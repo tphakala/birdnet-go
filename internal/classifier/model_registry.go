@@ -86,20 +86,24 @@ const DetectionNamePerch = "Perch"
 
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
-	ID               string        // Unique registry identifier (e.g., "BirdNET_V2.4")
-	Name             string        // User-friendly name (e.g., "BirdNET v2.4")
-	Backend          string        // Inference backend: "TFLite" or "ONNX"
-	DetectionName    string        // Database model name (e.g., "BirdNET", "Perch")
-	DetectionVersion string        // Database model version (e.g., "2.4", "V2")
-	Description      string        // Description of the model
-	Spec             ModelSpec     // Audio requirements (sample rate, clip length)
-	ConfigAliases    []string      // User-facing config IDs (e.g., ["birdnet"])
-	SupportedLocales []string      // List of supported locale codes
-	DefaultLocale    string        // Default locale if none is specified
-	NumSpecies       int           // Number of species in the model
-	CustomPath       string        // Path to custom model file, if any
-	Quantization     Quantization  // Precision of the loaded weights. Orthogonal to Backend.
-	IsStock          bool          // Marks the auto-resolved built-in default model. It is NOT set for user-supplied models (birdnet.modelpath) or gallery models, so detection attribution can treat the shipped default as "default" even when it loads from a CustomPath. See ToDetectionModelInfo.
+	ID               string       // Unique registry identifier (e.g., "BirdNET_V2.4")
+	Name             string       // User-friendly name (e.g., "BirdNET v2.4")
+	Backend          string       // Inference backend: "TFLite" or "ONNX"
+	DetectionName    string       // Database model name (e.g., "BirdNET", "Perch")
+	DetectionVersion string       // Database model version (e.g., "2.4", "V2")
+	Description      string       // Description of the model
+	Spec             ModelSpec    // Audio requirements (sample rate, clip length)
+	ConfigAliases    []string     // User-facing config IDs (e.g., ["birdnet"])
+	SupportedLocales []string     // List of supported locale codes
+	DefaultLocale    string       // Default locale if none is specified
+	NumSpecies       int          // Number of species in the model
+	CustomPath       string       // Path to custom model file, if any
+	Quantization     Quantization // Precision of the loaded weights. Orthogonal to Backend.
+	// IsStock marks the auto-resolved built-in default model. It is NOT set for
+	// user-supplied models (birdnet.modelpath) or gallery models, so detection
+	// attribution can treat the shipped default as "default" even when it loads
+	// from a CustomPath. See ToDetectionModelInfo.
+	IsStock bool
 }
 
 // DisplayName returns the user-facing name including the backend type, e.g. "BirdNET v2.4 (TFLite)".
