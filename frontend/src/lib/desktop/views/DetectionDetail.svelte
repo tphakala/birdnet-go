@@ -30,6 +30,7 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
+  import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
   import { dashboardSettings } from '$lib/stores/settings';
   import {
     Download,
@@ -105,6 +106,7 @@
   let guidePanelOpen = $state(true);
   let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
   let showSimilarSpecies = $derived($dashboardSettings?.speciesGuide?.showSimilarSpecies ?? true);
+  let showNotes = $derived($dashboardSettings?.speciesGuide?.showNotes ?? true);
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);
@@ -892,17 +894,22 @@
     </section>
 
     <!-- Species Guide panel (opt-in; gated on settings) -->
-    {#if guideEnabled && showSimilarSpecies && guidePanelOpen}
+    {#if guideEnabled && (showNotes || (showSimilarSpecies && guidePanelOpen))}
       <section class="surface-card" aria-labelledby="species-guide-heading">
-        <div class="p-5 md:p-6">
+        <div class="p-5 md:p-6 space-y-6">
           <h2 id="species-guide-heading" class="sr-only">
             {t('analytics.species.guide.title')}
           </h2>
-          <SpeciesComparison
-            scientificName={detection.scientificName}
-            commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
-            onclose={() => (guidePanelOpen = false)}
-          />
+          {#if showSimilarSpecies && guidePanelOpen}
+            <SpeciesComparison
+              scientificName={detection.scientificName}
+              commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
+              onclose={() => (guidePanelOpen = false)}
+            />
+          {/if}
+          {#if showNotes}
+            <SpeciesNotes scientificName={detection.scientificName} />
+          {/if}
         </div>
       </section>
     {/if}

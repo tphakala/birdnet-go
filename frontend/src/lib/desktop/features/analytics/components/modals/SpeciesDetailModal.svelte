@@ -4,6 +4,9 @@
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { dashboardSettings } from '$lib/stores/settings';
+  import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
+  import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -33,9 +36,15 @@
   // The cache is only useful during the close transition (species becomes null while
   // isOpen transitions to false), not during open.
   let prevIsOpen = $state(false);
+  // Species guide panel state (gated on settings; reset each time the modal opens).
+  let guidePanelOpen = $state(true);
+  let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
+  let showSimilarSpecies = $derived($dashboardSettings?.speciesGuide?.showSimilarSpecies ?? true);
+  let showNotes = $derived($dashboardSettings?.speciesGuide?.showNotes ?? true);
   $effect(() => {
     if (isOpen && !untrack(() => prevIsOpen)) {
       cachedSpecies = null;
+      guidePanelOpen = true;
     }
     prevIsOpen = isOpen;
   });
@@ -118,6 +127,21 @@
           </div>
         {/if}
       </div>
+
+      {#if guideEnabled && (showNotes || (showSimilarSpecies && guidePanelOpen))}
+        <div class="mt-4 space-y-4 border-t border-[var(--color-base-300)] pt-4">
+          {#if showSimilarSpecies && guidePanelOpen}
+            <SpeciesComparison
+              scientificName={displaySpecies.scientific_name}
+              commonName={displayName}
+              onclose={() => (guidePanelOpen = false)}
+            />
+          {/if}
+          {#if showNotes}
+            <SpeciesNotes scientificName={displaySpecies.scientific_name} />
+          {/if}
+        </div>
+      {/if}
     {/if}
   {/snippet}
 

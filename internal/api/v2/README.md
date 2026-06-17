@@ -233,6 +233,21 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 | GET    | `/species/:code/thumbnail`          | `GetSpeciesThumbnail`     | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
 | GET    | `/species/dictionary/:locale`       | `ServeSpeciesDictionary`  | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
+### Species Guide (`species_guide.go`)
+
+Wikipedia/eBird-backed guide enrichment, similar-species comparison, and per-species notes. Disabled by default (`realtime.dashboard.speciesguide.enabled`). Returns 404 when the feature is disabled and 503 when enabled but the cache is unavailable.
+
+| Method | Route                                | Handler             | Auth | Description                                                          |
+| ------ | ------------------------------------ | ------------------- | ---- | ------------------------------------------------------------------- |
+| GET    | `/species/:scientific_name/guide`    | `GetSpeciesGuide`   | ❌⚡ | Species guide (description, quality, expectedness, season, links)   |
+| GET    | `/species/:scientific_name/similar`  | `GetSimilarSpecies` | ❌⚡ | Same-genus / same-family / similar species with guide summaries     |
+| GET    | `/species/:scientific_name/notes`    | `GetSpeciesNotes`   | ❌   | List user notes for a species                                       |
+| POST   | `/species/:scientific_name/notes`    | `CreateSpeciesNote` | ✅   | Create a user note for a species                                    |
+| PUT    | `/species/notes/:id`                 | `UpdateSpeciesNote` | ✅   | Update a user note                                                  |
+| DELETE | `/species/notes/:id`                 | `DeleteSpeciesNote` | ✅   | Delete a user note                                                  |
+
+⚡ = rate-limited (external API calls).
+
 ### Server-Sent Events (`sse.go`)
 
 | Method | Route                 | Handler             | Auth | Description                  |
