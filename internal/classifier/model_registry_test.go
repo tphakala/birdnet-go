@@ -49,6 +49,7 @@ func TestModelRegistry_BackendAndDisplayName(t *testing.T) {
 }
 
 func TestDetectQuantization(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		in   string
@@ -61,15 +62,21 @@ func TestDetectQuantization(t *testing.T) {
 		{"no marker", "BirdNET_MData_V2.onnx", QuantizationUnknown},
 		{"false positive sprint8", "sprint8_model.onnx", QuantizationUnknown},
 		{"false positive point8", "perch_point8.onnx", QuantizationUnknown},
+		{"int8 at start", "int8_model.onnx", QuantizationINT8},
+		{"dot delimiter", "model.int8.onnx", QuantizationINT8},
+		{"ambiguous multi-token", "model_int8_fp16.onnx", QuantizationUnknown},
+		{"uppercase + uppercase ext", "model_FP16.TFLITE", QuantizationFP16},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, detectQuantization(tt.in))
 		})
 	}
 }
 
 func TestBirdNETV24EntryQuantization(t *testing.T) {
+	t.Parallel()
 	info := ModelRegistry[DefaultModelVersion]
 	assert.Equal(t, BackendTFLite, info.Backend)
 	assert.Equal(t, QuantizationFP32, info.Quantization)
@@ -433,19 +440,57 @@ func TestModelInfo_ToDetectionModelInfo_EmptyDetectionName(t *testing.T) {
 	assert.Equal(t, detection.DefaultModelInfo(), got)
 }
 
+// FuzzDetectQuantization seeds a few model names and asserts the result is
+// always one of the four defined Quantization constants and that the call
+// never panics.
+func FuzzDetectQuantization(f *testing.F) {
+	seeds := []string{
+		"BirdNET_INT8_ARM.onnx",
+		"model-fp16.tflite",
+		"BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite",
+		"sprint8_model.onnx",
+		"perch_point8.onnx",
+		"model_int8_fp16.onnx",
+		"model_FP16.TFLITE",
+		"int8_model.onnx",
+		"",
+		"/path/to/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite",
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+	valid := map[Quantization]bool{
+		QuantizationUnknown: true,
+		QuantizationFP32:    true,
+		QuantizationFP16:    true,
+		QuantizationINT8:    true,
+	}
+	f.Fuzz(func(t *testing.T, name string) {
+		q := detectQuantization(name)
+		if !valid[q] {
+			t.Errorf("detectQuantization(%q) returned unexpected value %q", name, q)
+		}
+	})
+}
+
 func TestToDetectionModelInfoVariant(t *testing.T) {
+	t.Parallel()
 	t.Run("stock INT8 default attributes as default", func(t *testing.T) {
-		m := birdNETV24ONNXVariant("/models/BirdNET_INT8_ARM.onnx", QuantizationINT8)
+		t.Parallel()
+		m := stockBirdNETV24ONNXVariant("/models/BirdNET_INT8_ARM.onnx", QuantizationINT8)
 		det := m.ToDetectionModelInfo()
 		assert.Equal(t, "default", det.Variant)
 		require.NotNil(t, det.ClassifierPath)
+		assert.Equal(t, "/models/BirdNET_INT8_ARM.onnx", *det.ClassifierPath)
 	})
 	t.Run("embedded FP32 default attributes as default", func(t *testing.T) {
+		t.Parallel()
 		m := ModelRegistry[DefaultModelVersion]
 		require.Empty(t, m.CustomPath, "precondition: registry entry must not have a custom path")
 		assert.Equal(t, "default", m.ToDetectionModelInfo().Variant)
 	})
 	t.Run("user/gallery model with path attributes as custom", func(t *testing.T) {
+		t.Parallel()
 		m := ModelRegistry[DefaultModelVersion]
 		m.CustomPath = "/home/user/my_birdnet.tflite"
 		m.IsStock = false

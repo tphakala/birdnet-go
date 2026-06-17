@@ -335,6 +335,37 @@ func TestUnionLabels_SkipsEmptyEntries(t *testing.T) {
 	assert.Equal(t, []string{"Parus major_Great Tit"}, got)
 }
 
+// TestModelInfos_LivePrimaryInfo verifies that ModelInfos returns the live
+// o.ModelInfo for the primary model entry rather than the static registry
+// template. This matters for the arm64 ONNX-only default, where o.ModelInfo
+// carries Backend=ONNX and Quantization=INT8 while the registry template has
+// Backend=TFLite and Quantization=FP32.
+func TestModelInfos_LivePrimaryInfo(t *testing.T) {
+	t.Parallel()
+
+	primaryInfo := stockBirdNETV24ONNXVariant("/models/BirdNET_INT8_ARM.onnx", QuantizationINT8)
+
+	o := &Orchestrator{
+		ModelInfo: primaryInfo,
+		models: map[string]*modelEntry{
+			primaryInfo.ID: {instance: &mockModelInstance{id: primaryInfo.ID}},
+		},
+	}
+
+	infos := o.ModelInfos()
+
+	require.Len(t, infos, 1)
+	got := infos[0]
+	assert.Equal(t, BackendONNX, got.Backend, "live backend must be ONNX, not the TFLite template")
+	assert.Equal(t, QuantizationINT8, got.Quantization, "live quantization must be INT8")
+	assert.True(t, got.IsStock, "IsStock must carry through from live info")
+	assert.Equal(t, "/models/BirdNET_INT8_ARM.onnx", got.CustomPath)
+
+	// Confirm ToDetectionModelInfo keeps attribution correct: IsStock keeps Variant "default".
+	det := got.ToDetectionModelInfo()
+	assert.Equal(t, "default", det.Variant, "IsStock stock model must attribute as default")
+}
+
 // TestAllLabels_IncludesSecondaryModelLabels verifies that AllLabels returns the
 // union of primary and secondary model labels, including scientific-only bat labels.
 // This is the label source used by the reverse name-search maps, so a secondary

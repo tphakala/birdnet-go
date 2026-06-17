@@ -15,6 +15,7 @@ import (
 // modelID is not present in infoMap is still included in the output using
 // the raw modelID as ModelName, and that a mapped counter uses its DisplayName.
 func TestMapInferenceSnapshotsKeepsUnmappedModel(t *testing.T) {
+	t.Parallel()
 	snaps := map[string]inferencestats.PeekSnapshot{
 		"Perch_V2":    {InvokeCount: 4, InvokeTotalUs: 4000, InvokeMaxUs: 1500},
 		"Ghost_Model": {InvokeCount: 2, InvokeTotalUs: 2000, InvokeMaxUs: 1200},

@@ -13,6 +13,7 @@ import (
 // registry ID (DefaultModelVersion) resolves to an embedded label filesystem and
 // a valid label filename without any remap shim.
 func TestBirdNETV24EmbeddedLabelsResolve(t *testing.T) {
+	t.Parallel()
 	// Labels must resolve for the canonical ID with no remap shim.
 	fs, err := getModelFileSystem(DefaultModelVersion)
 	require.NoError(t, err)
@@ -25,6 +26,7 @@ func TestBirdNETV24EmbeddedLabelsResolve(t *testing.T) {
 // TestIsBirdNETV24Family verifies that isBirdNETV24Family returns true only for
 // the canonical BirdNET v2.4 registry ID, and false for unrelated IDs.
 func TestIsBirdNETV24Family(t *testing.T) {
+	t.Parallel()
 	assert.True(t, isBirdNETV24Family(DefaultModelVersion))
 	assert.False(t, isBirdNETV24Family("Perch_V2"))
 }
@@ -211,6 +213,7 @@ func TestDetermineModelInfo_INT8ArmFilename(t *testing.T) {
 // classifier resolves to the unified BirdNET_V2.4 ID with ONNX backend and INT8
 // quantization, not the deprecated forked registry ID.
 func TestDefaultClassifierResolvesUnifiedINT8(t *testing.T) {
+	t.Parallel()
 	find := func(name string) (string, bool) {
 		if name == DefaultBirdNETINT8ONNXModelName {
 			return "/models/" + name, true
@@ -228,6 +231,7 @@ func TestDefaultClassifierResolvesUnifiedINT8(t *testing.T) {
 // TestDefaultClassifierFallsBackToTFLite verifies that on arm64 without the INT8
 // ONNX model present, the default falls back to TFLite v2.4.
 func TestDefaultClassifierFallsBackToTFLite(t *testing.T) {
+	t.Parallel()
 	find := func(string) (string, bool) { return "", false }
 	info := defaultClassifierModelInfo("arm64", find)
 	assert.Equal(t, DefaultModelVersion, info.ID)
@@ -238,6 +242,7 @@ func TestDefaultClassifierFallsBackToTFLite(t *testing.T) {
 // resolves to the unified BirdNET_V2.4 ID with ONNX backend and INT8 quantization,
 // and is NOT marked as stock (it is user-supplied).
 func TestDetermineModelInfoINT8ONNX(t *testing.T) {
+	t.Parallel()
 	info, err := DetermineModelInfo("/models/BirdNET_INT8_ARM.onnx")
 	require.NoError(t, err)
 	assert.Equal(t, DefaultModelVersion, info.ID)
@@ -249,6 +254,7 @@ func TestDetermineModelInfoINT8ONNX(t *testing.T) {
 // TestRemapV24ForONNXOnlyUnified verifies that remapV24ForONNXOnly returns the
 // unified BirdNET_V2.4 ID (not the forked INT8 ID) when remapping to ONNX.
 func TestRemapV24ForONNXOnlyUnified(t *testing.T) {
+	t.Parallel()
 	find := func(name string) (string, bool) {
 		if name == DefaultBirdNETINT8ONNXModelName {
 			return "/models/" + name, true
