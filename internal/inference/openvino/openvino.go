@@ -18,7 +18,8 @@ const DefaultPrecisionHint = "f16"
 var ErrOpenVINOUnavailable = errors.NewStd("openvino: backend unavailable")
 
 // Classifier runs inference and returns raw pre-activation logits. It is NOT
-// goroutine-safe; callers must serialize access (the classifier holds mu).
+// goroutine-safe; callers must serialize access (BirdNET.mu serializes the full
+// native call; this implementation has no internal mutex).
 type Classifier interface {
 	// PredictRaw runs one inference and returns raw logits in label order.
 	PredictRaw(samples []float32) ([]float32, error)

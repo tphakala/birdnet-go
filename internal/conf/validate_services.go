@@ -44,6 +44,13 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default), 'latest', 'legacy', or 'v3'")
 	}
 
+	// Backend must be one of the known preference strings when non-empty.
+	// Unknown values fall back safely to auto, so this is a warning, not an error.
+	if cfg.Backend != "" && cfg.Backend != BackendPrefAuto && cfg.Backend != BackendPrefONNX && cfg.Backend != BackendPrefOpenVINO {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("BirdNET backend '%s' is not recognised; must be 'auto', 'onnx', or 'openvino' - will use 'auto'", cfg.Backend))
+	}
+
 	checkRange(&result, cfg.RangeFilter.Threshold, 0, 1, "RangeFilter threshold must be between 0 and 1")
 
 	// Locale validation and normalization (pure transformation)

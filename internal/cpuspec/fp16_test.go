@@ -14,6 +14,8 @@ func TestHasNativeF16_NonArm64IsFalse(t *testing.T) {
 	// predicate must be false: OpenVINO f16 is strictly A76+/ARMv8.2.
 	if runtime.GOARCH != "arm64" || runtime.GOOS != "linux" {
 		assert.False(t, HasNativeF16(), "HasNativeF16 must be false off linux/arm64")
+	} else {
+		t.Skip("on linux/arm64 HasNativeF16 depends on CPU HWCAP; no fixed assertion")
 	}
 }
 

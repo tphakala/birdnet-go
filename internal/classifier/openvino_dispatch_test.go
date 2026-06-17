@@ -19,7 +19,7 @@ func TestShouldTryOpenVINO_FalseWithoutTag(t *testing.T) {
 	bn := &BirdNET{Settings: &conf.Settings{}}
 	bn.Settings.BirdNET.Backend = conf.BackendPrefOpenVINO
 	bn.ModelInfo = ModelInfo{ID: DefaultModelVersion, Backend: BackendONNX}
-	assert.Equal(t, openvinoBackendAvailable, bn.shouldTryOpenVINO(),
+	assert.False(t, bn.shouldTryOpenVINO(),
 		"without the openvino tag, shouldTryOpenVINO must be false")
 }
 
@@ -34,10 +34,10 @@ func TestShouldTryOpenVINO_OptOut(t *testing.T) {
 	assert.False(t, bn.shouldTryOpenVINO())
 }
 
-// TestInitializeModel_FallsBackToORTWithoutOpenVINO verifies the dispatch contract:
-// without the openvino tag, shouldTryOpenVINO is false so initializeModel on an
-// ONNX-backed model goes straight to the ONNX path.
-func TestInitializeModel_FallsBackToORTWithoutOpenVINO(t *testing.T) {
+// TestShouldTryOpenVINO_FalseForAutoWithoutTag pins the no-tag gate predicate
+// for the default/auto backend: without the openvino build tag, shouldTryOpenVINO
+// is false even when the model ID and CPU would otherwise qualify.
+func TestShouldTryOpenVINO_FalseForAutoWithoutTag(t *testing.T) {
 	t.Parallel()
 	// Without the openvino tag, shouldTryOpenVINO is false, so initializeModel
 	// on an ONNX-backed model must go straight to the ONNX path. We assert the

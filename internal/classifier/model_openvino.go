@@ -26,7 +26,7 @@ func (bn *BirdNET) shouldTryOpenVINO() bool {
 		return false
 	}
 	if bn.ModelInfo.ID != DefaultModelVersion {
-		return false // BirdNET v2.4 only for the PoC
+		return false // Only the BirdNET v2.4 identity is validated for the OpenVINO f16 path.
 	}
 	return cpuspec.HasNativeF16()
 }
@@ -43,7 +43,8 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	modelPath := bn.onnxModelPath()
 	if modelPath == "" {
 		return errors.Newf("OpenVINO classifier model path is empty").
-			Category(errors.CategoryModelInit).Build()
+			Category(errors.CategoryModelInit).
+			Context("model_id", bn.ModelInfo.ID).Build()
 	}
 	rawPath := modelPath
 	modelPath = os.ExpandEnv(modelPath)

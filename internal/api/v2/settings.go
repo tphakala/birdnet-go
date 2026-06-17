@@ -2292,6 +2292,16 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		return true
 	}
 
+	// Check for changes in BirdNET inference backend preference
+	if oldSettings.BirdNET.Backend != currentSettings.BirdNET.Backend {
+		return true
+	}
+
+	// Check for changes in OpenVINO shared library path
+	if oldSettings.BirdNET.OpenVINOPath != currentSettings.BirdNET.OpenVINOPath {
+		return true
+	}
+
 	return false
 }
 

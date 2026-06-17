@@ -122,7 +122,13 @@ static const char* ovbind_load(const char* path) {
     }
     OVB.handle = dlopen(path && path[0] ? path : "libopenvino_c.so", RTLD_NOW | RTLD_GLOBAL);
     if (!OVB.handle) {
-        return dlerror();
+        // POSIX allows dlerror() to return NULL; copy into the static buffer
+        // with a non-NULL fallback so the Go caller never sees a nil message
+        // and mistakes failure for success (which would call a NULL pointer).
+        const char* e = dlerror();
+        snprintf(_ovbind_errbuf, sizeof(_ovbind_errbuf), "%s",
+                 (e != NULL) ? e : "dlopen failed (no dlerror message)");
+        return _ovbind_errbuf;
     }
     OVBIND_RESOLVE(core_create,                              fn_core_create,                              "ov_core_create");
     OVBIND_RESOLVE(core_free,                                fn_core_free,                                "ov_core_free");
@@ -166,6 +172,11 @@ static ov_status_e ovbind_core_read_model(const ov_core_t* core, const char* mod
     return OVB.core_read_model(core, model_path, NULL, model);
 }
 
+// ov_core_compile_model counts its variadic property args as 2 per property
+// (a key and a value), so the property_args_size is 2 * the number of props.
+#define OVBIND_COMPILE_ARGS_1PROP 2
+#define OVBIND_COMPILE_ARGS_2PROPS 4
+
 // ovbind_compile wraps the variadic ov_core_compile_model (cgo cannot call C
 // variadic functions). Ported verbatim from the spike's ovspike_compile: each
 // property is a (key, value) pair, so property_args_size is 2 per pair.
@@ -173,11 +184,11 @@ static ov_status_e ovbind_compile(const ov_core_t* core, const ov_model_t* model
                                   const char* dev, const char* prec, const char* nthreads,
                                   ov_compiled_model_t** out) {
     if (nthreads != NULL && nthreads[0] != '\0') {
-        return OVB.core_compile_model(core, model, dev, 4, out,
+        return OVB.core_compile_model(core, model, dev, OVBIND_COMPILE_ARGS_2PROPS, out,
                                       "INFERENCE_PRECISION_HINT", prec,
                                       "INFERENCE_NUM_THREADS", nthreads);
     }
-    return OVB.core_compile_model(core, model, dev, 2, out,
+    return OVB.core_compile_model(core, model, dev, OVBIND_COMPILE_ARGS_1PROP, out,
                                   "INFERENCE_PRECISION_HINT", prec);
 }
 
@@ -305,7 +316,9 @@ import "C" //nolint:gocritic // dupImport: cgo import "C" must be separate from 
 import "unsafe" //nolint:gocritic // dupImport: false positive with cgo import "C"
 
 import (
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -344,9 +357,16 @@ var (
 )
 
 // lastErr builds an EnhancedError from the OpenVINO status code and the
-// library's last error message, prefixed by the failing operation.
-func lastErr(op string, status C.ov_status_e) error {
+// library's last error message, prefixed by the failing operation. Any
+// scrubPaths (e.g. the model or library path) are redacted from the OpenVINO
+// message so file paths do not leak into errors or telemetry.
+func lastErr(op string, status C.ov_status_e, scrubPaths ...string) error {
 	msg := C.GoString(C.ovbind_get_last_err_msg())
+	for _, p := range scrubPaths {
+		if p != "" {
+			msg = strings.ReplaceAll(msg, p, "<path>")
+		}
+	}
 	return errors.Newf("openvino: %s failed: status=%d: %s", op, int(status), msg).Build()
 }
 
@@ -356,6 +376,11 @@ func lastErr(op string, status C.ov_status_e) error {
 // mirrors inference.InitONNXRuntime semantics. The core is freed only by
 // DestroyOV, never on a model reload.
 func InitOV(libraryPath string) error {
+	// Pin to one OS thread so the dlopen/create call and any ov_get_last_err_msg
+	// fetch (C thread-local storage) run on the same thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	ovMu.Lock()
 	defer ovMu.Unlock()
 	if ovLoaded {
@@ -365,7 +390,11 @@ func InitOV(libraryPath string) error {
 	cPath := C.CString(libraryPath)
 	defer C.free(unsafe.Pointer(cPath))
 	if msg := C.ovbind_load(cPath); msg != nil {
-		return errors.Newf("openvino: failed to load libopenvino_c: %s", C.GoString(msg)).Build()
+		errMsg := C.GoString(msg)
+		if libraryPath != "" {
+			errMsg = strings.ReplaceAll(errMsg, libraryPath, "<path>")
+		}
+		return errors.Newf("openvino: failed to load libopenvino_c: %s", errMsg).Build()
 	}
 
 	var core *C.ov_core_t
@@ -401,11 +430,13 @@ func DestroyOV() error {
 
 // classifier holds the per-model OpenVINO state: a compiled model, one infer
 // request, and a C-malloc'd input buffer that OpenVINO may retain across
-// infer() calls (a Go-owned buffer would violate cgo pointer rules). It is NOT
-// goroutine-safe; callers serialize access. The process-global core is shared
-// and is not owned here.
+// infer() calls (a Go-owned buffer would violate cgo pointer rules). The read
+// model (ov_model_t) is freed right after compile, since the compiled model is
+// self-contained and holding the read model would double the per-classifier
+// memory footprint on the memory-constrained rpi5. It is NOT goroutine-safe;
+// callers serialize access. The process-global core is shared and is not owned
+// here.
 type classifier struct {
-	model    *C.ov_model_t
 	compiled *C.ov_compiled_model_t
 	req      *C.ov_infer_request_t
 	inBuf    unsafe.Pointer
@@ -420,7 +451,7 @@ type classifier struct {
 // compile or infer a dynamic-batch model without a static input shape. The
 // read-validate-reshape sequence runs atomically in C so cgo never handles the
 // dynamically allocated partial-shape dims.
-func reshapeToStaticBatch1(model *C.ov_model_t) (int, error) {
+func reshapeToStaticBatch1(model *C.ov_model_t, modelPath string) (int, error) {
 	var samples C.int64_t
 	st := C.ovbind_reshape_static_batch1(model, &samples)
 	if ovOK(st) {
@@ -433,7 +464,7 @@ func reshapeToStaticBatch1(model *C.ov_model_t) (int, error) {
 		return 0, errors.Newf("openvino: model input is not a static rank-2 shape; cannot reshape for batch-1 inference").
 			Category(errors.CategoryModelInit).Build()
 	}
-	return 0, lastErr("ov_model_reshape_single_input", st)
+	return 0, lastErr("ov_model_reshape_single_input", st, modelPath)
 }
 
 // NewClassifier reads modelPath, compiles it for the CPU device at
@@ -442,13 +473,20 @@ func reshapeToStaticBatch1(model *C.ov_model_t) (int, error) {
 // otherwise it returns ErrOpenVINOUnavailable. The returned Classifier is not
 // goroutine-safe.
 func NewClassifier(modelPath string, opts Options) (Classifier, error) {
+	// Pin to one OS thread so every OpenVINO call here and any
+	// ov_get_last_err_msg fetch (C thread-local storage) run on the same thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Hold ovMu for the whole core-using section: a concurrent DestroyOV must not
+	// free ovCore while read_model/compile are running on it. NewClassifier calls
+	// no other function that takes ovMu, so this cannot deadlock.
 	ovMu.Lock()
-	loaded := ovLoaded
-	core := ovCore
-	ovMu.Unlock()
-	if !loaded || core == nil {
+	defer ovMu.Unlock()
+	if !ovLoaded || ovCore == nil {
 		return nil, ErrOpenVINOUnavailable
 	}
+	core := ovCore
 
 	precision := opts.PrecisionHint
 	if precision == "" {
@@ -464,12 +502,12 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 
 	var model *C.ov_model_t
 	if st := C.ovbind_core_read_model(core, cPath, &model); !ovOK(st) {
-		return nil, lastErr("ov_core_read_model", st)
+		return nil, lastErr("ov_core_read_model", st, modelPath)
 	}
 
 	// Reshape the input to static [1, samples] before compiling. BirdNET v2.4
 	// has a dynamic batch dimension, which OpenVINO cannot compile or infer.
-	samples, err := reshapeToStaticBatch1(model)
+	samples, err := reshapeToStaticBatch1(model, modelPath)
 	if err != nil {
 		C.ovbind_model_free(model)
 		return nil, err
@@ -485,14 +523,18 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	var compiled *C.ov_compiled_model_t
 	if st := C.ovbind_compile(core, model, cDev, cPrec, cThreads, &compiled); !ovOK(st) {
 		C.ovbind_model_free(model)
-		return nil, lastErr("ov_core_compile_model", st)
+		return nil, lastErr("ov_core_compile_model", st, modelPath)
 	}
+	// The compiled model is self-contained; free the read model now to avoid
+	// doubling the per-classifier memory footprint (the create_infer_request
+	// below operates on the compiled model, not the read model).
+	C.ovbind_model_free(model)
+	model = nil
 
 	var req *C.ov_infer_request_t
 	if st := C.ovbind_compiled_model_create_infer_request(compiled, &req); !ovOK(st) {
 		C.ovbind_compiled_model_free(compiled)
-		C.ovbind_model_free(model)
-		return nil, lastErr("ov_compiled_model_create_infer_request", st)
+		return nil, lastErr("ov_compiled_model_create_infer_request", st, modelPath)
 	}
 
 	// Allocate the input buffer in C memory so OpenVINO may retain the pointer
@@ -501,7 +543,6 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	if inBuf == nil {
 		C.ovbind_infer_request_free(req)
 		C.ovbind_compiled_model_free(compiled)
-		C.ovbind_model_free(model)
 		return nil, errors.Newf("openvino: failed to allocate %d-sample input buffer", samples).Build()
 	}
 
@@ -511,7 +552,6 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		C.free(inBuf)
 		C.ovbind_infer_request_free(req)
 		C.ovbind_compiled_model_free(compiled)
-		C.ovbind_model_free(model)
 		return nil, lastErr("ov_shape_create", st)
 	}
 
@@ -521,7 +561,6 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		C.free(inBuf)
 		C.ovbind_infer_request_free(req)
 		C.ovbind_compiled_model_free(compiled)
-		C.ovbind_model_free(model)
 		return nil, lastErr("ov_tensor_create_from_host_ptr", st)
 	}
 	C.ovbind_shape_free(&shape)
@@ -531,7 +570,6 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		C.free(inBuf)
 		C.ovbind_infer_request_free(req)
 		C.ovbind_compiled_model_free(compiled)
-		C.ovbind_model_free(model)
 		return nil, lastErr("ov_infer_request_set_input_tensor_by_index", st)
 	}
 	// The tensor keeps a reference to inBuf; the wrapper handle itself is no
@@ -539,7 +577,6 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	C.ovbind_tensor_free(inTensor)
 
 	return &classifier{
-		model:    model,
 		compiled: compiled,
 		req:      req,
 		inBuf:    inBuf,
@@ -552,6 +589,11 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 // error if the input length does not match the model's input sample count. Not
 // goroutine-safe.
 func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
+	// Pin to one OS thread so the infer call and any ov_get_last_err_msg fetch
+	// (C thread-local storage) run on the same thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	if c.req == nil || c.inBuf == nil {
 		return nil, ErrOpenVINOUnavailable
 	}
@@ -581,6 +623,11 @@ func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	if st := C.ovbind_tensor_data(outTensor, &dataPtr); !ovOK(st) {
 		return nil, lastErr("ov_tensor_data", st)
 	}
+	// ov_tensor_data can return OK with a nil buffer; unsafe.Slice on a nil
+	// pointer with n > 0 is undefined behavior, so guard it.
+	if dataPtr == nil {
+		return nil, errors.Newf("openvino: ov_tensor_data returned a nil data pointer").Build()
+	}
 
 	src := unsafe.Slice((*float32)(dataPtr), int(n))
 	out := make([]float32, int(n))
@@ -588,8 +635,9 @@ func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	return out, nil
 }
 
-// Close frees the infer request, compiled model, read model, and the C input
-// buffer, in that order. It does not touch the process-global core. Close is
+// Close frees the infer request, compiled model, and the C input buffer, in
+// that order. The read model was already freed right after compile in
+// NewClassifier. Close does not touch the process-global core. Close is
 // idempotent.
 func (c *classifier) Close() error {
 	if c.req != nil {
@@ -599,10 +647,6 @@ func (c *classifier) Close() error {
 	if c.compiled != nil {
 		C.ovbind_compiled_model_free(c.compiled)
 		c.compiled = nil
-	}
-	if c.model != nil {
-		C.ovbind_model_free(c.model)
-		c.model = nil
 	}
 	if c.inBuf != nil {
 		C.free(c.inBuf)

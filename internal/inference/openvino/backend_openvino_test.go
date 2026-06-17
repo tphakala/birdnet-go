@@ -3,6 +3,7 @@
 package openvino
 
 import (
+	"math"
 	"os"
 	"testing"
 
@@ -35,4 +36,10 @@ func TestOpenVINORoundTrip(t *testing.T) {
 	out, err := c.PredictRaw(make([]float32, birdNETInputSamples))
 	require.NoError(t, err)
 	assert.Len(t, out, birdNETOutputClasses)
+
+	// Outputs are raw pre-activation logits (often negative), so do not assert a
+	// [0,1] range; just sanity-check that the first few are finite (not NaN/Inf).
+	for i, v := range out[:8] {
+		require.Falsef(t, math.IsNaN(float64(v)) || math.IsInf(float64(v), 0), "out[%d] not finite: %v", i, v)
+	}
 }
