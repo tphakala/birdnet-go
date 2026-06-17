@@ -127,16 +127,13 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			bn.ModelInfo.CustomPath = settings.BirdNET.ModelPath
 		}
 	case settings.BirdNET.ModelPath != "":
-		// Tier 3: filename-based fallback
-		bn.ModelInfo, err = DetermineModelInfo(settings.BirdNET.ModelPath)
-		if err != nil {
-			return nil, errors.New(err).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				ModelContext(settings.BirdNET.ModelPath, settings.BirdNET.ModelPath).
-				Context("operation", "determine_model_info").
-				Build()
-		}
+		// Tier 3: explicit model path in the birdnet config section. Any model in
+		// the birdnet slot is a BirdNET v2.4-type classifier, so it inherits the
+		// canonical BirdNET_V2.4 identity regardless of filename (BirdNET v3.0 is
+		// selected via birdnet.version, not by a filename here). Keeping the ID
+		// canonical ensures the per-source model-set join matches the loaded model
+		// so the primary classifier gets a buffer monitor and inference starts.
+		bn.ModelInfo = customBirdNETV24ModelInfo(settings.BirdNET.ModelPath)
 	default:
 		// Tier 4: default classifier. On arm64 (container images ship the
 		// INT8-ARM ONNX model alongside the binary) this resolves to the
@@ -1202,27 +1199,20 @@ func (bn *BirdNET) reloadModelInternal() error {
 		}
 		bn.ModelInfo = newInfo
 	} else if bn.Settings.BirdNET.ModelPath != "" {
-		// Fallback: re-derive from filename for legacy configs
-		newInfo, err := DetermineModelInfo(bn.Settings.BirdNET.ModelPath)
-		if err != nil {
+		// Birdnet-slot model: re-derive the canonical BirdNET_V2.4 identity from
+		// the configured path (mirrors NewBirdNET Tier 3). The ID stays
+		// BirdNET_V2.4 across reloads, so only a change of the model file path is
+		// treated as a model change requiring an orchestrator restart; a no-op
+		// reload (e.g. a locale change) stays in-place.
+		newInfo := customBirdNETV24ModelInfo(bn.Settings.BirdNET.ModelPath)
+		if newInfo.CustomPath != bn.ModelInfo.CustomPath {
 			rollback()
-			return errors.New(err).
+			return errors.Newf("birdnet model file changed from %q to %q: requires orchestrator restart", bn.ModelInfo.CustomPath, newInfo.CustomPath).
 				Component("birdnet").
 				Category(errors.CategoryModelInit).
 				Context("operation", "reload_model").
-				Context("step", "determine_model_info").
-				Build()
-		}
-		sameIdentity := newInfo.ID == bn.ModelInfo.ID
-		if newInfo.ID == modelIDCustom || bn.ModelInfo.ID == modelIDCustom {
-			sameIdentity = sameIdentity && newInfo.CustomPath == bn.ModelInfo.CustomPath
-		}
-		if !sameIdentity {
-			rollback()
-			return errors.Newf("model changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				Context("operation", "reload_model").
+				Context("current_model_path", bn.ModelInfo.CustomPath).
+				Context("requested_model_path", newInfo.CustomPath).
 				Build()
 		}
 		bn.ModelInfo = newInfo

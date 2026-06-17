@@ -30,6 +30,12 @@ const (
 	BackendONNX   = "ONNX"
 )
 
+// Model file extensions (lowercase, including the leading dot).
+const (
+	extONNX   = ".onnx"
+	extTFLite = ".tflite"
+)
+
 // Quantization is the numeric precision of a model's weights. It is orthogonal
 // to Backend (a model can be TFLite or ONNX at any precision).
 type Quantization string
@@ -231,6 +237,36 @@ func stockBirdNETV24ONNXVariant(path string, q Quantization) ModelInfo {
 	return info
 }
 
+// customBirdNETV24ModelInfo returns the canonical BirdNET_V2.4 identity adapted
+// to load a user-supplied model file configured in the birdnet config section
+// (birdnet.modelpath). Any model placed in the birdnet slot is a BirdNET
+// v2.4-type classifier (same 48kHz/3s I/O and 6522-class head), so it keeps the
+// BirdNET_V2.4 ID regardless of filename. Keeping the ID canonical is required:
+// the per-source model-set join in the analysis pipeline maps the config alias
+// "birdnet" to BirdNET_V2.4 and looks the loaded model up by ID, so a divergent
+// ID (e.g. the "Custom" sentinel for an unrecognized filename) would leave the
+// primary classifier without an analysis buffer monitor and inference would
+// never start. Backend is taken from the file extension and weight precision
+// from the filename; IsStock stays false (user-supplied), so detection
+// attribution records the "custom" variant. BirdNET v3.0 is selected via
+// birdnet.version, never by a filename in this slot.
+func customBirdNETV24ModelInfo(path string) ModelInfo {
+	info := ModelRegistry[DefaultModelVersion]
+	info.CustomPath = path
+	info.SupportedLocales = slices.Clone(info.SupportedLocales)
+	info.ConfigAliases = slices.Clone(info.ConfigAliases)
+	switch strings.ToLower(filepath.Ext(path)) {
+	case extONNX:
+		info.Backend = BackendONNX
+	case extTFLite:
+		info.Backend = BackendTFLite
+	}
+	if q := detectQuantization(path); q != QuantizationUnknown {
+		info.Quantization = q
+	}
+	return info
+}
+
 // defaultClassifierModelInfo resolves the classifier used when no model is
 // selected via config (the Tier 4 default). On arm64, if the INT8-ARM ONNX
 // classifier is present in the standard model paths (shipped only in arm64
@@ -339,7 +375,7 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 
 	// If it's a path to a model file
 	ext := strings.ToLower(filepath.Ext(modelPathOrID))
-	if ext == ".tflite" || ext == ".onnx" {
+	if ext == extTFLite || ext == extONNX {
 		baseName := filepath.Base(modelPathOrID)
 		lowerBase := strings.ToLower(baseName)
 
@@ -370,9 +406,9 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 			info := ModelRegistry[bestID]
 			info.CustomPath = modelPathOrID
 			switch ext {
-			case ".onnx":
+			case extONNX:
 				info.Backend = BackendONNX
-			case ".tflite":
+			case extTFLite:
 				info.Backend = BackendTFLite
 			}
 			if q := detectQuantization(modelPathOrID); q != QuantizationUnknown {
