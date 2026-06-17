@@ -1,6 +1,7 @@
 package inference
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -12,11 +13,20 @@ var (
 	ovInitialized bool
 )
 
+// OpenVINO device names accepted by OpenVINOClassifierOptions.Device. They are
+// the device strings the OpenVINO backend expects ("CPU", "GPU").
+const (
+	OVDeviceCPU = ov.DeviceCPU
+	OVDeviceGPU = ov.DeviceGPU
+)
+
 // OpenVINOClassifierOptions configures the OpenVINO species classifier.
 type OpenVINOClassifierOptions struct {
-	Labels        []string // species labels; required (drives NumSpecies)
-	Threads       int      // INFERENCE_NUM_THREADS; 0 = OpenVINO auto-tune
+	Labels        []string // species labels; required (validated against model output)
+	Threads       int      // INFERENCE_NUM_THREADS; 0 = OpenVINO auto-tune (CPU only)
 	PrecisionHint string   // INFERENCE_PRECISION_HINT; "" defaults to f16
+	Device        string   // ov.DeviceCPU (default) or ov.DeviceGPU
+	OutputIndex   int      // logits output port index; 0 default, 3 for Perch v2
 }
 
 type openvinoClassifier struct {
@@ -36,15 +46,38 @@ func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Cl
 	if prec == "" {
 		prec = ov.DefaultPrecisionHint
 	}
-	threads := opts.Threads
-	if threads < 0 {
-		threads = 0
-	}
-	c, err := ov.NewClassifier(modelPath, ov.Options{PrecisionHint: prec, Threads: threads})
+	threads := max(opts.Threads, 0)
+	c, err := ov.NewClassifier(modelPath, ov.Options{
+		PrecisionHint: prec,
+		Threads:       threads,
+		Device:        opts.Device,
+		OutputIndex:   opts.OutputIndex,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &openvinoClassifier{c: c, numSpecies: len(opts.Labels)}, nil
+	// Validate the model's real output dimension against the label count. The OV
+	// backend reports NumClasses from the compiled model (not the label list), so
+	// a mismatch is a genuine model/label inconsistency: reject it and let the
+	// caller fall back to ORT. (Issue #1112: when numSpecies was len(labels) this
+	// check was tautological and could never catch a wrong model or label file.)
+	if n := c.NumClasses(); n != len(opts.Labels) {
+		_ = c.Close()
+		return nil, errors.Newf("OpenVINO model output dimension %d does not match label count %d", n, len(opts.Labels)).
+			Category(errors.CategoryValidation).Build()
+	}
+	return &openvinoClassifier{c: c, numSpecies: c.NumClasses()}, nil
+}
+
+// OpenVINOHasDevice reports whether the named OpenVINO device (e.g. ov.DeviceGPU)
+// is available. It returns false on any error (backend not compiled in, core not
+// initialized, or query failure), so callers can use it as a plain gate.
+func OpenVINOHasDevice(name string) bool {
+	devs, err := ov.AvailableDevices()
+	if err != nil {
+		return false
+	}
+	return slices.Contains(devs, name)
 }
 
 func (c *openvinoClassifier) Predict(samples []float32) ([]float32, error) {
