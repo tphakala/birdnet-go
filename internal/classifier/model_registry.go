@@ -4,6 +4,7 @@ package classifier
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -29,6 +30,17 @@ const (
 	BackendONNX   = "ONNX"
 )
 
+// Quantization is the numeric precision of a model's weights. It is orthogonal
+// to Backend (a model can be TFLite or ONNX at any precision).
+type Quantization string
+
+const (
+	QuantizationUnknown Quantization = ""     // unspecified / not applicable
+	QuantizationFP32    Quantization = "FP32" // 32-bit float
+	QuantizationFP16    Quantization = "FP16" // 16-bit float
+	QuantizationINT8    Quantization = "INT8" // 8-bit integer quantized
+)
+
 // Registry ID constants for model identification across packages.
 const (
 	RegistryIDBirdNETV3      = "BirdNET_V3.0"
@@ -42,24 +54,52 @@ const (
 // ship the INT8-ARM ONNX classifier as the memory-saving default classifier.
 const defaultBirdNETClassifierARM64Arch = "arm64"
 
+// quantTokenReCache caches compiled regex patterns for quantization token detection.
+var quantTokenReCache = map[string]*regexp.Regexp{
+	"int8": regexp.MustCompile(`(?i)(^|[_\-.])int8([_\-.]|$)`),
+	"fp16": regexp.MustCompile(`(?i)(^|[_\-.])fp16([_\-.]|$)`),
+	"fp32": regexp.MustCompile(`(?i)(^|[_\-.])fp32([_\-.]|$)`),
+}
+
+func quantTokenRe(token string) *regexp.Regexp { return quantTokenReCache[token] }
+
+// detectQuantization infers weight precision from a model filename. It matches
+// delimiter-anchored tokens so unrelated names (sprint8, point8) do not
+// false-positive. Returns QuantizationUnknown when no marker is present.
+func detectQuantization(name string) Quantization {
+	lower := strings.ToLower(filepath.Base(name))
+	switch {
+	case quantTokenRe(`int8`).MatchString(lower):
+		return QuantizationINT8
+	case quantTokenRe(`fp16`).MatchString(lower):
+		return QuantizationFP16
+	case quantTokenRe(`fp32`).MatchString(lower):
+		return QuantizationFP32
+	default:
+		return QuantizationUnknown
+	}
+}
+
 // DetectionNamePerch is the detection model name for Perch classifiers,
 // matching the DetectionName field in the ModelRegistry.
 const DetectionNamePerch = "Perch"
 
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
-	ID               string    // Unique registry identifier (e.g., "BirdNET_V2.4")
-	Name             string    // User-friendly name (e.g., "BirdNET v2.4")
-	Backend          string    // Inference backend: "TFLite" or "ONNX"
-	DetectionName    string    // Database model name (e.g., "BirdNET", "Perch")
-	DetectionVersion string    // Database model version (e.g., "2.4", "V2")
-	Description      string    // Description of the model
-	Spec             ModelSpec // Audio requirements (sample rate, clip length)
-	ConfigAliases    []string  // User-facing config IDs (e.g., ["birdnet"])
-	SupportedLocales []string  // List of supported locale codes
-	DefaultLocale    string    // Default locale if none is specified
-	NumSpecies       int       // Number of species in the model
-	CustomPath       string    // Path to custom model file, if any
+	ID               string        // Unique registry identifier (e.g., "BirdNET_V2.4")
+	Name             string        // User-friendly name (e.g., "BirdNET v2.4")
+	Backend          string        // Inference backend: "TFLite" or "ONNX"
+	DetectionName    string        // Database model name (e.g., "BirdNET", "Perch")
+	DetectionVersion string        // Database model version (e.g., "2.4", "V2")
+	Description      string        // Description of the model
+	Spec             ModelSpec     // Audio requirements (sample rate, clip length)
+	ConfigAliases    []string      // User-facing config IDs (e.g., ["birdnet"])
+	SupportedLocales []string      // List of supported locale codes
+	DefaultLocale    string        // Default locale if none is specified
+	NumSpecies       int           // Number of species in the model
+	CustomPath       string        // Path to custom model file, if any
+	Quantization     Quantization  // Precision of the loaded weights. Orthogonal to Backend.
+	IsStock          bool          // Marks the auto-resolved built-in default model. It is NOT set for user-supplied models (birdnet.modelpath) or gallery models, so detection attribution can treat the shipped default as "default" even when it loads from a CustomPath. See ToDetectionModelInfo.
 }
 
 // DisplayName returns the user-facing name including the backend type, e.g. "BirdNET v2.4 (TFLite)".
@@ -87,6 +127,7 @@ var ModelRegistry = map[string]ModelInfo{
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
 		DefaultLocale: "en-uk",
 		NumSpecies:    6523,
+		Quantization:  QuantizationFP32,
 	},
 	RegistryIDBirdNETV3: {
 		ID:               RegistryIDBirdNETV3,

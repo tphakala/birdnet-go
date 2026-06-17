@@ -48,6 +48,34 @@ func TestModelRegistry_BackendAndDisplayName(t *testing.T) {
 	}
 }
 
+func TestDetectQuantization(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want Quantization
+	}{
+		{"int8 underscore", "BirdNET_INT8_ARM.onnx", QuantizationINT8},
+		{"int8 hyphen", "model-int8.onnx", QuantizationINT8},
+		{"fp16", "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite", QuantizationFP16},
+		{"fp32", "BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite", QuantizationFP32},
+		{"no marker", "BirdNET_MData_V2.onnx", QuantizationUnknown},
+		{"false positive sprint8", "sprint8_model.onnx", QuantizationUnknown},
+		{"false positive point8", "perch_point8.onnx", QuantizationUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, detectQuantization(tt.in))
+		})
+	}
+}
+
+func TestBirdNETV24EntryQuantization(t *testing.T) {
+	info := ModelRegistry[DefaultModelVersion]
+	assert.Equal(t, BackendTFLite, info.Backend)
+	assert.Equal(t, QuantizationFP32, info.Quantization)
+	assert.False(t, info.IsStock, "registry templates are not marked IsStock")
+}
+
 func TestDisplayName_NoBackend(t *testing.T) {
 	t.Parallel()
 
