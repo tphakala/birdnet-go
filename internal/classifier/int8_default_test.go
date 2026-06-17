@@ -76,8 +76,13 @@ func TestDetermineModelInfo_V24TFLiteStaysTFLite(t *testing.T) {
 func TestDetermineModelInfo_Deterministic(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, wantID string }{
-		{"/models/" + DefaultBirdNETINT8ONNXModelName, RegistryIDBirdNETV24INT8},
+		{"/models/" + DefaultBirdNETINT8ONNXModelName, DefaultModelVersion},
 		{"/models/" + DefaultBirdNETModelName, DefaultModelVersion},
+		// NOTE: blocked - the brief's Step 1 implies this should become
+		// DefaultModelVersion, but the forked RegistryIDBirdNETV24INT8 entry
+		// (kept this task per the brief) is still a live longest-match token in
+		// DetermineModelInfo, so this filename resolves to BirdNET_V2.4_INT8.
+		// Reverted to the original expectation pending guidance. See task-2-report.md.
 		{"/models/BirdNET_V2.4_INT8.onnx", RegistryIDBirdNETV24INT8},
 	}
 	for _, c := range cases {
@@ -106,8 +111,9 @@ func TestDefaultClassifierModelInfo_ARM64PrefersINT8WhenPresent(t *testing.T) {
 
 	info := defaultClassifierModelInfo("arm64", find)
 
-	assert.Equal(t, RegistryIDBirdNETV24INT8, info.ID)
+	assert.Equal(t, DefaultModelVersion, info.ID)
 	assert.Equal(t, BackendONNX, info.Backend)
+	assert.True(t, info.IsStock, "auto-resolved default is stock")
 	assert.Equal(t, "/models/"+DefaultBirdNETINT8ONNXModelName, info.CustomPath)
 }
 
@@ -160,11 +166,13 @@ func TestRemapV24ForONNXOnly(t *testing.T) {
 		assert.Equal(t, DefaultModelVersion, got.ID)
 		assert.Equal(t, BackendTFLite, got.Backend)
 	})
-	t.Run("onnx-only + int8 present: remapped to INT8 ONNX", func(t *testing.T) {
+	t.Run("onnx-only + int8 present: remapped to unified ONNX", func(t *testing.T) {
 		t.Parallel()
 		got := remapV24ForONNXOnly(&v24, false, findHit)
-		assert.Equal(t, RegistryIDBirdNETV24INT8, got.ID)
+		assert.Equal(t, DefaultModelVersion, got.ID)
 		assert.Equal(t, BackendONNX, got.Backend)
+		assert.Equal(t, QuantizationINT8, got.Quantization)
+		assert.True(t, got.IsStock)
 		assert.Equal(t, "/models/"+DefaultBirdNETINT8ONNXModelName, got.CustomPath)
 	})
 	t.Run("onnx-only but int8 absent: unchanged (fails clearly downstream)", func(t *testing.T) {
@@ -228,6 +236,63 @@ func TestDetermineModelInfo_INT8ArmFilename(t *testing.T) {
 	info, err := DetermineModelInfo("/models/" + DefaultBirdNETINT8ONNXModelName)
 	require.NoError(t, err)
 
-	assert.Equal(t, RegistryIDBirdNETV24INT8, info.ID)
+	assert.Equal(t, DefaultModelVersion, info.ID)
 	assert.Equal(t, BackendONNX, info.Backend)
+	assert.Equal(t, QuantizationINT8, info.Quantization)
+}
+
+// TestDefaultClassifierResolvesUnifiedINT8 verifies that on arm64 the default
+// classifier resolves to the unified BirdNET_V2.4 ID with ONNX backend and INT8
+// quantization, not the deprecated forked registry ID.
+func TestDefaultClassifierResolvesUnifiedINT8(t *testing.T) {
+	find := func(name string) (string, bool) {
+		if name == DefaultBirdNETINT8ONNXModelName {
+			return "/models/" + name, true
+		}
+		return "", false
+	}
+	info := defaultClassifierModelInfo("arm64", find)
+	assert.Equal(t, DefaultModelVersion, info.ID, "ID stays BirdNET_V2.4, not forked")
+	assert.Equal(t, BackendONNX, info.Backend)
+	assert.Equal(t, QuantizationINT8, info.Quantization)
+	assert.True(t, info.IsStock, "auto-resolved default is stock")
+	assert.Equal(t, "/models/"+DefaultBirdNETINT8ONNXModelName, info.CustomPath)
+}
+
+// TestDefaultClassifierFallsBackToTFLite verifies that on arm64 without the INT8
+// ONNX model present, the default falls back to TFLite v2.4.
+func TestDefaultClassifierFallsBackToTFLite(t *testing.T) {
+	find := func(string) (string, bool) { return "", false }
+	info := defaultClassifierModelInfo("arm64", find)
+	assert.Equal(t, DefaultModelVersion, info.ID)
+	assert.Equal(t, BackendTFLite, info.Backend)
+}
+
+// TestDetermineModelInfoINT8ONNX verifies that an explicit INT8 ONNX model path
+// resolves to the unified BirdNET_V2.4 ID with ONNX backend and INT8 quantization,
+// and is NOT marked as stock (it is user-supplied).
+func TestDetermineModelInfoINT8ONNX(t *testing.T) {
+	info, err := DetermineModelInfo("/models/BirdNET_INT8_ARM.onnx")
+	require.NoError(t, err)
+	assert.Equal(t, DefaultModelVersion, info.ID)
+	assert.Equal(t, BackendONNX, info.Backend)
+	assert.Equal(t, QuantizationINT8, info.Quantization)
+	assert.False(t, info.IsStock, "explicit modelpath is not stock")
+}
+
+// TestRemapV24ForONNXOnlyUnified verifies that remapV24ForONNXOnly returns the
+// unified BirdNET_V2.4 ID (not the forked INT8 ID) when remapping to ONNX.
+func TestRemapV24ForONNXOnlyUnified(t *testing.T) {
+	find := func(name string) (string, bool) {
+		if name == DefaultBirdNETINT8ONNXModelName {
+			return "/models/" + name, true
+		}
+		return "", false
+	}
+	base := ModelRegistry[DefaultModelVersion]
+	got := remapV24ForONNXOnly(&base, false /*tfliteAvailable*/, find)
+	assert.Equal(t, DefaultModelVersion, got.ID)
+	assert.Equal(t, BackendONNX, got.Backend)
+	assert.Equal(t, QuantizationINT8, got.Quantization)
+	assert.True(t, got.IsStock)
 }

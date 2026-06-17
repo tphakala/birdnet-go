@@ -235,11 +235,23 @@ func remapV24ForONNXOnly(info *ModelInfo, tfliteAvailable bool, find func(name s
 		return *info
 	}
 	if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
-		onnx := ModelRegistry[RegistryIDBirdNETV24INT8]
-		onnx.CustomPath = path
-		return onnx
+		return birdNETV24ONNXVariant(path, QuantizationINT8)
 	}
 	return *info
+}
+
+// birdNETV24ONNXVariant returns the canonical BirdNET_V2.4 entry adapted to load
+// the given ONNX file at the given precision. The ID is unchanged (BirdNET_V2.4)
+// so identity, metrics, labels, and attribution stay consistent across backends.
+// IsStock is true: this is the auto-resolved built-in default.
+func birdNETV24ONNXVariant(path string, q Quantization) ModelInfo {
+	info := ModelRegistry[DefaultModelVersion]
+	info.Backend = BackendONNX
+	info.Quantization = q
+	info.CustomPath = path
+	info.IsStock = true
+	info.SupportedLocales = slices.Clone(info.SupportedLocales)
+	return info
 }
 
 // defaultClassifierModelInfo resolves the classifier used when no model is
@@ -251,9 +263,7 @@ func remapV24ForONNXOnly(info *ModelInfo, tfliteAvailable bool, find func(name s
 func defaultClassifierModelInfo(goarch string, find func(name string) (path string, ok bool)) ModelInfo {
 	if goarch == defaultBirdNETClassifierARM64Arch {
 		if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
-			info := ModelRegistry[RegistryIDBirdNETV24INT8]
-			info.CustomPath = path
-			return info
+			return birdNETV24ONNXVariant(path, QuantizationINT8)
 		}
 	}
 	return ModelRegistry[DefaultModelVersion]
@@ -328,9 +338,9 @@ var filenamePatterns = map[string]string{
 	"birdnet-v24":            "BirdNET_V2.4",
 	"birdnet_v2.4":           "BirdNET_V2.4",
 	"birdnet-v2.4":           "BirdNET_V2.4",
-	"birdnet-go_classifier":  "BirdNET_V2.4",           // custom-named classifier builds
-	"int8_arm":               RegistryIDBirdNETV24INT8, // INT8-ARM ONNX classifier (arm64 container default)
-	"int8-arm":               RegistryIDBirdNETV24INT8,
+	"birdnet-go_classifier":  "BirdNET_V2.4",      // custom-named classifier builds
+	"int8_arm":               DefaultModelVersion, // INT8-ARM ONNX classifier (arm64 container default)
+	"int8-arm":               DefaultModelVersion,
 	"birdnet_global_v3.0":    RegistryIDBirdNETV3,
 	"birdnet-v30":            RegistryIDBirdNETV3,
 	"birdnet_v3.0":           RegistryIDBirdNETV3,
@@ -382,6 +392,12 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 		if bestID != "" {
 			info := ModelRegistry[bestID]
 			info.CustomPath = modelPathOrID
+			if ext == ".onnx" {
+				info.Backend = BackendONNX
+			}
+			if q := detectQuantization(modelPathOrID); q != QuantizationUnknown {
+				info.Quantization = q
+			}
 			return info, nil
 		}
 
