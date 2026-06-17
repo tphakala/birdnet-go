@@ -9,55 +9,23 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// TestINT8RegistryEntry verifies the dedicated INT8-ARM ONNX entry mirrors the
-// BirdNET v2.4 identity but runs on the ONNX backend.
-func TestINT8RegistryEntry(t *testing.T) {
-	t.Parallel()
-
-	info, ok := ModelRegistry[RegistryIDBirdNETV24INT8]
-	require.True(t, ok, "INT8 registry entry must exist")
-
-	assert.Equal(t, BackendONNX, info.Backend)
-	// Detections must be attributed to the same model/version as TFLite v2.4 so
-	// detection history stays continuous across the backend switch.
-	v24 := ModelRegistry[DefaultModelVersion]
-	assert.Equal(t, v24.DetectionName, info.DetectionName)
-	assert.Equal(t, v24.DetectionVersion, info.DetectionVersion)
-	assert.Equal(t, v24.NumSpecies, info.NumSpecies)
-	assert.Equal(t, v24.SupportedLocales, info.SupportedLocales)
-	assert.Equal(t, v24.DefaultLocale, info.DefaultLocale)
-	// Audio spec must match or the analysis framing breaks.
-	assert.Equal(t, v24.Spec, info.Spec)
-	// Backend, display name, and description intentionally differ.
-	assert.Equal(t, BackendONNX, info.Backend)
-	assert.Equal(t, "BirdNET v2.4 (ONNX)", info.DisplayName())
-	assert.NotEqual(t, v24.Description, info.Description)
-	// No config alias: it is selected via the arch-aware default or an explicit
-	// model path, never a user-facing config ID (would collide with "birdnet").
-	assert.Empty(t, info.ConfigAliases)
+// TestBirdNETV24EmbeddedLabelsResolve verifies that the canonical BirdNET v2.4
+// registry ID (DefaultModelVersion) resolves to an embedded label filesystem and
+// a valid label filename without any remap shim.
+func TestBirdNETV24EmbeddedLabelsResolve(t *testing.T) {
+	// Labels must resolve for the canonical ID with no remap shim.
+	fs, err := getModelFileSystem(DefaultModelVersion)
+	require.NoError(t, err)
+	require.NotNil(t, fs)
+	_, err = conf.GetLabelFilename(DefaultModelVersion, "en-uk")
+	require.NoError(t, err)
 }
 
-// TestLabelModelID verifies the INT8 entry resolves to BirdNET v2.4's label
-// family (regression guard for the INT8 default failing to load labels).
-func TestLabelModelID(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, DefaultModelVersion, labelModelID(RegistryIDBirdNETV24INT8))
-	assert.Equal(t, DefaultModelVersion, labelModelID(DefaultModelVersion))
-	assert.Equal(t, RegistryIDPerchV2, labelModelID(RegistryIDPerchV2))
-}
-
-// TestINT8EntryHasEmbeddedLabels is the regression guard for the gate-caught
-// blocker: the INT8 registry ID must resolve to v2.4's embedded label filesystem
-// and a valid label filename, or NewBirdNET fails to start on the arm64 default.
-func TestINT8EntryHasEmbeddedLabels(t *testing.T) {
-	t.Parallel()
-	fsys, err := getModelFileSystem(labelModelID(RegistryIDBirdNETV24INT8))
-	require.NoError(t, err)
-	require.NotNil(t, fsys)
-
-	fn, err := conf.GetLabelFilename(labelModelID(RegistryIDBirdNETV24INT8), "en-uk")
-	require.NoError(t, err)
-	assert.NotEmpty(t, fn)
+// TestIsBirdNETV24Family verifies that isBirdNETV24Family returns true only for
+// the canonical BirdNET v2.4 registry ID, and false for unrelated IDs.
+func TestIsBirdNETV24Family(t *testing.T) {
+	assert.True(t, isBirdNETV24Family(DefaultModelVersion))
+	assert.False(t, isBirdNETV24Family("Perch_V2"))
 }
 
 // TestDetermineModelInfo_V24TFLiteStaysTFLite is the reverse guard: a v2.4 TFLite
@@ -78,12 +46,9 @@ func TestDetermineModelInfo_Deterministic(t *testing.T) {
 	cases := []struct{ name, wantID string }{
 		{"/models/" + DefaultBirdNETINT8ONNXModelName, DefaultModelVersion},
 		{"/models/" + DefaultBirdNETModelName, DefaultModelVersion},
-		// NOTE: blocked - the brief's Step 1 implies this should become
-		// DefaultModelVersion, but the forked RegistryIDBirdNETV24INT8 entry
-		// (kept this task per the brief) is still a live longest-match token in
-		// DetermineModelInfo, so this filename resolves to BirdNET_V2.4_INT8.
-		// Reverted to the original expectation pending guidance. See task-2-report.md.
-		{"/models/BirdNET_V2.4_INT8.onnx", RegistryIDBirdNETV24INT8},
+		// With the forked RegistryIDBirdNETV24INT8 entry removed, this filename
+		// resolves to DefaultModelVersion via the "birdnet_v2.4" substring token.
+		{"/models/BirdNET_V2.4_INT8.onnx", DefaultModelVersion},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

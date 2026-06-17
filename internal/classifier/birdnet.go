@@ -588,9 +588,9 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 	// Get the appropriate locale code for the model version
 	localeCode := bn.Settings.BirdNET.Locale
 
-	// Use the new detailed loading function. Map the model ID to its label family
-	// (the INT8-ARM ONNX entry shares BirdNET v2.4's embedded labels).
-	result := GetLabelFileDataWithResult(labelModelID(bn.ModelInfo.ID), localeCode, bn)
+	// Use the new detailed loading function. The unified BirdNET_V2.4 registry ID
+	// is used for all backends (TFLite and ONNX), so no remap shim is needed.
+	result := GetLabelFileDataWithResult(bn.ModelInfo.ID, localeCode, bn)
 	if result.Error != nil {
 		// Create enhanced error for telemetry reporting
 		return errors.New(result.Error).
