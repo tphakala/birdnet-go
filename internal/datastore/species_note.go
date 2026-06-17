@@ -15,6 +15,18 @@ import (
 // SpeciesNoteMaxLength is the maximum allowed length (in bytes) of a note entry.
 const SpeciesNoteMaxLength = 10_000
 
+// GormDBProvider exposes the underlying GORM handle for features that need direct
+// database access (e.g. the species guide cache store). The concrete SQLite and
+// MySQL stores satisfy it via the embedded DataStore.
+type GormDBProvider interface {
+	GormDB() *gorm.DB
+}
+
+// GormDB returns the underlying GORM database handle, or nil if not connected.
+func (ds *DataStore) GormDB() *gorm.DB {
+	return ds.DB
+}
+
 // ErrSpeciesNoteNotFound is returned when a species note cannot be located.
 var ErrSpeciesNoteNotFound = errors.Newf("species note not found").
 	Component("datastore").

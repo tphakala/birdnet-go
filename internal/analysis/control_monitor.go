@@ -340,6 +340,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRecalculateDynamicThresholds()
 	case "reconfigure_dynamic_thresholds":
 		cm.handleReconfigureDynamicThresholds()
+	case "reconfigure_species_guide":
+		cm.handleReconfigureSpeciesGuide()
 	case schedule.SignalReconfigureQuietHours:
 		cm.handleReconfigureQuietHours()
 	case schedule.SignalQuietHoursStopSoundCard:
@@ -990,6 +992,46 @@ func (cm *ControlMonitor) handleReconfigureDynamicThresholds() {
 	}
 
 	emitHotReload("dynamic_thresholds_config")
+}
+
+// handleReconfigureSpeciesGuide rebuilds the species guide cache from current
+// settings and swaps it onto the API controller (which closes the previous
+// cache), then re-wires the processor's pre-fetch callback. This makes the
+// settings-UI toggles hot-reload without a server restart. Reconfigure signals
+// are processed sequentially on the control-monitor goroutine, so no version
+// guard is needed to protect against concurrent rebuilds.
+func (cm *ControlMonitor) handleReconfigureSpeciesGuide() {
+	GetLogger().Info("Reconfiguring species guide")
+
+	if cm.apiController == nil || cm.metrics == nil {
+		GetLogger().Error("API controller or metrics not available for species guide reconfiguration")
+		return
+	}
+
+	settings := conf.Setting()
+	cfg := settings.Realtime.Dashboard.SpeciesGuide
+
+	newCache := initGuideCacheIfNeeded(settings, cm.apiController.DS, cm.metrics.GuideProvider)
+
+	// Swap in the new cache (nil when disabled). SetGuideCache closes the old
+	// cache outside its lock so concurrent readers are never blocked.
+	cm.apiController.SetGuideCache(newCache)
+
+	// Re-wire the processor's pre-fetch callback to the new cache (or clear it).
+	if cm.proc != nil {
+		if newCache != nil && cfg.PreFetchEnabled {
+			cm.proc.SetGuidePreFetch(newCache.PreFetch)
+		} else {
+			cm.proc.SetGuidePreFetch(nil)
+		}
+	}
+
+	if newCache != nil {
+		warmGuideCacheWithTopSpecies(newCache, cm.apiController.DS, cfg.WarmTopN, GetLogger())
+	}
+
+	emitHotReload("species_guide_config")
+	cm.notifySuccess("Species guide reconfigured")
 }
 
 // handleReconfigureQuietHours triggers a re-evaluation of quiet hours after settings change.

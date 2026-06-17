@@ -100,6 +100,12 @@ type Processor struct {
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
 
+	// guidePreFetch warms the species guide cache for a newly detected species.
+	// It is fire-and-forget and must never block detection processing. Nil when
+	// the species guide feature or pre-fetch is disabled. Guarded by guidePreFetchMu.
+	guidePreFetch   func(ctx context.Context, scientificName string)
+	guidePreFetchMu sync.RWMutex
+
 	// Pending detection broadcast fields
 	PendingBroadcaster      func(snapshot []SSEPendingDetection) // Function to broadcast pending detections via SSE
 	pendingBroadcasterMu    sync.RWMutex                         // Mutex to protect PendingBroadcaster access
@@ -769,6 +775,9 @@ func (p *Processor) processDetections(item classifier.Results) {
 					},
 				},
 			}
+
+			// Newly detected species: warm the guide cache (fire-and-forget).
+			p.firePreFetchGuide(det.Result.Species.ScientificName)
 		}
 
 		// Apply extended capture if species qualifies
@@ -2308,6 +2317,31 @@ func (p *Processor) SetPendingBroadcaster(broadcaster func(snapshot []SSEPending
 	p.pendingBroadcasterMu.Lock()
 	defer p.pendingBroadcasterMu.Unlock()
 	p.PendingBroadcaster = broadcaster
+}
+
+// SetGuidePreFetch sets (or clears, with nil) the species guide pre-fetch
+// callback invoked for newly detected species. Safe for concurrent use and for
+// hot-reload re-wiring.
+func (p *Processor) SetGuidePreFetch(fn func(ctx context.Context, scientificName string)) {
+	p.guidePreFetchMu.Lock()
+	defer p.guidePreFetchMu.Unlock()
+	p.guidePreFetch = fn
+}
+
+// firePreFetchGuide invokes the guide pre-fetch callback for a species without
+// blocking. It snapshots the callback under a read lock and uses the flusher
+// context so shutdown cancels any in-flight network calls.
+func (p *Processor) firePreFetchGuide(scientificName string) {
+	if scientificName == "" {
+		return
+	}
+	p.guidePreFetchMu.RLock()
+	fn := p.guidePreFetch
+	p.guidePreFetchMu.RUnlock()
+	if fn == nil {
+		return
+	}
+	fn(p.flusherCtx, scientificName)
 }
 
 // SetBackupManager safely sets the backup manager

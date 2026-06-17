@@ -2151,6 +2151,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, "info", toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, "info", toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, "info", toastDurationShort},
+	{"Species guide", "reconfigure_species_guide", speciesGuideSettingsChanged, "Reconfiguring species guide...", "", "info", toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
@@ -2505,6 +2506,29 @@ func seasonalTrackingChanged(old, current conf.SeasonalTrackingSettings) bool {
 }
 
 // speciesTrackingSettingsChanged checks if species tracking settings have changed
+// speciesGuideSettingsChanged reports whether any species guide setting changed,
+// so the settings handler can emit the reconfigure_species_guide hot-reload signal.
+func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	o := oldSettings.Realtime.Dashboard.SpeciesGuide
+	n := currentSettings.Realtime.Dashboard.SpeciesGuide
+
+	// A toggle of the feature itself always requires reconfiguration.
+	if o.Enabled != n.Enabled {
+		return true
+	}
+	// If it was and remains disabled, nothing else matters.
+	if !n.Enabled {
+		return false
+	}
+	return o.Provider != n.Provider ||
+		o.FallbackPolicy != n.FallbackPolicy ||
+		o.WarmTopN != n.WarmTopN ||
+		o.PreFetchEnabled != n.PreFetchEnabled ||
+		o.IsShowNotes() != n.IsShowNotes() ||
+		o.IsShowEnrichments() != n.IsShowEnrichments() ||
+		o.IsShowSimilarSpecies() != n.IsShowSimilarSpecies()
+}
+
 func speciesTrackingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldTracking := oldSettings.Realtime.SpeciesTracking
 	newTracking := currentSettings.Realtime.SpeciesTracking
