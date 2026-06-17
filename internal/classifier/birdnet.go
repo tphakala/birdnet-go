@@ -231,12 +231,19 @@ func (bn *BirdNET) usesONNXBackend() bool {
 }
 
 // initializeModel loads and initializes the primary BirdNET model.
-// Dispatches to the ONNX or TFLite backend (see usesONNXBackend).
+// Dispatches to OpenVINO (A76 image, gated), ONNX, or TFLite (see
+// usesONNXBackend / shouldTryOpenVINO). OpenVINO failures fall back to ONNX.
 func (bn *BirdNET) initializeModel() error {
 	if bn.usesONNXBackend() {
+		if bn.shouldTryOpenVINO() {
+			err := bn.initializeOpenVINOModel()
+			if err == nil {
+				return nil
+			}
+			GetLogger().Warn("OpenVINO backend unavailable, falling back to ONNX Runtime", logger.Error(err))
+		}
 		return bn.initializeONNXModel()
 	}
-
 	return bn.initializeTFLiteModel()
 }
 
