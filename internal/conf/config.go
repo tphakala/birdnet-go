@@ -182,6 +182,36 @@ type Dashboard struct {
 	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
 	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
 	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
+	SpeciesGuide     SpeciesGuideConfig   `yaml:"speciesguide" json:"speciesGuide"`                     // species guide provider settings (Wikipedia/eBird enrichment)
+}
+
+// SpeciesGuideConfig holds configuration for the species guide provider.
+//
+// The three Show* flags are pointers so that an absent value defaults to true:
+// a plain bool would default to false and hide every section for existing users.
+// Read them through the IsShow*() accessors, never directly.
+type SpeciesGuideConfig struct {
+	Enabled            bool   `yaml:"enabled" json:"enabled"`
+	Provider           string `yaml:"provider" json:"provider"`                     // "wikipedia" | "auto"
+	FallbackPolicy     string `yaml:"fallbackpolicy" json:"fallbackPolicy"`         // "none" | "all"
+	WarmTopN           int    `yaml:"warmtopn" json:"warmTopN"`                     // top-N species warmed on startup (0 = off)
+	PreFetchEnabled    bool   `yaml:"prefetchenabled" json:"preFetchEnabled"`       // pre-fetch guides for newly detected species
+	ShowNotes          *bool  `yaml:"shownotes" json:"showNotes"`                   // default true
+	ShowEnrichments    *bool  `yaml:"showenrichments" json:"showEnrichments"`       // default true
+	ShowSimilarSpecies *bool  `yaml:"showsimilarspecies" json:"showSimilarSpecies"` // default true
+}
+
+// IsShowNotes reports whether the notes section should be shown (defaults to true when unset).
+func (c *SpeciesGuideConfig) IsShowNotes() bool { return c.ShowNotes == nil || *c.ShowNotes }
+
+// IsShowEnrichments reports whether enrichment badges should be shown (defaults to true when unset).
+func (c *SpeciesGuideConfig) IsShowEnrichments() bool {
+	return c.ShowEnrichments == nil || *c.ShowEnrichments
+}
+
+// IsShowSimilarSpecies reports whether the similar-species panel should be shown (defaults to true when unset).
+func (c *SpeciesGuideConfig) IsShowSimilarSpecies() bool {
+	return c.ShowSimilarSpecies == nil || *c.ShowSimilarSpecies
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.

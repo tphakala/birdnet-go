@@ -282,7 +282,36 @@ func validateDashboardSettings(settings *Dashboard) error {
 		logger.Bool("raw", settings.Spectrogram.Raw),
 		logger.String("style", settings.Spectrogram.Style))
 
+	validateSpeciesGuideSettings(&settings.SpeciesGuide)
+
 	return nil
+}
+
+// validateSpeciesGuideSettings normalizes the species guide provider and fallback
+// policy. Invalid or empty values fall back to the defaults rather than erroring,
+// and only matter when the feature is enabled.
+func validateSpeciesGuideSettings(settings *SpeciesGuideConfig) {
+	if !settings.Enabled {
+		return
+	}
+
+	if settings.Provider == "" {
+		settings.Provider = SpeciesGuideProviderWikipedia
+	} else if !slices.Contains(GetSpeciesGuideValidProviders(), settings.Provider) {
+		GetLogger().Warn("Invalid species guide provider, using default",
+			logger.String("invalid_provider", settings.Provider),
+			logger.String("fallback", SpeciesGuideProviderWikipedia))
+		settings.Provider = SpeciesGuideProviderWikipedia
+	}
+
+	if settings.FallbackPolicy == "" {
+		settings.FallbackPolicy = SpeciesGuideFallbackAll
+	} else if !slices.Contains(GetSpeciesGuideValidFallbackPolicies(), settings.FallbackPolicy) {
+		GetLogger().Warn("Invalid species guide fallback policy, using default",
+			logger.String("invalid_fallback_policy", settings.FallbackPolicy),
+			logger.String("fallback", SpeciesGuideFallbackAll))
+		settings.FallbackPolicy = SpeciesGuideFallbackAll
+	}
 }
 
 // validWeatherProviders contains all recognized weather provider values.

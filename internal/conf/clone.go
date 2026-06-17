@@ -68,6 +68,21 @@ func CloneSettings(src *Settings) *Settings {
 	}
 	dst.Realtime.Dashboard.Layout.Elements = cloneDashboardElements(src.Realtime.Dashboard.Layout.Elements)
 
+	// Realtime.Dashboard.SpeciesGuide: the three Show* flags are *bool pointers
+	// and must be deep-copied so a clone's mutation never aliases the original.
+	if src.Realtime.Dashboard.SpeciesGuide.ShowNotes != nil {
+		v := *src.Realtime.Dashboard.SpeciesGuide.ShowNotes
+		dst.Realtime.Dashboard.SpeciesGuide.ShowNotes = &v
+	}
+	if src.Realtime.Dashboard.SpeciesGuide.ShowEnrichments != nil {
+		v := *src.Realtime.Dashboard.SpeciesGuide.ShowEnrichments
+		dst.Realtime.Dashboard.SpeciesGuide.ShowEnrichments = &v
+	}
+	if src.Realtime.Dashboard.SpeciesGuide.ShowSimilarSpecies != nil {
+		v := *src.Realtime.Dashboard.SpeciesGuide.ShowSimilarSpecies
+		dst.Realtime.Dashboard.SpeciesGuide.ShowSimilarSpecies = &v
+	}
+
 	// Realtime.DogBarkFilter.
 	dst.Realtime.DogBarkFilter.Species = slices.Clone(src.Realtime.DogBarkFilter.Species)
 

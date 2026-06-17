@@ -129,6 +129,14 @@ func (b *SettingsBuilder) WithImageProvider(provider, fallbackPolicy string) *Se
 	return b
 }
 
+// WithSpeciesGuideProvider configures species guide provider settings and enables the feature.
+func (b *SettingsBuilder) WithSpeciesGuideProvider(provider, fallbackPolicy string) *SettingsBuilder {
+	b.settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
+	b.settings.Realtime.Dashboard.SpeciesGuide.Provider = provider
+	b.settings.Realtime.Dashboard.SpeciesGuide.FallbackPolicy = fallbackPolicy
+	return b
+}
+
 // WithWebServer configures web server settings.
 func (b *SettingsBuilder) WithWebServer(port string, enabled bool) *SettingsBuilder {
 	b.settings.WebServer.Port = port

@@ -1,7 +1,45 @@
 // conf/consts.go hard coded constants
 package conf
 
-import "time"
+import (
+	"slices"
+	"time"
+)
+
+// Species guide provider and fallback-policy identifiers.
+//
+// These live in the conf package (not guideprovider) to avoid an import cycle:
+// guideprovider imports conf for these constants, so conf cannot import guideprovider.
+const (
+	SpeciesGuideProviderWikipedia = "wikipedia"
+	SpeciesGuideProviderEBird     = "ebird"
+	SpeciesGuideProviderAuto      = "auto"
+	SpeciesGuideFallbackAll       = "all"
+	SpeciesGuideFallbackNone      = "none"
+)
+
+// speciesGuideValidProviders is the canonical list of accepted provider values.
+var speciesGuideValidProviders = []string{
+	SpeciesGuideProviderWikipedia,
+	SpeciesGuideProviderEBird,
+	SpeciesGuideProviderAuto,
+}
+
+// speciesGuideValidFallbackPolicies is the canonical list of accepted fallback policies.
+var speciesGuideValidFallbackPolicies = []string{
+	SpeciesGuideFallbackAll,
+	SpeciesGuideFallbackNone,
+}
+
+// GetSpeciesGuideValidProviders returns a defensive copy of the valid provider values.
+func GetSpeciesGuideValidProviders() []string {
+	return slices.Clone(speciesGuideValidProviders)
+}
+
+// GetSpeciesGuideValidFallbackPolicies returns a defensive copy of the valid fallback policies.
+func GetSpeciesGuideValidFallbackPolicies() []string {
+	return slices.Clone(speciesGuideValidFallbackPolicies)
+}
 
 const (
 	// Model IDs identify the inference backends available for detection.
