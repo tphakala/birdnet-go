@@ -103,6 +103,9 @@ func (c *Controller) initSpeciesRoutes() {
 	c.Group.GET("/taxonomy/genus/:genus", c.GetGenusSpecies)
 	c.Group.GET("/taxonomy/family/:family", c.GetFamilySpecies)
 	c.Group.GET("/taxonomy/tree/:scientific_name", c.GetSpeciesTree)
+
+	// Species guide, similar species, and per-species notes.
+	c.initSpeciesGuideRoutes()
 }
 
 // AllSpeciesResponse represents the response for the all species endpoint

@@ -32,6 +32,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -65,12 +66,17 @@ type Controller struct {
 	// newErrorResponse read it from HandleError while UpdateSettings holds
 	// settingsMutex.Lock without deadlocking on a non-reentrant RLock. The sibling
 	// engine and audioWatchdog fields use the same atomic-pointer pattern.
-	Settings          atomic.Pointer[conf.Settings]
-	BirdImageCache    *imageprovider.BirdImageCache
-	SunCalc           *suncalc.SunCalc
-	Processor         *processor.Processor
-	EBirdClient       *ebird.Client
-	TaxonomyDB        *classifier.TaxonomyDatabase
+	Settings       atomic.Pointer[conf.Settings]
+	BirdImageCache *imageprovider.BirdImageCache
+	SunCalc        *suncalc.SunCalc
+	Processor      *processor.Processor
+	EBirdClient    *ebird.Client
+	TaxonomyDB     *classifier.TaxonomyDatabase
+	// guideCache is the species guide cache. The controller is its canonical
+	// owner (hot-reload swaps it in), guarded by guideCacheMu. May be nil when
+	// the feature is disabled.
+	guideCache        *guideprovider.GuideCache
+	guideCacheMu      sync.RWMutex
 	controlChan       chan string
 	shutdownRequester ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
 	shutdownMu        sync.RWMutex      // protects shutdownRequester
@@ -246,6 +252,14 @@ func WithAuthService(svc auth.Service) Option {
 func WithNotificationService(svc *notification.Service) Option {
 	return func(c *Controller) {
 		c.notificationService = svc
+	}
+}
+
+// WithGuideCache injects the species guide cache. The controller becomes the
+// canonical owner and closes it on shutdown (hot-reload may swap it later).
+func WithGuideCache(gc *guideprovider.GuideCache) Option {
+	return func(c *Controller) {
+		c.guideCache = gc
 	}
 }
 
@@ -868,6 +882,16 @@ func (c *Controller) Shutdown() {
 	// which only closes when echo shuts down, creating a circular wait.
 	if c.sseManager != nil {
 		c.sseManager.CloseAllClients()
+	}
+
+	// Close and nil the species guide cache (the controller is its canonical
+	// owner). Snapshot under the lock, then close outside it.
+	c.guideCacheMu.Lock()
+	gc := c.guideCache
+	c.guideCache = nil
+	c.guideCacheMu.Unlock()
+	if gc != nil {
+		gc.Close()
 	}
 
 	// Stop alerting engine background goroutines and event bus
