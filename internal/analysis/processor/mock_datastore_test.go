@@ -202,6 +202,21 @@ func (m *ActionMockDatastore) UpdateNoteComment(_, _ string) error {
 func (m *ActionMockDatastore) DeleteNoteComment(_ string) error {
 	return nil
 }
+func (m *ActionMockDatastore) GetSpeciesNotes(_ context.Context, _ string) ([]datastore.SpeciesNote, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetSpeciesNoteByID(_ context.Context, _ uint) (*datastore.SpeciesNote, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) SaveSpeciesNote(_ context.Context, _ *datastore.SpeciesNote) error {
+	return nil
+}
+func (m *ActionMockDatastore) DeleteSpeciesNote(_ context.Context, _ string) error {
+	return nil
+}
+func (m *ActionMockDatastore) UpdateSpeciesNote(_ context.Context, _, _ string) error {
+	return nil
+}
 func (m *ActionMockDatastore) SaveDailyEvents(_ *datastore.DailyEvents) error {
 	return nil
 }

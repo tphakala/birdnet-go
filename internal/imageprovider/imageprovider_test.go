@@ -195,7 +195,16 @@ func (m *mockStore) GetNoteResults(noteID string) ([]datastore.Results, error)  
 func (m *mockStore) SaveNoteComment(comment *datastore.NoteComment) error           { return nil }
 func (m *mockStore) UpdateNoteComment(commentID, entry string) error                { return nil }
 func (m *mockStore) DeleteNoteComment(commentID string) error                       { return nil }
-func (m *mockStore) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error       { return nil }
+func (m *mockStore) GetSpeciesNotes(_ context.Context, _ string) ([]datastore.SpeciesNote, error) {
+	return nil, nil
+}
+func (m *mockStore) GetSpeciesNoteByID(_ context.Context, _ uint) (*datastore.SpeciesNote, error) {
+	return nil, nil
+}
+func (m *mockStore) SaveSpeciesNote(_ context.Context, _ *datastore.SpeciesNote) error { return nil }
+func (m *mockStore) DeleteSpeciesNote(_ context.Context, _ string) error               { return nil }
+func (m *mockStore) UpdateSpeciesNote(_ context.Context, _, _ string) error            { return nil }
+func (m *mockStore) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error          { return nil }
 func (m *mockStore) GetDailyEvents(date string) (datastore.DailyEvents, error) {
 	return datastore.DailyEvents{}, nil
 }

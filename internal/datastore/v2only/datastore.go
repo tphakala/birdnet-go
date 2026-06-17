@@ -1683,6 +1683,38 @@ func (ds *Datastore) DeleteNoteComment(commentID string) error {
 }
 
 // ============================================================
+// Species Guide Note Methods
+// ============================================================
+//
+// Species guide notes are a v1-datastore feature with no v2 repository backing,
+// so they are unsupported in v2-only mode.
+
+// GetSpeciesNotes is not supported in v2-only mode.
+func (ds *Datastore) GetSpeciesNotes(_ context.Context, _ string) ([]datastore.SpeciesNote, error) {
+	return nil, ErrNotImplemented
+}
+
+// GetSpeciesNoteByID is not supported in v2-only mode.
+func (ds *Datastore) GetSpeciesNoteByID(_ context.Context, _ uint) (*datastore.SpeciesNote, error) {
+	return nil, ErrNotImplemented
+}
+
+// SaveSpeciesNote is not supported in v2-only mode.
+func (ds *Datastore) SaveSpeciesNote(_ context.Context, _ *datastore.SpeciesNote) error {
+	return ErrNotImplemented
+}
+
+// DeleteSpeciesNote is not supported in v2-only mode.
+func (ds *Datastore) DeleteSpeciesNote(_ context.Context, _ string) error {
+	return ErrNotImplemented
+}
+
+// UpdateSpeciesNote is not supported in v2-only mode.
+func (ds *Datastore) UpdateSpeciesNote(_ context.Context, _, _ string) error {
+	return ErrNotImplemented
+}
+
+// ============================================================
 // Weather Methods
 // ============================================================
 
