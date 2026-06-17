@@ -4,6 +4,8 @@ package classifier
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,6 +30,23 @@ const (
 	BackendONNX   = "ONNX"
 )
 
+// Model file extensions (lowercase, including the leading dot).
+const (
+	extONNX   = ".onnx"
+	extTFLite = ".tflite"
+)
+
+// Quantization is the numeric precision of a model's weights. It is orthogonal
+// to Backend (a model can be TFLite or ONNX at any precision).
+type Quantization string
+
+const (
+	QuantizationUnknown Quantization = ""     // unspecified / not applicable
+	QuantizationFP32    Quantization = "FP32" // 32-bit float
+	QuantizationFP16    Quantization = "FP16" // 16-bit float
+	QuantizationINT8    Quantization = "INT8" // 8-bit integer quantized
+)
+
 // Registry ID constants for model identification across packages.
 const (
 	RegistryIDBirdNETV3 = "BirdNET_V3.0"
@@ -36,24 +55,66 @@ const (
 	RegistryIDPerchV2   = "Perch_V2"
 )
 
+// defaultBirdNETClassifierARM64Arch is the GOARCH for which container images
+// ship the INT8-ARM ONNX classifier as the memory-saving default classifier.
+const defaultBirdNETClassifierARM64Arch = "arm64"
+
+// Package-level compiled regexps for quantization token detection. Each pattern
+// requires the token to be surrounded by a delimiter (start, end, or [_\-.]) so
+// names like "sprint8" or "point8" do not false-positive.
+var (
+	reQuantINT8 = regexp.MustCompile(`(?i)(^|[_\-.])int8([_\-.]|$)`)
+	reQuantFP16 = regexp.MustCompile(`(?i)(^|[_\-.])fp16([_\-.]|$)`)
+	reQuantFP32 = regexp.MustCompile(`(?i)(^|[_\-.])fp32([_\-.]|$)`)
+)
+
+// detectQuantization infers weight precision from a model filename, matching
+// delimiter-anchored tokens against filepath.Base(name) so unrelated names
+// (sprint8, point8) do not false-positive. The extension's leading dot acts as
+// a trailing delimiter. A name carrying more than one distinct precision token
+// is ambiguous and returns QuantizationUnknown.
+func detectQuantization(name string) Quantization {
+	base := filepath.Base(name)
+	matches := []Quantization{}
+	if reQuantINT8.MatchString(base) {
+		matches = append(matches, QuantizationINT8)
+	}
+	if reQuantFP16.MatchString(base) {
+		matches = append(matches, QuantizationFP16)
+	}
+	if reQuantFP32.MatchString(base) {
+		matches = append(matches, QuantizationFP32)
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return QuantizationUnknown
+}
+
 // DetectionNamePerch is the detection model name for Perch classifiers,
 // matching the DetectionName field in the ModelRegistry.
 const DetectionNamePerch = "Perch"
 
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
-	ID               string    // Unique registry identifier (e.g., "BirdNET_V2.4")
-	Name             string    // User-friendly name (e.g., "BirdNET v2.4")
-	Backend          string    // Inference backend: "TFLite" or "ONNX"
-	DetectionName    string    // Database model name (e.g., "BirdNET", "Perch")
-	DetectionVersion string    // Database model version (e.g., "2.4", "V2")
-	Description      string    // Description of the model
-	Spec             ModelSpec // Audio requirements (sample rate, clip length)
-	ConfigAliases    []string  // User-facing config IDs (e.g., ["birdnet"])
-	SupportedLocales []string  // List of supported locale codes
-	DefaultLocale    string    // Default locale if none is specified
-	NumSpecies       int       // Number of species in the model
-	CustomPath       string    // Path to custom model file, if any
+	ID               string       // Unique registry identifier (e.g., "BirdNET_V2.4")
+	Name             string       // User-friendly name (e.g., "BirdNET v2.4")
+	Backend          string       // Inference backend: "TFLite" or "ONNX"
+	DetectionName    string       // Database model name (e.g., "BirdNET", "Perch")
+	DetectionVersion string       // Database model version (e.g., "2.4", "V2")
+	Description      string       // Description of the model
+	Spec             ModelSpec    // Audio requirements (sample rate, clip length)
+	ConfigAliases    []string     // User-facing config IDs (e.g., ["birdnet"])
+	SupportedLocales []string     // List of supported locale codes
+	DefaultLocale    string       // Default locale if none is specified
+	NumSpecies       int          // Number of species in the model
+	CustomPath       string       // Path to custom model file, if any
+	Quantization     Quantization // Precision of the loaded weights. Orthogonal to Backend.
+	// IsStock marks the auto-resolved built-in default model. It is NOT set for
+	// user-supplied models (birdnet.modelpath) or gallery models, so detection
+	// attribution can treat the shipped default as "default" even when it loads
+	// from a CustomPath. See ToDetectionModelInfo.
+	IsStock bool
 }
 
 // DisplayName returns the user-facing name including the backend type, e.g. "BirdNET v2.4 (TFLite)".
@@ -81,6 +142,7 @@ var ModelRegistry = map[string]ModelInfo{
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
 		DefaultLocale: "en-uk",
 		NumSpecies:    6523,
+		Quantization:  QuantizationFP32,
 	},
 	RegistryIDBirdNETV3: {
 		ID:               RegistryIDBirdNETV3,
@@ -127,6 +189,110 @@ var ModelRegistry = map[string]ModelInfo{
 		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 		ConfigAliases:    []string{conf.ModelIDBSG},
 	},
+}
+
+// isBirdNETV24Family reports whether id is the BirdNET v2.4 classifier.
+// Quantization (TFLite FP32 or ONNX INT8) is an orthogonal attribute on the
+// unified entry; callers that special-case v2.4 behavior (the native range-filter
+// fallback, the MData range-filter default) check the ID only.
+func isBirdNETV24Family(id string) bool {
+	return id == DefaultModelVersion
+}
+
+// remapV24ForONNXOnly remaps a registry-resolved BirdNET v2.4 TFLite model to the
+// INT8-ARM ONNX entry when this build has no TFLite backend (notflite, i.e. the
+// ONNX-only arm64 image) and the ONNX model is present in the standard paths.
+// This keeps arm64 configs that select v2.4 via `version: "2.4"` or the default
+// working on ONNX-only images instead of failing to start on the missing TFLite
+// backend. An explicit model path (CustomPath set) is left untouched so a
+// user-supplied model is never silently swapped.
+func remapV24ForONNXOnly(info *ModelInfo, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
+	if tfliteAvailable || info.CustomPath != "" {
+		return *info
+	}
+	if info.Backend != BackendTFLite || info.ID != DefaultModelVersion {
+		return *info
+	}
+	if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
+		return stockBirdNETV24ONNXVariant(path, QuantizationINT8)
+	}
+	return *info
+}
+
+// stockBirdNETV24ONNXVariant returns the canonical BirdNET_V2.4 entry adapted to
+// load the given ONNX file at the given precision. The ID is unchanged
+// (BirdNET_V2.4) so identity, metrics, labels, and attribution stay consistent
+// across backends. IsStock is unconditionally set to true, so callers MUST only
+// pass paths resolved from the standard model search paths
+// (findModelPathInStandardPaths). It must NOT be called with a user-supplied
+// birdnet.modelpath or gallery paths, which keep IsStock=false at their call site.
+func stockBirdNETV24ONNXVariant(path string, q Quantization) ModelInfo {
+	info := ModelRegistry[DefaultModelVersion]
+	info.Backend = BackendONNX
+	info.Quantization = q
+	info.CustomPath = path
+	info.IsStock = true
+	info.SupportedLocales = slices.Clone(info.SupportedLocales)
+	info.ConfigAliases = slices.Clone(info.ConfigAliases)
+	return info
+}
+
+// customBirdNETV24ModelInfo returns the canonical BirdNET_V2.4 identity adapted
+// to load a user-supplied model file configured in the birdnet config section
+// (birdnet.modelpath). Any model placed in the birdnet slot is a BirdNET
+// v2.4-type classifier (same 48kHz/3s I/O and 6522-class head), so it keeps the
+// BirdNET_V2.4 ID regardless of filename. Keeping the ID canonical is required:
+// the per-source model-set join in the analysis pipeline maps the config alias
+// "birdnet" to BirdNET_V2.4 and looks the loaded model up by ID, so a divergent
+// ID (e.g. the "Custom" sentinel for an unrecognized filename) would leave the
+// primary classifier without an analysis buffer monitor and inference would
+// never start. Backend is taken from the file extension and weight precision
+// from the filename; IsStock stays false (user-supplied), so detection
+// attribution records the "custom" variant. BirdNET v3.0 is selected via
+// birdnet.version, never by a filename in this slot.
+func customBirdNETV24ModelInfo(path string) ModelInfo {
+	info := ModelRegistry[DefaultModelVersion]
+	info.CustomPath = path
+	info.SupportedLocales = slices.Clone(info.SupportedLocales)
+	info.ConfigAliases = slices.Clone(info.ConfigAliases)
+	switch strings.ToLower(filepath.Ext(path)) {
+	case extONNX:
+		info.Backend = BackendONNX
+	case extTFLite:
+		info.Backend = BackendTFLite
+	}
+	if q := detectQuantization(path); q != QuantizationUnknown {
+		info.Quantization = q
+	}
+	return info
+}
+
+// defaultClassifierModelInfo resolves the classifier used when no model is
+// selected via config (the Tier 4 default). On arm64, if the INT8-ARM ONNX
+// classifier is present in the standard model paths (shipped only in arm64
+// container images), it is preferred to cut peak RSS; otherwise the embedded
+// TFLite BirdNET v2.4 model is used. find reports the resolved on-disk path of a
+// model filename within the standard search paths.
+func defaultClassifierModelInfo(goarch string, find func(name string) (path string, ok bool)) ModelInfo {
+	if goarch == defaultBirdNETClassifierARM64Arch {
+		if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
+			return stockBirdNETV24ONNXVariant(path, QuantizationINT8)
+		}
+	}
+	return ModelRegistry[DefaultModelVersion]
+}
+
+// defaultRangeFilterONNXPath resolves the ONNX range filter (MData) model used
+// when no range filter is configured. On arm64 (container images ship the ONNX
+// range filter instead of the TFLite MData models) it returns the on-disk path
+// when present; on other architectures it returns false so the TFLite range
+// filter is used. find reports the resolved path of a model filename within the
+// standard search paths.
+func defaultRangeFilterONNXPath(goarch string, find func(name string) (path string, ok bool)) (string, bool) {
+	if goarch != defaultBirdNETClassifierARM64Arch {
+		return "", false
+	}
+	return find(DefaultRangeFilterV2ONNXModelName)
 }
 
 // birdnetVersionToRegistryID maps user-facing BirdNET version strings to registry IDs.
@@ -185,7 +351,9 @@ var filenamePatterns = map[string]string{
 	"birdnet-v24":            "BirdNET_V2.4",
 	"birdnet_v2.4":           "BirdNET_V2.4",
 	"birdnet-v2.4":           "BirdNET_V2.4",
-	"birdnet-go_classifier":  "BirdNET_V2.4", // custom-named classifier builds
+	"birdnet-go_classifier":  "BirdNET_V2.4",      // custom-named classifier builds
+	"int8_arm":               DefaultModelVersion, // INT8-ARM ONNX classifier (arm64 container default)
+	"int8-arm":               DefaultModelVersion,
 	"birdnet_global_v3.0":    RegistryIDBirdNETV3,
 	"birdnet-v30":            RegistryIDBirdNETV3,
 	"birdnet_v3.0":           RegistryIDBirdNETV3,
@@ -207,26 +375,46 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 
 	// If it's a path to a model file
 	ext := strings.ToLower(filepath.Ext(modelPathOrID))
-	if ext == ".tflite" || ext == ".onnx" {
+	if ext == extTFLite || ext == extONNX {
 		baseName := filepath.Base(modelPathOrID)
 		lowerBase := strings.ToLower(baseName)
 
-		// Check against registry IDs in the filename
-		for id := range ModelRegistry {
-			if strings.Contains(lowerBase, strings.ToLower(id)) {
-				customInfo := ModelRegistry[id]
-				customInfo.CustomPath = modelPathOrID
-				return customInfo, nil
+		// Resolve by the LONGEST matching token so resolution is deterministic.
+		// Both ModelRegistry and filenamePatterns are maps with randomized
+		// iteration order, and some IDs/patterns are substrings of others (e.g.
+		// "birdnet_v2.4" vs "birdnet_v2.4_int8"). Longest-match prevents a filename
+		// from resolving to a different entry run-to-run; the more specific token
+		// (e.g. the int8 marker) wins over its prefix.
+		bestToken, bestID := "", ""
+		consider := func(token, registryID string) {
+			if !strings.Contains(lowerBase, strings.ToLower(token)) {
+				return
+			}
+			// Longest token wins; on equal length break ties lexically so resolution stays
+			// deterministic regardless of the randomized map iteration order above.
+			if len(token) > len(bestToken) || (len(token) == len(bestToken) && token < bestToken) {
+				bestToken, bestID = token, registryID
 			}
 		}
-
-		// Check known filename patterns (ONNX conventions, legacy names, etc.)
+		for id := range ModelRegistry {
+			consider(id, id)
+		}
 		for pattern, registryID := range filenamePatterns {
-			if strings.Contains(lowerBase, pattern) {
-				info := ModelRegistry[registryID]
-				info.CustomPath = modelPathOrID
-				return info, nil
+			consider(pattern, registryID)
+		}
+		if bestID != "" {
+			info := ModelRegistry[bestID]
+			info.CustomPath = modelPathOrID
+			switch ext {
+			case extONNX:
+				info.Backend = BackendONNX
+			case extTFLite:
+				info.Backend = BackendTFLite
 			}
+			if q := detectQuantization(modelPathOrID); q != QuantizationUnknown {
+				info.Quantization = q
+			}
+			return info, nil
 		}
 
 		// Unrecognized model file — return Custom, let runtime figure it out
@@ -269,7 +457,9 @@ func (m *ModelInfo) ToDetectionModelInfo() detection.ModelInfo {
 	var classifierPath *string
 	if m.CustomPath != "" {
 		classifierPath = &m.CustomPath
-		variant = "custom"
+		if !m.IsStock {
+			variant = "custom"
+		}
 	}
 	return detection.ModelInfo{
 		Name:           m.DetectionName,

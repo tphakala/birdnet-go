@@ -127,27 +127,25 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			bn.ModelInfo.CustomPath = settings.BirdNET.ModelPath
 		}
 	case settings.BirdNET.ModelPath != "":
-		// Tier 3: filename-based fallback
-		bn.ModelInfo, err = DetermineModelInfo(settings.BirdNET.ModelPath)
-		if err != nil {
-			return nil, errors.New(err).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				ModelContext(settings.BirdNET.ModelPath, settings.BirdNET.ModelPath).
-				Context("operation", "determine_model_info").
-				Build()
-		}
+		// Tier 3: explicit model path in the birdnet config section. Any model in
+		// the birdnet slot is a BirdNET v2.4-type classifier, so it inherits the
+		// canonical BirdNET_V2.4 identity regardless of filename (BirdNET v3.0 is
+		// selected via birdnet.version, not by a filename here). Keeping the ID
+		// canonical ensures the per-source model-set join matches the loaded model
+		// so the primary classifier gets a buffer monitor and inference starts.
+		bn.ModelInfo = customBirdNETV24ModelInfo(settings.BirdNET.ModelPath)
 	default:
-		// Tier 4: default embedded model
-		info, ok := ModelRegistry[DefaultModelVersion]
-		if !ok {
-			return nil, errors.Newf("default model version %s not found in registry", DefaultModelVersion).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				Build()
-		}
-		bn.ModelInfo = info
+		// Tier 4: default classifier. On arm64 (container images ship the
+		// INT8-ARM ONNX model alongside the binary) this resolves to the
+		// reduced-memory ONNX model when present in the standard model paths;
+		// otherwise it falls back to the embedded BirdNET v2.4 TFLite model.
+		bn.ModelInfo = defaultClassifierModelInfo(runtime.GOARCH, findModelPathInStandardPaths)
 	}
+
+	// On ONNX-only builds (notflite, the arm64 image), transparently remap a
+	// resolved v2.4 TFLite model (from version:"2.4" or the default) to the INT8
+	// ONNX entry so existing arm64 configs keep starting without a TFLite backend.
+	bn.ModelInfo = remapV24ForONNXOnly(&bn.ModelInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
 
 	// Load taxonomy data
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
@@ -223,11 +221,19 @@ func isONNXModel(path string) bool {
 	return strings.HasSuffix(strings.ToLower(expanded), ".onnx")
 }
 
+// usesONNXBackend reports whether the primary classifier should use the ONNX
+// backend. True when the configured model path is an .onnx file (explicit
+// selection) or when the resolved ModelInfo declares the ONNX backend (the
+// arm64 INT8 default, whose model path is empty and whose file is carried in
+// ModelInfo.CustomPath).
+func (bn *BirdNET) usesONNXBackend() bool {
+	return isONNXModel(bn.Settings.BirdNET.ModelPath) || bn.ModelInfo.Backend == BackendONNX
+}
+
 // initializeModel loads and initializes the primary BirdNET model.
-// Dispatches to ONNX or TFLite backend based on the model file extension.
+// Dispatches to the ONNX or TFLite backend (see usesONNXBackend).
 func (bn *BirdNET) initializeModel() error {
-	// If model path ends with .onnx, use the ONNX backend
-	if isONNXModel(bn.Settings.BirdNET.ModelPath) {
+	if bn.usesONNXBackend() {
 		return bn.initializeONNXModel()
 	}
 
@@ -420,18 +426,15 @@ func resolveRangeFilterBackend(rf *conf.RangeFilterSettings) rangeFilterBackend 
 	return rangeFilterBackendTFLite
 }
 
-// hasNativeRangeFilter reports whether the active classifier ships with an embedded
-// native range filter to fall back to when an ONNX geomodel cannot be loaded. Only
-// BirdNET v2.4 (TFLite backend) carries the embedded MData range filter; Perch v2 and
-// BirdNET v3.0 (ONNX backends) rely solely on the geomodel.
-// hasNativeRangeFilter reports whether the active classifier ships with an embedded
-// native range filter to fall back to when an ONNX geomodel cannot be loaded. The
-// embedded MData range filter is BirdNET v2.4 specific, so only that classifier qualifies.
-// Perch v2 and BirdNET v3.0 (ONNX backends) rely solely on the geomodel, and any other
-// TFLite-backed (custom or future) classifier must surface as unhealthy rather than
-// silently filtering against the v2.4 labels.
+// hasNativeRangeFilter reports whether the active classifier can fall back to the
+// embedded MData range filter when an ONNX geomodel cannot be loaded. The MData
+// range filter is BirdNET v2.4 specific, so the v2.4 family qualifies: both the
+// TFLite default and the INT8-ARM ONNX entry, which carry the same v2.4 labels.
+// Perch v2 and BirdNET v3.0 rely solely on the geomodel, and any other classifier
+// must surface as unhealthy rather than silently filtering against the v2.4 labels.
 func (bn *BirdNET) hasNativeRangeFilter() bool {
-	return bn.ModelInfo.Backend == BackendTFLite && bn.ModelInfo.ID == DefaultModelVersion
+	// ONNX-only builds (notflite) have no embedded TFLite range filter to fall back to.
+	return tfliteBackendAvailable && isBirdNETV24Family(bn.ModelInfo.ID)
 }
 
 func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
@@ -459,6 +462,24 @@ func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
 		log.Info("Auto-selected v3.0 geomodel for compatible classifier",
 			logger.String("classifier", bn.ModelInfo.ID),
 			logger.String("models_dir", bn.modelsDir))
+	}
+
+	// On arm64 (container images ship the ONNX range filter instead of the TFLite
+	// MData models), prefer the ONNX MData range filter when no range filter is
+	// configured and the v3 geomodel was not auto-selected above. Gated to the
+	// BirdNET v2.4 family: the MData V2 model outputs the v2.4 species set, and the
+	// strict ONNX path (no labels file) requires the model output dimension to
+	// equal the classifier label count, so it only fits a v2.4-family classifier.
+	// Routed locally only; settings are not published.
+	if rf.Model == "" && rf.ModelPath == "" && isBirdNETV24Family(bn.ModelInfo.ID) {
+		if path, ok := defaultRangeFilterONNXPath(runtime.GOARCH, findModelPathInStandardPaths); ok {
+			localSettings := conf.CloneSettings(settings)
+			localSettings.BirdNET.RangeFilter.ModelPath = path
+			settings = localSettings
+			rf = settings.BirdNET.RangeFilter
+			log.Info("Selected ONNX range filter (arm64 default)",
+				logger.String("model_path", path))
+		}
 	}
 
 	switch resolveRangeFilterBackend(&rf) {
@@ -564,7 +585,8 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 	// Get the appropriate locale code for the model version
 	localeCode := bn.Settings.BirdNET.Locale
 
-	// Use the new detailed loading function
+	// Use the new detailed loading function. The unified BirdNET_V2.4 registry ID
+	// is used for all backends (TFLite and ONNX), so no remap shim is needed.
 	result := GetLabelFileDataWithResult(bn.ModelInfo.ID, localeCode, bn)
 	if result.Error != nil {
 		// Create enhanced error for telemetry reporting
@@ -836,6 +858,16 @@ func (bn *BirdNET) ReloadRangeFilter() error {
 // This filename is used when searching standard paths for external model files in noembed builds.
 const DefaultBirdNETModelName = "BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
 
+// DefaultBirdNETINT8ONNXModelName is the expected filesystem basename for the INT8-ARM ONNX
+// classifier model. Shipped only in arm64 container images, where it becomes the default
+// classifier (see defaultClassifierModelInfo) to cut peak RSS versus the FP32 TFLite model.
+const DefaultBirdNETINT8ONNXModelName = "BirdNET_INT8_ARM.onnx"
+
+// DefaultRangeFilterV2ONNXModelName is the expected filesystem basename for the ONNX-converted
+// v2 range filter (MData) model. Shipped only in arm64 container images so the range filter can
+// run on ONNX when the TFLite range filter models are dropped from the image.
+const DefaultRangeFilterV2ONNXModelName = "BirdNET_MData_V2.onnx"
+
 // DefaultRangeFilterV1ModelName is the expected filesystem basename for the legacy (v1) range filter model file.
 // This filename is used when RangeFilter.Model is set to "legacy" in noembed builds.
 const DefaultRangeFilterV1ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite"
@@ -923,8 +955,10 @@ func getOSSpecificSystemPaths(modelName string) []string {
 // tryLoadModelFromStandardPaths attempts to load a model from standard locations.
 // It returns the model data, path, and an error if not found.
 // The error includes all attempted paths for debugging.
-func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, path string, err error) {
-	// Build candidate paths using filepath.Join for all constructions
+// modelCandidatePaths returns the ordered list of standard locations to search
+// for a model file named modelName: working-directory-relative, OS-specific
+// system paths, and executable-relative paths.
+func modelCandidatePaths(modelName string) []string {
 	var candidatePaths []string
 
 	// Relative paths (resolved against current working directory)
@@ -945,6 +979,25 @@ func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, pa
 			filepath.Join(exeDir, "..", "share", "birdnet-go", DefaultModelDirectory, modelName), // <exe-dir>/../share/birdnet-go/model/<name>
 		)
 	}
+
+	return candidatePaths
+}
+
+// findModelPathInStandardPaths returns the first standard-search-path location
+// where modelName exists on disk, without reading the file. Used to decide the
+// arm64 ONNX default (defaultClassifierModelInfo / range filter) where only the
+// path is needed and the file may be large.
+func findModelPathInStandardPaths(modelName string) (string, bool) {
+	for _, candidatePath := range modelCandidatePaths(modelName) {
+		if info, statErr := os.Stat(candidatePath); statErr == nil && !info.IsDir() {
+			return candidatePath, true
+		}
+	}
+	return "", false
+}
+
+func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, path string, err error) {
+	candidatePaths := modelCandidatePaths(modelName)
 
 	// Attempt to read from each candidate path directly (no os.Stat to avoid TOCTOU)
 	for _, candidatePath := range candidatePaths {
@@ -1128,6 +1181,12 @@ func (bn *BirdNET) reloadModelInternal() error {
 				Build()
 		}
 		newInfo.CustomPath = bn.Settings.BirdNET.ModelPath
+		// Mirror NewBirdNET (the remap at construction): on ONNX-only builds (notflite,
+		// arm64) a v2.4 TFLite model resolved from version:"2.4" is remapped to the INT8
+		// ONNX entry. Without this, a no-op reload re-resolves to the TFLite entry, and the
+		// identity check below misreads it as a model change requiring an orchestrator
+		// restart, so in-place hot-reloads fail and roll back.
+		newInfo = remapV24ForONNXOnly(&newInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
 		if newInfo.ID != bn.ModelInfo.ID || newInfo.CustomPath != bn.ModelInfo.CustomPath {
 			rollback()
 			return errors.Newf("model identity changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
@@ -1140,27 +1199,20 @@ func (bn *BirdNET) reloadModelInternal() error {
 		}
 		bn.ModelInfo = newInfo
 	} else if bn.Settings.BirdNET.ModelPath != "" {
-		// Fallback: re-derive from filename for legacy configs
-		newInfo, err := DetermineModelInfo(bn.Settings.BirdNET.ModelPath)
-		if err != nil {
+		// Birdnet-slot model: re-derive the canonical BirdNET_V2.4 identity from
+		// the configured path (mirrors NewBirdNET Tier 3). The ID stays
+		// BirdNET_V2.4 across reloads, so only a change of the model file path is
+		// treated as a model change requiring an orchestrator restart; a no-op
+		// reload (e.g. a locale change) stays in-place.
+		newInfo := customBirdNETV24ModelInfo(bn.Settings.BirdNET.ModelPath)
+		if newInfo.CustomPath != bn.ModelInfo.CustomPath {
 			rollback()
-			return errors.New(err).
+			return errors.Newf("birdnet model file changed from %q to %q: requires orchestrator restart", bn.ModelInfo.CustomPath, newInfo.CustomPath).
 				Component("birdnet").
 				Category(errors.CategoryModelInit).
 				Context("operation", "reload_model").
-				Context("step", "determine_model_info").
-				Build()
-		}
-		sameIdentity := newInfo.ID == bn.ModelInfo.ID
-		if newInfo.ID == modelIDCustom || bn.ModelInfo.ID == modelIDCustom {
-			sameIdentity = sameIdentity && newInfo.CustomPath == bn.ModelInfo.CustomPath
-		}
-		if !sameIdentity {
-			rollback()
-			return errors.Newf("model changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				Context("operation", "reload_model").
+				Context("current_model_path", bn.ModelInfo.CustomPath).
+				Context("requested_model_path", newInfo.CustomPath).
 				Build()
 		}
 		bn.ModelInfo = newInfo

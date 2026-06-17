@@ -1,4 +1,3 @@
-ARG TFLITE_LIB_DIR=/usr/lib
 ARG TENSORFLOW_VERSION=2.17.1
 ARG ONNXRUNTIME_VERSION=1.25.1
 
@@ -103,14 +102,21 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:trixie-slim
 
-# Copy model files to /models directory as separate cacheable layer
-# This layer will be reused if model files haven't changed between builds
-RUN mkdir -p /models
-COPY --from=build /home/dev-user/src/BirdNET-Go/internal/classifier/data/*.tflite /models/
-# Set read permissions for model files
-RUN chmod -R a+r /models/*.tflite 2>/dev/null || true
-# Ensure directory is executable (browsable)
-RUN chmod a+x /models
+# Copy model files to /models. arm64 ships ONNX-only (issue #1103); other arches
+# ship the TFLite models. Stage all candidates in one cacheable layer, then keep
+# only the set for the target architecture.
+RUN mkdir -p /models /tmp/allmodels
+COPY --from=build /home/dev-user/src/BirdNET-Go/internal/classifier/data/*.tflite /tmp/allmodels/
+COPY --from=build /home/dev-user/src/BirdNET-Go/internal/classifier/data/*.onnx /tmp/allmodels/
+ARG TARGETPLATFORM
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
+        cp /tmp/allmodels/*.onnx /models/; \
+    else \
+        cp /tmp/allmodels/*.tflite /models/; \
+    fi && \
+    chmod -R a+r /models/ && \
+    chmod a+x /models && \
+    rm -rf /tmp/allmodels
 
 # Install ALSA library and SOX for audio processing, and other system utilities for debugging
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
@@ -137,22 +143,19 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# Set TFLITE_LIB_DIR based on architecture
-ARG TARGETPLATFORM
-ARG TFLITE_LIB_DIR
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-        export TFLITE_LIB_DIR=/usr/aarch64-linux-gnu/lib; \
-    else \
-        export TFLITE_LIB_DIR=/usr/lib; \
-    fi && \
-    echo "Using TFLITE_LIB_DIR=$TFLITE_LIB_DIR"
-
-# Copy TensorFlow Lite library from build stage
-COPY --from=build /home/dev-user/lib/libtensorflowlite_c.so* ${TFLITE_LIB_DIR}/
-
-# Copy ONNX Runtime libraries from build stage
+# Copy ONNX Runtime libraries (used by all arches; arm64 relies on them exclusively).
 COPY --from=build /home/dev-user/lib/libonnxruntime*.so* /usr/lib/
-RUN ldconfig
+
+# TensorFlow Lite C library: installed for non-arm64 only. arm64 is ONNX-only
+# (issue #1103) and the binary does not link libtensorflowlite_c. Stage it, then
+# install per arch.
+ARG TARGETPLATFORM
+COPY --from=build /home/dev-user/lib/libtensorflowlite_c.so* /tmp/tflite-lib/
+RUN if [ "$TARGETPLATFORM" != "linux/arm64" ]; then \
+        cp /tmp/tflite-lib/libtensorflowlite_c.so* /usr/lib/; \
+    fi && \
+    rm -rf /tmp/tflite-lib && \
+    ldconfig
 
 # Include reset_auth tool from build stage
 COPY --from=build /home/dev-user/src/BirdNET-Go/reset_auth.sh /usr/bin/

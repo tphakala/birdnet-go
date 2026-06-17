@@ -1180,11 +1180,19 @@ tasks:
         export CC={{.CC}}
         {{end}}
         BUILD_TAGS="noembed"
+        # notflite produces an ONNX-only binary that does not link libtensorflowlite_c.
+        if [ "{{.NOTFLITE}}" = "true" ]; then
+          BUILD_TAGS="${BUILD_TAGS},notflite"
+        fi
         if [ -n "${EXTRA_BUILD_TAGS:-}" ]; then
           BUILD_TAGS="${BUILD_TAGS},${EXTRA_BUILD_TAGS}"
         fi
+        TFLITE_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c"
+        if [ "{{.NOTFLITE}}" = "true" ]; then
+          TFLITE_LDFLAGS=""
+        fi
         GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{.CGO_FLAGS}} \
-          CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
+          CGO_LDFLAGS="${TFLITE_LDFLAGS}" \
           go build -trimpath -tags ${BUILD_TAGS} {{.LDFLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}
         echo "Built non-embedded binary: {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}"
         echo "Note: This binary requires external model files to run"
@@ -1202,7 +1210,7 @@ tasks:
           BINARY_SUFFIX: ''
 
   noembed_linux_arm64:
-    desc: Build Linux ARM64 without embedded models
+    desc: Build Linux ARM64 without embedded models (ONNX-only, no TFLite)
     cmds:
       - task: noembed_build
         vars:
@@ -1214,6 +1222,9 @@ tasks:
           CROSS_COMPILE_CHECK: 'aarch64'
           CC: 'aarch64-linux-gnu-gcc'
           BINARY_SUFFIX: ''
+          # arm64 ships ONNX-only: build without the TFLite backend so the binary
+          # does not link libtensorflowlite_c (issue #1103).
+          NOTFLITE: 'true'
 
   noembed_windows_amd64:
     desc: Build Windows AMD64 without embedded models

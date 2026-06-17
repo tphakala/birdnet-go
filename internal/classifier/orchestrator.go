@@ -1440,6 +1440,9 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
+// For the primary model entry, the live o.ModelInfo is returned rather than the
+// static registry template, so the reported Backend and Quantization match the
+// actually loaded model (e.g. ONNX/INT8 on the arm64 container default).
 func (o *Orchestrator) ModelInfos() []ModelInfo {
 	o.mu.RLock()
 	if o.models == nil {
@@ -1450,6 +1453,11 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	for id, entry := range o.models {
 		refs = append(refs, entryRef{id: id, entry: entry})
 	}
+	// Snapshot the live primary identity and info under the same RLock so the
+	// read is consistent with the models-map snapshot above. o.ModelInfo is
+	// written only under o.mu.Lock() (in reloadModelInternal), so RLock is sufficient.
+	primaryID := o.ModelInfo.ID
+	primaryInfo := o.ModelInfo
 	o.mu.RUnlock()
 
 	infos := make([]ModelInfo, 0, len(refs))
@@ -1459,13 +1467,21 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 			ref.entry.mu.Unlock()
 			continue
 		}
-		info, exists := ModelRegistry[ref.id]
-		if !exists {
-			info = ModelInfo{
-				ID:         ref.entry.instance.ModelID(),
-				Name:       ref.entry.instance.ModelName(),
-				Spec:       ref.entry.instance.Spec(),
-				NumSpecies: ref.entry.instance.NumSpecies(),
+		var info ModelInfo
+		if ref.id == primaryID {
+			// Return the live primary info so Backend/Quantization reflect the
+			// actually loaded model, not the static registry template.
+			info = primaryInfo
+		} else {
+			var exists bool
+			info, exists = ModelRegistry[ref.id]
+			if !exists {
+				info = ModelInfo{
+					ID:         ref.entry.instance.ModelID(),
+					Name:       ref.entry.instance.ModelName(),
+					Spec:       ref.entry.instance.Spec(),
+					NumSpecies: ref.entry.instance.NumSpecies(),
+				}
 			}
 		}
 		ref.entry.mu.Unlock()
