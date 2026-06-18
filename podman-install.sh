@@ -1788,11 +1788,11 @@ Volume=./config:/config
 Volume=./data:/data
 PublishPort=${WEB_PORT}:8888
 Environment=TZ=${CONFIGURED_TZ:-UTC}
-Environment=BIRDNET_UID=\$(id -u)
-Environment=BIRDNET_GID=\$(id -g)
+Environment=BIRDNET_UID=%U
+Environment=BIRDNET_GID=%G
 Device=/dev/snd:/dev/snd
 Network=birdnet-bridge
-Tmpfs=/config/hls:exec,size=50M,uid=\$(id -u),gid=\$(id -g),mode=0755
+Tmpfs=/config/hls:exec,size=50M,mode=0755
 
 [Service]
 Restart=always
