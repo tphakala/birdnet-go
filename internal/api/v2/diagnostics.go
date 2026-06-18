@@ -136,6 +136,10 @@ func (c *Controller) registerHealthChecks() {
 			status := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
 			return status.Available, status.Initialized, status.Version, status.LibraryPath, status.Error
 		}),
+		checks.NewOpenVINOAvailabilityCheck(func() (supported, active bool) {
+			status := inference.CheckOpenVINOAvailability()
+			return status.Supported, status.Active
+		}),
 		checks.NewRangeFilterCheck(func() checks.RangeFilterStatusInfo {
 			orch, err := c.getBirdNETInstance()
 			if err != nil || orch == nil {

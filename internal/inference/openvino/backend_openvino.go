@@ -424,6 +424,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// Supported reports whether the OpenVINO backend is compiled into this build.
+// True here (built under the "openvino" tag); false in stub_noopenvino.go.
+const Supported = true
+
 const (
 	// inputPortIndex is the index of the single audio input tensor.
 	inputPortIndex = 0

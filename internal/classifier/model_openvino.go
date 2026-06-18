@@ -20,6 +20,7 @@ const birdnetLogitsOutputIndex = 0
 type openVINOPlan struct {
 	device      string // inference.OVDeviceCPU or inference.OVDeviceGPU
 	outputIndex int    // logits output port index
+	precision   string // INFERENCE_PRECISION_HINT; "" = backend default (f16)
 }
 
 // openVINOPlanFor decides whether and how to run a model on the OpenVINO backend,
@@ -27,16 +28,18 @@ type openVINOPlan struct {
 //
 //   - backendPref:  settings.BirdNET.Backend ("auto"/"onnx"/"openvino").
 //   - devicePref:   settings.BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu").
-//   - modelID:      the model registry identity (drives the GPU fence).
+//   - modelID:      the model registry identity (drives the precision policy).
 //   - libraryPath:  settings.BirdNET.OpenVINOPath (libopenvino_c location).
 //   - outputIndex:  the logits output port for this model.
 //
-// BirdNET v2.4 is fenced off the GPU this release (only Perch may target the Intel
-// iGPU). cpuspec.HasNativeF16() is true only on ARMv8.2+ (A76), which keeps amd64
-// CPU out of the auto path (a non-win); an explicit "cpu" device is still allowed
-// on amd64 for benchmarking/advanced use. The plan helper loads the OpenVINO core
-// (idempotent) only when it must enumerate devices for a GPU decision, so it is
-// independent of caller ordering.
+// Both BirdNET v2.4 and Perch may target the Intel iGPU; the per-(model, device)
+// precision is chosen by openVINOPrecisionFor (BirdNET v2.4 is forced to f32 on
+// the GPU because the GPU f16 kernel miscompiles it). cpuspec.HasNativeF16() is
+// true only on ARMv8.2+ (A76), which keeps amd64 CPU out of the auto path (a
+// non-win); an explicit "cpu" device is still allowed on amd64 for
+// benchmarking/advanced use. The plan helper loads the OpenVINO core (idempotent)
+// only when it must enumerate devices for a GPU decision, so it is independent of
+// caller ordering.
 func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outputIndex int) (openVINOPlan, bool) {
 	if !openvinoBackendAvailable {
 		return openVINOPlan{}, false
@@ -45,12 +48,10 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 		return openVINOPlan{}, false
 	}
 
-	allowGPU := modelID != DefaultModelVersion // BirdNET v2.4 stays CPU-only.
-
 	var device string
 	switch devicePref {
 	case conf.OVDeviceGPU:
-		if !allowGPU || !openVINOGPUAvailable(libraryPath) {
+		if !openVINOGPUAvailable(libraryPath) {
 			return openVINOPlan{}, false
 		}
 		device = inference.OVDeviceGPU
@@ -61,7 +62,7 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 		device = inference.OVDeviceCPU
 	default: // "auto" or ""
 		switch {
-		case allowGPU && openVINOGPUAvailable(libraryPath):
+		case openVINOGPUAvailable(libraryPath):
 			device = inference.OVDeviceGPU
 		case openVINOCPUAllowed(devicePref):
 			device = inference.OVDeviceCPU
@@ -70,7 +71,29 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 		}
 	}
 
-	return openVINOPlan{device: device, outputIndex: outputIndex}, true
+	return openVINOPlan{
+		device:      device,
+		outputIndex: outputIndex,
+		precision:   openVINOPrecisionFor(modelID, device),
+	}, true
+}
+
+// openVINOPrecisionFor returns the INFERENCE_PRECISION_HINT for a (model, device)
+// pair, or "" to use the backend default (f16).
+//
+// BirdNET v2.4 is forced to f32 on the GPU: the Intel GPU plugin's f16 kernel
+// miscompiles this single-output sigmoid model. Validated on an Iris Xe iGPU
+// (2026-06-18), f16 collapses on realistic low-SNR audio (max confidence error
+// ~0.8, wrong top-1, confidences fall to ~0) while a loud single-species clip
+// survives by luck; f32 is bit-exact with ORT (~6e-6) and still ~4.6x faster than
+// ORT CPU. CPU f16 (incl. ARM A76) and Perch v2 f16-GPU are unaffected, so the
+// override is scoped to BirdNET-on-GPU. Do NOT widen it to f16 without re-running
+// the inference/openvino_parity_functional_test.go soundscape parity check.
+func openVINOPrecisionFor(modelID, device string) string {
+	if device == inference.OVDeviceGPU && modelID == DefaultModelVersion {
+		return inference.OVPrecisionF32
+	}
+	return ""
 }
 
 // openVINOCPUAllowed reports whether the OpenVINO CPU device may be used. The f16
@@ -104,7 +127,8 @@ func openVINOGPUAvailable(libraryPath string) bool {
 // false to use ORT. The primary classifier path applies sigmoid post-processing,
 // so only the BirdNET v2.4 identity is valid here; Perch (softmax) runs its own
 // OpenVINO path in the Perch ModelInstance (perch_onnx.go), never through this
-// primary path. The plan also carries the device (CPU/GPU) and logits output index.
+// primary path. The plan carries the device (CPU/GPU), logits output index, and
+// the precision hint (f32 on the GPU for BirdNET v2.4; see openVINOPrecisionFor).
 func (bn *BirdNET) openVINOPlan() (openVINOPlan, bool) {
 	if bn.ModelInfo.ID != DefaultModelVersion {
 		return openVINOPlan{}, false
@@ -121,8 +145,8 @@ func (bn *BirdNET) openVINOPlan() (openVINOPlan, bool) {
 // shouldTryOpenVINO reports whether the OpenVINO backend should be attempted for
 // the primary classifier before falling back to ORT. True only when built with
 // the openvino tag, the model is the BirdNET v2.4 identity, config does not opt
-// out, and a supported device is available (ARM A76 f16 CPU; the GPU is fenced
-// off for BirdNET this release).
+// out, and a supported device is available (ARM A76 f16 CPU, or the Intel iGPU at
+// f32; see openVINOPrecisionFor for why BirdNET v2.4 uses f32 on the GPU).
 func (bn *BirdNET) shouldTryOpenVINO() bool {
 	_, ok := bn.openVINOPlan()
 	return ok
@@ -164,10 +188,11 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	}
 
 	classifier, err := inference.NewOpenVINOClassifier(modelPath, inference.OpenVINOClassifierOptions{
-		Labels:      settings.BirdNET.Labels,
-		Threads:     settings.BirdNET.Threads,
-		Device:      plan.device,
-		OutputIndex: plan.outputIndex,
+		Labels:        settings.BirdNET.Labels,
+		Threads:       settings.BirdNET.Threads,
+		Device:        plan.device,
+		OutputIndex:   plan.outputIndex,
+		PrecisionHint: plan.precision,
 	})
 	if err != nil {
 		return errors.New(err).Category(errors.CategoryModelInit).

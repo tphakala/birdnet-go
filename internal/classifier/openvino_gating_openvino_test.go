@@ -32,30 +32,27 @@ func TestShouldTryOpenVINO_Tagged_WrongModel(t *testing.T) {
 }
 
 // TestShouldTryOpenVINO_Tagged_HardwareGateDecides verifies that with the tag, a
-// supported model, and no opt-out, the native-f16 (ASIMDHP) capability is the final
-// deciding factor: true on ARMv8.2 (rpi5), false elsewhere (amd64). This makes the
-// test robust on any host.
+// supported model, and no opt-out, the hardware is the final deciding factor:
+// eligibility is true when the host has ARM A76 f16 CPU acceleration OR an
+// available Intel OpenVINO GPU (BirdNET v2.4 runs there at f32). This keeps the
+// test robust on any host (rpi5 A76, amd64+iGPU, or amd64 CPU-only).
 func TestShouldTryOpenVINO_Tagged_HardwareGateDecides(t *testing.T) {
 	t.Parallel()
 	bn := &BirdNET{Settings: &conf.Settings{}}
 	bn.Settings.BirdNET.Backend = conf.BackendPrefOpenVINO
 	bn.ModelInfo = ModelInfo{ID: DefaultModelVersion, Backend: BackendONNX}
-	assert.Equal(t, cpuspec.HasNativeF16(), bn.shouldTryOpenVINO(),
-		"with tag, supported model, and opt-in, the result must equal native-f16 capability")
-}
-
-// TestOpenVINOPlan_BirdNETFencedOffGPU verifies BirdNET v2.4 never targets the
-// GPU: an explicit device=gpu yields no plan, and an auto plan (when produced)
-// is always the CPU device. These cases never enumerate devices (the GPU branch
-// short-circuits on the BirdNET fence), so the test needs no libopenvino_c.
-func TestOpenVINOPlan_BirdNETFencedOffGPU(t *testing.T) {
-	t.Parallel()
-	_, ok := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceGPU, DefaultModelVersion, "", birdnetLogitsOutputIndex)
-	assert.False(t, ok, "BirdNET v2.4 + device=gpu must not produce a plan (GPU is fenced off)")
-
-	if plan, ok := openVINOPlanFor(conf.BackendPrefAuto, conf.OVDeviceAuto, DefaultModelVersion, "", birdnetLogitsOutputIndex); ok {
-		assert.Equal(t, inference.OVDeviceCPU, plan.device, "BirdNET auto plan must be CPU, never GPU")
-	}
+	// Compute the same hardware availability the planner uses (auto path: GPU
+	// preferred when present, else the ARM f16 CPU gate). The hardware portion of
+	// `expected` is intentionally mirror-logic of the implementation, so it proves
+	// nothing about the device decision itself; what this test actually guards is
+	// that the tag/opt-in/model gates upstream do NOT block eligibility (a
+	// regression that ignored the openvino tag, the BirdNET v2.4 model gate, or the
+	// opt-in would make `shouldTryOpenVINO` diverge from `expected` on a capable
+	// host). The fixed-expectation gate coverage lives in the sibling _OptOut,
+	// _WrongModel, and TestOpenVINOPlan_* tests.
+	expected := cpuspec.HasNativeF16() || openVINOGPUAvailable("")
+	assert.Equal(t, expected, bn.shouldTryOpenVINO(),
+		"with tag, supported model, and opt-in, eligibility must equal ARM f16 CPU capability or OV GPU availability")
 }
 
 // TestOpenVINOPlan_ExplicitCPU verifies the explicit CPU device gate: allowed on
