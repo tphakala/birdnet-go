@@ -3,7 +3,7 @@
 
   Consumes the GET /api/v2/system/inference snapshot, renders hardware,
   inference backends, audio pipeline metrics, and per-model cards with
-  latency / RTF / throughput sparklines, approximate host RAM, last
+  latency / throughput sparklines, approximate host RAM, last
   detection, activity pulse, and attached audio sources. Live updates arrive
   over the existing metrics SSE stream (SSE first, polling fallback), and the
   page re-fetches the snapshot when the backend broadcasts a topology change.
@@ -23,6 +23,7 @@
   import { loggers } from '$lib/utils/logger';
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import { formatBytesCompact, formatNumber, formatRelativeTime } from '$lib/utils/formatters';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
@@ -50,7 +51,6 @@
 
   // Sparkline colors, chosen to match the existing system charts palette.
   const LATENCY_COLOR = '#3b82f6'; // blue
-  const RTF_COLOR = '#8b5cf6'; // violet
   const THROUGHPUT_COLOR = '#10b981'; // emerald
   const AUDIO_COLOR = '#06b6d4'; // cyan
 
@@ -138,6 +138,19 @@
     }
     return keys;
   });
+
+  // Stable display order: sort by name (locale-aware), tie-broken by id, so cards
+  // do not reshuffle when the backend returns models in a different order.
+  let sortedModels = $derived(
+    snapshot
+      ? [...snapshot.models].sort((a, b) => {
+          // Case-insensitive, matching the backend's name -> id ordering so the
+          // client and API agree on order for mixed-case model names.
+          const byName = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+          return byName !== 0 ? byName : a.id.localeCompare(b.id);
+        })
+      : []
+  );
 
   // True while the page has loaded a snapshot with no models and is polling for
   // them to appear. Lets poll() hand off to the live SSE transport once models
@@ -401,12 +414,20 @@
   }
 </script>
 
-<div class="space-y-4">
-  <h2 class="text-xl font-semibold flex items-center gap-2">
-    <Brain class="w-5 h-5 shrink-0" aria-hidden="true" />
-    {t('system.inference.title')}
-  </h2>
+<!--
+  Renders a jargon stat as "label: value" with a plain-English explanation
+  available on hover (title) and to screen readers (sr-only + aria-describedby),
+  mirroring the existing RTF / approximate-RAM pattern. helpId must be unique.
+-->
+{#snippet stat(label: string, help: string, value: string, helpId: string)}
+  <span class="text-muted" title={help}>
+    {label}:
+    <span class="font-mono tabular-nums text-base-content" aria-describedby={helpId}>{value}</span>
+    <span id={helpId} class="sr-only">{help}</span>
+  </span>
+{/snippet}
 
+<div class="space-y-4">
   {#if loading}
     <div
       class="flex items-center gap-3 p-4 text-sm text-base-content/70"
@@ -414,7 +435,7 @@
       aria-live="polite"
     >
       <span
-        class="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"
+        class="animate-spin motion-reduce:animate-none h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"
         aria-hidden="true"
       ></span>
       <span>{t('system.inference.loading')}</span>
@@ -427,133 +448,163 @@
       {error}
     </div>
   {:else if snapshot}
-    <!-- Hardware -->
-    <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-      <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
-        {t('system.inference.sectionHardware')}
-      </h3>
-      <div class="space-y-2.5">
-        {#if snapshot.hardware.arch}
-          <div class="flex items-center gap-3">
-            <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <span class="text-sm text-muted">{t('system.inference.architecture')}</span>
-            <span class="text-sm font-mono tabular-nums truncate">{snapshot.hardware.arch}</span>
-          </div>
-        {/if}
-        {#if snapshot.hardware.cpuModel}
-          <div class="flex items-center gap-3">
-            <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <span class="text-sm text-muted">{t('system.inference.cpu')}</span>
-            <span class="text-sm truncate">{snapshot.hardware.cpuModel}</span>
-          </div>
-        {/if}
-        {#if snapshot.hardware.environment}
-          <div class="flex items-center gap-3">
-            <span class="text-sm text-muted">{t('system.inference.environment')}</span>
-            <span class="text-sm truncate">{snapshot.hardware.environment}</span>
-          </div>
-        {/if}
-        <div class="flex items-center gap-3">
-          <span class="text-sm text-muted">{t('system.inference.fp16')}</span>
-          {#if snapshot.hardware.fp16}
-            <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
-          {:else}
-            <StatusPill variant="neutral" label={t('system.inference.fp16Unsupported')} size="xs" />
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <!-- Inference backends -->
-    <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-      <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
-        {t('system.inference.sectionBackends')}
-      </h3>
-      <div class="space-y-2.5">
-        {#each simpleBackends as row (row.label)}
-          <div class="flex items-center gap-3 flex-wrap">
-            <span class="text-sm min-w-32">{row.label}</span>
-            <StatusPill
-              variant={backendVariant(row.status.available)}
-              label={backendLabel(row.status.available)}
-              size="xs"
-            />
-            {#if row.status.available && row.status.initialized}
-              <StatusPill variant="info" label={t('system.inference.initialized')} size="xs" />
-            {/if}
-            {#if row.status.version}
-              <span class="text-xs text-muted font-mono tabular-nums">
-                {t('system.inference.version')}: {row.status.version}
-              </span>
-            {/if}
-          </div>
-        {/each}
-
-        {#if openvino}
-          <div class="flex items-center gap-3 flex-wrap">
-            <span class="text-sm min-w-32">{t('system.inference.backendOpenvino')}</span>
-            {#if !openvino.supported}
-              <StatusPill variant="neutral" label={t('system.inference.notAvailable')} size="xs" />
-            {:else if openvino.active}
-              <StatusPill variant="success" label={t('system.inference.active')} size="xs" />
-            {:else}
-              <StatusPill variant="neutral" label={t('system.inference.inactive')} size="xs" />
-            {/if}
-            {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
-              <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
-              {#each openvino.devices as device (device)}
-                <Badge variant="neutral" size="sm" text={device} />
-              {/each}
-            {/if}
-          </div>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Audio pipeline -->
-    {#if snapshot.audio}
+    <!-- Top context row: hardware, inference backends, and audio as compact cards. -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <!-- Hardware -->
       <div
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
       >
         <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
-          {t('system.inference.sectionAudio')}
+          {t('system.inference.sectionHardware')}
         </h3>
         <div class="space-y-2.5">
-          <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-            <span class="text-muted">
-              {t('system.inference.queueDepth')}:
-              <span class="font-mono tabular-nums text-base-content">
-                {snapshot.audio.queueDepth}
-              </span>
-            </span>
-            <span class="text-muted">
-              {t('system.inference.queueCapacity')}:
-              <span class="font-mono tabular-nums text-base-content">
-                {snapshot.audio.queueCapacity}
-              </span>
-            </span>
-            <span class="text-muted">
-              {t('system.inference.droppedChunks')}:
-              <span class="font-mono tabular-nums text-base-content">
-                {formatNumber(snapshot.audio.droppedChunksTotal)}
-              </span>
-            </span>
-          </div>
-          <div>
-            <div class="text-[11px] text-muted mb-1 flex items-center gap-1">
-              <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
-              {t('system.inference.queueDepthChart')}
+          {#if snapshot.hardware.arch}
+            <div class="flex items-center gap-3">
+              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.architecture')}</span>
+              <span class="text-sm font-mono tabular-nums truncate" title={snapshot.hardware.arch}
+                >{snapshot.hardware.arch}</span
+              >
             </div>
-            <div class="h-10">
-              <Sparkline
-                data={seriesByKey[snapshot.audio.metricKeys.queueDepth] ?? []}
-                color={AUDIO_COLOR}
+          {/if}
+          {#if snapshot.hardware.cpuModel}
+            <div class="flex items-center gap-3">
+              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.cpu')}</span>
+              <span class="text-sm truncate" title={snapshot.hardware.cpuModel}
+                >{snapshot.hardware.cpuModel}</span
+              >
+            </div>
+          {/if}
+          {#if snapshot.hardware.environment}
+            <div class="flex items-center gap-3">
+              <span class="text-sm text-muted">{t('system.inference.environment')}</span>
+              <span class="text-sm truncate" title={snapshot.hardware.environment}
+                >{snapshot.hardware.environment}</span
+              >
+            </div>
+          {/if}
+          <div class="flex items-center gap-3">
+            <span
+              class="text-sm text-muted"
+              title={t('system.inference.fp16Help')}
+              aria-describedby="help-fp16"
+            >
+              {t('system.inference.fp16')}
+            </span>
+            <span id="help-fp16" class="sr-only">{t('system.inference.fp16Help')}</span>
+            {#if snapshot.hardware.fp16}
+              <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
+            {:else}
+              <StatusPill
+                variant="neutral"
+                label={t('system.inference.fp16Unsupported')}
+                size="xs"
               />
-            </div>
+            {/if}
           </div>
         </div>
       </div>
-    {/if}
+
+      <!-- Inference backends -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
+      >
+        <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
+          {t('system.inference.sectionBackends')}
+        </h3>
+        <div class="space-y-2.5">
+          {#each simpleBackends as row (row.label)}
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-sm min-w-32">{row.label}</span>
+              <StatusPill
+                variant={backendVariant(row.status.available)}
+                label={backendLabel(row.status.available)}
+                size="xs"
+              />
+              {#if row.status.available && row.status.initialized}
+                <StatusPill variant="info" label={t('system.inference.initialized')} size="xs" />
+              {/if}
+              {#if row.status.version}
+                <span class="text-xs text-muted font-mono tabular-nums">
+                  {t('system.inference.version')}: {row.status.version}
+                </span>
+              {/if}
+            </div>
+          {/each}
+
+          {#if openvino}
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-sm min-w-32">{t('system.inference.backendOpenvino')}</span>
+              {#if !openvino.supported}
+                <StatusPill
+                  variant="neutral"
+                  label={t('system.inference.notAvailable')}
+                  size="xs"
+                />
+              {:else if openvino.active}
+                <StatusPill variant="success" label={t('system.inference.active')} size="xs" />
+              {:else}
+                <StatusPill variant="neutral" label={t('system.inference.inactive')} size="xs" />
+              {/if}
+              {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
+                <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
+                {#each openvino.devices as device (device)}
+                  <Badge variant="neutral" size="sm" text={device} />
+                {/each}
+              {/if}
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Audio pipeline -->
+      {#if snapshot.audio}
+        <div
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
+        >
+          <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
+            {t('system.inference.sectionAudio')}
+          </h3>
+          <div class="space-y-2.5">
+            <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {@render stat(
+                t('system.inference.queueDepth'),
+                t('system.inference.queueDepthHelp'),
+                String(snapshot.audio.queueDepth),
+                'help-queue-depth'
+              )}
+              {@render stat(
+                t('system.inference.queueCapacity'),
+                t('system.inference.queueCapacityHelp'),
+                String(snapshot.audio.queueCapacity),
+                'help-queue-capacity'
+              )}
+              {@render stat(
+                t('system.inference.droppedChunks'),
+                t('system.inference.droppedChunksHelp'),
+                formatNumber(snapshot.audio.droppedChunksTotal),
+                'help-dropped-chunks'
+              )}
+            </div>
+            <div>
+              <div class="text-xs text-muted mb-1 flex items-center gap-1">
+                <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
+                {t('system.inference.queueDepthChart')}
+              </div>
+              <div class="h-10">
+                <Sparkline
+                  data={seriesByKey[snapshot.audio.metricKeys.queueDepth] ?? []}
+                  color={AUDIO_COLOR}
+                  decorative
+                  emptyLabel={t('system.inference.noDataYet')}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
 
     <!-- Models -->
     <div>
@@ -561,17 +612,22 @@
         {t('system.inference.sectionModels')}
       </h3>
 
-      {#if snapshot.models.length === 0}
+      {#if sortedModels.length === 0}
         <div
-          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-6 shadow-sm text-center text-sm text-base-content/70"
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-6 shadow-sm text-center text-sm text-muted"
         >
-          {t('system.inference.noModels')}
+          <p>{t('system.inference.noModels')}</p>
+          <p class="mt-2">
+            {t('system.inference.noModelsHint')}
+            <a href={buildAppUrl('/ui/settings/audio')} class="text-primary underline">
+              {t('system.inference.noModelsHintLink')}
+            </a>
+          </p>
         </div>
       {:else}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {#each snapshot.models as model (model.id)}
+        <div class="space-y-3">
+          {#each sortedModels as model (model.id)}
             {@const latencySeries = seriesByKey[model.metricKeys.avgMs] ?? []}
-            {@const rtfSeries = seriesByKey[model.metricKeys.rtf] ?? []}
             {@const throughputSeries = seriesByKey[model.metricKeys.throughput] ?? []}
             {@const throughputLatest =
               throughputSeries.length > 0 ? throughputSeries[throughputSeries.length - 1] : 0}
@@ -600,7 +656,10 @@
                     : t('system.inference.activityIdle')}
                 >
                   {#if isActive}
-                    <Activity class="w-3 h-3 text-green-500 animate-pulse" aria-hidden="true" />
+                    <Activity
+                      class="w-3 h-3 text-green-500 animate-pulse motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
                   {:else}
                     <Minus class="w-3 h-3 text-base-content/30" aria-hidden="true" />
                   {/if}
@@ -645,18 +704,18 @@
                     {formatRelativeTime(model.lastDetection.atUnix * 1000)}
                   </span>
                 {:else}
-                  <span class="text-base-content/70">{t('system.inference.lastSeenNever')}</span>
+                  <span class="text-muted">{t('system.inference.lastSeenNever')}</span>
                 {/if}
               </div>
 
               <!-- Stats line -->
               <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                <span class="text-muted">
-                  {t('system.inference.invocations')}:
-                  <span class="font-mono tabular-nums text-base-content">
-                    {formatNumber(model.stats.invocations)}
-                  </span>
-                </span>
+                {@render stat(
+                  t('system.inference.invocations'),
+                  t('system.inference.invocationsHelp'),
+                  formatNumber(model.stats.invocations),
+                  `help-invocations-${model.id}`
+                )}
                 <span class="text-muted">
                   {t('system.inference.avgLatency')}:
                   <span class="font-mono tabular-nums text-base-content">
@@ -669,67 +728,68 @@
                     {maxLatencyDisplay(model)}
                   </span>
                 </span>
-                <span class="text-muted" title={t('system.inference.rtfLabel')}>
+                <span class="text-muted" title={t('system.inference.rtfHelp')}>
                   {t('system.inference.rtf')}:
                   <span
                     class="font-mono tabular-nums text-base-content"
                     aria-describedby={`rtf-help-${model.id}`}>{rtfDisplay(model)}</span
                   >
                   <span id={`rtf-help-${model.id}`} class="sr-only">
-                    {t('system.inference.rtfLabel')}
+                    {t('system.inference.rtfHelp')}
                   </span>
                 </span>
-                <span class="text-muted">
-                  {t('system.inference.throughput')}:
-                  <span class="font-mono tabular-nums text-base-content">
-                    {throughputDisplay(model, throughputLatest)}
-                  </span>
-                </span>
+                {@render stat(
+                  t('system.inference.throughput'),
+                  t('system.inference.throughputHelp'),
+                  throughputDisplay(model, throughputLatest),
+                  `help-throughput-${model.id}`
+                )}
                 {#if model.stats.errorRate !== undefined}
-                  <span class="text-muted">
-                    {t('system.inference.errorRate')}:
-                    <span class="font-mono tabular-nums text-base-content">
-                      {Math.round(model.stats.errorRate * 100)}%
-                    </span>
-                  </span>
+                  {@render stat(
+                    t('system.inference.errorRate'),
+                    t('system.inference.errorRateHelp'),
+                    Math.round(model.stats.errorRate * 100) + '%',
+                    `help-error-rate-${model.id}`
+                  )}
                 {/if}
                 {#if model.stats.loadFailures !== undefined && model.stats.loadFailures > 0}
-                  <span class="text-muted">
-                    {t('system.inference.loadFailures')}:
-                    <span class="font-mono tabular-nums text-base-content">
-                      {model.stats.loadFailures}
-                    </span>
-                  </span>
+                  {@render stat(
+                    t('system.inference.loadFailures'),
+                    t('system.inference.loadFailuresHelp'),
+                    String(model.stats.loadFailures),
+                    `help-load-failures-${model.id}`
+                  )}
                 {/if}
               </div>
 
               <!-- Sparklines -->
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <div class="text-[11px] text-muted mb-1 flex items-center gap-1">
+                  <div class="text-xs text-muted mb-1 flex items-center gap-1">
                     <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
                     {t('system.inference.latencyChart')}
                   </div>
                   <div class="h-10">
-                    <Sparkline data={latencySeries} color={LATENCY_COLOR} />
+                    <Sparkline
+                      data={latencySeries}
+                      color={LATENCY_COLOR}
+                      decorative
+                      emptyLabel={t('system.inference.noDataYet')}
+                    />
                   </div>
                 </div>
                 <div>
-                  <div class="text-[11px] text-muted mb-1 flex items-center gap-1">
-                    <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
-                    {t('system.inference.rtfChart')}
-                  </div>
-                  <div class="h-10">
-                    <Sparkline data={rtfSeries} color={RTF_COLOR} />
-                  </div>
-                </div>
-                <div>
-                  <div class="text-[11px] text-muted mb-1 flex items-center gap-1">
+                  <div class="text-xs text-muted mb-1 flex items-center gap-1">
                     <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
                     {t('system.inference.throughputChart')}
                   </div>
                   <div class="h-10">
-                    <Sparkline data={throughputSeries} color={THROUGHPUT_COLOR} />
+                    <Sparkline
+                      data={throughputSeries}
+                      color={THROUGHPUT_COLOR}
+                      decorative
+                      emptyLabel={t('system.inference.noDataYet')}
+                    />
                   </div>
                 </div>
               </div>
@@ -752,10 +812,9 @@
 
               <!-- Sources -->
               <div>
-                <div class="text-[11px] text-muted mb-1">{t('system.inference.sources')}</div>
+                <div class="text-xs text-muted mb-1">{t('system.inference.sources')}</div>
                 {#if model.sources.length === 0}
-                  <span class="text-xs text-base-content/70">{t('system.inference.noSources')}</span
-                  >
+                  <span class="text-xs text-muted">{t('system.inference.noSources')}</span>
                 {:else}
                   <div class="flex flex-wrap gap-1.5">
                     {#each model.sources as source (source.id)}

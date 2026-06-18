@@ -93,6 +93,40 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 	assert.True(t, prim[0].Fallback, "primary source must be a fallback")
 }
 
+// TestBuildSourceAttachments_MultiModelSourceAttachesAll verifies that a single
+// source assigned to several models (the real multi-model setup: one soundcard
+// feeding BirdNET + Perch + Bat) is attached to EVERY loaded model in its Models
+// list, not just the first. This mirrors the runtime fan-out in
+// resolveModelTargets, which routes the source's audio to all assigned models.
+func TestBuildSourceAttachments_MultiModelSourceAttachesAll(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+
+	// All three models loaded.
+	models := []classifier.ModelInfo{
+		{ID: primaryID},
+		{ID: classifier.RegistryIDPerchV2},
+		{ID: classifier.RegistryIDBat},
+	}
+
+	settings := &conf.Settings{}
+	// One soundcard source explicitly assigned to all three models.
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Äänikortti", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat}},
+	}
+
+	got := buildSourceAttachments(settings, models, primaryID)
+
+	// Every assigned, loaded model must show the source, none as a fallback.
+	for _, id := range []string{primaryID, classifier.RegistryIDPerchV2, classifier.RegistryIDBat} {
+		att := got[id]
+		require.Len(t, att, 1, "model %q must have the source attached", id)
+		assert.Equal(t, "Äänikortti", att[0].Name, "source name for %q", id)
+		assert.False(t, att[0].Fallback, "explicit assignment must not be a fallback for %q", id)
+	}
+}
+
 // TestBuildModelStatus verifies that buildModelStatus correctly computes
 // average latency, peak latency, RTF, and memory from a non-zero PeekSnapshot.
 func TestBuildModelStatus(t *testing.T) {
@@ -292,4 +326,20 @@ func TestBuildModelStatus_LastDetection(t *testing.T) {
 	assert.Equal(t, "Erithacus rubecula", got.LastDetection.ScientificName)
 	assert.InDelta(t, 0.92, got.LastDetection.Confidence, 0.001)
 	assert.Equal(t, int64(1718000000), got.LastDetection.AtUnix)
+}
+
+// TestSortInferenceModelsByName verifies that model statuses are ordered by
+// display name (case-insensitive), tie-broken by ID, so the API response order
+// is deterministic regardless of the orchestrator's map iteration order.
+func TestSortInferenceModelsByName(t *testing.T) {
+	t.Parallel()
+	models := []InferenceModelStatus{
+		{ID: "b", Name: "Zebra"},
+		{ID: "a", Name: "alpha"},
+		{ID: "c", Name: "Alpha"},
+	}
+	sortInferenceModelsByName(models)
+	got := []string{models[0].ID, models[1].ID, models[2].ID}
+	// "alpha" and "Alpha" tie case-insensitively; tie broken by ID (a before c).
+	require.Equal(t, []string{"a", "c", "b"}, got)
 }

@@ -2,7 +2,10 @@
 package api
 
 import (
+	"cmp"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -364,8 +367,21 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 	for i := range infos {
 		resp.Models = append(resp.Models, buildModelStatus(&infos[i], counters[infos[i].ID], rss, attachments[infos[i].ID], loadFailures, lastDetections))
 	}
+	sortInferenceModelsByName(resp.Models)
 
 	return ctx.JSON(http.StatusOK, resp)
+}
+
+// sortInferenceModelsByName orders model statuses by display name
+// (case-insensitive), tie-broken by ID, so the API returns a deterministic
+// order regardless of the orchestrator's map iteration order.
+func sortInferenceModelsByName(models []InferenceModelStatus) {
+	slices.SortStableFunc(models, func(a, b InferenceModelStatus) int {
+		return cmp.Or(
+			cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)),
+			cmp.Compare(a.ID, b.ID),
+		)
+	})
 }
 
 // buildSourceAttachments computes, per loaded model registry ID, the audio
@@ -381,18 +397,21 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 	out := make(map[string][]ModelSourceInfo)
 
 	attach := func(name, sourceType string, configModels []string) {
-		target := ""
+		// A source can feed several models at once. The runtime fans its audio out
+		// to every assigned+loaded model (see analysis.resolveModelTargets), so the
+		// status view must attach the source to all of them, not just the first.
+		matched := false
 		for _, cm := range configModels {
-			if regID, ok := classifier.ResolveConfigModelID(cm); ok && loaded[regID] {
-				target = regID
-				break
+			regID, ok := classifier.ResolveConfigModelID(cm)
+			if !ok || !loaded[regID] {
+				continue
 			}
+			out[regID] = append(out[regID], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: false})
+			matched = true
 		}
-		if target != "" {
-			out[target] = append(out[target], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: false})
-			return
-		}
-		if primaryID != "" {
+		// No assigned model resolved to a loaded one: the primary model analyzes the
+		// source as the runtime fallback, so surface it there with Fallback=true.
+		if !matched && primaryID != "" {
 			out[primaryID] = append(out[primaryID], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: true})
 		}
 	}
