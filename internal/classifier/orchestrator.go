@@ -103,6 +103,11 @@ type Orchestrator struct {
 	modelRSS         map[string]int64
 	runtimeBaseline  int64
 	baselineCaptured bool
+
+	// modelLoadFailures tracks how many times LoadModel has failed per registry
+	// ID. Uses sync.Map to avoid holding o.mu for reads (see LoadFailures).
+	// Values are *atomic.Int64.
+	modelLoadFailures sync.Map
 }
 
 // CurrentSettings returns the latest settings snapshot published via
@@ -455,6 +460,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	duration := time.Since(start)
 
 	if err != nil {
+		globalInferenceCounters.RecordError(modelID)
 		log.Error("PredictModel inference failed",
 			logger.String("model_id", modelID),
 			logger.Error(err),
@@ -1512,6 +1518,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		logger.Int("threads", dynamicThreads))
 
 	if err := loader(o, dynamicThreads); err != nil {
+		o.incLoadFailure(registryID)
 		return err
 	}
 
@@ -1531,6 +1538,25 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	}
 
 	return nil
+}
+
+// incLoadFailure atomically increments the load-failure counter for registryID.
+// Safe to call concurrently; does not require o.mu.
+func (o *Orchestrator) incLoadFailure(registryID string) {
+	v, _ := o.modelLoadFailures.LoadOrStore(registryID, new(atomic.Int64))
+	v.(*atomic.Int64).Add(1)
+}
+
+// LoadFailures returns a snapshot of the per-model load-failure counts accumulated
+// since this Orchestrator was created. The returned map is a copy; callers may
+// read and discard it freely. Safe to call concurrently with LoadModel.
+func (o *Orchestrator) LoadFailures() map[string]int64 {
+	result := make(map[string]int64)
+	o.modelLoadFailures.Range(func(key, value any) bool {
+		result[key.(string)] = value.(*atomic.Int64).Load()
+		return true
+	})
+	return result
 }
 
 // UnloadModel removes a model from the Orchestrator and releases its resources.
