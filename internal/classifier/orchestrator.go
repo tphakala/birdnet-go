@@ -1195,6 +1195,10 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			refs = append(refs, entryRef{id: id, entry: entry})
 		}
 	}
+	// Sort by registry ID so the rebuild order (and thus logs and the returned
+	// firstErr when several secondaries fail) is deterministic across the random
+	// map iteration order.
+	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
 	o.mu.Unlock()
 
 	if len(refs) == 0 {
