@@ -17,6 +17,13 @@ import (
 // sourceTypeSoundCard is the source type label for local ALSA/sound card captures.
 const sourceTypeSoundCard = "soundcard"
 
+// eventInferenceTopologyChanged is the SSE event name emitted over the metrics
+// stream whenever the inference topology (loaded models or audio source
+// attachment) changes. It is the single source of truth for the event name;
+// the frontend listens for this exact string and re-fetches the
+// /api/v2/system/inference snapshot on receipt.
+const eventInferenceTopologyChanged = "system.inference_topology_changed"
+
 // InferenceStatusResponse is the top-level payload for GET /api/v2/system/inference.
 type InferenceStatusResponse struct {
 	Hardware             HardwareInfo           `json:"hardware"`
@@ -269,4 +276,14 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 		attach(st.Name, st.Type, st.Models)
 	}
 	return out
+}
+
+// BroadcastInferenceTopologyChanged signals all metrics-stream SSE clients that
+// the inference topology (models or source attachment) changed so they re-fetch
+// the /api/v2/system/inference snapshot. Safe to call when no metrics store is set.
+func (c *Controller) BroadcastInferenceTopologyChanged() {
+	if c == nil || c.metricsStore == nil {
+		return
+	}
+	c.metricsStore.BroadcastTopologyChanged()
 }

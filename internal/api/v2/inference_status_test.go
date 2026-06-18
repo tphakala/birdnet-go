@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // TestBuildSourceAttachments verifies that buildSourceAttachments correctly
@@ -150,4 +151,44 @@ func TestGetInferenceStatus_HTTP200(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body must unmarshal to InferenceStatusResponse")
 	assert.True(t, resp.Backends.TFLite.Available, "TFLite backend must always report Available=true")
 	assert.NotZero(t, resp.SnapshotAtUnix, "SnapshotAtUnix must be a non-zero Unix timestamp")
+}
+
+// eventInferenceTopologyChangedName is asserted against the package constant so
+// the SSE event name stays the single source of truth shared with the frontend.
+const eventInferenceTopologyChangedName = "system.inference_topology_changed"
+
+// TestBroadcastInferenceTopologyChanged_ReachesConsumer verifies that the
+// controller broadcast reaches a topology subscriber on the wired metrics store.
+func TestBroadcastInferenceTopologyChanged_ReachesConsumer(t *testing.T) {
+	t.Parallel()
+
+	// Constant matches the shared event-name contract.
+	assert.Equal(t, eventInferenceTopologyChangedName, eventInferenceTopologyChanged)
+
+	store := observability.NewMemoryStore(10)
+	controller := &Controller{metricsStore: store}
+
+	topoCh, cancel := store.SubscribeTopology()
+	t.Cleanup(cancel)
+
+	controller.BroadcastInferenceTopologyChanged()
+
+	select {
+	case <-topoCh:
+		// Expected: broadcast reached the subscriber.
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for topology broadcast to reach the subscriber")
+	}
+}
+
+// TestBroadcastInferenceTopologyChanged_NilSafe verifies the broadcast is a
+// no-op (no panic) when the controller or its metrics store is nil.
+func TestBroadcastInferenceTopologyChanged_NilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilController *Controller
+	assert.NotPanics(t, nilController.BroadcastInferenceTopologyChanged)
+
+	noStore := &Controller{}
+	assert.NotPanics(t, noStore.BroadcastInferenceTopologyChanged)
 }

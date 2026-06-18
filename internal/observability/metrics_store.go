@@ -40,4 +40,19 @@ type MetricsStore interface {
 	// (avoids send-on-closed-channel panics). The channel is reclaimed by GC
 	// once both sides drop references.
 	Subscribe() (<-chan map[string]MetricPoint, func())
+
+	// BroadcastTopologyChanged signals all topology subscribers that the
+	// inference topology (loaded models or audio source attachment) changed.
+	// The send is non-blocking: a subscriber whose buffer is already full keeps
+	// its pending signal and does not block the broadcaster. It is safe to call
+	// when there are no subscribers.
+	BroadcastTopologyChanged()
+
+	// SubscribeTopology returns a buffered (cap 1) signal channel that receives
+	// a value on each BroadcastTopologyChanged call, plus a cancel function to
+	// unsubscribe. The cancel function removes the subscriber but does NOT close
+	// the channel (avoids send-on-closed-channel panics). The channel is
+	// reclaimed by GC once both sides drop references. Consumers receive only a
+	// coalesced signal (no payload); they react by re-fetching the snapshot.
+	SubscribeTopology() (<-chan struct{}, func())
 }

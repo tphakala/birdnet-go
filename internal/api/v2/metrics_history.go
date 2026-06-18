@@ -97,6 +97,11 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 	ch, cancel := c.metricsStore.Subscribe()
 	defer cancel()
 
+	// Subscribe to inference topology changes (model add/remove, source
+	// reassignment) so the client re-fetches the inference snapshot.
+	topoCh, topoCancel := c.metricsStore.SubscribeTopology()
+	defer topoCancel()
+
 	// Set SSE headers
 	setSSEHeaders(ctx)
 
@@ -157,6 +162,17 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 					)
 					return err
 				}
+			}
+
+		case <-topoCh:
+			if err := c.sendSSEMessage(ctx, eventInferenceTopologyChanged, map[string]any{
+				"timestamp": time.Now().Unix(),
+			}); err != nil {
+				c.logDebugIfEnabled("Metrics SSE topology-changed send failed, client likely disconnected",
+					logger.String("client_id", clientID),
+					logger.Error(err),
+				)
+				return err
 			}
 
 		case <-heartbeatTicker.C:

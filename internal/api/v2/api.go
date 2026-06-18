@@ -276,6 +276,10 @@ func WithAudioEngine(e *engine.AudioEngine) Option {
 func WithModelManager(mm *classifier.ModelManager) Option {
 	return func(c *Controller) {
 		c.ModelManager = mm
+		// Wire the topology-changed callback so model add/remove broadcasts over
+		// the metrics SSE stream. The method value binds c; c.metricsStore is read
+		// lazily at call time, so option ordering is irrelevant.
+		mm.SetTopologyChangedCallback(c.BroadcastInferenceTopologyChanged)
 	}
 }
 
