@@ -470,6 +470,11 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	}
 
 	emitHotReload("birdnet_model")
+	// Signal the metrics SSE stream that the inference topology changed so the
+	// AI Models page re-fetches its snapshot.
+	if cm.apiController != nil {
+		cm.apiController.BroadcastInferenceTopologyChanged()
+	}
 }
 
 // handleReconfigureMQTT reconfigures the MQTT connection
@@ -543,6 +548,10 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 
 	audiocore.GetLogger().Info("Audio streams reconfigured successfully")
 	emitHotReload("rtsp_sources")
+	// Source reassignment changes the inference topology; notify the metrics SSE stream.
+	if cm.apiController != nil {
+		cm.apiController.BroadcastInferenceTopologyChanged()
+	}
 }
 
 // handleReconfigureBirdWeather reconfigures the BirdWeather integration
@@ -960,6 +969,10 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 
 	audiocore.GetLogger().Info("Audio sources reconfigured successfully")
 	emitHotReload("audio_sources")
+	// Source reassignment changes the inference topology; notify the metrics SSE stream.
+	if cm.apiController != nil {
+		cm.apiController.BroadcastInferenceTopologyChanged()
+	}
 }
 
 // handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
