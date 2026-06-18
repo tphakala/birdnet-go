@@ -3,6 +3,7 @@ package audiotemp_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestUniquePath_PrefixedByOutputAndEndsInExt(t *testing.T) {
@@ -106,4 +108,43 @@ func TestFinalize_ConcurrentSameTargetAllSucceed(t *testing.T) {
 	leftover, err := filepath.Glob(filepath.Join(dir, "*"+audiotemp.Ext))
 	require.NoError(t, err)
 	assert.Empty(t, leftover, "no temp files should remain after concurrent finalize")
+}
+
+// TestFinalizeWith_UsesInjectedRename verifies FinalizeWith routes the move
+// through the caller-supplied rename function (the SecureFS rename the
+// spectrogram generator injects) and returns its result unchanged on success.
+func TestFinalizeWith_UsesInjectedRename(t *testing.T) {
+	t.Parallel()
+	var gotOld, gotNew string
+	calls := 0
+	rename := func(oldpath, newpath string) error {
+		calls++
+		gotOld, gotNew = oldpath, newpath
+		return nil
+	}
+
+	require.NoError(t, audiotemp.FinalizeWith("clip.png.1.2.temp", "clip.png", rename))
+	assert.Equal(t, 1, calls, "rename must be called exactly once on success")
+	assert.Equal(t, "clip.png.1.2.temp", gotOld)
+	assert.Equal(t, "clip.png", gotNew)
+}
+
+// TestFinalizeWith_PropagatesRenameError verifies a rename failure surfaces to
+// the caller. On non-Windows the rename is attempted exactly once (no retry); the
+// Windows retry path is covered by TestFinalize_ConcurrentSameTargetAllSucceed.
+func TestFinalizeWith_PropagatesRenameError(t *testing.T) {
+	t.Parallel()
+	sentinel := errors.NewStd("rename failed")
+	calls := 0
+	rename := func(_, _ string) error {
+		calls++
+		return sentinel
+	}
+
+	err := audiotemp.FinalizeWith("a.temp", "a.png", rename)
+	require.ErrorIs(t, err, sentinel)
+	assert.GreaterOrEqual(t, calls, 1, "rename must be attempted at least once")
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, 1, calls, "non-Windows must not retry a failed rename")
+	}
 }
