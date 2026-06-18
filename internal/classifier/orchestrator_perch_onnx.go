@@ -76,12 +76,16 @@ func (o *Orchestrator) loadPerch(threads int) error {
 	if err != nil {
 		return err
 	}
-	o.warmupAndRecordRSS(perch.ModelID(), before, perch)
 
 	o.models[perch.ModelID()] = &modelEntry{
 		instance: perch,
 		backend:  secondaryTripletFor(settings),
 	}
+	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
+	// warm-up inference runs via the serialized inference path instead of stalling
+	// live inference on o.mu. The entry is registered above first
+	// so the drainer can find it by key.
+	o.deferWarmup(perch.ModelID(), before)
 
 	// No separate Perch label resolver needed. Perch returns scientific names,
 	// and the BirdNETLabelResolver (already registered) maps scientific -> common

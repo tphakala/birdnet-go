@@ -421,8 +421,11 @@ func (c *Collector) collectInference(points map[string]float64) {
 }
 
 // collectModelRSS sets the per-model RSS Prometheus gauge each tick. RSS is set
-// at load and stable until reload; setting it every tick is idempotent and
-// handles model add/remove. RSS is not written to the ring buffer in Phase 1.
+// shortly after load (the warm-up + measurement is deferred and run off o.mu,
+// so it lands a moment after the model becomes visible) and stable until reload;
+// setting it every tick is idempotent and handles model add/remove, and the tick
+// cadence naturally picks up the value once the deferred warm-up records it. RSS
+// is not written to the ring buffer in Phase 1.
 func (c *Collector) collectModelRSS() {
 	if c.modelRSSFunc == nil || c.rssGauge == nil {
 		return

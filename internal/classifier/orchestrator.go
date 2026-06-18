@@ -103,6 +103,22 @@ type Orchestrator struct {
 	modelRSS         map[string]int64
 	runtimeBaseline  int64
 	baselineCaptured bool
+
+	// pendingWarmups queues deferred warm-ups recorded by model loaders while
+	// they hold o.mu (write lock). Drained by runPendingWarmups after o.mu is
+	// released, so the warm-up inference runs via the serialized inference path
+	// instead of stalling PredictModel on o.mu. Appended only
+	// under o.mu.Lock(); snapshotted and cleared under o.mu by the drainer.
+	pendingWarmups []pendingWarmup
+}
+
+// pendingWarmup defers a freshly-registered model's warm-up + RSS measurement
+// until after o.mu is released. Running the warm-up inference under o.mu would
+// block every PredictModel/ModelInfos caller (which wait on o.mu.RLock) for the
+// inference duration.
+type pendingWarmup struct {
+	modelID string // o.models key of the freshly registered instance
+	before  uint64 // process RSS sampled before the build (0 = RSS unavailable)
 }
 
 // CurrentSettings returns the latest settings snapshot published via
@@ -1473,61 +1489,77 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			Build()
 	}
 
-	o.mu.Lock()
-	defer o.mu.Unlock()
+	// Drain the deferred warm-up after o.mu is released, on every return path.
+	// Loaders queue the warm-up via deferWarmup while holding o.mu; running it
+	// here (outside o.mu, via the serialized inference path) is what keeps a
+	// runtime install from stalling live inference. Deferring it
+	// (rather than calling it only on success) guarantees a loader that queues a
+	// warm-up and then fails cannot orphan an entry in the queue for a later load.
+	defer o.runPendingWarmups()
 
-	if o.models == nil {
-		return errors.Newf("orchestrator has been deleted, cannot load model").
-			Component("classifier.orchestrator").
-			Category(errors.CategorySystem).
-			Build()
-	}
+	// Build and register the model under o.mu (loaders write directly to
+	// o.models).
+	if err := func() error {
+		o.mu.Lock()
+		defer o.mu.Unlock()
 
-	if _, exists := o.models[registryID]; exists {
-		log.Debug("model already loaded, skipping",
-			logger.String("registry_id", registryID))
-		return nil
-	}
-
-	loader, implemented := modelLoaders[registryID]
-	if !implemented {
-		log.Warn("Loader not yet implemented",
-			logger.String("registry_id", registryID))
-		return errors.Newf("loader not yet implemented for model %s", registryID).
-			Component("classifier.orchestrator").
-			Category(errors.CategoryModelInit).
-			Context("registry_id", registryID).
-			Build()
-	}
-
-	// Give the new model the full thread budget. Inference is serialized by
-	// inferenceMu so concurrent CPU contention cannot occur.
-	dynamicThreads := o.currentSettings().BirdNET.Threads
-	if dynamicThreads <= 0 {
-		dynamicThreads = runtime.NumCPU()
-	}
-
-	log.Info("Loading model dynamically",
-		logger.String("registry_id", registryID),
-		logger.Int("threads", dynamicThreads))
-
-	if err := loader(o, dynamicThreads); err != nil {
-		return err
-	}
-
-	log.Info("Model loaded dynamically",
-		logger.String("registry_id", registryID))
-
-	// Start nighttime scheduler if bat model was just loaded and suncalc is available.
-	// Create a fresh scheduler to handle the unload/reload case where the
-	// previous scheduler's stopChan was closed.
-	if registryID == RegistryIDBat {
-		if old := o.scheduler.Load(); old != nil && old.sunCalc != nil {
-			old.stop()
-			s := newNighttimeScheduler(old.sunCalc)
-			o.scheduler.Store(s)
-			o.startBatScheduler(s)
+		if o.models == nil {
+			return errors.Newf("orchestrator has been deleted, cannot load model").
+				Component("classifier.orchestrator").
+				Category(errors.CategorySystem).
+				Build()
 		}
+
+		if _, exists := o.models[registryID]; exists {
+			log.Debug("model already loaded, skipping",
+				logger.String("registry_id", registryID))
+			return nil
+		}
+
+		loader, implemented := modelLoaders[registryID]
+		if !implemented {
+			log.Warn("Loader not yet implemented",
+				logger.String("registry_id", registryID))
+			return errors.Newf("loader not yet implemented for model %s", registryID).
+				Component("classifier.orchestrator").
+				Category(errors.CategoryModelInit).
+				Context("registry_id", registryID).
+				Build()
+		}
+
+		// Give the new model the full thread budget. Inference is serialized by
+		// inferenceMu so concurrent CPU contention cannot occur.
+		dynamicThreads := o.currentSettings().BirdNET.Threads
+		if dynamicThreads <= 0 {
+			dynamicThreads = runtime.NumCPU()
+		}
+
+		log.Info("Loading model dynamically",
+			logger.String("registry_id", registryID),
+			logger.Int("threads", dynamicThreads))
+
+		if err := loader(o, dynamicThreads); err != nil {
+			return err
+		}
+
+		log.Info("Model loaded dynamically",
+			logger.String("registry_id", registryID))
+
+		// Start nighttime scheduler if bat model was just loaded and suncalc is available.
+		// Create a fresh scheduler to handle the unload/reload case where the
+		// previous scheduler's stopChan was closed.
+		if registryID == RegistryIDBat {
+			if old := o.scheduler.Load(); old != nil && old.sunCalc != nil {
+				old.stop()
+				s := newNighttimeScheduler(old.sunCalc)
+				o.scheduler.Store(s)
+				o.startBatScheduler(s)
+			}
+		}
+
+		return nil
+	}(); err != nil {
+		return err
 	}
 
 	return nil
@@ -1872,6 +1904,12 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 				logger.String("registry_id", registryID),
 				logger.Error(loadErr))
 		}
+
+		// Warm up the freshly-loaded model now that o.mu is released, before the
+		// next model's build. Draining per-iteration (rather than once after the
+		// loop) keeps RSS accounting accurate: this model's RSS-after is measured
+		// before the next model allocates its arena.
+		o.runPendingWarmups()
 	}
 
 	return nil
