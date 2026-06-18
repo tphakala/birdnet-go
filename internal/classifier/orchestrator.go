@@ -1115,12 +1115,27 @@ func (o *Orchestrator) ReloadModel() error {
 	o.ScientificIndex = sciIndex
 
 	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
+	//
+	// Read each entry's instance and its ModelID under the entry's own e.mu. This is
+	// defensive, not a fix for a live bug: today ReloadModel and ReloadSecondaryModels
+	// (which swaps e.instance under e.mu, outside o.mu) are both invoked only from the
+	// single-goroutine monitor event loop, so they never interleave and this re-key,
+	// holding o.mu, already excludes every other e.instance writer. Keeping the
+	// ModelID() read inside e.mu removes reliance on that non-local serialization
+	// invariant (and on ModelID being an immutable accessor) so a future second caller
+	// cannot turn the re-key into a data race. e.mu is a leaf lock here (taken while
+	// holding o.mu and acquiring nothing else under it), so the established
+	// o.mu -> e.mu order holds and this cannot deadlock.
 	newModels := make(map[string]*modelEntry, len(o.models))
 	for _, e := range o.models {
+		e.mu.Lock()
 		if e.instance == nil {
+			e.mu.Unlock()
 			continue // skip entries closed by concurrent Delete
 		}
-		newModels[e.instance.ModelID()] = e
+		modelID := e.instance.ModelID()
+		e.mu.Unlock()
+		newModels[modelID] = e
 	}
 	o.models = newModels
 
@@ -1773,7 +1788,11 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryI
 func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	log := GetLogger()
 
-	for _, configID := range o.Settings.Models.Enabled {
+	// Read the live published settings snapshot rather than the deprecated
+	// o.Settings pointer, consistent with the per-model loaders (loadPerch/loadBat).
+	settings := o.currentSettings()
+
+	for _, configID := range settings.Models.Enabled {
 		registryID, known := ResolveConfigModelID(configID)
 		if !known {
 			log.Warn("skipping unknown model ID in models.enabled",
