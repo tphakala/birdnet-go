@@ -105,7 +105,7 @@ jobs:
           # Silicon, so DYLD_* env vars (stripped by SIP from child test binaries)
           # are not needed.
           sudo mkdir -p /usr/local/lib
-          sudo cp -a /tmp/onnxruntime/lib/libonnxruntime*.dylib /usr/local/lib/
+          sudo cp -a "${RUNNER_TEMP}"/onnxruntime/lib/libonnxruntime*.dylib /usr/local/lib/
 
       - name: Run unit tests
         env:

@@ -18,7 +18,13 @@ runs:
       id: cache-onnxruntime
       uses: actions/cache@v5
       with:
-        path: /tmp/onnxruntime
+        # Use runner.temp, not /tmp. actions/cache evaluates `path` in Node, which
+        # on a native Windows runner reads /tmp as the absolute path C:\tmp, while
+        # the shell: bash steps (Git Bash/MSYS) map /tmp to a different directory.
+        # On a cache hit Node would then restore the libs where the bash verify
+        # step cannot find them. runner.temp (Node) and $RUNNER_TEMP (bash) resolve
+        # to the same directory on every OS, so the two stay in agreement.
+        path: ${{ runner.temp }}/onnxruntime
         key: onnxruntime-${{ inputs.target-platform }}-${{ inputs.onnxruntime-version }}
 
     - name: Download ONNX Runtime
@@ -26,38 +32,39 @@ runs:
       shell: bash
       run: |
         VERSION="${{ inputs.onnxruntime-version }}"
-        mkdir -p /tmp/onnxruntime
+        ONNX_DIR="${RUNNER_TEMP}/onnxruntime"
+        mkdir -p "${ONNX_DIR}"
 
         case "${{ inputs.target-platform }}" in
           linux-amd64)
             curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-x64-${VERSION}.tgz" \
-              -o /tmp/onnxruntime.tgz
-            tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
-            rm /tmp/onnxruntime.tgz
+              -o "${ONNX_DIR}.tgz"
+            tar -xzf "${ONNX_DIR}.tgz" -C "${ONNX_DIR}" --strip-components=1
+            rm "${ONNX_DIR}.tgz"
             ;;
           linux-arm64)
             curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-aarch64-${VERSION}.tgz" \
-              -o /tmp/onnxruntime.tgz
-            tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
-            rm /tmp/onnxruntime.tgz
+              -o "${ONNX_DIR}.tgz"
+            tar -xzf "${ONNX_DIR}.tgz" -C "${ONNX_DIR}" --strip-components=1
+            rm "${ONNX_DIR}.tgz"
             ;;
           windows-amd64)
             curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-win-x64-${VERSION}.zip" \
-              -o /tmp/onnxruntime.zip
-            TMPDIR=$(mktemp -d)
-            unzip -q /tmp/onnxruntime.zip -d "$TMPDIR"
-            cp -r "$TMPDIR"/onnxruntime-*/* /tmp/onnxruntime/
-            rm -rf "$TMPDIR" /tmp/onnxruntime.zip
+              -o "${ONNX_DIR}.zip"
+            TMPDIR_WIN=$(mktemp -d "${RUNNER_TEMP}/tmp.XXXXXX")
+            unzip -q "${ONNX_DIR}.zip" -d "$TMPDIR_WIN"
+            cp -r "$TMPDIR_WIN"/onnxruntime-*/* "${ONNX_DIR}/"
+            rm -rf "$TMPDIR_WIN" "${ONNX_DIR}.zip"
             ;;
           darwin-arm64)
             curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-arm64-${VERSION}.tgz" \
-              -o /tmp/onnxruntime.tgz
+              -o "${ONNX_DIR}.tgz"
             # BSD tar on macOS treats ./ as a path component, so --strip-components=1
             # only strips ./ instead of the full directory prefix. Use cp instead.
-            TMPDIR_ORT=$(mktemp -d)
-            tar -xzf /tmp/onnxruntime.tgz -C "$TMPDIR_ORT"
-            cp -R "$TMPDIR_ORT"/onnxruntime-*/* /tmp/onnxruntime/
-            rm -rf "$TMPDIR_ORT" /tmp/onnxruntime.tgz
+            TMPDIR_ORT=$(mktemp -d "${RUNNER_TEMP}/tmp.XXXXXX")
+            tar -xzf "${ONNX_DIR}.tgz" -C "$TMPDIR_ORT"
+            cp -R "$TMPDIR_ORT"/onnxruntime-*/* "${ONNX_DIR}/"
+            rm -rf "$TMPDIR_ORT" "${ONNX_DIR}.tgz"
             ;;
           *)
             echo "::error::Unsupported platform: ${{ inputs.target-platform }}"
@@ -68,22 +75,23 @@ runs:
     - name: Verify download and repair symlinks
       shell: bash
       run: |
-        if [ ! -d /tmp/onnxruntime/lib ]; then
-          echo "::error::ONNX Runtime lib directory missing at /tmp/onnxruntime/lib"
-          echo "Contents of /tmp/onnxruntime:"
-          ls -laR /tmp/onnxruntime 2>/dev/null || echo "(directory does not exist)"
+        ONNX_DIR="${RUNNER_TEMP}/onnxruntime"
+        if [ ! -d "${ONNX_DIR}/lib" ]; then
+          echo "::error::ONNX Runtime lib directory missing at ${ONNX_DIR}/lib"
+          echo "Contents of ${ONNX_DIR}:"
+          ls -laR "${ONNX_DIR}" 2>/dev/null || echo "(directory does not exist)"
           exit 1
         fi
         echo "ONNX Runtime lib contents:"
-        ls -la /tmp/onnxruntime/lib/
+        ls -la "${ONNX_DIR}/lib/"
 
         # Repair dylib symlink if broken or missing after cache restore
         case "${{ inputs.target-platform }}" in
           darwin-arm64)
-            if [ ! -e /tmp/onnxruntime/lib/libonnxruntime.dylib ]; then
-              target=$(find /tmp/onnxruntime/lib -maxdepth 1 -name 'libonnxruntime.*.dylib' -not -name '*.dSYM' -type f | head -1)
+            if [ ! -e "${ONNX_DIR}/lib/libonnxruntime.dylib" ]; then
+              target=$(find "${ONNX_DIR}/lib" -maxdepth 1 -name 'libonnxruntime.*.dylib' -not -name '*.dSYM' -type f | head -1)
               if [ -n "$target" ]; then
-                ln -sf "$(basename "$target")" /tmp/onnxruntime/lib/libonnxruntime.dylib
+                ln -sf "$(basename "$target")" "${ONNX_DIR}/lib/libonnxruntime.dylib"
                 echo "Repaired missing symlink: libonnxruntime.dylib -> $(basename "$target")"
               fi
             fi
@@ -93,12 +101,13 @@ runs:
     - name: Install ONNX Runtime to system path
       shell: bash
       run: |
+        ONNX_DIR="${RUNNER_TEMP}/onnxruntime"
         case "${{ inputs.target-platform }}" in
           linux-amd64)
-            sudo cp /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/lib/
+            sudo cp "${ONNX_DIR}"/lib/libonnxruntime*.so* /usr/lib/
             sudo ldconfig
             ;;
           linux-arm64)
-            sudo cp /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/aarch64-linux-gnu/lib/
+            sudo cp "${ONNX_DIR}"/lib/libonnxruntime*.so* /usr/aarch64-linux-gnu/lib/
             ;;
         esac
