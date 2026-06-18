@@ -402,22 +402,10 @@ func (c *Collector) collectInference(points map[string]float64) {
 			continue
 		}
 
+		// avg_ms and rtf use the raw signed delta, exactly as before Phase 3.
+		// A counter reset (negative delta) falls through to the else branch and
+		// zeroes avg_ms, preserving the original Phase 1 behavior.
 		deltaInvokes := snap.InvokeCount - prev.InvokeCount
-		// Handle counter reset: if cumulative count decreased, treat the current
-		// absolute value as the delta (mirrors the disk I/O reset guard pattern).
-		if deltaInvokes < 0 {
-			deltaInvokes = snap.InvokeCount
-		}
-
-		// Compute delta errors with the same counter-reset guard.
-		deltaErrors := snap.InvokeErrors - prev.InvokeErrors
-		if deltaErrors < 0 {
-			deltaErrors = snap.InvokeErrors
-		}
-
-		// Elapsed seconds between the two snapshots, used for throughput computation.
-		elapsedSeconds := snap.CollectedAt.Sub(prev.CollectedAt).Seconds()
-
 		if deltaInvokes > 0 {
 			deltaUs := snap.InvokeTotalUs - prev.InvokeTotalUs
 			points[key] = float64(deltaUs) / float64(deltaInvokes) / usToMs
@@ -440,17 +428,33 @@ func (c *Collector) collectInference(points map[string]float64) {
 			points[key] = 0
 		}
 
+		// Throughput and error_rate use reset-adjusted deltas so that a counter
+		// reset (e.g. process restart) is treated as the absolute current value
+		// rather than a negative spike. These locals are scoped to the new series
+		// and do not affect avg_ms or rtf above.
+		tpInvokes := snap.InvokeCount - prev.InvokeCount
+		if tpInvokes < 0 {
+			tpInvokes = snap.InvokeCount
+		}
+		tpErrors := snap.InvokeErrors - prev.InvokeErrors
+		if tpErrors < 0 {
+			tpErrors = snap.InvokeErrors
+		}
+
+		// Elapsed seconds between the two snapshots, used for throughput computation.
+		elapsedSeconds := snap.CollectedAt.Sub(prev.CollectedAt).Seconds()
+
 		// Throughput: invocations per second over the tick interval.
 		if elapsedSeconds > 0 {
-			points[inferencestats.ThroughputMetricKey(modelID)] = float64(deltaInvokes) / elapsedSeconds
+			points[inferencestats.ThroughputMetricKey(modelID)] = float64(tpInvokes) / elapsedSeconds
 		} else {
 			points[inferencestats.ThroughputMetricKey(modelID)] = 0
 		}
 
 		// Error rate: errors / (errors + invocations) over the tick interval, range [0, 1].
-		total := deltaErrors + deltaInvokes
+		total := tpErrors + tpInvokes
 		if total > 0 {
-			points[inferencestats.ErrorRateMetricKey(modelID)] = float64(deltaErrors) / float64(total)
+			points[inferencestats.ErrorRateMetricKey(modelID)] = float64(tpErrors) / float64(total)
 		} else {
 			points[inferencestats.ErrorRateMetricKey(modelID)] = 0
 		}

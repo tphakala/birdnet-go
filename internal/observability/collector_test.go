@@ -480,37 +480,50 @@ func TestCollector_InferenceErrorRateZeroWhenIdle(t *testing.T) {
 	assert.InDelta(t, 0.0, pts[0].Value, 0.0001, "error_rate must be 0 when idle (no delta)")
 }
 
-// TestCollector_InferenceErrorRateCounterReset verifies that if the error counter
-// decreases (counter reset), the collector treats the current value as the delta
-// rather than computing a negative delta.
+// TestCollector_InferenceErrorRateCounterReset verifies that when the inference
+// counters decrease (counter reset - e.g. process restart or counter wrap),
+// the collector treats the current absolute values as the tick delta rather
+// than computing a negative rate. A fresh CounterMap with lower absolute
+// values is injected between ticks to force current < previous.
 func TestCollector_InferenceErrorRateCounterReset(t *testing.T) {
 	t.Parallel()
 	store := NewMemoryStore(10)
 	collector := NewCollector(store, time.Second, func() float64 { return 0 })
 
-	counters := &inferencestats.CounterMap{}
-	// Seed with some invocations and errors.
-	counters.RecordInvoke("ModelF", 10_000)
-	counters.RecordInvoke("ModelF", 10_000)
-	counters.RecordError("ModelF")
-	collector.SetInferenceCounters(counters)
+	// Tick 1: seed with high absolute values (10 invocations, 3 errors).
+	counters1 := &inferencestats.CounterMap{}
+	for range 10 {
+		counters1.RecordInvoke("ModelF", 10_000)
+	}
+	for range 3 {
+		counters1.RecordError("ModelF")
+	}
+	collector.SetInferenceCounters(counters1)
+	collector.collect() // seeding tick; nothing written to store
 
-	// First tick: seeding.
-	collector.collect()
-
-	// Simulate a counter reset by manipulating via a fresh CounterMap with lower values.
-	// In practice we test the reset path by verifying the code handles it gracefully.
-	// We record a fresh invocation on the same counter to ensure a positive delta.
-	counters.RecordInvoke("ModelF", 10_000)
-	counters.RecordError("ModelF")
-
+	// Tick 2: inject a fresh CounterMap with lower absolute values so that
+	// current < previous on both InvokeCount and InvokeErrors. This simulates
+	// a counter reset (e.g. the underlying counters were replaced).
+	// New absolute values: InvokeCount=2, InvokeErrors=1.
+	counters2 := &inferencestats.CounterMap{}
+	counters2.RecordInvoke("ModelF", 10_000)
+	counters2.RecordInvoke("ModelF", 10_000)
+	counters2.RecordError("ModelF")
+	collector.SetInferenceCounters(counters2)
 	collector.collect()
 
 	errorRateKey := inferencestats.ErrorRateMetricKey("ModelF")
 	pts := store.Get(errorRateKey, 10)
 	require.Len(t, pts, 1)
-	// deltaErrors=1, deltaInvokes=1 -> rate = 1/(1+1) = 0.5
-	assert.InDelta(t, 0.5, pts[0].Value, 0.0001, "error_rate = 1/(1+1) = 0.5")
+	// Reset guard: tpInvokes=2 (absolute), tpErrors=1 (absolute).
+	// error_rate = 1 / (1+2) = 0.333...
+	assert.InDelta(t, 1.0/3.0, pts[0].Value, 0.0001, "error_rate uses absolute value after counter reset")
+
+	// Throughput must also be positive (not zero or negative) after a reset.
+	throughputKey := inferencestats.ThroughputMetricKey("ModelF")
+	tpts := store.Get(throughputKey, 10)
+	require.Len(t, tpts, 1)
+	assert.Greater(t, tpts[0].Value, 0.0, "throughput uses absolute delta after counter reset")
 }
 
 // TestCollector_AudioQueueDepth_PrometheusGauges verifies that the Prometheus
