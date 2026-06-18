@@ -609,8 +609,11 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			errContain: "invalid FFmpeg path",
 		},
 		{
-			name:       "missing sox",
-			ffmpegPath: "/usr/bin/ffmpeg",
+			name: "missing sox",
+			// Absolute (real binary not needed) so it passes the FFmpeg path-format
+			// check and the failure surfaces at the missing Sox path. A literal
+			// /usr/bin/ffmpeg is not absolute on Windows and would fail first.
+			ffmpegPath: filepath.Join(env.TempDir, "ffmpeg"),
 			soxPath:    "",
 			errContain: "invalid Sox path",
 		},
@@ -861,8 +864,11 @@ func TestOperationalErrors_SetLowPriority(t *testing.T) {
 	t.Parallel()
 
 	env := setupTestEnv(t)
-	// We need a bogus path here so `generateWithSoxPCM` doesn't fail at the "binary not configured" check.
-	env.Settings.Realtime.Audio.SoxPath = "/nonexistent/sox"
+	// Bogus but absolute path so generateWithSoxPCM passes the path-format check
+	// (and the failure comes from the cancelled context, not path validation).
+	// A literal /nonexistent/sox is not absolute on Windows, so it would fail the
+	// Sox path check first and the error would not carry PriorityLow.
+	env.Settings.Realtime.Audio.SoxPath = filepath.Join(env.TempDir, "nonexistent-sox")
 
 	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
@@ -915,7 +921,11 @@ func TestNonOperationalErrors_NoExplicitPriority(t *testing.T) {
 	t.Parallel()
 
 	env := setupTestEnv(t)
-	env.Settings.Realtime.Audio.SoxPath = "/nonexistent/sox"
+	// Bogus but absolute path so the Sox path-format check passes and the failure
+	// comes from exec (binary not found), which is non-operational. A literal
+	// /nonexistent/sox is not absolute on Windows and would fail path validation
+	// first, masking the intended path; build an OS-absolute non-existent path.
+	env.Settings.Realtime.Audio.SoxPath = filepath.Join(env.TempDir, "nonexistent-sox")
 
 	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 

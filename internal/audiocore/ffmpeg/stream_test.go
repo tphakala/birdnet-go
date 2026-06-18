@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -416,17 +417,24 @@ func TestStream_CircuitBreakerCooldown(t *testing.T) {
 }
 
 func TestStream_DataRateCalculation(t *testing.T) {
-	t.Parallel()
+	// getRate divides total bytes by the time span between the first and last
+	// sample, returning 0 when that span is zero (div-by-zero guard). On
+	// coarse-timer platforms (Windows, ~15ms resolution) three back-to-back
+	// addSample calls can share a timestamp, making the span zero and the rate
+	// zero. Use synctest's fake clock advanced by time.Sleep so the samples get
+	// distinct timestamps deterministically on every platform.
+	synctest.Test(t, func(t *testing.T) {
+		calc := newDataRateCalculator(dataRateWindowSize)
 
-	stream := newTestStream(t)
-	calc := stream.dataRateCalc
+		calc.addSample(1024)
+		time.Sleep(time.Millisecond)
+		calc.addSample(2048)
+		time.Sleep(time.Millisecond)
+		calc.addSample(1536)
 
-	calc.addSample(1024)
-	calc.addSample(2048)
-	calc.addSample(1536)
-
-	rate := calc.getRate()
-	assert.Greater(t, rate, 0.0)
+		rate := calc.getRate()
+		assert.Greater(t, rate, 0.0)
+	})
 }
 
 func TestStream_DataRateCalculator_EmptyRate(t *testing.T) {

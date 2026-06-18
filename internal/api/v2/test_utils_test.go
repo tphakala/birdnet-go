@@ -184,7 +184,9 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 
 	// Register cleanup to stop background goroutines
 	t.Cleanup(func() {
-		// Shutdown the controller properly
+		// Shutdown the controller properly. This also closes the media SecureFS
+		// (an open os.Root on the t.TempDir() export path); on Windows that handle
+		// must be released or t.TempDir()'s RemoveAll cannot delete the directory.
 		controller.Shutdown()
 		// Close control channel to signal goroutines to exit
 		close(controlChan)

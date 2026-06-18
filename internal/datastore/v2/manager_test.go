@@ -202,7 +202,9 @@ func TestGetDataDirFromLegacyPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := GetDataDirFromLegacyPath(tt.legacyPath)
-			assert.Equal(t, tt.want, got)
+			// GetDataDirFromLegacyPath uses filepath.Dir, which emits OS-native
+			// separators; normalize so the forward-slash expectations hold on Windows.
+			assert.Equal(t, tt.want, filepath.ToSlash(got))
 		})
 	}
 }
