@@ -97,6 +97,12 @@ type Orchestrator struct {
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
 	scheduler atomic.Pointer[nighttimeScheduler]
+
+	// Per-model host RSS-delta accounting (see orchestrator_memory.go).
+	rssMu            sync.Mutex
+	modelRSS         map[string]int64
+	runtimeBaseline  int64
+	baselineCaptured bool
 }
 
 // CurrentSettings returns the latest settings snapshot published via
@@ -136,6 +142,17 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 			primaryInfo = &info
 		}
 	}
+
+	// Capture host RSS before the primary model allocates its arena. We need o
+	// to exist first (captureRSSBefore records the runtime baseline on first call),
+	// so build o with an empty models map and then insert the primary below.
+	o := &Orchestrator{
+		Settings: settings,
+		models:   map[string]*modelEntry{},
+		modelRSS: make(map[string]int64),
+	}
+	rssBefore := o.captureRSSBefore()
+
 	bn, err := NewBirdNET(settings, primaryInfo)
 	if err != nil {
 		return nil, err
@@ -144,21 +161,17 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	resolver := NewBirdNETLabelResolver(bn.Labels())
 	ofResolver := openfauna.NewResolver()
 
-	o := &Orchestrator{
-		Settings:        settings,
-		ModelInfo:       bn.ModelInfo,
-		TaxonomyMap:     bn.TaxonomyMap,
-		TaxonomyPath:    bn.TaxonomyPath,
-		ScientificIndex: bn.ScientificIndex,
-		// OpenFauna first so it overrides label/taxonomy names everywhere
-		// ResolveName is consulted (display + inference).
-		nameResolvers: []NameResolver{ofResolver, resolver},
-		openfauna:     ofResolver,
-		models: map[string]*modelEntry{
-			bn.ModelInfo.ID: {instance: bn},
-		},
-		primary: bn,
-	}
+	// Populate the remaining fields now that bn is available.
+	o.ModelInfo = bn.ModelInfo
+	o.TaxonomyMap = bn.TaxonomyMap
+	o.TaxonomyPath = bn.TaxonomyPath
+	o.ScientificIndex = bn.ScientificIndex
+	// OpenFauna first so it overrides label/taxonomy names everywhere
+	// ResolveName is consulted (display + inference).
+	o.nameResolvers = []NameResolver{ofResolver, resolver}
+	o.openfauna = ofResolver
+	o.models[bn.ModelInfo.ID] = &modelEntry{instance: bn}
+	o.primary = bn
 	o.settingsAtomic.Store(settings)
 
 	// Each OV-capable secondary records the startup triplet on its own modelEntry
@@ -166,6 +179,10 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// reload_birdnet for an unrelated setting (e.g. a locale change) sees a
 	// matching triplet and does not spuriously rebuild it. No orchestrator-wide
 	// gate to seed here anymore.
+
+	// Warm up the primary model and record RSS delta. This calls instance.Predict
+	// directly (single-threaded construction; no lock is held here).
+	o.warmupAndRecordRSS(bn.ModelInfo.ID, rssBefore, bn)
 
 	// Pre-compute thread allocation so model constructors receive their share.
 	// BirdNET already uses settings.BirdNET.Threads at construction; additional

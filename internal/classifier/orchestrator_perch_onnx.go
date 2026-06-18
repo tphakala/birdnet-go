@@ -63,6 +63,7 @@ func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch,
 }
 
 // loadPerch creates and registers a Perch v2 model instance from settings.
+// o.mu.Lock() is held by the caller.
 func (o *Orchestrator) loadPerch(threads int) error {
 	// Capture the settings snapshot once so the recorded backend triplet matches
 	// the exact configuration the instance was built against. This is what makes
@@ -70,10 +71,12 @@ func (o *Orchestrator) loadPerch(threads int) error {
 	// records its own triplet, so a later ReloadSecondaryModels rebuilds it only
 	// when the backend/device actually changes (Forgejo #1119).
 	settings := o.currentSettings()
+	before := o.captureRSSBefore()
 	perch, err := o.buildPerch(settings, threads)
 	if err != nil {
 		return err
 	}
+	o.warmupAndRecordRSS(perch.ModelID(), before, perch)
 
 	o.models[perch.ModelID()] = &modelEntry{
 		instance: perch,
