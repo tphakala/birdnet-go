@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -277,8 +278,15 @@ func TestGroupPathsWithPartitions_RootPathFallbackInContainer(t *testing.T) {
 func TestGroupPathsWithPartitions_MixedRootAndVolumePaths(t *testing.T) {
 	t.Parallel()
 
-	// Create a real temp directory to use as a volume mount path
-	tempDir := t.TempDir()
+	// Create a real temp directory to use as a volume mount path. Resolve symlinks
+	// up front: groupPathsWithPartitions calls filepath.EvalSymlinks on each path
+	// before matching it against the partition list. On macOS, t.TempDir() lives
+	// under /var, which is a symlink to /private/var, so without resolving here the
+	// mock partition mount point (the unresolved temp dir) would not prefix-match
+	// the resolved path, and the path would land in the no-device fallback group
+	// instead of matching its partition.
+	tempDir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 
 	// Simulate container with volume mounts: "/" not in partitions,
 	// but tempDir is a partition mount
