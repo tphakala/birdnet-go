@@ -384,7 +384,7 @@ func (c *Controller) findEncodingTempPath(relClipPath string) (string, bool) {
 
 // isExportTempFor reports whether name is an in-progress export temp file for the
 // clip file named base. It matches the per-export unique form
-// "<base>.<pid>.<seq>.temp" (pid and seq are integers, see ffmpeg.uniqueTempPath)
+// "<base>.<pid>.<seq>.temp" (pid and seq are integers, see audiotemp.UniquePath)
 // and the pre-fix "<base>.temp" form, but NOT unrelated sidecar temps that merely
 // share the prefix and suffix, e.g. a spectrogram's "<base>.png.<pid>.<seq>.temp".
 func isExportTempFor(name, base string) bool {
