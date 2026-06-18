@@ -125,10 +125,10 @@ jobs:
             fi
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
-            cp /tmp/onnxruntime/lib/*.dll artifacts/
+            cp "${RUNNER_TEMP}"/onnxruntime/lib/*.dll artifacts/
           elif [ "${{ matrix.goos }}" = "darwin" ]; then
             cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
-            cp /tmp/onnxruntime/lib/libonnxruntime.dylib artifacts/
+            cp "${RUNNER_TEMP}"/onnxruntime/lib/libonnxruntime.dylib artifacts/
           fi
           
           # Copy platform-specific README
