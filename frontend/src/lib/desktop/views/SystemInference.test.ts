@@ -234,7 +234,7 @@ describe('SystemInference', () => {
     });
 
     // The orphan/ghost series value must not surface anywhere in the rendered
-    // output: the orphan key was rejected by the validKeySet gate.
+    // output: the orphan key was rejected by the validKeys gate.
     expect(container.textContent).not.toContain(String(GHOST_VALUE));
 
     // The valid model's series was ingested: with two points its Sparkline

@@ -96,9 +96,10 @@
     return keys.join(',');
   }
 
-  // Build the set of metric keys belonging to current snapshot models. Used to
-  // ignore series for models that are no longer present (orphan-safe).
-  function validKeySet(): Set<string> {
+  // Set of metric keys belonging to current snapshot models. Used to ignore
+  // series for models that are no longer present (orphan-safe). Derived so it is
+  // recomputed only when the snapshot changes, not on every SSE metrics message.
+  const validKeys = $derived.by(() => {
     const keys = new Set<string>();
     if (!snapshot) return keys;
     for (const m of snapshot.models) {
@@ -106,7 +107,12 @@
       keys.add(m.metricKeys.rtf);
     }
     return keys;
-  }
+  });
+
+  // True while the page has loaded a snapshot with no models and is polling for
+  // them to appear. Lets poll() hand off to the live SSE transport once models
+  // load (a topology event has no transport in the zero-models state).
+  let awaitingModels = false;
 
   function disconnectStream(): void {
     if (metricsSSE) {
@@ -131,19 +137,20 @@
     if (!keys) {
       // No models loaded yet: nothing to stream. Poll the snapshot so the page
       // picks up models once they load (the topology SSE event has no transport here).
+      awaitingModels = true;
       startPollingFallback(active);
       return;
     }
+    awaitingModels = false;
     try {
       const data = await api.get<MetricsHistoryResponse>(
         `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=${encodeURIComponent(keys)}`
       );
       if (!active.current) return;
-      const valid = validKeySet();
       const next: Record<string, number[]> = {}; // rebuild fresh: drops orphan series for models no longer present
       for (const [key, points] of Object.entries(data.metrics)) {
-        if (!valid.has(key)) continue;
-        // eslint-disable-next-line security/detect-object-injection -- key is gated by validKeySet membership
+        if (!validKeys.has(key)) continue;
+        // eslint-disable-next-line security/detect-object-injection -- key is gated by validKeys membership
         next[key] = points.map(p => p.value);
       }
       seriesByKey = next;
@@ -172,13 +179,12 @@
         // eslint-disable-next-line no-undef
         const messageEvent = event as MessageEvent;
         const metrics = JSON.parse(messageEvent.data) as Record<string, { value: number }>;
-        const valid = validKeySet();
         const next: Record<string, number[]> = { ...seriesByKey };
         let changed = false;
         for (const [key, point] of Object.entries(metrics)) {
           // Ignore orphan keys for models not in the current snapshot.
-          if (!valid.has(key)) continue;
-          // eslint-disable-next-line security/detect-object-injection -- key is gated by validKeySet membership
+          if (!validKeys.has(key)) continue;
+          // eslint-disable-next-line security/detect-object-injection -- key is gated by validKeys membership
           next[key] = appendHistory(next[key] ?? [], point.value);
           changed = true;
         }
@@ -220,6 +226,13 @@
         if (!active.current) return;
         snapshot = data;
         error = null;
+        // If we started with no models and they have now loaded, hand off from
+        // snapshot polling to the live SSE transport (seed history + stream).
+        if (awaitingModels && metricKeysParam()) {
+          stopPolling();
+          loadHistory(active);
+          return;
+        }
       } catch {
         // Silently ignore polling failures; keep showing the last snapshot.
       }
