@@ -37,6 +37,16 @@ type entryRef struct {
 	entry *modelEntry
 }
 
+// secondaryBackendKey identifies the inference backend / OpenVINO device that
+// the OV-capable secondary models were last built against. ReloadSecondaryModels
+// uses it as a change-detection gate so an unrelated reload_birdnet trigger
+// (locale, thresholds) does not needlessly rebuild a large secondary model.
+type secondaryBackendKey struct {
+	backend  string
+	ovDevice string
+	ovPath   string
+}
+
 // Orchestrator manages classifier model instances and provides the primary
 // inference API. It replaces direct *BirdNET usage at all call sites.
 // Supports multiple models with per-model locking and name resolution.
@@ -77,6 +87,16 @@ type Orchestrator struct {
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
 	scheduler atomic.Pointer[nighttimeScheduler]
+
+	// secondaryBackend records the backend triplet ReloadSecondaryModels last
+	// built the OV-capable secondaries against, so it can skip a rebuild when
+	// reload_birdnet fires for an unrelated setting. With a single OV-capable
+	// secondary (Perch) and a restart-required OpenVINOPath, this equals the
+	// triplet every loaded secondary actually runs on, because LoadModel builds a
+	// runtime-installed secondary from the same current settings. Adding a second
+	// OV-capable secondary would need per-entry triplet tracking to stay exact
+	// across out-of-band loads (tracked separately). Guarded by o.mu.
+	secondaryBackend secondaryBackendKey
 }
 
 // CurrentSettings returns the latest settings snapshot published via
@@ -140,6 +160,15 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		primary: bn,
 	}
 	o.settingsAtomic.Store(settings)
+
+	// Seed the secondary-model backend gate with the startup triplet so the first
+	// reload_birdnet for an unrelated setting (e.g. a locale change) does not
+	// spuriously rebuild the secondaries (zero value would mismatch "onnx").
+	o.secondaryBackend = secondaryBackendKey{
+		backend:  settings.BirdNET.Backend,
+		ovDevice: settings.BirdNET.OpenVINODevice,
+		ovPath:   settings.BirdNET.OpenVINOPath,
+	}
 
 	// Pre-compute thread allocation so model constructors receive their share.
 	// BirdNET already uses settings.BirdNET.Threads at construction; additional
@@ -1104,6 +1133,150 @@ func (o *Orchestrator) ReloadModel() error {
 	return nil
 }
 
+// ReloadSecondaryModels rebuilds the OV-capable secondary models (currently
+// Perch) when the BirdNET inference backend or OpenVINO device preference
+// changes at runtime, so they move to the new device without a full restart.
+// It mirrors the primary reload's transactional safety: each model is built on
+// the new backend BEFORE the old instance is closed, and a build failure leaves
+// the old instance serving (one model failing does not abort the others).
+//
+// It is a no-op when the backend/device/path triplet is unchanged since the
+// last build, so an unrelated reload_birdnet trigger (locale, thresholds) does
+// not rebuild a large secondary model. The triplet is advanced unconditionally
+// before the build loop: a hard build failure is reported once rather than
+// retried on every subsequent unrelated reload; the user re-toggles the device
+// setting to retry.
+//
+// Returns the first build error encountered (for caller notification). The
+// reload itself does not fail on a secondary error because the primary model
+// has already reloaded by the time this runs.
+//
+// Lock discipline mirrors UnloadModel: o.mu is held only to gate and snapshot,
+// then released before the (potentially slow, JIT-compiling) builds; the swap
+// takes entry.mu alone, which cannot deadlock against PredictModel
+// (o.mu.RLock -> inferenceMu -> entry.mu) because entry.mu is acquired here as
+// a leaf lock while holding nothing else.
+func (o *Orchestrator) ReloadSecondaryModels() error {
+	log := GetLogger()
+
+	// Read the fresh settings published by the primary reload that ran just
+	// before this (ReloadModel atomically swapped the settings pointer).
+	settings := o.currentSettings()
+	triplet := secondaryBackendKey{
+		backend:  settings.BirdNET.Backend,
+		ovDevice: settings.BirdNET.OpenVINODevice,
+		ovPath:   settings.BirdNET.OpenVINOPath,
+	}
+
+	// Gate and snapshot under the write lock (the gate field is written here),
+	// then release o.mu before the slow builds.
+	o.mu.Lock()
+	if o.models == nil {
+		o.mu.Unlock()
+		return errors.Newf("orchestrator has been deleted, cannot reload secondary models").
+			Component("classifier.orchestrator").
+			Category(errors.CategorySystem).
+			Build()
+	}
+	if o.secondaryBackend == triplet {
+		o.mu.Unlock()
+		log.Debug("secondary models already built on current backend/device, skipping reload",
+			logger.String("backend", triplet.backend),
+			logger.String("ov_device", triplet.ovDevice))
+		return nil
+	}
+	// Advance the gate unconditionally (see method doc): a failed rebuild is not
+	// retried on the next unrelated reload.
+	o.secondaryBackend = triplet
+	primaryID := o.ModelInfo.ID
+	refs := make([]entryRef, 0, len(openvinoCapableSecondaryBuilders))
+	for id, entry := range o.models {
+		if _, ok := openvinoCapableSecondaryBuilders[id]; ok {
+			refs = append(refs, entryRef{id: id, entry: entry})
+		}
+	}
+	o.mu.Unlock()
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	// Full per-model thread budget (inference is serialized by inferenceMu),
+	// matching loadAdditionalModels.
+	threadAlloc := o.computeThreadAllocation(settings, primaryID)
+
+	// The builders below run outside o.mu. They construct from the settings
+	// snapshot and may read o.modelsDir (via resolveInstalledPaths), which is set
+	// once at startup by SetModelsDir before the pipeline (and thus this reload
+	// path) starts, so the read is safe without o.mu.
+
+	var firstErr error
+	for _, ref := range refs {
+		builder := openvinoCapableSecondaryBuilders[ref.id]
+		// A secondary present in o.models but absent from settings.Models.Enabled
+		// (e.g. installed at runtime then disabled in config) is not keyed in
+		// threadAlloc; fall back to the full budget, matching LoadModel's default
+		// (inference is serialized by inferenceMu, so each model gets all threads).
+		threads := threadAlloc[ref.id]
+		if threads <= 0 {
+			threads = settings.BirdNET.Threads
+			if threads <= 0 {
+				threads = runtime.NumCPU()
+			}
+		}
+		newInst, err := builder(o, settings, threads)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			log.Error("failed to rebuild secondary model on backend/device change; keeping existing instance",
+				logger.String("registry_id", ref.id),
+				logger.String("backend", triplet.backend),
+				logger.String("ov_device", triplet.ovDevice),
+				logger.Error(err))
+			continue
+		}
+
+		// Swap the new instance into the existing entry under entry.mu so it
+		// cannot race an in-flight PredictModel. Keeping the same *modelEntry
+		// preserves the per-entry mutex identity and the globalInferenceCounters
+		// keying.
+		ref.entry.mu.Lock()
+		old := ref.entry.instance
+		if old == nil {
+			// Entry was torn down by a concurrent Delete/Unload; do not resurrect
+			// a detached entry. Close the freshly built instance and skip.
+			ref.entry.mu.Unlock()
+			if err := newInst.Close(); err != nil {
+				log.Warn("failed to close orphaned secondary model instance after reload",
+					logger.String("registry_id", ref.id),
+					logger.Error(err))
+			}
+			continue
+		}
+		ref.entry.instance = newInst
+		ref.entry.mu.Unlock()
+
+		// Close the old instance after releasing entry.mu: native teardown can be
+		// slow, and no goroutine can reach the old instance once the swap is
+		// published (PredictModel reads entry.instance under entry.mu on every
+		// call). Building the new instance before closing the old keeps the OV
+		// active-classifier counter from transiently dropping to zero.
+		if err := old.Close(); err != nil {
+			log.Warn("failed to close old secondary model instance after reload",
+				logger.String("registry_id", ref.id),
+				logger.Error(err))
+		}
+
+		log.Info("secondary model reloaded on new backend/device",
+			logger.String("registry_id", ref.id),
+			logger.String("backend", triplet.backend),
+			logger.String("ov_device", triplet.ovDevice))
+	}
+
+	return firstErr
+}
+
 // Delete releases all resources held by the Orchestrator and its models.
 // After calling Delete, the Orchestrator must not be used.
 func (o *Orchestrator) Delete() {
@@ -1164,6 +1337,30 @@ func (o *Orchestrator) IsModelLoaded(registryID string) bool {
 var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
 	RegistryIDPerchV2: (*Orchestrator).loadPerch,
 	RegistryIDBat:     (*Orchestrator).loadBat,
+}
+
+// secondaryModelBuilder constructs (but does not register) a secondary model
+// instance from a settings snapshot, for the transactional hot-reload path.
+type secondaryModelBuilder func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error)
+
+// openvinoCapableSecondaryBuilders maps the registry IDs of secondary models
+// whose construction honors the BirdNET inference backend / OpenVINO device
+// preference to a builder returning a fresh, unregistered instance.
+// ReloadSecondaryModels rebuilds exactly these models when the backend/device
+// changes at runtime. ORT-only secondaries (e.g. Bat, which consumes only
+// ONNXRuntimePath) are intentionally absent: rebuilding them on a device change
+// would be wasted native work. Giving a new secondary OpenVINO support is a
+// one-line entry here, paired with the OV fields on its loader config.
+var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
+	RegistryIDPerchV2: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		// Explicit nil-on-error return avoids the typed-nil interface trap (a
+		// nil *Perch wrapped in a non-nil ModelInstance).
+		p, err := o.buildPerch(settings, threads)
+		if err != nil {
+			return nil, err
+		}
+		return p, nil
+	},
 }
 
 // LoadModel dynamically loads a model into the Orchestrator at runtime.
