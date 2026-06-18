@@ -16,6 +16,8 @@
     thresholdColor?: string;
     viewWidth?: number;
     viewHeight?: number;
+    decorative?: boolean;
+    emptyLabel?: string;
   }
 
   let {
@@ -26,6 +28,8 @@
     thresholdColor = '#ef4444',
     viewWidth = 200,
     viewHeight = 40,
+    decorative = false,
+    emptyLabel,
   }: Props = $props();
 
   let effectiveDatasets = $derived.by((): Dataset[] => {
@@ -102,38 +106,52 @@
       thresholdY: threshold != null ? yScale(threshold) : undefined,
     };
   });
+
+  // Show a subtle placeholder when a label is provided and nothing renders yet
+  // (e.g. during the SSE startup window before the first data points arrive).
+  let showEmpty = $derived(emptyLabel != null && rendered.paths.length === 0);
 </script>
 
-<svg
-  width="100%"
-  height="100%"
-  viewBox="0 0 {viewWidth} {viewHeight}"
-  preserveAspectRatio="none"
-  class="overflow-visible"
->
-  {#each rendered.paths as p, i (i)}
-    <path d={p.area} fill={p.color} opacity="0.08" />
-    <path
-      d={p.line}
-      fill="none"
-      stroke={p.color}
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      vector-effect="non-scaling-stroke"
-    />
-  {/each}
-  {#if rendered.thresholdY != null}
-    <line
-      x1="0"
-      y1={rendered.thresholdY}
-      x2={viewWidth}
-      y2={rendered.thresholdY}
-      stroke={thresholdColor}
-      stroke-width="1"
-      stroke-dasharray="4 3"
-      opacity="0.6"
-      vector-effect="non-scaling-stroke"
-    />
+<div class="relative w-full h-full">
+  <svg
+    width="100%"
+    height="100%"
+    viewBox="0 0 {viewWidth} {viewHeight}"
+    preserveAspectRatio="none"
+    class="overflow-visible"
+    aria-hidden={decorative ? 'true' : undefined}
+  >
+    {#each rendered.paths as p, i (i)}
+      <path d={p.area} fill={p.color} opacity="0.08" />
+      <path
+        d={p.line}
+        fill="none"
+        stroke={p.color}
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        vector-effect="non-scaling-stroke"
+      />
+    {/each}
+    {#if rendered.thresholdY != null}
+      <line
+        x1="0"
+        y1={rendered.thresholdY}
+        x2={viewWidth}
+        y2={rendered.thresholdY}
+        stroke={thresholdColor}
+        stroke-width="1"
+        stroke-dasharray="4 3"
+        opacity="0.6"
+        vector-effect="non-scaling-stroke"
+      />
+    {/if}
+  </svg>
+  {#if showEmpty}
+    <div
+      class="absolute inset-0 flex items-center justify-center text-xs text-base-content/60 pointer-events-none"
+    >
+      {emptyLabel}
+    </div>
   {/if}
-</svg>
+</div>
