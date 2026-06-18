@@ -279,18 +279,18 @@ func TestReadThermalZone_OutOfRangeTemperature(t *testing.T) {
 	assert.False(t, ok, "out-of-range temperature should be rejected")
 }
 
-// TestCollector_AudioQueueDepth verifies that collectAudioHealthCounters records
-// per-source queue-depth gauges and the aggregate key on every tick (not as deltas).
+// TestCollector_AudioQueueDepth verifies that collectAudio records the aggregate
+// audio queue depth into the MetricsStore batch (via RecordBatch) so the frontend
+// sparkline series and the metrics history API can serve it.
 //
-// First tick behavior: seeds all keys with 0 (consistent with the drops/overruns
-// first-tick pattern). Second tick onwards: records the actual instantaneous value.
+// Queue depth is an instantaneous gauge: each call to collect() writes the current
+// sum of all source depths into the MetricsStore as a single "audio.queue_depth"
+// point. The healthStore is NOT involved for queue depth.
 func TestCollector_AudioQueueDepth(t *testing.T) {
 	t.Parallel()
 
-	healthStore := NewHealthMetricsStore()
 	store := NewMemoryStore(100)
 	collector := NewCollector(store, time.Second, nil)
-	collector.SetHealthStore(healthStore)
 
 	snapshots := []AudioRouterSnapshot{
 		{SourceID: "src1", Drops: 0, Errors: 0, QueueDepth: 3},
@@ -300,56 +300,36 @@ func TestCollector_AudioQueueDepth(t *testing.T) {
 		return snapshots
 	})
 
-	now := time.Now()
+	// First call: aggregate (3 + 7 = 10) is recorded immediately.
+	points := make(map[string]float64, 4)
+	collector.collectAudio(points)
 
-	// First tick: per-source and aggregate keys are seeded with 0.
-	collector.collectAudioHealthCounters(now)
+	require.Contains(t, points, MetricKeyAudioQueueDepthAggregate, "aggregate key must be in the batch")
+	assert.InDelta(t, 10.0, points[MetricKeyAudioQueueDepthAggregate], 0.001, "aggregate = 3 + 7 = 10")
 
-	src1Buckets := healthStore.Buckets(MetricPrefixAudioQueueDepth+"src1", 1)
-	require.Len(t, src1Buckets, 1, "per-source queue depth for src1 must be seeded on first tick")
-	assert.Equal(t, int64(0), src1Buckets[0].Count, "src1 seeded with 0 on first tick")
+	// Commit the batch so the MetricsStore has a data point.
+	store.RecordBatch(points)
 
-	src2Buckets := healthStore.Buckets(MetricPrefixAudioQueueDepth+"src2", 1)
-	require.Len(t, src2Buckets, 1, "per-source queue depth for src2 must be seeded on first tick")
-	assert.Equal(t, int64(0), src2Buckets[0].Count, "src2 seeded with 0 on first tick")
+	pts := store.Get(MetricKeyAudioQueueDepthAggregate, 10)
+	require.Len(t, pts, 1, "MetricsStore must have one point after first batch")
+	assert.InDelta(t, 10.0, pts[0].Value, 0.001, "MetricsStore value = 10")
 
-	aggBuckets := healthStore.Buckets(MetricKeyAudioQueueDepthAggregate, 1)
-	require.Len(t, aggBuckets, 1, "aggregate queue depth must be seeded on first tick")
-	assert.Equal(t, int64(0), aggBuckets[0].Count, "aggregate seeded with 0 on first tick")
-
-	// Second tick (different hour to get a fresh bucket): queue depths are recorded.
-	now2 := now.Add(2 * time.Hour)
-	collector.collectAudioHealthCounters(now2)
-
-	src1B2 := healthStore.Buckets(MetricPrefixAudioQueueDepth+"src1", 1)
-	require.Len(t, src1B2, 1, "src1 bucket present after second tick")
-	assert.Equal(t, int64(3), src1B2[0].Count, "src1 queue depth = 3 on second tick")
-
-	src2B2 := healthStore.Buckets(MetricPrefixAudioQueueDepth+"src2", 1)
-	require.Len(t, src2B2, 1, "src2 bucket present after second tick")
-	assert.Equal(t, int64(7), src2B2[0].Count, "src2 queue depth = 7 on second tick")
-
-	aggB2 := healthStore.Buckets(MetricKeyAudioQueueDepthAggregate, 1)
-	require.Len(t, aggB2, 1, "aggregate bucket present after second tick")
-	assert.Equal(t, int64(10), aggB2[0].Count, "aggregate queue depth = 3 + 7 = 10 on second tick")
-
-	// Third tick in same hour as second: values accumulate within the bucket.
+	// Second call with changed depths: aggregate updates correctly.
 	snapshots = []AudioRouterSnapshot{
 		{SourceID: "src1", Drops: 0, Errors: 0, QueueDepth: 1},
 		{SourceID: "src2", Drops: 5, Errors: 1, QueueDepth: 2},
 	}
-	now3 := now2.Add(time.Minute)
-	collector.collectAudioHealthCounters(now3)
+	points2 := make(map[string]float64, 4)
+	collector.collectAudio(points2)
 
-	// Within the same hour bucket: 3 + 1 = 4 for src1, 7 + 2 = 9 for src2.
-	src1Total := healthStore.LifetimeTotal(MetricPrefixAudioQueueDepth + "src1")
-	assert.Equal(t, int64(3+1), src1Total, "src1 lifetime total after three ticks: seed(0) + tick2(3) + tick3(1)")
+	require.Contains(t, points2, MetricKeyAudioQueueDepthAggregate)
+	assert.InDelta(t, 3.0, points2[MetricKeyAudioQueueDepthAggregate], 0.001, "aggregate = 1 + 2 = 3")
 
-	src2Total := healthStore.LifetimeTotal(MetricPrefixAudioQueueDepth + "src2")
-	assert.Equal(t, int64(7+2), src2Total, "src2 lifetime total: seed(0) + tick2(7) + tick3(2)")
-
-	aggTotal := healthStore.LifetimeTotal(MetricKeyAudioQueueDepthAggregate)
-	assert.Equal(t, int64(10+3), aggTotal, "aggregate lifetime total: seed(0) + tick2(10) + tick3(3)")
+	// No-op when audioRouterFn is nil.
+	collector2 := NewCollector(NewMemoryStore(100), time.Second, nil)
+	empty := make(map[string]float64, 4)
+	collector2.collectAudio(empty)
+	assert.Empty(t, empty, "no points recorded when audioRouterFn is nil")
 }
 
 // TestCollector_AudioQueueDepth_PrometheusGauges verifies that the Prometheus
