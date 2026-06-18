@@ -176,6 +176,15 @@ func TestCounterMap_PeekAll_Empty(t *testing.T) {
 	assert.Empty(t, peek)
 }
 
+func TestRTFMetricKey(t *testing.T) {
+	t.Parallel()
+	got := RTFMetricKey("BirdNET V2.4")
+	want := "inference.BirdNET_V2_4.rtf"
+	if got != want {
+		t.Fatalf("RTFMetricKey = %q, want %q", got, want)
+	}
+}
+
 func TestCounterMap_PeekAll_DoesNotInterfereWithSnapshot(t *testing.T) {
 	t.Parallel()
 	m := &CounterMap{}

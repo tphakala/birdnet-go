@@ -228,6 +228,24 @@ func (c *Controller) initMetricsHistoryRoutes() {
 		// Wire BirdNET inference counters
 		collector.SetInferenceCounters(classifier.GetInferenceCounters())
 
+		// Wire per-model clip length and RSS functions for RTF computation and RSS gauges
+		if c.Processor != nil {
+			if bn := c.Processor.GetBirdNET(); bn != nil {
+				collector.SetModelClipFunc(func() map[string]float64 {
+					infos := bn.ModelInfos()
+					out := make(map[string]float64, len(infos))
+					for i := range infos {
+						out[infos[i].ID] = infos[i].Spec.ClipLength.Seconds()
+					}
+					return out
+				})
+				collector.SetModelRSSFunc(bn.ModelRSS)
+			}
+		}
+		if c.metrics != nil && c.metrics.BirdNET != nil {
+			collector.SetInferenceGaugeSetters(c.metrics.BirdNET.SetInferenceRTF, c.metrics.BirdNET.SetModelRSSBytes)
+		}
+
 		// Wire health counter collection (drops, overruns, stream restarts)
 		if c.healthMetricsStore != nil {
 			collector.SetHealthStore(c.healthMetricsStore)

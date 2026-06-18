@@ -72,6 +72,13 @@ func MetricKey(modelID string) string {
 	return "inference." + SanitizeModelID(modelID) + ".avg_ms"
 }
 
+// RTFMetricKey returns the ring-buffer series key for a model's real-time factor.
+// Single source of truth shared by the collector (writer) and the inference
+// status endpoint (which advertises it in metricKeys). Pure helper.
+func RTFMetricKey(modelID string) string {
+	return "inference." + SanitizeModelID(modelID) + ".rtf"
+}
+
 // CounterMap tracks per-model inference counters. Safe for concurrent use.
 type CounterMap struct {
 	models sync.Map // model ID (string) -> *Counters

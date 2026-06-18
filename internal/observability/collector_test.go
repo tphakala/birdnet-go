@@ -234,6 +234,36 @@ func TestCollector_InferenceIdlePeriod(t *testing.T) {
 	assert.InDelta(t, 0.0, avgPts[0].Value, 0.001, "idle period should record 0")
 }
 
+func TestCollector_EmitsRTFKeyAndGauge(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(60)
+	counters := &inferencestats.CounterMap{}
+	collector := NewCollector(store, time.Second, func() float64 { return 0 })
+	collector.SetInferenceCounters(counters)
+	collector.SetModelClipFunc(func() map[string]float64 { return map[string]float64{"M": 3.0} })
+
+	var gotRTFModel string
+	var gotRTF float64
+	collector.SetInferenceGaugeSetters(
+		func(model string, rtf float64) { gotRTFModel = model; gotRTF = rtf },
+		func(_ string, _ int64) {},
+	)
+
+	// First tick: establishes the previous snapshot (no rtf emitted yet).
+	counters.RecordInvoke("M", 30_000) // 30 ms
+	collector.collect()
+
+	// Second tick: one more 30 ms invocation -> interval avg 30 ms, rtf = 0.030s / 3s = 0.01.
+	counters.RecordInvoke("M", 30_000)
+	collector.collect()
+
+	pts := store.Get(inferencestats.RTFMetricKey("M"), 10)
+	require.Len(t, pts, 1, "expected an inference.M.rtf ring-buffer point")
+
+	assert.Equal(t, "M", gotRTFModel, "rtf gauge model should be M")
+	assert.InDelta(t, 0.01, gotRTF, 0.001, "rtf should be approx 0.01")
+}
+
 func TestReadThermalZone_OutOfRangeTemperature(t *testing.T) {
 	t.Parallel()
 
