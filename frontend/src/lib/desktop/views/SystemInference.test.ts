@@ -157,6 +157,46 @@ describe('SystemInference', () => {
     expect(container.textContent).not.toContain('system.inference.invocations');
   });
 
+  it('renders models sorted by name regardless of snapshot order', async () => {
+    // Snapshot delivers Zebra before Alpha; the view must display Alpha first.
+    const zebra = makeModel({ id: 'z', name: 'Zebra Model' });
+    const alpha = makeModel({ id: 'a', name: 'Alpha Model' });
+    installApi(makeSnapshot([zebra, alpha]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('Alpha Model');
+    });
+    const text = container.textContent ?? '';
+    expect(text.indexOf('Alpha Model')).toBeLessThan(text.indexOf('Zebra Model'));
+  });
+
+  it('does not render an RTF sparkline label on model cards', async () => {
+    installApi(makeSnapshot([makeModel()]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.invocations');
+    });
+    // The RTF sparkline (labelled rtfChart) is removed; the RTF number stays.
+    expect(container.textContent).not.toContain('system.inference.rtfChart');
+    expect(container.textContent).toContain('system.inference.rtf');
+  });
+
+  it('does not render its own page title heading', async () => {
+    installApi(makeSnapshot([makeModel()]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.invocations');
+    });
+    // Sibling system subpages render no title; System.svelte provides the region label.
+    expect(container.querySelector('h2')).toBeNull();
+  });
+
   it('renders model details, backend, quantization, invocations and a source chip', async () => {
     const model = makeModel();
     installApi(makeSnapshot([model]));
