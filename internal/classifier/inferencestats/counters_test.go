@@ -197,6 +197,111 @@ func TestRTFMetricKey(t *testing.T) {
 	}
 }
 
+func TestCounterMap_RecordError(t *testing.T) {
+	t.Parallel()
+	m := &CounterMap{}
+
+	m.RecordInvoke("birdnet", 1000)
+	m.RecordError("birdnet")
+
+	snap := m.PeekAll()["birdnet"]
+	require.EqualValues(t, 1, snap.InvokeCount)
+	require.EqualValues(t, 1, snap.InvokeErrors)
+}
+
+func TestCounters_RecordError(t *testing.T) {
+	t.Parallel()
+	c := &Counters{}
+
+	c.RecordError()
+	c.RecordError()
+
+	peek := c.InvokeErrors.Load()
+	assert.Equal(t, int64(2), peek)
+}
+
+func TestCounters_RecordError_NotResetOnSnapshot(t *testing.T) {
+	t.Parallel()
+	c := &Counters{}
+
+	c.RecordError()
+	snap := c.Snapshot()
+	assert.Equal(t, int64(1), snap.InvokeErrors)
+
+	// Second snapshot should still show cumulative count (no reset-on-read).
+	snap2 := c.Snapshot()
+	assert.Equal(t, int64(1), snap2.InvokeErrors)
+}
+
+func TestCounterMap_RecordError_NewModel(t *testing.T) {
+	t.Parallel()
+	m := &CounterMap{}
+
+	// RecordError on a model that has never had RecordInvoke called yet.
+	m.RecordError("unknown")
+
+	peek := m.PeekAll()["unknown"]
+	require.EqualValues(t, 0, peek.InvokeCount)
+	require.EqualValues(t, 1, peek.InvokeErrors)
+}
+
+func TestCounterMap_RecordError_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+	m := &CounterMap{}
+
+	const goroutines = 10
+	const iterations = 1000
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			for range iterations {
+				m.RecordError("model_a")
+			}
+		})
+	}
+	wg.Wait()
+
+	peek := m.PeekAll()["model_a"]
+	assert.Equal(t, int64(goroutines*iterations), peek.InvokeErrors)
+}
+
+func TestThroughputMetricKey(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "BirdNET v2.4", want: "inference.BirdNET_v2_4.throughput"},
+		{input: "Perch_V2", want: "inference.Perch_V2.throughput"},
+		{input: "", want: "inference..throughput"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ThroughputMetricKey(tt.input))
+		})
+	}
+}
+
+func TestErrorRateMetricKey(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "BirdNET v2.4", want: "inference.BirdNET_v2_4.error_rate"},
+		{input: "Perch_V2", want: "inference.Perch_V2.error_rate"},
+		{input: "", want: "inference..error_rate"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ErrorRateMetricKey(tt.input))
+		})
+	}
+}
+
 func TestCounterMap_PeekAll_DoesNotInterfereWithSnapshot(t *testing.T) {
 	t.Parallel()
 	m := &CounterMap{}
