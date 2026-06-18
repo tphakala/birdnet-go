@@ -122,26 +122,32 @@
     }
   }
 
-  // Load historical series for the current snapshot's metric keys, then connect
-  // the live stream. Skips quietly when there are no models.
+  // Seed historical series for the current snapshot's metric keys, then connect
+  // the live stream. Transport is mutually exclusive (SSE vs polling), mirroring
+  // System.svelte: a successful history seed goes live over SSE; any failure (or
+  // having no models to stream yet) falls back to polling instead.
   async function loadHistory(active: { current: boolean }): Promise<void> {
     const keys = metricKeysParam();
-    if (!keys) return;
+    if (!keys) {
+      // No models loaded yet: nothing to stream. Poll the snapshot so the page
+      // picks up models once they load (the topology SSE event has no transport here).
+      startPollingFallback(active);
+      return;
+    }
     try {
       const data = await api.get<MetricsHistoryResponse>(
         `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=${encodeURIComponent(keys)}`
       );
       if (!active.current) return;
-
       const valid = validKeySet();
-      const next: Record<string, number[]> = { ...seriesByKey };
+      const next: Record<string, number[]> = {}; // rebuild fresh: drops orphan series for models no longer present
       for (const [key, points] of Object.entries(data.metrics)) {
-        // Ignore keys that do not belong to a current snapshot model.
         if (!valid.has(key)) continue;
         // eslint-disable-next-line security/detect-object-injection -- key is gated by validKeySet membership
         next[key] = points.map(p => p.value);
       }
       seriesByKey = next;
+      connectStream(); // go live only after a successful history seed (mirrors System.svelte)
     } catch {
       if (!active.current) return;
       logger.debug('Inference metrics history not available, falling back to polling');
@@ -194,6 +200,10 @@
   // Re-fetch the snapshot on a fixed interval when SSE is unavailable. The loop
   // stays alive while offline but skips the actual fetch.
   function startPollingFallback(active: { current: boolean }): void {
+    // Clear any scheduled poll so a re-entrant call (repeated topology re-fetch
+    // failures, or zero-models then a later call) does not run overlapping loops.
+    stopPolling();
+
     async function poll(): Promise<void> {
       if (!active.current) return;
 
@@ -222,8 +232,9 @@
     pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
   }
 
-  // Load the snapshot, then load history and connect the live stream. On
-  // failure show a friendly error and start the polling fallback.
+  // Load the snapshot, then seed history and pick a live transport. loadHistory
+  // owns the SSE-vs-poll decision (mutually exclusive), so loadSnapshot does not
+  // connect the stream itself. On failure show a friendly error and poll.
   async function loadSnapshot(active: { current: boolean }): Promise<void> {
     try {
       const data = await api.get<InferenceStatusResponse>(INFERENCE_ENDPOINT);
@@ -232,8 +243,6 @@
       loading = false;
       error = null;
       await loadHistory(active);
-      if (!active.current) return;
-      connectStream();
     } catch (err: unknown) {
       if (!active.current) return;
       logger.debug('Failed to load inference status', {
@@ -498,7 +507,13 @@
                 </span>
                 <span class="text-muted" title={t('system.inference.rtfLabel')}>
                   {t('system.inference.rtf')}:
-                  <span class="font-mono tabular-nums text-base-content">{rtfDisplay(model)}</span>
+                  <span
+                    class="font-mono tabular-nums text-base-content"
+                    aria-describedby={`rtf-help-${model.id}`}>{rtfDisplay(model)}</span
+                  >
+                  <span id={`rtf-help-${model.id}`} class="sr-only">
+                    {t('system.inference.rtfLabel')}
+                  </span>
                 </span>
               </div>
 
