@@ -143,8 +143,14 @@ func TestReloadSecondaryModels_WarmupHoldsInferenceMu(t *testing.T) {
 	}
 
 	// While the warm-up inference runs, inferenceMu must be held so a live
-	// PredictModel cannot run a second model session concurrently.
-	assert.False(t, o.inferenceMu.TryLock(), "reload warm-up must hold inferenceMu during Predict")
+	// PredictModel cannot run a second model session concurrently. Capture the
+	// result and release if TryLock unexpectedly succeeds, so a regression does
+	// not leak the lock past the failing assertion.
+	locked := !o.inferenceMu.TryLock()
+	if !locked {
+		o.inferenceMu.Unlock()
+	}
+	assert.True(t, locked, "reload warm-up must hold inferenceMu during Predict")
 
 	close(release)
 	select {
