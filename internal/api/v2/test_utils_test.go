@@ -184,17 +184,10 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 
 	// Register cleanup to stop background goroutines
 	t.Cleanup(func() {
-		// Shutdown the controller properly
+		// Shutdown the controller properly. This also closes the media SecureFS
+		// (an open os.Root on the t.TempDir() export path); on Windows that handle
+		// must be released or t.TempDir()'s RemoveAll cannot delete the directory.
 		controller.Shutdown()
-		// Release the media SecureFS handle. NewWithOptions opens an os.Root on
-		// Export.Path (set to t.TempDir() above); on Windows an open directory
-		// handle blocks deletion, so t.TempDir()'s RemoveAll would fail. Closing
-		// it here (after Shutdown, with no in-flight requests in tests) lets the
-		// temp dir be removed on every platform. Done in the test rather than in
-		// Controller.Shutdown so production shutdown ordering is untouched.
-		if controller.SFS != nil {
-			_ = controller.SFS.Close()
-		}
 		// Close control channel to signal goroutines to exit
 		close(controlChan)
 	})
