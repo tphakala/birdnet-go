@@ -4,6 +4,10 @@
 // unique temp file and atomically renames it into place, so two simultaneous
 // detections that resolve to the same clip path (see GitHub #3323) dedup safely
 // instead of colliding on a shared temp or corrupting the final file mid-write.
+//
+// The spectrogram generator reuses the same naming (UniquePath) and finalize
+// retry via FinalizeWith, injecting a SecureFS rename so its writes stay inside
+// the os.Root sandbox.
 package audiotemp
 
 import (
@@ -54,13 +58,22 @@ func UniquePath(outputPath string) string {
 // exports rename onto the same path; Finalize retries a bounded number of times
 // there to absorb it.
 func Finalize(tempPath, finalPath string) error {
-	err := os.Rename(tempPath, finalPath)
+	return FinalizeWith(tempPath, finalPath, os.Rename)
+}
+
+// FinalizeWith is Finalize with a caller-supplied rename function. Callers whose
+// files live behind a path-validated boundary (e.g. SecureFS / os.Root) inject
+// their own rename so the move stays inside the sandbox, while still reusing the
+// Windows sharing-violation retry. Both rename targets must already be on the
+// same filesystem for the rename to be atomic. Finalize itself passes os.Rename.
+func FinalizeWith(tempPath, finalPath string, rename func(oldpath, newpath string) error) error {
+	err := rename(tempPath, finalPath)
 	if err == nil || runtime.GOOS != osWindows {
 		return err
 	}
 	for attempt := 1; attempt < renameRetryAttempts; attempt++ {
 		time.Sleep(renameRetryDelay)
-		if err = os.Rename(tempPath, finalPath); err == nil {
+		if err = rename(tempPath, finalPath); err == nil {
 			return nil
 		}
 	}

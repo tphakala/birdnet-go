@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -330,6 +331,21 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		return err
 	}
 
+	// Generate into a process-unique temp file in the same directory, then
+	// atomically rename it onto outputPath, so a crash/kill mid-write or two
+	// concurrent generations of the same path can never leave a partial or
+	// corrupt .png at the final path. The temp name reuses
+	// audiotemp.UniquePath ("<outputPath>.<pid>.<seq>.temp"), a form
+	// isExportTempFor already ignores so the audio-clip temp scan never mistakes
+	// a spectrogram temp for an in-progress audio export.
+	tempPath := audiotemp.UniquePath(outputPath)
+	defer func() {
+		// Best-effort cleanup. On success the temp was renamed away, so Remove
+		// returns a not-exist error we intentionally ignore; on any failure path
+		// (sox+ffmpeg fail, ctx cancel, rename fail) it deletes the partial.
+		_ = g.sfs.Remove(tempPath)
+	}()
+
 	// Capture one settings snapshot for the whole generation so SoxPath,
 	// Style, DynamicRange, etc. all read from the same view. A UI edit that
 	// lands mid-generation cannot split the output across two snapshots.
@@ -340,7 +356,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	defer soxCancel()
 
 	// Try Sox first (faster, direct processing)
-	if err := g.generateWithSoxFile(soxCtx, settings, audioPath, outputPath, width, raw, options.preValidatedDuration, profile); err != nil {
+	if err := g.generateWithSoxFile(soxCtx, settings, audioPath, tempPath, width, raw, options.preValidatedDuration, profile); err != nil {
 		// If the caller's context is already done (client disconnect, shutdown, or
 		// caller-imposed timeout), the result is no longer wanted. Skip the FFmpeg
 		// fallback: it runs on a context detached from the parent (see
@@ -365,13 +381,25 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		defer ffmpegCancel()
 
 		// Fallback to FFmpeg pipeline with fresh context
-		if ffmpegErr := g.generateWithFFmpeg(ffmpegCtx, settings, audioPath, outputPath, width, raw, profile); ffmpegErr != nil {
+		if ffmpegErr := g.generateWithFFmpeg(ffmpegCtx, settings, audioPath, tempPath, width, raw, profile); ffmpegErr != nil {
 			g.log().Error("Both Sox and FFmpeg generation failed",
 				logger.String("audio_path", audioPath),
 				logger.String("sox_error", err.Error()),
 				logger.String("ffmpeg_error", ffmpegErr.Error()))
 			return ffmpegErr
 		}
+	}
+
+	// Atomically publish the finished spectrogram. g.sfs.Rename keeps the move
+	// inside the SecureFS sandbox (os.Root); FinalizeWith reuses audiotemp's
+	// Windows rename-retry for transient sharing violations.
+	if err := audiotemp.FinalizeWith(tempPath, outputPath, g.sfs.Rename); err != nil {
+		return errors.New(err).
+			Component("spectrogram").
+			Category(errors.CategoryFileIO).
+			Context("operation", "finalize_spectrogram").
+			Context("output_path", outputPath).
+			Build()
 	}
 
 	g.log().Info("Spectrogram generation from file completed",
@@ -451,6 +479,16 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 		return err
 	}
 
+	// Generate into a process-unique temp file, then atomically rename it onto
+	// outputPath, so an interrupted or concurrent render never leaves a partial
+	// or corrupt .png at the final path. See GenerateFromFile.
+	tempPath := audiotemp.UniquePath(outputPath)
+	defer func() {
+		// Best-effort: harmless not-exist error on success (temp already
+		// renamed away); deletes the partial on any failure path.
+		_ = g.sfs.Remove(tempPath)
+	}()
+
 	// Capture one settings snapshot for the whole generation so all reads
 	// (SoxPath, Style, DynamicRange, Export.Length) are consistent even if
 	// the user saves settings mid-render.
@@ -461,8 +499,18 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 	defer cancel()
 
 	// Generate directly from PCM stdin (no FFmpeg needed)
-	if err := g.generateWithSoxPCM(ctx, settings, pcmData, outputPath, width, raw, sampleRate, profile); err != nil {
+	if err := g.generateWithSoxPCM(ctx, settings, pcmData, tempPath, width, raw, sampleRate, profile); err != nil {
 		return err
+	}
+
+	// Atomically publish the finished spectrogram (see GenerateFromFile).
+	if err := audiotemp.FinalizeWith(tempPath, outputPath, g.sfs.Rename); err != nil {
+		return errors.New(err).
+			Component("spectrogram").
+			Category(errors.CategoryFileIO).
+			Context("operation", "finalize_spectrogram").
+			Context("output_path", outputPath).
+			Build()
 	}
 
 	g.log().Info("Spectrogram generation from PCM completed",
