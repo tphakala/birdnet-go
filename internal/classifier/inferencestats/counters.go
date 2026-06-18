@@ -16,6 +16,7 @@ type Counters struct {
 	InvokeCount   atomic.Int64 // total invocations since startup
 	InvokeTotalUs atomic.Int64 // cumulative invoke duration in microseconds
 	InvokeMaxUs   atomic.Int64 // max single invoke duration since last snapshot
+	InvokeErrors  atomic.Int64 // total invocation errors since startup
 }
 
 // RecordInvoke records a single model invocation duration in microseconds.
@@ -25,21 +26,29 @@ func (c *Counters) RecordInvoke(durationUs int64) {
 	updateAtomicMax(&c.InvokeMaxUs, durationUs)
 }
 
+// RecordError increments the cumulative error counter by one.
+func (c *Counters) RecordError() {
+	c.InvokeErrors.Add(1)
+}
+
 // Snapshot captures the current counter state. Max values are reset-on-read.
 type Snapshot struct {
 	InvokeCount   int64
 	InvokeTotalUs int64
 	InvokeMaxUs   int64 // reset to zero after read
+	InvokeErrors  int64 // cumulative error count; not reset on read
 	CollectedAt   time.Time
 }
 
 // Snapshot returns a point-in-time copy of all counters.
 // InvokeMaxUs is atomically swapped to zero (reset-on-read).
+// InvokeErrors is cumulative and is not reset on read.
 func (c *Counters) Snapshot() Snapshot {
 	return Snapshot{
 		InvokeCount:   c.InvokeCount.Load(),
 		InvokeTotalUs: c.InvokeTotalUs.Load(),
 		InvokeMaxUs:   c.InvokeMaxUs.Swap(0),
+		InvokeErrors:  c.InvokeErrors.Load(),
 		CollectedAt:   time.Now(),
 	}
 }
@@ -79,6 +88,20 @@ func RTFMetricKey(modelID string) string {
 	return "inference." + SanitizeModelID(modelID) + ".rtf"
 }
 
+// ThroughputMetricKey returns the ring-buffer series key for a model's throughput.
+// Single source of truth shared by the collector (writer) and the inference
+// status endpoint (which advertises it in metricKeys). Pure helper.
+func ThroughputMetricKey(modelID string) string {
+	return "inference." + SanitizeModelID(modelID) + ".throughput"
+}
+
+// ErrorRateMetricKey returns the ring-buffer series key for a model's error rate.
+// Single source of truth shared by the collector (writer) and the inference
+// status endpoint (which advertises it in metricKeys). Pure helper.
+func ErrorRateMetricKey(modelID string) string {
+	return "inference." + SanitizeModelID(modelID) + ".error_rate"
+}
+
 // CounterMap tracks per-model inference counters. Safe for concurrent use.
 type CounterMap struct {
 	models sync.Map // model ID (string) -> *Counters
@@ -92,6 +115,16 @@ func (m *CounterMap) RecordInvoke(modelID string, durationUs int64) {
 	}
 	c, _ := m.models.LoadOrStore(modelID, &Counters{})
 	c.(*Counters).RecordInvoke(durationUs)
+}
+
+// RecordError increments the error counter for the given model ID.
+func (m *CounterMap) RecordError(modelID string) {
+	if v, ok := m.models.Load(modelID); ok {
+		v.(*Counters).RecordError()
+		return
+	}
+	c, _ := m.models.LoadOrStore(modelID, &Counters{})
+	c.(*Counters).RecordError()
 }
 
 // SnapshotAll returns a snapshot of all per-model counters. Each model's max
@@ -111,6 +144,7 @@ type PeekSnapshot struct {
 	InvokeCount   int64
 	InvokeTotalUs int64
 	InvokeMaxUs   int64
+	InvokeErrors  int64 // cumulative error count; not reset on read
 }
 
 // PeekAll returns a non-destructive snapshot of all per-model counters.
@@ -124,6 +158,7 @@ func (m *CounterMap) PeekAll() map[string]PeekSnapshot {
 			InvokeCount:   c.InvokeCount.Load(),
 			InvokeTotalUs: c.InvokeTotalUs.Load(),
 			InvokeMaxUs:   c.InvokeMaxUs.Load(),
+			InvokeErrors:  c.InvokeErrors.Load(),
 		}
 		return true
 	})

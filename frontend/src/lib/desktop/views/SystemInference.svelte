@@ -2,10 +2,13 @@
   SystemInference - AI Models & Inference subpage.
 
   Consumes the GET /api/v2/system/inference snapshot, renders hardware,
-  inference backends, and per-model cards with latency / RTF sparklines,
-  approximate host RAM, and attached audio sources. Live updates arrive over
-  the existing metrics SSE stream (SSE first, polling fallback), and the page
-  re-fetches the snapshot when the backend broadcasts a topology change.
+  inference backends, audio pipeline metrics, and per-model cards with
+  latency / RTF / throughput sparklines, approximate host RAM, last
+  detection, activity pulse, and attached audio sources. Live updates arrive
+  over the existing metrics SSE stream (SSE first, polling fallback), and the
+  page re-fetches the snapshot when the backend broadcasts a topology change.
+  A periodic ~30s snapshot refresh keeps headline stats and lastDetection
+  current without reconnecting the SSE stream.
 
   snapshot.models is the single source of truth: series for models that are
   not in the current snapshot are ignored (orphan-safe), and missing or null
@@ -19,11 +22,11 @@
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { loggers } from '$lib/utils/logger';
   import { connectionState } from '$lib/stores/connectionState.svelte';
-  import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
+  import { formatBytesCompact, formatNumber, formatRelativeTime } from '$lib/utils/formatters';
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
-  import { Brain, Cpu, MemoryStick, Activity } from '@lucide/svelte';
+  import { Brain, Cpu, MemoryStick, Activity, Minus } from '@lucide/svelte';
   import type {
     InferenceStatusResponse,
     InferenceModel,
@@ -48,6 +51,11 @@
   // Sparkline colors, chosen to match the existing system charts palette.
   const LATENCY_COLOR = '#3b82f6'; // blue
   const RTF_COLOR = '#8b5cf6'; // violet
+  const THROUGHPUT_COLOR = '#10b981'; // emerald
+  const AUDIO_COLOR = '#06b6d4'; // cyan
+
+  // Interval for periodic snapshot-only refreshes (does not reconnect SSE).
+  const SNAPSHOT_REFRESH_MS = 30000;
 
   // Conversions for spec display.
   const HZ_PER_KHZ = 1000;
@@ -91,25 +99,42 @@
     return next.length > MAX_HISTORY_POINTS ? next.slice(next.length - MAX_HISTORY_POINTS) : next;
   }
 
-  // Collect every avgMs and rtf metric key across the snapshot models.
+  // Collect every metric key across the snapshot models and audio pipeline.
+  // The audio queue-depth key is included regardless of model count so the
+  // Audio card sparkline receives data even before any model is loaded.
+  // When neither audio keys nor model keys are present the function returns ''
+  // and the caller falls through to the awaitingModels / polling path.
   function metricKeysParam(): string {
-    if (!snapshot || snapshot.models.length === 0) return '';
+    if (!snapshot) return '';
     const keys: string[] = [];
+    if (snapshot.audio) {
+      keys.push(snapshot.audio.metricKeys.queueDepth);
+    }
     for (const m of snapshot.models) {
-      keys.push(m.metricKeys.avgMs, m.metricKeys.rtf);
+      keys.push(
+        m.metricKeys.avgMs,
+        m.metricKeys.rtf,
+        m.metricKeys.throughput,
+        m.metricKeys.errorRate
+      );
     }
     return keys.join(',');
   }
 
-  // Set of metric keys belonging to current snapshot models. Used to ignore
-  // series for models that are no longer present (orphan-safe). Derived so it is
-  // recomputed only when the snapshot changes, not on every SSE metrics message.
+  // Set of metric keys belonging to current snapshot models and audio pipeline.
+  // Used to ignore series for models that are no longer present (orphan-safe).
+  // Derived so it is recomputed only when the snapshot changes.
   const validKeys = $derived.by(() => {
     const keys = new Set<string>();
     if (!snapshot) return keys;
+    if (snapshot.audio) {
+      keys.add(snapshot.audio.metricKeys.queueDepth);
+    }
     for (const m of snapshot.models) {
       keys.add(m.metricKeys.avgMs);
       keys.add(m.metricKeys.rtf);
+      keys.add(m.metricKeys.throughput);
+      keys.add(m.metricKeys.errorRate);
     }
     return keys;
   });
@@ -167,8 +192,8 @@
     }
   }
 
-  // Connect to the metrics SSE stream for live latency / RTF updates and
-  // topology-change notifications. Closes any prior connection first.
+  // Connect to the metrics SSE stream for live latency / RTF / throughput updates
+  // and topology-change notifications. Closes any prior connection first.
   function connectStream(): void {
     disconnectStream();
     const keys = metricKeysParam();
@@ -250,6 +275,24 @@
     pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
   }
 
+  // Periodic snapshot-only refresh: updates snapshot values (headline stats,
+  // lastDetection, audio) WITHOUT reconnecting the SSE stream or reseeding
+  // history. Respects componentActive and currentFetchId so a superseded
+  // refresh bails without clobbering newer topology-triggered state.
+  async function refreshSnapshot(
+    active: { current: boolean },
+    activeFetchId: number
+  ): Promise<void> {
+    if (!active.current || activeFetchId !== currentFetchId) return;
+    try {
+      const data = await api.get<InferenceStatusResponse>(INFERENCE_ENDPOINT);
+      if (!active.current || activeFetchId !== currentFetchId) return;
+      snapshot = data;
+    } catch {
+      // Silently ignore refresh failures; keep showing the last snapshot.
+    }
+  }
+
   // Load the snapshot, then seed history and pick a live transport. loadHistory
   // owns the SSE-vs-poll decision (mutually exclusive), so loadSnapshot does not
   // connect the stream itself. On failure show a friendly error and poll.
@@ -277,13 +320,18 @@
     }
   }
 
-  // Lifecycle: load on mount, tear down SSE and polling on unmount.
+  // Lifecycle: load on mount, start periodic snapshot refresh, tear down on unmount.
   $effect(() => {
     componentActive.current = true;
     loadSnapshot(componentActive);
 
+    const snapshotInterval = setInterval(() => {
+      refreshSnapshot(componentActive, currentFetchId);
+    }, SNAPSHOT_REFRESH_MS);
+
     return () => {
       componentActive.current = false;
+      clearInterval(snapshotInterval);
       disconnectStream();
       stopPolling();
     };
@@ -333,6 +381,23 @@
     const bytes = model.memory.approxRssBytes;
     if (bytes == null) return t('system.inference.notMeasured');
     return formatBytesCompact(bytes);
+  }
+
+  // Throughput, avgLatency, and maxLatency are meaningless at zero invocations:
+  // show a dash placeholder matching the rtfDisplay pattern.
+  function throughputDisplay(model: InferenceModel, latestValue: number): string {
+    if (model.stats.invocations <= 0) return '-';
+    return latestValue.toFixed(1) + t('system.inference.throughputUnit');
+  }
+
+  function avgLatencyDisplay(model: InferenceModel): string {
+    if (model.stats.invocations <= 0) return '-';
+    return model.stats.avgMs.toFixed(1) + ' ' + t('system.inference.unitMs');
+  }
+
+  function maxLatencyDisplay(model: InferenceModel): string {
+    if (model.stats.invocations <= 0) return '-';
+    return model.stats.maxMs.toFixed(1) + ' ' + t('system.inference.unitMs');
   }
 </script>
 
@@ -445,6 +510,51 @@
       </div>
     </div>
 
+    <!-- Audio pipeline -->
+    {#if snapshot.audio}
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
+      >
+        <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
+          {t('system.inference.sectionAudio')}
+        </h3>
+        <div class="space-y-2.5">
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <span class="text-muted">
+              {t('system.inference.queueDepth')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {snapshot.audio.queueDepth}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.queueCapacity')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {snapshot.audio.queueCapacity}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.droppedChunks')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {formatNumber(snapshot.audio.droppedChunksTotal)}
+              </span>
+            </span>
+          </div>
+          <div>
+            <div class="text-[11px] text-muted mb-1 flex items-center gap-1">
+              <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
+              {t('system.inference.queueDepthChart')}
+            </div>
+            <div class="h-10">
+              <Sparkline
+                data={seriesByKey[snapshot.audio.metricKeys.queueDepth] ?? []}
+                color={AUDIO_COLOR}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
+
     <!-- Models -->
     <div>
       <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
@@ -462,6 +572,10 @@
           {#each snapshot.models as model (model.id)}
             {@const latencySeries = seriesByKey[model.metricKeys.avgMs] ?? []}
             {@const rtfSeries = seriesByKey[model.metricKeys.rtf] ?? []}
+            {@const throughputSeries = seriesByKey[model.metricKeys.throughput] ?? []}
+            {@const throughputLatest =
+              throughputSeries.length > 0 ? throughputSeries[throughputSeries.length - 1] : 0}
+            {@const isActive = throughputSeries.length > 0 && throughputLatest > 0}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -478,6 +592,19 @@
                   size="sm"
                   text={model.isStock ? t('system.inference.stock') : t('system.inference.custom')}
                 />
+                <span
+                  class="ml-auto flex items-center gap-1"
+                  role="status"
+                  aria-label={isActive
+                    ? t('system.inference.activityActive')
+                    : t('system.inference.activityIdle')}
+                >
+                  {#if isActive}
+                    <Activity class="w-3 h-3 text-green-500 animate-pulse" aria-hidden="true" />
+                  {:else}
+                    <Minus class="w-3 h-3 text-base-content/30" aria-hidden="true" />
+                  {/if}
+                </span>
               </div>
 
               <!-- Spec line -->
@@ -504,6 +631,24 @@
                 </span>
               </div>
 
+              <!-- Last seen -->
+              <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                <span class="text-muted">{t('system.inference.lastSeen')}:</span>
+                {#if model.lastDetection}
+                  <span class="text-base-content">
+                    {model.lastDetection.species}
+                  </span>
+                  <span class="font-mono tabular-nums text-base-content">
+                    {Math.round(model.lastDetection.confidence * 100)}%
+                  </span>
+                  <span class="text-muted">
+                    {formatRelativeTime(model.lastDetection.atUnix * 1000)}
+                  </span>
+                {:else}
+                  <span class="text-base-content/70">{t('system.inference.lastSeenNever')}</span>
+                {/if}
+              </div>
+
               <!-- Stats line -->
               <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                 <span class="text-muted">
@@ -515,15 +660,13 @@
                 <span class="text-muted">
                   {t('system.inference.avgLatency')}:
                   <span class="font-mono tabular-nums text-base-content">
-                    {model.stats.avgMs.toFixed(1)}
-                    {t('system.inference.unitMs')}
+                    {avgLatencyDisplay(model)}
                   </span>
                 </span>
                 <span class="text-muted">
                   {t('system.inference.maxLatency')}:
                   <span class="font-mono tabular-nums text-base-content">
-                    {model.stats.maxMs.toFixed(1)}
-                    {t('system.inference.unitMs')}
+                    {maxLatencyDisplay(model)}
                   </span>
                 </span>
                 <span class="text-muted" title={t('system.inference.rtfLabel')}>
@@ -536,6 +679,28 @@
                     {t('system.inference.rtfLabel')}
                   </span>
                 </span>
+                <span class="text-muted">
+                  {t('system.inference.throughput')}:
+                  <span class="font-mono tabular-nums text-base-content">
+                    {throughputDisplay(model, throughputLatest)}
+                  </span>
+                </span>
+                {#if model.stats.errorRate !== undefined}
+                  <span class="text-muted">
+                    {t('system.inference.errorRate')}:
+                    <span class="font-mono tabular-nums text-base-content">
+                      {Math.round(model.stats.errorRate * 100)}%
+                    </span>
+                  </span>
+                {/if}
+                {#if model.stats.loadFailures !== undefined && model.stats.loadFailures > 0}
+                  <span class="text-muted">
+                    {t('system.inference.loadFailures')}:
+                    <span class="font-mono tabular-nums text-base-content">
+                      {model.stats.loadFailures}
+                    </span>
+                  </span>
+                {/if}
               </div>
 
               <!-- Sparklines -->
@@ -556,6 +721,15 @@
                   </div>
                   <div class="h-10">
                     <Sparkline data={rtfSeries} color={RTF_COLOR} />
+                  </div>
+                </div>
+                <div>
+                  <div class="text-[11px] text-muted mb-1 flex items-center gap-1">
+                    <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
+                    {t('system.inference.throughputChart')}
+                  </div>
+                  <div class="h-10">
+                    <Sparkline data={throughputSeries} color={THROUGHPUT_COLOR} />
                   </div>
                 </div>
               </div>

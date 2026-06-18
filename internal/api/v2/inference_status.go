@@ -6,11 +6,13 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
@@ -29,6 +31,7 @@ type InferenceStatusResponse struct {
 	Hardware             HardwareInfo           `json:"hardware"`
 	Backends             BackendsInfo           `json:"backends"`
 	Models               []InferenceModelStatus `json:"models"`
+	Audio                AudioMetricsInfo       `json:"audio"`
 	RuntimeBaselineBytes int64                  `json:"runtimeBaselineBytes,omitempty"`
 	SnapshotAtUnix       int64                  `json:"snapshotAtUnix"`
 }
@@ -64,19 +67,20 @@ type OpenVINOBackendStatus struct {
 
 // InferenceModelStatus describes one loaded model and its runtime statistics.
 type InferenceModelStatus struct {
-	ID               string            `json:"id"`
-	Name             string            `json:"name"`
-	Backend          string            `json:"backend"`
-	DetectionName    string            `json:"detectionName,omitempty"`
-	DetectionVersion string            `json:"detectionVersion,omitempty"`
-	Quantization     string            `json:"quantization,omitempty"`
-	IsStock          bool              `json:"isStock"`
-	Spec             ModelSpecInfo     `json:"spec"`
-	NumSpecies       int               `json:"numSpecies"`
-	Stats            ModelStats        `json:"stats"`
-	Memory           ModelMemoryInfo   `json:"memory"`
-	Sources          []ModelSourceInfo `json:"sources"`
-	MetricKeys       ModelMetricKeys   `json:"metricKeys"`
+	ID               string             `json:"id"`
+	Name             string             `json:"name"`
+	Backend          string             `json:"backend"`
+	DetectionName    string             `json:"detectionName,omitempty"`
+	DetectionVersion string             `json:"detectionVersion,omitempty"`
+	Quantization     string             `json:"quantization,omitempty"`
+	IsStock          bool               `json:"isStock"`
+	Spec             ModelSpecInfo      `json:"spec"`
+	NumSpecies       int                `json:"numSpecies"`
+	Stats            ModelStats         `json:"stats"`
+	Memory           ModelMemoryInfo    `json:"memory"`
+	Sources          []ModelSourceInfo  `json:"sources"`
+	MetricKeys       ModelMetricKeys    `json:"metricKeys"`
+	LastDetection    *LastDetectionInfo `json:"lastDetection,omitempty"`
 }
 
 // ModelSpecInfo carries the audio input requirements of a model.
@@ -93,11 +97,17 @@ type ModelSpecInfo struct {
 // RTF is the lifetime cumulative-average real-time factor: (avgMs / 1000) / clipSec.
 // This differs from the per-model ring-buffer series at MetricKeys.RTF, which is
 // an interval-windowed average computed by the collector on each tick.
+//
+// ErrorRate is the fraction of calls that resulted in an error:
+// InvokeErrors / (InvokeCount + InvokeErrors). Nil when total is zero.
+// LoadFailures is the cumulative count of model-load failures from the orchestrator.
 type ModelStats struct {
-	Invocations int64    `json:"invocations"`
-	AvgMs       float64  `json:"avgMs"`
-	MaxMs       float64  `json:"maxMs"`
-	RTF         *float64 `json:"rtf,omitempty"`
+	Invocations  int64    `json:"invocations"`
+	AvgMs        float64  `json:"avgMs"`
+	MaxMs        float64  `json:"maxMs"`
+	RTF          *float64 `json:"rtf,omitempty"`
+	ErrorRate    *float64 `json:"errorRate,omitempty"`
+	LoadFailures *int64   `json:"loadFailures,omitempty"`
 }
 
 // ModelMemoryInfo reports the estimated RSS contribution of a loaded model.
@@ -118,11 +128,48 @@ type ModelSourceInfo struct {
 }
 
 // ModelMetricKeys carries the Prometheus-style metric key names for a model's
-// latency and real-time-factor time series, so clients can look them up without
-// hardcoding.
+// latency, real-time-factor, throughput, and error-rate time series, so clients
+// can look them up without hardcoding.
 type ModelMetricKeys struct {
-	AvgMs string `json:"avgMs"`
-	RTF   string `json:"rtf"`
+	AvgMs      string `json:"avgMs"`
+	RTF        string `json:"rtf"`
+	Throughput string `json:"throughput"`
+	ErrorRate  string `json:"errorRate"`
+}
+
+// AudioMetricKeys holds the time-series metric key names for audio pipeline metrics.
+type AudioMetricKeys struct {
+	// QueueDepth is the metric key for the aggregate analysis queue depth.
+	QueueDepth string `json:"queueDepth"`
+}
+
+// AudioMetricsInfo holds a point-in-time snapshot of audio pipeline metrics.
+type AudioMetricsInfo struct {
+	// QueueDepth is the sum across all active sources of each source's maximum
+	// route inbox occupancy at snapshot time (per-source max, then summed). This
+	// matches the aggregate series produced by the observability collector, which
+	// records the same sum into MetricKeyAudioQueueDepthAggregate each tick.
+	QueueDepth int `json:"queueDepth"`
+	// DroppedChunksTotal is the cumulative count of dropped audio chunks.
+	DroppedChunksTotal int64 `json:"droppedChunksTotal"`
+	// QueueCapacity is the aggregate inbox capacity represented by QueueDepth:
+	// RouteInboxCapacity per active source, summed, so it stays on the same
+	// scale as the per-source-summed QueueDepth (depth never exceeds capacity).
+	QueueCapacity int `json:"queueCapacity"`
+	// MetricKeys holds the metric key names for audio pipeline time series.
+	MetricKeys AudioMetricKeys `json:"metricKeys"`
+}
+
+// LastDetectionInfo holds information about the most recently detected species for a model.
+type LastDetectionInfo struct {
+	// Species is the common name of the detected species.
+	Species string `json:"species"`
+	// ScientificName is the scientific name of the detected species.
+	ScientificName string `json:"scientificName"`
+	// Confidence is the detection confidence in the range [0, 1].
+	Confidence float64 `json:"confidence"`
+	// AtUnix is the Unix timestamp (seconds) of when the detection occurred.
+	AtUnix int64 `json:"atUnix"`
 }
 
 // deviceCPU and deviceGPU are the OpenVINO device name strings used when
@@ -133,10 +180,11 @@ const (
 )
 
 // buildModelStatus assembles an InferenceModelStatus for one loaded model from
-// its registry info, a non-destructive stats peek, the per-model RSS map, and
-// the pre-computed source attachment list. It is a pure function with no side
+// its registry info, a non-destructive stats peek, the per-model RSS map, the
+// pre-computed source attachment list, the per-model load-failure counts, and
+// the per-model last-detection cache. It is a pure function with no side
 // effects and is safe to call concurrently.
-func buildModelStatus(info *classifier.ModelInfo, snap inferencestats.PeekSnapshot, rss map[string]int64, sources []ModelSourceInfo) InferenceModelStatus {
+func buildModelStatus(info *classifier.ModelInfo, snap inferencestats.PeekSnapshot, rss map[string]int64, sources []ModelSourceInfo, loadFailures map[string]int64, lastDetections map[string]*LastDetectionInfo) InferenceModelStatus {
 	clipSec := info.Spec.ClipLength.Seconds()
 
 	avgMs := 0.0
@@ -149,6 +197,28 @@ func buildModelStatus(info *classifier.ModelInfo, snap inferencestats.PeekSnapsh
 	if snap.InvokeCount > 0 && clipSec > 0 {
 		v := (avgMs / 1000.0) / clipSec
 		rtf = &v
+	}
+
+	// ErrorRate = InvokeErrors / (InvokeCount + InvokeErrors) when total > 0.
+	var errorRate *float64
+	if total := snap.InvokeCount + snap.InvokeErrors; total > 0 {
+		v := float64(snap.InvokeErrors) / float64(total)
+		errorRate = &v
+	}
+
+	// LoadFailures from the orchestrator's per-model map.
+	var loadFail *int64
+	if loadFailures != nil {
+		if n, ok := loadFailures[info.ID]; ok {
+			v := n
+			loadFail = &v
+		}
+	}
+
+	// LastDetection from the processor cache.
+	var lastDet *LastDetectionInfo
+	if lastDetections != nil {
+		lastDet = lastDetections[info.ID]
 	}
 
 	mem := ModelMemoryInfo{Approximate: true}
@@ -172,18 +242,31 @@ func buildModelStatus(info *classifier.ModelInfo, snap inferencestats.PeekSnapsh
 		IsStock:          info.IsStock,
 		Spec:             ModelSpecInfo{SampleRate: info.Spec.SampleRate, ClipLengthSec: clipSec},
 		NumSpecies:       info.NumSpecies,
-		Stats:            ModelStats{Invocations: snap.InvokeCount, AvgMs: avgMs, MaxMs: maxMs, RTF: rtf},
-		Memory:           mem,
-		Sources:          sources,
-		MetricKeys:       ModelMetricKeys{AvgMs: inferencestats.MetricKey(info.ID), RTF: inferencestats.RTFMetricKey(info.ID)},
+		Stats: ModelStats{
+			Invocations:  snap.InvokeCount,
+			AvgMs:        avgMs,
+			MaxMs:        maxMs,
+			RTF:          rtf,
+			ErrorRate:    errorRate,
+			LoadFailures: loadFail,
+		},
+		Memory:  mem,
+		Sources: sources,
+		MetricKeys: ModelMetricKeys{
+			AvgMs:      inferencestats.MetricKey(info.ID),
+			RTF:        inferencestats.RTFMetricKey(info.ID),
+			Throughput: inferencestats.ThroughputMetricKey(info.ID),
+			ErrorRate:  inferencestats.ErrorRateMetricKey(info.ID),
+		},
+		LastDetection: lastDet,
 	}
 }
 
 // GetInferenceStatus handles GET /api/v2/system/inference. It returns a
 // read-only snapshot of the inference subsystem: hardware, backends, loaded
-// models with per-model stats and memory, and source attachment. The snapshot
-// is assembled from live sources on every request so it reflects hot-reload
-// changes without any caching.
+// models with per-model stats and memory, source attachment, and audio pipeline
+// metrics. The snapshot is assembled from live sources on every request so it
+// reflects hot-reload changes without any caching.
 func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 	settings := c.currentSettings()
 
@@ -230,9 +313,56 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 	counters := classifier.GetInferenceCounters().PeekAll()
 	attachments := buildSourceAttachments(settings, infos, primaryID)
 
+	// Compute per-model load failures.
+	var loadFailures map[string]int64
+	if c.Processor != nil {
+		if bn := c.Processor.GetBirdNET(); bn != nil {
+			loadFailures = bn.LoadFailures()
+		}
+	}
+
+	// Compute per-model last detections, converting from processor.LastDetection
+	// to the API-local LastDetectionInfo via field assignment (no type import needed).
+	var lastDetections map[string]*LastDetectionInfo
+	if c.Processor != nil {
+		lastDetections = make(map[string]*LastDetectionInfo, len(infos))
+		for i := range infos {
+			if ld, ok := c.Processor.GetLastDetection(infos[i].ID); ok {
+				lastDetections[infos[i].ID] = &LastDetectionInfo{
+					Species:        ld.Species,
+					ScientificName: ld.ScientificName,
+					Confidence:     ld.Confidence,
+					AtUnix:         ld.AtUnix,
+				}
+			}
+		}
+	}
+
+	// Audio pipeline metrics: sum queue depth and drops across all active sources.
+	audioSnaps := c.buildAudioRouterSnapshotProvider()()
+	var totalQueueDepth int
+	var totalDrops int64
+	for _, s := range audioSnaps {
+		totalQueueDepth += int(s.QueueDepth)
+		totalDrops += s.Drops
+	}
+	// QueueCapacity tracks QueueDepth's scale: one RouteInboxCapacity per active
+	// source, summed. With multiple sources this keeps depth <= capacity instead
+	// of comparing a summed depth against a single route's capacity.
+	queueCapacity := audiocore.RouteInboxCapacity
+	if len(audioSnaps) > 1 {
+		queueCapacity = len(audioSnaps) * audiocore.RouteInboxCapacity
+	}
+	resp.Audio = AudioMetricsInfo{
+		QueueDepth:         totalQueueDepth,
+		DroppedChunksTotal: totalDrops,
+		QueueCapacity:      queueCapacity,
+		MetricKeys:         AudioMetricKeys{QueueDepth: observability.MetricKeyAudioQueueDepthAggregate},
+	}
+
 	resp.Models = make([]InferenceModelStatus, 0, len(infos))
 	for i := range infos {
-		resp.Models = append(resp.Models, buildModelStatus(&infos[i], counters[infos[i].ID], rss, attachments[infos[i].ID]))
+		resp.Models = append(resp.Models, buildModelStatus(&infos[i], counters[infos[i].ID], rss, attachments[infos[i].ID], loadFailures, lastDetections))
 	}
 
 	return ctx.JSON(http.StatusOK, resp)

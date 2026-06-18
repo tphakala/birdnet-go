@@ -71,7 +71,12 @@ function makeModel(overrides: Partial<InferenceModel> = {}): InferenceModel {
     stats: { invocations: 12034, avgMs: 47.2, maxMs: 130, rtf: 0.016 },
     memory: { approxRssBytes: 125000000, approximate: true },
     sources: [{ id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: false }],
-    metricKeys: { avgMs: 'inference.model-1.avg_ms', rtf: 'inference.model-1.rtf' },
+    metricKeys: {
+      avgMs: 'inference.model-1.avg_ms',
+      rtf: 'inference.model-1.rtf',
+      throughput: 'inference.model-1.throughput',
+      errorRate: 'inference.model-1.error_rate',
+    },
     ...overrides,
   };
 }
@@ -86,6 +91,12 @@ function makeSnapshot(models: InferenceModel[]): InferenceStatusResponse {
       openvino: { supported: false, active: false },
     },
     models,
+    audio: {
+      queueDepth: 0,
+      droppedChunksTotal: 0,
+      queueCapacity: 64,
+      metricKeys: { queueDepth: 'audio.queue_depth' },
+    },
     snapshotAtUnix: 1750000000,
   };
 }
@@ -279,7 +290,12 @@ describe('SystemInference', () => {
     const secondModel = makeModel({
       id: 'model-2',
       name: 'PERCH SECONDARY 9K',
-      metricKeys: { avgMs: 'inference.model-2.avg_ms', rtf: 'inference.model-2.rtf' },
+      metricKeys: {
+        avgMs: 'inference.model-2.avg_ms',
+        rtf: 'inference.model-2.rtf',
+        throughput: 'inference.model-2.throughput',
+        errorRate: 'inference.model-2.error_rate',
+      },
     });
     installApi(makeSnapshot([secondModel]));
 
@@ -293,5 +309,186 @@ describe('SystemInference', () => {
       (call: unknown[]) => typeof call[0] === 'string' && call[0].includes(INFERENCE_URL)
     ).length;
     expect(snapshotCallsAfter).toBeGreaterThan(snapshotCallsBefore);
+  });
+
+  it('renders the audio card with queue depth, capacity, and dropped chunk count', async () => {
+    const snap = makeSnapshot([]);
+    snap.audio = {
+      queueDepth: 7,
+      droppedChunksTotal: 42,
+      queueCapacity: 64,
+      metricKeys: { queueDepth: 'audio.queue_depth' },
+    };
+    installApi(snap);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.sectionAudio');
+    });
+    const text = container.textContent;
+    expect(text).toContain('7');
+    expect(text).toContain('64');
+    expect(text).toContain('42');
+  });
+
+  it('includes the audio queue-depth metric key in the SSE subscription when models are absent', async () => {
+    // FIX 1 regression guard: metricKeysParam() must include the audio key even
+    // when snapshot.models is empty, so the audio sparkline receives live data
+    // before any model loads.
+    //
+    // Strategy: install a snapshot with zero models but an audio section, then
+    // capture the URL that the history endpoint was called with and assert it
+    // contains the audio queue-depth key.
+    const snap = makeSnapshot([]);
+    snap.audio = {
+      queueDepth: 2,
+      droppedChunksTotal: 0,
+      queueCapacity: 64,
+      metricKeys: { queueDepth: 'audio.queue_depth' },
+    };
+
+    let capturedHistoryUrl = '';
+    apiGet.mockImplementation((url: string) => {
+      if (url.includes('/metrics/history')) {
+        capturedHistoryUrl = url;
+        return Promise.resolve({ metrics: { 'audio.queue_depth': [] } });
+      }
+      if (url.includes(INFERENCE_URL)) {
+        return Promise.resolve(snap);
+      }
+      return Promise.resolve({ metrics: {} });
+    });
+
+    inferenceTest.render({});
+
+    // Wait until the history endpoint is called (proves loadHistory ran with keys).
+    await waitFor(() => {
+      expect(capturedHistoryUrl).toContain('audio.queue_depth');
+    });
+  });
+
+  it('renders species name and confidence when lastDetection is present', async () => {
+    const model = makeModel({
+      lastDetection: {
+        species: 'Common Chaffinch',
+        scientificName: 'Fringilla coelebs',
+        confidence: 0.87,
+        atUnix: Math.floor(Date.now() / 1000) - 60,
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    const text = container.textContent;
+    expect(text).toContain('Common Chaffinch');
+    expect(text).toContain('87%');
+  });
+
+  it('shows the lastSeenNever label when lastDetection is absent', async () => {
+    const model = makeModel({ lastDetection: undefined });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.textContent).toContain('system.inference.lastSeenNever');
+  });
+
+  it('shows activity pulse as active when throughput series last value is > 0', async () => {
+    const model = makeModel();
+    const history = {
+      metrics: {
+        [model.metricKeys.avgMs]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 47.2 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 48.1 },
+        ],
+        [model.metricKeys.rtf]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0.016 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0.018 },
+        ],
+        [model.metricKeys.throughput]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 3.5 },
+        ],
+      },
+    };
+    installApi(makeSnapshot([model]), history);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // When the last throughput value > 0, the activity indicator shows "active"
+    const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
+    expect(activeEl).not.toBeNull();
+    // The idle indicator must NOT be rendered at the same time (regression guard)
+    const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
+    expect(idleEl).toBeNull();
+  });
+
+  it('shows activity pulse as idle when throughput series last value is 0', async () => {
+    const model = makeModel();
+    const history = {
+      metrics: {
+        [model.metricKeys.avgMs]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 47.2 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 48.1 },
+        ],
+        [model.metricKeys.rtf]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0.016 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0.018 },
+        ],
+        [model.metricKeys.throughput]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 3.5 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0 },
+        ],
+      },
+    };
+    installApi(makeSnapshot([model]), history);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // When the last throughput value == 0, the activity indicator shows "idle"
+    const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
+    expect(idleEl).not.toBeNull();
+    // The active indicator must NOT be rendered at the same time (regression guard)
+    const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
+    expect(activeEl).toBeNull();
+  });
+
+  it('renders errorRate and loadFailures when present on the model', async () => {
+    const model = makeModel({
+      stats: {
+        invocations: 100,
+        avgMs: 45,
+        maxMs: 120,
+        rtf: 0.015,
+        errorRate: 0.05,
+        loadFailures: 3,
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    const text = container.textContent;
+    expect(text).toContain('system.inference.errorRate');
+    expect(text).toContain('5%');
+    expect(text).toContain('system.inference.loadFailures');
+    expect(text).toContain('3');
   });
 });

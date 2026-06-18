@@ -135,6 +135,12 @@ type Processor struct {
 	// Periodic pipeline stats (inference activity per source/model)
 	pipelineStats *PipelineStats
 
+	// Per-model last-detection cache. lastDetectionMu guards lastDetectionCache.
+	// The map is lazily initialised in updateLastDetection so zero-value Processors
+	// are safe to use in unit tests without a constructor call.
+	lastDetectionCache map[string]LastDetection
+	lastDetectionMu    sync.RWMutex
+
 	// Extended capture fields
 	extendedCaptureSpecies map[string]bool // Resolved set of scientific names eligible for extended capture
 	extendedCaptureAll     bool            // True when all species qualify (empty species list)
@@ -781,6 +787,10 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
+
+		// Record this detection as the most recent for its model. Called outside
+		// pendingMutex to keep the per-model cache update cheap and independent.
+		p.updateLastDetection(item.ModelID, &det.Result)
 	}
 
 	// Broadcast updated pending detections snapshot for "currently hearing" UI.

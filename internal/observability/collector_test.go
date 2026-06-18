@@ -278,3 +278,337 @@ func TestReadThermalZone_OutOfRangeTemperature(t *testing.T) {
 	_, ok := readThermalZone(tmpDir)
 	assert.False(t, ok, "out-of-range temperature should be rejected")
 }
+
+// TestCollector_AudioQueueDepth verifies that collectAudio records the aggregate
+// audio queue depth into the MetricsStore batch (via RecordBatch) so the frontend
+// sparkline series and the metrics history API can serve it.
+//
+// Queue depth is an instantaneous gauge: each call to collect() writes the current
+// sum of all source depths into the MetricsStore as a single "audio.queue_depth"
+// point. The healthStore is NOT involved for queue depth.
+func TestCollector_AudioQueueDepth(t *testing.T) {
+	t.Parallel()
+
+	store := NewMemoryStore(100)
+	collector := NewCollector(store, time.Second, nil)
+
+	snapshots := []AudioRouterSnapshot{
+		{SourceID: "src1", Drops: 0, Errors: 0, QueueDepth: 3},
+		{SourceID: "src2", Drops: 5, Errors: 1, QueueDepth: 7},
+	}
+	collector.SetAudioRouter(func() []AudioRouterSnapshot {
+		return snapshots
+	})
+
+	// First call: aggregate (3 + 7 = 10) is recorded immediately.
+	points := make(map[string]float64, 4)
+	collector.collectAudio(points)
+
+	require.Contains(t, points, MetricKeyAudioQueueDepthAggregate, "aggregate key must be in the batch")
+	assert.InDelta(t, 10.0, points[MetricKeyAudioQueueDepthAggregate], 0.001, "aggregate = 3 + 7 = 10")
+
+	// Commit the batch so the MetricsStore has a data point.
+	store.RecordBatch(points)
+
+	pts := store.Get(MetricKeyAudioQueueDepthAggregate, 10)
+	require.Len(t, pts, 1, "MetricsStore must have one point after first batch")
+	assert.InDelta(t, 10.0, pts[0].Value, 0.001, "MetricsStore value = 10")
+
+	// Second call with changed depths: aggregate updates correctly.
+	snapshots = []AudioRouterSnapshot{
+		{SourceID: "src1", Drops: 0, Errors: 0, QueueDepth: 1},
+		{SourceID: "src2", Drops: 5, Errors: 1, QueueDepth: 2},
+	}
+	points2 := make(map[string]float64, 4)
+	collector.collectAudio(points2)
+
+	require.Contains(t, points2, MetricKeyAudioQueueDepthAggregate)
+	assert.InDelta(t, 3.0, points2[MetricKeyAudioQueueDepthAggregate], 0.001, "aggregate = 1 + 2 = 3")
+
+	// No-op when audioRouterFn is nil.
+	collector2 := NewCollector(NewMemoryStore(100), time.Second, nil)
+	empty := make(map[string]float64, 4)
+	collector2.collectAudio(empty)
+	assert.Empty(t, empty, "no points recorded when audioRouterFn is nil")
+}
+
+// TestCollector_InferenceThroughput verifies that the collector records per-model
+// throughput (invocations per second) in the MetricsStore under the correct key
+// and that the recorded value matches the formula deltaInvokes / elapsedSeconds.
+//
+// Throughput is a delta metric: it is undefined on the first (seeding) tick and
+// should only appear from the second tick onward. The value is computed as
+// deltaInvokes / elapsedSeconds over the interval.
+func TestCollector_InferenceThroughput(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+	collector := NewCollector(store, time.Second, func() float64 { return 0 })
+
+	counters := &inferencestats.CounterMap{}
+	counters.RecordInvoke("ModelA", 10_000) // 10 ms
+	counters.RecordInvoke("ModelA", 10_000)
+	counters.RecordError("ModelA")
+	collector.SetInferenceCounters(counters)
+
+	throughputKey := inferencestats.ThroughputMetricKey("ModelA")
+
+	// First tick: seeds the previous snapshot; no throughput recorded yet.
+	// Record wall-clock time around the first collect so we can bracket
+	// the Snapshot CollectedAt that the collector stores internally.
+	tick1Before := time.Now()
+	collector.collect()
+	tick1After := time.Now()
+	pts := store.Get(throughputKey, 10)
+	assert.Nil(t, pts, "throughput must not be recorded on the seeding tick")
+
+	// Record two more invocations before the second tick.
+	const deltaInvokes = 2
+	counters.RecordInvoke("ModelA", 10_000)
+	counters.RecordInvoke("ModelA", 10_000)
+
+	// Second tick: delta = 2 invocations over elapsed time.
+	tick2Before := time.Now()
+	collector.collect()
+	tick2After := time.Now()
+
+	pts = store.Get(throughputKey, 10)
+	require.Len(t, pts, 1, "throughput must be recorded after second tick")
+
+	// The collector computes throughput as float64(deltaInvokes) / elapsedSeconds,
+	// where elapsedSeconds = snap2.CollectedAt - snap1.CollectedAt. Both CollectedAt
+	// values are set to time.Now() inside the respective Snapshot() calls, so the
+	// actual elapsed lies in [tick2Before - tick1After, tick2After - tick1Before].
+	//
+	// Recover the actual elapsed that the collector used (collector: throughput = delta / elapsed,
+	// so elapsed = delta / throughput) and assert it falls within the bracketed range.
+	// Also verify the formula itself: throughput * elapsed_recovered = deltaInvokes.
+	got := pts[0].Value
+	require.Greater(t, got, 0.0, "throughput must be positive when invocations occurred")
+
+	// Recovered elapsed seconds used by the collector.
+	recoveredElapsed := float64(deltaInvokes) / got
+
+	// The actual Snapshot CollectedAt values fall between tick1Before..tick1After
+	// and tick2Before..tick2After respectively. The elapsed is in the range
+	// [tick2Before - tick1After, tick2After - tick1Before]. Guard against
+	// negative lower bound (can occur on very fast machines where tick2Before < tick1After).
+	lowerElapsed := tick2Before.Sub(tick1After).Seconds()
+	upperElapsed := tick2After.Sub(tick1Before).Seconds()
+	if lowerElapsed < 0 {
+		lowerElapsed = 0
+	}
+
+	// The formula throughput = deltaInvokes / elapsed must hold: recovered elapsed
+	// should be consistent with the measured wall-clock range.
+	require.GreaterOrEqual(t, recoveredElapsed, lowerElapsed,
+		"recovered elapsed must be >= lower wall-clock bound")
+	require.LessOrEqual(t, recoveredElapsed, upperElapsed+time.Millisecond.Seconds(),
+		"recovered elapsed must be <= upper wall-clock bound (with 1ms slack)")
+
+	// Also verify via InDelta: expected throughput using the recovered elapsed equals the
+	// recorded value within floating-point rounding error.
+	expectedThroughput := float64(deltaInvokes) / recoveredElapsed
+	require.InDelta(t, expectedThroughput, got, 1e-9, "throughput must equal deltaInvokes/elapsed")
+}
+
+// TestCollector_InferenceThroughputZeroWhenIdle verifies that throughput is
+// recorded as exactly 0 when no invocations occurred in the interval.
+func TestCollector_InferenceThroughputZeroWhenIdle(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+	collector := NewCollector(store, time.Second, func() float64 { return 0 })
+
+	counters := &inferencestats.CounterMap{}
+	counters.RecordInvoke("ModelB", 5_000)
+	collector.SetInferenceCounters(counters)
+
+	throughputKey := inferencestats.ThroughputMetricKey("ModelB")
+
+	// First tick: seeding.
+	collector.collect()
+
+	// Second tick: no new invocations since the first tick.
+	collector.collect()
+
+	pts := store.Get(throughputKey, 10)
+	require.Len(t, pts, 1, "throughput must be recorded even during idle")
+	assert.InDelta(t, 0.0, pts[0].Value, 0.0001, "throughput must be 0 when idle")
+}
+
+// TestCollector_InferenceErrorRate verifies that the collector records per-model
+// error rate (errors / (errors + invocations)) in the MetricsStore under the
+// correct key. The value is in [0, 1].
+func TestCollector_InferenceErrorRate(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+	collector := NewCollector(store, time.Second, func() float64 { return 0 })
+
+	counters := &inferencestats.CounterMap{}
+	// Seed: 3 invocations, 1 error.
+	counters.RecordInvoke("ModelC", 10_000)
+	counters.RecordInvoke("ModelC", 10_000)
+	counters.RecordInvoke("ModelC", 10_000)
+	counters.RecordError("ModelC")
+	collector.SetInferenceCounters(counters)
+
+	errorRateKey := inferencestats.ErrorRateMetricKey("ModelC")
+
+	// First tick: seeding only.
+	collector.collect()
+	pts := store.Get(errorRateKey, 10)
+	assert.Nil(t, pts, "error_rate must not be recorded on the seeding tick")
+
+	// Interval: 2 more invocations, 1 more error (delta errors=1, delta invokes=2).
+	counters.RecordInvoke("ModelC", 10_000)
+	counters.RecordInvoke("ModelC", 10_000)
+	counters.RecordError("ModelC")
+
+	// Second tick: delta = 1 error / (1 error + 2 invokes) = 1/3 ≈ 0.333...
+	collector.collect()
+
+	pts = store.Get(errorRateKey, 10)
+	require.Len(t, pts, 1, "error_rate must be recorded after second tick")
+	assert.InDelta(t, 1.0/3.0, pts[0].Value, 0.0001, "error_rate = 1/(1+2) = 0.333")
+}
+
+// TestCollector_InferenceErrorRateZeroWhenNoErrors verifies that error_rate is
+// exactly 0 when no errors occurred in the interval.
+func TestCollector_InferenceErrorRateZeroWhenNoErrors(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+	collector := NewCollector(store, time.Second, func() float64 { return 0 })
+
+	counters := &inferencestats.CounterMap{}
+	counters.RecordInvoke("ModelD", 5_000)
+	collector.SetInferenceCounters(counters)
+
+	errorRateKey := inferencestats.ErrorRateMetricKey("ModelD")
+
+	// First tick: seeding.
+	collector.collect()
+
+	// Second tick: one more invocation, zero errors.
+	counters.RecordInvoke("ModelD", 5_000)
+	collector.collect()
+
+	pts := store.Get(errorRateKey, 10)
+	require.Len(t, pts, 1, "error_rate must be recorded")
+	assert.InDelta(t, 0.0, pts[0].Value, 0.0001, "error_rate must be 0 when no errors")
+}
+
+// TestCollector_InferenceErrorRateZeroWhenIdle verifies that error_rate is 0
+// when neither errors nor invocations occurred in the interval.
+func TestCollector_InferenceErrorRateZeroWhenIdle(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+	collector := NewCollector(store, time.Second, func() float64 { return 0 })
+
+	counters := &inferencestats.CounterMap{}
+	counters.RecordInvoke("ModelE", 5_000)
+	counters.RecordError("ModelE")
+	collector.SetInferenceCounters(counters)
+
+	errorRateKey := inferencestats.ErrorRateMetricKey("ModelE")
+
+	// First tick: seeding.
+	collector.collect()
+
+	// Second tick: no new activity.
+	collector.collect()
+
+	pts := store.Get(errorRateKey, 10)
+	require.Len(t, pts, 1, "error_rate must be recorded even when idle")
+	assert.InDelta(t, 0.0, pts[0].Value, 0.0001, "error_rate must be 0 when idle (no delta)")
+}
+
+// TestCollector_InferenceErrorRateCounterReset verifies that when the inference
+// counters decrease (counter reset - e.g. process restart or counter wrap),
+// the collector treats the current absolute values as the tick delta rather
+// than computing a negative rate. A fresh CounterMap with lower absolute
+// values is injected between ticks to force current < previous.
+func TestCollector_InferenceErrorRateCounterReset(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+	collector := NewCollector(store, time.Second, func() float64 { return 0 })
+
+	// Tick 1: seed with high absolute values (10 invocations, 3 errors).
+	counters1 := &inferencestats.CounterMap{}
+	for range 10 {
+		counters1.RecordInvoke("ModelF", 10_000)
+	}
+	for range 3 {
+		counters1.RecordError("ModelF")
+	}
+	collector.SetInferenceCounters(counters1)
+	collector.collect() // seeding tick; nothing written to store
+
+	// Tick 2: inject a fresh CounterMap with lower absolute values so that
+	// current < previous on both InvokeCount and InvokeErrors. This simulates
+	// a counter reset (e.g. the underlying counters were replaced).
+	// New absolute values: InvokeCount=2, InvokeErrors=1.
+	counters2 := &inferencestats.CounterMap{}
+	counters2.RecordInvoke("ModelF", 10_000)
+	counters2.RecordInvoke("ModelF", 10_000)
+	counters2.RecordError("ModelF")
+	collector.SetInferenceCounters(counters2)
+	collector.collect()
+
+	errorRateKey := inferencestats.ErrorRateMetricKey("ModelF")
+	pts := store.Get(errorRateKey, 10)
+	require.Len(t, pts, 1)
+	// Reset guard: tpInvokes=2 (absolute), tpErrors=1 (absolute).
+	// error_rate = 1 / (1+2) = 0.333...
+	assert.InDelta(t, 1.0/3.0, pts[0].Value, 0.0001, "error_rate uses absolute value after counter reset")
+
+	// Throughput must also be positive (not zero or negative) after a reset.
+	throughputKey := inferencestats.ThroughputMetricKey("ModelF")
+	tpts := store.Get(throughputKey, 10)
+	require.Len(t, tpts, 1)
+	assert.Greater(t, tpts[0].Value, 0.0, "throughput uses absolute delta after counter reset")
+}
+
+// TestCollector_AudioQueueDepth_PrometheusGauges verifies that the Prometheus
+// gauge setters are called with the correct source and value on each tick.
+func TestCollector_AudioQueueDepth_PrometheusGauges(t *testing.T) {
+	t.Parallel()
+
+	healthStore := NewHealthMetricsStore()
+	store := NewMemoryStore(100)
+	collector := NewCollector(store, time.Second, nil)
+	collector.SetHealthStore(healthStore)
+
+	snapshots := []AudioRouterSnapshot{
+		{SourceID: "src1", Drops: 10, Errors: 0, QueueDepth: 5},
+	}
+	collector.SetAudioRouter(func() []AudioRouterSnapshot { return snapshots })
+
+	type gaugeCall struct {
+		source string
+		value  float64
+	}
+	var depthCalls []gaugeCall
+	var dropCalls []gaugeCall
+
+	collector.SetAudioGaugeSetters(
+		func(source string, depth float64) { depthCalls = append(depthCalls, gaugeCall{source, depth}) },
+		func(source string, total float64) { dropCalls = append(dropCalls, gaugeCall{source, total}) },
+	)
+
+	now := time.Now()
+
+	// First tick: sources are new, so gauges must NOT be called (seeding tick).
+	collector.collectAudioHealthCounters(now)
+	assert.Empty(t, depthCalls, "no gauge calls on first (seeding) tick")
+	assert.Empty(t, dropCalls, "no gauge calls on first (seeding) tick")
+
+	// Second tick: gauges must be set.
+	now2 := now.Add(2 * time.Hour)
+	collector.collectAudioHealthCounters(now2)
+	require.Len(t, depthCalls, 1, "queue-depth gauge called once on second tick")
+	assert.Equal(t, "src1", depthCalls[0].source)
+	assert.InDelta(t, 5.0, depthCalls[0].value, 0.001)
+
+	require.Len(t, dropCalls, 1, "dropped-chunks gauge called once on second tick")
+	assert.Equal(t, "src1", dropCalls[0].source)
+	assert.InDelta(t, 10.0, dropCalls[0].value, 0.001)
+}

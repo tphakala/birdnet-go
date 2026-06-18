@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	// routeInboxCapacity is the per-route buffered channel size.
+	// RouteInboxCapacity is the per-route buffered channel size.
 	// A slow consumer drops frames after this many are queued.
-	routeInboxCapacity = 64
+	RouteInboxCapacity = 64
 
 	// dropLogInterval controls how often drop warnings are emitted.
 	// One log line per this many consecutive drops, per route.
@@ -33,7 +33,7 @@ const (
 	errorLogInterval = 100
 
 	// dropSentryThreshold is the total number of drops per route before
-	// a single Sentry report is fired. This fires once — the log.Warn at
+	// a single Sentry report is fired. This fires once; the log.Warn at
 	// dropLogInterval provides ongoing visibility.
 	dropSentryThreshold int64 = 1000
 )
@@ -121,6 +121,9 @@ type RouteInfo struct {
 
 	// Errors is the total number of Write errors for this route.
 	Errors int64
+
+	// QueueDepth is the current occupancy of the route inbox (len of the bounded channel).
+	QueueDepth int
 }
 
 // AudioRouter dispatches audio frames to registered consumers using
@@ -204,7 +207,7 @@ func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSa
 		Consumer:         consumer,
 		sourceSampleRate: sourceSampleRate,
 		gainLinear:       gainLinear,
-		inbox:            make(chan AudioFrame, routeInboxCapacity),
+		inbox:            make(chan AudioFrame, RouteInboxCapacity),
 		done:             make(chan struct{}),
 		stopped:          make(chan struct{}),
 	}
@@ -420,6 +423,7 @@ func (r *AudioRouter) Routes(sourceID string) []RouteInfo {
 			ConsumerID: rt.Consumer.ID(),
 			Drops:      rt.drops.Load(),
 			Errors:     rt.errors.Load(),
+			QueueDepth: len(rt.inbox),
 		})
 	}
 	return infos
@@ -542,7 +546,7 @@ func (r *AudioRouter) stopRoute(route *Route) {
 		}()
 	case <-time.After(drainerStopTimeout):
 		// Drainer is leaked and may still reference the resampler/consumer.
-		// Do NOT close them — leave for GC to reclaim.
+		// Do NOT close them, leave for GC to reclaim.
 		r.log.Warn("drainer goroutine did not exit in time, leaking resources",
 			logger.String("source_id", route.SourceID),
 			logger.String("consumer_id", route.Consumer.ID()))
@@ -606,7 +610,7 @@ func (r *AudioRouter) drainRoute(route *Route) {
 			r.mu.Unlock()
 			// Release any pooled refs on frames buffered in the inbox so the
 			// Retains performed by Dispatch are balanced even when the drainer
-			// unwinds via panic. Without this, up to routeInboxCapacity refs
+			// unwinds via panic. Without this, up to RouteInboxCapacity refs
 			// per panicking route would stay outstanding (the slices still
 			// GC, so this is pool-efficiency rather than a hard leak).
 			drainInboxRefs(route.inbox)

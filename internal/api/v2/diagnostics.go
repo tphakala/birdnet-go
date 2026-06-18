@@ -440,14 +440,22 @@ func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.A
 		snaps := make([]observability.AudioRouterSnapshot, 0, len(sourceIDs))
 		for _, sid := range sourceIDs {
 			var totalDrops, totalErrors int64
+			// QueueDepth is the MAX inbox occupancy across all routes for this source.
+			// The analysis/buffer route dominates under load, and max keeps the value
+			// within one inbox capacity rather than summing unrelated consumer queues.
+			var maxQueueDepth int64
 			for _, ri := range router.Routes(sid) {
 				totalDrops += ri.Drops
 				totalErrors += ri.Errors
+				if int64(ri.QueueDepth) > maxQueueDepth {
+					maxQueueDepth = int64(ri.QueueDepth)
+				}
 			}
 			snaps = append(snaps, observability.AudioRouterSnapshot{
-				SourceID: sid,
-				Drops:    totalDrops,
-				Errors:   totalErrors,
+				SourceID:   sid,
+				Drops:      totalDrops,
+				Errors:     totalErrors,
+				QueueDepth: maxQueueDepth,
 			})
 		}
 		return snaps

@@ -59,6 +59,9 @@ type Collector struct {
 	streamHealthFn  func() []StreamHealthSnapshot
 	prevAudioSnaps  map[string]AudioRouterSnapshot
 	prevStreamSnaps map[string]StreamHealthSnapshot
+	// Audio Prometheus gauge setters (optional, set via SetAudioGaugeSetters).
+	audioQueueDepthGauge   func(source string, depth float64)
+	audioDroppedChunksGauge func(source string, total float64)
 
 	// Track which metrics have had logged errors to avoid log spam
 	loggedErrors map[string]bool
@@ -108,7 +111,7 @@ const (
 	// expectedMetricCount is a lower-bound hint for the map pre-allocation per tick.
 	// Per-model RTF keys add len(models) more entries each tick, so the map may grow
 	// beyond this value. This is intentional: the map grows as needed.
-	expectedMetricCount = 12
+	expectedMetricCount = 13
 
 	metricCPUTotal          = "cpu.total"
 	metricMemoryUsedPercent = "memory.used_percent"
@@ -141,6 +144,7 @@ func (c *Collector) collect() {
 	c.collectDisk(points)
 	c.collectDatabase(points)
 	c.collectInference(points)
+	c.collectAudio(points)
 
 	if len(points) > 0 {
 		c.store.RecordBatch(points)
@@ -316,11 +320,23 @@ func (c *Collector) SetInferenceGaugeSetters(rtf func(string, float64), rss func
 	c.inferenceGaugeDelete = del
 }
 
+// SetAudioGaugeSetters injects the Prometheus gauge setter functions for audio
+// queue depth and dropped-chunks total. Both are nil-safe; only non-nil
+// functions are called. Must be called before Start.
+func (c *Collector) SetAudioGaugeSetters(queueDepth, droppedChunks func(string, float64)) {
+	c.audioQueueDepthGauge = queueDepth
+	c.audioDroppedChunksGauge = droppedChunks
+}
+
 // AudioRouterSnapshot holds cumulative counter values for a single audio source.
 type AudioRouterSnapshot struct {
 	SourceID string
 	Drops    int64
 	Errors   int64
+	// QueueDepth is the instantaneous maximum inbox occupancy across all routes
+	// for this source. It is a gauge (not a counter) and is updated on every
+	// collection tick.
+	QueueDepth int64
 }
 
 // StreamHealthSnapshot holds cumulative counter values for a single RTSP stream,
@@ -386,6 +402,9 @@ func (c *Collector) collectInference(points map[string]float64) {
 			continue
 		}
 
+		// avg_ms and rtf use the raw signed delta, exactly as before Phase 3.
+		// A counter reset (negative delta) falls through to the else branch and
+		// zeroes avg_ms, preserving the original Phase 1 behavior.
 		deltaInvokes := snap.InvokeCount - prev.InvokeCount
 		if deltaInvokes > 0 {
 			deltaUs := snap.InvokeTotalUs - prev.InvokeTotalUs
@@ -407,6 +426,37 @@ func (c *Collector) collectInference(points map[string]float64) {
 			}
 		} else {
 			points[key] = 0
+		}
+
+		// Throughput and error_rate use reset-adjusted deltas so that a counter
+		// reset (e.g. process restart) is treated as the absolute current value
+		// rather than a negative spike. These locals are scoped to the new series
+		// and do not affect avg_ms or rtf above.
+		tpInvokes := deltaInvokes
+		if tpInvokes < 0 {
+			tpInvokes = snap.InvokeCount
+		}
+		tpErrors := snap.InvokeErrors - prev.InvokeErrors
+		if tpErrors < 0 {
+			tpErrors = snap.InvokeErrors
+		}
+
+		// Elapsed seconds between the two snapshots, used for throughput computation.
+		elapsedSeconds := snap.CollectedAt.Sub(prev.CollectedAt).Seconds()
+
+		// Throughput: invocations per second over the tick interval.
+		if elapsedSeconds > 0 {
+			points[inferencestats.ThroughputMetricKey(modelID)] = float64(tpInvokes) / elapsedSeconds
+		} else {
+			points[inferencestats.ThroughputMetricKey(modelID)] = 0
+		}
+
+		// Error rate: errors / (errors + invocations) over the tick interval, range [0, 1].
+		total := tpErrors + tpInvokes
+		if total > 0 {
+			points[inferencestats.ErrorRateMetricKey(modelID)] = float64(tpErrors) / float64(total)
+		} else {
+			points[inferencestats.ErrorRateMetricKey(modelID)] = 0
 		}
 
 		s := snap
@@ -498,6 +548,21 @@ func skipCollectorFS(fstype string) bool {
 	return skipCollectorFSTypes[fstype]
 }
 
+// collectAudio records the aggregate audio queue depth into the MetricsStore
+// batch so it is available to the frontend sparkline series and the metrics
+// history API. Only records when audioRouterFn is wired; no-ops otherwise.
+func (c *Collector) collectAudio(points map[string]float64) {
+	if c.audioRouterFn == nil {
+		return
+	}
+	snaps := c.audioRouterFn()
+	var sum int64
+	for _, s := range snaps {
+		sum += s.QueueDepth
+	}
+	points[MetricKeyAudioQueueDepthAggregate] = float64(sum)
+}
+
 // collectHealthCounters samples cumulative audio and stream counters,
 // computes deltas from the previous snapshot, and records them into the
 // dedicated HealthMetricsStore. Follows the same delta pattern as collectDiskIO.
@@ -510,7 +575,9 @@ func (c *Collector) collectHealthCounters() {
 	c.collectStreamHealthCounters(now)
 }
 
-// collectAudioHealthCounters computes deltas for audio drops and overruns.
+// collectAudioHealthCounters computes deltas for audio drops and overruns and
+// updates Prometheus gauges. Queue depth is recorded into the MetricsStore
+// batch by collectAudio (called from collect), not here.
 func (c *Collector) collectAudioHealthCounters(now time.Time) {
 	if c.audioRouterFn == nil {
 		return
@@ -534,10 +601,21 @@ func (c *Collector) collectAudioHealthCounters(now time.Time) {
 			// IDs. Seed a zero here so ResultsQueueDropCheck reads "Healthy" from
 			// startup instead of "Skipped", consistent with the audio drop checks.
 			c.healthStore.RecordAt(MetricPrefixResultsQueueDrops+id, 0, now)
+			// Prometheus audio gauges are intentionally NOT set on the seeding tick:
+			// only the health-store keys are seeded. Gauges are set from the second
+			// tick onward once a previous snapshot exists for delta computation.
 			continue
 		}
 		c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, MetricTypeAudioDrops, now)
 		c.recordHealthDelta(MetricPrefixAudioOverruns+id, cur.Errors, prev.Errors, id, MetricTypeAudioOverruns, now)
+
+		// Update Prometheus gauges if wired.
+		if c.audioQueueDepthGauge != nil {
+			c.audioQueueDepthGauge(id, float64(cur.QueueDepth))
+		}
+		if c.audioDroppedChunksGauge != nil {
+			c.audioDroppedChunksGauge(id, float64(cur.Drops))
+		}
 	}
 
 	c.prevAudioSnaps = current

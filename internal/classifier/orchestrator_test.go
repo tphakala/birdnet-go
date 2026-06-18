@@ -2,6 +2,8 @@ package classifier
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -395,4 +397,89 @@ func TestAllLabels_IncludesSecondaryModelLabels(t *testing.T) {
 	assert.Contains(t, got, "Parus major_Great Tit", "bird model label must be included")
 	assert.Contains(t, got, "Barbastella barbastellus", "bat model scientific-only label must be included")
 	assert.Contains(t, got, "Myotis daubentonii", "bat model scientific-only label must be included")
+}
+
+// TestOrchestrator_PredictModel_ErrorIncrementsInvokeErrors verifies that a
+// failed model Predict call increments the readable inference error counter via
+// GetInferenceCounters().PeekAll()[id].InvokeErrors.
+func TestOrchestrator_PredictModel_ErrorIncrementsInvokeErrors(t *testing.T) {
+	// Not parallel: asserts a delta on the package-global inference counters
+	// (globalInferenceCounters). Keeping it serial avoids coupling the delta to
+	// any other test that touches the shared counters.
+	const modelID = "error-model"
+	predictErr := errors.New("injected predict failure")
+
+	mock := &mockModelInstance{
+		id:   modelID,
+		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			return nil, predictErr
+		},
+	}
+
+	o := newTestOrchestrator(t, mock)
+
+	// Confirm the counter starts at zero (entry may not exist yet).
+	before := GetInferenceCounters().PeekAll()[modelID].InvokeErrors
+
+	results, err := o.PredictModel(t.Context(), modelID, [][]float32{{0.1}})
+
+	require.Error(t, err)
+	assert.Nil(t, results)
+
+	after := GetInferenceCounters().PeekAll()[modelID].InvokeErrors
+	assert.Equal(t, before+1, after, "InvokeErrors must be incremented on predict failure")
+
+	// The success counter must not have been touched.
+	assert.Equal(t, int64(0), GetInferenceCounters().PeekAll()[modelID].InvokeCount,
+		"InvokeCount must remain zero after a failed predict")
+}
+
+// testRegistryIDForLoadFailure is a synthetic registry ID used only in tests
+// that exercise the LoadModel failure path. It is registered in ModelRegistry
+// and modelLoaders inside TestOrchestrator_LoadModel_FailureIncrementsLoadFailures.
+const testRegistryIDForLoadFailure = "__test_load_fail__"
+
+// TestOrchestrator_LoadModel_FailureIncrementsLoadFailures verifies that a
+// failed LoadModel call increments the per-model load-failure counter returned
+// by LoadFailures().
+func TestOrchestrator_LoadModel_FailureIncrementsLoadFailures(t *testing.T) {
+	// Do NOT run in parallel: mutates package-level ModelRegistry and modelLoaders.
+
+	loaderErr := fmt.Errorf("injected loader failure")
+
+	// Register a synthetic model so LoadModel's registry check passes.
+	ModelRegistry[testRegistryIDForLoadFailure] = ModelInfo{
+		ID:      testRegistryIDForLoadFailure,
+		IsStock: false,
+	}
+	modelLoaders[testRegistryIDForLoadFailure] = func(_ *Orchestrator, _ int) error {
+		return loaderErr
+	}
+	t.Cleanup(func() {
+		delete(ModelRegistry, testRegistryIDForLoadFailure)
+		delete(modelLoaders, testRegistryIDForLoadFailure)
+	})
+
+	o := &Orchestrator{
+		Settings: conftest.GetTestSettings(),
+		models:   map[string]*modelEntry{},
+		modelRSS: make(map[string]int64),
+	}
+
+	// The first failure must register the counter and set it to 1.
+	err := o.LoadModel(testRegistryIDForLoadFailure)
+	require.Error(t, err, "LoadModel should propagate the loader error")
+
+	failures := o.LoadFailures()
+	assert.Equal(t, int64(1), failures[testRegistryIDForLoadFailure],
+		"LoadFailures must be 1 after one failed LoadModel call")
+
+	// A second failure must increment to 2.
+	err = o.LoadModel(testRegistryIDForLoadFailure)
+	require.Error(t, err)
+
+	failures = o.LoadFailures()
+	assert.Equal(t, int64(2), failures[testRegistryIDForLoadFailure],
+		"LoadFailures must be 2 after two failed LoadModel calls")
 }

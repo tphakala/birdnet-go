@@ -50,6 +50,8 @@ export interface ModelStats {
   avgMs: number;
   maxMs: number;
   rtf?: number;
+  errorRate?: number;
+  loadFailures?: number;
 }
 
 /** Approximate host RAM (RSS) attributed to a model. `approxRssBytes` is absent when unavailable. */
@@ -70,6 +72,16 @@ export interface ModelSource {
 export interface ModelMetricKeys {
   avgMs: string;
   rtf: string;
+  throughput: string;
+  errorRate: string;
+}
+
+/** Most recent detection produced by a model. */
+export interface InferenceLastDetection {
+  species: string;
+  scientificName: string;
+  confidence: number;
+  atUnix: number;
 }
 
 /** A single loaded model and its current state. */
@@ -87,6 +99,20 @@ export interface InferenceModel {
   memory: ModelMemory;
   sources: ModelSource[];
   metricKeys: ModelMetricKeys;
+  lastDetection?: InferenceLastDetection;
+}
+
+/** Ring-buffer metric keys used to look up audio pipeline time series. */
+export interface InferenceAudioMetricKeys {
+  queueDepth: string;
+}
+
+/** Audio pipeline metrics snapshot for the inference page. */
+export interface InferenceAudio {
+  queueDepth: number;
+  droppedChunksTotal: number;
+  queueCapacity: number;
+  metricKeys: InferenceAudioMetricKeys;
 }
 
 /** Full inference status snapshot. `models` is the single source of truth. */
@@ -94,6 +120,7 @@ export interface InferenceStatusResponse {
   hardware: InferenceHardware;
   backends: InferenceBackends;
   models: InferenceModel[];
+  audio?: InferenceAudio;
   runtimeBaselineBytes?: number;
   snapshotAtUnix: number;
 }
