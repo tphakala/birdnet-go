@@ -1222,10 +1222,18 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		// Per-entry gate: read the triplet this entry's instance was built against
 		// under entry.mu and skip the rebuild when it already matches the current
 		// settings. The read pairs with the swap below, which publishes the new
-		// triplet under the same lock.
+		// triplet under the same lock. Also skip an entry whose instance was already
+		// torn down by a concurrent Delete/Unload (instance == nil): building a fresh
+		// (potentially multi-second, JIT-compiling) instance for a detached entry
+		// would only be discarded by the orphan guard at swap time. The post-build
+		// guard still covers a teardown that races the build itself.
 		ref.entry.mu.Lock()
 		current := ref.entry.backend
+		orphaned := ref.entry.instance == nil
 		ref.entry.mu.Unlock()
+		if orphaned {
+			continue
+		}
 		if current == triplet {
 			log.Debug("secondary model already built on current backend/device, skipping reload",
 				logger.String("registry_id", ref.id),

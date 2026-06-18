@@ -169,22 +169,52 @@ func TestReloadSecondaryModels_OrphanedEntrySkipsSwapAndClosesNew(t *testing.T) 
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
 	o.ModelInfo.ID = permanentRegistryID
-	// Entry is present in the map but its instance was torn down by a concurrent
-	// Delete/Unload (instance == nil). The reload must not resurrect a detached
-	// entry; it must close the freshly built instance and leave the entry nil.
-	// backend differs from the current triplet so the per-entry gate fires and the
-	// builder runs; the orphan (instance == nil) is only discovered at swap time.
-	o.models[testSecondaryID] = &modelEntry{instance: nil, backend: secondaryBackendKey{backend: "onnx"}}
+	// The entry has a live instance and a stale triplet, so the per-entry gate
+	// fires and the build runs. The builder simulates a concurrent Delete/Unload
+	// tearing the entry down (instance == nil) WHILE the slow build is in flight;
+	// the post-build orphan guard must then close the freshly built instance and
+	// must not resurrect the detached entry. (The already-orphaned-before-build
+	// case is covered by TestReloadSecondaryModels_AlreadyOrphanedSkipsBuild.)
+	o.models[testSecondaryID] = &modelEntry{instance: &reloadFakeModel{id: testSecondaryID}, backend: secondaryBackendKey{backend: "onnx"}}
 
 	built := &reloadFakeModel{id: testSecondaryID}
 	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		// Tear the entry down mid-build to race the swap.
+		e := o.models[testSecondaryID]
+		e.mu.Lock()
+		e.instance = nil
+		e.mu.Unlock()
 		return built, nil
 	})
 
 	require.NoError(t, o.ReloadSecondaryModels())
 
 	assert.Nil(t, o.models[testSecondaryID].instance, "orphaned entry must not be resurrected")
-	assert.Equal(t, int32(1), built.closes.Load(), "freshly built instance must be closed when the entry was orphaned")
+	assert.Equal(t, int32(1), built.closes.Load(), "freshly built instance must be closed when the entry was orphaned during the build")
+}
+
+// TestReloadSecondaryModels_AlreadyOrphanedSkipsBuild verifies the up-front gate
+// skip: an entry whose instance was already torn down before the reload starts
+// (instance == nil) must be skipped WITHOUT running the (slow, JIT-compiling)
+// builder, since any instance built for a detached entry would only be discarded.
+func TestReloadSecondaryModels_AlreadyOrphanedSkipsBuild(t *testing.T) {
+	setGlobalBackend(t, "openvino", "gpu", "")
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	// Already orphaned, with a stale triplet that would otherwise fire the gate.
+	o.models[testSecondaryID] = &modelEntry{instance: nil, backend: secondaryBackendKey{backend: "onnx"}}
+
+	var built atomic.Int32
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		built.Add(1)
+		return &reloadFakeModel{id: testSecondaryID}, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	assert.Equal(t, int32(0), built.Load(), "builder must not run for an already-orphaned entry")
+	assert.Nil(t, o.models[testSecondaryID].instance, "orphaned entry must stay nil")
 }
 
 func TestReloadSecondaryModels_PartialFailureAmongMultiple(t *testing.T) {
