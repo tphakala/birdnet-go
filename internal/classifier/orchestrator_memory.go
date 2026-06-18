@@ -10,8 +10,11 @@ import (
 
 // warmupTimeout bounds the best-effort warm-up inference run during model load.
 // It is intentionally short: a legitimate first inference completes well under
-// 5 s even on a Raspberry Pi 5, and the warm-up holds o.mu (callers of
-// PredictModel block on o.mu.RLock during a dynamic load). On timeout the
+// 5 s even on a Raspberry Pi 5. The warm-up no longer runs under o.mu; the
+// initial-load paths defer it and run it via the serialized inference path
+// (warmupRegisteredModel takes inferenceMu, not o.mu), so PredictModel/ModelInfos
+// callers are not blocked on o.mu during a dynamic load. The
+// bound caps how long a wedged warm-up can hold inferenceMu. On timeout the
 // warm-up aborts gracefully and RSS just undercounts for that model.
 const warmupTimeout = 5 * time.Second
 
@@ -73,6 +76,61 @@ func (o *Orchestrator) warmup(modelID string, instance ModelInstance) {
 			logger.String("model", modelID),
 			logger.Error(err))
 	}
+}
+
+// deferWarmup queues a freshly-registered model for warm-up after o.mu is
+// released, instead of warming it up inline. Model loaders call this while they
+// hold o.mu (write lock); running the warm-up inference here would block every
+// PredictModel/ModelInfos caller on o.mu for the inference duration. The caller
+// drains the queue via runPendingWarmups once o.mu is free.
+// Must be called with o.mu held.
+func (o *Orchestrator) deferWarmup(modelID string, before uint64) {
+	o.pendingWarmups = append(o.pendingWarmups, pendingWarmup{modelID: modelID, before: before})
+}
+
+// runPendingWarmups drains the deferred warm-up queue, running each warm-up via
+// the serialized inference path (warmupRegisteredModel) so it never holds o.mu.
+// The queue is snapshotted and cleared under o.mu so concurrent loader appends
+// cannot race the slice header and an entry is never warmed twice. Safe to call
+// with o.mu NOT held (it must not be: it acquires o.mu itself).
+func (o *Orchestrator) runPendingWarmups() {
+	o.mu.Lock()
+	pending := o.pendingWarmups
+	o.pendingWarmups = nil
+	o.mu.Unlock()
+
+	for _, w := range pending {
+		o.warmupRegisteredModel(w.modelID, w.before)
+	}
+}
+
+// warmupRegisteredModel runs the deferred warm-up + RSS measurement for a model
+// already published in o.models. It mirrors PredictModel's lock protocol
+// (o.mu.RLock to fetch the entry, release, then inferenceMu, then entry.mu) so
+// it behaves like a normal first inference: it never holds o.mu and serializes
+// with live inference via inferenceMu. The warm-up is skipped if the entry was
+// unloaded (absent, or instance == nil) before it ran, so a teardown that races
+// the load leaves no stale modelRSS entry. Unlike PredictModel it does not record
+// into globalInferenceCounters (warmupAndRecordRSS calls instance.Predict
+// directly), so the warm-up does not pollute inference stats.
+func (o *Orchestrator) warmupRegisteredModel(modelID string, before uint64) {
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+	if !ok {
+		return
+	}
+
+	o.inferenceMu.Lock()
+	defer o.inferenceMu.Unlock()
+
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.instance == nil {
+		return
+	}
+
+	o.warmupAndRecordRSS(modelID, before, entry.instance)
 }
 
 // ModelRSS returns a copy of the per-model host-RSS deltas (bytes) and the
