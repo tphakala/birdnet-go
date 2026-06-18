@@ -365,10 +365,9 @@ func (c *Controller) findEncodingTempPath(relClipPath string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	prefix := filepath.Base(relClipPath) + "."
+	base := filepath.Base(relClipPath)
 	for _, entry := range entries {
-		name := entry.Name()
-		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ffmpeg.TempExt) {
+		if !isExportTempFor(entry.Name(), base) {
 			continue
 		}
 		info, infoErr := entry.Info()
@@ -377,10 +376,40 @@ func (c *Controller) findEncodingTempPath(relClipPath string) (string, bool) {
 		}
 		// Guard against stale temp files from failed exports.
 		if time.Since(info.ModTime()) < audioEncodingMaxAge {
-			return filepath.Join(dir, name), true
+			return filepath.Join(dir, entry.Name()), true
 		}
 	}
 	return "", false
+}
+
+// isExportTempFor reports whether name is an in-progress export temp file for the
+// clip file named base. It matches the per-export unique form
+// "<base>.<pid>.<seq>.temp" (pid and seq are integers, see ffmpeg.uniqueTempPath)
+// and the pre-fix "<base>.temp" form, but NOT unrelated sidecar temps that merely
+// share the prefix and suffix, e.g. a spectrogram's "<base>.png.<pid>.<seq>.temp".
+func isExportTempFor(name, base string) bool {
+	// Pre-fix format: exactly "<base>.temp".
+	if name == base+ffmpeg.TempExt {
+		return true
+	}
+	// Unique format: "<base>.<pid>.<seq>.temp" with integer pid and seq.
+	middle, ok := strings.CutPrefix(name, base+".")
+	if !ok {
+		return false
+	}
+	middle, ok = strings.CutSuffix(middle, ffmpeg.TempExt)
+	if !ok {
+		return false
+	}
+	pidStr, seqStr, ok := strings.Cut(middle, ".")
+	if !ok {
+		return false
+	}
+	if _, err := strconv.Atoi(pidStr); err != nil {
+		return false
+	}
+	_, err := strconv.Atoi(seqStr)
+	return err == nil
 }
 
 // isAudioBeingEncoded reports whether a recent in-progress export temp file

@@ -1334,6 +1334,37 @@ func TestGetSpectrogramLogger(t *testing.T) {
 // TestServeAudioClipWaitsForEncoding verifies that when an audio file is being
 // encoded (temp file exists), the server waits for the final file to appear
 // instead of immediately returning 503.
+// TestIsExportTempFor verifies the in-progress-encoding temp matcher accepts the
+// export temp formats and rejects unrelated sidecar temps that merely share the
+// clip's prefix and the ".temp" suffix (GitHub #3323).
+func TestIsExportTempFor(t *testing.T) {
+	t.Parallel()
+	const base = "turdus_merula_84p_20260531T084138Z.m4a"
+	tests := []struct {
+		name string
+		file string
+		want bool
+	}{
+		{"unique format", base + ".12345.1" + ffmpeg.TempExt, true},
+		{"unique format large seq", base + ".987.4096" + ffmpeg.TempExt, true},
+		{"pre-fix legacy format", base + ffmpeg.TempExt, true},
+		{"final clip", base, false},
+		{"final clip other ext", base + ".part", false},
+		{"sidecar spectrogram temp", base + ".png.12345.1" + ffmpeg.TempExt, false},
+		{"different clip", "other_99p_20260531T084138Z.m4a.12345.1" + ffmpeg.TempExt, false},
+		{"non-integer pid", base + ".abc.1" + ffmpeg.TempExt, false},
+		{"non-integer seq", base + ".12345.x" + ffmpeg.TempExt, false},
+		{"missing seq", base + ".12345" + ffmpeg.TempExt, false},
+		{"extra middle segment", base + ".12345.1.2" + ffmpeg.TempExt, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isExportTempFor(tt.file, base))
+		})
+	}
+}
+
 func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
