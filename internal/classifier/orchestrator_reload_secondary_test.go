@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -100,6 +101,58 @@ func TestReloadSecondaryModels_SwapsAndClosesOld(t *testing.T) {
 	assert.Equal(t, int32(0), newInst.closes.Load(), "new instance must not be closed")
 	assert.Equal(t, secondaryBackendKey{backend: "openvino", ovDevice: "gpu", ovPath: "/opt/ov"}, o.models[testSecondaryID].backend,
 		"entry triplet should advance to the new backend")
+}
+
+// TestReloadSecondaryModels_WarmupHoldsInferenceMu verifies that the hot-reload
+// warm-up of the freshly built secondary serializes via inferenceMu, so it cannot
+// run a second model session concurrently with live inference. Mutation check:
+// this fails if the warm-up runs without inferenceMu (the pre-fix behavior).
+func TestReloadSecondaryModels_WarmupHoldsInferenceMu(t *testing.T) {
+	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+
+	old := &reloadFakeModel{id: testSecondaryID}
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	// Loaded on a different backend so the per-entry gate fires and the rebuild runs.
+	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "onnx"}}
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	// A non-empty Spec makes the warm-up actually run Predict (sized from the spec);
+	// the blocking Predict lets us observe inferenceMu while the warm-up is in flight.
+	newInst := &mockModelInstance{
+		id:   testSecondaryID,
+		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			close(started)
+			<-release
+			return nil, nil
+		},
+	}
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		return newInst, nil
+	})
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = o.ReloadSecondaryModels() }()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reload warm-up Predict did not start")
+	}
+
+	// While the warm-up inference runs, inferenceMu must be held so a live
+	// PredictModel cannot run a second model session concurrently.
+	assert.False(t, o.inferenceMu.TryLock(), "reload warm-up must hold inferenceMu during Predict")
+
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ReloadSecondaryModels did not finish")
+	}
+	assert.Same(t, ModelInstance(newInst), o.models[testSecondaryID].instance, "new instance should be swapped in")
 }
 
 func TestReloadSecondaryModels_NoOpWhenTripletUnchanged(t *testing.T) {

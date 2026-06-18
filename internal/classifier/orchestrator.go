@@ -1326,10 +1326,19 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 
 		// Warm up the freshly built (still private) instance before publishing it,
 		// so the first real inference does not pay the lazy-allocation cost, and
-		// re-measure its host RSS. This is lock-free and safe: newInst is not yet in
-		// the entry, and o.mu is not held in this build/swap section, so it does not
-		// stall live inference (unlike the initial load paths).
-		o.warmupAndRecordRSS(ref.id, before, newInst)
+		// re-measure its host RSS. newInst is not yet in the entry, so the warm-up
+		// needs no entry.mu, but it IS an inference: hold inferenceMu so it
+		// serializes with live PredictModel calls rather than running a second model
+		// session concurrently. That honors the inferenceMu invariant ("serializes
+		// inference across all models") and avoids the CPU/memory contention on
+		// constrained hardware that serialized inference exists to prevent. It never
+		// holds o.mu, so PredictModel/ModelInfos map readers are not blocked; it only
+		// queues briefly behind live inference (bounded by warmupTimeout).
+		func() {
+			o.inferenceMu.Lock()
+			defer o.inferenceMu.Unlock()
+			o.warmupAndRecordRSS(ref.id, before, newInst)
+		}()
 
 		// Swap the new instance into the existing entry under entry.mu so it
 		// cannot race an in-flight PredictModel. Keeping the same *modelEntry
