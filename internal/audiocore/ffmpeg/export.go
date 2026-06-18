@@ -9,17 +9,69 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// osWindows is runtime.GOOS on Windows, where concurrent same-target renames
+// need a retry (see finalizeExport).
+const osWindows = "windows"
+
 // TempExt is the temporary file extension used when exporting audio with FFmpeg.
 // Audio files are written with this suffix during encoding and renamed upon
 // completion to ensure atomic file operations.
 const TempExt = ".temp"
+
+// tempSeq makes every export's temp file unique within the process. Two exports
+// targeting the same OutputPath (e.g. two audio sources detecting the same
+// species in the same one-second window at the same rounded confidence, see
+// GitHub #3323) must not share one temp file: otherwise the first rename wins
+// and the rest fail with ENOENT, and concurrent FFmpeg writers can corrupt the
+// shared temp before it is renamed into place.
+//
+//nolint:gochecknoglobals // process-wide monotonic counter for unique temp names
+var tempSeq atomic.Uint64
+
+// uniqueTempPath returns a process-unique temp path for outputPath. The result
+// still ends in TempExt so diskmanager keeps skipping it during cleanup, and the
+// pid + counter prefix avoids colliding with a stale temp left by a crashed run
+// that happens to share the recordings directory.
+func uniqueTempPath(outputPath string) string {
+	return fmt.Sprintf("%s.%d.%d%s", outputPath, os.Getpid(), tempSeq.Add(1), TempExt)
+}
+
+// Concurrent exports that dedupe onto the same final clip (see uniqueTempPath /
+// GitHub #3323) finish with an atomic rename. POSIX rename(2) is atomic and the
+// kernel serializes concurrent renames to the same target, but Windows
+// MoveFileEx can transiently fail with a sharing violation when two renames hit
+// the same path at once; these bound a short Windows-only retry.
+const (
+	renameRetryAttempts = 8
+	renameRetryDelay    = 15 * time.Millisecond
+)
+
+// finalizeExport atomically renames the unique temp file onto the final clip
+// path. On non-Windows platforms it is a single os.Rename (identical behavior to
+// before). On Windows it retries a bounded number of times to absorb the sharing
+// violations that concurrent same-target renames can raise.
+func finalizeExport(tempPath, finalPath string) error {
+	err := os.Rename(tempPath, finalPath)
+	if err == nil || runtime.GOOS != osWindows {
+		return err
+	}
+	for attempt := 1; attempt < renameRetryAttempts; attempt++ {
+		time.Sleep(renameRetryDelay)
+		if err = os.Rename(tempPath, finalPath); err == nil {
+			return nil
+		}
+	}
+	return err
+}
 
 // minExportPhaseTimeout is the minimum time allowed for a single FFmpeg export phase.
 const minExportPhaseTimeout = 30 * time.Second
@@ -124,8 +176,10 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 			Build()
 	}
 
-	// Write to a temp file first for atomic finalisation.
-	tempPath := opts.OutputPath + TempExt
+	// Write to a unique temp file first for atomic finalisation. The temp name
+	// must be unique per export so concurrent exports targeting the same final
+	// path do not share one temp file (see uniqueTempPath / GitHub #3323).
+	tempPath := uniqueTempPath(opts.OutputPath)
 	defer func() {
 		// Best-effort cleanup of the temp file if export failed.
 		if _, statErr := os.Stat(tempPath); statErr == nil {
@@ -165,8 +219,8 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 		return err
 	}
 
-	// Atomic rename to final path.
-	if err := os.Rename(tempPath, opts.OutputPath); err != nil {
+	// Atomic rename to final path (Windows-safe under concurrent dedup).
+	if err := finalizeExport(tempPath, opts.OutputPath); err != nil {
 		return errors.Newf("failed to finalize export output: %w", err).
 			Component("audiocore/ffmpeg").
 			Category(errors.CategoryFileIO).

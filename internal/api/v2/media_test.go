@@ -1339,7 +1339,10 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 
 	audioFilename := "encoding-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	tempFilePath := audioFilePath + ffmpeg.TempExt
+	// Mirror the per-export unique temp name "<clip>.<pid>.<seq>.temp" the real
+	// exporters write, so this exercises the directory-scan detection in
+	// isAudioBeingEncoded rather than a fixed name that production never produces.
+	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
 
 	// Create the temp file to simulate in-progress encoding
 	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
@@ -1396,7 +1399,10 @@ func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 
 	audioFilename := "slow-encoding.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	tempFilePath := audioFilePath + ffmpeg.TempExt
+	// Mirror the per-export unique temp name "<clip>.<pid>.<seq>.temp" the real
+	// exporters write, so this exercises the directory-scan detection in
+	// isAudioBeingEncoded rather than a fixed name that production never produces.
+	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
 
 	// Create only the temp file — final file never appears
 	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
