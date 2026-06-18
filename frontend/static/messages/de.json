@@ -1567,7 +1567,19 @@
       "throughputUnit": "/s",
       "throughputChart": "Throughput (/s)",
       "errorRate": "Error rate",
-      "loadFailures": "Load failures"
+      "loadFailures": "Load failures",
+      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyzes a clip faster than real time (keeping up); above 1.0 means it is falling behind.",
+      "queueDepthHelp": "Audio clips waiting to be analyzed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
+      "queueCapacityHelp": "Maximum number of clips the queue can hold before new audio is dropped.",
+      "droppedChunksHelp": "Audio clips discarded because the queue was full. Should stay at zero.",
+      "throughputHelp": "Clips analyzed per second by this model.",
+      "errorRateHelp": "Share of analysis attempts that failed.",
+      "loadFailuresHelp": "Number of times this model failed to load.",
+      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
+      "invocationsHelp": "Total audio clips this model has analyzed since startup.",
+      "noModelsHint": "No audio source configured yet? Add one in",
+      "noModelsHintLink": "Audio Sources settings",
+      "noDataYet": "No data yet"
     },
     "metrics": {
       "cpu": "CPU",
