@@ -59,6 +59,9 @@ type Collector struct {
 	streamHealthFn  func() []StreamHealthSnapshot
 	prevAudioSnaps  map[string]AudioRouterSnapshot
 	prevStreamSnaps map[string]StreamHealthSnapshot
+	// Audio Prometheus gauge setters (optional, set via SetAudioGaugeSetters).
+	audioQueueDepthGauge   func(source string, depth float64)
+	audioDroppedChunksGauge func(source string, total float64)
 
 	// Track which metrics have had logged errors to avoid log spam
 	loggedErrors map[string]bool
@@ -316,11 +319,23 @@ func (c *Collector) SetInferenceGaugeSetters(rtf func(string, float64), rss func
 	c.inferenceGaugeDelete = del
 }
 
+// SetAudioGaugeSetters injects the Prometheus gauge setter functions for audio
+// queue depth and dropped-chunks total. Both are nil-safe; only non-nil
+// functions are called. Must be called before Start.
+func (c *Collector) SetAudioGaugeSetters(queueDepth, droppedChunks func(string, float64)) {
+	c.audioQueueDepthGauge = queueDepth
+	c.audioDroppedChunksGauge = droppedChunks
+}
+
 // AudioRouterSnapshot holds cumulative counter values for a single audio source.
 type AudioRouterSnapshot struct {
 	SourceID string
 	Drops    int64
 	Errors   int64
+	// QueueDepth is the instantaneous maximum inbox occupancy across all routes
+	// for this source. It is a gauge (not a counter) and is updated on every
+	// collection tick.
+	QueueDepth int64
 }
 
 // StreamHealthSnapshot holds cumulative counter values for a single RTSP stream,
@@ -507,7 +522,9 @@ func (c *Collector) collectHealthCounters() {
 	c.collectStreamHealthCounters(now)
 }
 
-// collectAudioHealthCounters computes deltas for audio drops and overruns.
+// collectAudioHealthCounters computes deltas for audio drops and overruns, and
+// records queue-depth gauges. Queue depth is instantaneous (not a cumulative
+// counter), so it is written every tick rather than as a delta.
 func (c *Collector) collectAudioHealthCounters(now time.Time) {
 	if c.audioRouterFn == nil {
 		return
@@ -518,6 +535,9 @@ func (c *Collector) collectAudioHealthCounters(now time.Time) {
 	for _, s := range snaps {
 		current[s.SourceID] = s
 	}
+
+	// Accumulate the aggregate queue depth across all sources each tick.
+	var queueDepthSum int64
 
 	for id, cur := range current {
 		prev, ok := c.prevAudioSnaps[id]
@@ -531,11 +551,30 @@ func (c *Collector) collectAudioHealthCounters(now time.Time) {
 			// IDs. Seed a zero here so ResultsQueueDropCheck reads "Healthy" from
 			// startup instead of "Skipped", consistent with the audio drop checks.
 			c.healthStore.RecordAt(MetricPrefixResultsQueueDrops+id, 0, now)
+			// Seed queue-depth to 0 so the sparkline series starts immediately.
+			c.healthStore.RecordAt(MetricPrefixAudioQueueDepth+id, 0, now)
 			continue
 		}
 		c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, MetricTypeAudioDrops, now)
 		c.recordHealthDelta(MetricPrefixAudioOverruns+id, cur.Errors, prev.Errors, id, MetricTypeAudioOverruns, now)
+
+		// Queue depth is a gauge: record the instantaneous value every tick.
+		c.healthStore.RecordAt(MetricPrefixAudioQueueDepth+id, cur.QueueDepth, now)
+		queueDepthSum += cur.QueueDepth
+
+		// Update Prometheus gauges if wired.
+		if c.audioQueueDepthGauge != nil {
+			c.audioQueueDepthGauge(id, float64(cur.QueueDepth))
+		}
+		if c.audioDroppedChunksGauge != nil {
+			c.audioDroppedChunksGauge(id, float64(cur.Drops))
+		}
 	}
+
+	// Record the per-tick aggregate. On the first tick for all sources, the sum
+	// is zero (all sources took the first-tick seed branch), so we seed the
+	// aggregate key with 0 to keep it consistent with per-source keys.
+	c.healthStore.RecordAt(MetricKeyAudioQueueDepthAggregate, queueDepthSum, now)
 
 	c.prevAudioSnaps = current
 }

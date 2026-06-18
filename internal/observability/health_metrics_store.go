@@ -22,6 +22,8 @@ const (
 	MetricTypeAudioOverruns     = "overruns"
 	MetricTypeStreamRestarts    = "restarts"
 	MetricTypeResultsQueueDrops = "queue_drops"
+	// MetricTypeAudioQueueDepth is the metric-type token for audio queue-depth gauges.
+	MetricTypeAudioQueueDepth = "queue_depth"
 )
 
 // Metric key prefixes for health counters. Used by both the collector
@@ -35,6 +37,15 @@ const (
 	// MetricPrefixResultsQueueDrops counts detection results dropped because the
 	// classifier results queue was full.
 	MetricPrefixResultsQueueDrops = "results." + MetricTypeResultsQueueDrops + "."
+	// MetricPrefixAudioQueueDepth is the per-source ring-buffer key prefix for
+	// audio queue-depth gauges. The full key is MetricPrefixAudioQueueDepth + sourceID
+	// (e.g. "audio.queue_depth.source1"). The trailing dot distinguishes per-source
+	// keys from the aggregate key MetricKeyAudioQueueDepthAggregate.
+	MetricPrefixAudioQueueDepth = "audio." + MetricTypeAudioQueueDepth + "."
+	// MetricKeyAudioQueueDepthAggregate is the ring-buffer key for the sum of all
+	// per-source queue depths. It has no source suffix so it is distinct from the
+	// per-source keys produced by MetricPrefixAudioQueueDepth.
+	MetricKeyAudioQueueDepthAggregate = "audio.queue_depth"
 )
 
 // HourlyBucket holds the aggregated event count for a single hour.

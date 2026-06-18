@@ -10,9 +10,12 @@ import (
 )
 
 const (
-	metricNameInferenceRTF  = "birdnet_inference_rtf"
-	metricNameModelRSSBytes = "birdnet_model_rss_bytes"
-	labelModel              = "model"
+	metricNameInferenceRTF         = "birdnet_inference_rtf"
+	metricNameModelRSSBytes        = "birdnet_model_rss_bytes"
+	metricNameAudioQueueDepth      = "birdnet_audio_queue_depth"
+	metricNameAudioDroppedChunks   = "birdnet_audio_dropped_chunks_total"
+	labelModel                     = "model"
+	labelSource                    = "source"
 )
 
 // BirdNETMetrics contains all Prometheus metrics related to BirdNET operations.
@@ -39,6 +42,10 @@ type BirdNETMetrics struct {
 	// Inference status gauges (AI Models page).
 	InferenceRTF  *prometheus.GaugeVec
 	ModelRSSBytes *prometheus.GaugeVec
+
+	// Audio pipeline gauges (per source).
+	AudioQueueDepth     *prometheus.GaugeVec
+	AudioDroppedChunks  *prometheus.GaugeVec
 
 	registry *prometheus.Registry
 }
@@ -174,6 +181,21 @@ func (m *BirdNETMetrics) initMetrics() error {
 		[]string{labelModel},
 	)
 
+	m.AudioQueueDepth = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: metricNameAudioQueueDepth,
+			Help: "Current audio pipeline queue depth (max route inbox occupancy) per source.",
+		},
+		[]string{labelSource},
+	)
+	m.AudioDroppedChunks = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: metricNameAudioDroppedChunks,
+			Help: "Cumulative audio frames dropped across the source's routes.",
+		},
+		[]string{labelSource},
+	)
+
 	return nil
 }
 
@@ -245,6 +267,22 @@ func (m *BirdNETMetrics) SetModelRSSBytes(model string, bytes int64) {
 		return
 	}
 	m.ModelRSSBytes.WithLabelValues(model).Set(float64(bytes))
+}
+
+// SetAudioQueueDepth sets the instantaneous audio queue depth gauge for a source. Nil-safe.
+func (m *BirdNETMetrics) SetAudioQueueDepth(source string, depth float64) {
+	if m == nil || m.AudioQueueDepth == nil {
+		return
+	}
+	m.AudioQueueDepth.WithLabelValues(source).Set(depth)
+}
+
+// SetAudioDroppedChunks sets the cumulative dropped-audio-chunks gauge for a source. Nil-safe.
+func (m *BirdNETMetrics) SetAudioDroppedChunks(source string, total float64) {
+	if m == nil || m.AudioDroppedChunks == nil {
+		return
+	}
+	m.AudioDroppedChunks.WithLabelValues(source).Set(total)
 }
 
 // DeleteInferenceMetrics removes a model's inference gauge label values, e.g.
@@ -326,6 +364,10 @@ func (m *BirdNETMetrics) Describe(ch chan<- *prometheus.Desc) {
 	// Inference status gauges
 	m.InferenceRTF.Describe(ch)
 	m.ModelRSSBytes.Describe(ch)
+
+	// Audio pipeline gauges
+	m.AudioQueueDepth.Describe(ch)
+	m.AudioDroppedChunks.Describe(ch)
 }
 
 // Collect implements the prometheus.Collector interface.
@@ -352,6 +394,10 @@ func (m *BirdNETMetrics) Collect(ch chan<- prometheus.Metric) {
 	// Inference status gauges
 	m.InferenceRTF.Collect(ch)
 	m.ModelRSSBytes.Collect(ch)
+
+	// Audio pipeline gauges
+	m.AudioQueueDepth.Collect(ch)
+	m.AudioDroppedChunks.Collect(ch)
 }
 
 // RecordOperation implements the Recorder interface.
