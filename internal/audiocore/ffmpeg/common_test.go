@@ -78,7 +78,12 @@ func TestValidateFFmpegPath_Invalid(t *testing.T) {
 	t.Run("non-existent absolute path passes (existence not checked)", func(t *testing.T) {
 		t.Parallel()
 
-		err := ffmpeg.ValidateFFmpegPath("/nonexistent/path/to/ffmpeg")
+		// Build a platform-absolute path that does not exist. A literal Unix path
+		// like /nonexistent/... is not absolute on Windows (filepath.IsAbs is
+		// false there), which would make this fail the absolute-path check it is
+		// meant to pass.
+		nonExistent := filepath.Join(t.TempDir(), "nonexistent", "ffmpeg")
+		err := ffmpeg.ValidateFFmpegPath(nonExistent)
 		assert.NoError(t, err, "non-existent absolute path should pass path-format validation")
 	})
 }
@@ -151,7 +156,9 @@ func TestValidateSoxPath_Invalid(t *testing.T) {
 	t.Run("non-existent absolute path passes (existence not checked)", func(t *testing.T) {
 		t.Parallel()
 
-		err := ffmpeg.ValidateSoxPath("/nonexistent/path/to/sox")
+		// Platform-absolute non-existent path (see ffmpeg case above).
+		nonExistent := filepath.Join(t.TempDir(), "nonexistent", "sox")
+		err := ffmpeg.ValidateSoxPath(nonExistent)
 		assert.NoError(t, err, "non-existent absolute path should pass path-format validation")
 	})
 }
