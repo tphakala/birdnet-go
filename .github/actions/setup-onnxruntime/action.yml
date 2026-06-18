@@ -51,7 +51,7 @@ runs:
           windows-amd64)
             curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-win-x64-${VERSION}.zip" \
               -o "${ONNX_DIR}.zip"
-            TMPDIR_WIN=$(mktemp -d)
+            TMPDIR_WIN=$(mktemp -d "${RUNNER_TEMP}/tmp.XXXXXX")
             unzip -q "${ONNX_DIR}.zip" -d "$TMPDIR_WIN"
             cp -r "$TMPDIR_WIN"/onnxruntime-*/* "${ONNX_DIR}/"
             rm -rf "$TMPDIR_WIN" "${ONNX_DIR}.zip"
@@ -61,7 +61,7 @@ runs:
               -o "${ONNX_DIR}.tgz"
             # BSD tar on macOS treats ./ as a path component, so --strip-components=1
             # only strips ./ instead of the full directory prefix. Use cp instead.
-            TMPDIR_ORT=$(mktemp -d)
+            TMPDIR_ORT=$(mktemp -d "${RUNNER_TEMP}/tmp.XXXXXX")
             tar -xzf "${ONNX_DIR}.tgz" -C "$TMPDIR_ORT"
             cp -R "$TMPDIR_ORT"/onnxruntime-*/* "${ONNX_DIR}/"
             rm -rf "$TMPDIR_ORT" "${ONNX_DIR}.tgz"
