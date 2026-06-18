@@ -921,7 +921,11 @@ func TestNonOperationalErrors_NoExplicitPriority(t *testing.T) {
 	t.Parallel()
 
 	env := setupTestEnv(t)
-	env.Settings.Realtime.Audio.SoxPath = "/nonexistent/sox"
+	// Bogus but absolute path so the Sox path-format check passes and the failure
+	// comes from exec (binary not found), which is non-operational. A literal
+	// /nonexistent/sox is not absolute on Windows and would fail path validation
+	// first, masking the intended path; build an OS-absolute non-existent path.
+	env.Settings.Realtime.Audio.SoxPath = filepath.Join(env.TempDir, "nonexistent-sox")
 
 	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
