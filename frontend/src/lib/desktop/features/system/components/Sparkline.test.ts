@@ -28,6 +28,6 @@ describe('Sparkline', () => {
     const { container } = render(Sparkline, {
       props: { data: [1, 2, 3], emptyLabel: 'No data yet' },
     });
-    expect(container.textContent ?? '').not.toContain('No data yet');
+    expect(container.textContent).not.toContain('No data yet');
   });
 });

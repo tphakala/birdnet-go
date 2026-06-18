@@ -168,7 +168,7 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain('Alpha Model');
     });
-    const text = container.textContent ?? '';
+    const text = container.textContent;
     expect(text.indexOf('Alpha Model')).toBeLessThan(text.indexOf('Zebra Model'));
   });
 

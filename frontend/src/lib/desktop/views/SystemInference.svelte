@@ -604,7 +604,7 @@
 
       {#if sortedModels.length === 0}
         <div
-          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-6 shadow-sm text-center text-sm text-base-content/70"
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-6 shadow-sm text-center text-sm text-muted"
         >
           <p>{t('system.inference.noModels')}</p>
           <p class="mt-2">
@@ -691,7 +691,7 @@
                     {formatRelativeTime(model.lastDetection.atUnix * 1000)}
                   </span>
                 {:else}
-                  <span class="text-base-content/70">{t('system.inference.lastSeenNever')}</span>
+                  <span class="text-muted">{t('system.inference.lastSeenNever')}</span>
                 {/if}
               </div>
 
@@ -801,8 +801,7 @@
               <div>
                 <div class="text-xs text-muted mb-1">{t('system.inference.sources')}</div>
                 {#if model.sources.length === 0}
-                  <span class="text-xs text-base-content/70">{t('system.inference.noSources')}</span
-                  >
+                  <span class="text-xs text-muted">{t('system.inference.noSources')}</span>
                 {:else}
                   <div class="flex flex-wrap gap-1.5">
                     {#each model.sources as source (source.id)}
