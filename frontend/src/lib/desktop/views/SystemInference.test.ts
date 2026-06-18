@@ -310,4 +310,143 @@ describe('SystemInference', () => {
     ).length;
     expect(snapshotCallsAfter).toBeGreaterThan(snapshotCallsBefore);
   });
+
+  it('renders the audio card with queue depth, capacity, and dropped chunk count', async () => {
+    const snap = makeSnapshot([]);
+    snap.audio = {
+      queueDepth: 7,
+      droppedChunksTotal: 42,
+      queueCapacity: 64,
+      metricKeys: { queueDepth: 'audio.queue_depth' },
+    };
+    installApi(snap);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.sectionAudio');
+    });
+    const text = container.textContent;
+    expect(text).toContain('7');
+    expect(text).toContain('64');
+    expect(text).toContain('42');
+  });
+
+  it('renders species name and confidence when lastDetection is present', async () => {
+    const model = makeModel({
+      lastDetection: {
+        species: 'Common Chaffinch',
+        scientificName: 'Fringilla coelebs',
+        confidence: 0.87,
+        atUnix: Math.floor(Date.now() / 1000) - 60,
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    const text = container.textContent;
+    expect(text).toContain('Common Chaffinch');
+    expect(text).toContain('87%');
+  });
+
+  it('shows the lastSeenNever label when lastDetection is absent', async () => {
+    const model = makeModel({ lastDetection: undefined });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.textContent).toContain('system.inference.lastSeenNever');
+  });
+
+  it('shows activity pulse as active when throughput series last value is > 0', async () => {
+    const model = makeModel();
+    const history = {
+      metrics: {
+        [model.metricKeys.avgMs]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 47.2 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 48.1 },
+        ],
+        [model.metricKeys.rtf]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0.016 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0.018 },
+        ],
+        [model.metricKeys.throughput]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 3.5 },
+        ],
+      },
+    };
+    installApi(makeSnapshot([model]), history);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // When the last throughput value > 0, the activity indicator shows "active"
+    const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
+    expect(activeEl).not.toBeNull();
+  });
+
+  it('shows activity pulse as idle when throughput series last value is 0', async () => {
+    const model = makeModel();
+    const history = {
+      metrics: {
+        [model.metricKeys.avgMs]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 47.2 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 48.1 },
+        ],
+        [model.metricKeys.rtf]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0.016 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0.018 },
+        ],
+        [model.metricKeys.throughput]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 3.5 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0 },
+        ],
+      },
+    };
+    installApi(makeSnapshot([model]), history);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // When the last throughput value == 0, the activity indicator shows "idle"
+    const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
+    expect(idleEl).not.toBeNull();
+  });
+
+  it('renders errorRate and loadFailures when present on the model', async () => {
+    const model = makeModel({
+      stats: {
+        invocations: 100,
+        avgMs: 45,
+        maxMs: 120,
+        rtf: 0.015,
+        errorRate: 0.05,
+        loadFailures: 3,
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    const text = container.textContent;
+    expect(text).toContain('system.inference.errorRate');
+    expect(text).toContain('5%');
+    expect(text).toContain('system.inference.loadFailures');
+    expect(text).toContain('3');
+  });
 });
