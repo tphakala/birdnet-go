@@ -57,6 +57,13 @@ func setupTestDB(t *testing.T) (db *sql.DB, dbPath string, cleanup func()) {
 
 	cleanup = func() {
 		_ = sqlDB.Close()
+		// gormDB (used only to create the schema) keeps its own SQLite connection
+		// open on test.db. Close it too, or on Windows the open handle blocks
+		// deletion of the temp dir ("being used by another process") and fails
+		// t.TempDir() cleanup.
+		if gormSQLDB, gormErr := gormDB.DB(); gormErr == nil {
+			_ = gormSQLDB.Close()
+		}
 		_ = os.RemoveAll(tmpDir)
 	}
 
