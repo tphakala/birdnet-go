@@ -403,6 +403,21 @@ func (c *Collector) collectInference(points map[string]float64) {
 		}
 
 		deltaInvokes := snap.InvokeCount - prev.InvokeCount
+		// Handle counter reset: if cumulative count decreased, treat the current
+		// absolute value as the delta (mirrors the disk I/O reset guard pattern).
+		if deltaInvokes < 0 {
+			deltaInvokes = snap.InvokeCount
+		}
+
+		// Compute delta errors with the same counter-reset guard.
+		deltaErrors := snap.InvokeErrors - prev.InvokeErrors
+		if deltaErrors < 0 {
+			deltaErrors = snap.InvokeErrors
+		}
+
+		// Elapsed seconds between the two snapshots, used for throughput computation.
+		elapsedSeconds := snap.CollectedAt.Sub(prev.CollectedAt).Seconds()
+
 		if deltaInvokes > 0 {
 			deltaUs := snap.InvokeTotalUs - prev.InvokeTotalUs
 			points[key] = float64(deltaUs) / float64(deltaInvokes) / usToMs
@@ -423,6 +438,21 @@ func (c *Collector) collectInference(points map[string]float64) {
 			}
 		} else {
 			points[key] = 0
+		}
+
+		// Throughput: invocations per second over the tick interval.
+		if elapsedSeconds > 0 {
+			points[inferencestats.ThroughputMetricKey(modelID)] = float64(deltaInvokes) / elapsedSeconds
+		} else {
+			points[inferencestats.ThroughputMetricKey(modelID)] = 0
+		}
+
+		// Error rate: errors / (errors + invocations) over the tick interval, range [0, 1].
+		total := deltaErrors + deltaInvokes
+		if total > 0 {
+			points[inferencestats.ErrorRateMetricKey(modelID)] = float64(deltaErrors) / float64(total)
+		} else {
+			points[inferencestats.ErrorRateMetricKey(modelID)] = 0
 		}
 
 		s := snap
