@@ -886,6 +886,17 @@ func (c *Controller) Shutdown() {
 	// Wait for all goroutines to finish
 	c.wg.Wait()
 
+	// Release the media SecureFS sandbox handle. securefs.New holds an open
+	// os.Root on the export directory; on Windows an open directory handle
+	// blocks deletion, which fails t.TempDir() cleanup in tests and leaks the
+	// handle across controller restarts in production. Closed after wg.Wait so
+	// no goroutine is still using it.
+	if c.SFS != nil {
+		if err := c.SFS.Close(); err != nil {
+			GetLogger().Error("Error closing media SecureFS", logger.Error(err))
+		}
+	}
+
 	// Shutdown the backup job manager to stop its cleanup goroutine
 	if backupJobManager != nil {
 		backupJobManager.Shutdown()
