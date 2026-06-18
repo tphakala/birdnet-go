@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -54,8 +55,10 @@ type ModelManager struct {
 	// topologyChangedCb, when set, is invoked after a successful model load or
 	// unload so observers (e.g. the metrics SSE stream) can signal that the
 	// inference topology changed. It is injected to keep this package free of an
-	// internal/observability import (which would create an import cycle).
-	topologyChangedCb func()
+	// internal/observability import (which would create an import cycle). The
+	// atomic pointer makes concurrent set and notify safe (the setter is
+	// exported, so a caller could re-register a callback while loads/unloads run).
+	topologyChangedCb atomic.Pointer[func()]
 }
 
 // InstalledModel represents a model that has been downloaded and is available.
@@ -106,17 +109,23 @@ func (mm *ModelManager) ModelInfos() []ModelInfo {
 
 // SetTopologyChangedCallback registers a callback invoked after a successful
 // model load or unload. It is injected (rather than imported) to avoid an
-// internal/observability import cycle. Passing nil disables the callback.
+// internal/observability import cycle. Passing nil disables the callback. The
+// store is atomic, so it is safe to call concurrently with notifyTopologyChanged.
 func (mm *ModelManager) SetTopologyChangedCallback(cb func()) {
-	mm.topologyChangedCb = cb
+	if cb == nil {
+		mm.topologyChangedCb.Store(nil)
+		return
+	}
+	mm.topologyChangedCb.Store(&cb)
 }
 
 // notifyTopologyChanged invokes the registered topology-changed callback if one
 // is set. It must be called outside any held lock, since the callback may run
-// arbitrary observer code.
+// arbitrary observer code. The load is atomic, so it is safe to call
+// concurrently with SetTopologyChangedCallback.
 func (mm *ModelManager) notifyTopologyChanged() {
-	if mm.topologyChangedCb != nil {
-		mm.topologyChangedCb()
+	if p := mm.topologyChangedCb.Load(); p != nil {
+		(*p)()
 	}
 }
 
