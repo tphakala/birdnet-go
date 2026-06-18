@@ -1815,16 +1815,6 @@ EOF
 start_quadlet_service() {
     log_message "INFO" "Starting BirdNET-Go Quadlet service"
     
-    # Enable the service
-    if systemctl --user enable birdnet-go.service; then
-        log_command_result "systemctl --user enable birdnet-go.service" $? "service enable"
-        print_message "✅ BirdNET-Go service enabled" "$GREEN"
-    else
-        log_message "ERROR" "Failed to enable BirdNET-Go service"
-        print_message "❌ Failed to enable BirdNET-Go service" "$RED"
-        return 1
-    fi
-    
     # Start the service
     if systemctl --user start birdnet-go.service; then
         log_command_result "systemctl --user start birdnet-go.service" $? "service start"
