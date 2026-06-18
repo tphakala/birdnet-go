@@ -64,12 +64,21 @@ func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch,
 
 // loadPerch creates and registers a Perch v2 model instance from settings.
 func (o *Orchestrator) loadPerch(threads int) error {
-	perch, err := o.buildPerch(o.currentSettings(), threads)
+	// Capture the settings snapshot once so the recorded backend triplet matches
+	// the exact configuration the instance was built against. This is what makes
+	// an out-of-band runtime install (LoadModel) reconcile correctly: the entry
+	// records its own triplet, so a later ReloadSecondaryModels rebuilds it only
+	// when the backend/device actually changes (Forgejo #1119).
+	settings := o.currentSettings()
+	perch, err := o.buildPerch(settings, threads)
 	if err != nil {
 		return err
 	}
 
-	o.models[perch.ModelID()] = &modelEntry{instance: perch}
+	o.models[perch.ModelID()] = &modelEntry{
+		instance: perch,
+		backend:  secondaryTripletFor(settings),
+	}
 
 	// No separate Perch label resolver needed. Perch returns scientific names,
 	// and the BirdNETLabelResolver (already registered) maps scientific -> common

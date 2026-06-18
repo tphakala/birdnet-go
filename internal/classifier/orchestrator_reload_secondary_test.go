@@ -79,9 +79,8 @@ func TestReloadSecondaryModels_SwapsAndClosesOld(t *testing.T) {
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
 	o.ModelInfo.ID = permanentRegistryID
-	o.models[testSecondaryID] = &modelEntry{instance: old}
-	// Loaded on a different backend so the gate fires.
-	o.secondaryBackend = secondaryBackendKey{backend: "onnx"}
+	// Loaded on a different backend so the per-entry gate fires.
+	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "onnx"}}
 
 	var built atomic.Int32
 	newInst := &reloadFakeModel{id: testSecondaryID}
@@ -99,8 +98,8 @@ func TestReloadSecondaryModels_SwapsAndClosesOld(t *testing.T) {
 	assert.Same(t, ModelInstance(newInst), o.models[testSecondaryID].instance, "new instance should be swapped in")
 	assert.Equal(t, int32(1), old.closes.Load(), "old instance should be closed once")
 	assert.Equal(t, int32(0), newInst.closes.Load(), "new instance must not be closed")
-	assert.Equal(t, secondaryBackendKey{backend: "openvino", ovDevice: "gpu", ovPath: "/opt/ov"}, o.secondaryBackend,
-		"gate should advance to the new triplet")
+	assert.Equal(t, secondaryBackendKey{backend: "openvino", ovDevice: "gpu", ovPath: "/opt/ov"}, o.models[testSecondaryID].backend,
+		"entry triplet should advance to the new backend")
 }
 
 func TestReloadSecondaryModels_NoOpWhenTripletUnchanged(t *testing.T) {
@@ -109,9 +108,8 @@ func TestReloadSecondaryModels_NoOpWhenTripletUnchanged(t *testing.T) {
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
 	o.ModelInfo.ID = permanentRegistryID
-	o.models[testSecondaryID] = &modelEntry{instance: old}
 	// Already on the current triplet: reload must be a no-op.
-	o.secondaryBackend = secondaryBackendKey{backend: "openvino", ovDevice: "gpu", ovPath: "/opt/ov"}
+	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "openvino", ovDevice: "gpu", ovPath: "/opt/ov"}}
 
 	var built atomic.Int32
 	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
@@ -132,8 +130,7 @@ func TestReloadSecondaryModels_KeepsOldOnBuildFailure(t *testing.T) {
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
 	o.ModelInfo.ID = permanentRegistryID
-	o.models[testSecondaryID] = &modelEntry{instance: old}
-	o.secondaryBackend = secondaryBackendKey{backend: "onnx"}
+	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "onnx"}}
 
 	buildErr := errors.Newf("simulated build failure").Build()
 	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
@@ -145,10 +142,10 @@ func TestReloadSecondaryModels_KeepsOldOnBuildFailure(t *testing.T) {
 
 	assert.Same(t, ModelInstance(old), o.models[testSecondaryID].instance, "old instance must keep serving on build failure")
 	assert.Equal(t, int32(0), old.closes.Load(), "old instance must not be closed when its rebuild fails")
-	// Advance-always: the gate moves to the new triplet so an unrelated reload
-	// does not retry the failed build.
-	assert.Equal(t, secondaryBackendKey{backend: "openvino", ovDevice: "gpu"}, o.secondaryBackend,
-		"gate should still advance after a build failure")
+	// Advance-always: the entry's triplet moves to the new triplet so an unrelated
+	// reload does not retry the failed build.
+	assert.Equal(t, secondaryBackendKey{backend: "openvino", ovDevice: "gpu"}, o.models[testSecondaryID].backend,
+		"entry triplet should still advance after a build failure")
 }
 
 func TestReloadSecondaryModels_SkipsNonOVCapableSecondary(t *testing.T) {
@@ -160,7 +157,6 @@ func TestReloadSecondaryModels_SkipsNonOVCapableSecondary(t *testing.T) {
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
 	o.ModelInfo.ID = permanentRegistryID
 	o.models[RegistryIDBat] = &modelEntry{instance: batLike}
-	o.secondaryBackend = secondaryBackendKey{backend: "onnx"}
 
 	require.NoError(t, o.ReloadSecondaryModels())
 
@@ -176,8 +172,9 @@ func TestReloadSecondaryModels_OrphanedEntrySkipsSwapAndClosesNew(t *testing.T) 
 	// Entry is present in the map but its instance was torn down by a concurrent
 	// Delete/Unload (instance == nil). The reload must not resurrect a detached
 	// entry; it must close the freshly built instance and leave the entry nil.
-	o.models[testSecondaryID] = &modelEntry{instance: nil}
-	o.secondaryBackend = secondaryBackendKey{backend: "onnx"}
+	// backend differs from the current triplet so the per-entry gate fires and the
+	// builder runs; the orphan (instance == nil) is only discovered at swap time.
+	o.models[testSecondaryID] = &modelEntry{instance: nil, backend: secondaryBackendKey{backend: "onnx"}}
 
 	built := &reloadFakeModel{id: testSecondaryID}
 	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
@@ -197,9 +194,9 @@ func TestReloadSecondaryModels_PartialFailureAmongMultiple(t *testing.T) {
 	oldFail := &reloadFakeModel{id: testSecondaryID2}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
 	o.ModelInfo.ID = permanentRegistryID
-	o.models[testSecondaryID] = &modelEntry{instance: oldOK}
-	o.models[testSecondaryID2] = &modelEntry{instance: oldFail}
-	o.secondaryBackend = secondaryBackendKey{backend: "onnx"}
+	// Both entries are on a different backend so the per-entry gate fires for each.
+	o.models[testSecondaryID] = &modelEntry{instance: oldOK, backend: secondaryBackendKey{backend: "onnx"}}
+	o.models[testSecondaryID2] = &modelEntry{instance: oldFail, backend: secondaryBackendKey{backend: "onnx"}}
 
 	newOK := &reloadFakeModel{id: testSecondaryID}
 	buildErr := errors.Newf("simulated build failure for second secondary").Build()
@@ -229,8 +226,7 @@ func TestReloadSecondaryModels_RaceWithPredict(t *testing.T) {
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
 	o.ModelInfo.ID = permanentRegistryID
-	o.models[testSecondaryID] = &modelEntry{instance: &reloadFakeModel{id: testSecondaryID}}
-	o.secondaryBackend = secondaryBackendKey{backend: "onnx"}
+	o.models[testSecondaryID] = &modelEntry{instance: &reloadFakeModel{id: testSecondaryID}, backend: secondaryBackendKey{backend: "onnx"}}
 
 	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
 		return &reloadFakeModel{id: testSecondaryID}, nil
@@ -253,8 +249,8 @@ func TestReloadSecondaryModels_RaceWithPredict(t *testing.T) {
 		})
 	}
 
-	// Force a rebuild on each iteration by alternating the device so the gate
-	// keeps firing (the previous successful reload advanced it to the prior value).
+	// Force a rebuild on each iteration by alternating the device so the per-entry
+	// gate keeps firing (the previous successful reload advanced it to the prior value).
 	// Publish directly (not via setGlobalBackend) to avoid stacking 40 cleanups;
 	// the initial setGlobalBackend already registered the reset-to-nil cleanup.
 	devices := []string{"cpu", "gpu"}
@@ -268,4 +264,48 @@ func TestReloadSecondaryModels_RaceWithPredict(t *testing.T) {
 
 	stop.Store(true)
 	wg.Wait()
+}
+
+// TestReloadSecondaryModels_PerEntryTripletRebuildsOnlyStale is the core
+// Forgejo #1119 behavior: with per-entry triplet tracking, a reload rebuilds only
+// the secondaries whose own recorded triplet differs from the current settings.
+// One secondary is already on the current triplet (e.g. installed out-of-band by
+// LoadModel after the backend change, which records the entry's triplet at load);
+// the other is stale. A single orchestrator-wide gate could not represent this
+// mixed state and would rebuild both or neither.
+func TestReloadSecondaryModels_PerEntryTripletRebuildsOnlyStale(t *testing.T) {
+	setGlobalBackend(t, "openvino", "gpu", "")
+	currentTriplet := secondaryBackendKey{backend: "openvino", ovDevice: "gpu"}
+
+	upToDate := &reloadFakeModel{id: testSecondaryID}
+	stale := &reloadFakeModel{id: testSecondaryID2}
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	// testSecondaryID is already on the current triplet; testSecondaryID2 is stale.
+	o.models[testSecondaryID] = &modelEntry{instance: upToDate, backend: currentTriplet}
+	o.models[testSecondaryID2] = &modelEntry{instance: stale, backend: secondaryBackendKey{backend: "onnx"}}
+
+	var builtUpToDate, builtStale atomic.Int32
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		builtUpToDate.Add(1)
+		return &reloadFakeModel{id: testSecondaryID}, nil
+	})
+	newStale := &reloadFakeModel{id: testSecondaryID2}
+	registerTestSecondaryBuilder(t, testSecondaryID2, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		builtStale.Add(1)
+		return newStale, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	// The up-to-date secondary must be left completely untouched.
+	assert.Equal(t, int32(0), builtUpToDate.Load(), "up-to-date secondary must not be rebuilt")
+	assert.Same(t, ModelInstance(upToDate), o.models[testSecondaryID].instance, "up-to-date instance must be unchanged")
+	assert.Equal(t, int32(0), upToDate.closes.Load(), "up-to-date instance must not be closed")
+
+	// The stale secondary must be rebuilt and its triplet advanced.
+	assert.Equal(t, int32(1), builtStale.Load(), "stale secondary must be rebuilt once")
+	assert.Same(t, ModelInstance(newStale), o.models[testSecondaryID2].instance, "stale instance must be swapped in")
+	assert.Equal(t, int32(1), stale.closes.Load(), "stale old instance must be closed")
+	assert.Equal(t, currentTriplet, o.models[testSecondaryID2].backend, "stale entry triplet must advance to current")
 }
