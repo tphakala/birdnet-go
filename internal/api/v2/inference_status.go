@@ -3,6 +3,8 @@ package api
 
 import (
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -364,8 +366,21 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 	for i := range infos {
 		resp.Models = append(resp.Models, buildModelStatus(&infos[i], counters[infos[i].ID], rss, attachments[infos[i].ID], loadFailures, lastDetections))
 	}
+	sortInferenceModelsByName(resp.Models)
 
 	return ctx.JSON(http.StatusOK, resp)
+}
+
+// sortInferenceModelsByName orders model statuses by display name
+// (case-insensitive), tie-broken by ID, so the API returns a deterministic
+// order regardless of the orchestrator's map iteration order.
+func sortInferenceModelsByName(models []InferenceModelStatus) {
+	slices.SortStableFunc(models, func(a, b InferenceModelStatus) int {
+		if c := strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
 }
 
 // buildSourceAttachments computes, per loaded model registry ID, the audio

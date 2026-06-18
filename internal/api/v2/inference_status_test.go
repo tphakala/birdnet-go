@@ -293,3 +293,19 @@ func TestBuildModelStatus_LastDetection(t *testing.T) {
 	assert.InDelta(t, 0.92, got.LastDetection.Confidence, 0.001)
 	assert.Equal(t, int64(1718000000), got.LastDetection.AtUnix)
 }
+
+// TestSortInferenceModelsByName verifies that model statuses are ordered by
+// display name (case-insensitive), tie-broken by ID, so the API response order
+// is deterministic regardless of the orchestrator's map iteration order.
+func TestSortInferenceModelsByName(t *testing.T) {
+	t.Parallel()
+	models := []InferenceModelStatus{
+		{ID: "b", Name: "Zebra"},
+		{ID: "a", Name: "alpha"},
+		{ID: "c", Name: "Alpha"},
+	}
+	sortInferenceModelsByName(models)
+	got := []string{models[0].ID, models[1].ID, models[2].ID}
+	// "alpha" and "Alpha" tie case-insensitively; tie broken by ID (a before c).
+	require.Equal(t, []string{"a", "c", "b"}, got)
+}
