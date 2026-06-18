@@ -152,7 +152,9 @@ type AudioMetricsInfo struct {
 	QueueDepth int `json:"queueDepth"`
 	// DroppedChunksTotal is the cumulative count of dropped audio chunks.
 	DroppedChunksTotal int64 `json:"droppedChunksTotal"`
-	// QueueCapacity is the per-route inbox capacity (RouteInboxCapacity).
+	// QueueCapacity is the aggregate inbox capacity represented by QueueDepth:
+	// RouteInboxCapacity per active source, summed, so it stays on the same
+	// scale as the per-source-summed QueueDepth (depth never exceeds capacity).
 	QueueCapacity int `json:"queueCapacity"`
 	// MetricKeys holds the metric key names for audio pipeline time series.
 	MetricKeys AudioMetricKeys `json:"metricKeys"`
@@ -344,10 +346,17 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 		totalQueueDepth += int(s.QueueDepth)
 		totalDrops += s.Drops
 	}
+	// QueueCapacity tracks QueueDepth's scale: one RouteInboxCapacity per active
+	// source, summed. With multiple sources this keeps depth <= capacity instead
+	// of comparing a summed depth against a single route's capacity.
+	queueCapacity := audiocore.RouteInboxCapacity
+	if len(audioSnaps) > 1 {
+		queueCapacity = len(audioSnaps) * audiocore.RouteInboxCapacity
+	}
 	resp.Audio = AudioMetricsInfo{
 		QueueDepth:         totalQueueDepth,
 		DroppedChunksTotal: totalDrops,
-		QueueCapacity:      audiocore.RouteInboxCapacity,
+		QueueCapacity:      queueCapacity,
 		MetricKeys:         AudioMetricKeys{QueueDepth: observability.MetricKeyAudioQueueDepthAggregate},
 	}
 

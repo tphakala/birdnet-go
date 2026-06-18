@@ -403,8 +403,9 @@ func TestAllLabels_IncludesSecondaryModelLabels(t *testing.T) {
 // failed model Predict call increments the readable inference error counter via
 // GetInferenceCounters().PeekAll()[id].InvokeErrors.
 func TestOrchestrator_PredictModel_ErrorIncrementsInvokeErrors(t *testing.T) {
-	t.Parallel()
-
+	// Not parallel: asserts a delta on the package-global inference counters
+	// (globalInferenceCounters). Keeping it serial avoids coupling the delta to
+	// any other test that touches the shared counters.
 	const modelID = "error-model"
 	predictErr := errors.New("injected predict failure")
 
@@ -449,7 +450,7 @@ func TestOrchestrator_LoadModel_FailureIncrementsLoadFailures(t *testing.T) {
 
 	// Register a synthetic model so LoadModel's registry check passes.
 	ModelRegistry[testRegistryIDForLoadFailure] = ModelInfo{
-		ID:     testRegistryIDForLoadFailure,
+		ID:      testRegistryIDForLoadFailure,
 		IsStock: false,
 	}
 	modelLoaders[testRegistryIDForLoadFailure] = func(_ *Orchestrator, _ int) error {
