@@ -12,8 +12,6 @@ import (
 
 // makeResult is a test helper that builds a detection.Result with the given fields.
 func makeResult(commonName, scientificName string, confidence float64, ts time.Time) detection.Result {
-	t := &testing.T{}
-	_ = t // placeholder: t.Helper() is intentionally not called here; this is a plain factory, not a test helper.
 	return detection.Result{
 		Species: detection.Species{
 			CommonName:     commonName,

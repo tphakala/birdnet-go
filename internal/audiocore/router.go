@@ -33,7 +33,7 @@ const (
 	errorLogInterval = 100
 
 	// dropSentryThreshold is the total number of drops per route before
-	// a single Sentry report is fired. This fires once — the log.Warn at
+	// a single Sentry report is fired. This fires once; the log.Warn at
 	// dropLogInterval provides ongoing visibility.
 	dropSentryThreshold int64 = 1000
 )
@@ -568,7 +568,7 @@ func (r *AudioRouter) stopRoute(route *Route) {
 		}()
 	case <-time.After(drainerStopTimeout):
 		// Drainer is leaked and may still reference the resampler/consumer.
-		// Do NOT close them — leave for GC to reclaim.
+		// Do NOT close them, leave for GC to reclaim.
 		r.log.Warn("drainer goroutine did not exit in time, leaking resources",
 			logger.String("source_id", route.SourceID),
 			logger.String("consumer_id", route.Consumer.ID()))
