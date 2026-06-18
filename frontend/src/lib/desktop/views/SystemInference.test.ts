@@ -71,7 +71,12 @@ function makeModel(overrides: Partial<InferenceModel> = {}): InferenceModel {
     stats: { invocations: 12034, avgMs: 47.2, maxMs: 130, rtf: 0.016 },
     memory: { approxRssBytes: 125000000, approximate: true },
     sources: [{ id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: false }],
-    metricKeys: { avgMs: 'inference.model-1.avg_ms', rtf: 'inference.model-1.rtf' },
+    metricKeys: {
+      avgMs: 'inference.model-1.avg_ms',
+      rtf: 'inference.model-1.rtf',
+      throughput: 'inference.model-1.throughput',
+      errorRate: 'inference.model-1.error_rate',
+    },
     ...overrides,
   };
 }
@@ -86,6 +91,12 @@ function makeSnapshot(models: InferenceModel[]): InferenceStatusResponse {
       openvino: { supported: false, active: false },
     },
     models,
+    audio: {
+      queueDepth: 0,
+      droppedChunksTotal: 0,
+      queueCapacity: 64,
+      metricKeys: { queueDepth: 'audio.queue_depth' },
+    },
     snapshotAtUnix: 1750000000,
   };
 }
@@ -279,7 +290,12 @@ describe('SystemInference', () => {
     const secondModel = makeModel({
       id: 'model-2',
       name: 'PERCH SECONDARY 9K',
-      metricKeys: { avgMs: 'inference.model-2.avg_ms', rtf: 'inference.model-2.rtf' },
+      metricKeys: {
+        avgMs: 'inference.model-2.avg_ms',
+        rtf: 'inference.model-2.rtf',
+        throughput: 'inference.model-2.throughput',
+        errorRate: 'inference.model-2.error_rate',
+      },
     });
     installApi(makeSnapshot([secondModel]));
 
