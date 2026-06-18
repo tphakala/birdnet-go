@@ -28,6 +28,15 @@ import (
 type modelEntry struct {
 	instance ModelInstance
 	mu       sync.Mutex // per-model lock; prevents inference on one model from blocking another
+
+	// backend records the inference-backend triplet this entry's instance was last
+	// built against. It is only set and read for OV-capable secondary models (those
+	// in openvinoCapableSecondaryBuilders); ReloadSecondaryModels compares it
+	// per-entry against the current settings to decide whether a backend/device
+	// change requires rebuilding this specific model. Guarded by mu, the same lock
+	// that guards instance, so the triplet is always published with the instance it
+	// describes. Non-secondary entries (e.g. the primary) leave it at the zero value.
+	backend secondaryBackendKey
 }
 
 // entryRef pairs a registry ID with its model entry for the snapshot-then-iterate
@@ -37,10 +46,11 @@ type entryRef struct {
 	entry *modelEntry
 }
 
-// secondaryBackendKey identifies the inference backend / OpenVINO device that
-// the OV-capable secondary models were last built against. ReloadSecondaryModels
-// uses it as a change-detection gate so an unrelated reload_birdnet trigger
-// (locale, thresholds) does not needlessly rebuild a large secondary model.
+// secondaryBackendKey identifies the inference backend / OpenVINO device that an
+// OV-capable secondary model was last built against. Each modelEntry stores its
+// own key (see modelEntry.backend); ReloadSecondaryModels uses it as a per-entry
+// change-detection gate so an unrelated reload_birdnet trigger (locale,
+// thresholds) does not needlessly rebuild a large secondary model.
 type secondaryBackendKey struct {
 	backend  string
 	ovDevice string
@@ -87,16 +97,6 @@ type Orchestrator struct {
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
 	scheduler atomic.Pointer[nighttimeScheduler]
-
-	// secondaryBackend records the backend triplet ReloadSecondaryModels last
-	// built the OV-capable secondaries against, so it can skip a rebuild when
-	// reload_birdnet fires for an unrelated setting. With a single OV-capable
-	// secondary (Perch) and a restart-required OpenVINOPath, this equals the
-	// triplet every loaded secondary actually runs on, because LoadModel builds a
-	// runtime-installed secondary from the same current settings. Adding a second
-	// OV-capable secondary would need per-entry triplet tracking to stay exact
-	// across out-of-band loads (tracked separately). Guarded by o.mu.
-	secondaryBackend secondaryBackendKey
 }
 
 // CurrentSettings returns the latest settings snapshot published via
@@ -161,14 +161,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	}
 	o.settingsAtomic.Store(settings)
 
-	// Seed the secondary-model backend gate with the startup triplet so the first
-	// reload_birdnet for an unrelated setting (e.g. a locale change) does not
-	// spuriously rebuild the secondaries (zero value would mismatch "onnx").
-	o.secondaryBackend = secondaryBackendKey{
-		backend:  settings.BirdNET.Backend,
-		ovDevice: settings.BirdNET.OpenVINODevice,
-		ovPath:   settings.BirdNET.OpenVINOPath,
-	}
+	// Each OV-capable secondary records the startup triplet on its own modelEntry
+	// when its loader registers it below (see loadPerch), so the first
+	// reload_birdnet for an unrelated setting (e.g. a locale change) sees a
+	// matching triplet and does not spuriously rebuild it. No orchestrator-wide
+	// gate to seed here anymore.
 
 	// Pre-compute thread allocation so model constructors receive their share.
 	// BirdNET already uses settings.BirdNET.Threads at construction; additional
@@ -1133,6 +1130,19 @@ func (o *Orchestrator) ReloadModel() error {
 	return nil
 }
 
+// secondaryTripletFor returns the inference-backend triplet that OV-capable
+// secondary models build against. The secondaries share the primary's OpenVINO
+// configuration, so the triplet is derived from settings.BirdNET. Each modelEntry
+// records this (modelEntry.backend) at build time so ReloadSecondaryModels can
+// detect a per-model backend/device change.
+func secondaryTripletFor(settings *conf.Settings) secondaryBackendKey {
+	return secondaryBackendKey{
+		backend:  settings.BirdNET.Backend,
+		ovDevice: settings.BirdNET.OpenVINODevice,
+		ovPath:   settings.BirdNET.OpenVINOPath,
+	}
+}
+
 // ReloadSecondaryModels rebuilds the OV-capable secondary models (currently
 // Perch) when the BirdNET inference backend or OpenVINO device preference
 // changes at runtime, so they move to the new device without a full restart.
@@ -1140,36 +1150,39 @@ func (o *Orchestrator) ReloadModel() error {
 // the new backend BEFORE the old instance is closed, and a build failure leaves
 // the old instance serving (one model failing does not abort the others).
 //
-// It is a no-op when the backend/device/path triplet is unchanged since the
-// last build, so an unrelated reload_birdnet trigger (locale, thresholds) does
-// not rebuild a large secondary model. The triplet is advanced unconditionally
-// before the build loop: a hard build failure is reported once rather than
-// retried on every subsequent unrelated reload; the user re-toggles the device
-// setting to retry.
+// The change-detection gate is per-entry (modelEntry.backend): each OV-capable
+// secondary is rebuilt only when its own recorded triplet differs from the
+// current settings, so an unrelated reload_birdnet trigger (locale, thresholds)
+// does not rebuild a large secondary model. Per-entry tracking (vs a single
+// orchestrator-wide gate) stays exact when a secondary is installed out-of-band
+// at runtime (LoadModel records the entry's triplet at load) and when more than
+// one OV-capable secondary is loaded. Each entry's triplet is advanced
+// unconditionally once its rebuild is reconciled: a hard build failure is
+// reported once and the gate still advances, so it is not retried on every
+// subsequent unrelated reload; the user re-toggles the device setting to retry.
 //
 // Returns the first build error encountered (for caller notification). The
 // reload itself does not fail on a secondary error because the primary model
 // has already reloaded by the time this runs.
 //
-// Lock discipline mirrors UnloadModel: o.mu is held only to gate and snapshot,
-// then released before the (potentially slow, JIT-compiling) builds; the swap
-// takes entry.mu alone, which cannot deadlock against PredictModel
-// (o.mu.RLock -> inferenceMu -> entry.mu) because entry.mu is acquired here as
-// a leaf lock while holding nothing else.
+// Lock discipline mirrors UnloadModel: o.mu is held only to snapshot the entry
+// set, then released before the (potentially slow, JIT-compiling) builds; the
+// per-entry gate read and the swap take entry.mu alone, which cannot deadlock
+// against PredictModel (o.mu.RLock -> inferenceMu -> entry.mu) because entry.mu
+// is acquired here as a leaf lock while holding nothing else. ReloadSecondaryModels
+// is invoked from the serialized reload path, so concurrent invocations are not
+// expected; if two ever interleaved, the per-entry gate makes the worst case a
+// redundant rebuild, never a corrupted swap.
 func (o *Orchestrator) ReloadSecondaryModels() error {
 	log := GetLogger()
 
 	// Read the fresh settings published by the primary reload that ran just
 	// before this (ReloadModel atomically swapped the settings pointer).
 	settings := o.currentSettings()
-	triplet := secondaryBackendKey{
-		backend:  settings.BirdNET.Backend,
-		ovDevice: settings.BirdNET.OpenVINODevice,
-		ovPath:   settings.BirdNET.OpenVINOPath,
-	}
+	triplet := secondaryTripletFor(settings)
 
-	// Gate and snapshot under the write lock (the gate field is written here),
-	// then release o.mu before the slow builds.
+	// Snapshot the OV-capable secondary entries under o.mu, then release it before
+	// the per-entry gate checks and slow builds.
 	o.mu.Lock()
 	if o.models == nil {
 		o.mu.Unlock()
@@ -1178,16 +1191,6 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			Category(errors.CategorySystem).
 			Build()
 	}
-	if o.secondaryBackend == triplet {
-		o.mu.Unlock()
-		log.Debug("secondary models already built on current backend/device, skipping reload",
-			logger.String("backend", triplet.backend),
-			logger.String("ov_device", triplet.ovDevice))
-		return nil
-	}
-	// Advance the gate unconditionally (see method doc): a failed rebuild is not
-	// retried on the next unrelated reload.
-	o.secondaryBackend = triplet
 	primaryID := o.ModelInfo.ID
 	refs := make([]entryRef, 0, len(openvinoCapableSecondaryBuilders))
 	for id, entry := range o.models {
@@ -1216,7 +1219,29 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 
 	var firstErr error
 	for _, ref := range refs {
-		builder := openvinoCapableSecondaryBuilders[ref.id]
+		// Per-entry gate: read the triplet this entry's instance was built against
+		// under entry.mu and skip the rebuild when it already matches the current
+		// settings. The read pairs with the swap below, which publishes the new
+		// triplet under the same lock. Also skip an entry whose instance was already
+		// torn down by a concurrent Delete/Unload (instance == nil): building a fresh
+		// (potentially multi-second, JIT-compiling) instance for a detached entry
+		// would only be discarded by the orphan guard at swap time. The post-build
+		// guard still covers a teardown that races the build itself.
+		ref.entry.mu.Lock()
+		current := ref.entry.backend
+		orphaned := ref.entry.instance == nil
+		ref.entry.mu.Unlock()
+		if orphaned {
+			continue
+		}
+		if current == triplet {
+			log.Debug("secondary model already built on current backend/device, skipping reload",
+				logger.String("registry_id", ref.id),
+				logger.String("backend", triplet.backend),
+				logger.String("ov_device", triplet.ovDevice))
+			continue
+		}
+
 		// A secondary present in o.models but absent from settings.Models.Enabled
 		// (e.g. installed at runtime then disabled in config) is not keyed in
 		// threadAlloc; fall back to the full budget, matching LoadModel's default
@@ -1228,11 +1253,20 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				threads = runtime.NumCPU()
 			}
 		}
-		newInst, err := builder(o, settings, threads)
+		newInst, err := openvinoCapableSecondaryBuilders[ref.id](o, settings, threads)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
+			// Hard build failure: keep the old instance serving, but advance this
+			// entry's gate (advance-always) so an unrelated reload does not retry the
+			// failed build. Skip the advance if the entry was torn down while building
+			// (a detached entry's gate is moot).
+			ref.entry.mu.Lock()
+			if ref.entry.instance != nil {
+				ref.entry.backend = triplet
+			}
+			ref.entry.mu.Unlock()
 			log.Error("failed to rebuild secondary model on backend/device change; keeping existing instance",
 				logger.String("registry_id", ref.id),
 				logger.String("backend", triplet.backend),
@@ -1251,14 +1285,15 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			// Entry was torn down by a concurrent Delete/Unload; do not resurrect
 			// a detached entry. Close the freshly built instance and skip.
 			ref.entry.mu.Unlock()
-			if err := newInst.Close(); err != nil {
+			if cerr := newInst.Close(); cerr != nil {
 				log.Warn("failed to close orphaned secondary model instance after reload",
 					logger.String("registry_id", ref.id),
-					logger.Error(err))
+					logger.Error(cerr))
 			}
 			continue
 		}
 		ref.entry.instance = newInst
+		ref.entry.backend = triplet
 		ref.entry.mu.Unlock()
 
 		// Close the old instance after releasing entry.mu: native teardown can be
@@ -1266,10 +1301,10 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		// published (PredictModel reads entry.instance under entry.mu on every
 		// call). Building the new instance before closing the old keeps the OV
 		// active-classifier counter from transiently dropping to zero.
-		if err := old.Close(); err != nil {
+		if cerr := old.Close(); cerr != nil {
 			log.Warn("failed to close old secondary model instance after reload",
 				logger.String("registry_id", ref.id),
-				logger.Error(err))
+				logger.Error(cerr))
 		}
 
 		log.Info("secondary model reloaded on new backend/device",
