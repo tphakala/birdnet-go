@@ -120,7 +120,7 @@ export interface InferenceStatusResponse {
   hardware: InferenceHardware;
   backends: InferenceBackends;
   models: InferenceModel[];
-  audio: InferenceAudio;
+  audio?: InferenceAudio;
   runtimeBaselineBytes?: number;
   snapshotAtUnix: number;
 }

@@ -26,7 +26,7 @@
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
-  import { Brain, Cpu, MemoryStick, Activity } from '@lucide/svelte';
+  import { Brain, Cpu, MemoryStick, Activity, Minus } from '@lucide/svelte';
   import type {
     InferenceStatusResponse,
     InferenceModel,
@@ -100,8 +100,12 @@
   }
 
   // Collect every metric key across the snapshot models and audio pipeline.
+  // The audio queue-depth key is included regardless of model count so the
+  // Audio card sparkline receives data even before any model is loaded.
+  // When neither audio keys nor model keys are present the function returns ''
+  // and the caller falls through to the awaitingModels / polling path.
   function metricKeysParam(): string {
-    if (!snapshot || snapshot.models.length === 0) return '';
+    if (!snapshot) return '';
     const keys: string[] = [];
     if (snapshot.audio) {
       keys.push(snapshot.audio.metricKeys.queueDepth);
@@ -378,6 +382,23 @@
     if (bytes == null) return t('system.inference.notMeasured');
     return formatBytesCompact(bytes);
   }
+
+  // Throughput, avgLatency, and maxLatency are meaningless at zero invocations:
+  // show a dash placeholder matching the rtfDisplay pattern.
+  function throughputDisplay(model: InferenceModel, latestValue: number): string {
+    if (model.stats.invocations <= 0) return '-';
+    return latestValue.toFixed(1) + t('system.inference.throughputUnit');
+  }
+
+  function avgLatencyDisplay(model: InferenceModel): string {
+    if (model.stats.invocations <= 0) return '-';
+    return model.stats.avgMs.toFixed(1) + ' ' + t('system.inference.unitMs');
+  }
+
+  function maxLatencyDisplay(model: InferenceModel): string {
+    if (model.stats.invocations <= 0) return '-';
+    return model.stats.maxMs.toFixed(1) + ' ' + t('system.inference.unitMs');
+  }
 </script>
 
 <div class="space-y-4">
@@ -572,19 +593,17 @@
                   text={model.isStock ? t('system.inference.stock') : t('system.inference.custom')}
                 />
                 <span
-                  class={isActive
-                    ? 'ml-auto w-2 h-2 rounded-full bg-green-500 animate-pulse'
-                    : 'ml-auto w-2 h-2 rounded-full bg-base-content/20'}
+                  class="ml-auto flex items-center gap-1"
                   role="status"
                   aria-label={isActive
                     ? t('system.inference.activityActive')
                     : t('system.inference.activityIdle')}
                 >
-                  <span class="sr-only"
-                    >{isActive
-                      ? t('system.inference.activityActive')
-                      : t('system.inference.activityIdle')}</span
-                  >
+                  {#if isActive}
+                    <Activity class="w-3 h-3 text-green-500 animate-pulse" aria-hidden="true" />
+                  {:else}
+                    <Minus class="w-3 h-3 text-base-content/30" aria-hidden="true" />
+                  {/if}
                 </span>
               </div>
 
@@ -641,15 +660,13 @@
                 <span class="text-muted">
                   {t('system.inference.avgLatency')}:
                   <span class="font-mono tabular-nums text-base-content">
-                    {model.stats.avgMs.toFixed(1)}
-                    {t('system.inference.unitMs')}
+                    {avgLatencyDisplay(model)}
                   </span>
                 </span>
                 <span class="text-muted">
                   {t('system.inference.maxLatency')}:
                   <span class="font-mono tabular-nums text-base-content">
-                    {model.stats.maxMs.toFixed(1)}
-                    {t('system.inference.unitMs')}
+                    {maxLatencyDisplay(model)}
                   </span>
                 </span>
                 <span class="text-muted" title={t('system.inference.rtfLabel')}>
@@ -665,7 +682,7 @@
                 <span class="text-muted">
                   {t('system.inference.throughput')}:
                   <span class="font-mono tabular-nums text-base-content">
-                    {throughputLatest.toFixed(1)}{t('system.inference.throughputUnit')}
+                    {throughputDisplay(model, throughputLatest)}
                   </span>
                 </span>
                 {#if model.stats.errorRate !== undefined}

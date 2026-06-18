@@ -332,6 +332,42 @@ describe('SystemInference', () => {
     expect(text).toContain('42');
   });
 
+  it('includes the audio queue-depth metric key in the SSE subscription when models are absent', async () => {
+    // FIX 1 regression guard: metricKeysParam() must include the audio key even
+    // when snapshot.models is empty, so the audio sparkline receives live data
+    // before any model loads.
+    //
+    // Strategy: install a snapshot with zero models but an audio section, then
+    // capture the URL that the history endpoint was called with and assert it
+    // contains the audio queue-depth key.
+    const snap = makeSnapshot([]);
+    snap.audio = {
+      queueDepth: 2,
+      droppedChunksTotal: 0,
+      queueCapacity: 64,
+      metricKeys: { queueDepth: 'audio.queue_depth' },
+    };
+
+    let capturedHistoryUrl = '';
+    apiGet.mockImplementation((url: string) => {
+      if (url.includes('/metrics/history')) {
+        capturedHistoryUrl = url;
+        return Promise.resolve({ metrics: { 'audio.queue_depth': [] } });
+      }
+      if (url.includes(INFERENCE_URL)) {
+        return Promise.resolve(snap);
+      }
+      return Promise.resolve({ metrics: {} });
+    });
+
+    inferenceTest.render({});
+
+    // Wait until the history endpoint is called (proves loadHistory ran with keys).
+    await waitFor(() => {
+      expect(capturedHistoryUrl).toContain('audio.queue_depth');
+    });
+  });
+
   it('renders species name and confidence when lastDetection is present', async () => {
     const model = makeModel({
       lastDetection: {
@@ -393,6 +429,9 @@ describe('SystemInference', () => {
     // When the last throughput value > 0, the activity indicator shows "active"
     const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
     expect(activeEl).not.toBeNull();
+    // The idle indicator must NOT be rendered at the same time (regression guard)
+    const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
+    expect(idleEl).toBeNull();
   });
 
   it('shows activity pulse as idle when throughput series last value is 0', async () => {
@@ -423,6 +462,9 @@ describe('SystemInference', () => {
     // When the last throughput value == 0, the activity indicator shows "idle"
     const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
     expect(idleEl).not.toBeNull();
+    // The active indicator must NOT be rendered at the same time (regression guard)
+    const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
+    expect(activeEl).toBeNull();
   });
 
   it('renders errorRate and loadFailures when present on the model', async () => {
