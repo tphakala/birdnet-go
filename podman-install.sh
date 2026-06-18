@@ -1790,7 +1790,7 @@ PublishPort=${WEB_PORT}:8080
 Environment=TZ=${CONFIGURED_TZ:-UTC}
 Environment=BIRDNET_UID=%U
 Environment=BIRDNET_GID=%G
-Device=/dev/snd:/dev/snd
+AddDevice=/dev/null:/dev/snd
 Network=birdnet-bridge
 Tmpfs=/config/hls:exec,size=50M,mode=0755
 
