@@ -432,7 +432,7 @@ func (c *Collector) collectInference(points map[string]float64) {
 		// reset (e.g. process restart) is treated as the absolute current value
 		// rather than a negative spike. These locals are scoped to the new series
 		// and do not affect avg_ms or rtf above.
-		tpInvokes := snap.InvokeCount - prev.InvokeCount
+		tpInvokes := deltaInvokes
 		if tpInvokes < 0 {
 			tpInvokes = snap.InvokeCount
 		}
@@ -598,6 +598,9 @@ func (c *Collector) collectAudioHealthCounters(now time.Time) {
 			// IDs. Seed a zero here so ResultsQueueDropCheck reads "Healthy" from
 			// startup instead of "Skipped", consistent with the audio drop checks.
 			c.healthStore.RecordAt(MetricPrefixResultsQueueDrops+id, 0, now)
+			// Prometheus audio gauges are intentionally NOT set on the seeding tick:
+			// only the health-store keys are seeded. Gauges are set from the second
+			// tick onward once a previous snapshot exists for delta computation.
 			continue
 		}
 		c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, MetricTypeAudioDrops, now)

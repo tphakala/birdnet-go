@@ -145,7 +145,10 @@ type AudioMetricKeys struct {
 
 // AudioMetricsInfo holds a point-in-time snapshot of audio pipeline metrics.
 type AudioMetricsInfo struct {
-	// QueueDepth is the current total analysis queue depth across all sources.
+	// QueueDepth is the sum across all active sources of each source's maximum
+	// route inbox occupancy at snapshot time (per-source max, then summed). This
+	// matches the aggregate series produced by the observability collector, which
+	// records the same sum into MetricKeyAudioQueueDepthAggregate each tick.
 	QueueDepth int `json:"queueDepth"`
 	// DroppedChunksTotal is the cumulative count of dropped audio chunks.
 	DroppedChunksTotal int64 `json:"droppedChunksTotal"`

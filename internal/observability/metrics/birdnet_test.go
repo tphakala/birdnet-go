@@ -74,7 +74,7 @@ func TestInferenceGauges_NilSafe(t *testing.T) {
 }
 
 // TestAudioGauges verifies that birdnet_audio_queue_depth and
-// birdnet_audio_dropped_chunks_total are registered, exposed, and set correctly.
+// birdnet_audio_dropped_chunks are registered, exposed, and set correctly.
 func TestAudioGauges(t *testing.T) {
 	t.Parallel()
 
@@ -88,10 +88,10 @@ func TestAudioGauges(t *testing.T) {
 	require.NotNil(t, depthFound, "expected birdnet_audio_queue_depth sample with label source=rtsp_source_1")
 	assert.InDelta(t, 8.0, *depthFound, 1e-9, "birdnet_audio_queue_depth value")
 
-	require.Contains(t, byName, "birdnet_audio_dropped_chunks_total", "birdnet_audio_dropped_chunks_total not registered/exposed")
-	dropsFound := findGaugeValue(byName["birdnet_audio_dropped_chunks_total"], "source", "rtsp_source_1")
-	require.NotNil(t, dropsFound, "expected birdnet_audio_dropped_chunks_total sample with label source=rtsp_source_1")
-	assert.InDelta(t, 42.0, *dropsFound, 1e-9, "birdnet_audio_dropped_chunks_total value")
+	require.Contains(t, byName, "birdnet_audio_dropped_chunks", "birdnet_audio_dropped_chunks not registered/exposed")
+	dropsFound := findGaugeValue(byName["birdnet_audio_dropped_chunks"], "source", "rtsp_source_1")
+	require.NotNil(t, dropsFound, "expected birdnet_audio_dropped_chunks sample with label source=rtsp_source_1")
+	assert.InDelta(t, 42.0, *dropsFound, 1e-9, "birdnet_audio_dropped_chunks value")
 }
 
 // TestAudioGauges_NilSafe verifies that SetAudioQueueDepth and SetAudioDroppedChunks

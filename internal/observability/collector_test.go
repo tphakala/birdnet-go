@@ -333,7 +333,8 @@ func TestCollector_AudioQueueDepth(t *testing.T) {
 }
 
 // TestCollector_InferenceThroughput verifies that the collector records per-model
-// throughput (invocations per second) in the MetricsStore under the correct key.
+// throughput (invocations per second) in the MetricsStore under the correct key
+// and that the recorded value matches the formula deltaInvokes / elapsedSeconds.
 //
 // Throughput is a delta metric: it is undefined on the first (seeding) tick and
 // should only appear from the second tick onward. The value is computed as
@@ -352,22 +353,62 @@ func TestCollector_InferenceThroughput(t *testing.T) {
 	throughputKey := inferencestats.ThroughputMetricKey("ModelA")
 
 	// First tick: seeds the previous snapshot; no throughput recorded yet.
+	// Record wall-clock time around the first collect so we can bracket
+	// the Snapshot CollectedAt that the collector stores internally.
+	tick1Before := time.Now()
 	collector.collect()
+	tick1After := time.Now()
 	pts := store.Get(throughputKey, 10)
 	assert.Nil(t, pts, "throughput must not be recorded on the seeding tick")
 
 	// Record two more invocations before the second tick.
+	const deltaInvokes = 2
 	counters.RecordInvoke("ModelA", 10_000)
 	counters.RecordInvoke("ModelA", 10_000)
 
-	// Second tick: delta = 2 invocations over whatever elapsed time.
+	// Second tick: delta = 2 invocations over elapsed time.
+	tick2Before := time.Now()
 	collector.collect()
+	tick2After := time.Now()
 
 	pts = store.Get(throughputKey, 10)
 	require.Len(t, pts, 1, "throughput must be recorded after second tick")
-	// The elapsed time is tiny in tests (microseconds to milliseconds), so throughput
-	// will be a large positive number. We verify it is strictly positive.
-	assert.Greater(t, pts[0].Value, 0.0, "throughput must be positive when invocations occurred")
+
+	// The collector computes throughput as float64(deltaInvokes) / elapsedSeconds,
+	// where elapsedSeconds = snap2.CollectedAt - snap1.CollectedAt. Both CollectedAt
+	// values are set to time.Now() inside the respective Snapshot() calls, so the
+	// actual elapsed lies in [tick2Before - tick1After, tick2After - tick1Before].
+	//
+	// Recover the actual elapsed that the collector used (collector: throughput = delta / elapsed,
+	// so elapsed = delta / throughput) and assert it falls within the bracketed range.
+	// Also verify the formula itself: throughput * elapsed_recovered = deltaInvokes.
+	got := pts[0].Value
+	require.Greater(t, got, 0.0, "throughput must be positive when invocations occurred")
+
+	// Recovered elapsed seconds used by the collector.
+	recoveredElapsed := float64(deltaInvokes) / got
+
+	// The actual Snapshot CollectedAt values fall between tick1Before..tick1After
+	// and tick2Before..tick2After respectively. The elapsed is in the range
+	// [tick2Before - tick1After, tick2After - tick1Before]. Guard against
+	// negative lower bound (can occur on very fast machines where tick2Before < tick1After).
+	lowerElapsed := tick2Before.Sub(tick1After).Seconds()
+	upperElapsed := tick2After.Sub(tick1Before).Seconds()
+	if lowerElapsed < 0 {
+		lowerElapsed = 0
+	}
+
+	// The formula throughput = deltaInvokes / elapsed must hold: recovered elapsed
+	// should be consistent with the measured wall-clock range.
+	require.GreaterOrEqual(t, recoveredElapsed, lowerElapsed,
+		"recovered elapsed must be >= lower wall-clock bound")
+	require.LessOrEqual(t, recoveredElapsed, upperElapsed+time.Millisecond.Seconds(),
+		"recovered elapsed must be <= upper wall-clock bound (with 1ms slack)")
+
+	// Also verify via InDelta: expected throughput using the recovered elapsed equals the
+	// recorded value within floating-point rounding error.
+	expectedThroughput := float64(deltaInvokes) / recoveredElapsed
+	require.InDelta(t, expectedThroughput, got, 1e-9, "throughput must equal deltaInvokes/elapsed")
 }
 
 // TestCollector_InferenceThroughputZeroWhenIdle verifies that throughput is

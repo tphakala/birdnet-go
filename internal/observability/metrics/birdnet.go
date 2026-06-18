@@ -13,7 +13,7 @@ const (
 	metricNameInferenceRTF         = "birdnet_inference_rtf"
 	metricNameModelRSSBytes        = "birdnet_model_rss_bytes"
 	metricNameAudioQueueDepth      = "birdnet_audio_queue_depth"
-	metricNameAudioDroppedChunks   = "birdnet_audio_dropped_chunks_total"
+	metricNameAudioDroppedChunks   = "birdnet_audio_dropped_chunks"
 	labelModel                     = "model"
 	labelSource                    = "source"
 )
@@ -191,7 +191,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 	m.AudioDroppedChunks = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: metricNameAudioDroppedChunks,
-			Help: "Cumulative audio frames dropped across the source's routes.",
+			Help: "Running total of audio frames dropped across the source's routes (gauge snapshot, not a counter).",
 		},
 		[]string{labelSource},
 	)

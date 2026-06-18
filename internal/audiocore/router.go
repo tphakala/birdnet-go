@@ -429,28 +429,6 @@ func (r *AudioRouter) Routes(sourceID string) []RouteInfo {
 	return infos
 }
 
-// AnalysisQueueSnapshot returns the summed inbox occupancy and lifetime drop
-// count across all routes whose consumer ID matches analysisConsumerID. It is
-// used to surface the analysis pipeline queue depth on the inference status
-// page without exposing internal Route fields. Both values are zero when no
-// matching routes exist. The read is taken under r.mu.RLock() so it is
-// consistent with Routes() snapshots.
-func (r *AudioRouter) AnalysisQueueSnapshot(analysisConsumerID string) (depth int, drops int64) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	for _, routes := range r.routes {
-		for _, rt := range routes {
-			if rt.Consumer.ID() != analysisConsumerID {
-				continue
-			}
-			depth += len(rt.inbox)
-			drops += rt.drops.Load()
-		}
-	}
-	return depth, drops
-}
-
 // LastDispatchTime returns the last time Dispatch was called for sourceID.
 // Returns zero time if the source has never dispatched.
 func (r *AudioRouter) LastDispatchTime(sourceID string) time.Time {

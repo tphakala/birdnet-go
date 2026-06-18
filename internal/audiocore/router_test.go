@@ -1152,8 +1152,7 @@ func TestRouter_PoolCacheHit(t *testing.T) {
 }
 
 // TestRouter_QueueDepth verifies that Routes() returns the current inbox
-// occupancy in RouteInfo.QueueDepth, and that AnalysisQueueSnapshot returns
-// the summed depth and lifetime drops for routes matching the given consumer ID.
+// occupancy in RouteInfo.QueueDepth for routes with queued frames.
 func TestRouter_QueueDepth(t *testing.T) {
 	t.Parallel()
 
@@ -1182,15 +1181,4 @@ func TestRouter_QueueDepth(t *testing.T) {
 		"QueueDepth must be positive when frames are queued in the inbox")
 	assert.LessOrEqual(t, routes[0].QueueDepth, RouteInboxCapacity,
 		"QueueDepth must not exceed inbox capacity")
-
-	// AnalysisQueueSnapshot must return a positive depth for the matching
-	// consumer ID, and non-negative drops.
-	depth, drops := router.AnalysisQueueSnapshot(consumerID)
-	assert.Positive(t, depth, "AnalysisQueueSnapshot depth must be positive")
-	assert.GreaterOrEqual(t, drops, int64(0), "AnalysisQueueSnapshot drops must be non-negative")
-
-	// A different consumer ID must return zero depth and zero drops.
-	depthOther, dropsOther := router.AnalysisQueueSnapshot("no-such-consumer")
-	assert.Zero(t, depthOther, "AnalysisQueueSnapshot for unknown consumer ID must return 0 depth")
-	assert.Zero(t, dropsOther, "AnalysisQueueSnapshot for unknown consumer ID must return 0 drops")
 }
