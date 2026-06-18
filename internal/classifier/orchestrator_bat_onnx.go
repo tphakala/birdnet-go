@@ -9,9 +9,15 @@ import (
 func (o *Orchestrator) loadBat(threads int) error {
 	log := GetLogger()
 
-	classifierModel := o.Settings.Bat.ClassifierModel
-	labelPath := o.Settings.Bat.LabelPath
-	embeddingModel := o.Settings.Bat.EmbeddingModel
+	// Read the live published settings snapshot once (mirroring loadPerch) rather
+	// than the deprecated o.Settings pointer, so an out-of-band LoadModel after a
+	// hot-reload builds against the same configuration the rest of the orchestrator
+	// sees instead of a possibly-staler pointer.
+	settings := o.currentSettings()
+
+	classifierModel := settings.Bat.ClassifierModel
+	labelPath := settings.Bat.LabelPath
+	embeddingModel := settings.Bat.EmbeddingModel
 
 	if classifierModel == "" || labelPath == "" || embeddingModel == "" {
 		m, l, e := o.resolveInstalledPaths(RegistryIDBat)
@@ -34,16 +40,16 @@ func (o *Orchestrator) loadBat(threads int) error {
 			Build()
 	}
 
-	if err := checkORTOrFail(o.Settings.BirdNET.ONNXRuntimePath, "Bat model", RegistryIDBat, "classifier.orchestrator"); err != nil {
+	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "Bat model", RegistryIDBat, "classifier.orchestrator"); err != nil {
 		return err
 	}
 
 	cfg := BatModelConfig{
 		EmbeddingModelPath:  embeddingModel,
-		EmbeddingLabels:     o.Settings.BirdNET.Labels,
+		EmbeddingLabels:     settings.BirdNET.Labels,
 		ClassifierModelPath: classifierModel,
 		ClassifierLabelPath: labelPath,
-		ONNXRuntimePath:     o.Settings.BirdNET.ONNXRuntimePath,
+		ONNXRuntimePath:     settings.BirdNET.ONNXRuntimePath,
 		Threads:             threads,
 	}
 
