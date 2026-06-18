@@ -52,7 +52,8 @@ func newTestOrchestrator(t *testing.T, mocks ...*mockModelInstance) *Orchestrato
 		models[m.id] = &modelEntry{instance: m}
 	}
 	return &Orchestrator{
-		models: models,
+		models:   models,
+		modelRSS: make(map[string]int64),
 	}
 }
 

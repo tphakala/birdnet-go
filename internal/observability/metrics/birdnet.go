@@ -247,6 +247,20 @@ func (m *BirdNETMetrics) SetModelRSSBytes(model string, bytes int64) {
 	m.ModelRSSBytes.WithLabelValues(model).Set(float64(bytes))
 }
 
+// DeleteInferenceMetrics removes a model's inference gauge label values, e.g.
+// after the model is unloaded, so Prometheus stops reporting stale series. Nil-safe.
+func (m *BirdNETMetrics) DeleteInferenceMetrics(model string) {
+	if m == nil {
+		return
+	}
+	if m.InferenceRTF != nil {
+		m.InferenceRTF.DeleteLabelValues(model)
+	}
+	if m.ModelRSSBytes != nil {
+		m.ModelRSSBytes.DeleteLabelValues(model)
+	}
+}
+
 // categorizeError returns a category string for the error type using enhanced error categories
 func categorizeError(err error) string {
 	if err == nil {

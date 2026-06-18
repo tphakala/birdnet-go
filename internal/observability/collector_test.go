@@ -247,6 +247,7 @@ func TestCollector_EmitsRTFKeyAndGauge(t *testing.T) {
 	collector.SetInferenceGaugeSetters(
 		func(model string, rtf float64) { gotRTFModel = model; gotRTF = rtf },
 		func(_ string, _ int64) {},
+		func(_ string) {},
 	)
 
 	// First tick: establishes the previous snapshot (no rtf emitted yet).

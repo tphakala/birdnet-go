@@ -1270,6 +1270,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				threads = runtime.NumCPU()
 			}
 		}
+		before := o.captureRSSBefore()
 		newInst, err := openvinoCapableSecondaryBuilders[ref.id](o, settings, threads)
 		if err != nil {
 			if firstErr == nil {
@@ -1292,6 +1293,13 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			continue
 		}
 
+		// Warm up the freshly built (still private) instance before publishing it,
+		// so the first real inference does not pay the lazy-allocation cost, and
+		// re-measure its host RSS. This is lock-free and safe: newInst is not yet in
+		// the entry, and o.mu is not held in this build/swap section, so it does not
+		// stall live inference (unlike the initial load paths).
+		o.warmupAndRecordRSS(ref.id, before, newInst)
+
 		// Swap the new instance into the existing entry under entry.mu so it
 		// cannot race an in-flight PredictModel. Keeping the same *modelEntry
 		// preserves the per-entry mutex identity and the globalInferenceCounters
@@ -1307,17 +1315,15 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 					logger.String("registry_id", ref.id),
 					logger.Error(cerr))
 			}
+			// Remove the RSS entry we just recorded since the model will not be published.
+			o.rssMu.Lock()
+			delete(o.modelRSS, ref.id)
+			o.rssMu.Unlock()
 			continue
 		}
 		ref.entry.instance = newInst
 		ref.entry.backend = triplet
 		ref.entry.mu.Unlock()
-
-		// Clear the stale RSS entry so the API reports n/a rather than a wrong
-		// number until the next warm-up or RSS measurement.
-		o.rssMu.Lock()
-		delete(o.modelRSS, ref.id)
-		o.rssMu.Unlock()
 
 		// Close the old instance after releasing entry.mu: native teardown can be
 		// slow, and no goroutine can reach the old instance once the swap is

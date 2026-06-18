@@ -243,7 +243,7 @@ func (c *Controller) initMetricsHistoryRoutes() {
 			}
 		}
 		if c.metrics != nil && c.metrics.BirdNET != nil {
-			collector.SetInferenceGaugeSetters(c.metrics.BirdNET.SetInferenceRTF, c.metrics.BirdNET.SetModelRSSBytes)
+			collector.SetInferenceGaugeSetters(c.metrics.BirdNET.SetInferenceRTF, c.metrics.BirdNET.SetModelRSSBytes, c.metrics.BirdNET.DeleteInferenceMetrics)
 		}
 
 		// Wire health counter collection (drops, overruns, stream restarts)
