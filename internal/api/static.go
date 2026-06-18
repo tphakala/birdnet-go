@@ -311,7 +311,11 @@ func (sfs *StaticFileServer) serveFromEmbed(c echo.Context, path string) error {
 // in their filename. These files need short cache durations because their content
 // can change across app updates without filename changes.
 func isUnhashedAsset(path string) bool {
-	clean := filepath.Clean(path)
+	// These are URL/embed asset paths, which always use forward slashes.
+	// filepath.Clean rewrites them with the OS separator (backslashes on Windows),
+	// which breaks the "messages/" prefix match and leaves translation files
+	// long-term cached on Windows. Normalize back to forward slashes.
+	clean := filepath.ToSlash(filepath.Clean(path))
 	return strings.HasPrefix(clean, "messages/") && strings.HasSuffix(clean, ".json")
 }
 
