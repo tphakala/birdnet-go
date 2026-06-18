@@ -197,6 +197,32 @@ describe('SystemInference', () => {
     expect(container.querySelector('h2')).toBeNull();
   });
 
+  it('renders the audio-sources hint link in the empty state', async () => {
+    installApi(makeSnapshot([]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.noModels');
+    });
+    const link = container.querySelector('a[href="/ui/settings/audio"]');
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toContain('system.inference.noModelsHintLink');
+  });
+
+  it('exposes screen-reader help for jargon terms', async () => {
+    installApi(makeSnapshot([makeModel()]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.invocations');
+    });
+    // The stat help snippet renders sr-only spans carrying the *Help keys.
+    expect(container.textContent).toContain('system.inference.queueDepthHelp');
+    expect(container.textContent).toContain('system.inference.invocationsHelp');
+  });
+
   it('renders model details, backend, quantization, invocations and a source chip', async () => {
     const model = makeModel();
     installApi(makeSnapshot([model]));
@@ -245,8 +271,8 @@ describe('SystemInference', () => {
       expect(container.textContent).toContain(model.name);
     });
 
-    // The RTF cell sits in a span carrying the rtfLabel title; assert its text is "-".
-    const rtfCell = container.querySelector('[title="system.inference.rtfLabel"]');
+    // The RTF cell sits in a span carrying the rtfHelp title; assert its text is "-".
+    const rtfCell = container.querySelector('[title="system.inference.rtfHelp"]');
     expect(rtfCell).not.toBeNull();
     expect(rtfCell?.textContent).toContain('-');
     // The non-null rtf value must NOT leak through despite being present.
