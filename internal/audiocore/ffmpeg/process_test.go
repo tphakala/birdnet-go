@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	require.Less(t, rtspIdx+1, len(args), "-rtsp_transport must have a value")
 	assert.Equal(t, "tcp", args[rtspIdx+1])
 
-	// RTSP must use -timeout; the legacy -stimeout was removed in FFmpeg 5.x+.
+	// Empty FFmpegPath yields an unknown version, which safely falls back to -timeout.
 	timeoutIdx := slices.Index(args, "-timeout")
 	require.NotEqual(t, -1, timeoutIdx, "expected -timeout flag for RTSP")
 	assert.Equal(t, -1, slices.Index(args, "-stimeout"), "RTSP must not use legacy -stimeout")
@@ -99,7 +100,7 @@ func TestBuildFFmpegArgs_CustomTimeout(t *testing.T) {
 		Transport: "tcp",
 	}
 
-	// User provides -timeout; RTSP now also uses -timeout.
+	// Empty FFmpegPath yields an unknown version, so RTSP uses -timeout.
 	customParams := []string{"-timeout", "5000000"}
 	args := BuildFFmpegArgs(cfg, customParams)
 
@@ -125,11 +126,80 @@ func TestBuildFFmpegArgs_CustomTimeout(t *testing.T) {
 func TestTimeoutParamForSource(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeRTSP))
-	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeHTTP))
-	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeHLS))
-	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeRTMP))
-	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeUDP))
+	tests := []struct {
+		name        string
+		sourceType  audiocore.SourceType
+		ffmpegMajor int
+		want        string
+	}{
+		{"rtsp_ffmpeg4_uses_stimeout", audiocore.SourceTypeRTSP, 4, "-stimeout"},
+		{"rtsp_ffmpeg5_uses_timeout", audiocore.SourceTypeRTSP, 5, "-timeout"},
+		{"rtsp_ffmpeg6_uses_timeout", audiocore.SourceTypeRTSP, 6, "-timeout"},
+		{"rtsp_ffmpeg7_uses_timeout", audiocore.SourceTypeRTSP, 7, "-timeout"},
+		{"rtsp_unknown_uses_timeout", audiocore.SourceTypeRTSP, 0, "-timeout"},
+		{"http_ffmpeg4_uses_timeout", audiocore.SourceTypeHTTP, 4, "-timeout"},
+		{"http_ffmpeg7_uses_timeout", audiocore.SourceTypeHTTP, 7, "-timeout"},
+		{"hls_ffmpeg4_uses_timeout", audiocore.SourceTypeHLS, 4, "-timeout"},
+		{"hls_ffmpeg7_uses_timeout", audiocore.SourceTypeHLS, 7, "-timeout"},
+		{"rtmp_ffmpeg4_uses_timeout", audiocore.SourceTypeRTMP, 4, "-timeout"},
+		{"rtmp_ffmpeg7_uses_timeout", audiocore.SourceTypeRTMP, 7, "-timeout"},
+		{"udp_ffmpeg4_uses_timeout", audiocore.SourceTypeUDP, 4, "-timeout"},
+		{"udp_ffmpeg7_uses_timeout", audiocore.SourceTypeUDP, 7, "-timeout"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, timeoutParamForSource(tt.sourceType, tt.ffmpegMajor))
+		})
+	}
+}
+
+func TestBuildFFmpegArgs_RTSP_LegacyFFmpeg4(t *testing.T) {
+	tests := []struct {
+		name          string
+		ffmpegPath    string
+		ffmpegMajor   int
+		wantFlag      string
+		forbiddenFlag string
+	}{
+		{
+			name:          "ffmpeg4_uses_stimeout",
+			ffmpegPath:    "/fake/ffmpeg4",
+			ffmpegMajor:   4,
+			wantFlag:      "-stimeout",
+			forbiddenFlag: "-timeout",
+		},
+		{
+			name:          "ffmpeg7_uses_timeout",
+			ffmpegPath:    "/fake/ffmpeg7",
+			ffmpegMajor:   7,
+			wantFlag:      "-timeout",
+			forbiddenFlag: "-stimeout",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ffmpegMajorCache.Store(tt.ffmpegPath, tt.ffmpegMajor)
+			t.Cleanup(func() {
+				ffmpegMajorCache.Delete(tt.ffmpegPath)
+			})
+
+			cfg := &StreamConfig{
+				URL:        "rtsp://camera.example.com/live",
+				Type:       "rtsp",
+				Transport:  "tcp",
+				FFmpegPath: tt.ffmpegPath,
+			}
+
+			args := BuildFFmpegArgs(cfg, nil)
+
+			assertFlagValue(t, args, tt.wantFlag, strconv.FormatInt(defaultTimeoutMicroseconds, 10))
+			assert.NotContains(t, args, tt.forbiddenFlag)
+		})
+	}
 }
 
 func TestStripTimeoutParams(t *testing.T) {
