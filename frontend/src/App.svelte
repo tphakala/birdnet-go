@@ -190,6 +190,7 @@
   const systemSubpages: Record<string, string> = {
     '/database': 'system.sections.database',
     '/terminal': 'system.sections.terminal',
+    '/inference': 'system.sections.inference',
   };
 
   // Dynamic import helper

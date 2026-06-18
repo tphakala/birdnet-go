@@ -177,6 +177,7 @@ Performance Optimizations:
     system: actualRoute.startsWith('/ui/system'),
     systemOverview: actualRoute === '/ui/system',
     systemDatabase: actualRoute === '/ui/system/database',
+    systemInference: actualRoute === '/ui/system/inference',
     systemTerminal: actualRoute === '/ui/system/terminal',
     systemHealth: actualRoute === '/ui/system/health',
     help: actualRoute.startsWith('/ui/help'),
@@ -226,6 +227,7 @@ Performance Optimizations:
     helpReportBug: onNavigate ? '/help/report-bug' : '/ui/help/report-bug',
     systemOverview: onNavigate ? '/system' : '/ui/system',
     systemDatabase: onNavigate ? '/system/database' : '/ui/system/database',
+    systemInference: onNavigate ? '/system/inference' : '/ui/system/inference',
     systemTerminal: onNavigate ? '/system/terminal' : '/ui/system/terminal',
     systemHealth: onNavigate ? '/system/health' : '/ui/system/health',
     settingsAnalysis: onNavigate ? '/settings/analysis' : '/ui/settings/analysis',
@@ -274,6 +276,12 @@ Performance Optimizations:
       label: t('system.sections.database'),
       url: navigationUrls.systemDatabase,
       routeKey: 'systemDatabase',
+    },
+    {
+      icon: Brain,
+      label: t('system.sections.inference'),
+      url: navigationUrls.systemInference,
+      routeKey: 'systemInference',
     },
     {
       icon: Terminal,

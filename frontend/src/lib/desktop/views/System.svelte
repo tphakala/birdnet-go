@@ -6,6 +6,7 @@
   import RestartCard from '$lib/desktop/features/system/components/RestartCard.svelte';
   import { DatabaseDashboard } from '$lib/desktop/components/database';
   import TerminalPage from '$lib/desktop/features/system/TerminalPage.svelte';
+  import SystemInference from '$lib/desktop/views/SystemInference.svelte';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -27,6 +28,7 @@
     const path = navigation.currentPath;
     if (path === '/ui/system/database') return 'database';
     if (path === '/ui/system/terminal') return 'terminal';
+    if (path === '/ui/system/inference') return 'inference';
     return 'overview';
   });
 
@@ -534,6 +536,11 @@
     aria-label={t('system.database.dashboard.title')}
   >
     <DatabaseDashboard />
+  </div>
+{:else if currentSubpage === 'inference'}
+  <!-- AI Models & Inference Page -->
+  <div class="col-span-12 space-y-4" role="region" aria-label={t('system.sections.inference')}>
+    <SystemInference />
   </div>
 {:else}
   <!-- System Overview Page -->
