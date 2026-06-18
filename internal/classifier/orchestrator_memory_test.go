@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -34,34 +36,30 @@ func (f *fakeInstance) Labels() []string     { return nil }
 func (f *fakeInstance) Close() error         { return nil }
 
 func TestWarmupAndRecordRSS_RecordsNonNegativeDelta(t *testing.T) {
+	t.Parallel()
 	o := &Orchestrator{modelRSS: make(map[string]int64)}
 	inst := &fakeInstance{id: "Test_Model", sampleRate: 48000, clip: 3 * time.Second}
 
 	before := o.captureRSSBefore()
+	if before == 0 {
+		t.Skip("process RSS unavailable on this platform")
+	}
 	o.warmupAndRecordRSS(inst.ModelID(), before, inst)
 
 	// Warm-up must size the dummy clip from the spec (48000 * 3s = 144000).
-	if inst.predictedN != 144000 {
-		t.Fatalf("warm-up dummy size = %d, want 144000", inst.predictedN)
-	}
+	require.Equal(t, 144000, inst.predictedN, "warm-up dummy size")
+
 	perModel, baseline := o.ModelRSS()
-	if _, ok := perModel[inst.ModelID()]; !ok {
-		t.Fatal("expected modelRSS entry for Test_Model")
-	}
-	if perModel[inst.ModelID()] < 0 {
-		t.Fatalf("RSS delta must be clamped to >= 0, got %d", perModel[inst.ModelID()])
-	}
-	if baseline < 0 {
-		t.Fatalf("runtime baseline must be >= 0, got %d", baseline)
-	}
+	require.Contains(t, perModel, inst.ModelID(), "expected modelRSS entry for Test_Model")
+	assert.GreaterOrEqual(t, perModel[inst.ModelID()], int64(0), "RSS delta must be clamped to >= 0")
+	assert.GreaterOrEqual(t, baseline, int64(0), "runtime baseline must be >= 0")
 }
 
 func TestModelRSS_ReturnsCopy(t *testing.T) {
+	t.Parallel()
 	o := &Orchestrator{modelRSS: map[string]int64{"A": 10}}
 	m, _ := o.ModelRSS()
 	m["A"] = 999
 	m2, _ := o.ModelRSS()
-	if m2["A"] != 10 {
-		t.Fatalf("ModelRSS must return a copy; got mutated value %d", m2["A"])
-	}
+	assert.Equal(t, int64(10), m2["A"], "ModelRSS must return a copy; mutation of returned map must not affect the original")
 }

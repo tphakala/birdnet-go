@@ -9,9 +9,11 @@ import (
 )
 
 // warmupTimeout bounds the best-effort warm-up inference run during model load.
-// First-inference lazy allocation can be slow, so this is generous; it only
-// guards against a wedged backend.
-const warmupTimeout = 30 * time.Second
+// It is intentionally short: a legitimate first inference completes well under
+// 5 s even on a Raspberry Pi 5, and the warm-up holds o.mu (callers of
+// PredictModel block on o.mu.RLock during a dynamic load). On timeout the
+// warm-up aborts gracefully and RSS just undercounts for that model.
+const warmupTimeout = 5 * time.Second
 
 // captureRSSBefore reads the current process RSS to use as the "before" sample
 // for a model load. On the first call it also records the process-wide runtime

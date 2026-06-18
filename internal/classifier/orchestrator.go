@@ -1313,6 +1313,12 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		ref.entry.backend = triplet
 		ref.entry.mu.Unlock()
 
+		// Clear the stale RSS entry so the API reports n/a rather than a wrong
+		// number until the next warm-up or RSS measurement.
+		o.rssMu.Lock()
+		delete(o.modelRSS, ref.id)
+		o.rssMu.Unlock()
+
 		// Close the old instance after releasing entry.mu: native teardown can be
 		// slow, and no goroutine can reach the old instance once the swap is
 		// published (PredictModel reads entry.instance under entry.mu on every
@@ -1353,6 +1359,10 @@ func (o *Orchestrator) Delete() {
 	o.primary = nil
 	o.models = nil
 	o.mu.Unlock()
+
+	o.rssMu.Lock()
+	o.modelRSS = make(map[string]int64)
+	o.rssMu.Unlock()
 
 	for id, entry := range models {
 		entry.mu.Lock()
@@ -1557,6 +1567,10 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	defer entry.mu.Unlock()
 
 	globalInferenceCounters.Delete(registryID)
+
+	o.rssMu.Lock()
+	delete(o.modelRSS, registryID)
+	o.rssMu.Unlock()
 
 	if entry.instance != nil {
 		modelID := entry.instance.ModelID()

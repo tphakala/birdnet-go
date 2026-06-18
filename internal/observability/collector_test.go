@@ -259,6 +259,7 @@ func TestCollector_EmitsRTFKeyAndGauge(t *testing.T) {
 
 	pts := store.Get(inferencestats.RTFMetricKey("M"), 10)
 	require.Len(t, pts, 1, "expected an inference.M.rtf ring-buffer point")
+	assert.InDelta(t, 0.01, pts[0].Value, 0.001, "ring-buffer RTF value")
 
 	assert.Equal(t, "M", gotRTFModel, "rtf gauge model should be M")
 	assert.InDelta(t, 0.01, gotRTF, 0.001, "rtf should be approx 0.01")

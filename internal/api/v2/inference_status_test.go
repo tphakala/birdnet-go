@@ -21,9 +21,8 @@ import (
 func TestBuildSourceAttachments(t *testing.T) {
 	t.Parallel()
 
-	// "BirdNET_V2.4" has no exported constant; use the literal that ModelRegistry
-	// uses as its key (verified in internal/classifier/model_registry.go line 131).
-	const primaryID = "BirdNET_V2.4"
+	// classifier.DefaultModelVersion is the registry key for the primary BirdNET model.
+	const primaryID = classifier.DefaultModelVersion
 
 	// Two loaded models: the primary BirdNET and Perch.
 	models := []classifier.ModelInfo{
@@ -46,19 +45,15 @@ func TestBuildSourceAttachments(t *testing.T) {
 
 	// Perch_V2 should have exactly Front Yard, attached without fallback.
 	perch := got[classifier.RegistryIDPerchV2]
-	if len(perch) != 1 || perch[0].Name != "Front Yard" || perch[0].Fallback {
-		t.Fatalf("Perch_V2 attachments = %+v, want [{Name:Front Yard Fallback:false}]", perch)
-	}
+	require.Len(t, perch, 1, "Perch_V2 attachments")
+	assert.Equal(t, "Front Yard", perch[0].Name, "Perch_V2 source name")
+	assert.False(t, perch[0].Fallback, "Perch_V2 source must not be a fallback")
 
 	// Primary should have Garage and Cam1, both as fallbacks.
 	prim := got[primaryID]
-	if len(prim) != 2 {
-		t.Fatalf("primary attachments = %+v, want 2 entries (Garage, Cam1)", prim)
-	}
+	require.Len(t, prim, 2, "primary attachments must have 2 entries (Garage, Cam1)")
 	for _, s := range prim {
-		if !s.Fallback {
-			t.Fatalf("primary attachment %q has Fallback=false, want true", s.Name)
-		}
+		assert.True(t, s.Fallback, "primary attachment %q should have Fallback=true", s.Name)
 	}
 }
 
@@ -69,7 +64,7 @@ func TestBuildSourceAttachments(t *testing.T) {
 func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 	t.Parallel()
 
-	const primaryID = "BirdNET_V2.4"
+	const primaryID = classifier.DefaultModelVersion
 
 	// Only BirdNET is loaded; Perch is deliberately NOT loaded.
 	models := []classifier.ModelInfo{
@@ -87,18 +82,13 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 
 	// Perch_V2 should have NO attachments (not loaded).
 	perch := got[classifier.RegistryIDPerchV2]
-	if len(perch) != 0 {
-		t.Fatalf("Perch_V2 attachments = %+v, want empty (Perch not loaded)", perch)
-	}
+	assert.Empty(t, perch, "Perch_V2 attachments must be empty (Perch not loaded)")
 
 	// Primary should have Studio as a fallback.
 	prim := got[primaryID]
-	if len(prim) != 1 {
-		t.Fatalf("primary attachments = %+v, want 1 entry (Studio)", prim)
-	}
-	if prim[0].Name != "Studio" || !prim[0].Fallback {
-		t.Fatalf("primary[0] = {Name:%q Fallback:%v}, want {Name:Studio Fallback:true}", prim[0].Name, prim[0].Fallback)
-	}
+	require.Len(t, prim, 1, "primary attachments must have 1 entry (Studio)")
+	assert.Equal(t, "Studio", prim[0].Name, "primary source name")
+	assert.True(t, prim[0].Fallback, "primary source must be a fallback")
 }
 
 // TestBuildModelStatus verifies that buildModelStatus correctly computes
@@ -120,24 +110,14 @@ func TestBuildModelStatus(t *testing.T) {
 
 	got := buildModelStatus(&info, snap, rss, nil)
 
-	if got.Stats.Invocations != 1000 {
-		t.Errorf("invocations = %d, want 1000", got.Stats.Invocations)
-	}
-	if got.Stats.AvgMs < 47.1 || got.Stats.AvgMs > 47.3 {
-		t.Errorf("avgMs = %v, want ~47.2", got.Stats.AvgMs)
-	}
-	if got.Stats.MaxMs != 130 {
-		t.Errorf("maxMs = %v, want 130", got.Stats.MaxMs)
-	}
-	if got.Stats.RTF == nil || *got.Stats.RTF < 0.0156 || *got.Stats.RTF > 0.0158 {
-		t.Errorf("rtf = %v, want ~0.0157", got.Stats.RTF)
-	}
-	if got.Memory.ApproxRssBytes == nil || *got.Memory.ApproxRssBytes != rssVal {
-		t.Errorf("approxRssBytes = %v, want %d", got.Memory.ApproxRssBytes, rssVal)
-	}
-	if got.MetricKeys.RTF != "inference.BirdNET_V2_4.rtf" {
-		t.Errorf("metricKeys.rtf = %q", got.MetricKeys.RTF)
-	}
+	assert.Equal(t, int64(1000), got.Stats.Invocations, "invocations")
+	assert.InDelta(t, 47.2, got.Stats.AvgMs, 0.1, "avgMs")
+	assert.InDelta(t, 130.0, got.Stats.MaxMs, 0.01, "maxMs")
+	require.NotNil(t, got.Stats.RTF, "rtf must not be nil with non-zero invocations")
+	assert.InDelta(t, 0.0157, *got.Stats.RTF, 0.0001, "rtf")
+	require.NotNil(t, got.Memory.ApproxRssBytes, "approxRssBytes must not be nil when RSS is available")
+	assert.Equal(t, rssVal, *got.Memory.ApproxRssBytes, "approxRssBytes")
+	assert.Equal(t, "inference.BirdNET_V2_4.rtf", got.MetricKeys.RTF, "metricKeys.rtf")
 }
 
 // TestBuildModelStatus_ZeroInvocations verifies that buildModelStatus returns
@@ -146,15 +126,9 @@ func TestBuildModelStatus_ZeroInvocations(t *testing.T) {
 	t.Parallel()
 	info := classifier.ModelInfo{ID: "X", Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}}
 	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil)
-	if got.Stats.RTF != nil {
-		t.Error("rtf must be nil with zero invocations (no divide-by-zero)")
-	}
-	if got.Memory.ApproxRssBytes != nil {
-		t.Error("approxRssBytes must be nil when RSS unavailable")
-	}
-	if !got.Memory.Approximate {
-		t.Error("memory.approximate must always be true")
-	}
+	assert.Nil(t, got.Stats.RTF, "rtf must be nil with zero invocations (no divide-by-zero)")
+	assert.Nil(t, got.Memory.ApproxRssBytes, "approxRssBytes must be nil when RSS unavailable")
+	assert.True(t, got.Memory.Approximate, "memory.approximate must always be true")
 }
 
 // TestGetInferenceStatus_HTTP200 verifies that GetInferenceStatus returns HTTP

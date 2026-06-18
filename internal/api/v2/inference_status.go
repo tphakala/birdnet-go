@@ -79,9 +79,13 @@ type ModelSpecInfo struct {
 }
 
 // ModelStats holds invocation counts and latency for a single model.
-// avgMs is the lifetime average; maxMs is the peak since the last metrics
+// AvgMs is the lifetime average; MaxMs is the peak since the last metrics
 // collection tick (a recent-window peak, since the collector resets it every
-// interval); rtf is nil when there have been no invocations.
+// interval); RTF is nil when there have been no invocations.
+//
+// RTF is the lifetime cumulative-average real-time factor: (avgMs / 1000) / clipSec.
+// This differs from the per-model ring-buffer series at MetricKeys.RTF, which is
+// an interval-windowed average computed by the collector on each tick.
 type ModelStats struct {
 	Invocations int64    `json:"invocations"`
 	AvgMs       float64  `json:"avgMs"`
@@ -181,7 +185,7 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 	}
 
 	// Hardware.
-	envType, _ := sysinfo.GetEnvironment()
+	envType, _ := sysinfo.GetEnvironment() // detail (sub-type) intentionally omitted in Phase 1
 	resp.Hardware = HardwareInfo{
 		Arch:        sysinfo.GetCPUArch(),
 		CPUModel:    sysinfo.GetCPUModel(),

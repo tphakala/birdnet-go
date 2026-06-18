@@ -100,7 +100,9 @@ func (c *Collector) Start(ctx context.Context) {
 
 // Metric key constants for collected system metrics.
 const (
-	// expectedMetricCount is the pre-allocation hint for the number of metrics collected per tick.
+	// expectedMetricCount is a lower-bound hint for the map pre-allocation per tick.
+	// Per-model RTF keys add len(models) more entries each tick, so the map may grow
+	// beyond this value. This is intentional: the map grows as needed.
 	expectedMetricCount = 12
 
 	metricCPUTotal          = "cpu.total"
