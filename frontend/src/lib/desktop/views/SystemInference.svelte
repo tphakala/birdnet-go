@@ -143,9 +143,12 @@
   // do not reshuffle when the backend returns models in a different order.
   let sortedModels = $derived(
     snapshot
-      ? [...snapshot.models].sort(
-          (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
-        )
+      ? [...snapshot.models].sort((a, b) => {
+          // Case-insensitive, matching the backend's name -> id ordering so the
+          // client and API agree on order for mixed-case model names.
+          const byName = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+          return byName !== 0 ? byName : a.id.localeCompare(b.id);
+        })
       : []
   );
 
@@ -618,7 +621,7 @@
             {t('system.inference.noModelsHint')}
             <a href={buildAppUrl('/ui/settings/audio')} class="text-primary underline">
               {t('system.inference.noModelsHintLink')}
-            </a>.
+            </a>
           </p>
         </div>
       {:else}
