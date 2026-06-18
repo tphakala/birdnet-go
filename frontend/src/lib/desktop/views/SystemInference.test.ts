@@ -28,14 +28,28 @@ vi.mock('$lib/utils/api', () => ({
   },
 }));
 
-// No-op SSE stub: the component constructs one, registers listeners, and closes
-// it on unmount. None of those should touch the network in tests.
+// SSE stub: the component constructs one, registers listeners, and closes it on
+// unmount. None of those should touch the network in tests. The stub captures
+// the registered listeners so tests can fire SSE events (e.g. a topology change)
+// without opening a real EventSource.
+const sseListeners = new Map<string, (event: Event) => void>();
+
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class ReconnectingEventSource {
-    addEventListener(_type: string, _listener: (event: Event) => void): void {}
+    addEventListener(type: string, listener: (event: Event) => void): void {
+      sseListeners.set(type, listener);
+    }
     close(): void {}
   },
 }));
+
+/** Fire a captured SSE listener by event type, if one was registered. */
+function fireSseEvent(type: string, data?: unknown): void {
+  const listener = sseListeners.get(type);
+  if (!listener) return;
+  const event = data === undefined ? new Event(type) : { data: JSON.stringify(data) };
+  listener(event as Event);
+}
 
 const inferenceTest = createComponentTestFactory(SystemInference);
 
@@ -98,6 +112,8 @@ function installApi(
 describe('SystemInference', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset captured SSE listeners so each test starts from a clean slate.
+    sseListeners.clear();
   });
 
   afterEach(() => {
@@ -164,9 +180,11 @@ describe('SystemInference', () => {
   });
 
   it('shows a dash for RTF when the model has zero invocations', async () => {
-    // Zero invocations: rtf is meaningless, so rtfDisplay returns "-".
+    // Zero invocations with a NON-null rtf: only the invocations<=0 branch can
+    // produce the dash here (the rtf==null branch is excluded), so this test
+    // exercises the invocation guard rather than the missing-value guard.
     const model = makeModel({
-      stats: { invocations: 0, avgMs: 0, maxMs: 0 },
+      stats: { invocations: 0, avgMs: 0, maxMs: 0, rtf: 0.5 },
     });
     installApi(makeSnapshot([model]));
 
@@ -180,17 +198,29 @@ describe('SystemInference', () => {
     const rtfCell = container.querySelector('[title="system.inference.rtfLabel"]');
     expect(rtfCell).not.toBeNull();
     expect(rtfCell?.textContent).toContain('-');
+    // The non-null rtf value must NOT leak through despite being present.
+    expect(rtfCell?.textContent).not.toContain('0.5');
   });
 
   it('ignores history series for models not in the snapshot and still renders the valid model', async () => {
     const model = makeModel();
     // History includes the valid model's keys plus an orphan key for a model that
-    // is no longer in the snapshot. The orphan must be ignored, not crash the view.
+    // is no longer in the snapshot. The orphan carries a distinctive ghost value
+    // (99999) so the test can prove the orphan key was actually rejected rather
+    // than just not crashing. Two points per valid series so the Sparkline
+    // renders a path (a single point produces no path), proving ingestion.
+    const GHOST_VALUE = 99999;
     const history = {
       metrics: {
-        'inference.model-1.avg_ms': [{ timestamp: '2026-06-18T00:00:00Z', value: 47.2 }],
-        'inference.model-1.rtf': [{ timestamp: '2026-06-18T00:00:00Z', value: 0.016 }],
-        'inference.ghost-model.avg_ms': [{ timestamp: '2026-06-18T00:00:00Z', value: 99 }],
+        'inference.model-1.avg_ms': [
+          { timestamp: '2026-06-18T00:00:00Z', value: 47.2 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 48.1 },
+        ],
+        'inference.model-1.rtf': [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0.016 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0.018 },
+        ],
+        'inference.ghost-model.avg_ms': [{ timestamp: '2026-06-18T00:00:00Z', value: GHOST_VALUE }],
         'inference.ghost-model.rtf': [{ timestamp: '2026-06-18T00:00:00Z', value: 1.5 }],
       },
     };
@@ -202,5 +232,66 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain(model.name);
     });
+
+    // The orphan/ghost series value must not surface anywhere in the rendered
+    // output: the orphan key was rejected by the validKeySet gate.
+    expect(container.textContent).not.toContain(String(GHOST_VALUE));
+
+    // The valid model's series was ingested: with two points its Sparkline
+    // renders at least one line path (a single point would render none).
+    expect(container.querySelector('svg path')).not.toBeNull();
+  });
+
+  it('re-fetches the snapshot when a topology-change SSE event fires', async () => {
+    // Topology event name must match the backend constant and the component.
+    const TOPOLOGY_EVENT = 'system.inference_topology_changed';
+
+    // Start with a single model. A non-empty history seed makes the component
+    // connect the SSE stream (and register the topology listener), rather than
+    // falling back to polling.
+    const firstModel = makeModel({ id: 'model-1', name: 'BirdNET GLOBAL 6K' });
+    const firstHistory = {
+      metrics: {
+        'inference.model-1.avg_ms': [{ timestamp: '2026-06-18T00:00:00Z', value: 47.2 }],
+        'inference.model-1.rtf': [{ timestamp: '2026-06-18T00:00:00Z', value: 0.016 }],
+      },
+    };
+    installApi(makeSnapshot([firstModel]), firstHistory);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(firstModel.name);
+    });
+
+    // The stream must have registered a topology listener (and opened no real
+    // EventSource: the stub is a no-op constructor with no network access).
+    await waitFor(() => {
+      expect(sseListeners.has(TOPOLOGY_EVENT)).toBe(true);
+    });
+
+    const snapshotCallsBefore = apiGet.mock.calls.filter(
+      (call: unknown[]) => typeof call[0] === 'string' && call[0].includes(INFERENCE_URL)
+    ).length;
+
+    // Swap the API to a DIFFERENT snapshot (a second, distinctly named model),
+    // then fire the captured topology listener.
+    const secondModel = makeModel({
+      id: 'model-2',
+      name: 'PERCH SECONDARY 9K',
+      metricKeys: { avgMs: 'inference.model-2.avg_ms', rtf: 'inference.model-2.rtf' },
+    });
+    installApi(makeSnapshot([secondModel]));
+
+    fireSseEvent(TOPOLOGY_EVENT);
+
+    // The component re-fetched the snapshot endpoint and rendered the new model.
+    await waitFor(() => {
+      expect(container.textContent).toContain(secondModel.name);
+    });
+    const snapshotCallsAfter = apiGet.mock.calls.filter(
+      (call: unknown[]) => typeof call[0] === 'string' && call[0].includes(INFERENCE_URL)
+    ).length;
+    expect(snapshotCallsAfter).toBeGreaterThan(snapshotCallsBefore);
   });
 });
