@@ -73,6 +73,9 @@ type MemoryStore struct {
 
 	subMu       sync.Mutex
 	subscribers map[chan map[string]MetricPoint]struct{}
+
+	topoMu          sync.Mutex
+	topoSubscribers map[chan struct{}]struct{}
 }
 
 // NewMemoryStore creates a MemoryStore that keeps up to maxPoints per metric.
@@ -80,9 +83,10 @@ type MemoryStore struct {
 func NewMemoryStore(maxPoints int) *MemoryStore {
 	maxPoints = max(1, maxPoints)
 	return &MemoryStore{
-		series:      make(map[string]*ringBuffer),
-		maxPoints:   maxPoints,
-		subscribers: make(map[chan map[string]MetricPoint]struct{}),
+		series:          make(map[string]*ringBuffer),
+		maxPoints:       maxPoints,
+		subscribers:     make(map[chan map[string]MetricPoint]struct{}),
+		topoSubscribers: make(map[chan struct{}]struct{}),
 	}
 }
 
@@ -195,6 +199,42 @@ func (s *MemoryStore) Subscribe() (sub <-chan map[string]MetricPoint, cancel fun
 		s.subMu.Lock()
 		delete(s.subscribers, bidi)
 		s.subMu.Unlock()
+	}
+
+	return bidi, cancel
+}
+
+// BroadcastTopologyChanged sends a non-blocking signal to every topology
+// subscriber. Subscribers whose buffer is full keep their pending signal
+// (the broadcaster never blocks), which is correct because the signal carries
+// no payload and consumers re-fetch the full snapshot on receipt.
+func (s *MemoryStore) BroadcastTopologyChanged() {
+	s.topoMu.Lock()
+	defer s.topoMu.Unlock()
+	for ch := range s.topoSubscribers {
+		// Non-blocking send: a coalesced signal is enough, drop if already pending.
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// SubscribeTopology returns a buffered (cap 1) signal channel that receives a
+// value on each BroadcastTopologyChanged, and a cancel function to unsubscribe.
+// The cancel function removes the subscriber but does NOT close the channel
+// (avoids send-on-closed-channel panics if a broadcast races with cancel).
+func (s *MemoryStore) SubscribeTopology() (sub <-chan struct{}, cancel func()) {
+	bidi := make(chan struct{}, 1)
+
+	s.topoMu.Lock()
+	s.topoSubscribers[bidi] = struct{}{}
+	s.topoMu.Unlock()
+
+	cancel = func() {
+		s.topoMu.Lock()
+		delete(s.topoSubscribers, bidi)
+		s.topoMu.Unlock()
 	}
 
 	return bidi, cancel
