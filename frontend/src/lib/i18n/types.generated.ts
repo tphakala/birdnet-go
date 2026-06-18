@@ -1178,8 +1178,6 @@ export type TranslationKey =
   | 'system.inference.initialized'
   | 'system.inference.version'
   | 'system.inference.devices'
-  | 'system.inference.backend'
-  | 'system.inference.quantization'
   | 'system.inference.stock'
   | 'system.inference.custom'
   | 'system.inference.sampleRate'

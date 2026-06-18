@@ -1533,8 +1533,6 @@
       "initialized": "Initialized",
       "version": "Version",
       "devices": "Devices",
-      "backend": "Backend",
-      "quantization": "Quantization",
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
