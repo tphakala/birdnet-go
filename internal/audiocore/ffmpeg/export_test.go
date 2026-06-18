@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,6 +58,60 @@ func TestExportAudio_MP3(t *testing.T) {
 
 	// The temp file must be removed after successful export.
 	assert.NoFileExists(t, outPath+ffmpeg.TempExt)
+}
+
+// TestExportAudio_ConcurrentSamePathNoTempCollision reproduces GitHub #3323 for
+// the FFmpeg export path: when several exports target the same OutputPath (two
+// audio sources detect the same species in the same one-second window at the
+// same rounded confidence, producing an identical clip name), each export must
+// use its own temp file. Previously every export wrote to the shared
+// OutputPath+TempExt and renamed it into place, so the first rename won and the
+// rest failed with ENOENT ("no such file or directory"), permanently dropping
+// those clips. All exports must succeed and leave a valid clip behind.
+func TestExportAudio_ConcurrentSamePathNoTempCollision(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpegBinary()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	const workers = 16
+	outDir := t.TempDir()
+	// AAC/m4a is the format from the issue report.
+	outPath := filepath.Join(outDir, "columba_palumbus_95p_20260531T083828Z.m4a")
+	pcm := makePCMSilence(t, 1)
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make([]error, workers)
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start // release all goroutines together to maximise collision
+			errs[i] = ffmpeg.ExportAudio(t.Context(), &ffmpeg.ExportOptions{
+				PCMData:    pcm,
+				OutputPath: outPath,
+				Format:     ffmpeg.FormatAAC,
+				Bitrate:    "128k",
+				SampleRate: 48000,
+				Channels:   1,
+				BitDepth:   16,
+				FFmpegPath: ffmpegPath,
+			})
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		require.NoErrorf(t, err, "concurrent export %d must not fail on a shared temp path", i)
+	}
+	assert.FileExists(t, outPath)
+	leftover, globErr := filepath.Glob(filepath.Join(outDir, "*"+ffmpeg.TempExt))
+	require.NoError(t, globErr)
+	assert.Empty(t, leftover, "no temp files should remain after concurrent exports")
 }
 
 // TestExportAudio_FLAC verifies that PCM audio can be exported to a FLAC file.

@@ -3,17 +3,25 @@ package flac
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	goflac "github.com/tphakala/go-flac/pcm"
 )
 
 const (
+	// osWindows is runtime.GOOS on Windows, where concurrent same-target renames
+	// need a retry (see finalizeEncode).
+	osWindows = "windows"
+
 	// tempExt is appended to the output path while encoding; the file is renamed
 	// to the final path on success. Intentionally duplicated from ffmpeg.TempExt
 	// (same value ".temp") rather than imported, to keep this package free of any
@@ -72,10 +80,56 @@ type Options struct {
 // constant-true condition into the call site.
 func SupportedBitDepth(bitDepth int) bool { return bitDepth == bitDepth16 }
 
+// tempSeq makes every export's temp file unique within the process. Two exports
+// targeting the same OutputPath (e.g. two audio sources detecting the same
+// species in the same one-second window at the same rounded confidence, see
+// GitHub #3323) must not share one temp file: otherwise the first rename wins
+// and the rest fail with ENOENT, and concurrent writers can corrupt the shared
+// temp before it is renamed into place.
+//
+//nolint:gochecknoglobals // process-wide monotonic counter for unique temp names
+var tempSeq atomic.Uint64
+
+// uniqueTempPath returns a process-unique temp path for outputPath. The result
+// still ends in tempExt so diskmanager keeps skipping it during cleanup, and
+// the pid + counter prefix avoids colliding with a stale temp left by a crashed
+// run that happens to share the recordings directory.
+func uniqueTempPath(outputPath string) string {
+	return fmt.Sprintf("%s.%d.%d%s", outputPath, os.Getpid(), tempSeq.Add(1), tempExt)
+}
+
+// Concurrent exports that dedupe onto the same final clip (see uniqueTempPath /
+// GitHub #3323) finish with an atomic rename. POSIX rename(2) is atomic and the
+// kernel serializes concurrent renames to the same target, but Windows
+// MoveFileEx can transiently fail with a sharing violation when two renames hit
+// the same path at once; these bound a short Windows-only retry.
+const (
+	renameRetryAttempts = 8
+	renameRetryDelay    = 15 * time.Millisecond
+)
+
+// finalizeEncode atomically renames the unique temp file onto the final clip
+// path. On non-Windows platforms it is a single os.Rename (identical behavior to
+// before). On Windows it retries a bounded number of times to absorb the sharing
+// violations that concurrent same-target renames can raise.
+func finalizeEncode(tempPath, finalPath string) error {
+	err := os.Rename(tempPath, finalPath)
+	if err == nil || runtime.GOOS != osWindows {
+		return err
+	}
+	for attempt := 1; attempt < renameRetryAttempts; attempt++ {
+		time.Sleep(renameRetryDelay)
+		if err = os.Rename(tempPath, finalPath); err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
 // EncodePCM encodes opts.PCMData to a FLAC file at opts.OutputPath. The write is
-// atomic: data is encoded to OutputPath+tempExt and renamed on success, with the
-// temp file removed on any failure. A non-zero GainDB is applied in Go before
-// encoding; opts.PCMData itself is never modified.
+// atomic: data is encoded to a unique per-export temp file and renamed on
+// success, with the temp file removed on any failure. A non-zero GainDB is
+// applied in Go before encoding; opts.PCMData itself is never modified.
 func EncodePCM(ctx context.Context, opts *Options) (err error) {
 	if opts == nil {
 		return errors.Newf("flac encode: nil options").
@@ -106,7 +160,7 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 			Build()
 	}
 
-	tempPath := opts.OutputPath + tempExt
+	tempPath := uniqueTempPath(opts.OutputPath)
 	f, createErr := os.Create(tempPath) //nolint:gosec // path derived from validated config
 	if createErr != nil {
 		return errors.New(createErr).
@@ -163,7 +217,7 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 			Build()
 	}
 
-	if renameErr := os.Rename(tempPath, opts.OutputPath); renameErr != nil {
+	if renameErr := finalizeEncode(tempPath, opts.OutputPath); renameErr != nil {
 		return errors.New(renameErr).
 			Component("audiocore/flac").
 			Category(errors.CategoryFileIO).

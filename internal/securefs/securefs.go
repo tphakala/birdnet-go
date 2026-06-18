@@ -802,6 +802,35 @@ func (sfs *SecureFS) ReadDir(path string) ([]os.DirEntry, error) {
 	return entries, nil
 }
 
+// ReadDirRel reads the directory at relPath (relative to the SecureFS root) and
+// returns its entries. Unlike ReadDir, which resolves its argument against the
+// process working directory, ReadDirRel validates relPath the same way StatRel
+// does, so it correctly lists directories addressed relative to the root, which
+// is the form stored clip paths use.
+func (sfs *SecureFS) ReadDirRel(relPath string) ([]os.DirEntry, error) {
+	validatedRelPath, err := sfs.ValidateRelativePath(relPath)
+	if err != nil {
+		return nil, err
+	}
+
+	dirFile, err := sfs.root.Open(validatedRelPath)
+	if err != nil {
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "open_directory_rel").Build()
+	}
+	defer func() {
+		if closeErr := dirFile.Close(); closeErr != nil {
+			GetLogger().Warn("Failed to close directory", logger.Error(closeErr))
+		}
+	}()
+
+	entries, err := dirFile.ReadDir(0) // 0 means read all entries
+	if err != nil {
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "read_directory_entries_rel").Build()
+	}
+
+	return entries, nil
+}
+
 // BaseDir returns the absolute base directory path of the secure filesystem.
 func (sfs *SecureFS) BaseDir() string {
 	return sfs.baseDir

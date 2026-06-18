@@ -65,6 +65,56 @@ func TestEncodePCM_RoundTripLossless(t *testing.T) {
 	assert.Equal(t, pcm, decodeFLAC(t, path), "decoded PCM must equal input (lossless)")
 }
 
+// assertNoTempLeftover fails if any temp file remains in the output directory.
+// It replaces the older exact-path checks (outputPath + ".temp"): the temp file
+// now carries a per-export unique token before the suffix, so cleanup is
+// verified by globbing the directory rather than by a fixed name.
+func assertNoTempLeftover(t *testing.T, outputPath string) {
+	t.Helper()
+	leftover, err := filepath.Glob(filepath.Join(filepath.Dir(outputPath), "*"+tempExt))
+	require.NoError(t, err)
+	assert.Empty(t, leftover, "no %s files should remain in %s", tempExt, filepath.Dir(outputPath))
+}
+
+// TestEncodePCM_ConcurrentSamePathNoTempCollision reproduces GitHub #3323: when
+// several exports target the same OutputPath (e.g. two audio sources detect the
+// same species in the same one-second window at the same rounded confidence),
+// each must encode to its own temp file. Previously every export wrote to the
+// shared OutputPath+tempExt and renamed it into place, so the first rename won
+// and the rest failed with ENOENT ("no such file or directory"), permanently
+// dropping those clips (and the shared temp could be corrupted by concurrent
+// writers). All exports must succeed and leave a valid lossless clip behind.
+func TestEncodePCM_ConcurrentSamePathNoTempCollision(t *testing.T) {
+	t.Parallel()
+	const workers = 32
+	dir := t.TempDir()
+	path := filepath.Join(dir, "columba_palumbus_95p_20260531T083828Z.flac")
+	pcm := makeTestPCM(20000)
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make([]error, workers)
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start // release all goroutines together to maximise collision
+			errs[i] = EncodePCM(t.Context(), baseOpts(path, pcm))
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		require.NoErrorf(t, err, "concurrent export %d must not fail on a shared temp path", i)
+	}
+	// Every worker encodes identical PCM, so whichever export wins the last
+	// rename (last-writer-wins dedup) the surviving clip decodes to the same
+	// bytes; this assertion is deterministic only because the inputs are equal.
+	assert.Equal(t, pcm, decodeFLAC(t, path), "the surviving clip must be a valid lossless FLAC")
+	assertNoTempLeftover(t, path)
+}
+
 func TestEncodePCM_GainRoundTrip(t *testing.T) {
 	t.Parallel()
 	pcm := makeTestPCM(10000)
@@ -156,7 +206,7 @@ func TestEncodePCM_CancelledBeforeStart(t *testing.T) {
 	err := EncodePCM(ctx, opts)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.NoFileExists(t, opts.OutputPath)
-	assert.NoFileExists(t, opts.OutputPath+".temp")
+	assertNoTempLeftover(t, opts.OutputPath)
 }
 
 // errAfterCtx returns nil from Err() for the first `after` calls, then
@@ -191,7 +241,7 @@ func TestEncodePCM_CancelledDuringEncode(t *testing.T) {
 	err := EncodePCM(ctx, opts)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.NoFileExists(t, opts.OutputPath)
-	assert.NoFileExists(t, opts.OutputPath+".temp")
+	assertNoTempLeftover(t, opts.OutputPath)
 }
 
 // TestEncoderReuseAfterAbortedWrite verifies the pooling safety contract that
@@ -286,7 +336,7 @@ func TestEncodePCM_NoTempFileLeftOnSuccess(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "clip.flac")
 	require.NoError(t, EncodePCM(t.Context(), baseOpts(path, makeTestPCM(5000))))
 	assert.FileExists(t, path)
-	assert.NoFileExists(t, path+".temp")
+	assertNoTempLeftover(t, path)
 }
 
 func TestEncodePCM_EmitsSeekTable(t *testing.T) {
