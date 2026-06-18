@@ -355,7 +355,7 @@ func isFileSizeStable(ctx context.Context, path string, initialSize int64) bool 
 
 // getFfprobeBinaryName returns the platform-appropriate ffprobe binary name.
 func getFfprobeBinaryName() string {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return "ffprobe.exe"
 	}
 	return "ffprobe"
