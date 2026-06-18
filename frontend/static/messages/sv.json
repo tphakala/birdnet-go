@@ -1538,7 +1538,7 @@
       "sampleRate": "Sample rate",
       "clipLength": "Clip length",
       "species": "Species",
-      "invocations": "Invocations",
+      "invocations": "Clips analyzed",
       "avgLatency": "Avg latency",
       "maxLatency": "Max latency",
       "rtf": "RTF",

@@ -180,9 +180,11 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain('system.inference.invocations');
     });
-    // The RTF sparkline (labelled rtfChart) is removed; the RTF number stays.
+    // The RTF sparkline (labelled rtfChart) is removed; the RTF number stat stays.
     expect(container.textContent).not.toContain('system.inference.rtfChart');
-    expect(container.textContent).toContain('system.inference.rtf');
+    // Assert the RTF number cell specifically (its span carries the rtfHelp title),
+    // not a loose substring of textContent that rtfHelp would also satisfy.
+    expect(container.querySelector('[title="system.inference.rtfHelp"]')).not.toBeNull();
   });
 
   it('does not render its own page title heading', async () => {

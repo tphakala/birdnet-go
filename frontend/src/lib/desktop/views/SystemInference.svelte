@@ -23,6 +23,7 @@
   import { loggers } from '$lib/utils/logger';
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import { formatBytesCompact, formatNumber, formatRelativeTime } from '$lib/utils/formatters';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
@@ -431,7 +432,7 @@
       aria-live="polite"
     >
       <span
-        class="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"
+        class="animate-spin motion-reduce:animate-none h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"
         aria-hidden="true"
       ></span>
       <span>{t('system.inference.loading')}</span>
@@ -458,20 +459,26 @@
             <div class="flex items-center gap-3">
               <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
               <span class="text-sm text-muted">{t('system.inference.architecture')}</span>
-              <span class="text-sm font-mono tabular-nums truncate">{snapshot.hardware.arch}</span>
+              <span class="text-sm font-mono tabular-nums truncate" title={snapshot.hardware.arch}
+                >{snapshot.hardware.arch}</span
+              >
             </div>
           {/if}
           {#if snapshot.hardware.cpuModel}
             <div class="flex items-center gap-3">
               <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
               <span class="text-sm text-muted">{t('system.inference.cpu')}</span>
-              <span class="text-sm truncate">{snapshot.hardware.cpuModel}</span>
+              <span class="text-sm truncate" title={snapshot.hardware.cpuModel}
+                >{snapshot.hardware.cpuModel}</span
+              >
             </div>
           {/if}
           {#if snapshot.hardware.environment}
             <div class="flex items-center gap-3">
               <span class="text-sm text-muted">{t('system.inference.environment')}</span>
-              <span class="text-sm truncate">{snapshot.hardware.environment}</span>
+              <span class="text-sm truncate" title={snapshot.hardware.environment}
+                >{snapshot.hardware.environment}</span
+              >
             </div>
           {/if}
           <div class="flex items-center gap-3">
@@ -609,7 +616,7 @@
           <p>{t('system.inference.noModels')}</p>
           <p class="mt-2">
             {t('system.inference.noModelsHint')}
-            <a href="/ui/settings/audio" class="text-primary underline">
+            <a href={buildAppUrl('/ui/settings/audio')} class="text-primary underline">
               {t('system.inference.noModelsHintLink')}
             </a>.
           </p>
@@ -646,7 +653,10 @@
                     : t('system.inference.activityIdle')}
                 >
                   {#if isActive}
-                    <Activity class="w-3 h-3 text-green-500 animate-pulse" aria-hidden="true" />
+                    <Activity
+                      class="w-3 h-3 text-green-500 animate-pulse motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
                   {:else}
                     <Minus class="w-3 h-3 text-base-content/30" aria-hidden="true" />
                   {/if}

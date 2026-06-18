@@ -149,7 +149,7 @@
   </svg>
   {#if showEmpty}
     <div
-      class="absolute inset-0 flex items-center justify-center text-xs text-base-content/60 pointer-events-none"
+      class="absolute inset-0 flex items-center justify-center text-xs text-muted pointer-events-none"
     >
       {emptyLabel}
     </div>
