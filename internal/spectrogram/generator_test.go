@@ -226,6 +226,7 @@ func partialWriteSoxStub(t *testing.T) string {
 // .png, so this test discriminates the fix from the old behaviour. POSIX-only
 // (the stub is a shell script).
 func TestGenerator_GenerateFromPCM_RuntimeFailureLeavesNoPartialFinal(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == osWindows {
 		t.Skip("partial-write Sox stub requires a POSIX shell")
 	}
@@ -247,6 +248,7 @@ func TestGenerator_GenerateFromPCM_RuntimeFailureLeavesNoPartialFinal(t *testing
 // cross-platform smoke test; the temp-cleanup-after-partial-write guarantee is
 // covered by TestGenerator_GenerateFromPCM_RuntimeFailureLeavesNoPartialFinal.
 func TestGenerator_GenerateFromPCM_FailureLeavesNoPartialOutput(t *testing.T) {
+	t.Parallel()
 	env := setupTestEnv(t)
 	// Leave SoxPath unset to force a failure before any image is written.
 	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
@@ -263,6 +265,7 @@ func TestGenerator_GenerateFromPCM_FailureLeavesNoPartialOutput(t *testing.T) {
 // counterpart of the early config-validation smoke test: both Sox and the FFmpeg
 // fallback fail path validation, so nothing is published.
 func TestGenerator_GenerateFromFile_FailureLeavesNoPartialOutput(t *testing.T) {
+	t.Parallel()
 	env := setupTestEnv(t)
 	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
@@ -283,6 +286,7 @@ func TestGenerator_GenerateFromFile_FailureLeavesNoPartialOutput(t *testing.T) {
 // unit test cannot cheaply, prove the no-partial-window invariant directly.
 // Requires a real Sox.
 func TestGenerator_GenerateFromPCM_AtomicWrite(t *testing.T) {
+	t.Parallel()
 	soxPath := requireSoxAvailable(t)
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.SoxPath = soxPath
