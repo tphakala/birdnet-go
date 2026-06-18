@@ -341,6 +341,17 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 
 	// Try Sox first (faster, direct processing)
 	if err := g.generateWithSoxFile(soxCtx, settings, audioPath, outputPath, width, raw, options.preValidatedDuration, profile); err != nil {
+		// If the caller's context is already done (client disconnect, shutdown, or
+		// caller-imposed timeout), the result is no longer wanted. Skip the FFmpeg
+		// fallback: it runs on a context detached from the parent (see
+		// CreateFreshFFmpegContext) and would otherwise render to completion for a
+		// dead request, wasting CPU/memory and emitting a misleading "Both Sox and
+		// FFmpeg generation failed" error. The Sox error is already classified
+		// operational by generateWithSoxFile, so return it as-is.
+		if ctx.Err() != nil {
+			return err
+		}
+
 		g.log().Warn("Sox spectrogram generation failed, falling back to FFmpeg",
 			logger.String("audio_path", audioPath),
 			logger.Error(err),
@@ -544,7 +555,7 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, settings *conf.Se
 			Context("width", width).
 			Context("raw", raw).
 			Context("sox_output", output.String())
-		if IsOperationalError(err) {
+		if isOperationalExecError(ctx, err) {
 			eb = eb.Priority(errors.PriorityLow)
 		}
 		return eb.Build()
@@ -679,7 +690,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 			Context("raw", raw).
 			Context("ffmpeg_output", ffmpegOutput.String()).
 			Context("sox_output", soxOutput.String())
-		if IsOperationalError(err) {
+		if isOperationalExecError(ctx, err) {
 			eb = eb.Priority(errors.PriorityLow)
 		}
 		return eb.Build()
@@ -711,7 +722,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 			Context("raw", raw).
 			Context("ffmpeg_output", ffmpegOutput.String()).
 			Context("sox_output", soxOutput.String())
-		if IsOperationalError(soxWaitErr) {
+		if isOperationalExecError(ctx, soxWaitErr) {
 			eb = eb.Priority(errors.PriorityLow)
 		}
 		return eb.Build()
@@ -815,7 +826,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 			Context("raw", raw).
 			Context("sox_stderr", stderr.String()).
 			Context("pcm_bytes", len(pcmData))
-		if IsOperationalError(err) {
+		if isOperationalExecError(ctx, err) {
 			eb = eb.Priority(errors.PriorityLow)
 		}
 		return eb.Build()
@@ -896,7 +907,7 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, settings *conf.Setti
 			Context("width", width).
 			Context("raw", raw).
 			Context("ffmpeg_output", output.String())
-		if IsOperationalError(err) {
+		if isOperationalExecError(ctx, err) {
 			eb = eb.Priority(errors.PriorityLow)
 		}
 		return eb.Build()
