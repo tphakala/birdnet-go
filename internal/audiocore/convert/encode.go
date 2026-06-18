@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -57,6 +58,17 @@ func SavePCMDataToWAV(filePath string, pcmData []byte, sampleRate, bitDepth int)
 			Build()
 	}
 
+	// Reject a non-positive sample rate up front: the WAV encoder divides by it
+	// and would otherwise panic with an integer divide-by-zero.
+	if sampleRate <= 0 {
+		return errors.Newf("invalid sample rate %d: SavePCMDataToWAV requires a positive sample rate", sampleRate).
+			Component("audiocore/convert").
+			Category(errors.CategoryValidation).
+			Context("operation", "save_pcm_to_wav").
+			Context("sample_rate", sampleRate).
+			Build()
+	}
+
 	bytesPerSample := bitDepth / 8
 	if len(pcmData)%bytesPerSample != 0 {
 		return errors.Newf("PCM data size (%d bytes) is not aligned with bit depth (%d bits, %d bytes per sample)", len(pcmData), bitDepth, bytesPerSample).
@@ -78,18 +90,35 @@ func SavePCMDataToWAV(filePath string, pcmData []byte, sampleRate, bitDepth int)
 			Build()
 	}
 
-	outFile, err := os.Create(filePath) //nolint:gosec // G304: filePath is constructed programmatically, not from raw user input
+	// Write to a process-unique temp file and atomically rename it onto the final
+	// path, so concurrent saves of the same clip (see GitHub #3323) cannot
+	// interleave into one file and a failed save never leaves a partial clip.
+	tempPath := audiotemp.UniquePath(filePath)
+	outFile, err := os.Create(tempPath) //nolint:gosec // G304: tempPath derives from filePath, which is constructed programmatically, not from raw user input
 	if err != nil {
 		return errors.New(err).
 			Component("audiocore/convert").
 			Category(errors.CategoryFileIO).
 			Context("operation", "save_pcm_to_wav").
-			Context("file_operation", "create_file").
+			Context("file_operation", "create_temp_file").
 			Build()
 	}
+
+	// Cleanup: close the temp file (idempotent) and remove it unless committed.
+	committed := false
+	fileOpen := true
+	closeFile := func() error {
+		if !fileOpen {
+			return nil
+		}
+		fileOpen = false
+		return outFile.Close()
+	}
 	defer func() {
-		// Best-effort close; encoder.Close() is the authoritative finalization step.
-		_ = outFile.Close()
+		_ = closeFile()
+		if !committed {
+			_ = os.Remove(tempPath)
+		}
 	}()
 
 	enc := wav.NewEncoder(outFile, sampleRate, bitDepth, wavNumChannels, wavAudioFormat)
@@ -128,6 +157,38 @@ func SavePCMDataToWAV(filePath string, pcmData []byte, sampleRate, bitDepth int)
 			Build()
 	}
 
+	// Flush the temp file to stable storage before renaming so a crash right
+	// after the rename cannot leave an empty or partial clip (matches the FLAC
+	// encoder's sync-before-rename).
+	if err := outFile.Sync(); err != nil {
+		return errors.New(err).
+			Component("audiocore/convert").
+			Category(errors.CategoryFileIO).
+			Context("operation", "save_pcm_to_wav").
+			Context("file_operation", "sync_temp_file").
+			Build()
+	}
+
+	// Close the temp file before renaming: flush its contents and release the
+	// handle so the rename succeeds on Windows (which cannot rename an open file).
+	if err := closeFile(); err != nil {
+		return errors.New(err).
+			Component("audiocore/convert").
+			Category(errors.CategoryFileIO).
+			Context("operation", "save_pcm_to_wav").
+			Context("file_operation", "close_temp_file").
+			Build()
+	}
+
+	if err := audiotemp.Finalize(tempPath, filePath); err != nil {
+		return errors.New(err).
+			Component("audiocore/convert").
+			Category(errors.CategoryFileIO).
+			Context("operation", "save_pcm_to_wav").
+			Context("file_operation", "finalize_rename").
+			Build()
+	}
+	committed = true
 	return nil
 }
 
