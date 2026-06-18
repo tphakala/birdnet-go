@@ -333,10 +333,19 @@ func findONNXRuntimeLibrary() string {
 }
 
 // DestroyONNXRuntime tears down the ONNX Runtime environment.
-// Resets initialization state so InitONNXRuntime can be called again.
+// Resets initialization state so InitONNXRuntime can be called again. It is a
+// no-op (returns nil) when the runtime was never initialized, mirroring
+// DestroyOpenVINO, so a shutdown teardown can call it unconditionally without
+// ort.DestroyORT reporting "InitializeRuntime has not been called".
 func DestroyONNXRuntime() error {
 	ortInitMu.Lock()
 	defer ortInitMu.Unlock()
+	if !ortInitialized {
+		return nil
+	}
+	if err := ort.DestroyORT(); err != nil {
+		return err
+	}
 	ortInitialized = false
-	return ort.DestroyORT()
+	return nil
 }

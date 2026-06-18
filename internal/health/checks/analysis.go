@@ -413,6 +413,61 @@ func (c *ORTAvailabilityCheck) Run(_ context.Context) health.Result {
 	}
 }
 
+// OpenVINOAvailabilityCheck reports whether the optional OpenVINO acceleration
+// backend is compiled in and active. Unlike ORT (required for several models),
+// OpenVINO is optional, so absence is never an error: the check is skipped on
+// builds without the backend, and otherwise reports active vs. fell-back-to-ORT.
+type OpenVINOAvailabilityCheck struct {
+	getStatus func() (supported, active bool)
+}
+
+// NewOpenVINOAvailabilityCheck creates an OpenVINOAvailabilityCheck using the
+// given status provider. active reports whether a classifier is actually running
+// on OpenVINO (not merely that the core was loaded for device probing).
+func NewOpenVINOAvailabilityCheck(getStatus func() (supported, active bool)) *OpenVINOAvailabilityCheck {
+	return &OpenVINOAvailabilityCheck{getStatus: getStatus}
+}
+
+// Name returns the check identifier.
+func (c *OpenVINOAvailabilityCheck) Name() string { return "openvino_availability" }
+
+// Category returns the analysis category.
+func (c *OpenVINOAvailabilityCheck) Category() health.Category { return health.CategoryAnalysis }
+
+// Run reports OpenVINO backend state. It is skipped on builds without the
+// backend (the common case), and healthy otherwise: OpenVINO is an optional
+// accelerator, so falling back to ORT is normal, not a fault.
+func (c *OpenVINOAvailabilityCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
+
+	if c.getStatus == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	supported, active := c.getStatus()
+	if !supported {
+		// Not an OpenVINO build: report Skipped rather than a misleading
+		// always-"inactive" line. Skipped checks remain in the diagnostics payload
+		// (like every other optional check) but do not count toward the aggregate
+		// health status, so default builds are not penalized for lacking OpenVINO.
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	msg := "OpenVINO compiled in, not in use (ONNX Runtime active)"
+	if active {
+		msg = "OpenVINO backend active"
+	}
+	return health.Result{
+		Name:       c.Name(),
+		Category:   c.Category(),
+		Status:     health.StatusHealthy,
+		Message:    msg,
+		Details:    map[string]any{"supported": supported, "active": active},
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
+}
+
 // Threshold constants for the results-queue detection-drop check. Each dropped
 // detection is a species that was heard but never recorded, so even a single
 // drop within the window is worth a warning; a high or sustained rate (the

@@ -10,6 +10,11 @@ import "github.com/tphakala/birdnet-go/internal/errors"
 // f16 acceleration path on ARMv8.2 CPUs and the Intel iGPU.
 const DefaultPrecisionHint = "f16"
 
+// PrecisionF32 is the OpenVINO INFERENCE_PRECISION_HINT for full f32 inference.
+// Used to override the f16 default for models that the GPU plugin miscompiles at
+// f16 (see classifier.openVINOPrecisionFor for the BirdNET v2.4 iGPU case).
+const PrecisionF32 = "f32"
+
 const (
 	// DeviceCPU is the OpenVINO CPU device. ARMv8.2 f16 acceleration runs here.
 	DeviceCPU = "CPU"

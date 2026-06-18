@@ -179,6 +179,18 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Build()
 	}
 
+	// bn now owns native inference backends. If a later construction step fails and
+	// aborts, close them so a partially-built BirdNET does not leak the native
+	// classifier/range filter or leave the OpenVINO active-classifier counter
+	// incremented (which would make diagnostics report OpenVINO as in use for the
+	// rest of the process lifetime).
+	constructed := false
+	defer func() {
+		if !constructed {
+			bn.Delete()
+		}
+	}()
+
 	if err := bn.initializeMetaModel(settings); err != nil {
 		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
 			logger.Error(err),
@@ -211,6 +223,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Build()
 	}
 
+	constructed = true
 	return bn, nil
 }
 
@@ -243,7 +256,7 @@ func (bn *BirdNET) initializeModel() error {
 			GetLogger().Warn("OpenVINO backend unavailable, falling back to ONNX Runtime", logger.Error(err))
 		} else if bn.Settings.BirdNET.Backend == conf.BackendPrefOpenVINO {
 			GetLogger().Warn("backend is set to 'openvino' but it cannot be used here; using ONNX Runtime",
-				logger.String("reason", "requires the openvino build, an ARMv8.2/A76+ CPU with native f16, and the BirdNET v2.4 model"))
+				logger.String("reason", "requires the openvino build, the BirdNET v2.4 model, and a supported device (an ARMv8.2/A76+ CPU with native f16, or an Intel OpenVINO GPU)"))
 		}
 		return bn.initializeONNXModel()
 	}

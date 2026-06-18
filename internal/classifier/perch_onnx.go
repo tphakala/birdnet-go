@@ -151,10 +151,11 @@ func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (inference.Classifier, 
 
 	start := time.Now()
 	classifier, err := inference.NewOpenVINOClassifier(cfg.ModelPath, inference.OpenVINOClassifierOptions{
-		Labels:      labels,
-		Threads:     cfg.Threads,
-		Device:      plan.device,
-		OutputIndex: plan.outputIndex,
+		Labels:        labels,
+		Threads:       cfg.Threads,
+		Device:        plan.device,
+		OutputIndex:   plan.outputIndex,
+		PrecisionHint: plan.precision, // "" => f16 default; Perch f16-GPU validated OK
 	})
 	if err != nil {
 		log.Warn("Perch OpenVINO classifier init failed; using ONNX Runtime",

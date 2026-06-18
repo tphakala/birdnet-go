@@ -251,6 +251,43 @@ func TestORTAvailabilityCheck_FoundNotInitialized(t *testing.T) {
 	assert.Contains(t, result.Message, "not yet initialized")
 }
 
+func TestOpenVINOAvailabilityCheck_NotSupported(t *testing.T) {
+	t.Parallel()
+	// Default build: OpenVINO not compiled in. The check stays silent (skipped)
+	// rather than reporting an always-"inactive" line.
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return false, false })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
+func TestOpenVINOAvailabilityCheck_Active(t *testing.T) {
+	t.Parallel()
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return true, true })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+	// "backend active" is unique to the active message; the not-in-use message also
+	// contains the bare token "active" ("ONNX Runtime active"), so asserting the
+	// full phrase catches a flag inversion that "active" alone would not.
+	assert.Contains(t, result.Message, "backend active")
+}
+
+func TestOpenVINOAvailabilityCheck_SupportedNotInUse(t *testing.T) {
+	t.Parallel()
+	// Built with the openvino tag but no classifier is running on it (the core may
+	// have loaded for device probing, but inference fell back to ORT).
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return true, false })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+	assert.Contains(t, result.Message, "not in use")
+}
+
+func TestOpenVINOAvailabilityCheck_NilProvider(t *testing.T) {
+	t.Parallel()
+	check := NewOpenVINOAvailabilityCheck(nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
 // --- Helper tests ---
 
 func TestSanitizeID(t *testing.T) {
