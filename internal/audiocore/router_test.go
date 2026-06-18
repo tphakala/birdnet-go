@@ -1150,3 +1150,47 @@ func TestRouter_PoolCacheHit(t *testing.T) {
 	assert.NotNil(t, route.byteOutPool.Load(), "byteOutPool should be cached after frames")
 	router.mu.RUnlock()
 }
+
+// TestRouter_QueueDepth verifies that Routes() returns the current inbox
+// occupancy in RouteInfo.QueueDepth, and that AnalysisQueueSnapshot returns
+// the summed depth and lifetime drops for routes matching the given consumer ID.
+func TestRouter_QueueDepth(t *testing.T) {
+	t.Parallel()
+
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(func() { router.Close() })
+
+	const consumerID = "analysis-consumer"
+	consumer := newBlockingConsumer(consumerID)
+	t.Cleanup(consumer.unblock)
+
+	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 0.0, nil))
+
+	// Push N frames without draining. The drainer goroutine will take at most
+	// one frame (blocking in Write), so inbox occupancy should be N-1 or N.
+	// We overfill slightly so at least routeInboxCapacity frames sit in the
+	// inbox after the drainer goroutine takes one.
+	const pushFrames = routeInboxCapacity
+	for range pushFrames {
+		router.Dispatch(testFrame("src-1"))
+	}
+
+	// QueueDepth must be positive: the inbox has frames queued.
+	routes := router.Routes("src-1")
+	require.Len(t, routes, 1)
+	assert.Positive(t, routes[0].QueueDepth,
+		"QueueDepth must be positive when frames are queued in the inbox")
+	assert.LessOrEqual(t, routes[0].QueueDepth, routeInboxCapacity,
+		"QueueDepth must not exceed inbox capacity")
+
+	// AnalysisQueueSnapshot must return a positive depth for the matching
+	// consumer ID, and non-negative drops.
+	depth, drops := router.AnalysisQueueSnapshot(consumerID)
+	assert.Positive(t, depth, "AnalysisQueueSnapshot depth must be positive")
+	assert.GreaterOrEqual(t, drops, int64(0), "AnalysisQueueSnapshot drops must be non-negative")
+
+	// A different consumer ID must return zero depth and zero drops.
+	depthOther, dropsOther := router.AnalysisQueueSnapshot("no-such-consumer")
+	assert.Zero(t, depthOther, "AnalysisQueueSnapshot for unknown consumer ID must return 0 depth")
+	assert.Zero(t, dropsOther, "AnalysisQueueSnapshot for unknown consumer ID must return 0 drops")
+}
