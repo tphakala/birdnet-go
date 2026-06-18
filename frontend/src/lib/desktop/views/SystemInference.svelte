@@ -80,6 +80,11 @@
   // async loaders, so a late resolve after unmount is a no-op.
   let componentActive = { current: false };
 
+  // Generation counter for snapshot loads. Each loadSnapshot bumps it; in-flight
+  // history/poll work checks it and bails if a newer load has started, so rapid
+  // topology events cannot let a stale response overwrite newer state.
+  let currentFetchId = 0;
+
   // Append a value to a history array, keeping it capped at MAX_HISTORY_POINTS.
   function appendHistory(arr: number[], value: number): number[] {
     const next = [...arr, value];
@@ -132,13 +137,13 @@
   // the live stream. Transport is mutually exclusive (SSE vs polling), mirroring
   // System.svelte: a successful history seed goes live over SSE; any failure (or
   // having no models to stream yet) falls back to polling instead.
-  async function loadHistory(active: { current: boolean }): Promise<void> {
+  async function loadHistory(active: { current: boolean }, fetchId: number): Promise<void> {
     const keys = metricKeysParam();
     if (!keys) {
       // No models loaded yet: nothing to stream. Poll the snapshot so the page
       // picks up models once they load (the topology SSE event has no transport here).
       awaitingModels = true;
-      startPollingFallback(active);
+      startPollingFallback(active, fetchId);
       return;
     }
     awaitingModels = false;
@@ -146,7 +151,7 @@
       const data = await api.get<MetricsHistoryResponse>(
         `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=${encodeURIComponent(keys)}`
       );
-      if (!active.current) return;
+      if (!active.current || fetchId !== currentFetchId) return;
       const next: Record<string, number[]> = {}; // rebuild fresh: drops orphan series for models no longer present
       for (const [key, points] of Object.entries(data.metrics)) {
         if (!validKeys.has(key)) continue;
@@ -156,9 +161,9 @@
       seriesByKey = next;
       connectStream(); // go live only after a successful history seed (mirrors System.svelte)
     } catch {
-      if (!active.current) return;
+      if (!active.current || fetchId !== currentFetchId) return;
       logger.debug('Inference metrics history not available, falling back to polling');
-      startPollingFallback(active);
+      startPollingFallback(active, fetchId);
     }
   }
 
@@ -205,17 +210,17 @@
 
   // Re-fetch the snapshot on a fixed interval when SSE is unavailable. The loop
   // stays alive while offline but skips the actual fetch.
-  function startPollingFallback(active: { current: boolean }): void {
+  function startPollingFallback(active: { current: boolean }, fetchId: number): void {
     // Clear any scheduled poll so a re-entrant call (repeated topology re-fetch
     // failures, or zero-models then a later call) does not run overlapping loops.
     stopPolling();
 
     async function poll(): Promise<void> {
-      if (!active.current) return;
+      if (!active.current || fetchId !== currentFetchId) return;
 
       if (!connectionState.isOnline) {
         // Skip the API call but keep the polling loop alive.
-        if (active.current) {
+        if (active.current && fetchId === currentFetchId) {
           pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
         }
         return;
@@ -223,21 +228,21 @@
 
       try {
         const data = await api.get<InferenceStatusResponse>(INFERENCE_ENDPOINT);
-        if (!active.current) return;
+        if (!active.current || fetchId !== currentFetchId) return;
         snapshot = data;
         error = null;
         // If we started with no models and they have now loaded, hand off from
         // snapshot polling to the live SSE transport (seed history + stream).
         if (awaitingModels && metricKeysParam()) {
           stopPolling();
-          loadHistory(active);
+          loadHistory(active, fetchId);
           return;
         }
       } catch {
         // Silently ignore polling failures; keep showing the last snapshot.
       }
 
-      if (active.current) {
+      if (active.current && fetchId === currentFetchId) {
         pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
       }
     }
@@ -249,15 +254,18 @@
   // owns the SSE-vs-poll decision (mutually exclusive), so loadSnapshot does not
   // connect the stream itself. On failure show a friendly error and poll.
   async function loadSnapshot(active: { current: boolean }): Promise<void> {
+    // Bump the generation so any older in-flight history/poll work bails out and
+    // cannot overwrite this load's state if responses arrive out of order.
+    const fetchId = ++currentFetchId;
     try {
       const data = await api.get<InferenceStatusResponse>(INFERENCE_ENDPOINT);
-      if (!active.current) return;
+      if (!active.current || fetchId !== currentFetchId) return;
       snapshot = data;
       loading = false;
       error = null;
-      await loadHistory(active);
+      await loadHistory(active, fetchId);
     } catch (err: unknown) {
-      if (!active.current) return;
+      if (!active.current || fetchId !== currentFetchId) return;
       logger.debug('Failed to load inference status', {
         error: err instanceof Error ? err.message : 'Unknown error',
       });
@@ -265,7 +273,7 @@
       // error banner when there is nothing to show.
       error = t('system.inference.error');
       loading = false;
-      startPollingFallback(active);
+      startPollingFallback(active, fetchId);
     }
   }
 
