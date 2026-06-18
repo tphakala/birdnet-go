@@ -1116,25 +1116,26 @@ func (o *Orchestrator) ReloadModel() error {
 
 	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
 	//
-	// Snapshot each entry's instance under its own e.mu before reading ModelID().
-	// This is defensive, not a fix for a live bug: today ReloadModel and
-	// ReloadSecondaryModels (which swaps e.instance under e.mu, outside o.mu) are
-	// both invoked only from the single-goroutine monitor event loop, so they never
-	// interleave and this re-key, holding o.mu, already excludes every other
-	// e.instance writer. The per-entry lock removes the reliance on that non-local
-	// serialization invariant, so a future second caller cannot turn the re-key read
-	// into a data race. e.mu is a leaf lock here (taken while holding o.mu and
-	// releasing nothing else under it), so the established o.mu -> e.mu order holds
-	// and this cannot deadlock.
+	// Read each entry's instance and its ModelID under the entry's own e.mu. This is
+	// defensive, not a fix for a live bug: today ReloadModel and ReloadSecondaryModels
+	// (which swaps e.instance under e.mu, outside o.mu) are both invoked only from the
+	// single-goroutine monitor event loop, so they never interleave and this re-key,
+	// holding o.mu, already excludes every other e.instance writer. Keeping the
+	// ModelID() read inside e.mu removes reliance on that non-local serialization
+	// invariant (and on ModelID being an immutable accessor) so a future second caller
+	// cannot turn the re-key into a data race. e.mu is a leaf lock here (taken while
+	// holding o.mu and acquiring nothing else under it), so the established
+	// o.mu -> e.mu order holds and this cannot deadlock.
 	newModels := make(map[string]*modelEntry, len(o.models))
 	for _, e := range o.models {
 		e.mu.Lock()
-		inst := e.instance
-		e.mu.Unlock()
-		if inst == nil {
+		if e.instance == nil {
+			e.mu.Unlock()
 			continue // skip entries closed by concurrent Delete
 		}
-		newModels[inst.ModelID()] = e
+		modelID := e.instance.ModelID()
+		e.mu.Unlock()
+		newModels[modelID] = e
 	}
 	o.models = newModels
 
