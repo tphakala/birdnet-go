@@ -1,0 +1,153 @@
+// internal/api/v2/inference_status_test.go
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
+// TestBuildSourceAttachments verifies that buildSourceAttachments correctly
+// routes audio sources to their configured model, or to the primary fallback
+// when no configured model resolves to a loaded model.
+func TestBuildSourceAttachments(t *testing.T) {
+	t.Parallel()
+
+	// classifier.DefaultModelVersion is the registry key for the primary BirdNET model.
+	const primaryID = classifier.DefaultModelVersion
+
+	// Two loaded models: the primary BirdNET and Perch.
+	models := []classifier.ModelInfo{
+		{ID: primaryID},
+		{ID: classifier.RegistryIDPerchV2},
+	}
+
+	settings := &conf.Settings{}
+	// Front Yard uses conf.ModelIDPerchV2 ("perch_v2"), which ResolveConfigModelID
+	// maps to classifier.RegistryIDPerchV2 ("Perch_V2"). Fallback must be false.
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Front Yard", Models: []string{conf.ModelIDPerchV2}},
+		{Name: "Garage", Models: nil}, // no models: falls back to primary
+	}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: falls back to primary
+	}
+
+	got := buildSourceAttachments(settings, models, primaryID)
+
+	// Perch_V2 should have exactly Front Yard, attached without fallback.
+	perch := got[classifier.RegistryIDPerchV2]
+	require.Len(t, perch, 1, "Perch_V2 attachments")
+	assert.Equal(t, "Front Yard", perch[0].Name, "Perch_V2 source name")
+	assert.False(t, perch[0].Fallback, "Perch_V2 source must not be a fallback")
+
+	// Primary should have Garage and Cam1, both as fallbacks.
+	prim := got[primaryID]
+	require.Len(t, prim, 2, "primary attachments must have 2 entries (Garage, Cam1)")
+	for _, s := range prim {
+		assert.True(t, s.Fallback, "primary attachment %q should have Fallback=true", s.Name)
+	}
+}
+
+// TestBuildSourceAttachments_ResolvesButNotLoaded verifies that a source whose
+// config model alias resolves to a registry ID, but that registry ID is NOT in
+// the loaded models list, falls back to primary with Fallback=true. This catches
+// regressions where the guard `ok && loaded[regID]` is loosened to just `ok`.
+func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+
+	// Only BirdNET is loaded; Perch is deliberately NOT loaded.
+	models := []classifier.ModelInfo{
+		{ID: primaryID},
+	}
+
+	settings := &conf.Settings{}
+	// Studio uses conf.ModelIDPerchV2, which resolves to classifier.RegistryIDPerchV2,
+	// but Perch is not in the loaded models. Must fall back to primary with Fallback=true.
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Studio", Models: []string{conf.ModelIDPerchV2}},
+	}
+
+	got := buildSourceAttachments(settings, models, primaryID)
+
+	// Perch_V2 should have NO attachments (not loaded).
+	perch := got[classifier.RegistryIDPerchV2]
+	assert.Empty(t, perch, "Perch_V2 attachments must be empty (Perch not loaded)")
+
+	// Primary should have Studio as a fallback.
+	prim := got[primaryID]
+	require.Len(t, prim, 1, "primary attachments must have 1 entry (Studio)")
+	assert.Equal(t, "Studio", prim[0].Name, "primary source name")
+	assert.True(t, prim[0].Fallback, "primary source must be a fallback")
+}
+
+// TestBuildModelStatus verifies that buildModelStatus correctly computes
+// average latency, peak latency, RTF, and memory from a non-zero PeekSnapshot.
+func TestBuildModelStatus(t *testing.T) {
+	t.Parallel()
+	rssVal := int64(125_000_000)
+	info := classifier.ModelInfo{
+		ID:           "BirdNET_V2.4",
+		Name:         "BirdNET v2.4",
+		Backend:      "ONNX",
+		Quantization: classifier.QuantizationINT8,
+		IsStock:      true,
+		NumSpecies:   6522,
+		Spec:         classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	snap := inferencestats.PeekSnapshot{InvokeCount: 1000, InvokeTotalUs: 47_200_000, InvokeMaxUs: 130_000}
+	rss := map[string]int64{"BirdNET_V2.4": rssVal}
+
+	got := buildModelStatus(&info, snap, rss, nil)
+
+	assert.Equal(t, int64(1000), got.Stats.Invocations, "invocations")
+	assert.InDelta(t, 47.2, got.Stats.AvgMs, 0.1, "avgMs")
+	assert.InDelta(t, 130.0, got.Stats.MaxMs, 0.01, "maxMs")
+	require.NotNil(t, got.Stats.RTF, "rtf must not be nil with non-zero invocations")
+	assert.InDelta(t, 0.0157, *got.Stats.RTF, 0.0001, "rtf")
+	require.NotNil(t, got.Memory.ApproxRssBytes, "approxRssBytes must not be nil when RSS is available")
+	assert.Equal(t, rssVal, *got.Memory.ApproxRssBytes, "approxRssBytes")
+	assert.Equal(t, "inference.BirdNET_V2_4.rtf", got.MetricKeys.RTF, "metricKeys.rtf")
+}
+
+// TestBuildModelStatus_ZeroInvocations verifies that buildModelStatus returns
+// nil RTF and nil ApproxRssBytes when there are no invocations or no RSS data.
+func TestBuildModelStatus_ZeroInvocations(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{ID: "X", Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}}
+	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil)
+	assert.Nil(t, got.Stats.RTF, "rtf must be nil with zero invocations (no divide-by-zero)")
+	assert.Nil(t, got.Memory.ApproxRssBytes, "approxRssBytes must be nil when RSS unavailable")
+	assert.True(t, got.Memory.Approximate, "memory.approximate must always be true")
+}
+
+// TestGetInferenceStatus_HTTP200 verifies that GetInferenceStatus returns HTTP
+// 200 and a valid InferenceStatusResponse with TFLite marked available. It uses
+// the shared setupTestEnvironment harness (minimalController + Echo) to exercise
+// the handler over httptest without starting any background goroutines.
+func TestGetInferenceStatus_HTTP200(t *testing.T) {
+	// NOT parallel: publishTestSettings in setupTestEnvironment mutates global state.
+	e, _, controller := setupTestEnvironment(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetInferenceStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp InferenceStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body must unmarshal to InferenceStatusResponse")
+	assert.True(t, resp.Backends.TFLite.Available, "TFLite backend must always report Available=true")
+	assert.NotZero(t, resp.SnapshotAtUnix, "SnapshotAtUnix must be a non-zero Unix timestamp")
+}

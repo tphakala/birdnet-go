@@ -39,6 +39,19 @@ type Collector struct {
 	inferenceCounters  *inferencestats.CounterMap
 	prevInferenceSnaps map[string]*inferencestats.Snapshot
 
+	// Per-model clip length provider for RTF computation (optional, set via SetModelClipFunc)
+	modelClipFunc func() map[string]float64
+	// Per-model RSS byte provider (optional, set via SetModelRSSFunc)
+	modelRSSFunc func() (map[string]int64, int64)
+	// Prometheus gauge setters (optional, set via SetInferenceGaugeSetters)
+	rtfGauge             func(model string, rtf float64)
+	rssGauge             func(model string, bytes int64)
+	inferenceGaugeDelete func(model string)
+	// gaugeModels tracks which model IDs have had a gauge label set so stale
+	// series can be pruned after unload. Accessed only from the collect()
+	// goroutine, so no mutex is needed.
+	gaugeModels map[string]struct{}
+
 	// Health counter tracking (optional, set via SetHealthStore/SetHealthEvents)
 	healthStore     *HealthMetricsStore
 	healthEvents    *HealthEventBuffer
@@ -92,7 +105,9 @@ func (c *Collector) Start(ctx context.Context) {
 
 // Metric key constants for collected system metrics.
 const (
-	// expectedMetricCount is the pre-allocation hint for the number of metrics collected per tick.
+	// expectedMetricCount is a lower-bound hint for the map pre-allocation per tick.
+	// Per-model RTF keys add len(models) more entries each tick, so the map may grow
+	// beyond this value. This is intentional: the map grows as needed.
 	expectedMetricCount = 12
 
 	metricCPUTotal          = "cpu.total"
@@ -131,6 +146,8 @@ func (c *Collector) collect() {
 		c.store.RecordBatch(points)
 	}
 
+	c.collectModelRSS()
+	c.pruneInferenceGauges()
 	c.collectHealthCounters()
 }
 
@@ -235,6 +252,9 @@ func (c *Collector) SetDBCounters(counters *dbstats.Counters) {
 // usToMs converts microseconds to milliseconds.
 const usToMs = 1000.0
 
+// usPerSecond is the number of microseconds per second, used for RTF computation.
+const usPerSecond = 1_000_000.0
+
 // collectDatabase computes database latency and throughput metrics from
 // atomic counter snapshots. Requires two consecutive snapshots for deltas.
 func (c *Collector) collectDatabase(points map[string]float64) {
@@ -275,6 +295,25 @@ func (c *Collector) collectDatabase(points map[string]float64) {
 // Must be called before Start. If not called, inference metrics are skipped.
 func (c *Collector) SetInferenceCounters(counters *inferencestats.CounterMap) {
 	c.inferenceCounters = counters
+}
+
+// SetModelClipFunc sets a function that returns each model's clip length in seconds.
+// Used to compute the real-time factor (RTF = avg_inference_s / clip_s).
+// Must be called before Start.
+func (c *Collector) SetModelClipFunc(f func() map[string]float64) { c.modelClipFunc = f }
+
+// SetModelRSSFunc sets a function that returns per-model host RSS deltas in bytes
+// and the runtime baseline. Used to update the RSS Prometheus gauge each tick.
+// Must be called before Start.
+func (c *Collector) SetModelRSSFunc(f func() (map[string]int64, int64)) { c.modelRSSFunc = f }
+
+// SetInferenceGaugeSetters injects the Prometheus gauge setter functions for RTF,
+// RSS, and deletion. All are nil-safe; only non-nil functions are called.
+// Must be called before Start.
+func (c *Collector) SetInferenceGaugeSetters(rtf func(string, float64), rss func(string, int64), del func(string)) {
+	c.rtfGauge = rtf
+	c.rssGauge = rss
+	c.inferenceGaugeDelete = del
 }
 
 // AudioRouterSnapshot holds cumulative counter values for a single audio source.
@@ -321,6 +360,11 @@ func (c *Collector) collectInference(points map[string]float64) {
 		return
 	}
 
+	var clips map[string]float64
+	if c.modelClipFunc != nil {
+		clips = c.modelClipFunc()
+	}
+
 	snaps := c.inferenceCounters.SnapshotAll()
 
 	if c.prevInferenceSnaps == nil {
@@ -346,6 +390,21 @@ func (c *Collector) collectInference(points map[string]float64) {
 		if deltaInvokes > 0 {
 			deltaUs := snap.InvokeTotalUs - prev.InvokeTotalUs
 			points[key] = float64(deltaUs) / float64(deltaInvokes) / usToMs
+
+			if clips != nil {
+				if clip, ok := clips[modelID]; ok && clip > 0 {
+					intervalAvgSec := (float64(deltaUs) / float64(deltaInvokes)) / usPerSecond
+					rtf := intervalAvgSec / clip
+					points[inferencestats.RTFMetricKey(modelID)] = rtf
+					if c.rtfGauge != nil {
+						c.rtfGauge(modelID, rtf)
+						if c.gaugeModels == nil {
+							c.gaugeModels = make(map[string]struct{})
+						}
+						c.gaugeModels[modelID] = struct{}{}
+					}
+				}
+			}
 		} else {
 			points[key] = 0
 		}
@@ -357,6 +416,40 @@ func (c *Collector) collectInference(points map[string]float64) {
 	for modelID := range c.prevInferenceSnaps {
 		if _, ok := snaps[modelID]; !ok {
 			delete(c.prevInferenceSnaps, modelID)
+		}
+	}
+}
+
+// collectModelRSS sets the per-model RSS Prometheus gauge each tick. RSS is set
+// at load and stable until reload; setting it every tick is idempotent and
+// handles model add/remove. RSS is not written to the ring buffer in Phase 1.
+func (c *Collector) collectModelRSS() {
+	if c.modelRSSFunc == nil || c.rssGauge == nil {
+		return
+	}
+	perModel, _ := c.modelRSSFunc()
+	for id, bytes := range perModel {
+		c.rssGauge(id, bytes)
+		if c.gaugeModels == nil {
+			c.gaugeModels = make(map[string]struct{})
+		}
+		c.gaugeModels[id] = struct{}{}
+	}
+}
+
+// pruneInferenceGauges deletes gauge label values for models that are no longer
+// loaded, preventing stale Prometheus series after unload/reload. The canonical
+// loaded set is modelClipFunc() (all loaded models, independent of RSS
+// availability). No-op until the clip func and delete callback are wired.
+func (c *Collector) pruneInferenceGauges() {
+	if c.modelClipFunc == nil || c.inferenceGaugeDelete == nil || len(c.gaugeModels) == 0 {
+		return
+	}
+	loaded := c.modelClipFunc()
+	for id := range c.gaugeModels {
+		if _, ok := loaded[id]; !ok {
+			c.inferenceGaugeDelete(id)
+			delete(c.gaugeModels, id)
 		}
 	}
 }

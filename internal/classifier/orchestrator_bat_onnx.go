@@ -6,8 +6,10 @@ import (
 )
 
 // loadBat creates and registers a bat detection model instance from settings.
+// o.mu.Lock() is held by the caller.
 func (o *Orchestrator) loadBat(threads int) error {
 	log := GetLogger()
+	before := o.captureRSSBefore()
 
 	// Read the live published settings snapshot once (mirroring loadPerch) rather
 	// than the deprecated o.Settings pointer, so an out-of-band LoadModel after a
@@ -62,6 +64,7 @@ func (o *Orchestrator) loadBat(threads int) error {
 			Build()
 	}
 
+	o.warmupAndRecordRSS(bat.ModelID(), before, bat)
 	o.models[bat.ModelID()] = &modelEntry{instance: bat}
 
 	log.Info("Bat model loaded into Orchestrator",

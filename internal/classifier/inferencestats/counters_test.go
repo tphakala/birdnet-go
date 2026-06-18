@@ -176,6 +176,27 @@ func TestCounterMap_PeekAll_Empty(t *testing.T) {
 	assert.Empty(t, peek)
 }
 
+func TestRTFMetricKey(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Spaces and dots replaced, normalized form.
+		{input: "BirdNET V2.4", want: "inference.BirdNET_V2_4.rtf"},
+		// Already-clean id: must round-trip without modification.
+		{input: "Perch_V2", want: "inference.Perch_V2.rtf"},
+		// Empty string: produces "inference..rtf" (degenerate but must not panic).
+		{input: "", want: "inference..rtf"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, RTFMetricKey(tt.input))
+		})
+	}
+}
+
 func TestCounterMap_PeekAll_DoesNotInterfereWithSnapshot(t *testing.T) {
 	t.Parallel()
 	m := &CounterMap{}

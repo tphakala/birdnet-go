@@ -97,6 +97,12 @@ type Orchestrator struct {
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
 	scheduler atomic.Pointer[nighttimeScheduler]
+
+	// Per-model host RSS-delta accounting (see orchestrator_memory.go).
+	rssMu            sync.Mutex
+	modelRSS         map[string]int64
+	runtimeBaseline  int64
+	baselineCaptured bool
 }
 
 // CurrentSettings returns the latest settings snapshot published via
@@ -136,6 +142,17 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 			primaryInfo = &info
 		}
 	}
+
+	// Capture host RSS before the primary model allocates its arena. We need o
+	// to exist first (captureRSSBefore records the runtime baseline on first call),
+	// so build o with an empty models map and then insert the primary below.
+	o := &Orchestrator{
+		Settings: settings,
+		models:   map[string]*modelEntry{},
+		modelRSS: make(map[string]int64),
+	}
+	rssBefore := o.captureRSSBefore()
+
 	bn, err := NewBirdNET(settings, primaryInfo)
 	if err != nil {
 		return nil, err
@@ -144,21 +161,17 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	resolver := NewBirdNETLabelResolver(bn.Labels())
 	ofResolver := openfauna.NewResolver()
 
-	o := &Orchestrator{
-		Settings:        settings,
-		ModelInfo:       bn.ModelInfo,
-		TaxonomyMap:     bn.TaxonomyMap,
-		TaxonomyPath:    bn.TaxonomyPath,
-		ScientificIndex: bn.ScientificIndex,
-		// OpenFauna first so it overrides label/taxonomy names everywhere
-		// ResolveName is consulted (display + inference).
-		nameResolvers: []NameResolver{ofResolver, resolver},
-		openfauna:     ofResolver,
-		models: map[string]*modelEntry{
-			bn.ModelInfo.ID: {instance: bn},
-		},
-		primary: bn,
-	}
+	// Populate the remaining fields now that bn is available.
+	o.ModelInfo = bn.ModelInfo
+	o.TaxonomyMap = bn.TaxonomyMap
+	o.TaxonomyPath = bn.TaxonomyPath
+	o.ScientificIndex = bn.ScientificIndex
+	// OpenFauna first so it overrides label/taxonomy names everywhere
+	// ResolveName is consulted (display + inference).
+	o.nameResolvers = []NameResolver{ofResolver, resolver}
+	o.openfauna = ofResolver
+	o.models[bn.ModelInfo.ID] = &modelEntry{instance: bn}
+	o.primary = bn
 	o.settingsAtomic.Store(settings)
 
 	// Each OV-capable secondary records the startup triplet on its own modelEntry
@@ -166,6 +179,10 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// reload_birdnet for an unrelated setting (e.g. a locale change) sees a
 	// matching triplet and does not spuriously rebuild it. No orchestrator-wide
 	// gate to seed here anymore.
+
+	// Warm up the primary model and record RSS delta. This calls instance.Predict
+	// directly (single-threaded construction; no lock is held here).
+	o.warmupAndRecordRSS(bn.ModelInfo.ID, rssBefore, bn)
 
 	// Pre-compute thread allocation so model constructors receive their share.
 	// BirdNET already uses settings.BirdNET.Threads at construction; additional
@@ -1268,6 +1285,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				threads = runtime.NumCPU()
 			}
 		}
+		before := o.captureRSSBefore()
 		newInst, err := openvinoCapableSecondaryBuilders[ref.id](o, settings, threads)
 		if err != nil {
 			if firstErr == nil {
@@ -1290,6 +1308,13 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			continue
 		}
 
+		// Warm up the freshly built (still private) instance before publishing it,
+		// so the first real inference does not pay the lazy-allocation cost, and
+		// re-measure its host RSS. This is lock-free and safe: newInst is not yet in
+		// the entry, and o.mu is not held in this build/swap section, so it does not
+		// stall live inference (unlike the initial load paths).
+		o.warmupAndRecordRSS(ref.id, before, newInst)
+
 		// Swap the new instance into the existing entry under entry.mu so it
 		// cannot race an in-flight PredictModel. Keeping the same *modelEntry
 		// preserves the per-entry mutex identity and the globalInferenceCounters
@@ -1305,6 +1330,10 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 					logger.String("registry_id", ref.id),
 					logger.Error(cerr))
 			}
+			// Remove the RSS entry we just recorded since the model will not be published.
+			o.rssMu.Lock()
+			delete(o.modelRSS, ref.id)
+			o.rssMu.Unlock()
 			continue
 		}
 		ref.entry.instance = newInst
@@ -1351,6 +1380,10 @@ func (o *Orchestrator) Delete() {
 	o.primary = nil
 	o.models = nil
 	o.mu.Unlock()
+
+	o.rssMu.Lock()
+	o.modelRSS = make(map[string]int64)
+	o.rssMu.Unlock()
 
 	for id, entry := range models {
 		entry.mu.Lock()
@@ -1556,6 +1589,10 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 
 	globalInferenceCounters.Delete(registryID)
 
+	o.rssMu.Lock()
+	delete(o.modelRSS, registryID)
+	o.rssMu.Unlock()
+
 	if entry.instance != nil {
 		modelID := entry.instance.ModelID()
 		if err := entry.instance.Close(); err != nil {
@@ -1687,6 +1724,15 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 		return
 	}
 	primary.Debug(format, v...)
+}
+
+// PrimaryModelID returns the registry ID of the primary model. It reads the
+// o.mu-guarded primary identity under the read lock, so it is safe to call
+// concurrently with model reloads. Returns "" if no primary is set.
+func (o *Orchestrator) PrimaryModelID() string {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.ModelInfo.ID
 }
 
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
