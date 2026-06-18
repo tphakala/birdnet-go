@@ -1786,7 +1786,7 @@ Image=${BIRDNET_GO_IMAGE}
 ContainerName=birdnet-go
 Volume=./config:/config
 Volume=./data:/data
-PublishPort=${WEB_PORT}:8888
+PublishPort=${WEB_PORT}:8080
 Environment=TZ=${CONFIGURED_TZ:-UTC}
 Environment=BIRDNET_UID=%U
 Environment=BIRDNET_GID=%G
