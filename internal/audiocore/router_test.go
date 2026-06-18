@@ -922,7 +922,7 @@ func TestRouter_Dispatch_RefFullInboxDrops(t *testing.T) {
 	// Dispatch enough frames to guarantee drops: the drainer consumes at most
 	// one frame before blocking in Write, so 2*cap + 1 leaves no room for
 	// timing-related flakiness.
-	totalFrames := 2*routeInboxCapacity + 1
+	totalFrames := 2*RouteInboxCapacity + 1
 	for range totalFrames {
 		ref := NewFrameRef(func() { released.Add(1) })
 		router.Dispatch(AudioFrame{
@@ -1168,9 +1168,9 @@ func TestRouter_QueueDepth(t *testing.T) {
 
 	// Push N frames without draining. The drainer goroutine will take at most
 	// one frame (blocking in Write), so inbox occupancy should be N-1 or N.
-	// We overfill slightly so at least routeInboxCapacity frames sit in the
+	// We overfill slightly so at least RouteInboxCapacity frames sit in the
 	// inbox after the drainer goroutine takes one.
-	const pushFrames = routeInboxCapacity
+	const pushFrames = RouteInboxCapacity
 	for range pushFrames {
 		router.Dispatch(testFrame("src-1"))
 	}
@@ -1180,7 +1180,7 @@ func TestRouter_QueueDepth(t *testing.T) {
 	require.Len(t, routes, 1)
 	assert.Positive(t, routes[0].QueueDepth,
 		"QueueDepth must be positive when frames are queued in the inbox")
-	assert.LessOrEqual(t, routes[0].QueueDepth, routeInboxCapacity,
+	assert.LessOrEqual(t, routes[0].QueueDepth, RouteInboxCapacity,
 		"QueueDepth must not exceed inbox capacity")
 
 	// AnalysisQueueSnapshot must return a positive depth for the matching

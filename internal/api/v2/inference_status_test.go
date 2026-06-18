@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -109,7 +110,7 @@ func TestBuildModelStatus(t *testing.T) {
 	snap := inferencestats.PeekSnapshot{InvokeCount: 1000, InvokeTotalUs: 47_200_000, InvokeMaxUs: 130_000}
 	rss := map[string]int64{"BirdNET_V2.4": rssVal}
 
-	got := buildModelStatus(&info, snap, rss, nil)
+	got := buildModelStatus(&info, snap, rss, nil, nil, nil)
 
 	assert.Equal(t, int64(1000), got.Stats.Invocations, "invocations")
 	assert.InDelta(t, 47.2, got.Stats.AvgMs, 0.1, "avgMs")
@@ -126,7 +127,7 @@ func TestBuildModelStatus(t *testing.T) {
 func TestBuildModelStatus_ZeroInvocations(t *testing.T) {
 	t.Parallel()
 	info := classifier.ModelInfo{ID: "X", Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}}
-	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil)
+	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil, nil, nil)
 	assert.Nil(t, got.Stats.RTF, "rtf must be nil with zero invocations (no divide-by-zero)")
 	assert.Nil(t, got.Memory.ApproxRssBytes, "approxRssBytes must be nil when RSS unavailable")
 	assert.True(t, got.Memory.Approximate, "memory.approximate must always be true")
@@ -191,4 +192,104 @@ func TestBroadcastInferenceTopologyChanged_NilSafe(t *testing.T) {
 
 	noStore := &Controller{}
 	assert.NotPanics(t, noStore.BroadcastInferenceTopologyChanged)
+}
+
+// TestGetInferenceStatus_AudioBlock verifies that GetInferenceStatus returns an
+// audio block with the expected metric key for queue depth and a non-negative
+// queue capacity matching RouteInboxCapacity.
+func TestGetInferenceStatus_AudioBlock(t *testing.T) {
+	// NOT parallel: publishTestSettings in setupTestEnvironment mutates global state.
+	e, _, controller := setupTestEnvironment(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetInferenceStatus(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp InferenceStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+	assert.Equal(t, observability.MetricKeyAudioQueueDepthAggregate, resp.Audio.MetricKeys.QueueDepth,
+		"audio.metricKeys.queueDepth must match the shared constant")
+	assert.Equal(t, audiocore.RouteInboxCapacity, resp.Audio.QueueCapacity,
+		"audio.queueCapacity must equal RouteInboxCapacity")
+	assert.GreaterOrEqual(t, resp.Audio.QueueDepth, 0, "audio.queueDepth must be non-negative")
+}
+
+// TestBuildModelStatus_MetricKeys verifies that buildModelStatus populates
+// throughput and error-rate metric keys using the inferencestats helpers.
+func TestBuildModelStatus_MetricKeys(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{
+		ID:   "BirdNET_V2.4",
+		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	snap := inferencestats.PeekSnapshot{InvokeCount: 100, InvokeErrors: 5}
+	got := buildModelStatus(&info, snap, nil, nil, nil, nil)
+
+	assert.Equal(t, inferencestats.ThroughputMetricKey("BirdNET_V2.4"), got.MetricKeys.Throughput,
+		"metricKeys.throughput must equal ThroughputMetricKey(id)")
+	assert.Equal(t, inferencestats.ErrorRateMetricKey("BirdNET_V2.4"), got.MetricKeys.ErrorRate,
+		"metricKeys.errorRate must equal ErrorRateMetricKey(id)")
+}
+
+// TestBuildModelStatus_ErrorRateAndLoadFailures verifies that buildModelStatus
+// computes error rate and populates load failures when data is available.
+func TestBuildModelStatus_ErrorRateAndLoadFailures(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{
+		ID:   "BirdNET_V2.4",
+		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	// 10 successes, 5 errors: errorRate = 5/15 ~= 0.333
+	snap := inferencestats.PeekSnapshot{InvokeCount: 10, InvokeErrors: 5}
+	loadFailures := map[string]int64{"BirdNET_V2.4": 3}
+
+	got := buildModelStatus(&info, snap, nil, nil, loadFailures, nil)
+
+	require.NotNil(t, got.Stats.ErrorRate, "errorRate must be non-nil when errors exist")
+	assert.InDelta(t, 5.0/15.0, *got.Stats.ErrorRate, 0.001, "errorRate = errors/(invocations+errors)")
+	require.NotNil(t, got.Stats.LoadFailures, "loadFailures must be non-nil when entry exists")
+	assert.Equal(t, int64(3), *got.Stats.LoadFailures, "loadFailures value")
+}
+
+// TestBuildModelStatus_ErrorRateNilWhenNoErrors verifies that error rate and
+// load failures are nil when there are no invocations and no map entry.
+func TestBuildModelStatus_ErrorRateNilWhenNoErrors(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{
+		ID:   "X",
+		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil, nil, nil)
+	assert.Nil(t, got.Stats.ErrorRate, "errorRate must be nil when total is zero")
+	assert.Nil(t, got.Stats.LoadFailures, "loadFailures must be nil when map is nil")
+}
+
+// TestBuildModelStatus_LastDetection verifies that buildModelStatus populates
+// LastDetection when the processor cache has an entry for the model.
+func TestBuildModelStatus_LastDetection(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{
+		ID:   "BirdNET_V2.4",
+		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	lastDetections := map[string]*LastDetectionInfo{
+		"BirdNET_V2.4": {
+			Species:        "European Robin",
+			ScientificName: "Erithacus rubecula",
+			Confidence:     0.92,
+			AtUnix:         1718000000,
+		},
+	}
+
+	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil, nil, lastDetections)
+
+	require.NotNil(t, got.LastDetection, "lastDetection must be non-nil when cache has entry")
+	assert.Equal(t, "European Robin", got.LastDetection.Species)
+	assert.Equal(t, "Erithacus rubecula", got.LastDetection.ScientificName)
+	assert.InDelta(t, 0.92, got.LastDetection.Confidence, 0.001)
+	assert.Equal(t, int64(1718000000), got.LastDetection.AtUnix)
 }

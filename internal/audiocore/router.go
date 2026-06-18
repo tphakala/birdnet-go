@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	// routeInboxCapacity is the per-route buffered channel size.
+	// RouteInboxCapacity is the per-route buffered channel size.
 	// A slow consumer drops frames after this many are queued.
-	routeInboxCapacity = 64
+	RouteInboxCapacity = 64
 
 	// dropLogInterval controls how often drop warnings are emitted.
 	// One log line per this many consecutive drops, per route.
@@ -207,7 +207,7 @@ func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSa
 		Consumer:         consumer,
 		sourceSampleRate: sourceSampleRate,
 		gainLinear:       gainLinear,
-		inbox:            make(chan AudioFrame, routeInboxCapacity),
+		inbox:            make(chan AudioFrame, RouteInboxCapacity),
 		done:             make(chan struct{}),
 		stopped:          make(chan struct{}),
 	}
@@ -632,7 +632,7 @@ func (r *AudioRouter) drainRoute(route *Route) {
 			r.mu.Unlock()
 			// Release any pooled refs on frames buffered in the inbox so the
 			// Retains performed by Dispatch are balanced even when the drainer
-			// unwinds via panic. Without this, up to routeInboxCapacity refs
+			// unwinds via panic. Without this, up to RouteInboxCapacity refs
 			// per panicking route would stay outstanding (the slices still
 			// GC, so this is pool-efficiency rather than a hard leak).
 			drainInboxRefs(route.inbox)
