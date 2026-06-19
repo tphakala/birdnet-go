@@ -560,7 +560,16 @@ func TestValidateSymlinkTarget(t *testing.T) {
 	symlinkOrSkip := func(t *testing.T, target, link string) string {
 		t.Helper()
 		if err := os.Symlink(target, link); err != nil {
-			t.Skipf("skipping: cannot create symlink (needs privilege/Developer Mode on Windows): %v", err)
+			// Without SeCreateSymbolicLinkPrivilege (admin or Developer Mode)
+			// os.Symlink fails on Windows with ERROR_PRIVILEGE_NOT_HELD. Gate the
+			// skip on GOOS, not errors.Is(err, os.ErrPermission): syscall.Errno.Is
+			// maps only ERROR_ACCESS_DENIED/EACCES/EPERM to os.ErrPermission, so
+			// it would NOT match ERROR_PRIVILEGE_NOT_HELD and the skip would never
+			// fire. On Unix a symlink failure is a genuine error and must fail.
+			if runtime.GOOS == OSWindows {
+				t.Skipf("skipping: cannot create symlink (needs privilege/Developer Mode on Windows): %v", err)
+			}
+			require.NoError(t, err)
 		}
 		return link
 	}
