@@ -311,6 +311,12 @@ func setupSymlinkTest(t *testing.T, tempDir string) (outsideDir, symlinkPath str
 		t.Skip("Skipping symlink test due to permission issues")
 		return "", ""
 	}
+	// Remove the directory symlink before t.TempDir()'s RemoveAll runs. On
+	// Windows a leftover directory reparse point makes the parent TempDir
+	// cleanup fail with "being used by another process", which fails the test.
+	// t.Cleanup is LIFO, so this runs before the TempDir teardown registered
+	// earlier by setupSecureFS.
+	t.Cleanup(func() { _ = os.Remove(symlinkPath) })
 
 	return outsideDir, symlinkPath
 }
@@ -369,7 +375,9 @@ func TestReadlinkReturnsTargetString(t *testing.T) {
 
 	target, err := sfs.Readlink(absSymlink)
 	require.NoError(t, err, "Readlink should return target string")
-	assert.Equal(t, "/etc/passwd", target)
+	// Readlink returns the OS-native target; Windows uses backslashes. Normalize
+	// to forward slashes so the comparison checks the path, not the separator.
+	assert.Equal(t, "/etc/passwd", filepath.ToSlash(target))
 
 	// Test 2: Symlink with relative escaping target - Readlink should return the target string
 	relEscapeSymlink := filepath.Join(tempDir, "rel_escape.txt")
@@ -378,7 +386,7 @@ func TestReadlinkReturnsTargetString(t *testing.T) {
 
 	target, err = sfs.Readlink(relEscapeSymlink)
 	require.NoError(t, err, "Readlink should return target string")
-	assert.Equal(t, "../../etc/passwd", target)
+	assert.Equal(t, "../../etc/passwd", filepath.ToSlash(target))
 }
 
 // TestReadDir verifies the ReadDir function
@@ -542,7 +550,7 @@ func TestFollowingEscapingSymlinkFails(t *testing.T) {
 	// Readlink should succeed (returns the target string)
 	target, err := sfs.Readlink(symlinkPath)
 	require.NoError(t, err, "Readlink failed")
-	assert.Equal(t, "../../etc/passwd", target)
+	assert.Equal(t, "../../etc/passwd", filepath.ToSlash(target))
 
 	// But trying to Open the symlink should fail because it escapes the sandbox
 	// The security is enforced when following the link, not when reading its target

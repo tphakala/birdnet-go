@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -581,7 +582,16 @@ func TestValidateSymlinkTarget(t *testing.T) {
 			name: "Invalid symlink to outside base",
 			setup: func() string {
 				symlinkPath := filepath.Join(tempDir, "escape_link")
-				err := os.Symlink("/etc", symlinkPath)
+				// An absolute path outside the sandbox base. "/etc" is absolute
+				// on Unix but drive-relative on Windows (filepath.IsAbs is false),
+				// where it would resolve inside the base and not be rejected, so
+				// use a Windows-absolute target there to exercise the escaping-
+				// symlink rejection on every OS.
+				outside := "/etc"
+				if runtime.GOOS == "windows" {
+					outside = `C:\Windows`
+				}
+				err := os.Symlink(outside, symlinkPath)
 				require.NoError(t, err)
 				return symlinkPath
 			},
