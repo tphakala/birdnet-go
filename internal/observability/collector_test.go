@@ -542,6 +542,16 @@ func TestCollector_InferenceErrorRateCounterReset(t *testing.T) {
 	collector.SetInferenceCounters(counters1)
 	collector.collect() // seeding tick; nothing written to store
 
+	// Backdate the seeded snapshot so the second tick observes a positive elapsed
+	// interval. The two collect() calls run back-to-back, and on platforms with
+	// coarse monotonic-clock granularity (e.g. Windows) both snapshots can read an
+	// identical timestamp, yielding elapsed == 0 and a throughput of 0 that fails
+	// the assertion below. Subtracting a full second is robust regardless of clock
+	// resolution; Add preserves the monotonic reading so the delta stays positive.
+	if prev, ok := collector.prevInferenceSnaps["ModelF"]; ok {
+		prev.CollectedAt = prev.CollectedAt.Add(-time.Second)
+	}
+
 	// Tick 2: inject a fresh CounterMap with lower absolute values so that
 	// current < previous on both InvokeCount and InvokeErrors. This simulates
 	// a counter reset (e.g. the underlying counters were replaced).

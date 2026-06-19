@@ -322,14 +322,21 @@ func TestManager_RestartStreamResetsBackoff(t *testing.T) {
 	t.Cleanup(func() { _ = mgr.Shutdown() })
 
 	const sourceID = "restart-backoff"
-	require.NoError(t, mgr.StartStream(
-		newTestManagerConfig(sourceID, "rtsp://restart.example.com/stream")))
 
-	// Access the internal stream to set up backoff state.
-	mgr.mu.RLock()
-	stream := mgr.streams[sourceID]
-	mgr.mu.RUnlock()
-	require.NotNil(t, stream)
+	// Register the stream directly instead of via StartStream, which would launch
+	// the Run loop. That loop races this test: on platforms where the config's
+	// FFmpeg path fails fast (e.g. the non-absolute /usr/bin/ffmpeg on Windows),
+	// startProcess records a failure and re-increments the very counters this
+	// test checks, right after the manual restart resets them. Registering the
+	// stream directly isolates the unit under test (Manager.RestartStream ->
+	// Stream.Restart(true) resets the backoff counters) and makes it
+	// deterministic on every platform. Shutdown still stops the stream safely.
+	stream := NewStream(
+		newTestManagerConfig(sourceID, "rtsp://restart.example.com/stream"),
+		nil, nil, nil, nil)
+	mgr.mu.Lock()
+	mgr.streams[sourceID] = stream
+	mgr.mu.Unlock()
 
 	// Simulate accumulated failures.
 	stream.restartCountMu.Lock()
