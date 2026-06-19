@@ -328,6 +328,64 @@ func TestCheckExistingV2Data_NilManager(t *testing.T) {
 	assert.Equal(t, CheckSeverityWarning, check.Severity)
 }
 
+// TestCheckExistingV2Data_UsesManagerTablePrefix verifies checkExistingV2Data derives
+// the detections table name from the manager's TablePrefix() (empty for fresh installs,
+// "v2_" during migration) rather than guessing from the dialect. The last case is the
+// regression guard: with a prefix set, a bare "detections" table must NOT be counted.
+func TestCheckExistingV2Data_UsesManagerTablePrefix(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	tests := []struct {
+		name        string
+		tableName   string
+		prefix      string
+		count       int
+		wantStatus  string
+		wantMessage string
+	}{
+		{
+			name:        "prefixed v2_detections with data is counted",
+			tableName:   "v2_detections",
+			prefix:      "v2_",
+			count:       3,
+			wantStatus:  CheckStatusWarning,
+			wantMessage: "3",
+		},
+		{
+			name:        "fresh-install bare detections with data is counted",
+			tableName:   "detections",
+			prefix:      "",
+			count:       2,
+			wantStatus:  CheckStatusWarning,
+			wantMessage: "2",
+		},
+		{
+			name:        "prefix set but only bare detections exists is not counted",
+			tableName:   "detections",
+			prefix:      "v2_",
+			count:       5,
+			wantStatus:  CheckStatusPassed,
+			wantMessage: "No existing migration data found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			controller := &Controller{V2Manager: newFakeV2ManagerWithTable(t, tt.tableName, tt.prefix, tt.count)}
+
+			check := controller.checkExistingV2Data()
+
+			assert.Equal(t, "existing_v2_data", check.ID)
+			assert.Equal(t, tt.wantStatus, check.Status)
+			if tt.wantMessage != "" {
+				assert.Contains(t, check.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
 // TestCheckWritePermission_Success tests checkWritePermission in a writable directory.
 func TestCheckWritePermission_Success(t *testing.T) {
 	t.Attr("component", "migration")

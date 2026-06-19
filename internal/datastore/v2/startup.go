@@ -848,18 +848,23 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 
 	// Bare v2-only tables that do NOT collide with legacy tables.
 	// Drop in reverse dependency order (children before parents).
-	// Table names use the OLD singular forms (migration_state, alert_history) because
-	// the orphaned tables were created by code with TableName() overrides.
+	// Both naming forms are listed: the OLD singular forms (migration_state,
+	// alert_history) left by pre-PR #2165 code with TableName() overrides, and the
+	// current GORM-pluralized forms (migration_states, alert_histories) that a more
+	// recent broken nightly would leave behind. FK checks are disabled below, so an
+	// entry that does not exist is a harmless no-op (DROP TABLE IF EXISTS).
 	orphanedTables := []string{
 		// Alert children first, then parent
 		"alert_actions",
 		"alert_conditions",
 		"alert_history",
+		"alert_histories",
 		"alert_rules",
 		// Detection children first, then parent
 		"detection_locks",
 		"detection_comments",
 		"detection_reviews",
+		"detection_model_contributions",
 		"detection_predictions",
 		"detections",
 		// Labels before its reference tables (labels has FKs to ai_models, label_types, taxonomic_classes)
@@ -868,29 +873,40 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 		"ai_models",
 		"taxonomic_classes",
 		"label_types",
+		// Application metadata and event log (no FK dependencies)
+		"app_events",
+		"app_metadata",
 		// Migration tracking
 		"migration_dirty_ids",
 		"migration_state",
+		"migration_states",
 	}
 
 	// Use db.Connection to pin all operations to a single pooled connection,
 	// ensuring SET FOREIGN_KEY_CHECKS applies to the same connection as the DROPs.
 	// FK checks must be disabled because preserved legacy tables (dynamic_thresholds,
 	// notification_histories, etc.) may have FK constraints pointing to orphaned tables.
-	if err := db.Connection(func(tx *gorm.DB) error {
+	if err := db.Connection(func(tx *gorm.DB) (retErr error) {
 		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
 			reportStartupError("mysql", "cleanupOrphanedTables_disableFK", err, database)
 			return err
 		}
+		// Re-enable FK checks via defer so the pooled connection is never returned
+		// with referential integrity disabled, even if a DROP panics. On a clean run,
+		// surface a re-enable failure as the closure error (skipping the success
+		// telemetry below), preserving the original inline behavior.
+		defer func() {
+			if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error; err != nil {
+				reportStartupError("mysql", "cleanupOrphanedTables_enableFK", err, database)
+				if retErr == nil {
+					retErr = err
+				}
+			}
+		}()
 		for _, table := range orphanedTables {
 			if err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", table)).Error; err != nil {
 				reportStartupError("mysql", "cleanupOrphanedTable_"+table, err, database)
 			}
-		}
-
-		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error; err != nil {
-			reportStartupError("mysql", "cleanupOrphanedTables_enableFK", err, database)
-			return err
 		}
 		return nil
 	}); err != nil {

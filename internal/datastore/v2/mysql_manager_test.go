@@ -22,13 +22,17 @@ func getMySQLConfig() *MySQLConfig {
 		port = "3306"
 	}
 
+	// UseV2Prefix defaults to false (fresh-install, no-prefix layout), matching a
+	// generic MySQL deployment. Tests that exercise the migration (v2_ prefixed)
+	// layout set cfg.UseV2Prefix = true explicitly.
 	return &MySQLConfig{
-		Host:     host,
-		Port:     port,
-		Username: os.Getenv("MYSQL_TEST_USER"),
-		Password: os.Getenv("MYSQL_TEST_PASSWORD"),
-		Database: os.Getenv("MYSQL_TEST_DATABASE"),
-		Debug:    false,
+		Host:        host,
+		Port:        port,
+		Username:    os.Getenv("MYSQL_TEST_USER"),
+		Password:    os.Getenv("MYSQL_TEST_PASSWORD"),
+		Database:    os.Getenv("MYSQL_TEST_DATABASE"),
+		UseV2Prefix: false,
+		Debug:       false,
 	}
 }
 
@@ -61,9 +65,9 @@ func TestV2TableName(t *testing.T) {
 }
 
 func TestMySQLManager_IsMySQL(t *testing.T) {
-	// This test doesn't require a real MySQL connection
-	// We're just testing the interface
+	// Exercises the migration (v2_ prefixed) layout, so opt into the prefix.
 	cfg := skipIfNoMySQL(t)
+	cfg.UseV2Prefix = true
 
 	mgr, err := NewMySQLManager(cfg)
 	require.NoError(t, err)
@@ -74,7 +78,9 @@ func TestMySQLManager_IsMySQL(t *testing.T) {
 }
 
 func TestMySQLManager_Initialize(t *testing.T) {
+	// Verifies the v2_ prefixed (migration) schema, so opt into the prefix.
 	cfg := skipIfNoMySQL(t)
+	cfg.UseV2Prefix = true
 
 	mgr, err := NewMySQLManager(cfg)
 	require.NoError(t, err)
