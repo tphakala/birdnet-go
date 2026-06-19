@@ -41,11 +41,6 @@ import (
 var _ PreRendererSubmit = (*spectrogram.PreRenderer)(nil)
 
 // Species identification constants for filtering
-const (
-	speciesDog   = "dog"
-	speciesHuman = "human"
-)
-
 // DefaultFlushInterval is the interval for checking and flushing pending detections
 const DefaultFlushInterval = 1 * time.Second
 
@@ -825,8 +820,8 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 
 		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
 		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
-		p.handleDogDetection(settings, item, speciesLowercase, result)
-		p.handleHumanDetection(settings, item, speciesLowercase, result)
+		p.handleDogDetection(settings, item, result)
+		p.handleHumanDetection(settings, item, result)
 
 		// Determine confidence threshold and check filters
 		baseThreshold := p.getBaseConfidenceThreshold(settings, commonName, scientificName, item.ModelID)
@@ -968,8 +963,9 @@ func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 
 // shouldFilterDetection checks if a detection should be filtered out
 func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
-	// Check human detection privacy filter
-	if strings.Contains(strings.ToLower(commonName), speciesHuman) && result.Confidence > baseThreshold {
+	// Check human detection privacy filter. Match the raw label so Perch v2's
+	// FSD50K human classes are caught too, not just BirdNET's "Human *" classes.
+	if isHumanVocalization(result.Species) && result.Confidence > baseThreshold {
 		return true, 0 // Filter out human detections for privacy
 	}
 
@@ -1243,8 +1239,8 @@ func (p *Processor) syncSpeciesTrackerIfNeeded() {
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.Results, speciesLowercase string, result datastore.Results) {
-	if settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, speciesDog) &&
+func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {
+	if settings.Realtime.DogBarkFilter.Enabled && isDogDetection(result.Species) &&
 		result.Confidence > settings.Realtime.DogBarkFilter.Confidence {
 		GetLogger().Info("dog detection filtered",
 			logger.Float32("confidence", result.Confidence),
@@ -1260,9 +1256,9 @@ func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {
 	// only check this if privacy filter is enabled
-	if settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
+	if settings.Realtime.PrivacyFilter.Enabled && isHumanVocalization(result.Species) &&
 		result.Confidence > settings.Realtime.PrivacyFilter.Confidence {
 		GetLogger().Info("human detection filtered",
 			logger.Float32("confidence", result.Confidence),
