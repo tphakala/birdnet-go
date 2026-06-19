@@ -108,7 +108,7 @@ func TestValidateExportPath(t *testing.T) {
 	// absolute paths so the "absolute path allowed" cases exercise the
 	// absolute-path branch on every OS.
 	absPath, absDockerPath := "/var/data/clips", "/data/clips/"
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		absPath, absDockerPath = `C:\var\data\clips`, `C:\data\clips\`
 	}
 	tests := []struct {

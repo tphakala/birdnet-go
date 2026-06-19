@@ -588,7 +588,7 @@ func TestValidateSymlinkTarget(t *testing.T) {
 				// use a Windows-absolute target there to exercise the escaping-
 				// symlink rejection on every OS.
 				outside := "/etc"
-				if runtime.GOOS == "windows" {
+				if runtime.GOOS == OSWindows {
 					outside = `C:\Windows`
 				}
 				err := os.Symlink(outside, symlinkPath)

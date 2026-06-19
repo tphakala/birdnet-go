@@ -79,7 +79,7 @@ func verifyCertificatePermissions(t *testing.T, path string, expectedPerm os.Fil
 	// call. Production still requests 0600/0644/0700; the bits just are not
 	// observable on NTFS. Skip only the perm comparison there so the rest of the
 	// save/retrieve flow stays exercised.
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return
 	}
 	assert.Equal(t, expectedPerm, info.Mode().Perm(), "File has wrong permissions")

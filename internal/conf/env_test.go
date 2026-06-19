@@ -556,7 +556,7 @@ func TestValueCanonicalization(t *testing.T) {
 	// there. canonicalizeValue only trims the model path, so the expected value
 	// is just the trimmed input on either OS.
 	modelPathRaw, modelPathWant := " /path/to/model ", "/path/to/model"
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		modelPathRaw, modelPathWant = ` C:\path\to\model `, `C:\path\to\model`
 	}
 	tests := []struct {
