@@ -33,6 +33,12 @@ func TestClassesGuard(t *testing.T) {
 	for tok := range firstTokenSet {
 		assert.True(t, multiWordKeys[tok], "firstTokenSet entry %q must be first token of at least one multi-word key in classes", tok)
 	}
+	// Reverse direction: every multi-word key's first token must be present in
+	// firstTokenSet, so an init() regression that drops a token is caught.
+	for tok := range multiWordKeys {
+		_, ok := firstTokenSet[tok]
+		assert.True(t, ok, "multi-word first token %q must exist in firstTokenSet", tok)
+	}
 
 	// Every category value used in classes must be one of the seven defined constants.
 	validCategories := map[Category]bool{
