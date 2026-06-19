@@ -444,3 +444,172 @@ func TestInMemoryStore_GetReturnsIndependentParamsAndExpiry(t *testing.T) {
 	assert.True(t, got2.ExpiresAt.Equal(originalExpiry),
 		"mutating a returned notification's ExpiresAt must not affect the stored copy")
 }
+
+// listIDs returns the IDs of all notifications from store.List, in order.
+func listIDs(t *testing.T, store *InMemoryStore) []string {
+	t.Helper()
+	got, err := store.List(nil)
+	require.NoError(t, err)
+	ids := make([]string, len(got))
+	for i, n := range got {
+		ids[i] = n.ID
+	}
+	return ids
+}
+
+// TestInMemoryStoreListDeterministicOrderOnEqualTimestamps verifies that List
+// returns a stable, creation-ordered result when notifications share the same
+// Timestamp. Equal timestamps are routine on coarse-resolution clocks (Windows'
+// ~15ms monotonic tick) and possible anywhere under load. Without a tiebreaker,
+// List relied on an unstable sort over a map-ordered slice, so the order of
+// equal-timestamp notifications (and which one a Limit:1 query returned) was
+// nondeterministic.
+func TestInMemoryStoreListDeterministicOrderOnEqualTimestamps(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(1000)
+	fixedTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	const count = 50
+	createdIDs := make([]string, count)
+	for i := range count {
+		n := NewNotification(TypeInfo, PriorityLow, "title", "message")
+		n.Timestamp = fixedTime // force identical timestamps to exercise the tiebreaker
+		createdIDs[i] = n.ID
+		mustStoreSave(t, store, n)
+	}
+
+	// Expected order: newest-created first. With all timestamps equal, the
+	// creation-sequence tiebreaker orders by descending seq, i.e. reverse
+	// insertion order.
+	wantIDs := make([]string, count)
+	for i := range count {
+		wantIDs[i] = createdIDs[count-1-i]
+	}
+
+	first := listIDs(t, store)
+	assert.Equal(t, wantIDs, first,
+		"List must order equal-timestamp notifications newest-created first")
+
+	// Repeat to defeat Go's per-range map-iteration randomization: a non-total
+	// ordering would surface different orders across calls within one process.
+	for range 20 {
+		assert.Equal(t, first, listIDs(t, store),
+			"List order must be identical across repeated calls")
+	}
+
+	// Limit:1 must deterministically return the most recently created.
+	limited, err := store.List(&FilterOptions{Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, limited, 1)
+	assert.Equal(t, createdIDs[count-1], limited[0].ID,
+		"Limit:1 must return the newest-created notification")
+}
+
+// TestInMemoryStoreListOrdersByTimestampNewestFirst verifies the primary sort
+// key: notifications with distinct timestamps are returned newest-first. This
+// guards the timestamp comparison direction independently of the equal-timestamp
+// tiebreaker (a sign error here would be invisible to the all-equal-timestamp
+// test above).
+func TestInMemoryStoreListOrdersByTimestampNewestFirst(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(1000)
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	const count = 10
+	// Save oldest-to-newest; List must return newest-first.
+	wantNewestFirst := make([]string, count)
+	for i := range count {
+		n := NewNotification(TypeInfo, PriorityLow, "title", "message")
+		n.Timestamp = base.Add(time.Duration(i) * time.Minute)
+		mustStoreSave(t, store, n)
+		wantNewestFirst[count-1-i] = n.ID // newest (largest i) goes first
+	}
+
+	assert.Equal(t, wantNewestFirst, listIDs(t, store),
+		"List must return distinct-timestamp notifications newest-first")
+}
+
+// TestInMemoryStoreListSeqZeroFallsBackToID verifies the final tiebreaker:
+// notifications built without NewNotification (seq == 0, e.g. struct literals)
+// that share a Timestamp are ordered deterministically by ascending ID.
+func TestInMemoryStoreListSeqZeroFallsBackToID(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(1000)
+	fixedTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// Insertion order deliberately differs from sorted-ID order; all seq == 0.
+	for _, id := range []string{"d", "a", "c", "b"} {
+		mustStoreSave(t, store, &Notification{
+			ID:        id,
+			Type:      TypeInfo,
+			Priority:  PriorityLow,
+			Status:    StatusUnread,
+			Timestamp: fixedTime,
+		})
+	}
+
+	assert.Equal(t, []string{"a", "b", "c", "d"}, listIDs(t, store),
+		"equal-timestamp seq-0 notifications must sort by ascending ID")
+}
+
+// TestInMemoryStoreRemoveOldestDeterministicOnEqualTimestamps verifies that
+// eviction at capacity is deterministic when notifications share a Timestamp:
+// the earliest-created (lowest seq) entry is evicted, consistent with List
+// ranking it last.
+func TestInMemoryStoreRemoveOldestDeterministicOnEqualTimestamps(t *testing.T) {
+	t.Parallel()
+
+	const maxSize = 3
+	store := NewInMemoryStore(maxSize)
+	fixedTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	const total = 5
+	created := make([]string, total)
+	for i := range total {
+		n := NewNotification(TypeInfo, PriorityLow, "title", "message")
+		n.Timestamp = fixedTime
+		created[i] = n.ID
+		mustStoreSave(t, store, n)
+	}
+
+	// The two earliest-created (created[0], created[1]) must have been evicted;
+	// the three most recently created remain, newest-first.
+	got := listIDs(t, store)
+	require.Len(t, got, maxSize)
+	assert.Equal(t, []string{created[4], created[3], created[2]}, got,
+		"eviction must drop the earliest-created equal-timestamp notifications")
+}
+
+// TestInMemoryStoreRemoveOldestSeqZeroFallsBackToID verifies eviction's final
+// tiebreaker: when entries share a Timestamp and seq (the seq == 0 struct-literal
+// case), removeOldest drops the highest ID, mirroring List which ranks the
+// highest ID last.
+func TestInMemoryStoreRemoveOldestSeqZeroFallsBackToID(t *testing.T) {
+	t.Parallel()
+
+	const maxSize = 2
+	store := NewInMemoryStore(maxSize)
+	fixedTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	save := func(id string) {
+		mustStoreSave(t, store, &Notification{
+			ID:        id,
+			Type:      TypeInfo,
+			Priority:  PriorityLow,
+			Status:    StatusUnread,
+			Timestamp: fixedTime,
+		})
+	}
+
+	// Fill to {a, c} (all seq == 0, same timestamp), then saving "b" must evict
+	// the highest current ID ("c"), leaving {a, b}.
+	save("a")
+	save("c")
+	save("b")
+
+	assert.Equal(t, []string{"a", "b"}, listIDs(t, store),
+		"seq-0 eviction must drop the highest ID (the entry List ranks last)")
+}
