@@ -274,3 +274,18 @@ func TestProcessor_resolveAudioSource_EnrichesFromRegistry(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertToAdditionalResults_SetsRawLabelFromSpecies(t *testing.T) {
+	t.Parallel()
+
+	input := []datastore.Results{
+		{Species: "male_speech_and_man_speaking", Confidence: 0.80},
+		{Species: "Turdus merula_Common Blackbird", Confidence: 0.75},
+	}
+
+	result := convertToAdditionalResults(input, "")
+
+	require.Len(t, result, 2)
+	assert.Equal(t, "male_speech_and_man_speaking", result[0].RawLabel, "raw label must equal the original r.Species string")
+	assert.Equal(t, "Turdus merula_Common Blackbird", result[1].RawLabel, "raw label must equal the original r.Species string")
+}

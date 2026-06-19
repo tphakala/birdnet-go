@@ -52,6 +52,9 @@ type Result struct {
 	ModelContributions    map[string]ResultModelContrib // Per-model detection data from cross-model consensus, keyed by model ID
 	UltrasonicCV          float64                       // US frame CV value from validation filter (for comment generation)
 	UltrasonicCVThreshold float64                       // CV threshold used by validation filter (for comment generation)
+	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
+	// used by the datastore to classify non-bird sound classes correctly.
+	RawLabel string
 
 	// Review status (populated from DB relations when loaded)
 	Verified string
@@ -81,6 +84,9 @@ type Comment struct {
 type AdditionalResult struct {
 	Species    Species
 	Confidence float64
+	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
+	// used by the datastore to classify non-bird sound classes correctly.
+	RawLabel string
 }
 
 // Date returns the detection date in YYYY-MM-DD format.

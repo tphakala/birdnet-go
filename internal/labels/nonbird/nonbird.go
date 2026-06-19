@@ -37,6 +37,14 @@ func init() {
 	}
 }
 
+// Categories returns all non-bird categories in a stable order.
+func Categories() []Category {
+	return []Category{
+		CategoryHuman, CategoryAnimal, CategoryMusic, CategoryMechanical,
+		CategoryEnvironment, CategoryNoise, CategoryDevice,
+	}
+}
+
 // CategoryOf returns the category for a FULL raw model label (e.g. "power_tool",
 // "male_speech_and_man_speaking"). The match is exact against the known class set,
 // case-insensitive. It does NOT match truncated first-token forms; callers that only
