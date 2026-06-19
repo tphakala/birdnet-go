@@ -23,7 +23,9 @@ const (
 )
 
 // firstTokenSet holds the first underscore-delimited token of every multi-word key in classes.
-// It is derived once in init() and never modified after that.
+// Keys are split on the first "_" only, so a token may itself contain a hyphen
+// (e.g. "fixed-wing" from "fixed-wing_aircraft_and_airplane"). It is derived once in
+// init() and never modified after that.
 var firstTokenSet map[string]struct{}
 
 func init() {

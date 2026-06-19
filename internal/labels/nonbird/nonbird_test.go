@@ -31,6 +31,7 @@ func TestCategoryOf(t *testing.T) {
 		// Negatives
 		{"truncated token not a full label", "Power", nonbird.Category(""), false},
 		{"real bird binomial", "Turdus merula", nonbird.Category(""), false},
+		{"underscore-joined binomial not a class", "turdus_merula", nonbird.Category(""), false},
 		{"empty string", "", nonbird.Category(""), false},
 	}
 
@@ -86,6 +87,7 @@ func TestIsNonBirdName(t *testing.T) {
 		{"first token of fixed-wing_aircraft", "fixed-wing", true},
 		{"single-token tick-tock", "tick-tock", true},
 		{"real bird binomial", "Turdus merula", false},
+		{"underscore-joined binomial", "turdus_merula", false},
 		{"empty string", "", false},
 		// Case-insensitivity extras
 		{"uppercase full key", "DOG", true},
