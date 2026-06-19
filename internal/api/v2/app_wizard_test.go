@@ -54,7 +54,8 @@ func (m *mockAppMetadataRepo) Set(_ context.Context, key, value string) error {
 // fakeV2Manager implements the subset of datastoreV2.Manager used by
 // hasZeroDetections (DB() and optionally TablePrefix()).
 type fakeV2Manager struct {
-	db *gorm.DB
+	db          *gorm.DB
+	tablePrefix string
 }
 
 func (f *fakeV2Manager) Initialize() error    { return nil }
@@ -65,12 +66,22 @@ func (f *fakeV2Manager) CheckpointWAL() error { return nil }
 func (f *fakeV2Manager) Delete() error        { return nil }
 func (f *fakeV2Manager) Exists() bool         { return true }
 func (f *fakeV2Manager) IsMySQL() bool        { return false }
-func (f *fakeV2Manager) TablePrefix() string  { return "" }
+func (f *fakeV2Manager) TablePrefix() string  { return f.tablePrefix }
 
 // newFakeV2ManagerWithDetections creates a fakeV2Manager backed by an
 // in-memory SQLite database.  If count > 0, it inserts that many dummy
 // rows into a "detections" table.
 func newFakeV2ManagerWithDetections(t *testing.T, count int) *fakeV2Manager {
+	t.Helper()
+	// Bare (no-prefix) "detections" table matching what hasZeroDetections queries.
+	return newFakeV2ManagerWithTable(t, "detections", "", count)
+}
+
+// newFakeV2ManagerWithTable creates a fakeV2Manager backed by an in-memory SQLite
+// database with a single arbitrary table (e.g. "v2_detections") holding count rows,
+// and reports the given prefix from TablePrefix(). Used to verify that table names are
+// derived from the manager's prefix rather than guessed from the dialect.
+func newFakeV2ManagerWithTable(t *testing.T, tableName, prefix string, count int) *fakeV2Manager {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
@@ -82,13 +93,12 @@ func newFakeV2ManagerWithDetections(t *testing.T, count int) *fakeV2Manager {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	// Create a minimal "detections" table matching what hasZeroDetections queries.
-	require.NoError(t, db.Exec("CREATE TABLE IF NOT EXISTS detections (id INTEGER PRIMARY KEY)").Error)
+	require.NoError(t, db.Exec("CREATE TABLE IF NOT EXISTS "+tableName+" (id INTEGER PRIMARY KEY)").Error)
 	for i := range count {
-		require.NoError(t, db.Exec("INSERT INTO detections (id) VALUES (?)", i+1).Error)
+		require.NoError(t, db.Exec("INSERT INTO "+tableName+" (id) VALUES (?)", i+1).Error)
 	}
 
-	return &fakeV2Manager{db: db}
+	return &fakeV2Manager{db: db, tablePrefix: prefix}
 }
 
 // =============================================================================
