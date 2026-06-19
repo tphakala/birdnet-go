@@ -1648,6 +1648,35 @@
     "reattach": "Fest til igjen"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Oversikt",
+        "patterns": "Aktivitetsmønstre",
+        "trends": "Trender",
+        "biodiversity": "Biologisk mangfold",
+        "quality": "Gjennomgang og nøyaktighet"
+      },
+      "aria": {
+        "tabs": "Analyseseksjoner"
+      },
+      "controls": {
+        "source": "Kilde",
+        "sourceAll": "Alle kilder",
+        "sourceComingSoon": "Filtrering etter kilde kommer i en senere oppdatering.",
+        "speciesNotApplicable": "Diagrammene i denne seksjonen filtrerer ikke etter art."
+      },
+      "card": {
+        "error": "Kunne ikke laste dette diagrammet",
+        "retry": "Prøv igjen",
+        "notEnoughData": "Ikke nok data ennå",
+        "notEnoughDataHint": "Dette diagrammet trenger minst {min} datapunkter. Fortsett å ta opp, og kom tilbake snart.",
+        "export": "Eksporter",
+        "exportComingSoon": "CSV-eksport kommer snart."
+      },
+      "comingSoon": {
+        "description": "Denne seksjonen er under utvikling og kommer i en kommende oppdatering."
+      }
+    },
     "title": "Oversikt",
     "loadingError": "Innlasting av noen analysedata mislyktes. Prøv igjen senere.",
     "stats": {

@@ -1648,6 +1648,35 @@
     "reattach": "Pievienot atpakaļ"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Pārskats",
+        "patterns": "Aktivitātes modeļi",
+        "trends": "Tendences",
+        "biodiversity": "Bioloģiskā daudzveidība",
+        "quality": "Pārskatīšana un precizitāte"
+      },
+      "aria": {
+        "tabs": "Analīzes sadaļas"
+      },
+      "controls": {
+        "source": "Avots",
+        "sourceAll": "Visi avoti",
+        "sourceComingSoon": "Filtrēšana pēc avota būs pieejama vēlākā atjauninājumā.",
+        "speciesNotApplicable": "Šīs sadaļas diagrammas nefiltrē pēc sugas."
+      },
+      "card": {
+        "error": "Neizdevās ielādēt šo diagrammu",
+        "retry": "Mēģināt vēlreiz",
+        "notEnoughData": "Vēl nav pietiekami daudz datu",
+        "notEnoughDataHint": "Šai diagrammai nepieciešami vismaz {min} datu punkti. Turpiniet ierakstīšanu un atgriezieties drīz.",
+        "export": "Eksportēt",
+        "exportComingSoon": "CSV eksports būs pieejams drīz."
+      },
+      "comingSoon": {
+        "description": "Šī sadaļa tiek izstrādāta un būs pieejama kādā no nākamajiem atjauninājumiem."
+      }
+    },
     "title": "Pārskats",
     "loadingError": "Neizdevās ielādēt dažus analītikas datus. Lūdzu, mēģiniet vēlāk.",
     "stats": {

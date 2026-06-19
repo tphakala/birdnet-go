@@ -1648,6 +1648,35 @@
     "reattach": "Reconectar"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Visão geral",
+        "patterns": "Padrões de atividade",
+        "trends": "Tendências",
+        "biodiversity": "Biodiversidade",
+        "quality": "Revisão e precisão"
+      },
+      "aria": {
+        "tabs": "Seções de análise"
+      },
+      "controls": {
+        "source": "Fonte",
+        "sourceAll": "Todas as fontes",
+        "sourceComingSoon": "A filtragem por fonte chegará numa atualização futura.",
+        "speciesNotApplicable": "Os gráficos desta seção não filtram por espécie."
+      },
+      "card": {
+        "error": "Não foi possível carregar este gráfico",
+        "retry": "Tentar novamente",
+        "notEnoughData": "Ainda não há dados suficientes",
+        "notEnoughDataHint": "Este gráfico precisa de pelo menos {min} pontos de dados. Continue gravando e volte em breve.",
+        "export": "Exportar",
+        "exportComingSoon": "A exportação CSV chegará em breve."
+      },
+      "comingSoon": {
+        "description": "Esta seção está em construção e chegará numa atualização futura."
+      }
+    },
     "title": "Visão geral",
     "loadingError": "Falha ao carregar alguns dados analíticos. Por favor, tente novamente mais tarde.",
     "stats": {

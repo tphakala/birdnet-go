@@ -1284,6 +1284,23 @@ export type TranslationKey =
   | 'terminal.detached'
   | 'terminal.detachedDescription'
   | 'terminal.reattach'
+  | 'analytics.hub.tabs.overview'
+  | 'analytics.hub.tabs.patterns'
+  | 'analytics.hub.tabs.trends'
+  | 'analytics.hub.tabs.biodiversity'
+  | 'analytics.hub.tabs.quality'
+  | 'analytics.hub.aria.tabs'
+  | 'analytics.hub.controls.source'
+  | 'analytics.hub.controls.sourceAll'
+  | 'analytics.hub.controls.sourceComingSoon'
+  | 'analytics.hub.controls.speciesNotApplicable'
+  | 'analytics.hub.card.error'
+  | 'analytics.hub.card.retry'
+  | 'analytics.hub.card.notEnoughData'
+  | 'analytics.hub.card.notEnoughDataHint' // params: min
+  | 'analytics.hub.card.export'
+  | 'analytics.hub.card.exportComingSoon'
+  | 'analytics.hub.comingSoon.description'
   | 'analytics.title'
   | 'analytics.loadingError'
   | 'analytics.stats.totalDetections'
@@ -3907,6 +3924,7 @@ export type TranslationParams = {
   'system.database.migration.prerequisites.criticalCount': { count: string | number };
   'system.database.migration.prerequisites.warningCount': { count: string | number };
   'system.inference.coDetectedHelp': { seconds: string | number };
+  'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
   'settings.notFound.message': { section: string | number };

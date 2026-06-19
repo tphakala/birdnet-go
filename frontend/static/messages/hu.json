@@ -1648,6 +1648,35 @@
     "reattach": "Újracsatlakozás"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Áttekintés",
+        "patterns": "Tevékenységi minták",
+        "trends": "Trendek",
+        "biodiversity": "Biodiverzitás",
+        "quality": "Ellenőrzés és pontosság"
+      },
+      "aria": {
+        "tabs": "Elemzési szakaszok"
+      },
+      "controls": {
+        "source": "Forrás",
+        "sourceAll": "Minden forrás",
+        "sourceComingSoon": "A forrás szerinti szűrés egy későbbi frissítésben érkezik.",
+        "speciesNotApplicable": "Az ebben a szakaszban lévő diagramok nem szűrnek faj szerint."
+      },
+      "card": {
+        "error": "Nem sikerült betölteni ezt a diagramot",
+        "retry": "Újra",
+        "notEnoughData": "Még nincs elég adat",
+        "notEnoughDataHint": "Ehhez a diagramhoz legalább {min} adatpont szükséges. Folytassa a rögzítést, és nézzen vissza hamarosan.",
+        "export": "Exportálás",
+        "exportComingSoon": "A CSV-exportálás hamarosan érkezik."
+      },
+      "comingSoon": {
+        "description": "Ez a szakasz fejlesztés alatt áll, és egy közelgő frissítésben érkezik."
+      }
+    },
     "title": "Áttekintés",
     "loadingError": "Néhány analitikai adat betöltése sikertelen. Próbálja később újra.",
     "stats": {
