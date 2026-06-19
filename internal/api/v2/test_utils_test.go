@@ -181,6 +181,14 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	if err != nil {
 		t.Fatalf("Failed to create test API controller: %v", err)
 	}
+	// Handler tests assert on in-memory settings and the HTTP response, not on
+	// disk persistence. Disable disk saves so settings-mutating handlers (e.g.
+	// IgnoreSpecies -> toggleSpeciesInIgnoredList -> conf.SaveSettings) do not
+	// write to the real default config path. On Windows that write fails (the
+	// default config directory is not provisioned in the test environment),
+	// surfacing as a 500; on Linux it silently pollutes the machine's config.
+	// All dedicated settings tests already set this flag.
+	controller.DisableSaveSettings = true
 
 	// Register cleanup to stop background goroutines
 	t.Cleanup(func() {
