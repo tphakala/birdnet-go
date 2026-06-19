@@ -34,6 +34,15 @@ func setupSecureFS(t *testing.T) (sfs *SecureFS, tempDir string) {
 	sfs, err = New(tempDir)
 	require.NoError(t, err, "Failed to create SecureFS")
 
+	// Close the os.Root handle when the test ends. Several callers discard the
+	// returned *SecureFS (e.g. `_, tempDir := setupSecureFS(t)`), so without this
+	// the open directory handle leaks and intermittently blocks t.TempDir's
+	// RemoveAll on Windows ("being used by another process"). Callers that also
+	// register their own sfs.Close cleanup are fine: Close ignores a second call
+	// (os.Root.Close returns an ignored error, no panic). t.Cleanup is LIFO, so
+	// this runs before the TempDir teardown registered by t.TempDir above.
+	t.Cleanup(func() { _ = sfs.Close() })
+
 	return sfs, tempDir
 }
 
