@@ -41,7 +41,8 @@ describe('AnalyticsControlBar', () => {
     });
 
     expect(screen.getByText('analytics.hub.controls.source')).toBeInTheDocument();
-    expect(screen.getByText('analytics.hub.controls.sourceComingSoon')).toBeInTheDocument();
+    // The "coming soon" reason is a hover tooltip on the source control wrapper.
+    expect(screen.getByTitle('analytics.hub.controls.sourceComingSoon')).toBeInTheDocument();
   });
 
   it('explains when species filtering does not apply to the active tab', () => {

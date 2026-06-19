@@ -1,17 +1,21 @@
 <!--
-  AnalyticsControlBar: the shared, sticky filter bar for the analytics hub.
+  AnalyticsControlBar: the shared filter toolbar for the analytics hub.
 
-  Holds the controls that apply across charts: date range (preset + custom),
+  A slim, page-colored toolbar (not a card) that sits under the tab bar. The
+  controls that apply across charts live here: date range (preset + custom),
   species selection (reusing SpeciesSelector), and a source/mic filter. All
-  state lives in the URL via the hub; this component is presentational: it reads
-  the resolved params and reports changes through `onParamsChange`.
+  state lives in the URL via the hub; this component is presentational and
+  reports changes through `onParamsChange`.
 
-  Each control honors the active tab's chart `supports` flags: when no chart in
-  the active tab filters by species (e.g. Biodiversity), the species selector is
-  disabled with an explanation rather than silently ignored. The source filter
-  is present but inert in PR0 (no backend wiring yet) and says so.
+  The species chip selector is the tall control, so it is collapsed behind a
+  toggle (the date range stays visible) to keep the toolbar compact. Each
+  control honors the active tab's chart `supports` flags: when no chart in the
+  active tab filters by species (e.g. Biodiversity), the species toggle is
+  disabled with an explanation. The source filter is present but inert in PR0.
 -->
 <script lang="ts">
+  import { ChevronDown, ChevronRight } from '@lucide/svelte';
+
   import { t } from '$lib/i18n';
   import SpeciesSelector from '$lib/components/ui/SpeciesSelector.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -39,6 +43,10 @@
   // Backend caps multi-species queries; keep the legacy client limit.
   const MAX_SPECIES = 10;
 
+  // The tall chip selector starts collapsed to keep the toolbar slim; the toggle
+  // shows the current count so the selection is never hidden without a hint.
+  let speciesExpanded = $state(false);
+
   const dateRangeOptions = $derived([
     { value: 'week', label: t('analytics.advanced.dateRangeOptions.week') },
     { value: 'month', label: t('analytics.advanced.dateRangeOptions.month') },
@@ -54,6 +62,13 @@
   // starts from whatever was showing, and reloads restore the typed dates.
   const customStart = $derived(params.start || formatDateForAPI(params.startDate));
   const customEnd = $derived(params.end || formatDateForAPI(params.endDate));
+
+  const speciesLabel = $derived(
+    t('analytics.advanced.speciesSelection', {
+      count: params.species.length,
+      max: MAX_SPECIES,
+    })
+  );
 
   function handleRangeChange(value: string | string[]): void {
     const range = (Array.isArray(value) ? value[0] : value) as DateRangePreset;
@@ -76,91 +91,112 @@
   }
 </script>
 
-<div class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]">
-  <div class="p-4 sm:p-6 overflow-visible space-y-4">
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-      <!-- Date range -->
-      <div class="space-y-2">
-        <SelectDropdown
-          value={params.range}
-          options={dateRangeOptions}
-          onChange={handleRangeChange}
-          label={t('analytics.advanced.dateRange')}
-          variant="select"
-          size="sm"
-          menuSize="sm"
-        />
-
-        {#if params.range === 'custom'}
-          <div class="grid grid-cols-2 gap-2 mt-2">
-            <label for="analyticsStartDate" class="sr-only"
-              >{t('analytics.advanced.filters.startDate')}</label
-            >
-            <input
-              id="analyticsStartDate"
-              type="date"
-              class="input w-full"
-              value={customStart}
-              max={customEnd}
-              onchange={handleStartChange}
-              aria-label={t('analytics.advanced.filters.startDate')}
-            />
-            <label for="analyticsEndDate" class="sr-only"
-              >{t('analytics.advanced.filters.endDate')}</label
-            >
-            <input
-              id="analyticsEndDate"
-              type="date"
-              class="input w-full"
-              value={customEnd}
-              min={customStart}
-              onchange={handleEndChange}
-              aria-label={t('analytics.advanced.filters.endDate')}
-            />
-          </div>
-        {/if}
-      </div>
-
-      <!-- Source / mic filter (present but inert in PR0) -->
-      <div class="space-y-1">
-        <SelectDropdown
-          value={params.source}
-          options={sourceOptions}
-          disabled={true}
-          label={t('analytics.hub.controls.source')}
-          helpText={t('analytics.hub.controls.sourceComingSoon')}
-          variant="select"
-          size="sm"
-          menuSize="sm"
-        />
-      </div>
+<div class="pb-3 border-b border-[var(--color-base-300)]/60">
+  <!-- Compact controls row: date range + source always visible, species behind a toggle -->
+  <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+    <!-- Date range -->
+    <div class="w-44 max-w-full space-y-1">
+      <SelectDropdown
+        value={params.range}
+        options={dateRangeOptions}
+        onChange={handleRangeChange}
+        label={t('analytics.advanced.dateRange')}
+        variant="select"
+        size="sm"
+        menuSize="sm"
+      />
     </div>
 
-    <!-- Species selection -->
-    <div class="space-y-2">
-      <div class="flex items-baseline justify-between gap-2">
-        <span id="analyticsSpeciesLabel" class="label-text font-medium"
-          >{t('analytics.advanced.speciesSelection', {
-            count: params.species.length,
-            max: MAX_SPECIES,
-          })}</span
-        >
-        <span
-          id="analyticsSpeciesHint"
-          class="label-text-alt text-xs text-[var(--color-base-content)] opacity-60"
-        >
-          {speciesApplicable
-            ? t('analytics.advanced.speciesSelectionHint')
-            : t('analytics.hub.controls.speciesNotApplicable')}
-        </span>
+    {#if params.range === 'custom'}
+      <div class="flex items-end gap-2">
+        <div class="space-y-1">
+          <label
+            for="analyticsStartDate"
+            class="text-xs font-medium text-[var(--color-base-content)]/70"
+            >{t('analytics.advanced.filters.startDate')}</label
+          >
+          <input
+            id="analyticsStartDate"
+            type="date"
+            class="input input-sm"
+            value={customStart}
+            max={customEnd}
+            onchange={handleStartChange}
+            aria-label={t('analytics.advanced.filters.startDate')}
+          />
+        </div>
+        <div class="space-y-1">
+          <label
+            for="analyticsEndDate"
+            class="text-xs font-medium text-[var(--color-base-content)]/70"
+            >{t('analytics.advanced.filters.endDate')}</label
+          >
+          <input
+            id="analyticsEndDate"
+            type="date"
+            class="input input-sm"
+            value={customEnd}
+            min={customStart}
+            onchange={handleEndChange}
+            aria-label={t('analytics.advanced.filters.endDate')}
+          />
+        </div>
       </div>
+    {/if}
 
-      <div
-        class="w-full min-h-[100px] relative"
-        role="group"
-        aria-labelledby="analyticsSpeciesLabel"
-        aria-describedby="analyticsSpeciesHint"
-      >
+    <!-- Source / mic filter (present but inert in PR0; reason in the hover tooltip
+         to keep the toolbar row aligned and compact). -->
+    <div class="w-44 max-w-full space-y-1" title={t('analytics.hub.controls.sourceComingSoon')}>
+      <SelectDropdown
+        value={params.source}
+        options={sourceOptions}
+        disabled={true}
+        label={t('analytics.hub.controls.source')}
+        variant="select"
+        size="sm"
+        menuSize="sm"
+      />
+    </div>
+
+    <div class="grow"></div>
+
+    <!-- Species toggle: expands the chip selector; shows the current count -->
+    <button
+      id="analyticsSpeciesToggle"
+      type="button"
+      class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border border-[var(--color-base-300)] hover:bg-[var(--color-base-100)] disabled:opacity-50 disabled:cursor-not-allowed"
+      aria-expanded={speciesExpanded}
+      aria-controls="analyticsSpeciesPanel"
+      disabled={!speciesApplicable}
+      title={speciesApplicable ? undefined : t('analytics.hub.controls.speciesNotApplicable')}
+      onclick={() => (speciesExpanded = !speciesExpanded)}
+    >
+      {#if speciesExpanded}
+        <ChevronDown class="h-4 w-4" aria-hidden="true" />
+      {:else}
+        <ChevronRight class="h-4 w-4" aria-hidden="true" />
+      {/if}
+      <span>{speciesLabel}</span>
+    </button>
+  </div>
+
+  {#if !speciesApplicable}
+    <p class="mt-2 text-xs text-[var(--color-base-content)]/60">
+      {t('analytics.hub.controls.speciesNotApplicable')}
+    </p>
+  {:else if speciesExpanded}
+    <!-- Collapsible species selector -->
+    <div
+      id="analyticsSpeciesPanel"
+      class="mt-3"
+      role="group"
+      aria-labelledby="analyticsSpeciesToggle"
+      aria-describedby="analyticsSpeciesHint"
+    >
+      <p id="analyticsSpeciesHint" class="mb-2 text-xs text-[var(--color-base-content)]/60">
+        {t('analytics.advanced.speciesSelectionHint')}
+      </p>
+      <div class="w-full min-h-[100px] relative">
         <SpeciesSelector
           species={availableSpecies}
           selected={params.species}
@@ -171,7 +207,6 @@
           searchable={true}
           showFrequency={true}
           categorized={false}
-          disabled={!speciesApplicable}
           loading={loadingSpecies}
           emptyText={t('analytics.advanced.noSpeciesFound')}
           className="w-full"
@@ -197,5 +232,5 @@
         </SpeciesSelector>
       </div>
     </div>
-  </div>
+  {/if}
 </div>

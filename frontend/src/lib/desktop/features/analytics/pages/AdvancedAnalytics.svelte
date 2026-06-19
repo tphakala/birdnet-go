@@ -240,24 +240,13 @@
 </script>
 
 <div class="col-span-12" role="region" aria-label={t('analytics.advanced.title')}>
-  <!-- Sticky shared control bar -->
-  <div class="sticky top-0 z-20 bg-[var(--color-base-100)] py-2">
-    <AnalyticsControlBar
-      {params}
-      {availableSpecies}
-      {loadingSpecies}
-      {speciesApplicable}
-      onParamsChange={partial => applyParams(partial, 'push')}
-    />
-  </div>
-
-  <!-- Tab bar -->
-  <!-- Scroll rather than wrap: longer locales (DE/FI) keep a single clean tab
-       strip instead of wrapping into a broken double border. -->
+  <!-- Tab bar: primary navigation, above the filters. Scrolls rather than wraps
+       so longer locales (DE/FI) keep a single clean strip; overflow-y is hidden
+       so the horizontal scroll container never shows a stray vertical bar. -->
   <div
     role="tablist"
     aria-label={t('analytics.hub.aria.tabs')}
-    class="mt-4 flex flex-nowrap gap-1 overflow-x-auto border-b border-[var(--color-base-200)]"
+    class="flex flex-nowrap gap-1 overflow-x-auto overflow-y-hidden border-b border-[var(--color-base-300)]/60"
   >
     {#each TABS as tab (tab.group)}
       {@const Icon = tab.icon}
@@ -279,6 +268,17 @@
         <span>{t(tab.labelKey)}</span>
       </button>
     {/each}
+  </div>
+
+  <!-- Compact filter toolbar (below the tabs) -->
+  <div class="mt-3">
+    <AnalyticsControlBar
+      {params}
+      {availableSpecies}
+      {loadingSpecies}
+      {speciesApplicable}
+      onParamsChange={partial => applyParams(partial, 'push')}
+    />
   </div>
 
   <!-- Active tab panel: only this tab's charts are mounted -->
