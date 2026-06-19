@@ -70,6 +70,12 @@
     })
   );
 
+  // The panel is only open when species filtering applies AND the user expanded
+  // it. Deriving this (rather than reading speciesExpanded directly) keeps the
+  // toggle's chevron, aria-expanded, and aria-controls consistent when the active
+  // tab switches to one whose charts do not filter by species.
+  const speciesPanelOpen = $derived(speciesApplicable && speciesExpanded);
+
   function handleRangeChange(value: string | string[]): void {
     const range = (Array.isArray(value) ? value[0] : value) as DateRangePreset;
     if (range === 'custom') {
@@ -144,8 +150,9 @@
       </div>
     {/if}
 
-    <!-- Source / mic filter (present but inert in PR0; reason in the hover tooltip
-         to keep the toolbar row aligned and compact). -->
+    <!-- Source / mic filter (present but inert in PR0). The reason is a hover
+         tooltip (keeps the toolbar row aligned/compact) plus a visually-hidden
+         line so screen-reader users in reading order also get the explanation. -->
     <div class="w-44 max-w-full space-y-1" title={t('analytics.hub.controls.sourceComingSoon')}>
       <SelectDropdown
         value={params.source}
@@ -156,6 +163,7 @@
         size="sm"
         menuSize="sm"
       />
+      <span class="sr-only">{t('analytics.hub.controls.sourceComingSoon')}</span>
     </div>
 
     <div class="grow"></div>
@@ -165,13 +173,13 @@
       id="analyticsSpeciesToggle"
       type="button"
       class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border border-[var(--color-base-300)] hover:bg-[var(--color-base-100)] disabled:opacity-50 disabled:cursor-not-allowed"
-      aria-expanded={speciesExpanded}
-      aria-controls="analyticsSpeciesPanel"
+      aria-expanded={speciesPanelOpen}
+      aria-controls={speciesPanelOpen ? 'analyticsSpeciesPanel' : undefined}
       disabled={!speciesApplicable}
       title={speciesApplicable ? undefined : t('analytics.hub.controls.speciesNotApplicable')}
       onclick={() => (speciesExpanded = !speciesExpanded)}
     >
-      {#if speciesExpanded}
+      {#if speciesPanelOpen}
         <ChevronDown class="h-4 w-4" aria-hidden="true" />
       {:else}
         <ChevronRight class="h-4 w-4" aria-hidden="true" />
@@ -184,7 +192,7 @@
     <p class="mt-2 text-xs text-[var(--color-base-content)]/60">
       {t('analytics.hub.controls.speciesNotApplicable')}
     </p>
-  {:else if speciesExpanded}
+  {:else if speciesPanelOpen}
     <!-- Collapsible species selector -->
     <div
       id="analyticsSpeciesPanel"

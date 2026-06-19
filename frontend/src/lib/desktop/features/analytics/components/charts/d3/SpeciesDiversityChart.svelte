@@ -65,10 +65,11 @@
 
     const safeDateExtent: [Date, Date] =
       dateExtent[0] && dateExtent[1] ? [dateExtent[0], dateExtent[1]] : [new Date(), new Date()];
-    // Floor the domain max at 1: unique-species counts are non-negative, so an
-    // all-zero range must keep zero at the bottom rather than collapse to a
-    // degenerate [0,0] domain (which .nice() expands symmetrically into negatives).
-    const safeMaxCount = Math.max(countExtent[1] ?? 0, 1);
+    // Unique-species counts are non-negative. Default a zero/empty max to 1 so an
+    // all-zero range keeps zero at the bottom rather than collapse to a degenerate
+    // [0,0] domain (which .nice() expands symmetrically into negatives). `|| 1`
+    // only replaces a falsy (0/undefined) max, preserving any real positive max.
+    const safeMaxCount = countExtent[1] || 1;
 
     return {
       x: safeDateExtent,

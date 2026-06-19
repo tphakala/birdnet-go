@@ -144,10 +144,11 @@
         .domain(dateRange || safeDateExtent)
         .range([0, 100]),
       y: scaleLinear()
-        // Floor the domain max at 1 so an all-zero range keeps zero pinned to the
-        // bottom instead of a degenerate [0,0] domain that .nice() expands into
-        // negative space. No-op for any real data (counts/percentages are >= 1).
-        .domain([0, Math.max(safeCountExtent[1] || 0, 1) * 1.1])
+        // Default a zero/empty max to 1 so an all-zero range keeps zero pinned to
+        // the bottom instead of a degenerate [0,0] domain that .nice() expands into
+        // negative space. `|| 1` only replaces a falsy (0) max, so a real fractional
+        // max in relative/percentage mode (e.g. 0.5%) is preserved, not squashed.
+        .domain([0, (safeCountExtent[1] || 1) * 1.1])
         .range([100, 0]),
     };
   });
@@ -426,10 +427,8 @@
         onEnd: selection => {
           if (selection) {
             const [x1, x2] = selection;
-            const dateRange: [Date, Date] = [xScale.invert(x1), xScale.invert(x2)];
-            onDateRangeChange?.(dateRange);
-          } else {
-            // Brush cleared
+            const brushRange: [Date, Date] = [xScale.invert(x1), xScale.invert(x2)];
+            onDateRangeChange?.(brushRange);
           }
         },
       });

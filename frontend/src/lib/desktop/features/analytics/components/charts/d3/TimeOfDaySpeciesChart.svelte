@@ -72,11 +72,11 @@
         visible.flatMap(s => s.data),
         d => d.count
       ) ?? 0;
-    // Detection counts are non-negative integers. Floor the domain max at 1 so an
-    // all-zero series pins zero to the bottom of the chart instead of producing a
-    // degenerate [0,0] domain that .nice() expands symmetrically (centering zero
-    // and rendering negative ticks). For any real data (max >= 1) this is a no-op.
-    const maxCount = Math.max(rawMaxCount, 1);
+    // Detection counts are non-negative. Default an all-zero/empty max to 1 so the
+    // series pins zero to the bottom instead of producing a degenerate [0,0] domain
+    // that .nice() expands symmetrically (centering zero and rendering negative
+    // ticks). `|| 1` only replaces a falsy (0) max, preserving any real positive max.
+    const maxCount = rawMaxCount || 1;
 
     return {
       x: scaleLinear().domain([0, 23]).range([0, 100]), // Percentage-based for responsiveness

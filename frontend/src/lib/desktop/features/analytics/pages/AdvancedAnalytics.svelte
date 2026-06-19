@@ -204,7 +204,9 @@
   // this effect into a fetch loop.
   $effect(() => {
     void rangeKey;
-    fetchAvailableSpecies();
+    // Run untracked: the synchronous param reads inside fetchAvailableSpecies must
+    // not become effect dependencies, so only rangeKey drives the refetch.
+    untrack(() => fetchAvailableSpecies());
     return () => speciesController?.abort();
   });
 

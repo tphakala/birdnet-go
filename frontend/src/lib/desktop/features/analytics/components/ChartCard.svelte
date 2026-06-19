@@ -70,34 +70,38 @@
   );
 
   $effect(() => {
-    // Track only fetchKey; read the live params untracked so options/tab changes
-    // never trigger a refetch.
+    // fetchKey is the ONLY tracked dependency. The whole body runs untracked so
+    // that the synchronous param reads inside chart.fetch() (which run before its
+    // first await) are not picked up as effect dependencies. Otherwise re-resolved
+    // Date objects / unrelated param changes would refetch despite an unchanged key.
     void fetchKey;
-    const currentParams = untrack(() => params);
-    const currentChart = untrack(() => chart);
+    return untrack(() => {
+      const currentParams = params;
+      const currentChart = chart;
 
-    controller?.abort();
-    const ac = new AbortController();
-    controller = ac;
+      controller?.abort();
+      const ac = new AbortController();
+      controller = ac;
 
-    loading = true;
-    error = null;
+      loading = true;
+      error = null;
 
-    currentChart
-      .fetch(currentParams, ac.signal)
-      .then(data => {
-        if (ac.signal.aborted) return;
-        result = data;
-        loading = false;
-      })
-      .catch((err: unknown) => {
-        if (ac.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return;
-        logger.error('Chart fetch failed', err, { chart: currentChart.id });
-        error = t('analytics.errors.loadFailed');
-        loading = false;
-      });
+      currentChart
+        .fetch(currentParams, ac.signal)
+        .then(data => {
+          if (ac.signal.aborted) return;
+          result = data;
+          loading = false;
+        })
+        .catch((err: unknown) => {
+          if (ac.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return;
+          logger.error('Chart fetch failed', err, { chart: currentChart.id });
+          error = t('analytics.errors.loadFailed');
+          loading = false;
+        });
 
-    return () => ac.abort();
+      return () => ac.abort();
+    });
   });
 
   function retry(): void {
@@ -123,7 +127,9 @@
   const isNotEnough = $derived(
     hasResult && chart.minDataPoints != null && dataCount > 0 && dataCount < chart.minDataPoints
   );
-  const showChart = $derived(hasResult && !isEmpty && !isNotEnough);
+  // Require real data points: never mount the (heavy) D3 chart with an empty
+  // dataset under the spinner while a species auto-select is still pending.
+  const showChart = $derived(hasResult && dataCount > 0 && !isNotEnough);
 
   // Map the fetched data + params (+ options/callbacks) onto the chart component's props.
   const resolvedProps = $derived.by<Record<string, unknown> | null>(() => {

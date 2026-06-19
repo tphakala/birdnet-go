@@ -96,4 +96,42 @@ describe('AnalyticsControlBar', () => {
 
     expect(onParamsChange).toHaveBeenCalledWith(expect.objectContaining({ range: 'month' }));
   });
+
+  it('expands and collapses the species selector via the toggle', async () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      props: { params: makeParams(), availableSpecies: species, onParamsChange },
+    });
+
+    const toggle = document.getElementById('analyticsSpeciesToggle') as HTMLButtonElement;
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // Collapsed by default: the species panel is not in the DOM.
+    expect(document.querySelector('#analyticsSpeciesPanel')).not.toBeInTheDocument();
+
+    await fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelector('#analyticsSpeciesPanel')).toBeInTheDocument();
+
+    await fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('#analyticsSpeciesPanel')).not.toBeInTheDocument();
+  });
+
+  it('disables the species toggle (collapsed, aria-expanded false) when species filtering does not apply', () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      props: {
+        params: makeParams(),
+        availableSpecies: species,
+        speciesApplicable: false,
+        onParamsChange,
+      },
+    });
+
+    const toggle = document.getElementById('analyticsSpeciesToggle') as HTMLButtonElement;
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).not.toHaveAttribute('aria-controls');
+    expect(document.querySelector('#analyticsSpeciesPanel')).not.toBeInTheDocument();
+  });
 });
