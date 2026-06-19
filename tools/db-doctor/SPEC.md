@@ -302,7 +302,11 @@ Also run targeted queries:
 
 If `migration_states` table exists:
 - Check the state value is one of the known states
-- If state is `completed`, verify that detections exist
+- If state is `completed`, verify that the `detections` table exists; a completed
+  marker with the `detections` table missing entirely is the GitHub #3575 wedge and
+  is flagged fixable (treated like an empty table). A healthy fresh install has the
+  `detections` table present (even with zero rows), so an empty-but-present table is
+  not flagged on its own.
 - If state is stuck in an active state (`migrating`, `dual_write`, etc.), report it
 - Check for stale `migration_dirty_ids` entries
 - If both legacy `notes` and v2 `detections` tables exist, compare record counts
