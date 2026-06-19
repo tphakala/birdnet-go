@@ -438,15 +438,17 @@
     const names: string[] = [];
     for (const m of snapshot.models) {
       if (m.id === modelId) continue;
-      // Match on the scientific name when both have one, else on the common name,
-      // so a species that one model labels scientifically and another labels by
-      // common name still correlates.
-      const hit = m.recentDetections?.some(
-        o =>
-          ((!!o.scientificName && o.scientificName === d.scientificName) ||
-            (!!o.species && o.species === d.species)) &&
-          Math.abs(o.atUnix - d.atUnix) <= CO_DETECTION_TOLERANCE_SEC
-      );
+      // When both entries have a scientific name, that is the authoritative
+      // identity: compare it and do not fall back to the common name (two
+      // different species can share a common name). Only fall back to the
+      // species key when one side lacks a scientific name.
+      const hit = m.recentDetections?.some(o => {
+        const sameSpecies =
+          o.scientificName && d.scientificName
+            ? o.scientificName === d.scientificName
+            : (o.scientificName || o.species) === (d.scientificName || d.species);
+        return sameSpecies && Math.abs(o.atUnix - d.atUnix) <= CO_DETECTION_TOLERANCE_SEC;
+      });
       if (hit) names.push(m.detectionName || m.name);
     }
     return names;
@@ -840,7 +842,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      {#each rows as d, i (`${d.scientificName || d.species}-${d.atUnix}-${i}`)}
+                      {#each rows as d (`${d.scientificName || d.species}-${d.atUnix}`)}
                         {@const coNames = coDetectingModels(model.id, d)}
                         <tr class="border-t border-[var(--border-100)]">
                           <td class="py-0.5 pr-2 text-base-content">

@@ -89,8 +89,10 @@ func (l *recentDetectionList) observe(common, scientific string, confidence floa
 			continue
 		}
 		// Compare the absolute gap so a backward clock jump (NTP correction or
-		// out-of-order processing, where atUnix can be earlier than the stored
-		// entry) does not silently drop detections until the clock catches up.
+		// out-of-order processing, where atUnix can be earlier than a stored entry)
+		// does not silently drop detections. Scan every same-species entry, not
+		// just the most recent: with out-of-order timestamps the closest entry in
+		// time may not be the front one, so drop if ANY is within the throttle.
 		gap := atUnix - l.items[i].AtUnix
 		if gap < 0 {
 			gap = -gap
@@ -98,7 +100,6 @@ func (l *recentDetectionList) observe(common, scientific string, confidence floa
 		if gap < throttleSec {
 			return
 		}
-		break
 	}
 
 	entry := LastDetection{

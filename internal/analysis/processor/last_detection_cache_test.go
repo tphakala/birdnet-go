@@ -160,6 +160,27 @@ func TestLastDetectionCache_ThrottleBackwardClock(t *testing.T) {
 	assert.Equal(t, base.Unix(), recent[1].AtUnix)
 }
 
+// TestLastDetectionCache_ThrottleScansAllEntries verifies that with out-of-order
+// timestamps the throttle drops a detection within the window of ANY same-species
+// entry, not just the most recent one (the front entry may not be the closest in
+// time after a backward jump).
+func TestLastDetectionCache_ThrottleScansAllEntries(t *testing.T) {
+	t.Parallel()
+
+	p := minimalProcessor()
+	base := time.Unix(10000, 0)
+	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base)                       // t=10000
+	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base.Add(-15*time.Second))  // t=9985, gap 15 -> recorded, becomes front
+	// t=9994: 9s from the front (9985) but only 6s from the older 10000 entry.
+	// Must be dropped because it is within the throttle of the older entry.
+	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base.Add(-6*time.Second))
+
+	recent := p.GetRecentDetections("m")
+	require.Len(t, recent, 2, "within the throttle of any same-species entry must be dropped")
+	assert.Equal(t, base.Add(-15*time.Second).Unix(), recent[0].AtUnix)
+	assert.Equal(t, base.Unix(), recent[1].AtUnix)
+}
+
 // TestLastDetectionCache_DifferentSpeciesNotThrottled verifies the throttle is
 // per species: distinct species detected within the interval are all recorded.
 func TestLastDetectionCache_DifferentSpeciesNotThrottled(t *testing.T) {
