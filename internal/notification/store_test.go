@@ -582,3 +582,34 @@ func TestInMemoryStoreRemoveOldestDeterministicOnEqualTimestamps(t *testing.T) {
 	assert.Equal(t, []string{created[4], created[3], created[2]}, got,
 		"eviction must drop the earliest-created equal-timestamp notifications")
 }
+
+// TestInMemoryStoreRemoveOldestSeqZeroFallsBackToID verifies eviction's final
+// tiebreaker: when entries share a Timestamp and seq (the seq == 0 struct-literal
+// case), removeOldest drops the highest ID, mirroring List which ranks the
+// highest ID last.
+func TestInMemoryStoreRemoveOldestSeqZeroFallsBackToID(t *testing.T) {
+	t.Parallel()
+
+	const maxSize = 2
+	store := NewInMemoryStore(maxSize)
+	fixedTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	save := func(id string) {
+		mustStoreSave(t, store, &Notification{
+			ID:        id,
+			Type:      TypeInfo,
+			Priority:  PriorityLow,
+			Status:    StatusUnread,
+			Timestamp: fixedTime,
+		})
+	}
+
+	// Fill to {a, c} (all seq == 0, same timestamp), then saving "b" must evict
+	// the highest current ID ("c"), leaving {a, b}.
+	save("a")
+	save("c")
+	save("b")
+
+	assert.Equal(t, []string{"a", "b"}, listIDs(t, store),
+		"seq-0 eviction must drop the highest ID (the entry List ranks last)")
+}

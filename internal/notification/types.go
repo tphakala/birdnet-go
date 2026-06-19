@@ -579,26 +579,34 @@ func (s *InMemoryStore) DeleteExpired() error {
 }
 
 // removeOldest removes the oldest notification to make room. "Oldest" is the
-// entry List ranks last: earliest Timestamp, and among equal timestamps the
-// lowest creation sequence (the earliest created). Using seq as the tiebreaker
-// keeps eviction deterministic and consistent with List's ordering on
-// coarse-resolution clocks where timestamps routinely collide; without it the
-// victim among equal-timestamp entries was whichever the randomized map range
-// happened to visit first.
+// entry List ranks last, so removeOldest uses the inverse of List's total
+// order: earliest Timestamp, then lowest creation sequence (earliest created),
+// then highest ID as a final fallback for notifications built without
+// NewNotification (seq 0). This keeps eviction deterministic and consistent
+// with List on coarse-resolution clocks where timestamps routinely collide;
+// without it the victim among tied entries was whichever the randomized map
+// range happened to visit first.
 func (s *InMemoryStore) removeOldest() {
 	var oldestID string
 	var oldestTime time.Time
 	var oldestSeq uint64
 
 	for id, notif := range s.notifications {
-		switch {
-		case oldestID == "": // first candidate
-		case notif.Timestamp.Before(oldestTime): // strictly older
-		case notif.Timestamp.Equal(oldestTime) && notif.seq < oldestSeq: // same time, created earlier
-		default:
+		if oldestID == "" {
+			oldestID, oldestTime, oldestSeq = id, notif.Timestamp, notif.seq
 			continue
 		}
-		oldestID, oldestTime, oldestSeq = id, notif.Timestamp, notif.seq
+		// Mirror sortNotificationsByTime, inverted to find the element it ranks
+		// last: earlier Timestamp, then lower seq, then higher ID. The ID args
+		// are reversed (oldestID, id) so a larger id compares as "older".
+		older := cmp.Or(
+			notif.Timestamp.Compare(oldestTime),
+			cmp.Compare(notif.seq, oldestSeq),
+			strings.Compare(oldestID, id),
+		) < 0
+		if older {
+			oldestID, oldestTime, oldestSeq = id, notif.Timestamp, notif.seq
+		}
 	}
 
 	if oldestID != "" {
