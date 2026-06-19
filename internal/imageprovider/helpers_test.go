@@ -468,6 +468,21 @@ func TestBirdImageGetTTL(t *testing.T) {
 			img:  BirdImage{URL: negativeEntryMarker},
 			want: negativeCacheTTL,
 		},
+		{
+			name: "negative entry with Engine (legacy non-avian class) gets permanent TTL",
+			img:  BirdImage{URL: negativeEntryMarker, ScientificName: "Engine"},
+			want: nonAvianCacheTTL,
+		},
+		{
+			name: "negative entry with Power (split first-token of power_tool) gets permanent TTL",
+			img:  BirdImage{URL: negativeEntryMarker, ScientificName: "Power"},
+			want: nonAvianCacheTTL,
+		},
+		{
+			name: "negative entry with real bird binomial gets shorter TTL",
+			img:  BirdImage{URL: negativeEntryMarker, ScientificName: "Turdus merula"},
+			want: negativeCacheTTL,
+		},
 	}
 
 	for _, tt := range tests {
@@ -540,6 +555,13 @@ func TestIsNonAvianClass(t *testing.T) {
 		{"noise is non-avian", "Noise", true},
 		{"environmental is non-avian", "Environmental", true},
 		{"engine is non-avian", "Engine", true},
+		// Perch v2 (FSD50K) classes via nonbird package - NOT in legacy map:
+		{"Power (first-token of power_tool) is non-avian", "Power", true},
+		{"power_tool (full Perch label) is non-avian", "power_tool", true},
+		{"speech is non-avian", "speech", true},
+		{"Speech is non-avian (case-insensitive)", "Speech", true},
+		{"growling is non-avian", "growling", true},
+		// Negatives:
 		{"real bird species is avian", "Cyanistes caeruleus", false},
 		{"another bird species is avian", "Turdus merula", false},
 		{"empty string is avian", "", false},
