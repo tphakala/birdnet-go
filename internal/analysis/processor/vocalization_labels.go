@@ -22,6 +22,10 @@
 //     "dog" token at all, and whose underscore-joined forms ("Human_voice")
 //     SplitSpeciesName mangles into "voice". Those are matched exactly against
 //     the raw label here.
+//
+// Matching is case-insensitive: the raw label is lowercased once and compared
+// against the lowercase keys / prefixes below, so a custom or future label file
+// with different casing still engages the filters.
 package processor
 
 import "strings"
@@ -47,86 +51,92 @@ const (
 // actions) so any sign of a human near the microphone engages the filter, the
 // same way BirdNET filters both "Human vocal" and "Human non-vocal". Non-human
 // AudioSet classes that merely co-occur with people (e.g. "Car_passing_by",
-// "Thump_and_thud") are intentionally excluded.
+// "Thump_and_thud") are intentionally excluded. Keys are lowercase; lookups
+// lowercase the raw label first (see isHumanVocalization).
 //
 //nolint:gochecknoglobals // immutable lookup table, read-only after init
 var perchHumanLabels = map[string]struct{}{
 	// Speech and voice.
-	"Speech":                           {},
-	"Speech_synthesizer":               {},
-	"Male_speech_and_man_speaking":     {},
-	"Female_speech_and_woman_speaking": {},
-	"Child_speech_and_kid_speaking":    {},
-	"Conversation":                     {},
-	"Chatter":                          {},
-	"Human_voice":                      {},
-	"Human_group_actions":              {},
-	"Whispering":                       {},
-	"Shout":                            {},
-	"Yell":                             {},
-	"Screaming":                        {},
+	"speech":                           {},
+	"speech_synthesizer":               {},
+	"male_speech_and_man_speaking":     {},
+	"female_speech_and_woman_speaking": {},
+	"child_speech_and_kid_speaking":    {},
+	"conversation":                     {},
+	"chatter":                          {},
+	"human_voice":                      {},
+	"human_group_actions":              {},
+	"whispering":                       {},
+	"shout":                            {},
+	"yell":                             {},
+	"screaming":                        {},
 	// Other human vocalizations.
-	"Singing":             {},
-	"Male_singing":        {},
-	"Female_singing":      {},
-	"Laughter":            {},
-	"Giggle":              {},
-	"Chuckle_and_chortle": {},
-	"Crying_and_sobbing":  {},
-	"Gasp":                {},
-	"Sigh":                {},
+	"singing":             {},
+	"male_singing":        {},
+	"female_singing":      {},
+	"laughter":            {},
+	"giggle":              {},
+	"chuckle_and_chortle": {},
+	"crying_and_sobbing":  {},
+	"gasp":                {},
+	"sigh":                {},
 	// Non-vocal human body sounds (parallels BirdNET "Human non-vocal").
-	"Cough":                   {},
-	"Sneeze":                  {},
-	"Breathing":               {},
-	"Respiratory_sounds":      {},
-	"Burping_and_eructation":  {},
-	"Fart":                    {},
-	"Chewing_and_mastication": {},
+	"cough":                   {},
+	"sneeze":                  {},
+	"breathing":               {},
+	"respiratory_sounds":      {},
+	"burping_and_eructation":  {},
+	"fart":                    {},
+	"chewing_and_mastication": {},
 	// Human taxon (iNaturalist) - humans detected as a species, not a sound.
-	"Homo sapiens": {},
+	"homo sapiens": {},
 	// Human actions and group sounds.
-	"Crowd":              {},
-	"Cheering":           {},
-	"Applause":           {},
-	"Clapping":           {},
-	"Finger_snapping":    {},
-	"Hands":              {},
-	"Walk_and_footsteps": {},
-	"Run":                {},
+	"crowd":              {},
+	"cheering":           {},
+	"applause":           {},
+	"clapping":           {},
+	"finger_snapping":    {},
+	"hands":              {},
+	"walk_and_footsteps": {},
+	"run":                {},
 }
 
 // perchDogLabels enumerates the raw Perch v2 labels treated as a dog by the dog
 // bark filter: the FSD50K dog sound classes plus the domestic dog taxon. Wild
 // canids (wolf, coyote, jackal) are intentionally excluded so they remain
 // detectable as wildlife rather than being suppressed as background barking.
+// "Growling" is the AudioSet child of the Dog class (dog growling), so it stays.
+// Keys are lowercase; lookups lowercase the raw label first (see isDogDetection).
 //
 //nolint:gochecknoglobals // immutable lookup table, read-only after init
 var perchDogLabels = map[string]struct{}{
-	"Dog":              {}, // FSD50K dog
-	"Bark":             {}, // FSD50K bark
-	"Growling":         {}, // FSD50K growl
-	"Canis familiaris": {}, // domestic dog (iNaturalist taxon)
+	"dog":              {}, // FSD50K dog
+	"bark":             {}, // FSD50K bark
+	"growling":         {}, // FSD50K dog growl (AudioSet child of Dog)
+	"canis familiaris": {}, // domestic dog (iNaturalist taxon)
 }
 
 // isHumanVocalization reports whether a raw classifier label represents a human
 // sound that should engage the privacy filter. rawLabel is the untransformed
-// result.Species value. Perch v2 classes are matched exactly; BirdNET classes
-// are matched by the locale-stable English label prefix.
+// result.Species value. Matching is case-insensitive: Perch v2 classes are
+// matched exactly; BirdNET classes are matched by the locale-stable English
+// label prefix.
 func isHumanVocalization(rawLabel string) bool {
-	if _, ok := perchHumanLabels[rawLabel]; ok {
+	lowered := strings.ToLower(rawLabel)
+	if _, ok := perchHumanLabels[lowered]; ok {
 		return true
 	}
-	return strings.HasPrefix(strings.ToLower(rawLabel), birdnetHumanLabelPrefix)
+	return strings.HasPrefix(lowered, birdnetHumanLabelPrefix)
 }
 
 // isDogDetection reports whether a raw classifier label represents a dog for the
-// dog bark filter. rawLabel is the untransformed result.Species value. Perch v2
-// classes are matched exactly; BirdNET's "Dog" class is matched by the
-// locale-stable English label prefix.
+// dog bark filter. rawLabel is the untransformed result.Species value. Matching
+// is case-insensitive: Perch v2 classes are matched exactly; BirdNET's "Dog"
+// class is matched by the locale-stable English label prefix.
 func isDogDetection(rawLabel string) bool {
-	if _, ok := perchDogLabels[rawLabel]; ok {
+	lowered := strings.ToLower(rawLabel)
+	if _, ok := perchDogLabels[lowered]; ok {
 		return true
 	}
-	return strings.HasPrefix(strings.ToLower(rawLabel), birdnetDogLabelPrefix)
+	return strings.HasPrefix(lowered, birdnetDogLabelPrefix)
 }

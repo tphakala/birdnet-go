@@ -56,6 +56,10 @@ func TestIsHumanVocalization(t *testing.T) {
 		{"Perch Run", "Run", true},
 		// Human taxon (the human species itself).
 		{"Perch Homo sapiens", "Homo sapiens", true},
+		// Case-insensitive matching (custom/future label files may vary casing).
+		{"Perch speech lowercase", "speech", true},
+		{"Perch HUMAN_VOICE uppercase", "HUMAN_VOICE", true},
+		{"BirdNET human prefix lowercase", "human vocal_human vocal", true},
 		// Negatives: bird binomials that merely contain the substring "human".
 		{"cicada Pacarina schumanni", "Pacarina schumanni", false},
 		{"warbler Phylloscopus humei", "Phylloscopus humei", false},
@@ -92,6 +96,9 @@ func TestIsDogDetection(t *testing.T) {
 		{"Perch Bark", "Bark", true},
 		{"Perch Growling", "Growling", true},
 		{"Perch Canis familiaris", "Canis familiaris", true},
+		// Case-insensitive matching.
+		{"Perch bark lowercase", "bark", true},
+		{"BirdNET DOG_DOG uppercase", "DOG_DOG", true},
 		// Negatives: bird/insect binomials that merely contain the substring "dog".
 		// Tachyspiza rhodogaster is a real bird (Vinous-breasted Sparrowhawk); the
 		// old "dog" substring match would have wrongly filtered it.
@@ -118,61 +125,42 @@ func TestIsDogDetection(t *testing.T) {
 }
 
 // TestDetectionHandlers_RecordTimestamp proves both recording handlers store a
-// detection timestamp for the labels the old substring match missed: Perch v2
-// FSD50K classes and localized (non-English) BirdNET classes.
+// detection timestamp for the labels the old substring match missed (Perch v2
+// FSD50K classes and localized non-English BirdNET classes), and do NOT record
+// when the filter is disabled or the confidence is below the threshold. It also
+// confirms each handler writes only its own map, never the other filter's.
 func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 	t.Parallel()
 
 	const source = "src1"
 	start := time.Date(2026, 6, 19, 8, 0, 0, 0, time.UTC)
 
+	enablePrivacy := func(s *conf.Settings) {
+		s.Realtime.PrivacyFilter.Enabled = true
+		s.Realtime.PrivacyFilter.Confidence = 0.05
+	}
+	enableDog := func(s *conf.Settings) {
+		s.Realtime.DogBarkFilter.Enabled = true
+		s.Realtime.DogBarkFilter.Confidence = 0.05
+	}
+
 	tests := []struct {
-		name    string
-		species string
-		enable  func(s *conf.Settings)
-		record  func(p *Processor, s *conf.Settings, item classifier.Results, r datastore.Results)
-		stored  func(p *Processor) (time.Time, bool)
+		name       string
+		species    string
+		confidence float32
+		enable     func(s *conf.Settings)
+		record     func(p *Processor, s *conf.Settings, item classifier.Results, r datastore.Results)
+		isHuman    bool // true: should write LastHumanDetection; false: LastDogDetection
+		wantStored bool
 	}{
-		{
-			name:    "privacy filter records Perch speech",
-			species: "Speech",
-			enable: func(s *conf.Settings) {
-				s.Realtime.PrivacyFilter.Enabled = true
-				s.Realtime.PrivacyFilter.Confidence = 0.05
-			},
-			record: (*Processor).handleHumanDetection,
-			stored: func(p *Processor) (time.Time, bool) { v, ok := p.LastHumanDetection[source]; return v, ok },
-		},
-		{
-			name:    "privacy filter records localized BirdNET human",
-			species: "Human vocal_Mensch Stimme",
-			enable: func(s *conf.Settings) {
-				s.Realtime.PrivacyFilter.Enabled = true
-				s.Realtime.PrivacyFilter.Confidence = 0.05
-			},
-			record: (*Processor).handleHumanDetection,
-			stored: func(p *Processor) (time.Time, bool) { v, ok := p.LastHumanDetection[source]; return v, ok },
-		},
-		{
-			name:    "dog bark filter records Perch bark",
-			species: "Bark",
-			enable: func(s *conf.Settings) {
-				s.Realtime.DogBarkFilter.Enabled = true
-				s.Realtime.DogBarkFilter.Confidence = 0.05
-			},
-			record: (*Processor).handleDogDetection,
-			stored: func(p *Processor) (time.Time, bool) { v, ok := p.LastDogDetection[source]; return v, ok },
-		},
-		{
-			name:    "dog bark filter records localized BirdNET dog",
-			species: "Dog_Hund",
-			enable: func(s *conf.Settings) {
-				s.Realtime.DogBarkFilter.Enabled = true
-				s.Realtime.DogBarkFilter.Confidence = 0.05
-			},
-			record: (*Processor).handleDogDetection,
-			stored: func(p *Processor) (time.Time, bool) { v, ok := p.LastDogDetection[source]; return v, ok },
-		},
+		{"privacy records Perch speech", "Speech", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, true},
+		{"privacy records localized BirdNET human", "Human vocal_Mensch Stimme", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, true},
+		{"privacy disabled does not record", "Speech", 0.9, func(_ *conf.Settings) {}, (*Processor).handleHumanDetection, true, false},
+		{"privacy below threshold does not record", "Speech", 0.01, enablePrivacy, (*Processor).handleHumanDetection, true, false},
+		{"dog records Perch bark", "Bark", 0.9, enableDog, (*Processor).handleDogDetection, false, true},
+		{"dog records localized BirdNET dog", "Dog_Hund", 0.9, enableDog, (*Processor).handleDogDetection, false, true},
+		{"dog disabled does not record", "Bark", 0.9, func(_ *conf.Settings) {}, (*Processor).handleDogDetection, false, false},
+		{"dog below threshold does not record", "Bark", 0.01, enableDog, (*Processor).handleDogDetection, false, false},
 	}
 
 	for _, tt := range tests {
@@ -188,13 +176,21 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 			}
 			item := classifier.Results{StartTime: start}
 			item.Source.ID = source
-			result := datastore.Results{Species: tt.species, Confidence: 0.9}
+			result := datastore.Results{Species: tt.species, Confidence: tt.confidence}
 
 			tt.record(p, settings, item, result)
 
-			got, ok := tt.stored(p)
-			assert.True(t, ok, "handler should record a detection timestamp")
-			assert.Equal(t, start, got)
+			target, other := p.LastHumanDetection, p.LastDogDetection
+			if !tt.isHuman {
+				target, other = p.LastDogDetection, p.LastHumanDetection
+			}
+
+			got, ok := target[source]
+			assert.Equal(t, tt.wantStored, ok, "unexpected record state in target map")
+			if tt.wantStored {
+				assert.Equal(t, start, got)
+			}
+			assert.Empty(t, other, "handler must not write the other filter's map")
 		})
 	}
 }
