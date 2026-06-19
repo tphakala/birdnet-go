@@ -553,35 +553,43 @@ func TestValidateSymlinkTarget(t *testing.T) {
 	targetFile := filepath.Join(targetDir, "file.txt")
 	require.NoError(t, os.WriteFile(targetFile, []byte("target"), 0o600))
 
+	// symlinkOrSkip creates a symlink and skips the subtest if the OS denies it.
+	// Creating symlinks on Windows requires SeCreateSymbolicLinkPrivilege
+	// (admin or Developer Mode). CI runners have it, but a local developer may
+	// not, so skip rather than fail when creation is not permitted.
+	symlinkOrSkip := func(t *testing.T, target, link string) string {
+		t.Helper()
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("skipping: cannot create symlink (needs privilege/Developer Mode on Windows): %v", err)
+		}
+		return link
+	}
+
 	tests := []struct {
 		name        string
-		setup       func() string // Returns symlink path
+		setup       func(t *testing.T) string // Returns symlink path; may t.Skip if symlinks are unavailable
 		expectError bool
 	}{
 		{
 			name: "Valid symlink within base",
-			setup: func() string {
-				symlinkPath := filepath.Join(tempDir, "valid_link")
-				err := os.Symlink(targetDir, symlinkPath)
-				require.NoError(t, err)
-				return symlinkPath
+			setup: func(t *testing.T) string {
+				t.Helper()
+				return symlinkOrSkip(t, targetDir, filepath.Join(tempDir, "valid_link"))
 			},
 			expectError: false,
 		},
 		{
 			name: "Valid relative symlink within base",
-			setup: func() string {
-				symlinkPath := filepath.Join(tempDir, "relative_link")
-				err := os.Symlink("target", symlinkPath)
-				require.NoError(t, err)
-				return symlinkPath
+			setup: func(t *testing.T) string {
+				t.Helper()
+				return symlinkOrSkip(t, "target", filepath.Join(tempDir, "relative_link"))
 			},
 			expectError: false,
 		},
 		{
 			name: "Invalid symlink to outside base",
-			setup: func() string {
-				symlinkPath := filepath.Join(tempDir, "escape_link")
+			setup: func(t *testing.T) string {
+				t.Helper()
 				// An absolute path outside the sandbox base. "/etc" is absolute
 				// on Unix but drive-relative on Windows (filepath.IsAbs is false),
 				// where it would resolve inside the base and not be rejected, so
@@ -591,19 +599,15 @@ func TestValidateSymlinkTarget(t *testing.T) {
 				if runtime.GOOS == OSWindows {
 					outside = `C:\Windows`
 				}
-				err := os.Symlink(outside, symlinkPath)
-				require.NoError(t, err)
-				return symlinkPath
+				return symlinkOrSkip(t, outside, filepath.Join(tempDir, "escape_link"))
 			},
 			expectError: true,
 		},
 		{
 			name: "Invalid symlink with parent traversal",
-			setup: func() string {
-				symlinkPath := filepath.Join(tempDir, "traversal_link")
-				err := os.Symlink("../../../etc", symlinkPath)
-				require.NoError(t, err)
-				return symlinkPath
+			setup: func(t *testing.T) string {
+				t.Helper()
+				return symlinkOrSkip(t, "../../../etc", filepath.Join(tempDir, "traversal_link"))
 			},
 			expectError: true,
 		},
@@ -612,7 +616,7 @@ func TestValidateSymlinkTarget(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Note: Not parallel because setup creates files in shared directory
-			symlinkPath := tc.setup()
+			symlinkPath := tc.setup(t)
 
 			err := controller.validateSymlinkTarget(symlinkPath)
 			if tc.expectError {
