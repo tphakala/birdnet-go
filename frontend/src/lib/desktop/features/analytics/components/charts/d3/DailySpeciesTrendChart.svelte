@@ -144,7 +144,10 @@
         .domain(dateRange || safeDateExtent)
         .range([0, 100]),
       y: scaleLinear()
-        .domain([0, (safeCountExtent[1] || 0) * 1.1])
+        // Floor the domain max at 1 so an all-zero range keeps zero pinned to the
+        // bottom instead of a degenerate [0,0] domain that .nice() expands into
+        // negative space. No-op for any real data (counts/percentages are >= 1).
+        .domain([0, Math.max(safeCountExtent[1] || 0, 1) * 1.1])
         .range([100, 0]),
     };
   });
