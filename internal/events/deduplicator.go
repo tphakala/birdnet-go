@@ -247,9 +247,11 @@ func (ed *ErrorDeduplicator) evictOldest() {
 	}
 
 	// Find oldest entry. Primary key is lastUsed; seq breaks ties when several
-	// entries share a coarse-clock timestamp (the smaller seq is the least
-	// recently used). On platforms with a fine clock the tie branch is unused
-	// and behavior is identical to comparing lastUsed alone.
+	// entries share an identical timestamp (the smaller seq is the least
+	// recently used). Ties are the norm on coarse clocks (Windows ~15ms) and
+	// rare but possible on a fine clock (two touches in the same nanosecond);
+	// whenever the tie branch fires it evicts the genuine LRU, which matches or
+	// improves the old lastUsed-only result, so it is never a regression.
 	oldestIdx := 0
 	oldestTime := ed.entries[0].lastUsed
 	oldestSeq := ed.entries[0].seq
