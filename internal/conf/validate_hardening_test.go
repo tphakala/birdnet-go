@@ -2,6 +2,7 @@ package conf
 
 import (
 	"math"
+	"runtime"
 	"testing"
 	"time"
 
@@ -101,6 +102,15 @@ func TestValidateSettings_MainNameSanitized(t *testing.T) {
 
 func TestValidateExportPath(t *testing.T) {
 	t.Parallel()
+	// "absolute" is OS-specific: "/var/data/clips" is absolute on Unix but
+	// relative on Windows (filepath.IsAbs wants a drive), where validateExportPath
+	// would route it through the IsLocal branch and reject it. Use platform-
+	// absolute paths so the "absolute path allowed" cases exercise the
+	// absolute-path branch on every OS.
+	absPath, absDockerPath := "/var/data/clips", "/data/clips/"
+	if runtime.GOOS == "windows" {
+		absPath, absDockerPath = `C:\var\data\clips`, `C:\data\clips\`
+	}
 	tests := []struct {
 		name    string
 		path    string
@@ -113,8 +123,8 @@ func TestValidateExportPath(t *testing.T) {
 		{"parent traversal rejected", "../../../etc/passwd", true, "path traversal"},
 		{"hidden traversal rejected", "foo/../../../etc/passwd", true, "path traversal"},
 		{"double dot in middle rejected", "data/../secret", true, "path traversal"},
-		{"absolute path allowed", "/var/data/clips", false, ""},
-		{"absolute docker path allowed", "/data/clips/", false, ""},
+		{"absolute path allowed", absPath, false, ""},
+		{"absolute docker path allowed", absDockerPath, false, ""},
 		{"absolute path with traversal rejected", "/var/data/../etc/passwd", true, "path traversal"},
 		{"null byte rejected", "clips\x00/etc/passwd", true, "null bytes"},
 		{"windows-style path treated as relative on unix", "C:\\data\\clips", false, ""},

@@ -147,11 +147,13 @@ func TestCollector_getLogSearchPaths(t *testing.T) {
 
 	paths := c.getLogSearchPaths()
 
-	// Should have at least the base paths
+	// Should have at least the base paths. getLogSearchPaths builds entries with
+	// filepath.Join, which uses the OS separator (backslashes on Windows), so
+	// build the expected values the same way to compare structure, not separator.
 	expectedPaths := []string{
 		"logs",
-		"/var/lib/birdnet/logs",
-		"/etc/birdnet/logs",
+		filepath.Join("/var/lib/birdnet", "logs"),
+		filepath.Join("/etc/birdnet", "logs"),
 	}
 
 	assert.GreaterOrEqual(t, len(paths), len(expectedPaths), "Expected at least %d paths", len(expectedPaths))

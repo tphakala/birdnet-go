@@ -260,19 +260,22 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
-	// Create a mix of valid and invalid files
+	// Create a mix of valid and invalid files. Build paths with filepath.Join so
+	// the keys match GetAudioFiles' filepath.Walk output, which uses the OS
+	// separator (backslashes on Windows); plain "tempDir + \"/...\"" would not
+	// match the processed paths there.
 	validFiles := []string{
-		tempDir + "/bubo_bubo_80p_20210102T150405Z.wav",
-		tempDir + "/anas_platyrhynchos_70p_20210103T150405Z.mp3",
-		tempDir + "/erithacus_rubecula_60p_20210104T150405Z.flac",
-		tempDir + "/turdus_migratorius_94p_20210105T150405Z_86s.m4a",  // with duration suffix
-		tempDir + "/cyanocitta_cristata_89p_20210106T150405Z_38s.wav", // with duration suffix
+		filepath.Join(tempDir, "bubo_bubo_80p_20210102T150405Z.wav"),
+		filepath.Join(tempDir, "anas_platyrhynchos_70p_20210103T150405Z.mp3"),
+		filepath.Join(tempDir, "erithacus_rubecula_60p_20210104T150405Z.flac"),
+		filepath.Join(tempDir, "turdus_migratorius_94p_20210105T150405Z_86s.m4a"),  // with duration suffix
+		filepath.Join(tempDir, "cyanocitta_cristata_89p_20210106T150405Z_38s.wav"), // with duration suffix
 	}
 
 	invalidFiles := []string{
-		tempDir + "/invalid_file.wav",                   // Invalid format
-		tempDir + "/bubo_bubo_XXp_20210102T150405Z.wav", // Invalid confidence
-		tempDir + "/bubo_bubo_80p_invalid.wav",          // Invalid timestamp
+		filepath.Join(tempDir, "invalid_file.wav"),                   // Invalid format
+		filepath.Join(tempDir, "bubo_bubo_XXp_20210102T150405Z.wav"), // Invalid confidence
+		filepath.Join(tempDir, "bubo_bubo_80p_invalid.wav"),          // Invalid timestamp
 	}
 
 	// Create all the files

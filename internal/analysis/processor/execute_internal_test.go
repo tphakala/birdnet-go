@@ -197,7 +197,12 @@ func TestValidateCommandPath_PathTraversalCleaned(t *testing.T) {
 func TestValidateCommandPath_NonExistentFile(t *testing.T) {
 	t.Parallel()
 
-	_, err := validateCommandPath("/tmp/this_file_definitely_does_not_exist_12345.sh")
+	// Use an OS-absolute path so validateCommandPath reaches the os.Stat check on
+	// every platform: a Unix literal like "/tmp/..." is not absolute on Windows
+	// (filepath.IsAbs is false), so it short-circuits with CategoryValidation
+	// before the missing-file (CategoryFileIO) branch runs. t.TempDir() is
+	// absolute everywhere and the file inside it does not exist.
+	_, err := validateCommandPath(filepath.Join(t.TempDir(), "this_file_definitely_does_not_exist_12345.sh"))
 	require.Error(t, err)
 
 	// Regression: a missing file must produce a single enhanced error with
