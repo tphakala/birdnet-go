@@ -98,7 +98,8 @@ interface ParseOptions {
  * URL never throws or renders a broken view.
  */
 export function parseAnalyticsParams(search: string, opts: ParseOptions = {}): AnalyticsParams {
-  const sp = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  // URLSearchParams strips a single leading '?' itself, so pass the value as-is.
+  const sp = new URLSearchParams(search);
   const now = opts.now ?? new Date();
   const defaultTab = opts.defaultTab ?? 'overview';
 
