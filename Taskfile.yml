@@ -758,6 +758,17 @@ tasks:
   frontend-install:
     desc: Install frontend dependencies
     dir: frontend
+    # run: once guarantees a single execution per `task` invocation even when
+    # reached through multiple dependency paths. frontend-build depends on both
+    # frontend-install and frontend-typecheck, and frontend-typecheck also
+    # depends on frontend-install, forming a diamond. With the default
+    # run: always, go-task runs frontend-build's deps concurrently and executes
+    # frontend-install twice in parallel, so two `npm install` processes write
+    # the same node_modules at once. That race truncates large files (e.g.
+    # typescript.js), and svelte-check then fails with "Unexpected end of input".
+    # The race is timing dependent, which is why it flaked only intermittently
+    # and mostly on the arm64 runner.
+    run: once
     cmds:
       - |
         max_retries=3
