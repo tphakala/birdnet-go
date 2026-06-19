@@ -103,3 +103,35 @@ func TestIsNonBirdName(t *testing.T) {
 		})
 	}
 }
+
+func TestCategories(t *testing.T) {
+	t.Parallel()
+
+	cats := nonbird.Categories()
+
+	// Must have exactly seven entries.
+	assert.Len(t, cats, 7)
+
+	// No duplicates.
+	seen := make(map[nonbird.Category]struct{}, len(cats))
+	for _, c := range cats {
+		_, dup := seen[c]
+		assert.False(t, dup, "duplicate category %q in Categories()", c)
+		seen[c] = struct{}{}
+	}
+
+	// Every returned value must be one of the seven exported constants.
+	valid := map[nonbird.Category]struct{}{
+		nonbird.CategoryHuman:       {},
+		nonbird.CategoryAnimal:      {},
+		nonbird.CategoryMusic:       {},
+		nonbird.CategoryMechanical:  {},
+		nonbird.CategoryEnvironment: {},
+		nonbird.CategoryNoise:       {},
+		nonbird.CategoryDevice:      {},
+	}
+	for _, c := range cats {
+		_, ok := valid[c]
+		assert.True(t, ok, "Categories() returned unexpected value %q", c)
+	}
+}

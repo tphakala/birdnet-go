@@ -155,3 +155,50 @@ func TestAdditionalResultsToDatastoreResults(t *testing.T) {
 		assert.InDelta(t, float32(0.75), result[1].Confidence, 0.001)
 	})
 }
+
+func TestNoteFromResult_CarriesRawLabel(t *testing.T) {
+	t.Parallel()
+
+	result := detection.Result{
+		Timestamp: time.Date(2024, 6, 15, 14, 30, 45, 0, time.UTC),
+		Species: detection.Species{
+			ScientificName: "Turdus merula",
+			CommonName:     "Common Blackbird",
+		},
+		RawLabel: "power_tool",
+	}
+
+	note := datastore.NoteFromResult(&result)
+
+	assert.Equal(t, "power_tool", note.RawLabel)
+}
+
+func TestAdditionalResultsToDatastoreResults_CarriesRawLabel(t *testing.T) {
+	t.Parallel()
+
+	input := []detection.AdditionalResult{
+		{
+			Species: detection.Species{
+				ScientificName: "Turdus merula",
+				CommonName:     "Common Blackbird",
+			},
+			Confidence: 0.85,
+			RawLabel:   "speech",
+		},
+		{
+			Species: detection.Species{
+				ScientificName: "Turdus philomelos",
+				CommonName:     "Song Thrush",
+				Code:           "sonthr",
+			},
+			Confidence: 0.75,
+			RawLabel:   "male_speech_and_man_speaking",
+		},
+	}
+
+	result := datastore.AdditionalResultsToDatastoreResults(input)
+
+	require.Len(t, result, 2)
+	assert.Equal(t, "speech", result[0].RawLabel)
+	assert.Equal(t, "male_speech_and_man_speaking", result[1].RawLabel)
+}

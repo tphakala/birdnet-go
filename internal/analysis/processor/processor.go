@@ -1075,7 +1075,8 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 		float64(result.Confidence),
 		item.Source, clipName,
 		item.ElapsedTime, occurrence,
-		item.ModelID)
+		item.ModelID,
+		result.Species)
 
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
 	// Exclude the primary species since it's already stored as Detection.LabelID.
@@ -1109,7 +1110,8 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 	confidence float64,
 	source datastore.AudioSource, clipName string,
 	elapsedTime time.Duration, occurrence float64,
-	modelID string) detection.Result {
+	modelID string,
+	rawLabel string) detection.Result {
 
 	// Resolve audio source info from registry
 	audioSource := p.resolveAudioSource(source)
@@ -1134,6 +1136,7 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 		ProcessingTime: elapsedTime,
 		Occurrence:     math.Max(0.0, math.Min(1.0, occurrence)),
 		Model:          classifier.DetectionModelInfoForID(modelID),
+		RawLabel:       rawLabel,
 	}
 }
 
@@ -1195,6 +1198,7 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 				additional[idx] = detection.AdditionalResult{
 					Species:    sp,
 					Confidence: float64(r.Confidence),
+					RawLabel:   r.Species,
 				}
 			}
 			continue
@@ -1203,6 +1207,7 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 		additional = append(additional, detection.AdditionalResult{
 			Species:    sp,
 			Confidence: float64(r.Confidence),
+			RawLabel:   r.Species,
 		})
 	}
 	return additional

@@ -21,14 +21,20 @@
 //     sound classes ("Speech", "Bark", "Growling", ...) that carry no "human"/
 //     "dog" token at all, and whose underscore-joined forms ("Human_voice")
 //     SplitSpeciesName mangles into "voice". Those are matched exactly against
-//     the raw label here.
+//     the raw label here. The Perch/AudioSet (FSD50K) human-sound classes are
+//     handled by the shared nonbird package (CategoryHuman); only the
+//     iNaturalist taxon "homo sapiens" requires a local extra-labels map.
 //
 // Matching is case-insensitive: the raw label is lowercased once and compared
 // against the lowercase keys / prefixes below, so a custom or future label file
 // with different casing still engages the filters.
 package processor
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+)
 
 const (
 	// birdnetHumanLabelPrefix matches BirdNET's human classes by the English
@@ -44,61 +50,13 @@ const (
 	birdnetDogLabelPrefix = "dog_"
 )
 
-// perchHumanLabels enumerates the raw Perch v2 (FSD50K) labels treated as human
-// vocalizations by the privacy filter. The set is deliberately broad: it covers
-// the full AudioSet "Human sounds" branch present in the Perch label set (voice,
-// other vocalizations, respiratory, digestive, hand, locomotion, and group
-// actions) so any sign of a human near the microphone engages the filter, the
-// same way BirdNET filters both "Human vocal" and "Human non-vocal". Non-human
-// AudioSet classes that merely co-occur with people (e.g. "Car_passing_by",
-// "Thump_and_thud") are intentionally excluded. Keys are lowercase; lookups
-// lowercase the raw label first (see isHumanVocalization).
+// perchHumanExtraLabels holds human labels that the shared nonbird package does
+// not cover: iNaturalist taxa (not AudioSet/FSD50K sound classes). Keys are
+// lowercase.
 //
 //nolint:gochecknoglobals // immutable lookup table, read-only after init
-var perchHumanLabels = map[string]struct{}{
-	// Speech and voice.
-	"speech":                           {},
-	"speech_synthesizer":               {},
-	"male_speech_and_man_speaking":     {},
-	"female_speech_and_woman_speaking": {},
-	"child_speech_and_kid_speaking":    {},
-	"conversation":                     {},
-	"chatter":                          {},
-	"human_voice":                      {},
-	"human_group_actions":              {},
-	"whispering":                       {},
-	"shout":                            {},
-	"yell":                             {},
-	"screaming":                        {},
-	// Other human vocalizations.
-	"singing":             {},
-	"male_singing":        {},
-	"female_singing":      {},
-	"laughter":            {},
-	"giggle":              {},
-	"chuckle_and_chortle": {},
-	"crying_and_sobbing":  {},
-	"gasp":                {},
-	"sigh":                {},
-	// Non-vocal human body sounds (parallels BirdNET "Human non-vocal").
-	"cough":                   {},
-	"sneeze":                  {},
-	"breathing":               {},
-	"respiratory_sounds":      {},
-	"burping_and_eructation":  {},
-	"fart":                    {},
-	"chewing_and_mastication": {},
-	// Human taxon (iNaturalist) - humans detected as a species, not a sound.
-	"homo sapiens": {},
-	// Human actions and group sounds.
-	"crowd":              {},
-	"cheering":           {},
-	"applause":           {},
-	"clapping":           {},
-	"finger_snapping":    {},
-	"hands":              {},
-	"walk_and_footsteps": {},
-	"run":                {},
+var perchHumanExtraLabels = map[string]struct{}{
+	"homo sapiens": {}, // human detected as a species (iNaturalist taxon), not a sound class
 }
 
 // perchDogLabels enumerates the raw Perch v2 labels treated as a dog by the dog
@@ -118,12 +76,17 @@ var perchDogLabels = map[string]struct{}{
 
 // isHumanVocalization reports whether a raw classifier label represents a human
 // sound that should engage the privacy filter. rawLabel is the untransformed
-// result.Species value. Matching is case-insensitive: Perch v2 classes are
-// matched exactly; BirdNET classes are matched by the locale-stable English
-// label prefix.
+// result.Species value. Matching is case-insensitive.
+//
+// The AudioSet/FSD50K portion is delegated to the shared nonbird package
+// (nonbird.CategoryHuman). The iNaturalist taxon "homo sapiens" and the
+// BirdNET locale-stable prefix are handled locally.
 func isHumanVocalization(rawLabel string) bool {
+	if cat, ok := nonbird.CategoryOf(rawLabel); ok && cat == nonbird.CategoryHuman {
+		return true
+	}
 	lowered := strings.ToLower(rawLabel)
-	if _, ok := perchHumanLabels[lowered]; ok {
+	if _, ok := perchHumanExtraLabels[lowered]; ok {
 		return true
 	}
 	return strings.HasPrefix(lowered, birdnetHumanLabelPrefix)
