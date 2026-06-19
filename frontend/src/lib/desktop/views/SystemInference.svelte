@@ -409,7 +409,7 @@
   function latencySummary(series: number[]): string {
     if (series.length === 0) return '';
     const current = series[series.length - 1] ?? 0;
-    const peak = series.reduce((max, v) => (v > max ? v : max), 0);
+    const peak = Math.max(...series);
     return `${current.toFixed(1)} ${t('system.inference.unitMs')} · ${t('system.inference.peak')} ${peak.toFixed(1)}`;
   }
 </script>
