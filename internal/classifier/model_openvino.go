@@ -201,6 +201,9 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	}
 
 	bn.classifier = classifier
+	// Record the concrete OpenVINO device (CPU/GPU) the classifier bound to so
+	// Device() reports the real execution provider rather than the backend string.
+	bn.device = plan.device
 	log.Info("OpenVINO model initialized",
 		logger.String("model", modelPath),
 		logger.String("device", plan.device),

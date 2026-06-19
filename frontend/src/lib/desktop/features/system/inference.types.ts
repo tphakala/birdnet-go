@@ -100,6 +100,14 @@ export interface InferenceModel {
   sources: ModelSource[];
   metricKeys: ModelMetricKeys;
   lastDetection?: InferenceLastDetection;
+  /** Compute device the model's inference runs on ("CPU", "GPU", "NPU", or "Unknown"). */
+  device?: string;
+  /** True when the model is currently paused by a schedule (e.g. bat night schedule). */
+  paused?: boolean;
+  /** Human-readable reason the model is paused, when paused (e.g. "Night schedule"). */
+  scheduleLabel?: string;
+  /** Most recent above-threshold detections, newest first (up to 10). */
+  recentDetections?: InferenceLastDetection[];
 }
 
 /** Ring-buffer metric keys used to look up audio pipeline time series. */

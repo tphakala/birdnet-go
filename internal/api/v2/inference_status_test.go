@@ -328,6 +328,57 @@ func TestBuildModelStatus_LastDetection(t *testing.T) {
 	assert.Equal(t, int64(1718000000), got.LastDetection.AtUnix)
 }
 
+// TestInferenceModelStatus_JSONContract locks in the Phase A JSON field names
+// and shapes the frontend depends on: device, paused, scheduleLabel, and a
+// newest-first recentDetections array. recentDetections must serialize as an
+// array (never null) so the frontend can iterate it unconditionally, while an
+// empty scheduleLabel must be omitted.
+func TestInferenceModelStatus_JSONContract(t *testing.T) {
+	t.Parallel()
+
+	status := InferenceModelStatus{
+		ID:            "Bat",
+		Name:          "Bat",
+		Device:        deviceCPU,
+		Paused:        true,
+		ScheduleLabel: "Night schedule",
+		RecentDetections: []LastDetectionInfo{
+			{Species: "Common Pipistrelle", ScientificName: "Pipistrellus pipistrellus", Confidence: 0.81, AtUnix: 1718000200},
+			{Species: "Soprano Pipistrelle", ScientificName: "Pipistrellus pygmaeus", Confidence: 0.74, AtUnix: 1718000100},
+		},
+	}
+
+	raw, err := json.Marshal(status)
+	require.NoError(t, err)
+
+	var m map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &m))
+
+	// The four new keys are present under their contract names.
+	assert.JSONEq(t, `"CPU"`, string(m["device"]))
+	assert.JSONEq(t, `true`, string(m["paused"]))
+	assert.JSONEq(t, `"Night schedule"`, string(m["scheduleLabel"]))
+	require.Contains(t, m, "recentDetections", "recentDetections key must always be present")
+
+	// recentDetections is newest-first and serializes its nested fields.
+	var recent []LastDetectionInfo
+	require.NoError(t, json.Unmarshal(m["recentDetections"], &recent))
+	require.Len(t, recent, 2)
+	assert.Equal(t, "Common Pipistrelle", recent[0].Species, "recentDetections must be newest-first")
+	assert.Equal(t, int64(1718000200), recent[0].AtUnix)
+
+	// An empty ring still serializes as [] (never null) and an empty
+	// scheduleLabel is omitted from the object entirely.
+	active := InferenceModelStatus{ID: "x", Device: deviceUnknown, RecentDetections: []LastDetectionInfo{}}
+	rawActive, err := json.Marshal(active)
+	require.NoError(t, err)
+	var ma map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rawActive, &ma))
+	assert.JSONEq(t, `[]`, string(ma["recentDetections"]), "empty recentDetections must serialize as [] not null")
+	assert.NotContains(t, ma, "scheduleLabel", "empty scheduleLabel must be omitted")
+	assert.JSONEq(t, `"Unknown"`, string(ma["device"]))
+}
+
 // TestSortInferenceModelsByName verifies that model statuses are ordered by
 // display name (case-insensitive), tie-broken by ID, so the API response order
 // is deterministic regardless of the orchestrator's map iteration order.

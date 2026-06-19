@@ -135,10 +135,12 @@ type Processor struct {
 	// Periodic pipeline stats (inference activity per source/model)
 	pipelineStats *PipelineStats
 
-	// Per-model last-detection cache. lastDetectionMu guards lastDetectionCache.
-	// The map is lazily initialised in updateLastDetection so zero-value Processors
+	// Per-model recent-detection cache: a fixed-size ring of the last
+	// lastDetectionRingSize above-threshold detections per model. lastDetectionMu
+	// guards lastDetectionCache and every ring it holds. The map and per-model
+	// rings are lazily initialised in updateLastDetection so zero-value Processors
 	// are safe to use in unit tests without a constructor call.
-	lastDetectionCache map[string]LastDetection
+	lastDetectionCache map[string]*detectionRing
 	lastDetectionMu    sync.RWMutex
 
 	// Extended capture fields

@@ -35,11 +35,12 @@ func TestIsPerchNoDFT(t *testing.T) {
 // this is deterministic everywhere (no libopenvino_c required).
 func TestTryPerchOpenVINO_StockModelFallsBack(t *testing.T) {
 	t.Parallel()
-	c, ok := tryPerchOpenVINO(&PerchConfig{
+	c, device, ok := tryPerchOpenVINO(&PerchConfig{
 		ModelPath:      "/models/perch_v2.onnx",
 		Backend:        conf.BackendPrefOpenVINO,
 		OpenVINODevice: conf.OVDeviceAuto,
 	}, []string{"a", "b"})
 	assert.False(t, ok, "stock perch_v2 must not use OpenVINO")
 	assert.Nil(t, c)
+	assert.Empty(t, device, "fallback path must not report an OpenVINO device")
 }

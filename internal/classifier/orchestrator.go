@@ -332,6 +332,10 @@ func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 	}
 }
 
+// scheduleReasonNight is the human-readable reason ModelScheduleStatus returns
+// when a model is paused by the nighttime schedule (currently only the bat model).
+const scheduleReasonNight = "Night schedule"
+
 // IsModelActive returns whether a model should currently run inference.
 // For the bat model, this checks the nighttime scheduler. For all other
 // models, it always returns true.
@@ -344,6 +348,49 @@ func (o *Orchestrator) IsModelActive(modelID string) bool {
 		return true // no scheduler = no restriction
 	}
 	return s.isActive()
+}
+
+// ModelScheduleStatus reports whether a model is currently allowed to run and,
+// when paused, a human-readable reason. It is the reason-carrying sibling of
+// IsModelActive (which stays bool-only because it is on the hot monitor-tick
+// path). Only the bat model is schedule-gated today: it returns
+// (false, scheduleReasonNight) when the nighttime scheduler has it paused, and
+// (true, "") otherwise. Every other model returns (true, ""). The design is
+// general so a future gated model can return its own reason.
+func (o *Orchestrator) ModelScheduleStatus(modelID string) (active bool, reason string) {
+	if modelID != RegistryIDBat {
+		return true, ""
+	}
+	s := o.scheduler.Load()
+	if s == nil || s.isActive() {
+		return true, ""
+	}
+	return false, scheduleReasonNight
+}
+
+// GetModelDevice returns the compute device (execution provider) the named
+// model's inference currently runs on, resolved from the live instance's
+// Device() (e.g. "CPU" or "GPU"). It returns deviceUnknown when the model is not
+// loaded or its instance has been torn down. Locking mirrors ModelInfos /
+// PredictModel: o.mu.RLock to find the entry, then entry.mu to read the instance.
+func (o *Orchestrator) GetModelDevice(modelID string) string {
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+	if !ok {
+		return deviceUnknown
+	}
+	// Capture the instance pointer under entry.mu, then release it before calling
+	// Device(): a model's Device() may take its own per-model lock (BirdNET locks
+	// bn.mu), and holding entry.mu across that call would stall PredictModel, which
+	// needs entry.mu only briefly on the inference hot path. Mirrors PredictModel.
+	entry.mu.Lock()
+	inst := entry.instance
+	entry.mu.Unlock()
+	if inst == nil {
+		return deviceUnknown
+	}
+	return inst.Device()
 }
 
 // ModelSpecFor returns the ModelSpec for the given model ID.

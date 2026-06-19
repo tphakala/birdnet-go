@@ -20,6 +20,7 @@ type mockModelInstance struct {
 	id      string
 	spec    ModelSpec
 	labels  []string // optional; when nil a single default label is returned
+	device  string   // optional; when empty Device() reports "CPU"
 	predict func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
@@ -44,6 +45,12 @@ func (m *mockModelInstance) Labels() []string {
 	return []string{"Turdus merula_Common Blackbird"}
 }
 func (m *mockModelInstance) Close() error { return nil }
+func (m *mockModelInstance) Device() string {
+	if m.device != "" {
+		return m.device
+	}
+	return deviceCPU
+}
 
 // newTestOrchestrator creates an Orchestrator with mock models for unit testing.
 // It does not require real model files.

@@ -9,6 +9,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// Device name strings reported by ModelInstance.Device(). CPU-bound backends
+// (TFLite, ONNX Runtime CPU EP) report deviceCPU; OpenVINO-backed instances
+// report the concrete OpenVINO device (inference.OVDeviceCPU/OVDeviceGPU).
+// deviceUnknown is returned by the Orchestrator when a model is not loaded.
+const (
+	deviceCPU     = "CPU"
+	deviceUnknown = "Unknown"
+)
+
 // ModelSpec describes a model's fixed audio requirements.
 // Overlap is NOT included - it comes from user configuration
 // (the false positive filter has multiple levels with specific overlap values).
@@ -78,6 +87,13 @@ type ModelInstance interface {
 
 	// Labels returns the full list of species labels.
 	Labels() []string
+
+	// Device returns the compute device (execution provider) the model's
+	// inference actually runs on, resolved from the backend selected at load
+	// time. Returns deviceCPU ("CPU") or, for OpenVINO-backed instances, the
+	// concrete OpenVINO device (inference.OVDeviceCPU/OVDeviceGPU). It is never
+	// inferred from the backend string: the value reflects the real chosen path.
+	Device() string
 
 	// Close releases resources held by the model.
 	Close() error
