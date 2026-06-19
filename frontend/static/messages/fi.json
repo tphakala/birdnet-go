@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "Laskentalaite, jolla tämä malli suorittaa päättelyn (CPU tai GPU).",
+      "deviceHelp": "Laskentalaite, jolla tämä malli suorittaa päättelyn (CPU, GPU tai tuntematon).",
       "paused": "Tauolla",
       "pausedScheduleHelp": "Tämä malli toimii vain aikataulun mukaan ja on tällä hetkellä tauolla, joten se ei käsittele ääntä.",
       "activityPaused": "Tauolla aikataulun mukaan",

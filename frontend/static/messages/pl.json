@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "Urządzenie obliczeniowe, na którym ten model uruchamia wnioskowanie (CPU lub GPU).",
+      "deviceHelp": "Urządzenie obliczeniowe, na którym ten model uruchamia wnioskowanie (CPU, GPU lub nieznane).",
       "paused": "Wstrzymano",
       "pausedScheduleHelp": "Ten model działa tylko zgodnie z harmonogramem i jest obecnie wstrzymany, więc nie przetwarza dźwięku.",
       "activityPaused": "Wstrzymano przez harmonogram",

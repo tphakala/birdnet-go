@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "Výpočtové zariadenie, na ktorom tento model spúšťa inferenciu (CPU alebo GPU).",
+      "deviceHelp": "Výpočtové zariadenie, na ktorom tento model spúšťa inferenciu (CPU, GPU alebo neznáme).",
       "paused": "Pozastavené",
       "pausedScheduleHelp": "Tento model beží iba podľa plánu a momentálne je pozastavený, takže nespracováva zvuk.",
       "activityPaused": "Pozastavené plánom",

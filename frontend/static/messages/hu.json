@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "A számítási eszköz, amelyen ez a modell a következtetést futtatja (CPU vagy GPU).",
+      "deviceHelp": "A számítási eszköz, amelyen ez a modell a következtetést futtatja (CPU, GPU vagy ismeretlen).",
       "paused": "Szüneteltetve",
       "pausedScheduleHelp": "Ez a modell csak ütemezés szerint fut, és jelenleg szünetel, így nem dolgoz fel hangot.",
       "activityPaused": "Ütemezés miatt szünetel",

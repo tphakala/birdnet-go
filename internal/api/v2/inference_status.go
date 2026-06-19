@@ -362,26 +362,26 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 		lastDetections = make(map[string]*LastDetectionInfo, len(infos))
 		for i := range infos {
 			id := infos[i].ID
-			if ld, ok := c.Processor.GetLastDetection(id); ok {
-				lastDetections[id] = &LastDetectionInfo{
-					Species:        ld.Species,
-					ScientificName: ld.ScientificName,
-					Confidence:     ld.Confidence,
-					AtUnix:         ld.AtUnix,
+			// Derive both the recent-detections list and the single most-recent
+			// detection from one GetRecentDetections snapshot (newest first), so
+			// lastDetection and recentDetections[0] are always consistent and we
+			// take only one read lock per model.
+			recent := c.Processor.GetRecentDetections(id)
+			if len(recent) == 0 {
+				continue
+			}
+			converted := make([]LastDetectionInfo, len(recent))
+			for j := range recent {
+				converted[j] = LastDetectionInfo{
+					Species:        recent[j].Species,
+					ScientificName: recent[j].ScientificName,
+					Confidence:     recent[j].Confidence,
+					AtUnix:         recent[j].AtUnix,
 				}
 			}
-			if recent := c.Processor.GetRecentDetections(id); len(recent) > 0 {
-				converted := make([]LastDetectionInfo, len(recent))
-				for j := range recent {
-					converted[j] = LastDetectionInfo{
-						Species:        recent[j].Species,
-						ScientificName: recent[j].ScientificName,
-						Confidence:     recent[j].Confidence,
-						AtUnix:         recent[j].AtUnix,
-					}
-				}
-				recentDetections[id] = converted
-			}
+			latest := converted[0]
+			lastDetections[id] = &latest
+			recentDetections[id] = converted
 		}
 	}
 

@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "Den beräkningsenhet som denna modell kör inferens på (CPU eller GPU).",
+      "deviceHelp": "Den beräkningsenhet som denna modell kör inferens på (CPU, GPU eller okänd).",
       "paused": "Pausad",
       "pausedScheduleHelp": "Denna modell körs endast enligt ett schema och är för närvarande pausad, så den bearbetar inte ljud.",
       "activityPaused": "Pausad av schema",

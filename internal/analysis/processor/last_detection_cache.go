@@ -46,7 +46,7 @@ type detectionRing struct {
 // detection hot path is minimally impacted. res is passed by pointer to avoid
 // copying the large detection.Result value.
 func (p *Processor) updateLastDetection(modelID string, res *detection.Result) {
-	if modelID == "" {
+	if modelID == "" || res == nil {
 		return
 	}
 	entry := LastDetection{

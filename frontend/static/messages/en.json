@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "The compute device this model runs inference on (CPU or GPU).",
+      "deviceHelp": "The compute device this model runs inference on (CPU, GPU, or Unknown).",
       "paused": "Paused",
       "pausedScheduleHelp": "This model only runs on a schedule and is currently paused, so it is not processing audio.",
       "activityPaused": "Paused by schedule",

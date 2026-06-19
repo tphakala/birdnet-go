@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "Il dispositivo di elaborazione su cui questo modello esegue l'inferenza (CPU o GPU).",
+      "deviceHelp": "Il dispositivo di elaborazione su cui questo modello esegue l'inferenza (CPU, GPU o sconosciuto).",
       "paused": "In pausa",
       "pausedScheduleHelp": "Questo modello funziona solo in base a una pianificazione ed è attualmente in pausa, quindi non sta elaborando l'audio.",
       "activityPaused": "In pausa da pianificazione",

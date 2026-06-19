@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "Het rekensysteem waarop dit model inferentie uitvoert (CPU of GPU).",
+      "deviceHelp": "Het rekensysteem waarop dit model inferentie uitvoert (CPU, GPU of onbekend).",
       "paused": "Gepauzeerd",
       "pausedScheduleHelp": "Dit model draait alleen volgens een schema en is momenteel gepauzeerd, dus het verwerkt geen audio.",
       "activityPaused": "Gepauzeerd door schema",

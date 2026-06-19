@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "Das Rechengerät, auf dem dieses Modell die Inferenz ausführt (CPU oder GPU).",
+      "deviceHelp": "Das Rechengerät, auf dem dieses Modell die Inferenz ausführt (CPU, GPU oder unbekannt).",
       "paused": "Pausiert",
       "pausedScheduleHelp": "Dieses Modell läuft nur nach Zeitplan und ist derzeit pausiert, sodass es keine Audiodaten verarbeitet.",
       "activityPaused": "Durch Zeitplan pausiert",

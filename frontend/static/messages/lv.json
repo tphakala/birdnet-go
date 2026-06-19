@@ -1561,7 +1561,7 @@
       "queueCapacity": "Capacity",
       "lastSeen": "Last seen",
       "lastSeenNever": "No detections yet",
-      "deviceHelp": "Skaitļošanas ierīce, kurā šis modelis veic secinājumus (CPU vai GPU).",
+      "deviceHelp": "Skaitļošanas ierīce, kurā šis modelis veic secinājumus (CPU, GPU vai nezināma).",
       "paused": "Apturēts",
       "pausedScheduleHelp": "Šis modelis darbojas tikai pēc grafika un šobrīd ir apturēts, tāpēc tas neapstrādā audio.",
       "activityPaused": "Apturēts pēc grafika",
