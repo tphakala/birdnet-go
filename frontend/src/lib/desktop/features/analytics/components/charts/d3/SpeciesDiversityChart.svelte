@@ -30,6 +30,9 @@
 
   // Chart styling constants
   const Y_SCALE_HEADROOM = 1.1;
+  // Non-degenerate fallback for the y-domain max when the range has no data, so
+  // an all-zero range keeps zero at the bottom instead of collapsing to [0,0].
+  const MIN_Y_DOMAIN_MAX = 1;
   const MAX_X_TICKS = 8;
   const TICK_SPACING_PX = 80;
   const Y_TICK_COUNT = 6;
@@ -65,7 +68,11 @@
 
     const safeDateExtent: [Date, Date] =
       dateExtent[0] && dateExtent[1] ? [dateExtent[0], dateExtent[1]] : [new Date(), new Date()];
-    const safeMaxCount = countExtent[1] !== undefined ? countExtent[1] : 10;
+    // Unique-species counts are non-negative. Default a zero/empty max to 1 so an
+    // all-zero range keeps zero at the bottom rather than collapse to a degenerate
+    // [0,0] domain (which .nice() expands symmetrically into negatives). `|| 1`
+    // only replaces a falsy (0/undefined) max, preserving any real positive max.
+    const safeMaxCount = countExtent[1] || MIN_Y_DOMAIN_MAX;
 
     return {
       x: safeDateExtent,

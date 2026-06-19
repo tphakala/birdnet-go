@@ -1648,6 +1648,35 @@
     "reattach": "Pripojiť späť"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Prehľad",
+        "patterns": "Vzorce aktivity",
+        "trends": "Trendy",
+        "biodiversity": "Biodiverzita",
+        "quality": "Kontrola a presnosť"
+      },
+      "aria": {
+        "tabs": "Sekcie analýzy"
+      },
+      "controls": {
+        "source": "Zdroj",
+        "sourceAll": "Všetky zdroje",
+        "sourceComingSoon": "Filtrovanie podľa zdroja príde v neskoršej aktualizácii.",
+        "speciesNotApplicable": "Grafy v tejto sekcii nefiltrujú podľa druhu."
+      },
+      "card": {
+        "error": "Tento graf sa nepodarilo načítať",
+        "retry": "Skúsiť znova",
+        "notEnoughData": "Zatiaľ nie je dostatok údajov",
+        "notEnoughDataHint": "Tento graf potrebuje aspoň {min} dátových bodov. Pokračujte v nahrávaní a vráťte sa čoskoro.",
+        "export": "Exportovať",
+        "exportComingSoon": "Export do CSV čoskoro príde."
+      },
+      "comingSoon": {
+        "description": "Táto sekcia sa pripravuje a príde v niektorej z budúcich aktualizácií."
+      }
+    },
     "title": "Prehľad",
     "loadingError": "Nepodarilo sa načítať niektoré analytické dáta. Skúste to neskôr.",
     "stats": {

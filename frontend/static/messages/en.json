@@ -1648,6 +1648,35 @@
     "reattach": "Reattach"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Overview",
+        "patterns": "Activity Patterns",
+        "trends": "Trends",
+        "biodiversity": "Biodiversity",
+        "quality": "Review & Accuracy"
+      },
+      "aria": {
+        "tabs": "Analytics sections"
+      },
+      "controls": {
+        "source": "Source",
+        "sourceAll": "All sources",
+        "sourceComingSoon": "Filtering by source arrives in a later update.",
+        "speciesNotApplicable": "The charts in this section do not filter by species."
+      },
+      "card": {
+        "error": "Couldn't load this chart",
+        "retry": "Retry",
+        "notEnoughData": "Not enough data yet",
+        "notEnoughDataHint": "This chart needs at least {min} data points. Keep recording and check back soon.",
+        "export": "Export",
+        "exportComingSoon": "CSV export is coming soon."
+      },
+      "comingSoon": {
+        "description": "This section is under construction and will arrive in an upcoming update."
+      }
+    },
     "title": "Overview",
     "loadingError": "Failed to load some analytics data. Please try again later.",
     "stats": {

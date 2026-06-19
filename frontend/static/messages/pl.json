@@ -1648,6 +1648,35 @@
     "reattach": "Podłącz ponownie"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Przegląd",
+        "patterns": "Wzorce aktywności",
+        "trends": "Trendy",
+        "biodiversity": "Bioróżnorodność",
+        "quality": "Przegląd i dokładność"
+      },
+      "aria": {
+        "tabs": "Sekcje analizy"
+      },
+      "controls": {
+        "source": "Źródło",
+        "sourceAll": "Wszystkie źródła",
+        "sourceComingSoon": "Filtrowanie według źródła pojawi się w późniejszej aktualizacji.",
+        "speciesNotApplicable": "Wykresy w tej sekcji nie filtrują według gatunku."
+      },
+      "card": {
+        "error": "Nie można załadować tego wykresu",
+        "retry": "Ponów próbę",
+        "notEnoughData": "Wciąż za mało danych",
+        "notEnoughDataHint": "Ten wykres wymaga co najmniej {min} punktów danych. Kontynuuj nagrywanie i wróć wkrótce.",
+        "export": "Eksportuj",
+        "exportComingSoon": "Eksport CSV pojawi się wkrótce."
+      },
+      "comingSoon": {
+        "description": "Ta sekcja jest w budowie i pojawi się w nadchodzącej aktualizacji."
+      }
+    },
     "title": "Przegląd",
     "loadingError": "Nie udało się załadować niektórych danych analitycznych. Spróbuj ponownie później.",
     "stats": {

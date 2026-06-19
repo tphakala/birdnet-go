@@ -1648,6 +1648,35 @@
     "reattach": "Återanslut"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Översikt",
+        "patterns": "Aktivitetsmönster",
+        "trends": "Trender",
+        "biodiversity": "Biologisk mångfald",
+        "quality": "Granskning och noggrannhet"
+      },
+      "aria": {
+        "tabs": "Analysavsnitt"
+      },
+      "controls": {
+        "source": "Källa",
+        "sourceAll": "Alla källor",
+        "sourceComingSoon": "Filtrering efter källa kommer i en senare uppdatering.",
+        "speciesNotApplicable": "Diagrammen i det här avsnittet filtrerar inte efter art."
+      },
+      "card": {
+        "error": "Det gick inte att läsa in det här diagrammet",
+        "retry": "Försök igen",
+        "notEnoughData": "Inte tillräckligt med data ännu",
+        "notEnoughDataHint": "Det här diagrammet behöver minst {min} datapunkter. Fortsätt spela in och titta tillbaka snart.",
+        "export": "Exportera",
+        "exportComingSoon": "CSV-export kommer snart."
+      },
+      "comingSoon": {
+        "description": "Det här avsnittet är under uppbyggnad och kommer i en kommande uppdatering."
+      }
+    },
     "title": "Översikt",
     "loadingError": "Kunde inte ladda vissa analysdata. Försök igen senare.",
     "stats": {
