@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -602,7 +601,7 @@ func (s *InMemoryStore) removeOldest() {
 		older := cmp.Or(
 			notif.Timestamp.Compare(oldestTime),
 			cmp.Compare(notif.seq, oldestSeq),
-			strings.Compare(oldestID, id),
+			cmp.Compare(oldestID, id),
 		) < 0
 		if older {
 			oldestID, oldestTime, oldestSeq = id, notif.Timestamp, notif.seq
@@ -678,7 +677,7 @@ func sortNotificationsByTime(notifications []*Notification) {
 		return cmp.Or(
 			b.Timestamp.Compare(a.Timestamp), // newest first
 			cmp.Compare(b.seq, a.seq),        // later creation first on equal timestamps
-			strings.Compare(a.ID, b.ID),      // stable fallback for seq-less notifications
+			cmp.Compare(a.ID, b.ID),          // stable fallback for seq-less notifications
 		)
 	})
 }
