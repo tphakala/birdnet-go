@@ -1536,7 +1536,7 @@
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
-      "clipLength": "Clip length",
+      "clipLength": "Segmenta garums",
       "species": "Species",
       "invocations": "Segments analysed",
       "avgLatency": "Avg latency",
@@ -1566,9 +1566,13 @@
       "pausedScheduleHelp": "Šis modelis darbojas tikai pēc grafika un šobrīd ir apturēts, tāpēc tas neapstrādā audio.",
       "activityPaused": "Apturēts pēc grafika",
       "lastHeard": "Pēdējoreiz dzirdēts",
+      "lastHeardHint": "Nesenās prognozes virs sliekšņa, diagnostikai. Ietver ne-putnu un ārpus diapazona rezultātus, kas netiek saglabāti kā atklājumi.",
       "lastHeardNever": "Vēl nekas nav dzirdēts",
       "confidenceColumn": "Tic.",
       "heardWhen": "Kad",
+      "coDetectedColumn": "Arī",
+      "coDetectedHelp": "Citi modeļi, kas konstatēja šo sugu {seconds}s laikā",
+      "outOfRangeHelp": "Ārpus apgabala filtra (rādīts diagnostikai, nav saglabāts kā atklājums)",
       "peak": "pīķis",
       "activityActive": "Inference active",
       "activityIdle": "Idle",
@@ -1587,8 +1591,7 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources",
-      "noDataYet": "No data yet"
+      "noModelsHintLink": "Configure audio sources"
     },
     "metrics": {
       "cpu": "Procesors",

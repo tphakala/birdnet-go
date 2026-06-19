@@ -94,8 +94,9 @@ type InferenceModelStatus struct {
 	Sources       []ModelSourceInfo  `json:"sources"`
 	MetricKeys    ModelMetricKeys    `json:"metricKeys"`
 	LastDetection *LastDetectionInfo `json:"lastDetection,omitempty"`
-	// RecentDetections is the newest-first list of up to 10 recent above-threshold
-	// detections for this model (the "Last heard" table). Empty when none.
+	// RecentDetections is the newest-first feed of up to 20 recent above-threshold
+	// detections for this model (the "Last heard" table), throttled per species so
+	// a continuously singing bird does not flood it. Empty when none.
 	RecentDetections []LastDetectionInfo `json:"recentDetections"`
 }
 
@@ -186,6 +187,11 @@ type LastDetectionInfo struct {
 	Confidence float64 `json:"confidence"`
 	// AtUnix is the Unix timestamp (seconds) of when the detection occurred.
 	AtUnix int64 `json:"atUnix"`
+	// InRange reports whether the species passes the range filter. True when in
+	// range or the range filter is inactive (e.g. no location configured). When
+	// the range filter is active it is false for out-of-range birds and for
+	// non-avian and human classes, which are shown for diagnostics but not saved.
+	InRange bool `json:"inRange"`
 }
 
 // deviceCPU and deviceGPU are the OpenVINO device name strings used when
@@ -353,7 +359,7 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 		}
 	}
 
-	// Compute per-model last detection and the recent-detections ring (newest
+	// Compute per-model last detection and the recent-detections list (newest
 	// first), converting from processor.LastDetection to the API-local
 	// LastDetectionInfo via field assignment (no type import needed).
 	var lastDetections map[string]*LastDetectionInfo
@@ -377,6 +383,7 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 					ScientificName: recent[j].ScientificName,
 					Confidence:     recent[j].Confidence,
 					AtUnix:         recent[j].AtUnix,
+					InRange:        recent[j].InRange,
 				}
 			}
 			latest := converted[0]

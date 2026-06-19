@@ -432,7 +432,7 @@ describe('SystemInference', () => {
     expect(capturedHistoryUrl).not.toContain('inference.model-1.error_rate');
   });
 
-  it('renders the Last heard table with recent detections (species and confidence)', async () => {
+  it('renders the Last heard feed with recent detections (species and confidence)', async () => {
     const model = makeModel({
       recentDetections: [
         {
@@ -440,12 +440,14 @@ describe('SystemInference', () => {
           scientificName: 'Fringilla coelebs',
           confidence: 0.87,
           atUnix: Math.floor(Date.now() / 1000) - 60,
+          inRange: true,
         },
         {
           species: 'European Robin',
           scientificName: 'Erithacus rubecula',
           confidence: 0.42,
           atUnix: Math.floor(Date.now() / 1000) - 120,
+          inRange: true,
         },
       ],
     });
@@ -462,6 +464,137 @@ describe('SystemInference', () => {
     expect(text).toContain('87%');
     expect(text).toContain('European Robin');
     expect(text).toContain('42%');
+  });
+
+  it('shows the same species more than once in the throttled feed', async () => {
+    // The feed is chronological, not collapsed: a species detected again after
+    // its throttle interval appears as a separate row (no ×N counter, no range).
+    const now = Math.floor(Date.now() / 1000);
+    const model = makeModel({
+      recentDetections: [
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.81,
+          atUnix: now - 2,
+          inRange: true,
+        },
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.77,
+          atUnix: now - 12,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // Two separate rows for the same species, each with its own confidence.
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    const text = container.textContent;
+    expect(text).toContain('81%');
+    expect(text).toContain('77%');
+    expect(text).not.toContain('×');
+  });
+
+  it('lists other models that detected the same species within tolerance (Also column)', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const birdnet = makeModel({
+      id: 'model-1',
+      name: 'BirdNET GLOBAL 6K',
+      detectionName: 'BirdNET',
+      recentDetections: [
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.8,
+          atUnix: now - 5,
+          inRange: true,
+        },
+        {
+          species: 'Common Blackbird',
+          scientificName: 'Turdus merula',
+          confidence: 0.7,
+          atUnix: now - 30,
+          inRange: true,
+        },
+      ],
+    });
+    const perch = makeModel({
+      id: 'model-2',
+      name: 'Perch',
+      detectionName: 'Perch',
+      metricKeys: {
+        avgMs: 'inference.model-2.avg_ms',
+        rtf: 'inference.model-2.rtf',
+        throughput: 'inference.model-2.throughput',
+        errorRate: 'inference.model-2.error_rate',
+      },
+      // Robin 1s from BirdNET's Robin (within tolerance); no Blackbird.
+      recentDetections: [
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.75,
+          atUnix: now - 6,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([birdnet, perch]));
+
+    const { container } = inferenceTest.render({});
+    await waitFor(() => {
+      expect(container.textContent).toContain('BirdNET GLOBAL 6K');
+    });
+
+    // The "Also" column is the 4th cell of each detection row.
+    const alsoCells = Array.from(container.querySelectorAll('tbody tr td:nth-child(4)')).map(c =>
+      c.textContent.trim()
+    );
+    expect(alsoCells).toContain('Perch'); // BirdNET's Robin co-detected by Perch
+    expect(alsoCells).toContain('BirdNET'); // Perch's Robin co-detected by BirdNET
+    expect(alsoCells).toContain('-'); // Blackbird had no co-detection
+  });
+
+  it('marks out-of-range / non-avian predictions with an icon, not in-range ones', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const model = makeModel({
+      recentDetections: [
+        {
+          species: 'Engine',
+          scientificName: 'Engine',
+          confidence: 0.7,
+          atUnix: now - 2,
+          inRange: false,
+        },
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.8,
+          atUnix: now - 10,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+
+    // Exactly one out-of-range marker (Engine); the in-range Robin has none.
+    const markers = container.querySelectorAll('[aria-label="system.inference.outOfRangeHelp"]');
+    expect(markers).toHaveLength(1);
+    expect(container.textContent).toContain('Engine');
+    expect(container.textContent).toContain('European Robin');
   });
 
   it('shows the lastHeardNever label when there are no recent detections', async () => {

@@ -1536,7 +1536,7 @@
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
-      "clipLength": "Clip length",
+      "clipLength": "Segmentin pituus",
       "species": "Species",
       "invocations": "Segments analysed",
       "avgLatency": "Avg latency",
@@ -1566,9 +1566,13 @@
       "pausedScheduleHelp": "Tämä malli toimii vain aikataulun mukaan ja on tällä hetkellä tauolla, joten se ei käsittele ääntä.",
       "activityPaused": "Tauolla aikataulun mukaan",
       "lastHeard": "Viimeksi kuultu",
+      "lastHeardHint": "Viimeisimmät kynnyksen ylittävät ennusteet, diagnostiikkaa varten. Sisältää muut kuin lintu- ja alueen ulkopuoliset tulokset, joita ei tallenneta havaintoina.",
       "lastHeardNever": "Ei vielä kuultu mitään",
       "confidenceColumn": "Varm.",
       "heardWhen": "Milloin",
+      "coDetectedColumn": "Myös",
+      "coDetectedHelp": "Muut mallit, jotka havaitsivat tämän lajin {seconds}s sisällä",
+      "outOfRangeHelp": "Aluesuodattimen ulkopuolella (näytetään diagnostiikkaa varten, ei tallenneta havaintona)",
       "peak": "huippu",
       "activityActive": "Inference active",
       "activityIdle": "Idle",
@@ -1587,8 +1591,7 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources",
-      "noDataYet": "No data yet"
+      "noModelsHintLink": "Configure audio sources"
     },
     "metrics": {
       "cpu": "CPU",

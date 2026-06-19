@@ -316,6 +316,7 @@ func TestBuildModelStatus_LastDetection(t *testing.T) {
 			ScientificName: "Erithacus rubecula",
 			Confidence:     0.92,
 			AtUnix:         1718000000,
+			InRange:        true,
 		},
 	}
 
@@ -326,6 +327,7 @@ func TestBuildModelStatus_LastDetection(t *testing.T) {
 	assert.Equal(t, "Erithacus rubecula", got.LastDetection.ScientificName)
 	assert.InDelta(t, 0.92, got.LastDetection.Confidence, 0.001)
 	assert.Equal(t, int64(1718000000), got.LastDetection.AtUnix)
+	assert.True(t, got.LastDetection.InRange)
 }
 
 // TestInferenceModelStatus_JSONContract locks in the Phase A JSON field names
@@ -343,8 +345,8 @@ func TestInferenceModelStatus_JSONContract(t *testing.T) {
 		Paused:        true,
 		ScheduleLabel: "Night schedule",
 		RecentDetections: []LastDetectionInfo{
-			{Species: "Common Pipistrelle", ScientificName: "Pipistrellus pipistrellus", Confidence: 0.81, AtUnix: 1718000200},
-			{Species: "Soprano Pipistrelle", ScientificName: "Pipistrellus pygmaeus", Confidence: 0.74, AtUnix: 1718000100},
+			{Species: "Common Pipistrelle", ScientificName: "Pipistrellus pipistrellus", Confidence: 0.81, AtUnix: 1718000200, InRange: true},
+			{Species: "Soprano Pipistrelle", ScientificName: "Pipistrellus pygmaeus", Confidence: 0.74, AtUnix: 1718000100, InRange: false},
 		},
 	}
 
@@ -354,7 +356,7 @@ func TestInferenceModelStatus_JSONContract(t *testing.T) {
 	var m map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(raw, &m))
 
-	// The four new keys are present under their contract names.
+	// The Phase A keys are present under their contract names.
 	assert.JSONEq(t, `"CPU"`, string(m["device"]))
 	assert.JSONEq(t, `true`, string(m["paused"]))
 	assert.JSONEq(t, `"Night schedule"`, string(m["scheduleLabel"]))
@@ -367,7 +369,17 @@ func TestInferenceModelStatus_JSONContract(t *testing.T) {
 	assert.Equal(t, "Common Pipistrelle", recent[0].Species, "recentDetections must be newest-first")
 	assert.Equal(t, int64(1718000200), recent[0].AtUnix)
 
-	// An empty ring still serializes as [] (never null) and an empty
+	// The nested field names are part of the contract: assert their JSON keys.
+	var rows []map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(m["recentDetections"], &rows))
+	require.NotEmpty(t, rows)
+	firstRow := rows[0]
+	for _, key := range []string{"species", "scientificName", "confidence", "atUnix", "inRange"} {
+		require.Contains(t, firstRow, key, "recentDetections element must carry the %q key", key)
+	}
+	assert.JSONEq(t, `true`, string(firstRow["inRange"]))
+
+	// An empty list still serializes as [] (never null) and an empty
 	// scheduleLabel is omitted from the object entirely.
 	active := InferenceModelStatus{ID: "x", Device: deviceUnknown, RecentDetections: []LastDetectionInfo{}}
 	rawActive, err := json.Marshal(active)

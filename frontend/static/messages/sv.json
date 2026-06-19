@@ -1536,7 +1536,7 @@
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
-      "clipLength": "Clip length",
+      "clipLength": "Segmentlängd",
       "species": "Species",
       "invocations": "Segments analysed",
       "avgLatency": "Avg latency",
@@ -1566,9 +1566,13 @@
       "pausedScheduleHelp": "Denna modell körs endast enligt ett schema och är för närvarande pausad, så den bearbetar inte ljud.",
       "activityPaused": "Pausad av schema",
       "lastHeard": "Sist hörd",
+      "lastHeardHint": "Senaste förutsägelser över tröskeln, för diagnostik. Inkluderar icke-fågel- och utanför område-resultat som inte sparas som detekteringar.",
       "lastHeardNever": "Inget hört än",
       "confidenceColumn": "Konf.",
       "heardWhen": "När",
+      "coDetectedColumn": "Även",
+      "coDetectedHelp": "Andra modeller som upptäckte denna art inom {seconds}s",
+      "outOfRangeHelp": "Utanför områdesfiltret (visas för diagnostik, sparas inte som detektering)",
       "peak": "topp",
       "activityActive": "Inference active",
       "activityIdle": "Idle",
@@ -1587,8 +1591,7 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources",
-      "noDataYet": "No data yet"
+      "noModelsHintLink": "Configure audio sources"
     },
     "metrics": {
       "cpu": "CPU",

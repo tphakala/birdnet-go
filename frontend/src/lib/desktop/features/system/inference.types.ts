@@ -76,12 +76,19 @@ export interface ModelMetricKeys {
   errorRate: string;
 }
 
-/** Most recent detection produced by a model. */
+/** A recent detection in a model's "Last heard" feed (throttled per species). */
 export interface InferenceLastDetection {
   species: string;
   scientificName: string;
   confidence: number;
   atUnix: number;
+  /**
+   * Whether the species passes the range filter. True when in range or the range
+   * filter is inactive (e.g. no location configured). When the range filter is
+   * active it is false for out-of-range birds and for non-avian and human classes,
+   * which are shown for diagnostics but are not saved as detections.
+   */
+  inRange: boolean;
 }
 
 /** A single loaded model and its current state. */
@@ -106,7 +113,7 @@ export interface InferenceModel {
   paused?: boolean;
   /** Human-readable reason the model is paused, when paused (e.g. "Night schedule"). */
   scheduleLabel?: string;
-  /** Most recent above-threshold detections, newest first (up to 10). */
+  /** Most recent above-threshold predictions, newest first (up to 20). */
   recentDetections?: InferenceLastDetection[];
 }
 

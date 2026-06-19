@@ -1536,7 +1536,7 @@
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
-      "clipLength": "Clip length",
+      "clipLength": "Délka segmentu",
       "species": "Species",
       "invocations": "Segments analysed",
       "avgLatency": "Avg latency",
@@ -1566,9 +1566,13 @@
       "pausedScheduleHelp": "Tento model běží pouze podle plánu a je momentálně pozastaven, takže nezpracovává zvuk.",
       "activityPaused": "Pozastaveno plánem",
       "lastHeard": "Naposledy slyšeno",
+      "lastHeardHint": "Nedávné predikce nad prahem, pro diagnostiku. Zahrnuje neptačí a mimo-oblastní výsledky, které se neukládají jako detekce.",
       "lastHeardNever": "Zatím nic neslyšeno",
       "confidenceColumn": "Spol.",
       "heardWhen": "Kdy",
+      "coDetectedColumn": "Také",
+      "coDetectedHelp": "Jiné modely, které tento druh zachytily do {seconds} s",
+      "outOfRangeHelp": "Mimo oblastní filtr (zobrazeno pro diagnostiku, neuloženo jako detekce)",
       "peak": "špička",
       "activityActive": "Inference active",
       "activityIdle": "Idle",
@@ -1587,8 +1591,7 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources",
-      "noDataYet": "No data yet"
+      "noModelsHintLink": "Configure audio sources"
     },
     "metrics": {
       "cpu": "CPU",
