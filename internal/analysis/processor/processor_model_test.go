@@ -56,6 +56,7 @@ func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 				"clip.wav",
 				100*time.Millisecond, 0.5,
 				tc.modelID,
+				"Parus major_Great Tit_gretit1",
 			)
 
 			assert.Equal(t, tc.expectedName, result.Model.Name)
