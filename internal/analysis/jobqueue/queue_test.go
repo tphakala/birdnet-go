@@ -1575,6 +1575,12 @@ func TestJobTypeStatistics(t *testing.T) {
 		MockAction: MockAction{
 			Description: "Retry Action",
 			ExecuteFunc: func(data any) error {
+				// Sleep longer than the system monotonic-clock granularity so the
+				// measured execution duration is reliably non-zero. Windows' clock
+				// resolution (~15ms) otherwise lets the start/end timestamp reads
+				// land in one tick, producing a 0 duration and a 0 MinDuration stat
+				// that fails the "duration should be positive" assertions below.
+				time.Sleep(25 * time.Millisecond)
 				// Increment counter and check
 				retryCounter++
 				// Fail on first attempt, succeed on retry
