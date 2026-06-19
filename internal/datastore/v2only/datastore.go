@@ -38,6 +38,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	obmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -139,6 +140,11 @@ type Datastore struct {
 	avesClassID        *uint // "Aves" taxonomic class ID (optional)
 	chiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
 
+	// nonBirdLabelTypeIDs maps each non-bird sound category to its label_type_id.
+	// Set once in the constructor (read-only afterwards) so concurrent Save calls can
+	// classify Perch v2 (FSD50K) sound classes without a data race.
+	nonBirdLabelTypeIDs map[nonbird.Category]uint
+
 	// names holds the species name lookup maps behind an atomic.Pointer
 	// for lock-free reads and atomic swaps when locale changes.
 	names atomic.Pointer[nameMaps]
@@ -195,6 +201,20 @@ type Config struct {
 	SpeciesCodeMap map[string]string
 }
 
+// getOrCreateLabelTypeID returns the id of the label type named name, creating
+// the row if absent. It returns an error if the resolved id is 0 (a zero
+// label_type_id is a silent FK orphan that would corrupt label rows).
+func getOrCreateLabelTypeID(db *gorm.DB, name string) (uint, error) {
+	var lt entities.LabelType
+	if err := db.Where("name = ?", name).FirstOrCreate(&lt, entities.LabelType{Name: name}).Error; err != nil {
+		return 0, fmt.Errorf("resolve label type %q: %w", name, err)
+	}
+	if lt.ID == 0 {
+		return 0, fmt.Errorf("label type %q resolved to id 0", name)
+	}
+	return lt.ID, nil
+}
+
 // New creates a new V2-only Datastore.
 func New(cfg *Config) (*Datastore, error) {
 	if cfg.Manager == nil {
@@ -218,14 +238,27 @@ func New(cfg *Config) (*Datastore, error) {
 	dbCounters := &dbstats.Counters{}
 	dbstats.RegisterCallbacks(db, dbCounters)
 
-	// Get or verify species label type ID
+	// Get or verify species label type ID.
+	// Uses the helper so a zero id (FK orphan) causes construction to fail early.
 	speciesLabelTypeID := cfg.SpeciesLabelTypeID
 	if speciesLabelTypeID == 0 {
-		var labelType entities.LabelType
-		if err := db.Where("name = ?", "species").FirstOrCreate(&labelType, entities.LabelType{Name: "species"}).Error; err != nil {
+		var err error
+		speciesLabelTypeID, err = getOrCreateLabelTypeID(db, entities.LabelTypeSpecies)
+		if err != nil {
 			return nil, fmt.Errorf("failed to get species label type: %w", err)
 		}
-		speciesLabelTypeID = labelType.ID
+	}
+
+	// Build cached map of non-bird category -> label_type_id.
+	// All seven IDs are resolved once here (read-only after construction) so
+	// concurrent Save calls can classify non-bird sounds without a data race.
+	nonBirdLabelTypeIDs := make(map[nonbird.Category]uint, len(nonbird.Categories()))
+	for _, cat := range nonbird.Categories() {
+		id, err := getOrCreateLabelTypeID(db, string(cat))
+		if err != nil {
+			return nil, fmt.Errorf("resolve non-bird label type for category %q: %w", cat, err)
+		}
+		nonBirdLabelTypeIDs[cat] = id
 	}
 
 	// Get or verify default model ID (BirdNET)
@@ -295,12 +328,13 @@ func New(cfg *Config) (*Datastore, error) {
 		log:                cfg.Logger,
 		timezone:           tz,
 		suncalc:            cfg.SunCalc,
-		defaultModelID:     defaultModelID,
-		speciesLabelTypeID: speciesLabelTypeID,
-		avesClassID:        avesClassID,
-		chiropteraClassID:  chiropteraClassID,
-		speciesCodeMap:     speciesCodeMap,
-		dbCounters:         dbCounters,
+		defaultModelID:      defaultModelID,
+		speciesLabelTypeID:  speciesLabelTypeID,
+		avesClassID:         avesClassID,
+		chiropteraClassID:   chiropteraClassID,
+		nonBirdLabelTypeIDs: nonBirdLabelTypeIDs,
+		speciesCodeMap:      speciesCodeMap,
+		dbCounters:          dbCounters,
 	}
 	ds.names.Store(nm)
 

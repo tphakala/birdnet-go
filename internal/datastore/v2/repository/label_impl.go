@@ -337,6 +337,16 @@ func (r *labelRepository) GetLabelIDsByScientificName(ctx context.Context, name 
 	return ids, err
 }
 
+// UpdateLabelType updates the label_type_id of an existing label identified by id.
+// A non-existent id results in zero rows affected, which is not treated as an error.
+func (r *labelRepository) UpdateLabelType(ctx context.Context, id, labelTypeID uint) error {
+	return datastore.RetryOnLock(ctx, "v2_update_label_type", func() error {
+		return r.db.WithContext(ctx).Table(r.tableName()).
+			Where("id = ?", id).
+			Update("label_type_id", labelTypeID).Error
+	}, r.metrics)
+}
+
 // GetByScientificNames retrieves all labels matching any of the scientific names.
 // Handles large name sets by chunking to avoid SQL parameter limits.
 func (r *labelRepository) GetByScientificNames(ctx context.Context, names []string) (map[string][]*entities.Label, error) {
