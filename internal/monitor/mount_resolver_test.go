@@ -3,6 +3,7 @@ package monitor
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -120,6 +121,13 @@ func TestResolveMountPointFromPartitionsNoMatch(t *testing.T) {
 
 func TestGroupPathsByMountPoint(t *testing.T) {
 	t.Parallel()
+	// Uses real Unix filesystem paths ("/", "/tmp") and asserts both survive
+	// mount-point grouping. On Windows neither is a valid path, so one is
+	// dropped and the count assertion fails. The grouping logic is covered
+	// cross-platform by the mock-partition tests in this file.
+	if runtime.GOOS == "windows" {
+		t.Skip("uses real Unix filesystem paths not present on Windows")
+	}
 
 	// Test with real filesystem - paths that exist
 	paths := []string{"/", "/tmp"}

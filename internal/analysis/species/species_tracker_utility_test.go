@@ -389,7 +389,12 @@ func TestCacheManagement_CriticalReliability(t *testing.T) {
 	tracker.ExpireCacheForTesting(species1)
 	cached, exists := tracker.statusCache[species1]
 	assert.True(t, exists, "Expired entry should still exist")
-	assert.Greater(t, time.Since(cached.timestamp), time.Hour,
+	// ExpireCacheForTesting sets the timestamp to exactly now-1h. On a coarse
+	// system clock (e.g. Windows' ~15ms timer) the time.Now() inside time.Since
+	// can equal the one used to stamp it, yielding exactly 1h rather than
+	// strictly greater. GreaterOrEqual still proves the entry is well past the
+	// 30s cache TTL, i.e. expired.
+	assert.GreaterOrEqual(t, time.Since(cached.timestamp), time.Hour,
 		"Cache timestamp should be expired")
 
 	// Test 4: ClearCacheForTesting
