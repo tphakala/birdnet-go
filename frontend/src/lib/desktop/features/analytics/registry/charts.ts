@@ -173,7 +173,11 @@ async function fetchDiversity(
     .map(item => {
       const date = parseLocalDateString(item.date);
       if (!date || isNaN(date.getTime())) return null;
-      return { date, uniqueSpecies: item.unique_species };
+      const uniqueSpecies =
+        typeof item.unique_species === 'number' && Number.isFinite(item.unique_species)
+          ? item.unique_species
+          : 0;
+      return { date, uniqueSpecies };
     })
     .filter((item): item is DiversityDatum => item !== null);
 }

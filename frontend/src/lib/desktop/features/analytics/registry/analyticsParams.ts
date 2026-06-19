@@ -31,7 +31,16 @@ const VALID_RANGES = new Set<string>(['week', 'month', 'quarter', 'year', 'custo
 /** Default range when the URL omits `range`. Matches the legacy page default. */
 export const DEFAULT_RANGE: DateRangePreset = 'month';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+/**
+ * Subtracts whole calendar days from a date in local time. Using setDate (rather
+ * than millisecond arithmetic) keeps preset windows DST-safe: a "7 days ago"
+ * boundary lands on the correct local date even across a DST transition.
+ */
+function subtractLocalDays(base: Date, days: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() - days);
+  return d;
+}
 
 /** Rolling-window lengths in days for the preset ranges. */
 const RANGE_DAYS: Record<Exclude<DateRangePreset, 'custom'>, number> = {
@@ -63,7 +72,7 @@ export function resolveDateRange(
   now: Date = new Date()
 ): [Date, Date] {
   if (range === 'custom') {
-    const monthAgo = new Date(now.getTime() - RANGE_DAYS.month * DAY_MS);
+    const monthAgo = subtractLocalDays(now, RANGE_DAYS.month);
     const startDate = start ? (parseLocalDateString(start) ?? monthAgo) : monthAgo;
     const endDate = end ? (parseLocalDateString(end) ?? now) : now;
     return [startDate, endDate];
@@ -71,7 +80,7 @@ export function resolveDateRange(
 
   // eslint-disable-next-line security/detect-object-injection -- range is a typed preset enum, not user input
   const days = RANGE_DAYS[range];
-  return [new Date(now.getTime() - days * DAY_MS), now];
+  return [subtractLocalDays(now, days), now];
 }
 
 interface ParseOptions {
@@ -105,10 +114,16 @@ export function parseAnalyticsParams(search: string, opts: ParseOptions = {}): A
 
   const speciesRaw = sp.get('species') ?? '';
   const species = speciesRaw
-    ? speciesRaw
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
+    ? // Dedupe so a hand-edited URL with repeats (?species=A,A) does not produce
+      // duplicate selections / duplicate D3 series keys.
+      [
+        ...new Set(
+          speciesRaw
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean)
+        ),
+      ]
     : [];
 
   const source = sp.get('source') ?? '';

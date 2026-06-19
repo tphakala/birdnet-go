@@ -37,6 +37,11 @@
 
   let { data = [], width = 800, height = 400, selectedSpecies = [] }: Props = $props();
 
+  // Non-degenerate fallback for the y-domain max (counts are non-negative; an
+  // all-zero range keeps zero at the bottom) plus a fixed headroom above the max.
+  const MIN_Y_DOMAIN_MAX = 1;
+  const Y_AXIS_HEADROOM = 1.1;
+
   // Component state
   let tooltip: ChartTooltip | null = null;
 
@@ -76,12 +81,12 @@
     // series pins zero to the bottom instead of producing a degenerate [0,0] domain
     // that .nice() expands symmetrically (centering zero and rendering negative
     // ticks). `|| 1` only replaces a falsy (0) max, preserving any real positive max.
-    const maxCount = rawMaxCount || 1;
+    const maxCount = rawMaxCount || MIN_Y_DOMAIN_MAX;
 
     return {
       x: scaleLinear().domain([0, 23]).range([0, 100]), // Percentage-based for responsiveness
       y: scaleLinear()
-        .domain([0, maxCount * 1.1])
+        .domain([0, maxCount * Y_AXIS_HEADROOM])
         .range([100, 0]), // Inverted for SVG
     };
   });
