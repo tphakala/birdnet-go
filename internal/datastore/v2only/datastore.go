@@ -570,6 +570,20 @@ func (ds *Datastore) GetDatabaseStats(ctx context.Context) (*datastore.DatabaseS
 	return stats, nil
 }
 
+// labelTypeForRawLabel resolves the label_type_id and taxonomic_class_id for a label given its
+// full raw classifier label. A Perch v2 (FSD50K) non-bird sound class (recognized by
+// nonbird.CategoryOf on the full raw label) gets its category's label type and a nil taxonomic
+// class; everything else (birds, and any label not recognized as non-bird, including an empty
+// rawLabel) gets the species label type and the model's taxonomic class. The stored scientific
+// name is unchanged by this function - the caller still stores the extracted scientific name.
+// isNonBird reports whether the non-bird branch was taken (used to gate first-writer-wins relabel).
+func (ds *Datastore) labelTypeForRawLabel(rawLabel string, speciesTaxClassID *uint) (labelTypeID uint, taxClassID *uint, isNonBird bool) {
+	if cat, ok := nonbird.CategoryOf(rawLabel); ok {
+		return ds.nonBirdLabelTypeIDs[cat], nil, true
+	}
+	return ds.speciesLabelTypeID, speciesTaxClassID, false
+}
+
 // taxonomicClassForModel returns the appropriate taxonomic class ID for label
 // creation based on the model type. Bird models use Aves, bat models use
 // Chiroptera, and multi-taxa models use nil (no default taxonomic class).
@@ -592,6 +606,76 @@ func (ds *Datastore) EnsureModelRegistered(info detection.ModelInfo) error {
 	ctx := context.Background()
 	_, err := ds.model.GetOrCreate(ctx, info.Name, info.Version, info.Variant, detection.ResolveModelType(info.Name, info.Version), info.ClassifierPath)
 	return err
+}
+
+// resolvePredictionLabels classifies and batch-resolves labels for all prediction results.
+// It groups predictions by their (labelTypeID, taxClassID), calls BatchGetOrCreate per group,
+// relabels any non-bird groups that were previously stored with the wrong (species) type, and
+// returns a predLabels slice in the same order as results. Returns nil if results is empty.
+func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []datastore.Results, modelID uint, taxonomicClassID *uint) ([]*entities.Label, error) {
+	if len(results) == 0 {
+		return nil, nil
+	}
+
+	// Collect species names and classify each prediction.
+	// Results.Species may contain concatenated "ScientificName_CommonName" format
+	// from legacy code (see AdditionalResultsToDatastoreResults). Extract only
+	// the scientific name portion for v2 label storage.
+	speciesNames := make([]string, len(results))
+	predTypeIDs := make([]uint, len(results))
+	predTaxIDs := make([]*uint, len(results))
+	for i, r := range results {
+		speciesNames[i] = detection.ExtractScientificName(r.Species)
+		predTypeIDs[i], predTaxIDs[i], _ = ds.labelTypeForRawLabel(r.RawLabel, taxonomicClassID)
+	}
+
+	// Group prediction names by (labelTypeID, taxClassID). taxClassID nil is represented
+	// by 0 in the key (real taxonomic-class IDs are never 0); groupTax preserves the
+	// actual *uint to pass to BatchGetOrCreate.
+	type predGroupKey struct{ typeID, taxID uint }
+	groupNames := make(map[predGroupKey][]string)
+	groupTax := make(map[predGroupKey]*uint)
+	for i := range results {
+		var taxKey uint
+		if predTaxIDs[i] != nil {
+			taxKey = *predTaxIDs[i]
+		}
+		k := predGroupKey{predTypeIDs[i], taxKey}
+		groupNames[k] = append(groupNames[k], speciesNames[i])
+		groupTax[k] = predTaxIDs[i]
+	}
+
+	// Batch resolve each group and merge into a single name->label map.
+	merged := make(map[string]*entities.Label, len(results))
+	for k, names := range groupNames {
+		m, err := ds.label.BatchGetOrCreate(ctx, names, modelID, k.typeID, groupTax[k])
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch get/create prediction labels: %w", err)
+		}
+		for name, lbl := range m {
+			// First-writer-wins relabel for non-bird groups (k.typeID is not the species type).
+			if k.typeID != ds.speciesLabelTypeID && lbl.LabelTypeID != k.typeID {
+				if err := ds.label.UpdateLabelType(ctx, lbl.ID, k.typeID); err != nil {
+					return nil, fmt.Errorf("failed to relabel non-bird prediction label %q: %w", name, err)
+				}
+				lbl.LabelTypeID = k.typeID
+			}
+			merged[name] = lbl
+		}
+	}
+
+	// Resolve predLabels in original order.
+	predLabels := make([]*entities.Label, len(results))
+	for i := range results {
+		sciName := speciesNames[i]
+		lbl, ok := merged[sciName]
+		if !ok {
+			return nil, fmt.Errorf("label not found for species %s after batch creation", results[i].Species)
+		}
+		predLabels[i] = lbl
+	}
+
+	return predLabels, nil
 }
 
 // Save saves a note with its results atomically.
@@ -618,40 +702,29 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// If the detection save fails, orphaned reference data may persist.
 	// This is acceptable as they will be reused on subsequent saves.
 	// Extract scientific name in case it contains concatenated "ScientificName_CommonName" format.
-	label, err := ds.label.GetOrCreate(ctx, detection.ExtractScientificName(note.ScientificName), model.ID, ds.speciesLabelTypeID, taxonomicClassID)
+	// Classify the primary label: non-bird Perch sound classes get their category's label type
+	// and a nil taxonomic class; birds and unrecognized labels (including empty RawLabel) keep
+	// the species label type and the model's taxonomic class.
+	primaryTypeID, primaryTaxID, primaryNonBird := ds.labelTypeForRawLabel(note.RawLabel, taxonomicClassID)
+	label, err := ds.label.GetOrCreate(ctx, detection.ExtractScientificName(note.ScientificName), model.ID, primaryTypeID, primaryTaxID)
 	if err != nil {
 		return fmt.Errorf("failed to get/create label: %w", err)
 	}
+	// First-writer-wins relabel: if this non-bird class was previously created as species, correct its type.
+	if primaryNonBird && label.LabelTypeID != primaryTypeID {
+		if err := ds.label.UpdateLabelType(ctx, label.ID, primaryTypeID); err != nil {
+			return fmt.Errorf("failed to relabel non-bird label %q: %w", label.ScientificName, err)
+		}
+		label.LabelTypeID = primaryTypeID
+	}
 
 	// Pre-resolve all prediction labels before starting transaction.
-	// Uses batch operation to avoid N+1 queries.
-	var predLabels []*entities.Label
-	if len(results) > 0 {
-		// Collect species names for batch resolution.
-		// Results.Species may contain concatenated "ScientificName_CommonName" format
-		// from legacy code (see AdditionalResultsToDatastoreResults). Extract only
-		// the scientific name portion for v2 label storage.
-		speciesNames := make([]string, len(results))
-		for i, r := range results {
-			speciesNames[i] = detection.ExtractScientificName(r.Species)
-		}
-
-		// Batch resolve all labels (returns map[scientificName]*Label)
-		labelMap, err := ds.label.BatchGetOrCreate(ctx, speciesNames, model.ID, ds.speciesLabelTypeID, taxonomicClassID)
-		if err != nil {
-			return fmt.Errorf("failed to batch get/create prediction labels: %w", err)
-		}
-
-		// Build predLabels slice from map, preserving order
-		predLabels = make([]*entities.Label, len(results))
-		for i := range results {
-			sciName := speciesNames[i]
-			lbl, ok := labelMap[sciName]
-			if !ok {
-				return fmt.Errorf("label not found for species %s after batch creation", results[i].Species)
-			}
-			predLabels[i] = lbl
-		}
+	// Uses batch operation to avoid N+1 queries. Predictions are grouped by their
+	// classified (labelTypeID, taxClassID) so BatchGetOrCreate can be called once per
+	// group. Non-bird groups are relabeled if they were previously stored as species.
+	predLabels, err := ds.resolvePredictionLabels(ctx, results, model.ID, taxonomicClassID)
+	if err != nil {
+		return err
 	}
 
 	// Parse the date string and time string to get Unix timestamp
