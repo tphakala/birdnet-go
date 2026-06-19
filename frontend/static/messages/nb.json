@@ -1536,7 +1536,7 @@
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
-      "clipLength": "Clip length",
+      "clipLength": "Segmentlengde",
       "species": "Species",
       "invocations": "Segments analysed",
       "avgLatency": "Avg latency",
@@ -1566,9 +1566,13 @@
       "pausedScheduleHelp": "Denne modellen kjører kun etter en tidsplan og er for øyeblikket pauset, så den behandler ikke lyd.",
       "activityPaused": "Pauset av tidsplan",
       "lastHeard": "Sist hørt",
+      "lastHeardHint": "Nylige prediksjoner over terskelen, for diagnostikk. Inkluderer ikke-fugl- og utenfor område-resultater som ikke lagres som deteksjoner.",
       "lastHeardNever": "Ingenting hørt ennå",
       "confidenceColumn": "Konf.",
       "heardWhen": "Når",
+      "coDetectedColumn": "Også",
+      "coDetectedHelp": "Andre modeller som registrerte denne arten innen {seconds}s",
+      "outOfRangeHelp": "Utenfor områdefilteret (vist for diagnostikk, ikke lagret som deteksjon)",
       "peak": "topp",
       "activityActive": "Inference active",
       "activityIdle": "Idle",
@@ -1587,8 +1591,7 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources",
-      "noDataYet": "No data yet"
+      "noModelsHintLink": "Configure audio sources"
     },
     "metrics": {
       "cpu": "CPU",

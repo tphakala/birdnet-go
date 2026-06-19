@@ -135,12 +135,13 @@ type Processor struct {
 	// Periodic pipeline stats (inference activity per source/model)
 	pipelineStats *PipelineStats
 
-	// Per-model recent-detection cache: a fixed-size ring of the last
-	// lastDetectionRingSize above-threshold detections per model. lastDetectionMu
-	// guards lastDetectionCache and every ring it holds. The map and per-model
-	// rings are lazily initialised in updateLastDetection so zero-value Processors
-	// are safe to use in unit tests without a constructor call.
-	lastDetectionCache map[string]*detectionRing
+	// Per-model recent-detection cache: a fixed-capacity, most-recent-first feed of
+	// the last lastDetectionCap detections per model, throttled per species so a
+	// continuously singing bird does not flood it. lastDetectionMu guards
+	// lastDetectionCache and every feed it holds. The map and per-model feeds are
+	// lazily initialised in updateLastDetection so zero-value Processors are safe to
+	// use in unit tests without a constructor call.
+	lastDetectionCache map[string]*recentDetectionList
 	lastDetectionMu    sync.RWMutex
 
 	// Extended capture fields
@@ -789,10 +790,6 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
-
-		// Record this detection as the most recent for its model. Called outside
-		// pendingMutex to keep the per-model cache update cheap and independent.
-		p.updateLastDetection(item.ModelID, &det.Result)
 	}
 
 	// Broadcast updated pending detections snapshot for "currently hearing" UI.
@@ -815,6 +812,14 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 
 	// Sync species tracker if needed
 	p.syncSpeciesTrackerIfNeeded()
+
+	// Per-model "Last heard" feed parameters, computed once per chunk: the
+	// per-species throttle (from the model's segment length) and a single shared
+	// timestamp for every prediction in this chunk. ModelRegistry is read-only
+	// after init; an unknown model ID yields a zero clip length and the default
+	// throttle.
+	feedThrottle := detectionThrottle(classifier.ModelRegistry[item.ModelID].Spec.ClipLength)
+	feedTime := time.Now().Add(-detection.DetectionTimeOffset)
 
 	// Process each result in item.Results
 	for _, result := range item.Results {
@@ -845,6 +850,17 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 
 		// Check if detection should be filtered
 		shouldSkip, _ := p.shouldFilterDetection(settings, result, commonName, scientificName, speciesLowercase, baseThreshold, item.Source.ID, item.ModelID)
+
+		// Record every prediction above the base confidence threshold in the
+		// per-model "Last heard" diagnostic feed, including non-avian classes,
+		// human vocalizations, and out-of-range birds, tagged with whether the
+		// species passes the range filter. This is independent of whether the
+		// detection is saved below (saved detections also clear this bar).
+		if result.Confidence > baseThreshold {
+			inRange := !shouldApplyRangeFilter(item.ModelID, settings) || settings.IsSpeciesIncluded(result.Species)
+			p.updateLastDetection(item.ModelID, commonName, scientificName, float64(result.Confidence), feedTime, inRange, feedThrottle)
+		}
+
 		if shouldSkip {
 			continue
 		}

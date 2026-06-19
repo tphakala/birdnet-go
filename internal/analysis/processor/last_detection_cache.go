@@ -1,17 +1,30 @@
-// last_detection_cache.go - Per-model in-memory ring of recent detections.
+// last_detection_cache.go - Per-model in-memory feed of recently heard species.
 package processor
 
 import (
-	"github.com/tphakala/birdnet-go/internal/detection"
+	"math"
+	"time"
 )
 
-// lastDetectionRingSize is the number of most-recent above-threshold detections
-// retained per model for the inference-status "Last heard" view.
-const lastDetectionRingSize = 10
+// lastDetectionCap is the number of most-recent detections retained per model for
+// the inference-status "Last heard" feed. The frontend shows them as two columns
+// of ten.
+const lastDetectionCap = 20
 
-// LastDetection holds a snapshot of a single above-threshold detection for one
-// AI model. It is intentionally lightweight: only the fields needed by the
-// inference-status page are captured.
+// detectionThrottleTarget is the spacing the Last-heard feed aims for between
+// repeat entries of the same species. The actual per-model interval snaps this to
+// a whole number of the model's analysis segments (clip length), so feed entries
+// line up with segment boundaries (e.g. 9s for 3s BirdNET segments, 10s for 5s
+// Perch segments). Throttling keeps a continuously singing bird from flooding the
+// feed while still showing its detection cadence over time.
+const detectionThrottleTarget = 9 * time.Second
+
+// LastDetection holds a snapshot of one above-threshold prediction for one AI
+// model. The feed records every prediction above the base confidence threshold
+// (including non-avian, human, and out-of-range species), not only the ones that
+// pass every filter and get saved, so it shows what the model is actually firing
+// on. It is intentionally lightweight: only the fields the inference-status "Last
+// heard" feed needs are captured.
 type LastDetection struct {
 	// Species is the common name of the detected species.
 	Species string
@@ -21,55 +34,113 @@ type LastDetection struct {
 	Confidence float64
 	// AtUnix is the Unix timestamp (seconds) of when the detection occurred.
 	AtUnix int64
+	// InRange reports whether the species passes the range filter. It is true when
+	// the species is in range, or when the range filter is not active (e.g. no
+	// location configured). When the range filter is active it is false for
+	// out-of-range birds and for non-avian and human classes; those are shown for
+	// diagnostics but are not saved as real detections.
+	InRange bool
 }
 
-// detectionRing is a fixed-capacity circular buffer of the most recent
-// above-threshold detections for a single model. head is the index where the
-// next write lands; count is the number of valid entries (capped at the ring
-// size). It is not goroutine-safe on its own; the Processor's lastDetectionMu
-// guards every access.
-type detectionRing struct {
-	items [lastDetectionRingSize]LastDetection
-	head  int
-	count int
+// recentDetectionList is a small, most-recent-first feed of a single model's
+// recent detections, capped at lastDetectionCap entries. A species is recorded at
+// most once per throttle interval so a continuously singing bird does not flood
+// the feed (see observe). It is not goroutine-safe on its own; the Processor's
+// lastDetectionMu guards every access.
+type recentDetectionList struct {
+	// items is ordered most-recent-first; its length never exceeds lastDetectionCap.
+	items []LastDetection
+}
+
+// detectionThrottle returns the minimum spacing between recorded detections of
+// the same species for a model whose analysis segment (clip) length is clip. It
+// is clip scaled to the whole multiple closest to detectionThrottleTarget, with a
+// floor of one segment; an unknown clip length (<= 0) falls back to the target.
+func detectionThrottle(clip time.Duration) time.Duration {
+	if clip <= 0 {
+		return detectionThrottleTarget
+	}
+	n := max(int64(math.Round(float64(detectionThrottleTarget)/float64(clip))), 1)
+	return time.Duration(n) * clip
+}
+
+// speciesKey returns the stable identity used to rate-limit repeated detections
+// of the same species. ScientificName is preferred because it is
+// locale-independent; CommonName is the fallback when the scientific name is
+// missing. It is empty for an unidentified detection.
+func speciesKey(scientific, common string) string {
+	if scientific != "" {
+		return scientific
+	}
+	return common
+}
+
+// observe prepends one detection to the front of the feed, unless the same
+// species was already recorded within throttleSec seconds (in which case it is
+// dropped, keeping a continuously singing bird from flooding the feed). The
+// oldest entry is evicted once the cap is reached. The scan and shift are
+// O(lastDetectionCap), far cheaper than the surrounding lock acquisition.
+func (l *recentDetectionList) observe(common, scientific string, confidence float64, atUnix int64, inRange bool, throttleSec int64) {
+	key := speciesKey(scientific, common)
+	// Throttle: scan newest-first for this species' most recent feed entry. If it
+	// is within throttleSec, drop this detection; otherwise record it.
+	for i := range l.items {
+		if speciesKey(l.items[i].ScientificName, l.items[i].Species) != key {
+			continue
+		}
+		if atUnix-l.items[i].AtUnix < throttleSec {
+			return
+		}
+		break
+	}
+
+	entry := LastDetection{
+		Species:        common,
+		ScientificName: scientific,
+		Confidence:     confidence,
+		AtUnix:         atUnix,
+		InRange:        inRange,
+	}
+	// Prepend the new entry, shifting existing entries down one slot and dropping
+	// the oldest once the cap is reached. Grow the slice by one slot only while
+	// under the cap; at the cap the last (oldest) entry is overwritten by the
+	// shift. copy handles the overlapping move correctly.
+	if len(l.items) < lastDetectionCap {
+		l.items = append(l.items, LastDetection{})
+	}
+	copy(l.items[1:], l.items[:len(l.items)-1])
+	l.items[0] = entry
 }
 
 // lastDetectionCache and lastDetectionMu are added to the Processor struct in
-// processor.go. They are zero-value safe: the map and per-model rings are
-// lazily initialised in updateLastDetection.
+// processor.go. They are zero-value safe: the map and per-model feeds are lazily
+// initialised in updateLastDetection.
 
-// updateLastDetection records res as the most recent detection for modelID,
-// appending it to that model's ring (oldest entry evicted once full). Only
-// above-threshold detections reach this path (it is called post-threshold),
-// so every retained entry is an above-threshold detection. Empty modelID is
-// silently skipped. The write lock is held only for the ring update so the
-// detection hot path is minimally impacted. res is passed by pointer to avoid
-// copying the large detection.Result value.
-func (p *Processor) updateLastDetection(modelID string, res *detection.Result) {
-	if modelID == "" || res == nil {
+// updateLastDetection records one above-threshold prediction for modelID in the
+// "Last heard" feed, subject to the per-species throttle (see
+// recentDetectionList.observe). The caller records every prediction above the base
+// confidence threshold (including non-avian, human, and out-of-range species), so
+// inRange marks whether the species passes the range filter. Empty modelID is
+// silently skipped. throttle is the minimum spacing between recorded detections of
+// the same species (derived from the model's clip length by the caller). The write
+// lock is held only for the feed update so the detection hot path is minimally
+// impacted.
+func (p *Processor) updateLastDetection(modelID, commonName, scientificName string, confidence float64, at time.Time, inRange bool, throttle time.Duration) {
+	if modelID == "" {
 		return
 	}
-	entry := LastDetection{
-		Species:        res.Species.CommonName,
-		ScientificName: res.Species.ScientificName,
-		Confidence:     res.Confidence,
-		AtUnix:         res.Timestamp.Unix(),
-	}
+	throttleSec := int64(throttle / time.Second)
 	p.lastDetectionMu.Lock()
 	defer p.lastDetectionMu.Unlock()
 	if p.lastDetectionCache == nil {
-		p.lastDetectionCache = make(map[string]*detectionRing)
+		p.lastDetectionCache = make(map[string]*recentDetectionList)
 	}
-	ring := p.lastDetectionCache[modelID]
-	if ring == nil {
-		ring = &detectionRing{}
-		p.lastDetectionCache[modelID] = ring
+	list := p.lastDetectionCache[modelID]
+	if list == nil {
+		list = &recentDetectionList{}
+		p.lastDetectionCache[modelID] = list
 	}
-	ring.items[ring.head] = entry
-	ring.head = (ring.head + 1) % lastDetectionRingSize
-	if ring.count < lastDetectionRingSize {
-		ring.count++
-	}
+	list.observe(commonName, scientificName, confidence, at.Unix(), inRange, throttleSec)
 }
 
 // GetLastDetection returns the most recent detection for modelID and whether an
@@ -78,34 +149,26 @@ func (p *Processor) updateLastDetection(modelID string, res *detection.Result) {
 func (p *Processor) GetLastDetection(modelID string) (LastDetection, bool) {
 	p.lastDetectionMu.RLock()
 	defer p.lastDetectionMu.RUnlock()
-	ring := p.lastDetectionCache[modelID]
-	if ring == nil || ring.count == 0 {
+	list := p.lastDetectionCache[modelID]
+	if list == nil || len(list.items) == 0 {
 		return LastDetection{}, false
 	}
-	// The most recent write is one slot behind head (head points at the next
-	// write position). Wrap to the end of the array when head is at index 0.
-	newest := (ring.head - 1 + lastDetectionRingSize) % lastDetectionRingSize
-	return ring.items[newest], true
+	return list.items[0], true
 }
 
-// GetRecentDetections returns a newest-first copy of the recent above-threshold
-// detections for modelID, up to lastDetectionRingSize entries. The returned
-// slice is freshly allocated under the read lock with values copied out, so it
-// never shares backing storage with the ring; the caller may retain or mutate
-// it freely while the hot path keeps writing. Returns nil when no entry exists.
+// GetRecentDetections returns a newest-first copy of the recent detections for
+// modelID, up to lastDetectionCap entries. The returned slice is freshly
+// allocated under the read lock with values copied out, so it never shares
+// backing storage with the cache; the caller may retain or mutate it freely while
+// the hot path keeps writing. Returns nil when no entry exists.
 func (p *Processor) GetRecentDetections(modelID string) []LastDetection {
 	p.lastDetectionMu.RLock()
 	defer p.lastDetectionMu.RUnlock()
-	ring := p.lastDetectionCache[modelID]
-	if ring == nil || ring.count == 0 {
+	list := p.lastDetectionCache[modelID]
+	if list == nil || len(list.items) == 0 {
 		return nil
 	}
-	out := make([]LastDetection, ring.count)
-	// Walk backwards from the most recent write so the result is newest-first.
-	idx := (ring.head - 1 + lastDetectionRingSize) % lastDetectionRingSize
-	for i := range ring.count {
-		out[i] = ring.items[idx]
-		idx = (idx - 1 + lastDetectionRingSize) % lastDetectionRingSize
-	}
+	out := make([]LastDetection, len(list.items))
+	copy(out, list.items)
 	return out
 }

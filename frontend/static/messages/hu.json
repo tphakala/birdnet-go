@@ -1536,7 +1536,7 @@
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
-      "clipLength": "Clip length",
+      "clipLength": "Szegmens hossza",
       "species": "Species",
       "invocations": "Segments analysed",
       "avgLatency": "Avg latency",
@@ -1566,9 +1566,13 @@
       "pausedScheduleHelp": "Ez a modell csak ütemezés szerint fut, és jelenleg szünetel, így nem dolgoz fel hangot.",
       "activityPaused": "Ütemezés miatt szünetel",
       "lastHeard": "Utoljára hallva",
+      "lastHeardHint": "Legutóbbi küszöb feletti előrejelzések, diagnosztikához. Tartalmazza a nem madár és tartományon kívüli eredményeket, amelyek nem kerülnek mentésre észlelésként.",
       "lastHeardNever": "Még semmi sem hallatszott",
       "confidenceColumn": "Konf.",
       "heardWhen": "Mikor",
+      "coDetectedColumn": "Még",
+      "coDetectedHelp": "Más modellek, amelyek {seconds} mp-en belül észlelték ezt a fajt",
+      "outOfRangeHelp": "A területszűrőn kívül (diagnosztikához megjelenítve, nem mentve észlelésként)",
       "peak": "csúcs",
       "activityActive": "Inference active",
       "activityIdle": "Idle",
@@ -1587,8 +1591,7 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources",
-      "noDataYet": "No data yet"
+      "noModelsHintLink": "Configure audio sources"
     },
     "metrics": {
       "cpu": "CPU",

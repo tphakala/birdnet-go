@@ -1536,7 +1536,7 @@
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
-      "clipLength": "Clip length",
+      "clipLength": "Segment length",
       "species": "Species",
       "invocations": "Segments analysed",
       "avgLatency": "Avg latency",
@@ -1566,9 +1566,13 @@
       "pausedScheduleHelp": "This model only runs on a schedule and is currently paused, so it is not processing audio.",
       "activityPaused": "Paused by schedule",
       "lastHeard": "Last heard",
+      "lastHeardHint": "Recent above-threshold predictions, for diagnostics. Includes non-bird and out-of-range results that are not saved as detections.",
       "lastHeardNever": "Nothing heard yet",
       "confidenceColumn": "Conf.",
       "heardWhen": "When",
+      "coDetectedColumn": "Also",
+      "coDetectedHelp": "Other models that detected this species within {seconds}s",
+      "outOfRangeHelp": "Outside the range filter (shown for diagnostics, not saved as a detection)",
       "peak": "peak",
       "activityActive": "Inference active",
       "activityIdle": "Idle",
@@ -1587,8 +1591,7 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources",
-      "noDataYet": "No data yet"
+      "noModelsHintLink": "Configure audio sources"
     },
     "metrics": {
       "cpu": "CPU",

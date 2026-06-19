@@ -1211,9 +1211,13 @@ export type TranslationKey =
   | 'system.inference.pausedScheduleHelp'
   | 'system.inference.activityPaused'
   | 'system.inference.lastHeard'
+  | 'system.inference.lastHeardHint'
   | 'system.inference.lastHeardNever'
   | 'system.inference.confidenceColumn'
   | 'system.inference.heardWhen'
+  | 'system.inference.coDetectedColumn'
+  | 'system.inference.coDetectedHelp' // params: seconds
+  | 'system.inference.outOfRangeHelp'
   | 'system.inference.peak'
   | 'system.inference.activityActive'
   | 'system.inference.activityIdle'
@@ -1233,7 +1237,6 @@ export type TranslationKey =
   | 'system.inference.invocationsHelp'
   | 'system.inference.noModelsHint'
   | 'system.inference.noModelsHintLink'
-  | 'system.inference.noDataYet'
   | 'system.metrics.cpu'
   | 'system.metrics.memory'
   | 'system.metrics.temperature'
@@ -3903,6 +3906,7 @@ export type TranslationParams = {
   };
   'system.database.migration.prerequisites.criticalCount': { count: string | number };
   'system.database.migration.prerequisites.warningCount': { count: string | number };
+  'system.inference.coDetectedHelp': { seconds: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
   'settings.notFound.message': { section: string | number };

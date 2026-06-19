@@ -25,15 +25,17 @@
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { loggers } from '$lib/utils/logger';
   import { connectionState } from '$lib/stores/connectionState.svelte';
-  import { formatBytesCompact, formatNumber, formatRelativeTime } from '$lib/utils/formatters';
+  import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
+  import { getLocalTimeString, formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
-  import { Brain, Cpu, MemoryStick, Activity, Minus, Pause } from '@lucide/svelte';
+  import { Brain, Cpu, MemoryStick, Activity, Minus, Pause, MapPinOff } from '@lucide/svelte';
   import type {
     InferenceStatusResponse,
     InferenceModel,
+    InferenceLastDetection,
     BackendStatus,
     OpenVINOBackendStatus,
   } from '$lib/desktop/features/system/inference.types';
@@ -60,6 +62,21 @@
 
   // Conversions for spec display.
   const HZ_PER_KHZ = 1000;
+
+  // Flat 0 baseline shown in the latency sparkline before real samples flow (the
+  // chart needs >= 2 points to draw a line; an all-zeros series renders as a flat
+  // line at the bottom). Used until the live series has at least two points.
+  const EMPTY_SPARKLINE_BASELINE = [0, 0];
+
+  // Tolerance (seconds) for treating the same species in two models' feeds as one
+  // co-detection. Detection timestamps are per-model wall-clock at second
+  // granularity, and models analyze different segment lengths, so co-detections of
+  // one bird land a few seconds apart; this stays well under the per-species
+  // throttle so it never matches two different occurrences within a model.
+  const CO_DETECTION_TOLERANCE_SEC = 3;
+
+  // Rows per column in the two-column Last-heard layout (backend retains 2x this).
+  const LAST_HEARD_COLUMN_ROWS = 10;
 
   interface MetricPoint {
     timestamp: string;
@@ -369,7 +386,7 @@
     snapshot ? snapshot.backends.openvino : null
   );
 
-  // Spec line for a model: sample rate in kHz, clip length in seconds.
+  // Spec line for a model: sample rate in kHz, segment length in seconds.
   function sampleRateKhz(hz: number): string {
     return (hz / HZ_PER_KHZ).toFixed(hz % HZ_PER_KHZ === 0 ? 0 : 1);
   }
@@ -411,6 +428,25 @@
     const current = series[series.length - 1] ?? 0;
     const peak = Math.max(...series);
     return `${current.toFixed(1)} ${t('system.inference.unitMs')} · ${t('system.inference.peak')} ${peak.toFixed(1)}`;
+  }
+
+  // Short names of other loaded models whose feed contains the same species within
+  // CO_DETECTION_TOLERANCE_SEC of this detection, for cross-model correlation.
+  function coDetectingModels(modelId: string, d: InferenceLastDetection): string[] {
+    if (!snapshot) return [];
+    const key = d.scientificName || d.species;
+    if (!key) return [];
+    const names: string[] = [];
+    for (const m of snapshot.models) {
+      if (m.id === modelId) continue;
+      const hit = m.recentDetections?.some(
+        o =>
+          (o.scientificName || o.species) === key &&
+          Math.abs(o.atUnix - d.atUnix) <= CO_DETECTION_TOLERANCE_SEC
+      );
+      if (hit) names.push(m.detectionName || m.name);
+    }
+    return names;
   }
 </script>
 
@@ -732,78 +768,149 @@
                 {/if}
               </div>
 
-              <!-- Latency sparkline + recent detections (Last heard) side by side -->
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div>
-                  <div class="text-xs text-muted mb-1 flex items-center gap-1">
-                    <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
-                    {t('system.inference.latencyChart')}
-                    {#if latencySeries.length > 0}
-                      <span class="ml-auto font-mono tabular-nums text-base-content">
-                        {latencySummary(latencySeries)}
-                      </span>
-                    {/if}
-                  </div>
-                  <div class="h-10">
-                    <Sparkline
-                      data={latencySeries}
-                      color={LATENCY_COLOR}
-                      decorative
-                      emptyLabel={t('system.inference.noDataYet')}
-                    />
-                  </div>
+              <!-- Latency sparkline (full width) -->
+              <div>
+                <div class="text-xs text-muted mb-1 flex items-center gap-1">
+                  <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
+                  {t('system.inference.latencyChart')}
+                  {#if latencySeries.length > 0}
+                    <span class="ml-auto font-mono tabular-nums text-base-content">
+                      {latencySummary(latencySeries)}
+                    </span>
+                  {/if}
                 </div>
-                <div>
-                  <div class="text-xs text-muted mb-1">{t('system.inference.lastHeard')}</div>
-                  <!-- min-height sized for the full 10-row ring so the card does not
-                       resize as detections fill in after a restart. -->
-                  <div class="min-h-[11rem]">
-                    {#if model.recentDetections && model.recentDetections.length > 0}
-                      <table class="w-full text-xs table-fixed">
-                        <thead class="text-muted">
-                          <tr>
-                            <th class="text-left font-normal py-0.5">
-                              {t('system.inference.species')}
-                            </th>
-                            <th
-                              class="text-right font-normal py-0.5 w-16"
-                              title={t('common.labels.confidence')}
-                              aria-label={t('common.labels.confidence')}
-                            >
-                              {t('system.inference.confidenceColumn')}
-                            </th>
-                            <th class="text-right font-normal py-0.5 w-20">
-                              {t('system.inference.heardWhen')}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {#each model.recentDetections as d, i (`${d.atUnix}-${i}`)}
-                            <tr class="border-t border-[var(--border-100)]">
-                              <td
-                                class="truncate py-0.5 pr-2 text-base-content"
+                <div class="h-10">
+                  <!-- Before real samples flow, draw a flat 0 baseline (the chart
+                       needs >= 2 points) instead of an empty/placeholder state. -->
+                  <Sparkline
+                    data={latencySeries.length >= 2 ? latencySeries : EMPTY_SPARKLINE_BASELINE}
+                    color={LATENCY_COLOR}
+                    decorative
+                  />
+                </div>
+              </div>
+
+              <!-- Recent detections (Last heard): a per-species-throttled feed (the
+                   same species is recorded at most once per the model's segment
+                   interval). Shown as two columns of ten (newest ten on the left,
+                   the next ten on the right) with absolute timestamps and the other
+                   models that detected the same species within the tolerance, so
+                   detections can be correlated across models. -->
+              <div>
+                <div class="text-xs text-muted">{t('system.inference.lastHeard')}</div>
+                <!-- The feed shows everything each model fires on above the base
+                     threshold, so it includes non-bird, human, and out-of-range
+                     predictions that are not saved. Explain it so they are not
+                     mistaken for saved detections. -->
+                <div class="text-[11px] text-muted mb-1 leading-snug">
+                  {t('system.inference.lastHeardHint')}
+                </div>
+
+                {#snippet feedTable(rows: InferenceLastDetection[])}
+                  <table class="w-full text-xs table-fixed">
+                    <thead class="text-muted">
+                      <tr>
+                        <th class="text-left font-normal py-0.5 pr-2">
+                          {t('system.inference.species')}
+                        </th>
+                        <th
+                          class="text-left font-normal py-0.5 w-12 whitespace-nowrap"
+                          title={t('common.labels.confidence')}
+                          aria-label={t('common.labels.confidence')}
+                        >
+                          {t('system.inference.confidenceColumn')}
+                        </th>
+                        <th class="text-left font-normal py-0.5 w-16 whitespace-nowrap">
+                          {t('system.inference.heardWhen')}
+                        </th>
+                        <th
+                          class="text-left font-normal py-0.5 pl-2 w-20 whitespace-nowrap"
+                          title={t('system.inference.coDetectedHelp', {
+                            seconds: CO_DETECTION_TOLERANCE_SEC,
+                          })}
+                          aria-label={t('system.inference.coDetectedHelp', {
+                            seconds: CO_DETECTION_TOLERANCE_SEC,
+                          })}
+                        >
+                          {t('system.inference.coDetectedColumn')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each rows as d, i (`${d.scientificName || d.species}-${d.atUnix}-${i}`)}
+                        {@const coNames = coDetectingModels(model.id, d)}
+                        <tr class="border-t border-[var(--border-100)]">
+                          <td class="py-0.5 pr-2 text-base-content">
+                            <div class="flex items-center gap-1 min-w-0">
+                              {#if !d.inRange}
+                                <!-- Did not pass the range filter (non-avian, human,
+                                     or out-of-range): shown for diagnostics but not
+                                     saved as a detection. -->
+                                <span
+                                  class="shrink-0 inline-flex text-muted"
+                                  role="img"
+                                  title={t('system.inference.outOfRangeHelp')}
+                                  aria-label={t('system.inference.outOfRangeHelp')}
+                                >
+                                  <MapPinOff class="w-3 h-3" aria-hidden="true" />
+                                </span>
+                              {/if}
+                              <span
+                                class="truncate"
                                 title={d.scientificName
                                   ? `${d.species} (${d.scientificName})`
                                   : d.species}
                               >
                                 {d.species}
-                              </td>
-                              <td
-                                class="text-right py-0.5 font-mono tabular-nums text-base-content"
-                              >
-                                {Math.round(d.confidence * 100)}%
-                              </td>
-                              <td class="text-right py-0.5 text-muted whitespace-nowrap">
-                                {formatRelativeTime(d.atUnix * 1000)}
-                              </td>
-                            </tr>
-                          {/each}
-                        </tbody>
-                      </table>
-                    {:else}
-                      <div class="text-xs text-muted">{t('system.inference.lastHeardNever')}</div>
-                    {/if}
-                  </div>
+                              </span>
+                            </div>
+                          </td>
+                          <td class="text-left py-0.5 font-mono tabular-nums text-base-content">
+                            {Math.round(d.confidence * 100)}%
+                          </td>
+                          <td
+                            class="text-left py-0.5 font-mono tabular-nums text-muted whitespace-nowrap"
+                            title={formatLocalDateTime(new Date(d.atUnix * 1000))}
+                          >
+                            {getLocalTimeString(new Date(d.atUnix * 1000))}
+                          </td>
+                          <td
+                            class="truncate py-0.5 pl-2 text-muted"
+                            title={coNames.length > 0 ? coNames.join(', ') : undefined}
+                          >
+                            {#if coNames.length > 0}
+                              {coNames.join(', ')}
+                            {:else}
+                              -
+                            {/if}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                {/snippet}
+
+                <!-- min-height sized for the full ten rows per column so the card
+                     does not resize as detections fill in after a restart. -->
+                <div class="min-h-[12rem]">
+                  {#if model.recentDetections && model.recentDetections.length > 0}
+                    {@const left = model.recentDetections.slice(0, LAST_HEARD_COLUMN_ROWS)}
+                    {@const right = model.recentDetections.slice(
+                      LAST_HEARD_COLUMN_ROWS,
+                      LAST_HEARD_COLUMN_ROWS * 2
+                    )}
+                    <!-- Two newspaper columns: newest ten on the left, next ten on
+                         the right. The left table stays half-width even before the
+                         right column fills, so the species column never hogs the card. -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-6 items-start">
+                      {@render feedTable(left)}
+                      {#if right.length > 0}
+                        {@render feedTable(right)}
+                      {/if}
+                    </div>
+                  {:else}
+                    <div class="text-xs text-muted">{t('system.inference.lastHeardNever')}</div>
+                  {/if}
                 </div>
               </div>
 
