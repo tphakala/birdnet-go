@@ -8,6 +8,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 )
 
 func TestIsHumanVocalization(t *testing.T) {
@@ -191,6 +192,68 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 				assert.Equal(t, start, got)
 			}
 			assert.Empty(t, other, "handler must not write the other filter's map")
+		})
+	}
+}
+
+// TestPerchHumanLabelsParityWithNonbird verifies that every key previously in
+// perchHumanLabels (except "homo sapiens", which is the iNaturalist taxon
+// preserved in perchHumanExtraLabels) is classified as CategoryHuman by the
+// shared nonbird package. A failure here means a coverage regression: a label
+// that used to engage the privacy filter would silently stop doing so.
+func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
+	t.Parallel()
+
+	// The complete former perchHumanLabels key set (37 entries minus "homo sapiens").
+	// "homo sapiens" is excluded: it is an iNaturalist taxon, not an AudioSet/FSD50K
+	// sound class, so nonbird does not include it. It lives in perchHumanExtraLabels.
+	oldAudioSetKeys := []string{
+		"speech",
+		"speech_synthesizer",
+		"male_speech_and_man_speaking",
+		"female_speech_and_woman_speaking",
+		"child_speech_and_kid_speaking",
+		"conversation",
+		"chatter",
+		"human_voice",
+		"human_group_actions",
+		"whispering",
+		"shout",
+		"yell",
+		"screaming",
+		"singing",
+		"male_singing",
+		"female_singing",
+		"laughter",
+		"giggle",
+		"chuckle_and_chortle",
+		"crying_and_sobbing",
+		"gasp",
+		"sigh",
+		"cough",
+		"sneeze",
+		"breathing",
+		"respiratory_sounds",
+		"burping_and_eructation",
+		"fart",
+		"chewing_and_mastication",
+		"crowd",
+		"cheering",
+		"applause",
+		"clapping",
+		"finger_snapping",
+		"hands",
+		"walk_and_footsteps",
+		"run",
+	}
+
+	for _, key := range oldAudioSetKeys {
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+			cat, ok := nonbird.CategoryOf(key)
+			assert.True(t, ok, "nonbird.CategoryOf(%q) must find the key", key)
+			assert.Equal(t, nonbird.CategoryHuman, cat,
+				"nonbird.CategoryOf(%q) must return CategoryHuman", key)
 		})
 	}
 }
