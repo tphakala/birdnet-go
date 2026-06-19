@@ -4,11 +4,13 @@
 package notification
 
 import (
+	"cmp"
 	"fmt"
 	"reflect"
 	"slices"
-	"sort"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -128,7 +130,23 @@ type Notification struct {
 	// Set to "bell" for in-app only, "push" for push providers only.
 	// Transient routing field; never serialized or persisted.
 	DeliveryTarget string `json:"-"`
+
+	// seq is a process-local monotonic creation sequence assigned by
+	// NewNotification. It exists solely to give List a deterministic,
+	// creation-ordered tiebreaker when two notifications share a Timestamp
+	// (routine on coarse-resolution clocks and under load). Unexported and
+	// never serialized or persisted; copied by Clone so the store's copy
+	// keeps the original creation order.
+	seq uint64
 }
+
+// notificationSeq assigns a process-wide, strictly increasing sequence number
+// to each notification created via NewNotification. It is the tiebreaker that
+// makes InMemoryStore.List ordering deterministic for notifications that share
+// a Timestamp: results are gathered by ranging a Go map (randomized order), so
+// without a real tiebreaker an unstable timestamp-only sort produced arbitrary
+// ordering for equal timestamps.
+var notificationSeq atomic.Uint64
 
 // NewNotification creates a new notification with a unique ID and timestamp
 func NewNotification(notifType Type, priority Priority, title, message string) *Notification {
@@ -140,6 +158,7 @@ func NewNotification(notifType Type, priority Priority, title, message string) *
 		Title:     title,
 		Message:   message,
 		Timestamp: time.Now(),
+		seq:       notificationSeq.Add(1),
 		Metadata:  make(map[string]any),
 	}
 }
@@ -250,6 +269,7 @@ func (n *Notification) Clone() *Notification {
 		TitleKey:       n.TitleKey,
 		MessageKey:     n.MessageKey,
 		DeliveryTarget: n.DeliveryTarget,
+		seq:            n.seq,
 	}
 
 	// Deep copy ExpiresAt
@@ -558,16 +578,27 @@ func (s *InMemoryStore) DeleteExpired() error {
 	return nil
 }
 
-// removeOldest removes the oldest notification to make room
+// removeOldest removes the oldest notification to make room. "Oldest" is the
+// entry List ranks last: earliest Timestamp, and among equal timestamps the
+// lowest creation sequence (the earliest created). Using seq as the tiebreaker
+// keeps eviction deterministic and consistent with List's ordering on
+// coarse-resolution clocks where timestamps routinely collide; without it the
+// victim among equal-timestamp entries was whichever the randomized map range
+// happened to visit first.
 func (s *InMemoryStore) removeOldest() {
 	var oldestID string
 	var oldestTime time.Time
+	var oldestSeq uint64
 
 	for id, notif := range s.notifications {
-		if oldestID == "" || notif.Timestamp.Before(oldestTime) {
-			oldestID = id
-			oldestTime = notif.Timestamp
+		switch {
+		case oldestID == "": // first candidate
+		case notif.Timestamp.Before(oldestTime): // strictly older
+		case notif.Timestamp.Equal(oldestTime) && notif.seq < oldestSeq: // same time, created earlier
+		default:
+			continue
 		}
+		oldestID, oldestTime, oldestSeq = id, notif.Timestamp, notif.seq
 	}
 
 	if oldestID != "" {
@@ -627,10 +658,20 @@ func (s *InMemoryStore) GetUnreadCount() (int, error) {
 	return s.Count(&FilterOptions{Status: []Status{StatusUnread}})
 }
 
-// sortNotificationsByTime sorts notifications by timestamp (newest first)
+// sortNotificationsByTime sorts notifications newest-first by a deterministic
+// total order. The primary key is Timestamp (descending). Ties are broken by
+// the creation sequence (descending, so the more recently created wins) and,
+// as a final fallback for notifications built without NewNotification (seq 0),
+// by ID. A total order is required because the input is gathered by ranging a
+// Go map, whose iteration order is randomized; a timestamp-only comparison
+// would leave equal-timestamp notifications in arbitrary, run-varying order.
 func sortNotificationsByTime(notifications []*Notification) {
-	sort.Slice(notifications, func(i, j int) bool {
-		return notifications[i].Timestamp.After(notifications[j].Timestamp)
+	slices.SortFunc(notifications, func(a, b *Notification) int {
+		return cmp.Or(
+			b.Timestamp.Compare(a.Timestamp), // newest first
+			cmp.Compare(b.seq, a.seq),        // later creation first on equal timestamps
+			strings.Compare(a.ID, b.ID),      // stable fallback for seq-less notifications
+		)
 	})
 }
 
