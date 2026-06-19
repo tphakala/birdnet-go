@@ -3,6 +3,7 @@ package datastore
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,8 +42,14 @@ func TestCreateBackup_FilePermissions(t *testing.T) {
 
 	info, err := os.Stat(backupPath)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(),
-		"backup file should have 0600 permissions")
+	// Windows does not represent Unix permission bits: os.Stat reports 0666 for
+	// regular files regardless of the mode passed to OpenFile. The backup is
+	// still created with 0o600 in production; the bits just are not observable
+	// here. Skip the perm assertion on Windows; the rest of the test still runs.
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(),
+			"backup file should have 0600 permissions")
+	}
 }
 
 func TestCheckWritePermission_NoSymlinkFollow(t *testing.T) {
@@ -79,6 +86,12 @@ func TestCheckWritePermission_CleansUpTempFile(t *testing.T) {
 
 func TestCheckWritePermission_FailsOnReadOnlyDir(t *testing.T) {
 	t.Parallel()
+	// chmod cannot make a directory unwritable for its owner on Windows, so
+	// the write-permission probe still succeeds and no error is returned. The
+	// scenario this test asserts is only reproducible on Unix.
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod cannot make a directory unwritable for the owner on Windows")
+	}
 	tmpDir := t.TempDir()
 
 	// Make directory read-only

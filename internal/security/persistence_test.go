@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -77,7 +78,12 @@ func TestTokenPersistence(t *testing.T) {
 	// Verify file permissions
 	info, err := os.Stat(filepath.Join(tempDir, "tokens.json"))
 	require.NoError(t, err, "Failed to stat tokens file")
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "Tokens file should have 0600 permissions")
+	// Windows reports 0666 for regular files regardless of the mode saveTokens
+	// requests; the 0600 bits are not observable on NTFS. Skip only the perm
+	// comparison there.
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "Tokens file should have 0600 permissions")
+	}
 }
 
 // TestFilesystemStore tests that the FilesystemStore is initialized correctly
@@ -117,7 +123,12 @@ func TestFilesystemStore(t *testing.T) {
 	info, err := os.Stat(sessionsDir)
 	require.NoError(t, err, "Failed to stat sessions directory")
 	assert.True(t, info.IsDir(), "Sessions path should be a directory")
-	assert.Equal(t, os.FileMode(DirPermissions), info.Mode().Perm(), "Sessions directory should have secure permissions")
+	// Windows reports 0777 for directories regardless of the mode requested; the
+	// DirPermissions bits are not observable on NTFS. Skip only the perm
+	// comparison there.
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(DirPermissions), info.Mode().Perm(), "Sessions directory should have secure permissions")
+	}
 }
 
 // TestLocalNetworkCookieStore tests configuring cookie store for local network access
@@ -233,8 +244,11 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 
 // Let's also add a test for unwritable directories
 func TestUnwritableTokensDirectory(t *testing.T) {
-	// Skip on Windows as permission handling differs
-	if os.Getenv("GOOS") == "windows" {
+	// Skip on Windows: chmod cannot make a directory unwritable for its owner
+	// there, so saveTokens succeeds and no error is returned. (The previous
+	// guard used os.Getenv("GOOS"), which is always empty because GOOS is a
+	// build constant, not an environment variable, so the skip never fired.)
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping on Windows as permission handling is different")
 	}
 

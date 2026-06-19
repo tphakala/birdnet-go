@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -73,6 +74,14 @@ func verifyCertificatePermissions(t *testing.T, path string, expectedPerm os.Fil
 	t.Helper()
 	info, err := os.Stat(path)
 	require.NoError(t, err, "Failed to stat file")
+	// Windows does not represent Unix permission bits: os.Stat reports 0666 for
+	// files and 0777 for directories regardless of the mode passed to the create
+	// call. Production still requests 0600/0644/0700; the bits just are not
+	// observable on NTFS. Skip only the perm comparison there so the rest of the
+	// save/retrieve flow stays exercised.
+	if runtime.GOOS == "windows" {
+		return
+	}
 	assert.Equal(t, expectedPerm, info.Mode().Perm(), "File has wrong permissions")
 }
 
