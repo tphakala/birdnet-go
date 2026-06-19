@@ -434,14 +434,17 @@
   // CO_DETECTION_TOLERANCE_SEC of this detection, for cross-model correlation.
   function coDetectingModels(modelId: string, d: InferenceLastDetection): string[] {
     if (!snapshot) return [];
-    const key = d.scientificName || d.species;
-    if (!key) return [];
+    if (!d.scientificName && !d.species) return [];
     const names: string[] = [];
     for (const m of snapshot.models) {
       if (m.id === modelId) continue;
+      // Match on the scientific name when both have one, else on the common name,
+      // so a species that one model labels scientifically and another labels by
+      // common name still correlates.
       const hit = m.recentDetections?.some(
         o =>
-          (o.scientificName || o.species) === key &&
+          ((!!o.scientificName && o.scientificName === d.scientificName) ||
+            (!!o.species && o.species === d.species)) &&
           Math.abs(o.atUnix - d.atUnix) <= CO_DETECTION_TOLERANCE_SEC
       );
       if (hit) names.push(m.detectionName || m.name);

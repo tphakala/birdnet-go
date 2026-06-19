@@ -141,6 +141,25 @@ func TestLastDetectionCache_Throttle(t *testing.T) {
 	}, atUnix, "only detections spaced >= throttle apart are kept, newest first")
 }
 
+// TestLastDetectionCache_ThrottleBackwardClock verifies a backward clock jump does
+// not silently drop detections: a detection earlier than the stored one but beyond
+// the throttle interval is still recorded (the gap is compared in absolute terms).
+func TestLastDetectionCache_ThrottleBackwardClock(t *testing.T) {
+	t.Parallel()
+
+	p := minimalProcessor()
+	base := time.Unix(10000, 0)
+	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base)
+	// Clock jumps back 20s (> 9s throttle): the absolute gap is 20, so this is
+	// recorded rather than silently dropped (the bug the absolute-gap fix targets).
+	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base.Add(-20*time.Second))
+
+	recent := p.GetRecentDetections("m")
+	require.Len(t, recent, 2, "a backward clock jump beyond the throttle is recorded, not silently dropped")
+	assert.Equal(t, base.Add(-20*time.Second).Unix(), recent[0].AtUnix)
+	assert.Equal(t, base.Unix(), recent[1].AtUnix)
+}
+
 // TestLastDetectionCache_DifferentSpeciesNotThrottled verifies the throttle is
 // per species: distinct species detected within the interval are all recorded.
 func TestLastDetectionCache_DifferentSpeciesNotThrottled(t *testing.T) {

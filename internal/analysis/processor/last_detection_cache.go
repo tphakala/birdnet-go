@@ -88,7 +88,14 @@ func (l *recentDetectionList) observe(common, scientific string, confidence floa
 		if speciesKey(l.items[i].ScientificName, l.items[i].Species) != key {
 			continue
 		}
-		if atUnix-l.items[i].AtUnix < throttleSec {
+		// Compare the absolute gap so a backward clock jump (NTP correction or
+		// out-of-order processing, where atUnix can be earlier than the stored
+		// entry) does not silently drop detections until the clock catches up.
+		gap := atUnix - l.items[i].AtUnix
+		if gap < 0 {
+			gap = -gap
+		}
+		if gap < throttleSec {
 			return
 		}
 		break
