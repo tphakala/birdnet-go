@@ -76,6 +76,10 @@ func (bn *BirdNET) initializeONNXModel() error {
 	}
 
 	bn.classifier = classifier
+	// We ship only the CPU execution provider for ONNX Runtime today. Other ORT
+	// EPs (CUDA, DirectML, CoreML) would set this from the bound provider; until
+	// one is wired in, the runtime path is CPU.
+	bn.device = deviceCPU
 
 	log.Info("ONNX model initialized",
 		logger.String("model", modelPath),

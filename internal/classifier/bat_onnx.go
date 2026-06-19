@@ -21,6 +21,12 @@ type Bat struct {
 	batClassifier      inference.CustomClassifier
 	info               ModelInfo
 	mu                 sync.Mutex
+	// device is the compute device the bat pipeline bound to. Both the embedding
+	// extractor and the classifier run on the ONNX Runtime CPU EP today (there is
+	// no OpenVINO path for the bat model), so this is deviceCPU. Kept as a field
+	// rather than a constant so a future OpenVINO bat path can set the real device
+	// at construction. Reported via Device().
+	device string
 }
 
 // BatModelConfig holds configuration for creating a Bat model instance.
@@ -91,6 +97,8 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		embeddingExtractor: embExtractor,
 		batClassifier:      batCC,
 		info:               info,
+		// The bat embedding + classifier pipeline is ONNX-only (CPU EP) today.
+		device: deviceCPU,
 	}, nil
 }
 
@@ -250,6 +258,11 @@ func (b *Bat) Labels() []string {
 	}
 	return b.batClassifier.Labels()
 }
+
+// Device returns the compute device the bat pipeline bound to ("CPU" today; the
+// model is ONNX-only). Set once at construction and never mutated, so no lock is
+// needed. Implements ModelInstance.
+func (b *Bat) Device() string { return b.device }
 
 // Close releases resources held by the bat model.
 func (b *Bat) Close() error {

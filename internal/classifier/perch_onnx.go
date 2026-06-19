@@ -34,6 +34,10 @@ type Perch struct {
 	labels     []string
 	info       ModelInfo
 	mu         sync.Mutex
+	// device is the compute device the classifier bound to: the OpenVINO device
+	// (CPU/GPU) when the OV path succeeds, otherwise deviceCPU for the ONNX
+	// Runtime CPU EP. Set once at construction; reported via Device().
+	device string
 }
 
 // PerchConfig holds configuration for creating a Perch model instance.
@@ -81,7 +85,9 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 	// Prefer the OpenVINO backend when eligible (Perch no_dft model + gate),
 	// falling back to ORT on any failure. OpenVINO must never make Perch fail to
 	// load, so tryPerchOpenVINO logs and swallows OV errors and returns ok=false.
-	classifier, ok := tryPerchOpenVINO(cfg, labels)
+	// device records the compute device actually bound to (the OpenVINO device on
+	// the OV path, else the ONNX Runtime CPU EP).
+	classifier, device, ok := tryPerchOpenVINO(cfg, labels)
 	if !ok {
 		// Initialize ONNX Runtime
 		if err := inference.InitONNXRuntime(cfg.ONNXRuntimePath); err != nil {
@@ -104,6 +110,8 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 				Context("label_count", len(labels)).
 				Build()
 		}
+		// ONNX Runtime currently runs Perch on the CPU execution provider.
+		device = deviceCPU
 	}
 
 	info := ModelInfo{
@@ -122,22 +130,25 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 		classifier: classifier,
 		labels:     labels,
 		info:       info,
+		device:     device,
 	}, nil
 }
 
 // tryPerchOpenVINO attempts to build an OpenVINO classifier for Perch v2. It
-// returns (classifier, true) on success or (nil, false) to fall back to ORT.
-// Any failure (ineligible model, gate denied, init/compile/validation error) is
-// logged and swallowed: OpenVINO must never make Perch fail to load. OV is only
-// attempted for the no_dft model variant, since the stock perch_v2.onnx cannot
-// compile on OpenVINO (a dynamic-rank DFT op).
-func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (inference.Classifier, bool) {
+// returns (classifier, device, true) on success or (nil, "", false) to fall back
+// to ORT, where device is the concrete OpenVINO device the classifier bound to
+// (inference.OVDeviceCPU/OVDeviceGPU). Any failure (ineligible model, gate
+// denied, init/compile/validation error) is logged and swallowed: OpenVINO must
+// never make Perch fail to load. OV is only attempted for the no_dft model
+// variant, since the stock perch_v2.onnx cannot compile on OpenVINO (a
+// dynamic-rank DFT op).
+func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (inference.Classifier, string, bool) {
 	if !isPerchNoDFT(cfg.ModelPath) {
-		return nil, false
+		return nil, "", false
 	}
 	plan, ok := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDPerchV2, cfg.OpenVINOPath, perchLogitsOutputIndex)
 	if !ok {
-		return nil, false
+		return nil, "", false
 	}
 
 	log := GetLogger()
@@ -146,7 +157,7 @@ func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (inference.Classifier, 
 	// here to cover it. A load failure means no usable OpenVINO; fall back to ORT.
 	if err := inference.InitOpenVINO(cfg.OpenVINOPath); err != nil {
 		log.Warn("Perch OpenVINO init failed; using ONNX Runtime", logger.Error(err))
-		return nil, false
+		return nil, "", false
 	}
 
 	start := time.Now()
@@ -161,14 +172,14 @@ func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (inference.Classifier, 
 		log.Warn("Perch OpenVINO classifier init failed; using ONNX Runtime",
 			logger.String("device", plan.device),
 			logger.Error(err))
-		return nil, false
+		return nil, "", false
 	}
 
 	log.Info("Perch v2 model using OpenVINO backend",
 		logger.String("device", plan.device),
 		logger.Int("species", classifier.NumSpecies()),
 		logger.String("init_time", time.Since(start).String()))
-	return classifier, true
+	return classifier, plan.device, true
 }
 
 // isPerchNoDFT reports whether the model file is the OpenVINO-compatible Perch
@@ -257,6 +268,11 @@ func (p *Perch) Labels() []string {
 	copy(out, p.labels)
 	return out
 }
+
+// Device returns the compute device the classifier bound to at construction
+// (the OpenVINO device on the OV path, else "CPU"). Set once and never mutated,
+// so no lock is needed. Implements ModelInstance.
+func (p *Perch) Device() string { return p.device }
 
 // Close releases resources held by the Perch model.
 func (p *Perch) Close() error {

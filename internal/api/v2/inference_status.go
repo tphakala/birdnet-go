@@ -70,20 +70,33 @@ type OpenVINOBackendStatus struct {
 
 // InferenceModelStatus describes one loaded model and its runtime statistics.
 type InferenceModelStatus struct {
-	ID               string             `json:"id"`
-	Name             string             `json:"name"`
-	Backend          string             `json:"backend"`
-	DetectionName    string             `json:"detectionName,omitempty"`
-	DetectionVersion string             `json:"detectionVersion,omitempty"`
-	Quantization     string             `json:"quantization,omitempty"`
-	IsStock          bool               `json:"isStock"`
-	Spec             ModelSpecInfo      `json:"spec"`
-	NumSpecies       int                `json:"numSpecies"`
-	Stats            ModelStats         `json:"stats"`
-	Memory           ModelMemoryInfo    `json:"memory"`
-	Sources          []ModelSourceInfo  `json:"sources"`
-	MetricKeys       ModelMetricKeys    `json:"metricKeys"`
-	LastDetection    *LastDetectionInfo `json:"lastDetection,omitempty"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Backend          string `json:"backend"`
+	DetectionName    string `json:"detectionName,omitempty"`
+	DetectionVersion string `json:"detectionVersion,omitempty"`
+	Quantization     string `json:"quantization,omitempty"`
+	IsStock          bool   `json:"isStock"`
+	// Device is the compute device (execution provider) this model's inference
+	// runs on, resolved from the live runtime binding ("CPU", "GPU", or "Unknown"
+	// when the model is not loaded). Never inferred from the backend string.
+	Device string `json:"device"`
+	// Paused is true when the model is currently prevented from running inference
+	// by a schedule (e.g. the bat model outside its nighttime window).
+	Paused bool `json:"paused"`
+	// ScheduleLabel is the human-readable reason the model is paused (e.g.
+	// "Night schedule"). Empty when the model is active.
+	ScheduleLabel string             `json:"scheduleLabel,omitempty"`
+	Spec          ModelSpecInfo      `json:"spec"`
+	NumSpecies    int                `json:"numSpecies"`
+	Stats         ModelStats         `json:"stats"`
+	Memory        ModelMemoryInfo    `json:"memory"`
+	Sources       []ModelSourceInfo  `json:"sources"`
+	MetricKeys    ModelMetricKeys    `json:"metricKeys"`
+	LastDetection *LastDetectionInfo `json:"lastDetection,omitempty"`
+	// RecentDetections is the newest-first list of up to 10 recent above-threshold
+	// detections for this model (the "Last heard" table). Empty when none.
+	RecentDetections []LastDetectionInfo `json:"recentDetections"`
 }
 
 // ModelSpecInfo carries the audio input requirements of a model.
@@ -176,10 +189,13 @@ type LastDetectionInfo struct {
 }
 
 // deviceCPU and deviceGPU are the OpenVINO device name strings used when
-// probing which compute devices are available for inference.
+// probing which compute devices are available for inference. deviceUnknown is
+// the per-model device fallback when the orchestrator cannot resolve a live
+// binding (model not loaded).
 const (
-	deviceCPU = "CPU"
-	deviceGPU = "GPU"
+	deviceCPU     = "CPU"
+	deviceGPU     = "GPU"
+	deviceUnknown = "Unknown"
 )
 
 // buildModelStatus assembles an InferenceModelStatus for one loaded model from
@@ -305,39 +321,67 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 	if c.ModelManager != nil {
 		infos = c.ModelManager.ModelInfos()
 	}
+	// Fetch the orchestrator once: it is the live source for RSS, primary ID,
+	// load failures, per-model device, and per-model schedule status. The
+	// Processor guard mirrors the GetLastDetection guard below.
+	var orch *classifier.Orchestrator
+	if c.Processor != nil {
+		orch = c.Processor.GetBirdNET()
+	}
 	var rss map[string]int64
 	primaryID := ""
-	if c.Processor != nil {
-		if bn := c.Processor.GetBirdNET(); bn != nil {
-			rss, resp.RuntimeBaselineBytes = bn.ModelRSS()
-			primaryID = bn.PrimaryModelID()
-		}
+	var loadFailures map[string]int64
+	if orch != nil {
+		rss, resp.RuntimeBaselineBytes = orch.ModelRSS()
+		primaryID = orch.PrimaryModelID()
+		loadFailures = orch.LoadFailures()
 	}
 	counters := classifier.GetInferenceCounters().PeekAll()
 	attachments := buildSourceAttachments(settings, infos, primaryID)
 
-	// Compute per-model load failures.
-	var loadFailures map[string]int64
-	if c.Processor != nil {
-		if bn := c.Processor.GetBirdNET(); bn != nil {
-			loadFailures = bn.LoadFailures()
+	// Compute per-model device and schedule status from the live orchestrator.
+	devices := make(map[string]string, len(infos))
+	paused := make(map[string]bool, len(infos))
+	scheduleLabels := make(map[string]string, len(infos))
+	if orch != nil {
+		for i := range infos {
+			id := infos[i].ID
+			devices[id] = orch.GetModelDevice(id)
+			active, reason := orch.ModelScheduleStatus(id)
+			paused[id] = !active
+			scheduleLabels[id] = reason
 		}
 	}
 
-	// Compute per-model last detections, converting from processor.LastDetection
-	// to the API-local LastDetectionInfo via field assignment (no type import needed).
+	// Compute per-model last detection and the recent-detections ring (newest
+	// first), converting from processor.LastDetection to the API-local
+	// LastDetectionInfo via field assignment (no type import needed).
 	var lastDetections map[string]*LastDetectionInfo
+	recentDetections := make(map[string][]LastDetectionInfo, len(infos))
 	if c.Processor != nil {
 		lastDetections = make(map[string]*LastDetectionInfo, len(infos))
 		for i := range infos {
-			if ld, ok := c.Processor.GetLastDetection(infos[i].ID); ok {
-				lastDetections[infos[i].ID] = &LastDetectionInfo{
-					Species:        ld.Species,
-					ScientificName: ld.ScientificName,
-					Confidence:     ld.Confidence,
-					AtUnix:         ld.AtUnix,
+			id := infos[i].ID
+			// Derive both the recent-detections list and the single most-recent
+			// detection from one GetRecentDetections snapshot (newest first), so
+			// lastDetection and recentDetections[0] are always consistent and we
+			// take only one read lock per model.
+			recent := c.Processor.GetRecentDetections(id)
+			if len(recent) == 0 {
+				continue
+			}
+			converted := make([]LastDetectionInfo, len(recent))
+			for j := range recent {
+				converted[j] = LastDetectionInfo{
+					Species:        recent[j].Species,
+					ScientificName: recent[j].ScientificName,
+					Confidence:     recent[j].Confidence,
+					AtUnix:         recent[j].AtUnix,
 				}
 			}
+			latest := converted[0]
+			lastDetections[id] = &latest
+			recentDetections[id] = converted
 		}
 	}
 
@@ -365,7 +409,21 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 
 	resp.Models = make([]InferenceModelStatus, 0, len(infos))
 	for i := range infos {
-		resp.Models = append(resp.Models, buildModelStatus(&infos[i], counters[infos[i].ID], rss, attachments[infos[i].ID], loadFailures, lastDetections))
+		id := infos[i].ID
+		status := buildModelStatus(&infos[i], counters[id], rss, attachments[id], loadFailures, lastDetections)
+		// Live runtime fields resolved from the orchestrator/processor, kept out of
+		// the pure buildModelStatus so it stays a side-effect-free assembler.
+		status.Device = devices[id]
+		if status.Device == "" {
+			status.Device = deviceUnknown
+		}
+		status.Paused = paused[id]
+		status.ScheduleLabel = scheduleLabels[id]
+		status.RecentDetections = recentDetections[id]
+		if status.RecentDetections == nil {
+			status.RecentDetections = []LastDetectionInfo{}
+		}
+		resp.Models = append(resp.Models, status)
 	}
 	sortInferenceModelsByName(resp.Models)
 

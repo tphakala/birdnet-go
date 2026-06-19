@@ -63,6 +63,11 @@ type BirdNET struct {
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	modelVersion        string              // Human-readable model version string (per-instance to avoid shared global state)
 	modelsDir           string              // base directory for gallery-installed models (set by Orchestrator)
+	// device is the compute device the classifier backend bound to at load time
+	// ("CPU" for TFLite/ONNX, or the OpenVINO device for the OV path). It is set
+	// by each initialize*Model path and defaults to deviceCPU in NewBirdNET so a
+	// path that forgets to set it still reports a sane value. Reported via Device().
+	device string
 	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack).
 	// Inference holds mu for the full duration of the native call, not just the field
 	// read: the backends are not goroutine-safe and reload/Delete Close() them under
@@ -103,6 +108,9 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 		TaxonomyPath: "", // Default to embedded taxonomy
 		modelVersion: defaultModelVersionString,
 		speciesCache: make(map[string]*speciesCacheEntry),
+		// Default to CPU; the OpenVINO init path overrides this with the real
+		// device (CPU/GPU) it bound to. TFLite and ONNX paths set it explicitly too.
+		device: deviceCPU,
 	}
 	bn.settingsAtomic.Store(settings)
 
@@ -298,6 +306,8 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 	}
 
 	bn.classifier = classifier
+	// TFLite runs on CPU (the optional XNNPACK delegate is still CPU execution).
+	bn.device = deviceCPU
 
 	// Update the human-readable model version string for display when a custom
 	// model path is provided. Model identity (ModelInfo.ID) is never modified
@@ -1451,6 +1461,16 @@ func (bn *BirdNET) Labels() []string {
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
 	return slices.Clone(bn.Settings.BirdNET.Labels)
+}
+
+// Device returns the compute device this model's classifier backend bound to
+// at load time ("CPU" for TFLite/ONNX, or the OpenVINO device for the OV path).
+// Guarded by bn.mu because reloadModelInternal rewrites bn.device under the same
+// lock when re-initializing the backend. Implements ModelInstance.
+func (bn *BirdNET) Device() string {
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	return bn.device
 }
 
 // ReloadSnapshot returns a copy of the model metadata and taxonomy maps safely under bn.mu.

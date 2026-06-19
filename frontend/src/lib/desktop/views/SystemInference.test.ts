@@ -77,6 +77,9 @@ function makeModel(overrides: Partial<InferenceModel> = {}): InferenceModel {
       throughput: 'inference.model-1.throughput',
       errorRate: 'inference.model-1.error_rate',
     },
+    device: 'CPU',
+    paused: false,
+    recentDetections: [],
     ...overrides,
   };
 }
@@ -221,8 +224,8 @@ describe('SystemInference', () => {
       expect(container.textContent).toContain('system.inference.invocations');
     });
     // The stat help snippet renders sr-only spans carrying the *Help keys.
-    expect(container.textContent).toContain('system.inference.queueDepthHelp');
     expect(container.textContent).toContain('system.inference.invocationsHelp');
+    expect(container.textContent).toContain('system.inference.rtfHelp');
   });
 
   it('renders model details, backend, quantization, invocations and a source chip', async () => {
@@ -379,8 +382,8 @@ describe('SystemInference', () => {
     expect(snapshotCallsAfter).toBeGreaterThan(snapshotCallsBefore);
   });
 
-  it('renders the audio card with queue depth, capacity, and dropped chunk count', async () => {
-    const snap = makeSnapshot([]);
+  it('does not render the Audio card (intentionally hidden in Phase A)', async () => {
+    const snap = makeSnapshot([makeModel()]);
     snap.audio = {
       queueDepth: 7,
       droppedChunksTotal: 42,
@@ -392,58 +395,59 @@ describe('SystemInference', () => {
     const { container } = inferenceTest.render({});
 
     await waitFor(() => {
-      expect(container.textContent).toContain('system.inference.sectionAudio');
+      expect(container.textContent).toContain('system.inference.invocations');
     });
-    const text = container.textContent;
-    expect(text).toContain('7');
-    expect(text).toContain('64');
-    expect(text).toContain('42');
+    // The Audio pipeline card is deliberately hidden pending a refactor; its
+    // section header must not appear.
+    expect(container.textContent).not.toContain('system.inference.sectionAudio');
   });
 
-  it('includes the audio queue-depth metric key in the SSE subscription when models are absent', async () => {
-    // FIX 1 regression guard: metricKeysParam() must include the audio key even
-    // when snapshot.models is empty, so the audio sparkline receives live data
-    // before any model loads.
-    //
-    // Strategy: install a snapshot with zero models but an audio section, then
-    // capture the URL that the history endpoint was called with and assert it
-    // contains the audio queue-depth key.
-    const snap = makeSnapshot([]);
-    snap.audio = {
-      queueDepth: 2,
-      droppedChunksTotal: 0,
-      queueCapacity: 64,
-      metricKeys: { queueDepth: 'audio.queue_depth' },
-    };
-
+  it('does not include the audio queue-depth key in the metrics subscription', async () => {
+    // With the Audio card hidden in Phase A, metricKeysParam() must subscribe only
+    // to per-model series and must NOT include the audio queue-depth key.
+    const model = makeModel();
     let capturedHistoryUrl = '';
     apiGet.mockImplementation((url: string) => {
       if (url.includes('/metrics/history')) {
         capturedHistoryUrl = url;
-        return Promise.resolve({ metrics: { 'audio.queue_depth': [] } });
+        return Promise.resolve({ metrics: {} });
       }
       if (url.includes(INFERENCE_URL)) {
-        return Promise.resolve(snap);
+        return Promise.resolve(makeSnapshot([model]));
       }
       return Promise.resolve({ metrics: {} });
     });
 
     inferenceTest.render({});
 
-    // Wait until the history endpoint is called (proves loadHistory ran with keys).
     await waitFor(() => {
-      expect(capturedHistoryUrl).toContain('audio.queue_depth');
+      expect(capturedHistoryUrl).toContain('inference.model-1.avg_ms');
     });
+    expect(capturedHistoryUrl).not.toContain('audio.queue_depth');
+    // Throughput must stay subscribed: the activity pulse derives from it even
+    // though its sparkline was removed. RTF and error-rate are rendered from the
+    // snapshot, not a live series, so they are intentionally NOT subscribed.
+    expect(capturedHistoryUrl).toContain('inference.model-1.throughput');
+    expect(capturedHistoryUrl).not.toContain('inference.model-1.rtf');
+    expect(capturedHistoryUrl).not.toContain('inference.model-1.error_rate');
   });
 
-  it('renders species name and confidence when lastDetection is present', async () => {
+  it('renders the Last heard table with recent detections (species and confidence)', async () => {
     const model = makeModel({
-      lastDetection: {
-        species: 'Common Chaffinch',
-        scientificName: 'Fringilla coelebs',
-        confidence: 0.87,
-        atUnix: Math.floor(Date.now() / 1000) - 60,
-      },
+      recentDetections: [
+        {
+          species: 'Common Chaffinch',
+          scientificName: 'Fringilla coelebs',
+          confidence: 0.87,
+          atUnix: Math.floor(Date.now() / 1000) - 60,
+        },
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.42,
+          atUnix: Math.floor(Date.now() / 1000) - 120,
+        },
+      ],
     });
     installApi(makeSnapshot([model]));
 
@@ -453,12 +457,15 @@ describe('SystemInference', () => {
       expect(container.textContent).toContain(model.name);
     });
     const text = container.textContent;
+    expect(text).toContain('system.inference.lastHeard');
     expect(text).toContain('Common Chaffinch');
     expect(text).toContain('87%');
+    expect(text).toContain('European Robin');
+    expect(text).toContain('42%');
   });
 
-  it('shows the lastSeenNever label when lastDetection is absent', async () => {
-    const model = makeModel({ lastDetection: undefined });
+  it('shows the lastHeardNever label when there are no recent detections', async () => {
+    const model = makeModel({ recentDetections: [] });
     installApi(makeSnapshot([model]));
 
     const { container } = inferenceTest.render({});
@@ -466,7 +473,7 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain(model.name);
     });
-    expect(container.textContent).toContain('system.inference.lastSeenNever');
+    expect(container.textContent).toContain('system.inference.lastHeardNever');
   });
 
   it('shows activity pulse as active when throughput series last value is > 0', async () => {
@@ -558,5 +565,39 @@ describe('SystemInference', () => {
     expect(text).toContain('5%');
     expect(text).toContain('system.inference.loadFailures');
     expect(text).toContain('3');
+  });
+
+  it('renders the device chip carrying the model device', async () => {
+    const model = makeModel({ device: 'GPU' });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.textContent).toContain('GPU');
+    // The device chip carries the device help as a tooltip.
+    expect(container.querySelector('[title="system.inference.deviceHelp"]')).not.toBeNull();
+  });
+
+  it('shows a Paused indicator with the schedule label when the model is paused', async () => {
+    const model = makeModel({ paused: true, scheduleLabel: 'Night schedule' });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // The paused state replaces the idle dash and explains why inference is stopped.
+    expect(
+      container.querySelector('[aria-label="system.inference.activityPaused"]')
+    ).not.toBeNull();
+    expect(container.textContent).toContain('system.inference.paused');
+    expect(container.textContent).toContain('Night schedule');
+    // Neither active nor idle indicators render while paused.
+    expect(container.querySelector('[aria-label="system.inference.activityActive"]')).toBeNull();
+    expect(container.querySelector('[aria-label="system.inference.activityIdle"]')).toBeNull();
   });
 });
