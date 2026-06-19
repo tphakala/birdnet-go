@@ -337,13 +337,20 @@ func (r *labelRepository) GetLabelIDsByScientificName(ctx context.Context, name 
 	return ids, err
 }
 
-// UpdateLabelType updates the label_type_id of an existing label identified by id.
+// UpdateLabelType updates the label_type_id of an existing label identified by id and clears its
+// taxonomic_class_id (a non-bird sound class has no taxonomic class).
 // A non-existent id results in zero rows affected, which is not treated as an error.
 func (r *labelRepository) UpdateLabelType(ctx context.Context, id, labelTypeID uint) error {
 	return datastore.RetryOnLock(ctx, "v2_update_label_type", func() error {
+		// Update both columns: a non-bird sound class has no taxonomic class, so clear any
+		// stale taxonomic_class_id (e.g. Aves) carried over from when the row was first created
+		// as a species. Updates with a map writes nil as SQL NULL.
 		return r.db.WithContext(ctx).Table(r.tableName()).
 			Where("id = ?", id).
-			Update("label_type_id", labelTypeID).Error
+			Updates(map[string]any{
+				"label_type_id":      labelTypeID,
+				"taxonomic_class_id": nil,
+			}).Error
 	}, r.metrics)
 }
 

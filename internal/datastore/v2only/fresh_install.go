@@ -132,7 +132,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 
 	// Get or create required lookup table entries and cache their IDs
 	ctx := context.Background()
-	speciesLabelType, err := labelTypeRepo.GetOrCreate(ctx, "species")
+	speciesLabelType, err := labelTypeRepo.GetOrCreate(ctx, entities.LabelTypeSpecies)
 	if err != nil {
 		_ = manager.Close()
 		return nil, errors.New(err).

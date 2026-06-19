@@ -315,19 +315,19 @@ func New(cfg *Config) (*Datastore, error) {
 	}
 
 	ds := &Datastore{
-		manager:            cfg.Manager,
-		detection:          cfg.Detection,
-		label:              cfg.Label,
-		model:              cfg.Model,
-		source:             cfg.Source,
-		weather:            cfg.Weather,
-		imageCache:         cfg.ImageCache,
-		threshold:          cfg.Threshold,
-		notification:       cfg.Notification,
-		appEvent:           cfg.AppEvent,
-		log:                cfg.Logger,
-		timezone:           tz,
-		suncalc:            cfg.SunCalc,
+		manager:             cfg.Manager,
+		detection:           cfg.Detection,
+		label:               cfg.Label,
+		model:               cfg.Model,
+		source:              cfg.Source,
+		weather:             cfg.Weather,
+		imageCache:          cfg.ImageCache,
+		threshold:           cfg.Threshold,
+		notification:        cfg.Notification,
+		appEvent:            cfg.AppEvent,
+		log:                 cfg.Logger,
+		timezone:            tz,
+		suncalc:             cfg.SunCalc,
 		defaultModelID:      defaultModelID,
 		speciesLabelTypeID:  speciesLabelTypeID,
 		avesClassID:         avesClassID,
@@ -645,7 +645,11 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 		groupTax[k] = predTaxIDs[i]
 	}
 
-	// Batch resolve each group and merge into a single name->label map.
+	// Batch resolve each group and merge into a single name->label map. A given scientific name
+	// maps to exactly one label row per model (unique on (scientific_name, model_id)), so even if
+	// the same name were classified into two groups, both BatchGetOrCreate calls return the same
+	// underlying label (same ID). Downstream uses only the label ID, so the merge is safe
+	// regardless of group iteration order.
 	merged := make(map[string]*entities.Label, len(results))
 	for k, names := range groupNames {
 		m, err := ds.label.BatchGetOrCreate(ctx, names, modelID, k.typeID, groupTax[k])
@@ -659,6 +663,7 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 					return nil, fmt.Errorf("failed to relabel non-bird prediction label %q: %w", name, err)
 				}
 				lbl.LabelTypeID = k.typeID
+				lbl.TaxonomicClassID = nil
 			}
 			merged[name] = lbl
 		}
@@ -716,6 +721,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 			return fmt.Errorf("failed to relabel non-bird label %q: %w", label.ScientificName, err)
 		}
 		label.LabelTypeID = primaryTypeID
+		label.TaxonomicClassID = nil
 	}
 
 	// Pre-resolve all prediction labels before starting transaction.

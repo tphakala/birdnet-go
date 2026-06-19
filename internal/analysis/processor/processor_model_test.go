@@ -62,6 +62,8 @@ func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 			assert.Equal(t, tc.expectedName, result.Model.Name)
 			assert.Equal(t, tc.expectedVersion, result.Model.Version)
 			assert.Equal(t, tc.expectedVariant, result.Model.Variant)
+			assert.Equal(t, "Parus major_Great Tit_gretit1", result.RawLabel,
+				"createDetectionResult must set RawLabel from the passed raw label")
 		})
 	}
 }

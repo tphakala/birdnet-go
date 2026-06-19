@@ -4,14 +4,14 @@ package entities
 // the corresponding nonbird.Category constants so the seeded lookup table rows
 // align with the nonbird classification buckets without a direct import.
 const (
-	LabelTypeSpecies     = "species"
-	LabelTypeNoise       = "noise"
-	LabelTypeEnvironment = "environment"
-	LabelTypeDevice      = "device"
-	LabelTypeHuman       = "human"
-	LabelTypeAnimal      = "animal"
-	LabelTypeMusic       = "music"
-	LabelTypeMechanical  = "mechanical"
+	LabelTypeSpecies     = "species"     // a taxonomic species (bird, bat, or other taxon)
+	LabelTypeNoise       = "noise"       // unstructured noise sound events
+	LabelTypeEnvironment = "environment" // natural environmental sounds
+	LabelTypeDevice      = "device"      // electronic devices and appliances
+	LabelTypeHuman       = "human"       // human vocal and body sounds
+	LabelTypeAnimal      = "animal"      // non-bird animal sounds
+	LabelTypeMusic       = "music"       // musical instruments and performed music
+	LabelTypeMechanical  = "mechanical"  // vehicles, tools, and other mechanical sources
 )
 
 // LabelType represents the classification category of a label.

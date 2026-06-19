@@ -173,8 +173,9 @@ func TestSave_BatchMixed_CorrectLabelTypesPerPrediction(t *testing.T) {
 	perchModel, err := ds.model.GetOrCreate(ctx, "Perch", "1.0", "default", "multi", nil)
 	require.NoError(t, err)
 
-	// Check bird prediction label: should be species type.
-	birdLabel, err := ds.label.GetOrCreate(ctx, "Turdus merula", perchModel.ID, ds.speciesLabelTypeID, nil)
+	// Check bird prediction label: should be species type. Use a read-only lookup so the
+	// assertion fails if Save never actually created the label (GetOrCreate would create it).
+	birdLabel, err := ds.label.GetByScientificNameAndModel(ctx, "Turdus merula", perchModel.ID)
 	require.NoError(t, err)
 	assert.Equal(t, ds.speciesLabelTypeID, birdLabel.LabelTypeID,
 		"bird prediction must keep species label type")
@@ -183,7 +184,7 @@ func TestSave_BatchMixed_CorrectLabelTypesPerPrediction(t *testing.T) {
 	wantHumanTypeID := ds.nonBirdLabelTypeIDs[nonbird.CategoryHuman]
 	require.NotZero(t, wantHumanTypeID)
 
-	speechLabel, err := ds.label.GetOrCreate(ctx, "speech", perchModel.ID, wantHumanTypeID, nil)
+	speechLabel, err := ds.label.GetByScientificNameAndModel(ctx, "speech", perchModel.ID)
 	require.NoError(t, err)
 	assert.Equal(t, wantHumanTypeID, speechLabel.LabelTypeID,
 		"'speech' prediction must use the Human non-bird label type")
@@ -227,16 +228,14 @@ func TestSave_Relabel_CorrectsMisclassifiedSpeciesRow(t *testing.T) {
 	wantTypeID := ds.nonBirdLabelTypeIDs[nonbird.CategoryMechanical]
 	require.NotZero(t, wantTypeID)
 
-	// GetOrCreate with the mechanical type will return the now-updated row.
-	updatedLabel, err := ds.label.GetOrCreate(ctx, "power", perchModel.ID, wantTypeID, nil)
+	// Read the row back (read-only) and verify it was relabeled.
+	updatedLabel, err := ds.label.GetByScientificNameAndModel(ctx, "power", perchModel.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, wantTypeID, updatedLabel.LabelTypeID,
 		"Save must relabel a pre-existing species row to the correct non-bird type")
-	// NOTE: UpdateLabelType only fixes label_type_id (TYPE-ONLY scope). The TaxonomicClassID of a
-	// pre-existing mis-labeled row is not retroactively changed; only rows created fresh after the
-	// fix get nil TaxonomicClassID. This is acceptable: the ID field drives detection queries, not
-	// TaxonomicClassID.
+	assert.Nil(t, updatedLabel.TaxonomicClassID,
+		"relabel must clear the stale taxonomic class (Aves) on the corrected non-bird row")
 }
 
 // TestSave_NonBirdDetection_AppearsInGetAllNotes proves that non-bird Perch detections

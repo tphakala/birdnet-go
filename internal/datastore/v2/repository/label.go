@@ -74,9 +74,11 @@ type LabelRepository interface {
 	// Returns empty slice if no labels found.
 	GetLabelIDsByScientificName(ctx context.Context, name string) ([]uint, error)
 
-	// UpdateLabelType updates the label_type_id of an existing label identified by id.
-	// Used to correct a label that was first created with the wrong type (e.g. a non-bird
-	// sound class initially stored as species before classification was available).
+	// UpdateLabelType updates the label_type_id of an existing label identified by id and
+	// clears its taxonomic_class_id (a non-bird sound class has no taxonomic class). Used to
+	// correct a label that was first created with the wrong type (e.g. a non-bird sound class
+	// initially stored as species, with an Aves taxonomic class, before classification was
+	// available).
 	// Does not error when no row matches id (zero rows affected is not an error).
 	UpdateLabelType(ctx context.Context, id, labelTypeID uint) error
 }
