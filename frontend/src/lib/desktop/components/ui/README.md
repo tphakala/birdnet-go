@@ -46,6 +46,8 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 - [SystemInfoCard](#systeminfocard) - System information display
 - [SettingsCard](#settingscard) - Configuration settings card
 - [SettingsSection](#settingssection) - Settings organization
+- [SpeciesComparison](#speciescomparison) - Similar-species comparison panel (species guide)
+- [SpeciesNotes](#speciesnotes) - Per-species user notes with CRUD (species guide)
 
 ### Media & Audio
 
@@ -521,6 +523,71 @@ interface Props {
   onDelete={() => actions.handleDelete(detection)}
   onDownload={handleDownload}
 />
+```
+
+---
+
+### SpeciesComparison
+
+Collapsible panel comparing a focal species against same-genus / same-family / similar species, sourced from the species guide cache (Wikipedia/eBird). Fetches the focal guide and the similar-species list, mapping localized Wikipedia headings to canonical section IDs. Used in detection details and the species detail modal.
+
+**Props:**
+
+```ts
+interface Props {
+  scientificName: string;
+  commonName: string;
+  onclose: () => void;
+  className?: string;
+  [key: string]: unknown;
+}
+```
+
+**Features:**
+
+- Fetches focal guide (`/api/v2/species/:name/guide`) and similar species (`/api/v2/species/:name/similar`)
+- Collapsible Description, Songs & Calls, and Similar species sections
+- Localized heading mapping (de/fr/es/it/cs/pl/fi/et) to canonical section IDs
+- Instance-scoped ARIA ids via `$props.id()` so multiple instances on one page do not collide
+- Loading and empty states
+
+**Example:**
+
+```svelte
+<SpeciesComparison
+  scientificName="Turdus merula"
+  commonName="Common Blackbird"
+  onclose={() => (showComparison = false)}
+/>
+```
+
+---
+
+### SpeciesNotes
+
+Per-species user notes with full CRUD (auth-gated writes). Lists notes newest-first and supports add/edit/delete with optimistic updates and a client-side length guard mirroring the server limit.
+
+**Props:**
+
+```ts
+interface Props {
+  scientificName: string;
+  className?: string;
+  [key: string]: unknown;
+}
+```
+
+**Features:**
+
+- Read public; create / edit / delete require authentication (`isAuthenticated`)
+- Client-side max-length guard (10,000 chars) mirroring `datastore.SpeciesNoteMaxLength`
+- Inline edit with optimistic entry update; server `updated_at` refreshes on reload
+- Delete confirmation, toast-based error surfacing, i18n strings under `analytics.species.notes.*`
+
+**Example:**
+
+```svelte
+<SpeciesNotes scientificName="Turdus merula" />
 ```
 
 ---

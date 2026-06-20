@@ -199,7 +199,7 @@ func (m *mockStore) GetSpeciesNotes(_ context.Context, _ string) ([]datastore.Sp
 	return nil, nil
 }
 func (m *mockStore) GetSpeciesNoteByID(_ context.Context, _ uint) (*datastore.SpeciesNote, error) {
-	return nil, nil
+	return nil, datastore.ErrSpeciesNoteNotFound
 }
 func (m *mockStore) SaveSpeciesNote(_ context.Context, _ *datastore.SpeciesNote) error { return nil }
 func (m *mockStore) DeleteSpeciesNote(_ context.Context, _ string) error               { return nil }

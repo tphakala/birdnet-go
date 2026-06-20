@@ -85,15 +85,13 @@
     try {
       const [g, s] = await Promise.all([
         api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide`),
-        api
-          .get<SimilarSpeciesResponse>(`/api/v2/species/${enc}/similar`)
-          .catch(
-            (): SimilarSpeciesResponse => ({
-              scientific_name: scientificName,
-              genus: '',
-              similar: [],
-            })
-          ),
+        api.get<SimilarSpeciesResponse>(`/api/v2/species/${enc}/similar`).catch(
+          (): SimilarSpeciesResponse => ({
+            scientific_name: scientificName,
+            genus: '',
+            similar: [],
+          })
+        ),
       ]);
       guide = g;
       similar = s.similar ?? [];

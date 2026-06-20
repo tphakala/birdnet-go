@@ -180,6 +180,12 @@ type GuideCache struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	// lifecycleMu serializes the closed-check + wg.Add in goIfOpen against
+	// Close setting closed and calling wg.Wait, so a background spawn can never
+	// race the Wait (which would let a goroutine outlive Close or panic the
+	// WaitGroup).
+	lifecycleMu sync.Mutex
+
 	startOnce sync.Once
 	closeOnce sync.Once
 	closed    atomic.Bool
@@ -268,7 +274,9 @@ func (c *GuideCache) Close() {
 		return
 	}
 	c.closeOnce.Do(func() {
+		c.lifecycleMu.Lock()
 		c.closed.Store(true)
+		c.lifecycleMu.Unlock()
 		c.cancel()
 		c.wg.Wait()
 	})
@@ -476,12 +484,27 @@ func (c *GuideCache) isCacheEntryStale(g *SpeciesGuide) bool {
 	return time.Since(g.CachedAt) > ttl
 }
 
-// triggerAsyncRefresh re-fetches a stale entry in the background.
-func (c *GuideCache) triggerAsyncRefresh(name, locale string) {
+// goIfOpen starts fn on a wait-group-tracked background goroutine unless the
+// cache is closed. The closed-check and wg.Add are serialized against Close
+// under lifecycleMu, so once Close has flipped closed no new Add can race the
+// wg.Wait that follows it.
+func (c *GuideCache) goIfOpen(fn func()) {
+	c.lifecycleMu.Lock()
 	if c.closed.Load() {
+		c.lifecycleMu.Unlock()
 		return
 	}
-	c.wg.Go(func() {
+	c.wg.Add(1)
+	c.lifecycleMu.Unlock()
+	go func() {
+		defer c.wg.Done()
+		fn()
+	}()
+}
+
+// triggerAsyncRefresh re-fetches a stale entry in the background.
+func (c *GuideCache) triggerAsyncRefresh(name, locale string) {
+	c.goIfOpen(func() {
 		if c.shouldQuit() {
 			return
 		}
@@ -499,7 +522,7 @@ func (c *GuideCache) PreFetch(ctx context.Context, scientificName string) {
 	if name == "" {
 		return
 	}
-	c.wg.Go(func() {
+	c.goIfOpen(func() {
 		if c.shouldQuit() {
 			return
 		}
@@ -526,7 +549,7 @@ func (c *GuideCache) WarmForSpecies(speciesNames []string) {
 	if len(names) == 0 {
 		return
 	}
-	c.wg.Go(func() {
+	c.goIfOpen(func() {
 		for _, n := range names {
 			if c.shouldQuit() {
 				return

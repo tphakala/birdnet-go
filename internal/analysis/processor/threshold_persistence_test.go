@@ -97,7 +97,7 @@ func (m *MockDatastore) GetSpeciesNotes(context.Context, string) ([]datastore.Sp
 	return nil, nil
 }
 func (m *MockDatastore) GetSpeciesNoteByID(context.Context, uint) (*datastore.SpeciesNote, error) {
-	return nil, nil
+	return nil, datastore.ErrSpeciesNoteNotFound
 }
 func (m *MockDatastore) SaveSpeciesNote(context.Context, *datastore.SpeciesNote) error { return nil }
 func (m *MockDatastore) DeleteSpeciesNote(context.Context, string) error               { return nil }

@@ -95,9 +95,9 @@
     saving = true;
     try {
       await api.put(`/api/v2/species/notes/${id}`, { entry });
-      notes = notes.map(n =>
-        n.id === id ? { ...n, entry, updated_at: new Date().toISOString() } : n
-      );
+      // Optimistically update the entry text only; the server-authoritative
+      // updated_at refreshes on the next load (avoids a UTC toISOString date).
+      notes = notes.map(n => (n.id === id ? { ...n, entry } : n));
       cancelEdit();
     } catch (e) {
       handleWriteError(e, 'analytics.species.notes.saveFailed');

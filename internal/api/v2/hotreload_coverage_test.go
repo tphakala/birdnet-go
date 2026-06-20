@@ -120,6 +120,13 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// -- Dashboard (display only, read per-request by frontend) --
 	"Realtime.Dashboard": {categories: []hotReloadCategory{hotReloadDisplay}},
 
+	// SpeciesGuide rebuilds its provider cache live via the
+	// reconfigure_species_guide control signal (field-level entry covers the subtree).
+	"Realtime.Dashboard.SpeciesGuide": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+
 	// -- DynamicThreshold --
 	"Realtime.DynamicThreshold.Enabled": {
 		categories: []hotReloadCategory{hotReloadFresh},

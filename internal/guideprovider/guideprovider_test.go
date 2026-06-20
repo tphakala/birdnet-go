@@ -118,6 +118,44 @@ func newTestCache(t *testing.T, store GuideStore, provider GuideProvider) *Guide
 	return c
 }
 
+// TestGuideCache_CloseRacesBackgroundSpawns exercises the spawn-vs-Close path:
+// PreFetch / WarmForSpecies / Get racing a concurrent Close must never call
+// wg.Add concurrently with Close's wg.Wait. Run under -race to catch a
+// regression (the unguarded closed-check + wg.Go this replaced was racy).
+func TestGuideCache_CloseRacesBackgroundSpawns(t *testing.T) {
+	t.Parallel()
+	const iterations = 50
+	const spawners = 8
+	for range iterations {
+		store := newFakeStore()
+		prov := &fakeProvider{
+			name:   WikipediaProviderName,
+			result: &SpeciesGuide{CommonName: "Common Blackbird", Description: "A bird."},
+		}
+		c := NewGuideCache(store, noopMetrics{})
+		c.RegisterProvider(prov.Name(), prov)
+		c.Start()
+
+		var wg sync.WaitGroup
+		for s := range spawners {
+			wg.Add(1)
+			go func(n int) {
+				defer wg.Done()
+				name := "Genus species" + strconv.Itoa(n)
+				c.PreFetch(t.Context(), name)
+				c.WarmForSpecies([]string{name})
+				_, _ = c.Get(t.Context(), name, FetchOptions{})
+			}(s)
+		}
+
+		// Close concurrently with the in-flight spawners.
+		c.Close()
+		wg.Wait()
+		// Idempotent under concurrency.
+		c.Close()
+	}
+}
+
 func TestGuideCache_FetchAndMemoryHit(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()

@@ -76,6 +76,14 @@ BirdNET-Go follows **Privacy by Design** principles:
 - **OpenWeather**: Requires user API key for enhanced weather data
 - **Data sent**: HTTP requests with coordinates and API key
 
+**Species Guide** (disabled by default):
+
+- **Purpose**: Enrich detected species with descriptions, taxonomy, and similar-species information
+- **Services**: Wikipedia REST API (when enabled); eBird API (only when an eBird API key is configured)
+- **Data sent**: HTTP requests containing the scientific name of detected species and a language code
+- **Requires**: User enables the feature in settings; eBird enrichment additionally requires a user-provided API key
+- **Privacy**: No personal data, coordinates, or audio transmitted - only public taxonomic names
+
 ### Telemetry Data Collection (Opt-In Only)
 
 **IMPORTANT: The following telemetry data is ONLY collected when you explicitly enable it. By default, NO telemetry data is collected.**
