@@ -4,9 +4,11 @@ package api
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -351,7 +353,10 @@ func (c *Controller) buildPerModelInferenceProvider() func() []checks.ModelInfer
 // dropping a model from the inference chart.
 func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, infoMap map[string]*classifier.ModelInfo) []checks.ModelInferenceInfo {
 	result := make([]checks.ModelInferenceInfo, 0, len(snapshots))
-	for modelID, s := range snapshots {
+	// Iterate in sorted model-ID order so the returned slice (and the health
+	// results derived from it) is deterministic; map iteration order is random.
+	for _, modelID := range slices.Sorted(maps.Keys(snapshots)) {
+		s := snapshots[modelID]
 		var avgMS, maxMS, windowMS float64
 		if s.InvokeCount > 0 {
 			avgMS = float64(s.InvokeTotalUs) / float64(s.InvokeCount) / 1000.0

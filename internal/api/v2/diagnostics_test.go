@@ -81,3 +81,23 @@ func TestMapInferenceSnapshotsUsesWindowedMaxNotLifetime(t *testing.T) {
 	assert.InDelta(t, 250.0, out[0].MaxMS, 0.001,
 		"health check must use windowed max, not the lifetime warm-up spike")
 }
+
+// TestMapInferenceSnapshotsDeterministicOrder verifies the output is sorted by
+// ModelID regardless of map iteration order, so the derived health results and
+// logs are stable rather than reordering randomly between runs.
+func TestMapInferenceSnapshotsDeterministicOrder(t *testing.T) {
+	t.Parallel()
+	snaps := map[string]inferencestats.PeekSnapshot{
+		"Zebra_Model": {InvokeCount: 1, InvokeTotalUs: 1000, InvokeMaxUs: 1000},
+		"Alpha_Model": {InvokeCount: 1, InvokeTotalUs: 1000, InvokeMaxUs: 1000},
+		"Mango_Model": {InvokeCount: 1, InvokeTotalUs: 1000, InvokeMaxUs: 1000},
+	}
+
+	out := mapInferenceSnapshots(snaps, map[string]*classifier.ModelInfo{})
+	ids := make([]string, len(out))
+	for i, r := range out {
+		ids[i] = r.ModelID
+	}
+	assert.Equal(t, []string{"Alpha_Model", "Mango_Model", "Zebra_Model"}, ids,
+		"models must be returned in sorted ModelID order")
+}
