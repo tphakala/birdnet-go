@@ -407,11 +407,11 @@ func initSpeciesTracker(settings *conf.Settings, ds datastore.Interface) *specie
 	}
 
 	tracker := species.NewTrackerFromSettings(ds, &hemisphereAwareTracking)
-	if err := tracker.InitFromDatabase(); err != nil {
-		GetLogger().Error("Failed to initialize species tracker from database, continuing with new detections",
-			logger.Error(err),
-			logger.String("operation", "species_tracker_init"))
-	}
+	// Load historical state in the background so the multi-query database scan
+	// does not block startup (it gates the HTTP server on large databases). The
+	// tracker suppresses new-species status until the load completes, so no
+	// spurious "new species" notifications fire from the not-yet-populated maps.
+	tracker.InitFromDatabaseAsync()
 
 	hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
 	GetLogger().Info("Species tracking enabled",
