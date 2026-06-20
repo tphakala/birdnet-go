@@ -28,6 +28,10 @@ const (
 
 	// wikipediaTimeout bounds a single Wikipedia HTTP request.
 	wikipediaTimeout = 15 * time.Second
+	// wikipediaMaxResponseBytes caps the response body read so a hostile or
+	// malfunctioning upstream cannot exhaust memory. Real TextExtracts responses
+	// for a single article are a few KB; 2 MiB is a generous ceiling.
+	wikipediaMaxResponseBytes = 2 << 20
 	// wikipediaRateLimit is the steady-state request rate (requests/second).
 	wikipediaRateLimit = 5
 	// wikipediaRateBurst is the rate-limiter burst allowance.
@@ -121,7 +125,7 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 			Build()
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, wikipediaMaxResponseBytes))
 	if err != nil {
 		return nil, NewTransientError(err)
 	}

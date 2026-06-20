@@ -356,9 +356,10 @@ type similarCandidate struct {
 // similarSpeciesCandidates resolves same-genus then same-family candidates,
 // excluding the focal species and capped at maxSimilarSpecies.
 func (c *Controller) similarSpeciesCandidates(focal string) (genus string, candidates []similarCandidate) {
-	genusName, _, err := c.TaxonomyDB.GetGenusByScientificName(focal)
+	genusName, meta, err := c.TaxonomyDB.GetGenusByScientificName(focal)
 	if err != nil || genusName == "" {
-		// Fall back to the first token of the scientific name.
+		// Fall back to the first token of the scientific name. meta stays nil,
+		// so the same-family branch below is skipped (it has no family to use).
 		genusName, _, _ = strings.Cut(focal, " ")
 	}
 
@@ -383,10 +384,9 @@ func (c *Controller) similarSpeciesCandidates(focal string) (genus string, candi
 	if genusName != "" {
 		add(c.TaxonomyDB.LookupAllSpeciesInGenus(genusName), relationshipSameGenus)
 	}
-	if len(candidates) < maxSimilarSpecies {
-		if _, meta, mErr := c.TaxonomyDB.GetGenusByScientificName(focal); mErr == nil && meta != nil {
-			add(c.TaxonomyDB.LookupAllSpeciesInFamily(meta.Family), relationshipSameFamily)
-		}
+	// Reuse the family metadata resolved above rather than looking it up again.
+	if len(candidates) < maxSimilarSpecies && meta != nil {
+		add(c.TaxonomyDB.LookupAllSpeciesInFamily(meta.Family), relationshipSameFamily)
 	}
 	return genusName, candidates
 }
@@ -397,10 +397,8 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 	entries := make([]SimilarSpeciesEntry, len(candidates))
 	var wg sync.WaitGroup
 	for i := range candidates {
-		wg.Add(1)
-		// Pass the index as a parameter to avoid loop-variable capture.
-		go func(idx int) {
-			defer wg.Done()
+		idx := i // capture per-iteration index for the goroutine
+		wg.Go(func() {
 			cand := candidates[idx]
 			entry := SimilarSpeciesEntry{
 				ScientificName: cand.scientificName,
@@ -417,7 +415,7 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 				return nil
 			})
 			entries[idx] = entry
-		}(i)
+		})
 	}
 	wg.Wait()
 	return entries
@@ -587,9 +585,21 @@ func (c *Controller) guideExpectedness(scientificName string) string {
 // geomodel occurrence score, rebuilding it when the TTL expires. Returns nil
 // when the prediction is unavailable (caller omits expectedness).
 func (c *Controller) probableSpeciesScores(bn *classifier.Orchestrator) map[string]float64 {
+	// Fast path: while the memoized map is fresh, a concurrent burst of guide
+	// requests shares it under a read lock without serializing on the rebuild.
+	c.guideRarityMu.RLock()
+	if c.guideRarityScores != nil && time.Now().Before(c.guideRarityExpiry) {
+		scores := c.guideRarityScores
+		c.guideRarityMu.RUnlock()
+		return scores
+	}
+	c.guideRarityMu.RUnlock()
+
 	c.guideRarityMu.Lock()
 	defer c.guideRarityMu.Unlock()
 
+	// Re-check under the write lock: another goroutine may have rebuilt the map
+	// while we waited for the lock, so only one geomodel prediction runs per TTL.
 	if c.guideRarityScores != nil && time.Now().Before(c.guideRarityExpiry) {
 		return c.guideRarityScores
 	}
@@ -736,9 +746,9 @@ type guideSection struct {
 // splitGuideSections splits a description on "## " headers, mirroring the
 // frontend parseGuideDescription contract.
 func splitGuideSections(description string) []guideSection {
-	var sections []guideSection
 	startsWithHeader := strings.HasPrefix(strings.TrimSpace(description), "## ")
 	parts := strings.Split(description, "## ")
+	sections := make([]guideSection, 0, len(parts))
 	for i, part := range parts {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {

@@ -80,7 +80,7 @@ type Controller struct {
 	// guideRarity* memoize the daily probable-species score map (normalized
 	// scientific name -> score) for the guide expectedness badge, so a burst of
 	// guide requests doesn't re-run the geomodel prediction per call.
-	guideRarityMu     sync.Mutex
+	guideRarityMu     sync.RWMutex
 	guideRarityExpiry time.Time
 	guideRarityScores map[string]float64
 	controlChan       chan string
