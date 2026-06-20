@@ -253,22 +253,23 @@ func (bn *BirdNET) usesONNXBackend() bool {
 
 // initializeModel loads and initializes the primary BirdNET model.
 // Dispatches to OpenVINO (A76 image, gated), ONNX, or TFLite (see
-// usesONNXBackend / shouldTryOpenVINO). OpenVINO failures fall back to ONNX.
+// usesONNXBackend / openVINOPlan). OpenVINO failures fall back to ONNX, and a
+// declined OpenVINO attempt is logged with the reason (see logOpenVINODeclined),
+// so the chosen backend is never silent in the journal.
 func (bn *BirdNET) initializeModel() error {
-	if bn.usesONNXBackend() {
-		if bn.shouldTryOpenVINO() {
-			err := bn.initializeOpenVINOModel()
-			if err == nil {
-				return nil
-			}
-			GetLogger().Warn("OpenVINO backend unavailable, falling back to ONNX Runtime", logger.Error(err))
-		} else if bn.Settings.BirdNET.Backend == conf.BackendPrefOpenVINO {
-			GetLogger().Warn("backend is set to 'openvino' but it cannot be used here; using ONNX Runtime",
-				logger.String("reason", "requires the openvino build, the BirdNET v2.4 model, and a supported device (an ARMv8.2/A76+ CPU with native f16, or an Intel OpenVINO GPU)"))
-		}
-		return bn.initializeONNXModel()
+	if !bn.usesONNXBackend() {
+		return bn.initializeTFLiteModel()
 	}
-	return bn.initializeTFLiteModel()
+	if _, ok, reason := bn.openVINOPlan(); ok {
+		err := bn.initializeOpenVINOModel()
+		if err == nil {
+			return nil
+		}
+		GetLogger().Warn("OpenVINO backend unavailable, falling back to ONNX Runtime", logger.Error(err))
+	} else {
+		logOpenVINODeclined(bn.ModelInfo.ID, bn.Settings.BirdNET.Backend, reason)
+	}
+	return bn.initializeONNXModel()
 }
 
 // initializeTFLiteModel loads and initializes a TFLite model as the classifier backend.

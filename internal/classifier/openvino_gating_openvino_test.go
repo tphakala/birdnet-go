@@ -61,19 +61,23 @@ func TestShouldTryOpenVINO_Tagged_HardwareGateDecides(t *testing.T) {
 // path never enumerates devices, so no libopenvino_c is required.
 func TestOpenVINOPlan_ExplicitCPU(t *testing.T) {
 	t.Parallel()
-	plan, ok := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceCPU, RegistryIDPerchV2, "", perchLogitsOutputIndex)
+	plan, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceCPU, RegistryIDPerchV2, "", perchLogitsOutputIndex)
 	expected := cpuspec.HasNativeF16() || runtime.GOARCH == "amd64"
 	assert.Equal(t, expected, ok, "explicit CPU is allowed on ARM A76 or amd64, not on ARM A72")
 	if ok {
 		assert.Equal(t, inference.OVDeviceCPU, plan.device)
 		assert.Equal(t, perchLogitsOutputIndex, plan.outputIndex)
+		assert.Empty(t, reason, "an accepted plan must not carry a decline reason")
+	} else {
+		assert.Equal(t, ovReasonCPUUnsupported, reason, "explicit CPU on an unsupported host reports the cpu reason")
 	}
 }
 
 // TestOpenVINOPlan_ONNXOptOut verifies Backend=onnx opts out for any model,
-// including Perch, without touching the OpenVINO library.
+// including Perch, without touching the OpenVINO library, and reports the reason.
 func TestOpenVINOPlan_ONNXOptOut(t *testing.T) {
 	t.Parallel()
-	_, ok := openVINOPlanFor(conf.BackendPrefONNX, conf.OVDeviceAuto, RegistryIDPerchV2, "", perchLogitsOutputIndex)
+	_, ok, reason := openVINOPlanFor(conf.BackendPrefONNX, conf.OVDeviceAuto, RegistryIDPerchV2, "", perchLogitsOutputIndex)
 	assert.False(t, ok, "Backend=onnx must opt out of OpenVINO for Perch too")
+	assert.Equal(t, ovReasonBackendONNX, reason)
 }

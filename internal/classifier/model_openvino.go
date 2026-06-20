@@ -16,6 +16,19 @@ import (
 // (a single-output graph). Perch v2 uses a different index (see perchLogitsOutputIndex).
 const birdnetLogitsOutputIndex = 0
 
+// OpenVINO decline reasons. openVINOPlanFor / openVINOPlan return one of these as
+// the third value when OpenVINO is not used, so the init path can log exactly why
+// the backend was declined instead of falling back silently (see logOpenVINODeclined).
+const (
+	ovReasonNotBuilt       = "binary not built with OpenVINO support"
+	ovReasonBackendONNX    = "backend is set to onnx"
+	ovReasonGPUUnavailable = "gpu device requested but not available"
+	ovReasonCPUUnsupported = "cpu device not supported on this host (needs an ARMv8.2+/A76 CPU with native f16)"
+	ovReasonNoDevice       = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
+	ovReasonNotBirdNETv24  = "model is not the stock BirdNET v2.4 classifier"
+	ovReasonNotPerchNoDFT  = "model is not the Perch no_dft variant"
+)
+
 // openVINOPlan describes how a model should run on the OpenVINO backend.
 type openVINOPlan struct {
 	device      string // inference.OVDeviceCPU or inference.OVDeviceGPU
@@ -25,6 +38,8 @@ type openVINOPlan struct {
 
 // openVINOPlanFor decides whether and how to run a model on the OpenVINO backend,
 // returning the plan and true when OV should be attempted, or false to use ORT.
+// The third return value is a human-readable reason when OV is declined (empty
+// when accepted), so callers can log why instead of falling back silently.
 //
 //   - backendPref:  settings.BirdNET.Backend ("auto"/"onnx"/"openvino").
 //   - devicePref:   settings.BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu").
@@ -40,24 +55,24 @@ type openVINOPlan struct {
 // benchmarking/advanced use. The plan helper loads the OpenVINO core (idempotent)
 // only when it must enumerate devices for a GPU decision, so it is independent of
 // caller ordering.
-func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outputIndex int) (openVINOPlan, bool) {
+func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outputIndex int) (plan openVINOPlan, ok bool, reason string) {
 	if !openvinoBackendAvailable {
-		return openVINOPlan{}, false
+		return openVINOPlan{}, false, ovReasonNotBuilt
 	}
 	if backendPref == conf.BackendPrefONNX {
-		return openVINOPlan{}, false
+		return openVINOPlan{}, false, ovReasonBackendONNX
 	}
 
 	var device string
 	switch devicePref {
 	case conf.OVDeviceGPU:
 		if !openVINOGPUAvailable(libraryPath) {
-			return openVINOPlan{}, false
+			return openVINOPlan{}, false, ovReasonGPUUnavailable
 		}
 		device = inference.OVDeviceGPU
 	case conf.OVDeviceCPU:
 		if !openVINOCPUAllowed(devicePref) {
-			return openVINOPlan{}, false
+			return openVINOPlan{}, false, ovReasonCPUUnsupported
 		}
 		device = inference.OVDeviceCPU
 	default: // "auto" or ""
@@ -67,7 +82,7 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 		case openVINOCPUAllowed(devicePref):
 			device = inference.OVDeviceCPU
 		default:
-			return openVINOPlan{}, false
+			return openVINOPlan{}, false, ovReasonNoDevice
 		}
 	}
 
@@ -75,7 +90,7 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 		device:      device,
 		outputIndex: outputIndex,
 		precision:   openVINOPrecisionFor(modelID, device),
-	}, true
+	}, true, ""
 }
 
 // openVINOPrecisionFor returns the INFERENCE_PRECISION_HINT for a (model, device)
@@ -129,9 +144,9 @@ func openVINOGPUAvailable(libraryPath string) bool {
 // OpenVINO path in the Perch ModelInstance (perch_onnx.go), never through this
 // primary path. The plan carries the device (CPU/GPU), logits output index, and
 // the precision hint (f32 on the GPU for BirdNET v2.4; see openVINOPrecisionFor).
-func (bn *BirdNET) openVINOPlan() (openVINOPlan, bool) {
+func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 	if bn.ModelInfo.ID != DefaultModelVersion {
-		return openVINOPlan{}, false
+		return openVINOPlan{}, false, ovReasonNotBirdNETv24
 	}
 	return openVINOPlanFor(
 		bn.Settings.BirdNET.Backend,
@@ -142,14 +157,49 @@ func (bn *BirdNET) openVINOPlan() (openVINOPlan, bool) {
 	)
 }
 
-// shouldTryOpenVINO reports whether the OpenVINO backend should be attempted for
-// the primary classifier before falling back to ORT. True only when built with
-// the openvino tag, the model is the BirdNET v2.4 identity, config does not opt
-// out, and a supported device is available (ARM A76 f16 CPU, or the Intel iGPU at
-// f32; see openVINOPrecisionFor for why BirdNET v2.4 uses f32 on the GPU).
+// shouldTryOpenVINO reports whether the OpenVINO backend is eligible for the
+// primary classifier: the boolean form of openVINOPlan, dropping the plan and the
+// decline reason. True only when built with the openvino tag, the model is the
+// BirdNET v2.4 identity, config does not opt out, and a supported device is
+// available (ARM A76 f16 CPU, or the Intel iGPU at f32; see openVINOPrecisionFor
+// for why BirdNET v2.4 uses f32 on the GPU). initializeModel calls openVINOPlan
+// directly so it can also log the decline reason; this predicate keeps the
+// eligibility gate independently assertable in tests.
 func (bn *BirdNET) shouldTryOpenVINO() bool {
-	_, ok := bn.openVINOPlan()
+	_, ok, _ := bn.openVINOPlan()
 	return ok
+}
+
+// openVINOPrecisionLabel renders an OpenVINO precision hint for logging. An empty
+// hint means the backend default, which is f16 (see openVINOPrecisionFor).
+func openVINOPrecisionLabel(precision string) string {
+	if precision == "" {
+		return "f16"
+	}
+	return precision
+}
+
+// logOpenVINODeclined logs, once at model init, that the OpenVINO backend was not
+// used and why. It logs at WARN when the user explicitly set backend=openvino
+// (they asked for it and did not get it) and at INFO on the auto path (a normal,
+// expected outcome). In a standard build that cannot use OpenVINO at all, the auto
+// path is suppressed entirely so it does not add a line to every startup; an
+// explicit opt-in on such a build still warns.
+func logOpenVINODeclined(model, backendPref, reason string) {
+	explicit := backendPref == conf.BackendPrefOpenVINO
+	if !openvinoBackendAvailable && !explicit {
+		return
+	}
+	fields := []logger.Field{
+		logger.String("model", model),
+		logger.String("reason", reason),
+	}
+	log := GetLogger()
+	if explicit {
+		log.Warn("OpenVINO requested but not used; using ONNX Runtime", fields...)
+		return
+	}
+	log.Info("OpenVINO not used; using ONNX Runtime", fields...)
 }
 
 // initializeOpenVINOModel loads the FP32 ONNX classifier via the OpenVINO
@@ -161,11 +211,12 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	log := GetLogger()
 	settings := bn.Settings
 
-	plan, ok := bn.openVINOPlan()
+	plan, ok, reason := bn.openVINOPlan()
 	if !ok {
 		return errors.Newf("OpenVINO is not eligible for this model or host").
 			Category(errors.CategoryModelInit).
-			Context("model_id", bn.ModelInfo.ID).Build()
+			Context("model_id", bn.ModelInfo.ID).
+			Context("reason", reason).Build()
 	}
 
 	modelPath := bn.onnxModelPath()
@@ -207,6 +258,7 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	log.Info("OpenVINO model initialized",
 		logger.String("model", modelPath),
 		logger.String("device", plan.device),
+		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("species", classifier.NumSpecies()),
 		logger.String("init_time", time.Since(start).String()))
 	return nil
