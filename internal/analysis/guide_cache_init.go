@@ -25,11 +25,12 @@ func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpM
 
 	log := GetLogger()
 
-	// The GORM store needs the concrete datastore's *gorm.DB. In v2-only mode the
-	// legacy DB is absent, so the guide feature is unavailable there.
+	// The GORM store needs the datastore's *gorm.DB. Both the legacy and v2-only
+	// datastores expose it via GormDBProvider; if neither is available (or the
+	// handle is nil) the guide cache cannot be built.
 	provider, ok := ds.(datastore.GormDBProvider)
 	if !ok || provider.GormDB() == nil {
-		log.Warn("Species guide enabled but no legacy database handle is available; guide cache disabled")
+		log.Warn("Species guide enabled but no database handle is available; guide cache disabled")
 		return nil
 	}
 

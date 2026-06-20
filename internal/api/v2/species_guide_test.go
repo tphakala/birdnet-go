@@ -103,7 +103,7 @@ func TestExtractSections(t *testing.T) {
 	t.Parallel()
 
 	desc := "An intro about the bird.\n\n## Voice\nA melodic song.\n\n## Habitat\nWoodlands."
-	secs := extractSections(desc, []string{"Turdus pilaris"}, "en")
+	secs := extractSections(desc, []string{"Turdus pilaris"})
 	assert.NotNil(t, secs)
 	assert.Equal(t, "An intro about the bird.", secs.Description)
 	assert.Equal(t, "A melodic song.", secs.SongsAndCalls)
@@ -111,10 +111,10 @@ func TestExtractSections(t *testing.T) {
 
 	// Localized songs heading (German "Stimme") is matched.
 	deDesc := "Einleitung.\n\n## Stimme\nSchöner Gesang."
-	deSecs := extractSections(deDesc, nil, "de")
+	deSecs := extractSections(deDesc, nil)
 	assert.Equal(t, "Schöner Gesang.", deSecs.SongsAndCalls)
 
-	assert.Nil(t, extractSections("", nil, "en"))
+	assert.Nil(t, extractSections("", nil))
 }
 
 func TestSummarizeDescription(t *testing.T) {

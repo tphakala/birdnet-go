@@ -210,14 +210,26 @@ func (s *GORMGuideStore) Delete(ctx context.Context, scientificName, locale, pro
 	return nil
 }
 
-// Cleanup removes entries older than DBRetention. Implements the optional
-// cleaner interface used by the cache refresh loop.
+// Cleanup removes expired entries. Negative (not-found) entries age out on a
+// much shorter schedule (NegativeDBRetention) than positive entries
+// (DBRetention) so requests for never-present species cannot accumulate
+// long-lived rows. Implements the optional cleaner interface used by the cache
+// refresh loop.
 func (s *GORMGuideStore) Cleanup(ctx context.Context) error {
-	cutoff := time.Now().Add(-DBRetention)
-	err := s.db.WithContext(ctx).
-		Where("cached_at < ?", cutoff).
-		Delete(&GuideCacheEntry{}).Error
-	if err != nil {
+	now := time.Now()
+
+	// Aggressively purge stale negative entries first.
+	if err := s.db.WithContext(ctx).
+		Where("negative = ? AND cached_at < ?", true, now.Add(-NegativeDBRetention)).
+		Delete(&GuideCacheEntry{}).Error; err != nil {
+		s.recordDBError("write", "cleanup")
+		return s.wrapDBError(err, "cleanup")
+	}
+
+	// Then purge any entry (positive or lingering negative) past full retention.
+	if err := s.db.WithContext(ctx).
+		Where("cached_at < ?", now.Add(-DBRetention)).
+		Delete(&GuideCacheEntry{}).Error; err != nil {
 		s.recordDBError("write", "cleanup")
 		return s.wrapDBError(err, "cleanup")
 	}

@@ -33,8 +33,13 @@ const (
 	PositiveTTL = 7 * 24 * time.Hour
 	// NegativeTTL is how long a "not found" marker stays fresh before retrying.
 	NegativeTTL = 30 * time.Minute
-	// DBRetention is how long entries are kept in the DB before cleanup.
+	// DBRetention is how long positive entries are kept in the DB before cleanup.
 	DBRetention = 30 * 24 * time.Hour
+	// NegativeDBRetention is how long negative (not-found) entries are kept in the
+	// DB before cleanup. Far shorter than positive retention so that requests for
+	// never-present species (e.g. a flood of distinct names) cannot accumulate
+	// long-lived rows.
+	NegativeDBRetention = 24 * time.Hour
 	// refreshInterval is the background refresh loop cadence.
 	refreshInterval = 2 * time.Hour
 	// maxDescriptionLength caps stored descriptions (trimmed on a UTF-8 boundary).
@@ -327,10 +332,15 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 	opts.Locale = locale
 	key := cacheKey(name, locale)
 
-	// Tier 1: memory.
+	// Tier 1: memory. Fresh entries are returned immediately; a stale entry is
+	// served stale-while-revalidate (returned now, refreshed in the background)
+	// so a stale memory hit doesn't incur a redundant DB round-trip on every call.
 	if v, ok := c.memory.Load(key); ok {
-		if g, ok := v.(*SpeciesGuide); ok && !c.isCacheEntryStale(g) {
+		if g, ok := v.(*SpeciesGuide); ok {
 			c.metrics.RecordCacheHit(tierMemory, entryQuality(g))
+			if c.isCacheEntryStale(g) {
+				c.triggerAsyncRefresh(name, locale)
+			}
 			return g, nil
 		}
 	}
@@ -349,10 +359,13 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 		}
 		return g, nil
 	case err != nil && !errors.Is(err, ErrCacheEntryNotFound):
+		// DB error (not a clean miss): fall through to a live fetch without
+		// recording a cache miss, so error and miss metrics stay distinct.
 		c.metrics.RecordDBError("read", "get")
-		// fall through to a live fetch
+	default:
+		// Clean miss (no row): record and fall through to a live fetch.
+		c.metrics.RecordCacheMiss(tierDB)
 	}
-	c.metrics.RecordCacheMiss(tierDB)
 
 	// Tier 3: fetch from providers (singleflight collapses concurrent fetches).
 	v, err, _ := c.sf.Do(key, func() (any, error) {
@@ -400,7 +413,7 @@ func (c *GuideCache) fetchFromProviders(ctx context.Context, name, locale string
 
 	var merged *SpeciesGuide
 	var transient error
-	notFoundCount := 0
+	failedCount := 0 // providers that failed for a non-definitive reason
 
 	providers := c.providers
 	if c.fallbackPolicy != conf.SpeciesGuideFallbackAll {
@@ -425,13 +438,17 @@ func (c *GuideCache) fetchFromProviders(ctx context.Context, name, locale string
 				merged = mergeGuides(merged, g)
 			}
 		case errors.Is(err, ErrGuideNotFound):
+			// A provider definitively having no entry is not a failure: an
+			// enrichment-only provider (eBird taxonomy) lacks many species and
+			// must not downgrade an otherwise-complete primary guide.
 			c.metrics.RecordFetch(rp.name, outcomeNotFound, elapsed)
-			notFoundCount++
 		case IsTransient(err):
 			c.metrics.RecordFetch(rp.name, outcomeTransient, elapsed)
 			transient = err
+			failedCount++
 		default:
 			c.metrics.RecordFetch(rp.name, outcomeError, elapsed)
+			failedCount++
 			GetLogger().Debug("Provider fetch failed",
 				logger.String("provider", rp.name),
 				logger.String("species", name),
@@ -440,8 +457,11 @@ func (c *GuideCache) fetchFromProviders(ctx context.Context, name, locale string
 	}
 
 	if merged != nil {
-		// Mark partial when some providers were attempted but failed.
-		if c.fallbackPolicy == conf.SpeciesGuideFallbackAll && (transient != nil || notFoundCount > 0) {
+		// Mark partial only when a provider genuinely failed (transient or
+		// error), not when a secondary provider simply had no entry — otherwise
+		// a complete Wikipedia guide would be flagged partial (and classified
+		// "intro_only") whenever eBird lacks the species.
+		if c.fallbackPolicy == conf.SpeciesGuideFallbackAll && failedCount > 0 {
 			merged.Partial = true
 		}
 		merged.CachedAt = time.Now()

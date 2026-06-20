@@ -47,6 +47,13 @@ const (
 	guideRateLimitPerMinute = 30
 	// maxSimilarSpecies caps the number of similar-species candidates resolved.
 	maxSimilarSpecies = 8
+	// similarSpeciesResolveTimeout bounds the worst-case latency of the
+	// similar-species panel: candidates fan out concurrent guide lookups that may
+	// trigger live (external) fetches on a cold cache, so cap how long the whole
+	// resolution may block. Candidates that don't resolve in time return
+	// name-only (best-effort enrichment); the cache still persists any fetch that
+	// completes after the deadline for the next request.
+	similarSpeciesResolveTimeout = 8 * time.Second
 	// guideSummaryMaxLength caps the per-candidate guide summary length (bytes).
 	guideSummaryMaxLength = 280
 	// guideDescriptionShortThreshold is the byte length under which a guide with
@@ -394,6 +401,12 @@ func (c *Controller) similarSpeciesCandidates(focal string) (genus string, candi
 // resolveSimilarSpecies fetches each candidate's guide in parallel and builds the
 // response entries, preserving candidate order.
 func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string) []SimilarSpeciesEntry {
+	// Bound the whole fan-out so a cold cache (live external fetches) cannot
+	// block the request indefinitely; unresolved candidates fall back to
+	// name-only below.
+	resolveCtx, cancel := context.WithTimeout(ctx, similarSpeciesResolveTimeout)
+	defer cancel()
+
 	entries := make([]SimilarSpeciesEntry, len(candidates))
 	var wg sync.WaitGroup
 	for i := range candidates {
@@ -405,13 +418,13 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 				Relationship:   cand.relationship,
 			}
 			_ = c.WithGuideCache(func(gc *guideprovider.GuideCache) error {
-				g, err := gc.Get(ctx, cand.scientificName, guideprovider.FetchOptions{Locale: locale})
+				g, err := gc.Get(resolveCtx, cand.scientificName, guideprovider.FetchOptions{Locale: locale})
 				if err != nil || g == nil || g.IsNegativeEntry() {
 					return nil //nolint:nilerr // best-effort enrichment; missing guide is fine
 				}
 				entry.CommonName = g.CommonName
 				entry.GuideSummary = summarizeDescription(g.Description)
-				entry.Sections = extractSections(g.Description, namesOf(g.SimilarSpecies), locale)
+				entry.Sections = extractSections(g.Description, namesOf(g.SimilarSpecies))
 				return nil
 			})
 			entries[idx] = entry
@@ -717,9 +730,9 @@ var songsHeadingTokens = []string{
 }
 
 // extractSections parses a guide description into structured sections for the
-// similar-species panel.
-func extractSections(description string, similar []string, locale string) *SimilarSpeciesSections {
-	_ = locale // heading matching is language-agnostic via songsHeadingTokens
+// similar-species panel. Heading matching is language-agnostic via
+// songsHeadingTokens, so no locale is needed.
+func extractSections(description string, similar []string) *SimilarSpeciesSections {
 	trimmed := strings.TrimSpace(description)
 	if trimmed == "" && len(similar) == 0 {
 		return nil

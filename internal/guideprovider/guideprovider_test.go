@@ -280,6 +280,49 @@ func TestGuideCache_FallbackMergesProviders(t *testing.T) {
 	assert.Equal(t, "Turdidae", g.Family, "secondary fills gap")
 }
 
+func TestGuideCache_SecondaryNotFoundDoesNotMarkPartial(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	c := NewGuideCache(store, noopMetrics{})
+	c.SetFallbackPolicy(conf.SpeciesGuideFallbackAll)
+	c.RegisterProvider(WikipediaProviderName, &fakeProvider{
+		name:   WikipediaProviderName,
+		result: &SpeciesGuide{CommonName: "Blackbird", Description: "Complete Wikipedia prose."},
+	})
+	// eBird enrichment definitively has no entry for this species.
+	c.RegisterProvider(EBirdProviderName, &fakeProvider{
+		name: EBirdProviderName,
+		err:  ErrGuideNotFound,
+	})
+	t.Cleanup(c.Close)
+
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	assert.False(t, g.Partial,
+		"a secondary provider with no entry must not downgrade a complete primary guide")
+}
+
+func TestGuideCache_TransientSecondaryMarksPartial(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	c := NewGuideCache(store, noopMetrics{})
+	c.SetFallbackPolicy(conf.SpeciesGuideFallbackAll)
+	c.RegisterProvider(WikipediaProviderName, &fakeProvider{
+		name:   WikipediaProviderName,
+		result: &SpeciesGuide{CommonName: "Blackbird", Description: "Complete Wikipedia prose."},
+	})
+	// eBird enrichment fails for a transient reason: the merged guide is partial.
+	c.RegisterProvider(EBirdProviderName, &fakeProvider{
+		name: EBirdProviderName,
+		err:  NewTransientError(stubError("boom")),
+	})
+	t.Cleanup(c.Close)
+
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	assert.True(t, g.Partial, "a transient secondary failure must mark the guide partial")
+}
+
 func TestIsCacheEntryStale(t *testing.T) {
 	t.Parallel()
 	c := &GuideCache{}

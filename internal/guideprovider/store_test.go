@@ -113,6 +113,40 @@ func TestGORMGuideStore_Cleanup(t *testing.T) {
 	assert.Equal(t, "Fresh species", all[0].ScientificName)
 }
 
+func TestGORMGuideStore_CleanupNegativeRetention(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	ctx := t.Context()
+
+	// Negative entry older than the (short) negative retention but well within
+	// the (long) positive retention: it must be purged.
+	require.NoError(t, store.Save(ctx, &GuideCacheEntry{
+		ScientificName: "Stale negative", Locale: "en", Provider: WikipediaProviderName,
+		Negative: true, CachedAt: time.Now().Add(-NegativeDBRetention - time.Hour),
+	}))
+	// Recent negative entry: must survive.
+	require.NoError(t, store.Save(ctx, &GuideCacheEntry{
+		ScientificName: "Fresh negative", Locale: "en", Provider: WikipediaProviderName,
+		Negative: true, CachedAt: time.Now(),
+	}))
+	// Positive entry older than negative retention but within positive retention:
+	// must survive (it is not negative).
+	require.NoError(t, store.Save(ctx, &GuideCacheEntry{
+		ScientificName: "Old positive", Locale: "en", Provider: WikipediaProviderName,
+		CachedAt: time.Now().Add(-NegativeDBRetention - time.Hour),
+	}))
+
+	require.NoError(t, store.Cleanup(ctx))
+
+	all, err := store.GetAll(ctx)
+	require.NoError(t, err)
+	names := make([]string, 0, len(all))
+	for i := range all {
+		names = append(names, all[i].ScientificName)
+	}
+	assert.ElementsMatch(t, []string{"Fresh negative", "Old positive"}, names)
+}
+
 func TestEncodeDecodeSimilarSpecies(t *testing.T) {
 	t.Parallel()
 	in := []SimilarSpecies{
