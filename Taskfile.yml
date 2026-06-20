@@ -55,6 +55,10 @@ vars:
   # is absent, while openvino builds populate it via the check-openvino task.
   OPENVINO_RELEASE: '2026.2'
   OPENVINO_BUILD: '2026.2.0.21903.52ddc073857'
+  # SHA256 of the archive below, published at <archive-url>.sha256. The download
+  # is verified against this before extraction. Bump it together with
+  # OPENVINO_BUILD on every version change.
+  OPENVINO_SHA256: '8ce45467967e22fddb83a6b72a8bd1f9bfa6f43351e1ca2eaf5251064fe17767'
   # Archive basename, defined once so the URL and the tar member path cannot
   # drift apart. The arm64 package is the canonical source: its runtime/include
   # C API headers are identical across arch packages, so it serves amd64 too.
@@ -738,11 +742,13 @@ tasks:
       OPENVINO_ARCHIVE: '{{.OPENVINO_BASENAME}}.tgz'
       OPENVINO_URL: 'https://storage.openvinotoolkit.org/repositories/openvino/packages/{{.OPENVINO_RELEASE}}/linux/{{.OPENVINO_BASENAME}}.tgz'
     # Skip entirely unless this is an openvino build, otherwise skip when the
-    # header tree is already cached. Either status command succeeding marks the
-    # task up-to-date, so the download runs only when OPENVINO=true and the
-    # headers are missing.
+    # header tree for THIS build id is already cached. Either status command
+    # succeeding marks the task up-to-date, so the download runs only when
+    # OPENVINO=true and the cached headers are missing or stale. The .build-id
+    # stamp invalidates the cache when OPENVINO_BUILD changes, so a version bump
+    # forces a re-download instead of compiling against stale headers.
     status:
-      - '[ "{{.OPENVINO}}" != "true" ] || [ -f "{{.OPENVINO_HEADERS_DIR}}/include/openvino/c/openvino.h" ]'
+      - '[ "{{.OPENVINO}}" != "true" ] || { [ -f "{{.OPENVINO_HEADERS_DIR}}/include/openvino/c/openvino.h" ] && [ "$(cat "{{.OPENVINO_HEADERS_DIR}}/.build-id" 2>/dev/null)" = "{{.OPENVINO_BUILD}}" ]; }'
     cmds:
       - |
         set -euo pipefail
@@ -755,19 +761,29 @@ tasks:
         trap 'rm -rf "${ov_tmp}"' EXIT
         # wget exits non-zero on hard HTTP errors (e.g. 404); set -e then aborts.
         wget -q --tries=3 --timeout=30 "{{.OPENVINO_URL}}" -O "${ov_tmp}/openvino.tgz"
+        # Verify archive integrity against the pinned SHA256 before extraction
+        # (TLS does not protect against a corrupted or tampered upstream artifact,
+        # and an upstream-moved archive can return an HTTP-200 HTML page). A
+        # mismatch aborts under set -e. sha256sum on Linux, shasum on macOS.
+        if command -v sha256sum >/dev/null 2>&1; then
+          echo "{{.OPENVINO_SHA256}}  ${ov_tmp}/openvino.tgz" | sha256sum -c -
+        else
+          echo "{{.OPENVINO_SHA256}}  ${ov_tmp}/openvino.tgz" | shasum -a 256 -c -
+        fi
         # Extract only the architecture-independent C API header tree
         # (runtime/include); the runtime .so is dlopen'd at deploy time and is
         # never linked here.
         tar -xzf "${ov_tmp}/openvino.tgz" -C "${ov_tmp}" --strip-components=2 \
           "{{.OPENVINO_BASENAME}}/runtime/include"
         # Publish: rm-then-rename avoids nesting into a pre-existing dir, and the
-        # same-fs rename keeps the swap atomic. The final sentinel check turns a
-        # partial extract or an HTTP-200 HTML error page (returned for a moved
-        # upstream archive) into a loud failure rather than a silently
-        # half-populated cache that the status guard would later treat as valid.
+        # same-fs rename keeps the swap atomic. The sentinel check turns a partial
+        # extract into a loud failure rather than a silently half-populated cache.
         rm -rf "{{.OPENVINO_HEADERS_DIR}}/include"
         mv "${ov_tmp}/include" "{{.OPENVINO_HEADERS_DIR}}/include"
         test -f "{{.OPENVINO_HEADERS_DIR}}/include/openvino/c/openvino.h"
+        # Stamp the cached build id last, so an interrupted run leaves a stale or
+        # absent stamp that the status guard rejects on the next build.
+        printf '%s\n' "{{.OPENVINO_BUILD}}" > "{{.OPENVINO_HEADERS_DIR}}/.build-id"
         echo "OpenVINO headers installed to {{.OPENVINO_HEADERS_DIR}}/include"
 
   check-tflite-lib:
