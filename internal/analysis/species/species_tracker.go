@@ -7,6 +7,7 @@ package species
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -192,6 +193,29 @@ type SpeciesTracker struct {
 	// Goroutine lifecycle management for graceful shutdown
 	// Tracks in-flight async database operations (notification persistence/cleanup)
 	asyncOpsWg sync.WaitGroup
+
+	// warming is true while the background historical load started by
+	// InitFromDatabaseAsync is in flight. While warming, the public hot-path
+	// methods short-circuit (returning "not new") BEFORE acquiring t.mu, so the
+	// HTTP server stays responsive and no spurious new-species notifications
+	// fire from empty maps. It is an atomic so those guards never block on the
+	// mutex the background load holds. Default false: a directly-constructed
+	// tracker (synchronous InitFromDatabase, or none) behaves normally.
+	//
+	// Guarded methods (suppress while warming): GetSpeciesStatus,
+	// GetBatchSpeciesStatus, UpdateSpecies, IsNewSpecies, CheckAndUpdateSpecies,
+	// CheckAndUpdateSpeciesWithNovelty, GetSpeciesCount. The notification
+	// helpers (ShouldSuppressNotification, RecordNotificationSent) are
+	// intentionally NOT guarded: they are only reached from the new-species
+	// notification branch, which the suppressed isNew already prevents during
+	// warm-up, so they cannot run mid-load.
+	warming atomic.Bool
+
+	// initCancel cancels the in-flight background load started by
+	// InitFromDatabaseAsync. Close calls it (lock-free) so a shutdown landing in
+	// the warm-up window aborts the DB scan instead of blocking on it. nil when
+	// no async load was started.
+	initCancel atomic.Pointer[context.CancelFunc]
 }
 
 // seasonDates represents the start date for a season
@@ -305,7 +329,55 @@ func (t *SpeciesTracker) GetWindowDays() int {
 
 // GetSpeciesCount returns the number of tracked species
 func (t *SpeciesTracker) GetSpeciesCount() int {
+	// During the background warm-up load the maps are still being populated and
+	// the background goroutine holds t.mu; report 0 without blocking.
+	if t.warming.Load() {
+		return 0
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return len(t.speciesFirstSeen)
+}
+
+// IsWarming reports whether the background historical load started by
+// InitFromDatabaseAsync is still in flight. While warming, new-species status is
+// suppressed so the tracker never reports a spurious "new species" from an
+// not-yet-populated database load. Intended for tests and diagnostics.
+func (t *SpeciesTracker) IsWarming() bool {
+	return t.warming.Load()
+}
+
+// InitFromDatabaseAsync runs the historical load in the background so it does not
+// block startup (notably the HTTP server). The tracker enters the warming state
+// immediately and leaves it once the load finishes, succeed or fail; on failure
+// it still goes live and self-heals from new detections. The load is registered
+// with asyncOpsWg so Close waits for it, and runs under a cancellable context so
+// Close can abort it during shutdown.
+//
+// Use this on the startup path only. Runtime reconfiguration keeps calling the
+// synchronous InitFromDatabase, which is a rare, user-initiated action; a
+// concurrent SyncIfNeeded reload is harmless (it serializes on t.mu).
+func (t *SpeciesTracker) InitFromDatabaseAsync() {
+	t.warming.Store(true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.initCancel.Store(&cancel)
+
+	// Stamp the sync time now, before any detection can flow, so an early
+	// SyncIfNeeded during the warm-up window does not kick off a redundant
+	// second full load on top of this one (lastSyncTime would otherwise be zero).
+	t.mu.Lock()
+	t.lastSyncTime = time.Now()
+	t.mu.Unlock()
+
+	t.asyncOpsWg.Go(func() {
+		defer t.warming.Store(false)
+		defer cancel()
+		if err := t.initFromDatabaseContext(ctx); err != nil {
+			getLog().Error("species tracker background initialization failed; continuing with live detections",
+				logger.Error(err),
+				logger.String("operation", "species_tracker_async_init"),
+				logger.String("impact", "new-species history unavailable until the next successful sync"))
+		}
+	})
 }

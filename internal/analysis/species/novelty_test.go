@@ -119,8 +119,8 @@ func TestLoadNoveltyEpisodesFromDatabase_RestoresActiveEpisode(t *testing.T) {
 
 	tracker := testNoveltyTracker(7)
 	tracker.ds = ds
-	require.NoError(t, tracker.loadLifetimeDataFromDatabase(now))
-	require.NoError(t, tracker.loadNoveltyEpisodesFromDatabase(now))
+	require.NoError(t, tracker.loadLifetimeDataFromDatabase(t.Context(), now))
+	require.NoError(t, tracker.loadNoveltyEpisodesFromDatabase(t.Context(), now))
 
 	_, _, novelty := tracker.CheckAndUpdateSpeciesWithNovelty(scientificName, now.Add(2*time.Hour))
 
@@ -196,8 +196,8 @@ func TestLoadNoveltyEpisodesFromDatabase(t *testing.T) {
 
 			tracker := testNoveltyTracker(7)
 			tracker.ds = tt.ds
-			require.NoError(t, tracker.loadLifetimeDataFromDatabase(now))
-			require.NoError(t, tracker.loadNoveltyEpisodesFromDatabase(now))
+			require.NoError(t, tracker.loadLifetimeDataFromDatabase(t.Context(), now))
+			require.NoError(t, tracker.loadNoveltyEpisodesFromDatabase(t.Context(), now))
 
 			// Inspect the restored episode directly, before any new detection
 			// re-runs the live path and overwrites the restored value.
