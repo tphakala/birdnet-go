@@ -325,22 +325,22 @@ func (m *MockDatastore) DeleteAllThresholdEvents() (int64, error) {
 }
 
 // BG-17 fix: Add notification history methods
-func (m *MockDatastore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+func (m *MockDatastore) GetActiveNotificationHistory(_ context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
 	return []datastore.NotificationHistory{}, nil
 }
 
-func (m *MockDatastore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+func (m *MockDatastore) GetNotificationHistory(_ context.Context, scientificName, notificationType string) (*datastore.NotificationHistory, error) {
 	return nil, errors.Newf("notification history not found").
 		Component("datastore").
 		Category(errors.CategoryNotFound).
 		Build()
 }
 
-func (m *MockDatastore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+func (m *MockDatastore) SaveNotificationHistory(_ context.Context, history *datastore.NotificationHistory) error {
 	return nil
 }
 
-func (m *MockDatastore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+func (m *MockDatastore) DeleteExpiredNotificationHistory(_ context.Context, before time.Time) (int64, error) {
 	return 0, nil
 }
 

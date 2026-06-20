@@ -295,19 +295,19 @@ func (m *mockStore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]d
 }
 
 // BG-17 fix: Add notification history methods
-func (m *mockStore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+func (m *mockStore) GetActiveNotificationHistory(_ context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
 	return []datastore.NotificationHistory{}, nil
 }
 
-func (m *mockStore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+func (m *mockStore) GetNotificationHistory(_ context.Context, scientificName, notificationType string) (*datastore.NotificationHistory, error) {
 	return nil, datastore.ErrNotificationHistoryNotFound
 }
 
-func (m *mockStore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+func (m *mockStore) SaveNotificationHistory(_ context.Context, history *datastore.NotificationHistory) error {
 	return nil
 }
 
-func (m *mockStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+func (m *mockStore) DeleteExpiredNotificationHistory(_ context.Context, before time.Time) (int64, error) {
 	return 0, nil
 }
 

@@ -3507,11 +3507,13 @@ func notificationScientificName(h *entities.NotificationHistory) string {
 
 // SaveNotificationHistory saves a notification history entry.
 // Resolves the scientific name to a label ID before saving.
-func (ds *Datastore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+func (ds *Datastore) SaveNotificationHistory(ctx context.Context, history *datastore.NotificationHistory) error {
 	if ds.notification == nil {
 		return fmt.Errorf("notification repository not configured")
 	}
-	ctx := context.Background()
+	if history == nil {
+		return fmt.Errorf("notification history cannot be nil")
+	}
 
 	// Resolve scientific name to label ID using default model
 	label, err := ds.label.GetOrCreate(ctx, history.ScientificName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
@@ -3529,11 +3531,10 @@ func (ds *Datastore) SaveNotificationHistory(history *datastore.NotificationHist
 }
 
 // GetNotificationHistory retrieves a notification history entry.
-func (ds *Datastore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+func (ds *Datastore) GetNotificationHistory(ctx context.Context, scientificName, notificationType string) (*datastore.NotificationHistory, error) {
 	if ds.notification == nil {
 		return nil, datastore.ErrNotificationHistoryNotFound
 	}
-	ctx := context.Background()
 	h, err := ds.notification.GetNotificationHistory(ctx, scientificName, notificationType)
 	if err != nil {
 		return nil, err
@@ -3550,11 +3551,10 @@ func (ds *Datastore) GetNotificationHistory(scientificName, notificationType str
 }
 
 // GetActiveNotificationHistory retrieves active notification history entries.
-func (ds *Datastore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+func (ds *Datastore) GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
 	if ds.notification == nil {
 		return []datastore.NotificationHistory{}, nil
 	}
-	ctx := context.Background()
 	v2Histories, err := ds.notification.GetActiveNotificationHistory(ctx, after)
 	if err != nil {
 		return nil, err
@@ -3576,11 +3576,10 @@ func (ds *Datastore) GetActiveNotificationHistory(after time.Time) ([]datastore.
 }
 
 // DeleteExpiredNotificationHistory deletes expired notification history entries.
-func (ds *Datastore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+func (ds *Datastore) DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) {
 	if ds.notification == nil {
 		return 0, nil
 	}
-	ctx := context.Background()
 	return ds.notification.DeleteExpiredNotificationHistory(ctx, before)
 }
 

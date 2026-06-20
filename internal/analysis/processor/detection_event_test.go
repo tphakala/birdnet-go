@@ -279,11 +279,11 @@ func TestPublishDetectionEvent_SuppressedNewSpecies(t *testing.T) {
 
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.EXPECT().
-		GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).
 		Maybe()
 	mockDS.EXPECT().
-		SaveNotificationHistory(mock.AnythingOfType("*datastore.NotificationHistory")).
+		SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).
 		Maybe()
 

@@ -492,9 +492,9 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(ctx context.Context
 		return nil
 	}
 
-	// This is the last load step and GetActiveNotificationHistory takes no context,
-	// so honor a cancelled load (shutdown during warm-up) by skipping it here rather
-	// than issuing one more query. Treated as a clean skip, not an error.
+	// This is the last load step. GetActiveNotificationHistory honors ctx, but
+	// short-circuit here on an already-cancelled load (shutdown during warm-up) to
+	// skip issuing one more query. Treated as a clean skip, not an error.
 	select {
 	case <-ctx.Done():
 		getLog().Debug("Notification history load skipped: initialization cancelled")
@@ -511,7 +511,7 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(ctx context.Context
 		logger.Duration("suppression_window", t.notificationSuppressionWindow))
 
 	// Get notification history from database
-	histories, err := t.ds.GetActiveNotificationHistory(lookbackTime)
+	histories, err := t.ds.GetActiveNotificationHistory(ctx, lookbackTime)
 	if err != nil {
 		return errors.Newf("failed to load notification history from database: %w", err).
 			Component("new-species-tracker").

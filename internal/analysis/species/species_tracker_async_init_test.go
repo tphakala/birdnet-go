@@ -58,7 +58,7 @@ func TestInitFromDatabaseAsyncSuppressesNewSpeciesWhileWarming(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-01"}, // 20 days before detection
 		}, nil).Maybe()
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -108,7 +108,7 @@ func TestInitFromDatabaseAsyncGoesLiveOnError(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData(nil), assert.AnError).Maybe()
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	tracker := NewTrackerFromSettings(ds, asyncTestSettings())
@@ -141,7 +141,7 @@ func TestInitFromDatabaseAsyncCloseCancelsLoad(t *testing.T) {
 			}
 		}).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesDetectionDatesInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.SpeciesDetectionDate{}, nil).Maybe()
@@ -178,7 +178,7 @@ func TestInitFromDatabaseAsyncNoRaceUnderConcurrentDetections(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-01"},
 		}, nil).Maybe()
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()

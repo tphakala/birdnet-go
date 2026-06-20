@@ -33,6 +33,11 @@ const (
 	// database or slow storage and briefly flag every species as new.
 	speciesTrackerInitTimeout = 5 * time.Minute
 
+	// notificationPersistTimeout bounds the fire-and-forget notification-history
+	// writes (save/cleanup) so a stuck SQLite write cannot leak a goroutine
+	// indefinitely. These are small local upsert/delete operations.
+	notificationPersistTimeout = 30 * time.Second
+
 	// Time calculations
 	hoursPerDay          = 24
 	seasonBufferDays     = 7 // Days buffer for season comparison
@@ -94,9 +99,9 @@ type SpeciesDatastore interface {
 	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
 	// Notification history methods for BG-17 fix
-	GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error)
-	SaveNotificationHistory(history *datastore.NotificationHistory) error
-	DeleteExpiredNotificationHistory(before time.Time) (int64, error)
+	GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]datastore.NotificationHistory, error)
+	SaveNotificationHistory(ctx context.Context, history *datastore.NotificationHistory) error
+	DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error)
 }
 
 type speciesDetectionHistoryDatastore interface {
