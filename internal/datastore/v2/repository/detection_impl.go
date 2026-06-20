@@ -1660,29 +1660,27 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 
 // GetSpeciesFirstDetectionInPeriod returns the first detection of each species within a date range.
 // Groups by scientific_name to aggregate across all models for the same species.
-// Uses ROW_NUMBER() window function to correctly identify the detection with the earliest timestamp
-// per species, with id as tie-breaker for deterministic results.
+//
+// It uses a plain GROUP BY + MIN(detected_at) rather than a ROW_NUMBER() window
+// function. The only consumer is the species tracker (yearly/seasonal first-seen
+// loads), which uses just scientific_name + first_detected and discards label_id
+// and detection_id; MIN(detected_at) per scientific_name is exactly that first-seen
+// date, and avoids the window function's full per-period sort (a large cost on the
+// startup load). label_id is reported as MIN(label_id) (a representative, not
+// necessarily the first row's label); detection_id is no longer selected (left zero).
 func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error) {
 	var results []SpeciesFirstSeen
 
-	// Use window function to rank detections per species (by scientific_name) by timestamp
-	// This ensures we get the actual detection_id that corresponds to the first_detected time
-	// Partitioning by scientific_name aggregates across all models for the same species
 	rawSQL := fmt.Sprintf(`
-		SELECT label_id, scientific_name, first_detected, detection_id
-		FROM (
-			SELECT
-				d.label_id,
-				l.scientific_name,
-				d.detected_at as first_detected,
-				d.id as detection_id,
-				ROW_NUMBER() OVER (PARTITION BY l.scientific_name ORDER BY d.detected_at ASC, d.id ASC) as rn
-			FROM %s d
-			JOIN %s l ON l.id = d.label_id
-			WHERE d.detected_at >= ? AND d.detected_at < ?
-		) ranked
-		WHERE rn = 1
-		ORDER BY first_detected ASC
+		SELECT
+			MIN(d.label_id) as label_id,
+			l.scientific_name,
+			MIN(d.detected_at) as first_detected
+		FROM %s d
+		JOIN %s l ON l.id = d.label_id
+		WHERE d.detected_at >= ? AND d.detected_at < ?
+		GROUP BY l.scientific_name
+		ORDER BY first_detected ASC, l.scientific_name ASC
 		LIMIT ? OFFSET ?
 	`, r.tableName(), r.labelsTable())
 
