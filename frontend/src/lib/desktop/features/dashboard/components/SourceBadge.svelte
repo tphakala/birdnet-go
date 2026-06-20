@@ -40,9 +40,11 @@
       : null
   );
 
-  // Only show the source badge when multiple sources are active — with a single
-  // source every detection shares the same origin, so the label adds no value.
-  // Guests never load settings so counts stay 0 and the badge stays hidden.
+  // For the overlay variant (spectrogram cards): suppress when only one source
+  // is active, since every live detection shares the same origin and the label
+  // adds no value. Inline variant always shows — historical views may contain
+  // detections from sources that have since been disabled, and users need the
+  // label to identify the origin. Guests stay hidden: counts stay 0.
   const MULTIPLE_SOURCES_THRESHOLD = 2;
   let hasMultipleSources = $derived(
     ($settingsStore?.formData?.realtime?.audio?.sources?.length ?? 0) +
@@ -51,7 +53,7 @@
   );
 </script>
 
-{#if sourceLabel && hasMultipleSources}
+{#if sourceLabel && (variant !== 'overlay' || hasMultipleSources)}
   <div
     class={cn(variant === 'overlay' ? 'source-badge-overlay' : 'source-badge-inline', className)}
     title={sourceLabel}
