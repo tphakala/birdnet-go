@@ -27,3 +27,16 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 	assert.Empty(t, openVINOPrecisionFor(RegistryIDPerchV2, inference.OVDeviceCPU),
 		"Perch on CPU keeps the f16 default")
 }
+
+// TestOpenVINOEffectivePrecision verifies the mapping from an OpenVINO
+// INFERENCE_PRECISION_HINT to the display precision shown on the inference status
+// card. The empty default hint (f16) maps to FP16, and the only explicit override
+// emitted (OVPrecisionF32, the BirdNET v2.4 GPU path) maps to FP32. Tag-agnostic
+// like openVINOEffectivePrecision itself, so it runs in the default suite.
+func TestOpenVINOEffectivePrecision(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, string(QuantizationFP16), openVINOEffectivePrecision(""),
+		"empty hint is the backend f16 default, shown as FP16")
+	assert.Equal(t, string(QuantizationFP32), openVINOEffectivePrecision(inference.OVPrecisionF32),
+		"the f32 hint (BirdNET v2.4 GPU) is shown as FP32")
+}

@@ -25,9 +25,16 @@ const (
 )
 
 // Inference backend identifiers.
+//
+// BackendTFLite and BackendONNX double as the model file-type stored in
+// ModelInfo.Backend (the static metadata). BackendOpenVINO is an execution
+// provider, not a file type: OpenVINO executes an ONNX model file through the OV
+// runtime, so it only ever appears as a live, per-instance backend reported by
+// ModelInstance.Backend(), never as a ModelInfo.Backend file-type value.
 const (
-	BackendTFLite = "TFLite"
-	BackendONNX   = "ONNX"
+	BackendTFLite   = "TFLite"
+	BackendONNX     = "ONNX"
+	BackendOpenVINO = "OpenVINO"
 )
 
 // Model file extensions (lowercase, including the leading dot).

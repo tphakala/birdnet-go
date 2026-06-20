@@ -44,6 +44,75 @@ func TestGetModelDevice_NilInstance(t *testing.T) {
 	assert.Equal(t, deviceUnknown, o.GetModelDevice("closed"))
 }
 
+// TestGetModelBackend covers live-backend resolution for loaded, unloaded, and
+// torn-down instances. Unlike GetModelDevice, a missing/unknown backend returns
+// "" so the caller falls back to the static ModelInfo.Backend file metadata.
+func TestGetModelBackend(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ortModelID = "ort_model"
+		ovModelID  = "ov_model"
+	)
+	o := newTestOrchestrator(t,
+		&mockModelInstance{id: ortModelID, backend: BackendONNX},
+		&mockModelInstance{id: ovModelID, backend: BackendOpenVINO},
+	)
+
+	t.Run("returns the live instance backend", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, BackendONNX, o.GetModelBackend(ortModelID))
+		assert.Equal(t, BackendOpenVINO, o.GetModelBackend(ovModelID),
+			"an ONNX model executed on OpenVINO must report OpenVINO, not ONNX")
+	})
+
+	t.Run("unknown model returns empty for static fallback", func(t *testing.T) {
+		t.Parallel()
+		assert.Empty(t, o.GetModelBackend("not_loaded"))
+	})
+}
+
+// TestGetModelPrecision covers live effective-precision resolution. A missing or
+// unknown precision returns "" so the caller falls back to the static
+// ModelInfo.Quantization metadata.
+func TestGetModelPrecision(t *testing.T) {
+	t.Parallel()
+
+	const (
+		fp16ModelID = "fp16_model"
+		int8ModelID = "int8_model"
+	)
+	o := newTestOrchestrator(t,
+		&mockModelInstance{id: fp16ModelID, precision: string(QuantizationFP16)},
+		&mockModelInstance{id: int8ModelID, precision: string(QuantizationINT8)},
+	)
+
+	t.Run("returns the live instance precision", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, string(QuantizationFP16), o.GetModelPrecision(fp16ModelID))
+		assert.Equal(t, string(QuantizationINT8), o.GetModelPrecision(int8ModelID))
+	})
+
+	t.Run("unknown model returns empty for static fallback", func(t *testing.T) {
+		t.Parallel()
+		assert.Empty(t, o.GetModelPrecision("not_loaded"))
+	})
+}
+
+// TestGetModelBackendPrecision_NilInstance verifies a torn-down entry reports the
+// empty string for both backend and precision (static-fallback signal).
+func TestGetModelBackendPrecision_NilInstance(t *testing.T) {
+	t.Parallel()
+	o := &Orchestrator{
+		models: map[string]*modelEntry{
+			"closed": {instance: nil},
+		},
+		modelRSS: make(map[string]int64),
+	}
+	assert.Empty(t, o.GetModelBackend("closed"))
+	assert.Empty(t, o.GetModelPrecision("closed"))
+}
+
 // TestModelScheduleStatus covers the schedule gating contract: only the bat
 // model is gated, and only when its scheduler reports inactive.
 func TestModelScheduleStatus(t *testing.T) {

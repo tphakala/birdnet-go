@@ -368,29 +368,63 @@ func (o *Orchestrator) ModelScheduleStatus(modelID string) (active bool, reason 
 	return false, scheduleReasonNight
 }
 
-// GetModelDevice returns the compute device (execution provider) the named
-// model's inference currently runs on, resolved from the live instance's
-// Device() (e.g. "CPU" or "GPU"). It returns deviceUnknown when the model is not
-// loaded or its instance has been torn down. Locking mirrors ModelInfos /
-// PredictModel: o.mu.RLock to find the entry, then entry.mu to read the instance.
-func (o *Orchestrator) GetModelDevice(modelID string) string {
+// instanceFor returns the live ModelInstance for modelID, or nil when the model
+// is not loaded or its instance has been torn down. Locking mirrors ModelInfos /
+// PredictModel: o.mu.RLock to find the entry, then entry.mu only briefly to
+// capture the instance pointer. The pointer is captured under entry.mu and the
+// lock released before the caller invokes any instance method, because those
+// methods may take their own per-model lock (BirdNET locks bn.mu), and holding
+// entry.mu across such a call would stall PredictModel, which needs entry.mu only
+// briefly on the inference hot path.
+func (o *Orchestrator) instanceFor(modelID string) ModelInstance {
 	o.mu.RLock()
 	entry, ok := o.models[modelID]
 	o.mu.RUnlock()
 	if !ok {
-		return deviceUnknown
+		return nil
 	}
-	// Capture the instance pointer under entry.mu, then release it before calling
-	// Device(): a model's Device() may take its own per-model lock (BirdNET locks
-	// bn.mu), and holding entry.mu across that call would stall PredictModel, which
-	// needs entry.mu only briefly on the inference hot path. Mirrors PredictModel.
 	entry.mu.Lock()
 	inst := entry.instance
 	entry.mu.Unlock()
+	return inst
+}
+
+// GetModelDevice returns the compute device (execution provider) the named
+// model's inference currently runs on, resolved from the live instance's
+// Device() (e.g. "CPU" or "GPU"). It returns deviceUnknown when the model is not
+// loaded or its instance has been torn down.
+func (o *Orchestrator) GetModelDevice(modelID string) string {
+	inst := o.instanceFor(modelID)
 	if inst == nil {
 		return deviceUnknown
 	}
 	return inst.Device()
+}
+
+// GetModelBackend returns the live inference execution backend the named model
+// loaded on (BackendTFLite/BackendONNX/BackendOpenVINO), resolved from the live
+// instance's Backend(). It returns "" when the model is not loaded or its instance
+// has been torn down, signalling callers to fall back to the static
+// ModelInfo.Backend file metadata.
+func (o *Orchestrator) GetModelBackend(modelID string) string {
+	inst := o.instanceFor(modelID)
+	if inst == nil {
+		return ""
+	}
+	return inst.Backend()
+}
+
+// GetModelPrecision returns the effective runtime precision the named model
+// executes at ("INT8"/"FP16"/"FP32"), resolved from the live instance's
+// Precision(). It returns "" when the model is not loaded, its instance has been
+// torn down, or the precision is unknown, signalling callers to fall back to the
+// static ModelInfo.Quantization file metadata.
+func (o *Orchestrator) GetModelPrecision(modelID string) string {
+	inst := o.instanceFor(modelID)
+	if inst == nil {
+		return ""
+	}
+	return inst.Precision()
 }
 
 // ModelSpecFor returns the ModelSpec for the given model ID.

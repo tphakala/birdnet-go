@@ -27,6 +27,12 @@ type Bat struct {
 	// rather than a constant so a future OpenVINO bat path can set the real device
 	// at construction. Reported via Device().
 	device string
+	// backend is the live execution backend (BackendONNX today; the bat pipeline is
+	// ONNX-only), and precision is the weight precision detected from the classifier
+	// model filename (empty when no token). Both set once at construction; reported
+	// via Backend()/Precision().
+	backend   string
+	precision string
 }
 
 // BatModelConfig holds configuration for creating a Bat model instance.
@@ -98,7 +104,11 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		batClassifier:      batCC,
 		info:               info,
 		// The bat embedding + classifier pipeline is ONNX-only (CPU EP) today.
-		device: deviceCPU,
+		device:  deviceCPU,
+		backend: BackendONNX,
+		// Surface the weight precision detected from the classifier model filename
+		// (empty when no token, which is the common case for the bat model).
+		precision: string(detectQuantization(cfg.ClassifierModelPath)),
 	}, nil
 }
 
@@ -263,6 +273,16 @@ func (b *Bat) Labels() []string {
 // model is ONNX-only). Set once at construction and never mutated, so no lock is
 // needed. Implements ModelInstance.
 func (b *Bat) Device() string { return b.device }
+
+// Backend returns the live execution backend the bat pipeline bound to
+// (BackendONNX today). Set once at construction and never mutated, so no lock is
+// needed. Implements ModelInstance.
+func (b *Bat) Backend() string { return b.backend }
+
+// Precision returns the weight precision detected from the bat classifier model
+// filename (empty when no token). Set once at construction and never mutated, so
+// no lock is needed. Implements ModelInstance.
+func (b *Bat) Precision() string { return b.precision }
 
 // Close releases resources held by the bat model.
 func (b *Bat) Close() error {

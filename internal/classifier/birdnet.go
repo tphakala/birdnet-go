@@ -68,6 +68,14 @@ type BirdNET struct {
 	// by each initialize*Model path and defaults to deviceCPU in NewBirdNET so a
 	// path that forgets to set it still reports a sane value. Reported via Device().
 	device string
+	// backend is the inference execution backend bound to at load time
+	// (BackendTFLite/BackendONNX/BackendOpenVINO), and precision is the effective
+	// runtime precision the model executes at ("INT8"/"FP16"/"FP32"). Both mirror
+	// device: set by each initialize*Model path so the inference status card reports
+	// what is really running rather than the static ModelInfo file metadata.
+	// Reported via Backend()/Precision(); guarded by mu like device.
+	backend   string
+	precision string
 	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack).
 	// Inference holds mu for the full duration of the native call, not just the field
 	// read: the backends are not goroutine-safe and reload/Delete Close() them under
@@ -154,6 +162,13 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 	// resolved v2.4 TFLite model (from version:"2.4" or the default) to the INT8
 	// ONNX entry so existing arm64 configs keep starting without a TFLite backend.
 	bn.ModelInfo = remapV24ForONNXOnly(&bn.ModelInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
+
+	// Seed backend/precision from the resolved static metadata so a model that
+	// somehow loads without an initialize*Model path still reports a sane value
+	// (mirrors the device default). Each init path overrides these with the real
+	// load-time backend and effective runtime precision.
+	bn.backend = bn.ModelInfo.Backend
+	bn.precision = string(bn.ModelInfo.Quantization)
 
 	// Load taxonomy data
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
@@ -309,6 +324,10 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 	bn.classifier = classifier
 	// TFLite runs on CPU (the optional XNNPACK delegate is still CPU execution).
 	bn.device = deviceCPU
+	// TFLite executes the model file as-is, so the runtime precision is the weight
+	// precision recorded in ModelInfo.Quantization (FP32 for the stock v2.4 model).
+	bn.backend = BackendTFLite
+	bn.precision = string(bn.ModelInfo.Quantization)
 
 	// Update the human-readable model version string for display when a custom
 	// model path is provided. Model identity (ModelInfo.ID) is never modified
@@ -1472,6 +1491,27 @@ func (bn *BirdNET) Device() string {
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
 	return bn.device
+}
+
+// Backend returns the inference execution backend this model loaded on
+// (BackendTFLite/BackendONNX/BackendOpenVINO). Guarded by bn.mu because
+// reloadModelInternal rewrites bn.backend under the same lock when re-initializing
+// the backend. Implements ModelInstance.
+func (bn *BirdNET) Backend() string {
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	return bn.backend
+}
+
+// Precision returns the effective runtime precision this model executes at
+// ("INT8"/"FP16"/"FP32"), which can differ from the weight precision stored in
+// the file (BirdNET v2.4 runs the FP32 ONNX model at FP16 on OpenVINO CPU).
+// Guarded by bn.mu because reloadModelInternal rewrites bn.precision under the
+// same lock. Implements ModelInstance.
+func (bn *BirdNET) Precision() string {
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	return bn.precision
 }
 
 // ReloadSnapshot returns a copy of the model metadata and taxonomy maps safely under bn.mu.

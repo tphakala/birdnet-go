@@ -287,6 +287,22 @@ func buildModelStatus(info *classifier.ModelInfo, snap inferencestats.PeekSnapsh
 	}
 }
 
+// applyRuntimeBackend overrides a model status's static file metadata (Backend,
+// Quantization) with the live values resolved from the loaded instance: the real
+// execution provider and effective runtime precision. An empty live value means
+// the model is not loaded or the value is unknown, so the static ModelInfo values
+// set by buildModelStatus are kept as the fallback. This is what makes an ONNX
+// model executed on the OpenVINO runtime report "OpenVINO" with its FP16/FP32
+// compute precision instead of the static "ONNX" file type.
+func applyRuntimeBackend(status *InferenceModelStatus, backend, precision string) {
+	if backend != "" {
+		status.Backend = backend
+	}
+	if precision != "" {
+		status.Quantization = precision
+	}
+}
+
 // GetInferenceStatus handles GET /api/v2/system/inference. It returns a
 // read-only snapshot of the inference subsystem: hardware, backends, loaded
 // models with per-model stats and memory, source attachment, and audio pipeline
@@ -345,14 +361,23 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 	counters := classifier.GetInferenceCounters().PeekAll()
 	attachments := buildSourceAttachments(settings, infos, primaryID)
 
-	// Compute per-model device and schedule status from the live orchestrator.
+	// Compute per-model device, backend, precision, and schedule status from the
+	// live orchestrator. Backend and precision come from the loaded instance (the
+	// real execution provider and runtime precision) rather than the static
+	// ModelInfo file metadata, so an ONNX model executed on OpenVINO reports
+	// "OpenVINO" and its effective precision. Empty values fall back to the static
+	// metadata in the assembly loop below.
 	devices := make(map[string]string, len(infos))
+	backends := make(map[string]string, len(infos))
+	precisions := make(map[string]string, len(infos))
 	paused := make(map[string]bool, len(infos))
 	scheduleLabels := make(map[string]string, len(infos))
 	if orch != nil {
 		for i := range infos {
 			id := infos[i].ID
 			devices[id] = orch.GetModelDevice(id)
+			backends[id] = orch.GetModelBackend(id)
+			precisions[id] = orch.GetModelPrecision(id)
 			active, reason := orch.ModelScheduleStatus(id)
 			paused[id] = !active
 			scheduleLabels[id] = reason
@@ -424,6 +449,10 @@ func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
 		if status.Device == "" {
 			status.Device = deviceUnknown
 		}
+		// Override the static file metadata with the live backend/precision when the
+		// model is loaded (see applyRuntimeBackend); an empty value means "not loaded
+		// / unknown", so the static ModelInfo values set by buildModelStatus survive.
+		applyRuntimeBackend(&status, backends[id], precisions[id])
 		status.Paused = paused[id]
 		status.ScheduleLabel = scheduleLabels[id]
 		status.RecentDetections = recentDetections[id]

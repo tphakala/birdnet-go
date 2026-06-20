@@ -17,11 +17,13 @@ import (
 
 // mockModelInstance implements ModelInstance for testing.
 type mockModelInstance struct {
-	id      string
-	spec    ModelSpec
-	labels  []string // optional; when nil a single default label is returned
-	device  string   // optional; when empty Device() reports "CPU"
-	predict func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
+	id        string
+	spec      ModelSpec
+	labels    []string // optional; when nil a single default label is returned
+	device    string   // optional; when empty Device() reports "CPU"
+	backend   string   // optional; reported verbatim by Backend()
+	precision string   // optional; reported verbatim by Precision()
+	predict   func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
 func (m *mockModelInstance) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
@@ -44,7 +46,9 @@ func (m *mockModelInstance) Labels() []string {
 	}
 	return []string{"Turdus merula_Common Blackbird"}
 }
-func (m *mockModelInstance) Close() error { return nil }
+func (m *mockModelInstance) Close() error      { return nil }
+func (m *mockModelInstance) Backend() string   { return m.backend }
+func (m *mockModelInstance) Precision() string { return m.precision }
 func (m *mockModelInstance) Device() string {
 	if m.device != "" {
 		return m.device

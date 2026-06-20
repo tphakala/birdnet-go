@@ -95,6 +95,21 @@ type ModelInstance interface {
 	// inferred from the backend string: the value reflects the real chosen path.
 	Device() string
 
+	// Backend returns the inference execution backend the model actually loaded
+	// on (BackendTFLite/BackendONNX/BackendOpenVINO), resolved at load time. This
+	// is the execution provider, which is distinct from the model file format:
+	// an ONNX model file executed through the OpenVINO runtime reports
+	// BackendOpenVINO, not BackendONNX. Like Device(), it reflects the real chosen
+	// path, never the static ModelInfo.Backend file-type metadata.
+	Backend() string
+
+	// Precision returns the effective runtime precision the model executes at
+	// ("INT8"/"FP16"/"FP32", matching the Quantization constants), which can
+	// differ from the weight precision stored in the file (e.g. an FP32 ONNX model
+	// executed on OpenVINO at FP16). Empty when unknown. Like Device(), it reflects
+	// the real chosen path, not the static ModelInfo.Quantization metadata.
+	Precision() string
+
 	// Close releases resources held by the model.
 	Close() error
 }
