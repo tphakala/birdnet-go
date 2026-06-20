@@ -25,6 +25,24 @@ func TestNewSQLiteManager(t *testing.T) {
 	assert.False(t, mgr.IsMySQL())
 }
 
+// TestNewSQLiteManager_AppliesPerformancePragmas verifies the cold-read tuning
+// pragmas are actually applied to an opened file database: mmap_size (set via a
+// post-open Exec, since mattn has no DSN param) and the larger cache_size (DSN).
+func TestNewSQLiteManager_AppliesPerformancePragmas(t *testing.T) {
+	mgr, err := NewSQLiteManager(Config{DataDir: t.TempDir()})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	var mmap int64
+	require.NoError(t, mgr.DB().Raw("PRAGMA mmap_size").Scan(&mmap).Error)
+	assert.Equal(t, int64(sqliteMmapSizeBytes), mmap,
+		"mmap_size pragma should be applied (confirms the driver build has mmap enabled)")
+
+	var cacheSize int64
+	require.NoError(t, mgr.DB().Raw("PRAGMA cache_size").Scan(&cacheSize).Error)
+	assert.Equal(t, int64(-16000), cacheSize, "cache_size pragma should reflect the DSN value")
+}
+
 func TestSQLiteManager_Initialize(t *testing.T) {
 	tmpDir := t.TempDir()
 
