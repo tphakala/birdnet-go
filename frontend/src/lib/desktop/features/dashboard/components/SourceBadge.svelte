@@ -39,9 +39,19 @@
         )
       : null
   );
+
+  // Only show the source badge when multiple sources are active — with a single
+  // source every detection shares the same origin, so the label adds no value.
+  // Guests never load settings so counts stay 0 and the badge stays hidden.
+  const MULTIPLE_SOURCES_THRESHOLD = 2;
+  let hasMultipleSources = $derived(
+    ($settingsStore?.formData?.realtime?.audio?.sources?.length ?? 0) +
+      ($settingsStore?.formData?.realtime?.rtsp?.streams?.filter(s => s.enabled).length ?? 0) >=
+      MULTIPLE_SOURCES_THRESHOLD
+  );
 </script>
 
-{#if sourceLabel}
+{#if sourceLabel && hasMultipleSources}
   <div
     class={cn(variant === 'overlay' ? 'source-badge-overlay' : 'source-badge-inline', className)}
     title={sourceLabel}
