@@ -63,6 +63,58 @@ describe('SpeciesComparison', () => {
     expect(screen.getByText('A large thrush.')).toBeInTheDocument();
   });
 
+  it('renders enrichment badges and external links when enrichments are enabled', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/guide'))
+        return Promise.resolve(
+          makeGuide({
+            expectedness: 'expected',
+            current_season: 'summer',
+            external_links: [
+              { name: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Turdus_merula' },
+            ],
+          }) as never
+        );
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+    });
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+    });
+
+    await screen.findByText('An introduction.', {}, { timeout: 5000 });
+    expect(screen.getByText('analytics.species.guide.expectedness.expected')).toBeInTheDocument();
+    expect(
+      screen.getByText('analytics.species.guide.season.summer', { exact: false })
+    ).toBeInTheDocument();
+    const wiki = screen.getByText('Wikipedia');
+    expect(wiki).toBeInTheDocument();
+    expect(wiki).toHaveAttribute('href', 'https://en.wikipedia.org/wiki/Turdus_merula');
+  });
+
+  it('hides enrichment badges when the enrichments feature is disabled', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/guide'))
+        return Promise.resolve(
+          makeGuide({
+            features: { notes: true, enrichments: false, similar_species: true },
+            expectedness: 'expected',
+            current_season: 'summer',
+          }) as never
+        );
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+    });
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+    });
+
+    await screen.findByText('An introduction.', {}, { timeout: 5000 });
+    expect(
+      screen.queryByText('analytics.species.guide.expectedness.expected')
+    ).not.toBeInTheDocument();
+  });
+
   it('shows the empty state when there are no similar species', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url.includes('/guide'))
@@ -89,6 +141,22 @@ describe('SpeciesComparison', () => {
     });
 
     expect(await screen.findByRole('alert', {}, { timeout: 5000 })).toBeInTheDocument();
+  });
+
+  it('shows a soft no-guide message (not a red error) on a 404 response', async () => {
+    vi.mocked(api.get).mockRejectedValue(
+      new ApiError('not found', 404, new Response(null, { status: 404 }))
+    );
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+    });
+
+    expect(
+      await screen.findByText('analytics.species.guide.noGuide', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+    // A benign 404 must not be surfaced as an error alert.
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('invokes onclose when the close button is clicked', async () => {

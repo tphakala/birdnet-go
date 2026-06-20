@@ -1,10 +1,16 @@
 package api
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 func TestClassifyGuideQuality(t *testing.T) {
@@ -49,6 +55,89 @@ func TestScoreToExpectedness(t *testing.T) {
 	}
 }
 
+// fakePredictor is a probableSpeciesPredictor that records how many times
+// GetProbableSpecies was actually invoked, so the memoization can be asserted.
+type fakePredictor struct {
+	mu     sync.Mutex
+	calls  int
+	scores []classifier.SpeciesScore
+}
+
+func (p *fakePredictor) GetProbableSpecies(_ time.Time, _ float32) ([]classifier.SpeciesScore, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls++
+	return p.scores, nil
+}
+
+func (p *fakePredictor) callCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
+}
+
+// TestProbableSpeciesScores_MemoizesUnderConcurrency verifies the double-checked
+// lock collapses a concurrent burst of guide requests to a single geomodel
+// prediction, and that every caller gets the (shared, read-only) score map. Run
+// under -race to catch a regression in the memoization locking.
+func TestProbableSpeciesScores_MemoizesUnderConcurrency(t *testing.T) {
+	withRestoredGlobalSettings(t)
+	s := &conf.Settings{}
+	s.BirdNET.Latitude = 60.17
+	s.BirdNET.Longitude = 24.94
+	conftest.SetTestSettings(s)
+
+	c := &Controller{}
+	c.Settings.Store(s)
+	pred := &fakePredictor{scores: []classifier.SpeciesScore{{Label: sciEurasianBlackbird, Score: 0.9}}}
+
+	const callers = 32
+	var wg sync.WaitGroup
+	results := make([]map[string]float64, callers)
+	for i := range callers {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			results[idx] = c.probableSpeciesScores(pred)
+		}(i)
+	}
+	wg.Wait()
+
+	assert.Equal(t, 1, pred.callCount(), "concurrent callers must share one geomodel prediction")
+	for _, r := range results {
+		require.NotNil(t, r)
+		assert.InDelta(t, 0.9, r["turdus merula"], 1e-9)
+	}
+}
+
+// TestProbableSpeciesScores_InvalidatesOnLocationChange verifies the memo is
+// reused within the TTL for the same location but invalidated immediately when the
+// configured location changes (the location-keyed cache).
+func TestProbableSpeciesScores_InvalidatesOnLocationChange(t *testing.T) {
+	withRestoredGlobalSettings(t)
+	s := &conf.Settings{}
+	s.BirdNET.Latitude = 10.0
+	s.BirdNET.Longitude = 20.0
+	conftest.SetTestSettings(s)
+
+	c := &Controller{}
+	c.Settings.Store(s)
+	pred := &fakePredictor{scores: []classifier.SpeciesScore{{Label: "X", Score: 0.5}}}
+
+	c.probableSpeciesScores(pred)
+	c.probableSpeciesScores(pred)
+	assert.Equal(t, 1, pred.callCount(), "same location within TTL must be memoized")
+
+	// Change location: the memo must invalidate and re-predict despite a live TTL.
+	s2 := &conf.Settings{}
+	s2.BirdNET.Latitude = 11.0
+	s2.BirdNET.Longitude = 20.0
+	conftest.SetTestSettings(s2)
+
+	c.probableSpeciesScores(pred)
+	assert.Equal(t, 2, pred.callCount(), "location change must invalidate the memo")
+}
+
 func TestComputeCurrentSeason(t *testing.T) {
 	t.Parallel()
 
@@ -70,7 +159,7 @@ func TestComputeCurrentSeason(t *testing.T) {
 func TestBuildExternalLinks(t *testing.T) {
 	t.Parallel()
 
-	links := buildExternalLinks("Common Blackbird", "Turdus merula")
+	links := buildExternalLinks("Common Blackbird", sciEurasianBlackbird)
 	assert.NotEmpty(t, links)
 
 	names := make(map[string]string, len(links))
@@ -83,38 +172,6 @@ func TestBuildExternalLinks(t *testing.T) {
 	assert.Contains(t, names, "Xeno-canto")
 
 	assert.Empty(t, buildExternalLinks("", ""))
-}
-
-func TestSplitGuideSections(t *testing.T) {
-	t.Parallel()
-
-	desc := "Intro paragraph.\n\n## Voice\nSings.\n\n## Habitat\nForests."
-	sections := splitGuideSections(desc)
-	require := assert.New(t)
-	require.Len(sections, 3)
-	require.Empty(sections[0].heading)
-	require.Equal("Intro paragraph.", sections[0].body)
-	require.Equal("Voice", sections[1].heading)
-	require.Equal("Sings.", sections[1].body)
-	require.Equal("Habitat", sections[2].heading)
-}
-
-func TestExtractSections(t *testing.T) {
-	t.Parallel()
-
-	desc := "An intro about the bird.\n\n## Voice\nA melodic song.\n\n## Habitat\nWoodlands."
-	secs := extractSections(desc, []string{"Turdus pilaris"})
-	assert.NotNil(t, secs)
-	assert.Equal(t, "An intro about the bird.", secs.Description)
-	assert.Equal(t, "A melodic song.", secs.SongsAndCalls)
-	assert.Equal(t, []string{"Turdus pilaris"}, secs.SimilarSpecies)
-
-	// Localized songs heading (German "Stimme") is matched.
-	deDesc := "Einleitung.\n\n## Stimme\nSchöner Gesang."
-	deSecs := extractSections(deDesc, nil)
-	assert.Equal(t, "Schöner Gesang.", deSecs.SongsAndCalls)
-
-	assert.Nil(t, extractSections("", nil))
 }
 
 func TestSummarizeDescription(t *testing.T) {

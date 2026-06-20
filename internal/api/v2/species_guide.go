@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/time/rate"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -44,7 +46,17 @@ const (
 
 const (
 	// guideRateLimitPerMinute bounds calls to the external-API-backed endpoints.
-	guideRateLimitPerMinute = 30
+	// The limiter runs as middleware (before the handler), so it cannot tell a
+	// warm cache hit from a live external fetch and counts both. Echo's limiter
+	// Rate is in requests-per-second, so this per-minute value is divided by
+	// SecondsPerMinute at construction; the cache's singleflight + stale-refresh
+	// dedup already bounds the actual number of external provider calls.
+	guideRateLimitPerMinute = 60
+	// guideRateLimitBurst is the limiter burst allowance. The species comparison
+	// panel issues two requests per open (guide + similar), so a generous burst
+	// keeps a user clicking through detections from being throttled prematurely
+	// while the sustained per-second rate still bounds abuse.
+	guideRateLimitBurst = 30
 	// maxSimilarSpecies caps the number of similar-species candidates resolved.
 	maxSimilarSpecies = 8
 	// similarSpeciesResolveTimeout bounds the worst-case latency of the
@@ -105,20 +117,12 @@ type SpeciesGuideData struct {
 	CachedAt       string              `json:"cached_at"`
 }
 
-// SimilarSpeciesSections holds parsed guide sections for a similar species.
-type SimilarSpeciesSections struct {
-	Description    string   `json:"description,omitempty"`
-	SongsAndCalls  string   `json:"songs_and_calls,omitempty"`
-	SimilarSpecies []string `json:"similar_species,omitempty"`
-}
-
 // SimilarSpeciesEntry is one related species in the comparison panel.
 type SimilarSpeciesEntry struct {
-	ScientificName string                  `json:"scientific_name"`
-	CommonName     string                  `json:"common_name"`
-	Relationship   string                  `json:"relationship"`
-	GuideSummary   string                  `json:"guide_summary,omitempty"`
-	Sections       *SimilarSpeciesSections `json:"sections,omitempty"`
+	ScientificName string `json:"scientific_name"`
+	CommonName     string `json:"common_name"`
+	Relationship   string `json:"relationship"`
+	GuideSummary   string `json:"guide_summary,omitempty"`
 }
 
 // SimilarSpeciesResponse is the response body for GET /species/:name/similar.
@@ -191,10 +195,16 @@ func (c *Controller) newGuideRateLimiter() echo.MiddlewareFunc {
 	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      guideRateLimitPerMinute,
+				Rate:      rate.Limit(float64(guideRateLimitPerMinute) / float64(SecondsPerMinute)),
+				Burst:     guideRateLimitBurst,
 				ExpiresIn: 1 * time.Minute,
 			},
 		),
+		// Per-client identification uses Echo's RealIP. Behind a reverse proxy
+		// that is not configured as a trusted proxy, X-Forwarded-For is
+		// client-controlled and the per-IP limit can be bypassed by spoofing it.
+		// Deployments exposing this publicly behind a proxy should set Echo's
+		// trusted-proxy / IP-extractor configuration accordingly.
 		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
 		ErrorHandler: func(ctx echo.Context, _ error) error {
 			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
@@ -297,8 +307,6 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 		CommonName:     guide.CommonName,
 		Description:    guide.Description,
 		Quality:        classifyGuideQuality(guide.Description, guide.Partial),
-		CurrentSeason:  computeCurrentSeason(settings.BirdNET.Latitude, time.Now()),
-		ExternalLinks:  buildExternalLinks(guide.CommonName, guide.ScientificName),
 		Features: GuideFeatureFlags{
 			Notes:          cfg.IsShowNotes(),
 			Enrichments:    cfg.IsShowEnrichments(),
@@ -313,8 +321,15 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 		Partial:  guide.Partial,
 		CachedAt: guide.CachedAt.Format(time.RFC3339),
 	}
-	if exp := c.guideExpectedness(name); exp != "" {
-		data.Expectedness = exp
+	// Enrichments (expectedness, season, external links) are only rendered when
+	// the showEnrichments setting is on; skip their cost (the geomodel prediction
+	// in particular) when the feature flag is off.
+	if cfg.IsShowEnrichments() {
+		data.CurrentSeason = computeCurrentSeason(settings.BirdNET.Latitude, time.Now())
+		data.ExternalLinks = buildExternalLinks(guide.CommonName, guide.ScientificName)
+		if exp := c.guideExpectedness(name); exp != "" {
+			data.Expectedness = exp
+		}
 	}
 
 	return ctx.JSON(http.StatusOK, data)
@@ -424,7 +439,6 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 				}
 				entry.CommonName = g.CommonName
 				entry.GuideSummary = summarizeDescription(g.Description)
-				entry.Sections = extractSections(g.Description, namesOf(g.SimilarSpecies))
 				return nil
 			})
 			entries[idx] = entry
@@ -594,14 +608,37 @@ func (c *Controller) guideExpectedness(scientificName string) string {
 	return ""
 }
 
+// guideRarityLocationKey returns a stable key for the configured observer
+// location. The memoized probable-species map is invalidated when this changes so
+// a location update is reflected immediately rather than after the TTL window.
+func (c *Controller) guideRarityLocationKey() string {
+	settings := c.currentSettings()
+	if settings == nil {
+		return ""
+	}
+	return fmt.Sprintf("%.4f,%.4f", settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+}
+
+// probableSpeciesPredictor is the minimal classifier surface
+// probableSpeciesScores needs. Declaring it as an interface keeps the memoization
+// (double-checked locking + location-keyed invalidation) unit-testable without a
+// loaded geomodel; *classifier.Orchestrator satisfies it.
+type probableSpeciesPredictor interface {
+	GetProbableSpecies(date time.Time, week float32) ([]classifier.SpeciesScore, error)
+}
+
 // probableSpeciesScores returns a cached map of normalized scientific name ->
-// geomodel occurrence score, rebuilding it when the TTL expires. Returns nil
-// when the prediction is unavailable (caller omits expectedness).
-func (c *Controller) probableSpeciesScores(bn *classifier.Orchestrator) map[string]float64 {
-	// Fast path: while the memoized map is fresh, a concurrent burst of guide
-	// requests shares it under a read lock without serializing on the rebuild.
+// geomodel occurrence score, rebuilding it when the TTL expires or the configured
+// location changes. Returns nil when the prediction is unavailable (caller omits
+// expectedness).
+func (c *Controller) probableSpeciesScores(bn probableSpeciesPredictor) map[string]float64 {
+	locKey := c.guideRarityLocationKey()
+
+	// Fast path: while the memoized map is fresh AND was computed for the current
+	// location, a concurrent burst of guide requests shares it under a read lock
+	// without serializing on the rebuild.
 	c.guideRarityMu.RLock()
-	if c.guideRarityScores != nil && time.Now().Before(c.guideRarityExpiry) {
+	if c.guideRarityScores != nil && c.guideRarityLocKey == locKey && time.Now().Before(c.guideRarityExpiry) {
 		scores := c.guideRarityScores
 		c.guideRarityMu.RUnlock()
 		return scores
@@ -612,8 +649,9 @@ func (c *Controller) probableSpeciesScores(bn *classifier.Orchestrator) map[stri
 	defer c.guideRarityMu.Unlock()
 
 	// Re-check under the write lock: another goroutine may have rebuilt the map
-	// while we waited for the lock, so only one geomodel prediction runs per TTL.
-	if c.guideRarityScores != nil && time.Now().Before(c.guideRarityExpiry) {
+	// while we waited for the lock, so only one geomodel prediction runs per
+	// (location, TTL) window.
+	if c.guideRarityScores != nil && c.guideRarityLocKey == locKey && time.Now().Before(c.guideRarityExpiry) {
 		return c.guideRarityScores
 	}
 
@@ -628,6 +666,7 @@ func (c *Controller) probableSpeciesScores(bn *classifier.Orchestrator) map[stri
 		scores[strings.ToLower(detection.ExtractScientificName(ss.Label))] = ss.Score
 	}
 	c.guideRarityScores = scores
+	c.guideRarityLocKey = locKey
 	c.guideRarityExpiry = time.Now().Add(guideRarityTTL)
 	return scores
 }
@@ -720,88 +759,4 @@ func summarizeDescription(description string) string {
 		intro = strings.TrimSpace(intro[:guideSummaryMaxLength])
 	}
 	return intro
-}
-
-// songsHeadingTokens are localized fragments identifying a "songs and calls"
-// section heading (lowercased).
-var songsHeadingTokens = []string{
-	"song", "call", "voice", "stimme", "voix", "chant", "voz", "canto", "głos",
-	"ääntely", "läte",
-}
-
-// extractSections parses a guide description into structured sections for the
-// similar-species panel. Heading matching is language-agnostic via
-// songsHeadingTokens, so no locale is needed.
-func extractSections(description string, similar []string) *SimilarSpeciesSections {
-	trimmed := strings.TrimSpace(description)
-	if trimmed == "" && len(similar) == 0 {
-		return nil
-	}
-	secs := &SimilarSpeciesSections{SimilarSpecies: similar}
-	for _, sec := range splitGuideSections(trimmed) {
-		heading := strings.ToLower(strings.TrimSpace(sec.heading))
-		switch {
-		case heading == "":
-			secs.Description = sec.body
-		case headingMatchesSongs(heading):
-			secs.SongsAndCalls = sec.body
-		}
-	}
-	return secs
-}
-
-// guideSection is a heading/body pair parsed from a description.
-type guideSection struct {
-	heading string
-	body    string
-}
-
-// splitGuideSections splits a description on "## " headers, mirroring the
-// frontend parseGuideDescription contract.
-func splitGuideSections(description string) []guideSection {
-	startsWithHeader := strings.HasPrefix(strings.TrimSpace(description), "## ")
-	parts := strings.Split(description, "## ")
-	sections := make([]guideSection, 0, len(parts))
-	for i, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed == "" {
-			continue
-		}
-		// The leading chunk (before any header) has no heading.
-		if i == 0 && !startsWithHeader {
-			sections = append(sections, guideSection{heading: "", body: trimmed})
-			continue
-		}
-		heading, body, found := strings.Cut(trimmed, "\n")
-		if !found {
-			sections = append(sections, guideSection{heading: strings.TrimSpace(heading), body: ""})
-			continue
-		}
-		sections = append(sections, guideSection{
-			heading: strings.TrimSpace(heading),
-			body:    strings.TrimSpace(body),
-		})
-	}
-	return sections
-}
-
-func headingMatchesSongs(lowerHeading string) bool {
-	for _, token := range songsHeadingTokens {
-		if strings.Contains(lowerHeading, token) {
-			return true
-		}
-	}
-	return false
-}
-
-// namesOf extracts scientific names from a similar-species list.
-func namesOf(list []guideprovider.SimilarSpecies) []string {
-	if len(list) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(list))
-	for _, s := range list {
-		out = append(out, s.ScientificName)
-	}
-	return out
 }

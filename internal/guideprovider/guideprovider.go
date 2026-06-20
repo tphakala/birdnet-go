@@ -52,10 +52,14 @@ const (
 	maxMemoryEntries = 5000
 )
 
-// localePattern restricts locale codes to BCP-47-ish forms (e.g. "en", "pt-br").
-// It bounds the cache key space and prevents arbitrary input from selecting a
-// Wikipedia subdomain or inflating the cache. Invalid values fall back to "en".
-var localePattern = regexp.MustCompile(`^[a-z]{2,3}(-[a-z]{2,4})?$`)
+// localePattern restricts locale codes to BCP-47-ish forms (e.g. "en", "pt-br",
+// "be-tarask", "zh-min-nan"). It allows a 2–3 letter primary subtag followed by
+// up to two "-subtag" parts of 2–10 lowercase letters each, which covers the
+// non-standard Wikipedia language subdomains (e.g. zh-classical) that the older,
+// tighter pattern silently dropped to "en". It still admits only values that form
+// a "<locale>.wikipedia.org" host and bounds the cache key space; anything else
+// (underscores, dots, paths, host-injection) falls back to "en".
+var localePattern = regexp.MustCompile(`^[a-z]{2,3}(-[a-z]{2,10}){0,2}$`)
 
 // Cache tier labels for metrics.
 const (
@@ -240,22 +244,30 @@ func (c *GuideCache) SetWarmTopN(n int) {
 	c.warmTopN = n
 }
 
-// storeMemory writes an entry to the memory tier with a soft size cap. Existing
+// storeMemory writes an entry to the memory tier with a hard size cap. Existing
 // keys are always updated; new keys are only added while under maxMemoryEntries,
 // so a flood of distinct keys cannot grow memory without bound (those entries
 // still live in the DB tier).
+//
+// The cap is enforced exactly without locking by reserving a slot up front
+// (memCount.Add) and rolling the reservation back when it would exceed the cap or
+// when a concurrent writer created the key first — so memCount stays an accurate
+// count of memory entries even under concurrent distinct-key writes.
 func (c *GuideCache) storeMemory(key string, g *SpeciesGuide) {
 	if _, loaded := c.memory.Load(key); loaded {
 		c.memory.Store(key, g)
 		return
 	}
-	if c.memCount.Load() >= maxMemoryEntries {
+	// Reserve a slot; if that pushes us over the cap, roll back and skip.
+	if c.memCount.Add(1) > maxMemoryEntries {
+		c.memCount.Add(-1)
 		return
 	}
 	if _, loaded := c.memory.LoadOrStore(key, g); loaded {
+		// Another writer added this key between our Load and LoadOrStore: we did
+		// not consume a new slot, so release the reservation and update in place.
+		c.memCount.Add(-1)
 		c.memory.Store(key, g)
-	} else {
-		c.memCount.Add(1)
 	}
 }
 
@@ -284,6 +296,15 @@ func (c *GuideCache) Close() {
 		c.lifecycleMu.Unlock()
 		c.cancel()
 		c.wg.Wait()
+		// Release per-provider resources (e.g. the eBird client's rate-limiter
+		// ticker). Without this a hot-reload that rebuilds the cache would leak
+		// the previous providers' resources. Done after wg.Wait so no background
+		// fetch is still using a provider.
+		for i := range c.providers {
+			if closer, ok := c.providers[i].provider.(interface{ Close() error }); ok {
+				_ = closer.Close()
+			}
+		}
 	})
 }
 
@@ -488,7 +509,10 @@ func (c *GuideCache) saveGuide(ctx context.Context, name, locale string, g *Spec
 			logger.String("species", name), logger.Error(err))
 		return
 	}
-	c.updateCachePopulationRatio()
+	// The population-ratio gauge is intentionally NOT updated here: it would cost
+	// a full memory-map scan on every cache write (O(n) per save, O(n^2) during
+	// warm-up and under pre-fetch load). It is recomputed at startup, after warm
+	// completes, and once per refresh cycle (refreshStaleEntries) instead.
 }
 
 // isCacheEntryStale reports whether a guide needs refreshing. Negative entries
@@ -522,13 +546,20 @@ func (c *GuideCache) goIfOpen(fn func()) {
 	}()
 }
 
-// triggerAsyncRefresh re-fetches a stale entry in the background.
+// triggerAsyncRefresh re-fetches a stale entry in the background. The fetch is
+// routed through the singleflight group keyed on the cache key (the same key the
+// synchronous Tier-3 path uses), so a burst of concurrent requests for one stale
+// species collapses to a single provider fetch instead of spawning a redundant
+// external call per request (thundering-herd guard).
 func (c *GuideCache) triggerAsyncRefresh(name, locale string) {
+	key := cacheKey(name, locale)
 	c.goIfOpen(func() {
 		if c.shouldQuit() {
 			return
 		}
-		_, _ = c.fetchAndStore(c.ctx, name, locale)
+		_, _, _ = c.sf.Do(key, func() (any, error) {
+			return c.fetchAndStore(c.ctx, name, locale)
+		})
 	})
 }
 
@@ -595,19 +626,35 @@ func (c *GuideCache) startCacheRefresh() {
 	}
 }
 
-// refreshStaleEntries refreshes every stale entry currently in memory.
+// refreshStaleEntries refreshes stale positive entries in memory and evicts stale
+// negative ones. Positive entries are re-fetched in place so the warm cache stays
+// fresh; expired negative (not-found) entries are dropped from memory rather than
+// perpetually re-fetched, so a flood of distinct never-present names cannot pin
+// memory slots or re-hit providers every cycle. Evicted negatives are recreated
+// on demand if requested again.
 func (c *GuideCache) refreshStaleEntries() {
 	type staleKey struct{ name, locale string }
 	var stale []staleKey
+	var evict []string
 	c.memory.Range(func(k, v any) bool {
 		g, ok := v.(*SpeciesGuide)
 		if !ok || !c.isCacheEntryStale(g) {
 			return true
 		}
-		name, locale := splitCacheKey(k.(string))
+		key := k.(string)
+		if g.IsNegativeEntry() {
+			evict = append(evict, key)
+			return true
+		}
+		name, locale := splitCacheKey(key)
 		stale = append(stale, staleKey{name: name, locale: locale})
 		return true
 	})
+	for _, key := range evict {
+		if _, loaded := c.memory.LoadAndDelete(key); loaded {
+			c.memCount.Add(-1)
+		}
+	}
 	for _, s := range stale {
 		if c.shouldQuit() {
 			return
@@ -621,6 +668,12 @@ func (c *GuideCache) refreshStaleEntries() {
 			GetLogger().Debug("Guide cache cleanup failed", logger.Error(err))
 		}
 	}
+
+	// Refresh the population-ratio gauge once per cycle. This is the home for the
+	// O(n) scan that used to run on every cache write (see saveGuide); doing it
+	// here keeps the gauge current as pre-fetch adds entries without taxing the
+	// write path.
+	c.updateCachePopulationRatio()
 }
 
 // cleaner is an optional GuideStore capability for retention cleanup.

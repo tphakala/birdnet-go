@@ -61,12 +61,12 @@ func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpM
 		case eErr != nil:
 			log.Warn("eBird client init failed; skipping eBird guide provider", logger.Error(eErr))
 		default:
-			provider, pErr := guideprovider.NewEBirdGuideProviderWithMetrics(ebirdClient, gpMetrics)
+			ebirdProvider, pErr := guideprovider.NewEBirdGuideProviderWithMetrics(ebirdClient, gpMetrics)
 			if pErr != nil {
 				log.Warn("eBird guide provider init failed; skipping", logger.Error(pErr))
 				ebirdClient.Close()
 			} else {
-				cache.RegisterProvider(guideprovider.EBirdProviderName, provider)
+				cache.RegisterProvider(guideprovider.EBirdProviderName, ebirdProvider)
 			}
 		}
 	}

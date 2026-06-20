@@ -1675,6 +1675,8 @@
         "similar": "Similar species",
         "noSimilar": "No similar species found",
         "loading": "Loading guide…",
+        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
+        "noGuide": "No guide available for this species.",
         "expectedness": {
           "expected": "Expected here",
           "uncommon": "Uncommon here",
@@ -1692,7 +1694,8 @@
           "dry2": "Dry season"
         },
         "description": "Description",
-        "songsAndCalls": "Songs & Calls"
+        "songsAndCalls": "Songs & Calls",
+        "externalLinks": "External resources"
       },
       "notes": {
         "title": "Notes",
@@ -1703,11 +1706,13 @@
         "deleteConfirm": "Delete this note?",
         "deleteFailed": "Failed to delete note.",
         "saveFailed": "Failed to save note.",
+        "saveDisabledReason": "Enter note text to enable Save.",
         "tooLong": "Note is too long (maximum {max} characters)."
       },
       "similar": {
         "title": "Similar species",
         "compare": "Compare",
+        "show": "Show species comparison",
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
@@ -4210,12 +4215,25 @@
           "helpText": "Wikipedia provides descriptions; auto also enriches taxonomy from eBird when an API key is configured.",
           "options": {
             "wikipedia": "Wikipedia",
-            "ebird": "eBird"
+            "ebird": "eBird",
+            "auto": "Wikipedia + eBird"
           }
         },
         "fallbackPolicy": {
           "label": "Fallback policy",
-          "helpText": "All merges every available provider; none uses only the primary provider."
+          "helpText": "All merges every available provider; none uses only the primary provider.",
+          "options": {
+            "all": "All providers",
+            "none": "Primary only"
+          }
+        },
+        "warmTopN": {
+          "label": "Warm top species",
+          "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."
+        },
+        "preFetchEnabled": {
+          "label": "Pre-fetch on detection",
+          "helpText": "Fetch the guide the first time a species is detected so it loads instantly later."
         },
         "sections": {
           "title": "Guide Sections"

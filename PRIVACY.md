@@ -79,7 +79,7 @@ BirdNET-Go follows **Privacy by Design** principles:
 **Species Guide** (disabled by default):
 
 - **Purpose**: Enrich detected species with descriptions, taxonomy, and similar-species information
-- **Services**: Wikipedia REST API (when enabled); eBird API (only when an eBird API key is configured)
+- **Services**: Wikipedia Action API (when enabled); eBird API (only when an eBird API key is configured)
 - **Data sent**: HTTP requests containing the scientific name of detected species and a language code
 - **Requires**: User enables the feature in settings; eBird enrichment additionally requires a user-provided API key
 - **Privacy**: No personal data, coordinates, or audio transmitted - only public taxonomic names

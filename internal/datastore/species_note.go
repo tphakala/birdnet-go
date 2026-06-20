@@ -15,6 +15,11 @@ import (
 // SpeciesNoteMaxLength is the maximum allowed length (in bytes) of a note entry.
 const SpeciesNoteMaxLength = 10_000
 
+// SpeciesNotesMaxResults bounds how many notes GetSpeciesNotes returns for a
+// single species. The read endpoint is public, so this caps the worst-case
+// result size; newest-first ordering means the most recent notes are retained.
+const SpeciesNotesMaxResults = 500
+
 // GormDBProvider exposes the underlying GORM handle for features that need direct
 // database access (e.g. the species guide cache store). The concrete SQLite and
 // MySQL stores satisfy it via the embedded DataStore.
@@ -69,6 +74,7 @@ func (ds *DataStore) GetSpeciesNotes(ctx context.Context, scientificName string)
 	if err := ds.DB.WithContext(ctx).
 		Where("scientific_name = ?", name).
 		Order("created_at DESC").
+		Limit(SpeciesNotesMaxResults).
 		Find(&notes).Error; err != nil {
 		return nil, dbError(err, "get_species_notes", errors.PriorityLow,
 			"scientific_name", name, "table", "species_notes")

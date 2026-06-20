@@ -624,10 +624,15 @@ func (p *Processor) Start() {
 			logger.Bool("registry_set", p.Registry() != nil),
 			logger.String("operation", "processor_start"))
 
+		// Initialize flusherCtx before starting the detection processor: the
+		// detection goroutine can call firePreFetchGuide (which reads flusherCtx),
+		// so it must be assigned before that goroutine is launched to avoid an
+		// unsynchronized read of a not-yet-set field.
+		p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
+
 		p.startDetectionProcessor()
 		p.startWorkerPool()
 
-		p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
 		p.pendingDetectionsFlusher()
 
 		if p.pipelineStats != nil {

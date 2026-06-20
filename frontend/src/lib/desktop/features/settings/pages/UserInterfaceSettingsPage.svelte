@@ -472,7 +472,7 @@
               },
               {
                 value: 'auto',
-                label: t('settings.userInterface.speciesGuide.provider.options.ebird'),
+                label: t('settings.userInterface.speciesGuide.provider.options.auto'),
               },
             ]}
             value={speciesGuide.provider}
@@ -489,11 +489,11 @@
             options={[
               {
                 value: 'all',
-                label: t('settings.userInterface.speciesGuide.fallbackPolicy.label') + ' (all)',
+                label: t('settings.userInterface.speciesGuide.fallbackPolicy.options.all'),
               },
               {
                 value: 'none',
-                label: t('settings.userInterface.speciesGuide.fallbackPolicy.label') + ' (none)',
+                label: t('settings.userInterface.speciesGuide.fallbackPolicy.options.none'),
               },
             ]}
             value={speciesGuide.fallbackPolicy}
@@ -504,6 +504,27 @@
             groupBy={false}
             menuSize="sm"
             onChange={value => updateSpeciesGuideSetting('fallbackPolicy', value as string)}
+          />
+        </div>
+
+        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
+          <Checkbox
+            checked={speciesGuide.preFetchEnabled}
+            label={t('settings.userInterface.speciesGuide.preFetchEnabled.label')}
+            helpText={t('settings.userInterface.speciesGuide.preFetchEnabled.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('preFetchEnabled', value)}
+          />
+
+          <InlineSlider
+            label={t('settings.userInterface.speciesGuide.warmTopN.label')}
+            helpText={t('settings.userInterface.speciesGuide.warmTopN.helpText')}
+            value={speciesGuide.warmTopN}
+            onUpdate={value => updateSpeciesGuideSetting('warmTopN', value)}
+            min={0}
+            max={500}
+            step={10}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
           />
         </div>
 

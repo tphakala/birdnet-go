@@ -236,6 +236,89 @@ func TestGuideCache_StaleWhileRevalidate(t *testing.T) {
 	}, 3*time.Second, 20*time.Millisecond)
 }
 
+// blockingProvider blocks inside Fetch until release is closed, so a test can
+// hold a single fetch in-flight while many concurrent refreshes pile up behind
+// the singleflight group. It records how many times Fetch was actually entered.
+type blockingProvider struct {
+	name    string
+	mu      sync.Mutex
+	calls   int
+	started chan struct{} // closed once, when the first Fetch begins
+	release chan struct{} // close to unblock the in-flight Fetch(es)
+	once    sync.Once
+	result  *SpeciesGuide
+}
+
+func (p *blockingProvider) Name() string { return p.name }
+
+func (p *blockingProvider) Fetch(ctx context.Context, scientificName string, _ FetchOptions) (*SpeciesGuide, error) {
+	p.mu.Lock()
+	p.calls++
+	p.mu.Unlock()
+	p.once.Do(func() { close(p.started) })
+	select {
+	case <-p.release:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	g := *p.result
+	g.ScientificName = scientificName
+	return &g, nil
+}
+
+func (p *blockingProvider) callCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
+}
+
+// TestGuideCache_AsyncRefreshIsDeduplicated verifies that a burst of concurrent
+// reads of one stale entry collapses to a single provider fetch. The async
+// refresh is routed through the singleflight group, so the in-flight fetch
+// absorbs every concurrent refresh instead of issuing one external call per
+// reader (the thundering-herd guard). Regression test for that routing.
+func TestGuideCache_AsyncRefreshIsDeduplicated(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	prov := &blockingProvider{
+		name:    WikipediaProviderName,
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		result:  &SpeciesGuide{CommonName: "Fresh", Description: "fresh"},
+	}
+	c := newTestCache(t, store, prov)
+
+	// Seed a stale entry straight into the memory tier so every Get is a stale
+	// memory hit that fires a background refresh (no synchronous fetch).
+	c.storeMemory(cacheKey("Turdus merula", defaultLocale), &SpeciesGuide{
+		ScientificName: "Turdus merula",
+		CommonName:     "Stale",
+		Description:    "stale",
+		CachedAt:       time.Now().Add(-PositiveTTL - time.Hour),
+	})
+
+	const readers = 32
+	var wg sync.WaitGroup
+	for range readers {
+		wg.Go(func() {
+			// Each stale memory hit returns immediately and fires a background
+			// refresh; whether it observes the stale or the just-refreshed value
+			// is timing-dependent, so only the dedup (calls==1 below) is asserted.
+			_, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+			assert.NoError(t, err)
+		})
+	}
+
+	// Once the single coalesced refresh has entered Fetch, no other reader may
+	// have spawned its own fetch: singleflight keeps exactly one leader in-flight
+	// while it is blocked, and followers never call Fetch.
+	<-prov.started
+	assert.Equal(t, 1, prov.callCount(), "concurrent stale reads must collapse to one refresh fetch")
+
+	close(prov.release)
+	wg.Wait()
+}
+
 func TestGuideCache_GetAfterCloseStillReads(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
@@ -398,15 +481,20 @@ func TestNormalizeLocale_Validation(t *testing.T) {
 	}{
 		{"en", "en"},
 		{"de", "de"},
-		{" PT-BR ", "pt-br"},   // trimmed + lowercased
-		{"zh-hans", "zh-hans"}, // 4-letter subtag allowed
-		{"", "en"},             // empty -> default
-		{"english", "en"},      // too long -> default
-		{"en_US", "en"},        // underscore not allowed -> default
-		{"../etc", "en"},       // path traversal attempt -> default
-		{"@evil.com", "en"},    // host-injection attempt -> default
-		{"en.wikipedia", "en"}, // dotted -> default
-		{"a", "en"},            // too short -> default
+		{" PT-BR ", "pt-br"},             // trimmed + lowercased
+		{"zh-hans", "zh-hans"},           // 4-letter subtag allowed
+		{"be-tarask", "be-tarask"},       // 6-letter subtag (real Wikipedia subdomain)
+		{"zh-classical", "zh-classical"}, // 9-letter subtag (real Wikipedia subdomain)
+		{"zh-min-nan", "zh-min-nan"},     // two subtags (real Wikipedia subdomain)
+		{"", "en"},                       // empty -> default
+		{"english", "en"},                // too long, no subtag -> default
+		{"ab-cd-ef-gh", "en"},            // more than two subtags -> default
+		{"en-superlongsubtag", "en"},     // subtag exceeds 10 chars -> default
+		{"en_US", "en"},                  // underscore not allowed -> default
+		{"../etc", "en"},                 // path traversal attempt -> default
+		{"@evil.com", "en"},              // host-injection attempt -> default
+		{"en.wikipedia", "en"},           // dotted -> default
+		{"a", "en"},                      // too short -> default
 	}
 	for _, tt := range tests {
 		assert.Equalf(t, tt.want, normalizeLocale(tt.in), "normalizeLocale(%q)", tt.in)
@@ -427,7 +515,9 @@ func TestStoreMemory_Caps(t *testing.T) {
 		count++
 		return true
 	})
-	assert.LessOrEqual(t, count, maxMemoryEntries, "memory tier must not exceed the cap")
+	assert.Equal(t, maxMemoryEntries, count, "memory tier must fill exactly to the cap")
+	// The counter must exactly track the map size (no overshoot / drift).
+	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must equal the actual entry count")
 
 	// Updating an existing key must not change the count or be rejected.
 	c.storeMemory(cacheKey("species", strconvI(0)), &SpeciesGuide{CommonName: "updated"})
@@ -435,6 +525,67 @@ func TestStoreMemory_Caps(t *testing.T) {
 	assert.True(t, ok)
 	g, _ := v.(*SpeciesGuide)
 	assert.Equal(t, "updated", g.CommonName)
+	assert.Equal(t, int64(maxMemoryEntries), c.memCount.Load(), "updating a key must not change the count")
+}
+
+// TestStoreMemory_ExactCountUnderConcurrency drives concurrent distinct-key
+// writes past the cap and asserts the lock-free reserve-then-rollback keeps the
+// entry count exactly at the cap (no overshoot) and memCount in sync. Run under
+// -race to catch a regression in the atomic reservation.
+func TestStoreMemory_ExactCountUnderConcurrency(t *testing.T) {
+	t.Parallel()
+	c := NewGuideCache(newFakeStore(), noopMetrics{})
+	t.Cleanup(c.Close)
+
+	const writers = 16
+	const perWriter = 1000 // 16k distinct keys >> maxMemoryEntries (5000)
+	var wg sync.WaitGroup
+	for w := range writers {
+		wg.Go(func() {
+			for i := range perWriter {
+				key := cacheKey("species", strconvI(w*perWriter+i))
+				c.storeMemory(key, &SpeciesGuide{CommonName: "x"})
+			}
+		})
+	}
+	wg.Wait()
+
+	count := 0
+	c.memory.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	assert.Equal(t, maxMemoryEntries, count, "concurrent writes must not overshoot the cap")
+	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must stay exact under concurrency")
+}
+
+// TestRefreshStaleEntries_EvictsExpiredNegatives verifies the refresh sweep drops
+// expired negative entries from memory (freeing slots) while keeping fresh ones.
+func TestRefreshStaleEntries_EvictsExpiredNegatives(t *testing.T) {
+	t.Parallel()
+	c := NewGuideCache(newFakeStore(), noopMetrics{})
+	t.Cleanup(c.Close)
+
+	// A stale negative entry (past NegativeTTL) and a fresh positive one.
+	c.storeMemory(cacheKey("Gone species", defaultLocale), &SpeciesGuide{
+		ScientificName: "Gone species",
+		Negative:       true,
+		CachedAt:       time.Now().Add(-NegativeTTL - time.Hour),
+	})
+	c.storeMemory(cacheKey("Turdus merula", defaultLocale), &SpeciesGuide{
+		ScientificName: "Turdus merula",
+		CommonName:     "Common Blackbird",
+		CachedAt:       time.Now(),
+	})
+	require.Equal(t, int64(2), c.memCount.Load())
+
+	c.refreshStaleEntries()
+
+	_, negStillThere := c.memory.Load(cacheKey("Gone species", defaultLocale))
+	assert.False(t, negStillThere, "expired negative entry must be evicted")
+	_, posStillThere := c.memory.Load(cacheKey("Turdus merula", defaultLocale))
+	assert.True(t, posStillThere, "fresh positive entry must be retained")
+	assert.Equal(t, int64(1), c.memCount.Load(), "counter must reflect the eviction")
 }
 
 func strconvI(i int) string {

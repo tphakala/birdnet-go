@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { BookOpen } from '@lucide/svelte';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
@@ -128,18 +129,34 @@
         {/if}
       </div>
 
-      {#if guideEnabled && (showNotes || (showSimilarSpecies && guidePanelOpen))}
+      {#if guideEnabled && (showNotes || showSimilarSpecies)}
         <div class="mt-4 space-y-4 border-t border-[var(--color-base-300)] pt-4">
-          {#if showSimilarSpecies && guidePanelOpen}
-            <SpeciesComparison
-              scientificName={displaySpecies.scientific_name}
-              commonName={displayName}
-              onclose={() => (guidePanelOpen = false)}
-            />
-          {/if}
-          {#if showNotes}
-            <SpeciesNotes scientificName={displaySpecies.scientific_name} />
-          {/if}
+          <!-- Key on the species so the guide + notes remount (and refetch) when
+               the modal is reused for a different species without closing. -->
+          {#key displaySpecies.scientific_name}
+            {#if showSimilarSpecies}
+              {#if guidePanelOpen}
+                <SpeciesComparison
+                  scientificName={displaySpecies.scientific_name}
+                  commonName={displayName}
+                  onclose={() => (guidePanelOpen = false)}
+                />
+              {:else}
+                <!-- Reopen affordance so closing the comparison is never a dead end. -->
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm gap-2"
+                  onclick={() => (guidePanelOpen = true)}
+                >
+                  <BookOpen class="h-4 w-4" />
+                  {t('analytics.species.similar.show')}
+                </button>
+              {/if}
+            {/if}
+            {#if showNotes}
+              <SpeciesNotes scientificName={displaySpecies.scientific_name} />
+            {/if}
+          {/key}
         </div>
       {/if}
     {/if}

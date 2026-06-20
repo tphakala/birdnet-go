@@ -138,7 +138,7 @@
           type="button"
           class="btn btn-primary btn-sm"
           disabled={!canSave}
-          title={!canSave ? t('analytics.species.notes.placeholder') : undefined}
+          title={!canSave ? t('analytics.species.notes.saveDisabledReason') : undefined}
           aria-describedby={!canSave ? `${uid}-save-help` : undefined}
           onclick={addNote}
         >
@@ -147,7 +147,9 @@
         </button>
       </div>
       {#if !canSave}
-        <p id={`${uid}-save-help`} class="sr-only">{t('analytics.species.notes.placeholder')}</p>
+        <p id={`${uid}-save-help`} class="sr-only">
+          {t('analytics.species.notes.saveDisabledReason')}
+        </p>
       {/if}
     </div>
   {/if}

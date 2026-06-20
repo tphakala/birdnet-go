@@ -37,6 +37,17 @@ func NewEBirdGuideProviderWithMetrics(client ebirdTaxonomyClient, _ GuideCacheMe
 // Name returns the provider's registration name.
 func (p *EBirdGuideProvider) Name() string { return EBirdProviderName }
 
+// Close releases resources held by the underlying eBird client (notably its
+// rate-limiter ticker). It satisfies the optional closer contract the cache
+// invokes on Close, so a hot-reload that rebuilds the cache does not leak the
+// previous client. Safe to call when the client does not expose Close.
+func (p *EBirdGuideProvider) Close() error {
+	if closer, ok := p.client.(interface{ Close() }); ok {
+		closer.Close()
+	}
+	return nil
+}
+
 // Fetch returns taxonomy enrichment for a species.
 func (p *EBirdGuideProvider) Fetch(ctx context.Context, scientificName string, _ FetchOptions) (*SpeciesGuide, error) {
 	tree, err := p.client.BuildFamilyTree(ctx, scientificName)

@@ -79,10 +79,14 @@ type Controller struct {
 	guideCacheMu sync.RWMutex
 	// guideRarity* memoize the daily probable-species score map (normalized
 	// scientific name -> score) for the guide expectedness badge, so a burst of
-	// guide requests doesn't re-run the geomodel prediction per call.
+	// guide requests doesn't re-run the geomodel prediction per call. The memo is
+	// keyed on the configured location (guideRarityLocKey) as well as the TTL, so a
+	// location change invalidates it immediately instead of serving a stale map for
+	// up to the TTL window.
 	guideRarityMu     sync.RWMutex
 	guideRarityExpiry time.Time
 	guideRarityScores map[string]float64
+	guideRarityLocKey string
 	controlChan       chan string
 	shutdownRequester ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
 	shutdownMu        sync.RWMutex      // protects shutdownRequester

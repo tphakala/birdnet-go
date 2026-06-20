@@ -42,6 +42,7 @@
     Moon,
     Sunrise,
     Sunset,
+    BookOpen,
   } from '@lucide/svelte';
 
   // Interface definitions for API responses
@@ -894,22 +895,38 @@
     </section>
 
     <!-- Species Guide panel (opt-in; gated on settings) -->
-    {#if guideEnabled && (showNotes || (showSimilarSpecies && guidePanelOpen))}
+    {#if guideEnabled && (showNotes || showSimilarSpecies)}
       <section class="surface-card" aria-labelledby="species-guide-heading">
         <div class="p-5 md:p-6 space-y-6">
           <h2 id="species-guide-heading" class="sr-only">
             {t('analytics.species.guide.title')}
           </h2>
-          {#if showSimilarSpecies && guidePanelOpen}
-            <SpeciesComparison
-              scientificName={detection.scientificName}
-              commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
-              onclose={() => (guidePanelOpen = false)}
-            />
-          {/if}
-          {#if showNotes}
-            <SpeciesNotes scientificName={detection.scientificName} />
-          {/if}
+          <!-- Key on the species so the guide + notes remount (and refetch) when
+               navigating between detections of different species in place. -->
+          {#key detection.scientificName}
+            {#if showSimilarSpecies}
+              {#if guidePanelOpen}
+                <SpeciesComparison
+                  scientificName={detection.scientificName}
+                  commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
+                  onclose={() => (guidePanelOpen = false)}
+                />
+              {:else}
+                <!-- Reopen affordance so closing the comparison is never a dead end. -->
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm gap-2"
+                  onclick={() => (guidePanelOpen = true)}
+                >
+                  <BookOpen class="h-4 w-4" />
+                  {t('analytics.species.similar.show')}
+                </button>
+              {/if}
+            {/if}
+            {#if showNotes}
+              <SpeciesNotes scientificName={detection.scientificName} />
+            {/if}
+          {/key}
         </div>
       </section>
     {/if}

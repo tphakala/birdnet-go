@@ -101,17 +101,11 @@ export interface SpeciesGuideData {
   cached_at: string;
 }
 
-export interface SimilarSpeciesSections {
-  description?: string;
-  songs_and_calls?: string;
-  similar_species?: string[];
-}
 export interface SimilarSpeciesEntry {
   scientific_name: string;
   common_name: string;
   relationship: 'same_genus' | 'same_family' | 'similar';
   guide_summary?: string;
-  sections?: SimilarSpeciesSections;
 }
 export interface SimilarSpeciesResponse {
   scientific_name: string;

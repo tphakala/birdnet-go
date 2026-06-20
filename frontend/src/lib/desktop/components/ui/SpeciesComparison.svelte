@@ -4,6 +4,7 @@
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
+  import { getSeasonHighlight } from '$lib/utils/seasonHighlight';
   import {
     parseGuideDescription,
     type SpeciesGuideData,
@@ -15,6 +16,10 @@
 
   // 503: surfaced when the guide feature is enabled but the cache is unavailable.
   const HTTP_SERVICE_UNAVAILABLE = 503;
+  // 404: a species with no guide content (e.g. obscure species, or non-bird
+  // labels like "Noise"/"Engine"). This is an expected, benign case, so it gets a
+  // soft "no guide" message rather than the alarming red error alert.
+  const HTTP_NOT_FOUND = 404;
 
   interface Props {
     scientificName: string;
@@ -34,6 +39,7 @@
   let similar = $state<SimilarSpeciesEntry[]>([]);
   let loading = $state(true);
   let unavailable = $state(false);
+  let noGuide = $state(false);
   let error = $state<string | null>(null);
 
   let openSections = $state<Record<string, boolean>>({
@@ -77,10 +83,17 @@
     return songs?.body ?? '';
   });
 
+  // Enrichments (expectedness, season, external links) are shown only when the
+  // guide's enrichments feature flag is on (driven by the showEnrichments setting).
+  let enrichmentsOn = $derived(guide?.features?.enrichments ?? false);
+  let season = $derived(guide ? getSeasonHighlight(guide.current_season) : null);
+  let externalLinks = $derived(guide?.external_links ?? []);
+
   async function load(): Promise<void> {
     loading = true;
     error = null;
     unavailable = false;
+    noGuide = false;
     const enc = encodeURIComponent(scientificName);
     try {
       const [g, s] = await Promise.all([
@@ -98,6 +111,9 @@
     } catch (e) {
       if (e instanceof ApiError && e.status === HTTP_SERVICE_UNAVAILABLE) {
         unavailable = true;
+      } else if (e instanceof ApiError && e.status === HTTP_NOT_FOUND) {
+        // Expected when no guide exists for this species: show a soft empty state.
+        noGuide = true;
       } else {
         error = e instanceof Error ? e.message : String(e);
       }
@@ -141,11 +157,45 @@
     </div>
   {:else if unavailable}
     <div role="alert" class="p-4 rounded-lg bg-warning/10 text-warning-content">
-      {t('analytics.species.guide.loading')}
+      {t('analytics.species.guide.unavailable')}
+    </div>
+  {:else if noGuide}
+    <div role="status" class="p-4 text-sm text-base-content/70">
+      {t('analytics.species.guide.noGuide')}
     </div>
   {:else if error}
     <div role="alert" class="p-4 rounded-lg bg-error/10 text-error">{error}</div>
   {:else if guide}
+    <!-- Enrichments: expectedness + season badges and external resource links -->
+    {#if enrichmentsOn && (guide.expectedness || season || externalLinks.length > 0)}
+      <div class="mb-3 flex flex-wrap items-center gap-2" data-testid="guide-enrichments">
+        {#if guide.expectedness}
+          <span class="badge badge-sm badge-outline">
+            {t(`analytics.species.guide.expectedness.${guide.expectedness}`)}
+          </span>
+        {/if}
+        {#if season}
+          <span class="badge badge-sm badge-outline">
+            {#if season.emoji}<span aria-hidden="true">{season.emoji}</span>{/if}
+            {t(season.i18nKey)}
+          </span>
+        {/if}
+        {#if externalLinks.length > 0}
+          <span class="sr-only">{t('analytics.species.guide.externalLinks')}</span>
+          {#each externalLinks as link (link.url)}
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="badge badge-sm badge-ghost"
+            >
+              {link.name}
+            </a>
+          {/each}
+        {/if}
+      </div>
+    {/if}
+
     <!-- Description -->
     {#if descriptionBody}
       <div class="border-b border-base-300">
