@@ -357,15 +357,15 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 	// results derived from it) is deterministic; map iteration order is random.
 	for _, modelID := range slices.Sorted(maps.Keys(snapshots)) {
 		s := snapshots[modelID]
-		var avgMS, maxMS, windowMS float64
+		var avgMS, p95MS, windowMS float64
 		if s.InvokeCount > 0 {
 			avgMS = float64(s.InvokeTotalUs) / float64(s.InvokeCount) / 1000.0
 		}
-		// Use the windowed max (since the last collector tick), not the lifetime
-		// max, so a single slow warm-up inference does not permanently latch the
-		// latency health check into Warning/Critical. The model card uses the
-		// lifetime max instead (see buildModelStatus).
-		maxMS = float64(s.InvokeMaxUs) / 1000.0
+		// Use the rolling-window p95 latency, not the lifetime max, so a single
+		// slow warm-up inference does not permanently latch the health check into
+		// Warning/Critical, and so an occasional GC pause does not flap it. The
+		// model card uses the lifetime max instead (see buildModelStatus).
+		p95MS = float64(s.RecentP95Us) / 1000.0
 		name := modelID
 		if mi, ok := infoMap[modelID]; ok {
 			name = mi.DisplayName()
@@ -378,7 +378,7 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 			ModelID:   modelID,
 			ModelName: name,
 			AvgMS:     avgMS,
-			MaxMS:     maxMS,
+			P95MS:     p95MS,
 			WindowMS:  windowMS,
 		})
 	}
