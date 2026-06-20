@@ -25,6 +25,14 @@ const (
 	// Capacity hints for map allocations
 	initialSpeciesCapacity = 100 // Initial capacity for species maps
 
+	// speciesTrackerInitTimeout bounds the background warm-up load so a stalled
+	// datastore query cannot keep the tracker suppressed forever or block
+	// shutdown indefinitely. It is a generous safety net, NOT a tuning knob: the
+	// normal load takes seconds, so this only fires for a genuinely stuck query.
+	// Keep it large; too short would abort a legitimately slow load on a big
+	// database or slow storage and briefly flag every species as new.
+	speciesTrackerInitTimeout = 5 * time.Minute
+
 	// Time calculations
 	hoursPerDay          = 24
 	seasonBufferDays     = 7 // Days buffer for season comparison
@@ -351,8 +359,9 @@ func (t *SpeciesTracker) IsWarming() bool {
 // block startup (notably the HTTP server). The tracker enters the warming state
 // immediately and leaves it once the load finishes, succeed or fail; on failure
 // it still goes live and self-heals from new detections. The load is registered
-// with asyncOpsWg so Close waits for it, and runs under a cancellable context so
-// Close can abort it during shutdown.
+// with asyncOpsWg so Close waits for it, and runs under a cancellable,
+// timeout-bounded context so Close can abort it during shutdown and a stalled
+// query cannot keep the tracker warming forever.
 //
 // Use this on the startup path only. Runtime reconfiguration keeps calling the
 // synchronous InitFromDatabase, which is a rare, user-initiated action; a
@@ -360,7 +369,7 @@ func (t *SpeciesTracker) IsWarming() bool {
 func (t *SpeciesTracker) InitFromDatabaseAsync() {
 	t.warming.Store(true)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), speciesTrackerInitTimeout)
 	t.initCancel.Store(&cancel)
 
 	// Stamp the sync time now, before any detection can flow, so an early
