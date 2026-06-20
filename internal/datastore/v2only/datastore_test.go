@@ -848,17 +848,17 @@ func TestV2OnlyDatastore_NotificationHistory(t *testing.T) {
 	}
 
 	// Save history
-	err := ds.SaveNotificationHistory(history)
+	err := ds.SaveNotificationHistory(t.Context(), history)
 	require.NoError(t, err)
 
 	// Get history
-	retrieved, err := ds.GetNotificationHistory("Passer domesticus", "new_species")
+	retrieved, err := ds.GetNotificationHistory(t.Context(), "Passer domesticus", "new_species")
 	require.NoError(t, err)
 	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
 	assert.Equal(t, "new_species", retrieved.NotificationType)
 
 	// Get active history
-	active, err := ds.GetActiveNotificationHistory(time.Now().Add(-1 * time.Hour))
+	active, err := ds.GetActiveNotificationHistory(t.Context(), time.Now().Add(-1*time.Hour))
 	require.NoError(t, err)
 	assert.Len(t, active, 1)
 }

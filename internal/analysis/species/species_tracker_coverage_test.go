@@ -23,12 +23,12 @@ func TestIsNewSpecies(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -69,12 +69,12 @@ func TestGetBatchSpeciesStatus(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -203,12 +203,12 @@ func TestCleanupExpiredCache(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -259,12 +259,12 @@ func TestCleanupExpiredCacheLRU(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -321,12 +321,12 @@ func TestCheckAndUpdateSpeciesAtomic(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -404,12 +404,12 @@ func TestIsSeasonMapInitializedAndCount(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -477,12 +477,12 @@ func TestExpireCacheForTesting(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -523,12 +523,12 @@ func TestClearCacheForTestingMethod(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -573,12 +573,12 @@ func TestShouldSuppressNotificationMethod(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -639,12 +639,12 @@ func TestRecordNotificationSentMethod(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -702,12 +702,12 @@ func TestCleanupOldNotificationRecordsMethod(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -784,12 +784,12 @@ func TestCheckAndResetPeriods(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -915,12 +915,12 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -1027,15 +1027,15 @@ func TestConcurrentOperationsStress(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: RecordNotificationSent saves to database (called in case 7)
-	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
 	// BG-17: CleanupOldNotificationRecords deletes from database (called in PruneOldEntries)
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{

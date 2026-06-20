@@ -269,7 +269,7 @@ func setupNotificationMock(mockDS *mocks.MockInterface, skipCall bool, histories
 		return
 	}
 	mockDS.EXPECT().
-		GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(histories, mockErr).
 		Once()
 }

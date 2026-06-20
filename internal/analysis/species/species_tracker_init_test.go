@@ -41,7 +41,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 						{ScientificName: "Lifetime_Species_2", FirstSeenDate: "2024-02-01"},
 					}, nil).Maybe()
 				// BG-17: InitFromDatabase requires notification history
-				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				// Yearly data
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -101,7 +101,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 				// BG-17: InitFromDatabase now loads notification history
-				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				// Yearly fails
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -123,7 +123,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 				// BG-17: InitFromDatabase now loads notification history
-				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				// First season fails
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -144,7 +144,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 				// BG-17: InitFromDatabase now loads notification history
-				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()

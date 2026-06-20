@@ -224,15 +224,15 @@ func (d *noveltyHistoryDatastore) GetSpeciesFirstDetectionInPeriod(context.Conte
 	return nil, nil
 }
 
-func (d *noveltyHistoryDatastore) GetActiveNotificationHistory(time.Time) ([]datastore.NotificationHistory, error) {
+func (d *noveltyHistoryDatastore) GetActiveNotificationHistory(context.Context, time.Time) ([]datastore.NotificationHistory, error) {
 	return nil, nil
 }
 
-func (d *noveltyHistoryDatastore) SaveNotificationHistory(*datastore.NotificationHistory) error {
+func (d *noveltyHistoryDatastore) SaveNotificationHistory(context.Context, *datastore.NotificationHistory) error {
 	return nil
 }
 
-func (d *noveltyHistoryDatastore) DeleteExpiredNotificationHistory(time.Time) (int64, error) {
+func (d *noveltyHistoryDatastore) DeleteExpiredNotificationHistory(context.Context, time.Time) (int64, error) {
 	return 0, nil
 }
 
