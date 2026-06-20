@@ -91,13 +91,15 @@ RUN ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
     rm -rf /tmp/onnxruntime /tmp/onnxruntime.tgz
 
 # Build assets and compile BirdNET-Go (non-embedded, TFLite + ONNX)
+# OPENVINO=false keeps the published images ONNX-only: the noembed_linux_* targets
+# default OpenVINO on, so the standard image must opt out explicitly.
 # Note: frontend-build (including Tailwind) is handled as a dependency of noembed_* tasks
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     task check-tensorflow && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
-    BUILD_VERSION="${BUILD_VERSION}" SENTRY_DSN="${SENTRY_DSN}" PROJECT_NAME="${PROJECT_NAME}" PROJECT_REPO_URL="${PROJECT_REPO_URL}" PROJECT_COMMUNITY_URL="${PROJECT_COMMUNITY_URL}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
+    BUILD_VERSION="${BUILD_VERSION}" SENTRY_DSN="${SENTRY_DSN}" PROJECT_NAME="${PROJECT_NAME}" PROJECT_REPO_URL="${PROJECT_REPO_URL}" PROJECT_COMMUNITY_URL="${PROJECT_COMMUNITY_URL}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET} OPENVINO=false
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:trixie-slim
