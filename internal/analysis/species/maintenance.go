@@ -348,6 +348,13 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 // This should be called during application shutdown or when the tracker is no longer needed.
 // It waits for any in-flight async database operations to complete before returning.
 func (t *SpeciesTracker) Close() error {
+	// Cancel any in-flight background historical load first so shutdown does not
+	// block on a long DB scan started by InitFromDatabaseAsync. Done lock-free
+	// (the loader holds t.mu for the scan), and cancel is idempotent.
+	if cancel := t.initCancel.Load(); cancel != nil {
+		(*cancel)()
+	}
+
 	// Wait for any in-flight async database operations (notification persistence/cleanup)
 	// This prevents goroutine leaks and ensures data is persisted before shutdown
 	t.asyncOpsWg.Wait()
