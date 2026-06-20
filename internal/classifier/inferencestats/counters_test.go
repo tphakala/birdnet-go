@@ -308,14 +308,55 @@ func TestCounterMap_PeekAll_DoesNotInterfereWithSnapshot(t *testing.T) {
 
 	m.RecordInvoke("model_a", 1000)
 
-	// PeekAll should not affect subsequent SnapshotAll
+	// PeekAll is non-destructive: it does not reset the windowed max that the
+	// collector consumes through SnapshotAll.
 	peek := m.PeekAll()
 	assert.Equal(t, int64(1000), peek["model_a"].InvokeMaxUs)
 
 	snap := m.SnapshotAll()
 	assert.Equal(t, int64(1000), snap["model_a"].InvokeMaxUs)
 
-	// After SnapshotAll resets max, PeekAll should see zero
+	// SnapshotAll resets the windowed max, so PeekAll's windowed InvokeMaxUs is
+	// back to zero, but the lifetime max survives the reset.
 	peek2 := m.PeekAll()
 	assert.Equal(t, int64(0), peek2["model_a"].InvokeMaxUs)
+	assert.Equal(t, int64(1000), peek2["model_a"].InvokeMaxUsLifetime)
+}
+
+// TestCounterMap_PeekAll_LifetimeMaxSurvivesSnapshotReset reproduces the model
+// card "avg latency > max latency" bug: the status endpoint reads the max via
+// PeekAll while the metrics collector resets the windowed max on every tick
+// through SnapshotAll. A slow warm-up invocation inflates the lifetime average,
+// but its peak was wiped by the collector, so the reported max fell below the
+// average. PeekAll must report the lifetime peak so max >= avg always holds.
+func TestCounterMap_PeekAll_LifetimeMaxSurvivesSnapshotReset(t *testing.T) {
+	t.Parallel()
+	m := &CounterMap{}
+
+	// A slow warm-up invocation sets the lifetime peak (2s).
+	m.RecordInvoke("model_a", 2_000_000)
+
+	// The collector ticks: SnapshotAll resets the windowed max on read.
+	_ = m.SnapshotAll()
+
+	// Steady-state invocations afterwards are much faster than the warm-up.
+	m.RecordInvoke("model_a", 250_000)
+	m.RecordInvoke("model_a", 260_000)
+
+	peek := m.PeekAll()["model_a"]
+	require.Positive(t, peek.InvokeCount)
+	avgUs := peek.InvokeTotalUs / peek.InvokeCount
+
+	// The lifetime max (used by the model card) survives the collector reset, so
+	// it still reflects the warm-up peak and stays >= the lifetime average.
+	assert.Equal(t, int64(2_000_000), peek.InvokeMaxUsLifetime,
+		"lifetime max must report the warm-up peak, not the since-last-tick peak")
+	assert.GreaterOrEqual(t, peek.InvokeMaxUsLifetime, avgUs,
+		"model-card max latency must never be below average latency")
+
+	// The windowed max (used by the latency health check) was reset by the tick,
+	// so it reflects only the recent steady-state peak, not the warm-up spike.
+	// This is what keeps a one-time warm-up from latching the health check.
+	assert.Equal(t, int64(260_000), peek.InvokeMaxUs,
+		"windowed max must reflect only invocations since the last collector tick")
 }

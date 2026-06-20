@@ -107,9 +107,10 @@ type ModelSpecInfo struct {
 }
 
 // ModelStats holds invocation counts and latency for a single model.
-// AvgMs is the lifetime average; MaxMs is the peak since the last metrics
-// collection tick (a recent-window peak, since the collector resets it every
-// interval); RTF is nil when there have been no invocations.
+// AvgMs is the lifetime average and MaxMs is the lifetime peak (both since
+// startup), so MaxMs is always >= AvgMs; RTF is nil when there have been no
+// invocations. MaxMs comes from the never-reset PeekSnapshot.InvokeMaxUsLifetime,
+// not the collector's reset-on-read windowed max.
 //
 // RTF is the lifetime cumulative-average real-time factor: (avgMs / 1000) / clipSec.
 // This differs from the per-model ring-buffer series at MetricKeys.RTF, which is
@@ -216,7 +217,7 @@ func buildModelStatus(info *classifier.ModelInfo, snap inferencestats.PeekSnapsh
 	if snap.InvokeCount > 0 {
 		avgMs = float64(snap.InvokeTotalUs) / float64(snap.InvokeCount) / 1000.0
 	}
-	maxMs := float64(snap.InvokeMaxUs) / 1000.0
+	maxMs := float64(snap.InvokeMaxUsLifetime) / 1000.0
 
 	var rtf *float64
 	if snap.InvokeCount > 0 && clipSec > 0 {

@@ -4,9 +4,11 @@ package api
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -351,12 +353,19 @@ func (c *Controller) buildPerModelInferenceProvider() func() []checks.ModelInfer
 // dropping a model from the inference chart.
 func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, infoMap map[string]*classifier.ModelInfo) []checks.ModelInferenceInfo {
 	result := make([]checks.ModelInferenceInfo, 0, len(snapshots))
-	for modelID, s := range snapshots {
-		var avgMS, p99MS, windowMS float64
+	// Iterate in sorted model-ID order so the returned slice (and the health
+	// results derived from it) is deterministic; map iteration order is random.
+	for _, modelID := range slices.Sorted(maps.Keys(snapshots)) {
+		s := snapshots[modelID]
+		var avgMS, maxMS, windowMS float64
 		if s.InvokeCount > 0 {
 			avgMS = float64(s.InvokeTotalUs) / float64(s.InvokeCount) / 1000.0
 		}
-		p99MS = float64(s.InvokeMaxUs) / 1000.0
+		// Use the windowed max (since the last collector tick), not the lifetime
+		// max, so a single slow warm-up inference does not permanently latch the
+		// latency health check into Warning/Critical. The model card uses the
+		// lifetime max instead (see buildModelStatus).
+		maxMS = float64(s.InvokeMaxUs) / 1000.0
 		name := modelID
 		if mi, ok := infoMap[modelID]; ok {
 			name = mi.DisplayName()
@@ -369,7 +378,7 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 			ModelID:   modelID,
 			ModelName: name,
 			AvgMS:     avgMS,
-			P99MS:     p99MS,
+			MaxMS:     maxMS,
 			WindowMS:  windowMS,
 		})
 	}

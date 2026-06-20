@@ -45,11 +45,59 @@ func TestMapInferenceSnapshotsKeepsUnmappedModel(t *testing.T) {
 	// Mapped model uses DisplayName ("Google Perch v2 (TFLite)").
 	assert.Equal(t, "Google Perch v2 (TFLite)", byID["Perch_V2"].ModelName)
 
-	// Avg and p99 are computed correctly for the mapped model.
+	// Avg and max are computed correctly for the mapped model.
 	assert.InDelta(t, 1.0, byID["Perch_V2"].AvgMS, 0.001, "avg = 4000us / 4 / 1000 = 1ms")
-	assert.InDelta(t, 1.5, byID["Perch_V2"].P99MS, 0.001, "p99 = 1500us / 1000 = 1.5ms")
+	assert.InDelta(t, 1.5, byID["Perch_V2"].MaxMS, 0.001, "max = 1500us / 1000 = 1.5ms")
 
-	// Avg and p99 computed for unmapped model too.
+	// Avg and max computed for unmapped model too.
 	assert.InDelta(t, 1.0, byID["Ghost_Model"].AvgMS, 0.001, "avg = 2000us / 2 / 1000 = 1ms")
-	assert.InDelta(t, 1.2, byID["Ghost_Model"].P99MS, 0.001, "p99 = 1200us / 1000 = 1.2ms")
+	assert.InDelta(t, 1.2, byID["Ghost_Model"].MaxMS, 0.001, "max = 1200us / 1000 = 1.2ms")
+}
+
+// TestMapInferenceSnapshotsUsesWindowedMaxNotLifetime guards the latency
+// health-check path against a regression where a one-time warm-up spike
+// permanently latches the check into Warning/Critical. mapInferenceSnapshots
+// must derive MaxMS from the windowed max (InvokeMaxUs, reset every collector
+// tick), NOT from the never-reset lifetime max (InvokeMaxUsLifetime). The model
+// card uses the lifetime max; the health check must not.
+func TestMapInferenceSnapshotsUsesWindowedMaxNotLifetime(t *testing.T) {
+	t.Parallel()
+	// A model whose all-time peak was a slow 2s warm-up, but whose recent
+	// (windowed) peak is a healthy 250ms.
+	snaps := map[string]inferencestats.PeekSnapshot{
+		"Perch_V2": {
+			InvokeCount:         10,
+			InvokeTotalUs:       2_500_000,
+			InvokeMaxUs:         250_000,   // windowed: recent steady-state peak
+			InvokeMaxUsLifetime: 2_000_000, // lifetime: one-time warm-up spike
+		},
+	}
+
+	out := mapInferenceSnapshots(snaps, map[string]*classifier.ModelInfo{})
+	require.Len(t, out, 1)
+
+	// MaxMS must reflect the windowed max (250ms), not the lifetime spike (2000ms),
+	// so the latency health check clears once the warm-up falls out of the window.
+	assert.InDelta(t, 250.0, out[0].MaxMS, 0.001,
+		"health check must use windowed max, not the lifetime warm-up spike")
+}
+
+// TestMapInferenceSnapshotsDeterministicOrder verifies the output is sorted by
+// ModelID regardless of map iteration order, so the derived health results and
+// logs are stable rather than reordering randomly between runs.
+func TestMapInferenceSnapshotsDeterministicOrder(t *testing.T) {
+	t.Parallel()
+	snaps := map[string]inferencestats.PeekSnapshot{
+		"Zebra_Model": {InvokeCount: 1, InvokeTotalUs: 1000, InvokeMaxUs: 1000},
+		"Alpha_Model": {InvokeCount: 1, InvokeTotalUs: 1000, InvokeMaxUs: 1000},
+		"Mango_Model": {InvokeCount: 1, InvokeTotalUs: 1000, InvokeMaxUs: 1000},
+	}
+
+	out := mapInferenceSnapshots(snaps, map[string]*classifier.ModelInfo{})
+	ids := make([]string, len(out))
+	for i, r := range out {
+		ids[i] = r.ModelID
+	}
+	assert.Equal(t, []string{"Alpha_Model", "Mango_Model", "Zebra_Model"}, ids,
+		"models must be returned in sorted ModelID order")
 }
