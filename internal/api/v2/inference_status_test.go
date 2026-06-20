@@ -167,6 +167,42 @@ func TestBuildModelStatus_ZeroInvocations(t *testing.T) {
 	assert.True(t, got.Memory.Approximate, "memory.approximate must always be true")
 }
 
+// TestApplyRuntimeBackend verifies that live backend/precision values override the
+// static file metadata, while empty live values preserve the static fallback that
+// buildModelStatus set. This is the core of the runtime-sourced fix: an ONNX model
+// executed on OpenVINO must report "OpenVINO" with its FP16 compute precision, but
+// a model that is not loaded (empty live values) must keep its static metadata.
+func TestApplyRuntimeBackend(t *testing.T) {
+	t.Parallel()
+
+	t.Run("live values override static file metadata", func(t *testing.T) {
+		t.Parallel()
+		// Static metadata says ONNX/FP32 (the file), live says OpenVINO/FP16 (running).
+		status := InferenceModelStatus{Backend: classifier.BackendONNX, Quantization: string(classifier.QuantizationFP32)}
+		applyRuntimeBackend(&status, classifier.BackendOpenVINO, string(classifier.QuantizationFP16))
+		assert.Equal(t, classifier.BackendOpenVINO, status.Backend, "live backend must win over static ONNX")
+		assert.Equal(t, string(classifier.QuantizationFP16), status.Quantization, "live precision must win over static FP32")
+	})
+
+	t.Run("live precision fills an empty static quantization", func(t *testing.T) {
+		t.Parallel()
+		// Perch has no static quantization; the live INT8 (from the int8_arm filename)
+		// must surface on the card.
+		status := InferenceModelStatus{Backend: classifier.BackendONNX, Quantization: ""}
+		applyRuntimeBackend(&status, classifier.BackendONNX, string(classifier.QuantizationINT8))
+		assert.Equal(t, string(classifier.QuantizationINT8), status.Quantization, "live INT8 must surface for perch_v2_int8_arm")
+	})
+
+	t.Run("empty live values preserve the static fallback", func(t *testing.T) {
+		t.Parallel()
+		// Model not loaded: live values are empty, so the static metadata is kept.
+		status := InferenceModelStatus{Backend: classifier.BackendTFLite, Quantization: string(classifier.QuantizationFP32)}
+		applyRuntimeBackend(&status, "", "")
+		assert.Equal(t, classifier.BackendTFLite, status.Backend, "empty live backend must keep the static value")
+		assert.Equal(t, string(classifier.QuantizationFP32), status.Quantization, "empty live precision must keep the static value")
+	})
+}
+
 // TestGetInferenceStatus_HTTP200 verifies that GetInferenceStatus returns HTTP
 // 200 and a valid InferenceStatusResponse with TFLite marked available. It uses
 // the shared setupTestEnvironment harness (minimalController + Echo) to exercise

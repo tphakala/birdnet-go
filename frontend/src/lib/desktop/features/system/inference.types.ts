@@ -95,9 +95,20 @@ export interface InferenceLastDetection {
 export interface InferenceModel {
   id: string;
   name: string;
+  /**
+   * Inference execution backend the model is actually running on ("TFLite",
+   * "ONNX", or "OpenVINO"), resolved from the live instance, not the model file
+   * type. An ONNX model executed through the OpenVINO runtime reports "OpenVINO".
+   * Falls back to the static file type when the model is not loaded.
+   */
   backend: string;
   detectionName?: string;
   detectionVersion?: string;
+  /**
+   * Effective runtime precision ("INT8"/"FP16"/"FP32"), which can differ from the
+   * weight precision in the file (e.g. an FP32 ONNX model executed on OpenVINO at
+   * FP16). Absent when unknown.
+   */
   quantization?: string;
   isStock: boolean;
   spec: ModelSpec;

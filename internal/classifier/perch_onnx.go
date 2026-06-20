@@ -38,6 +38,13 @@ type Perch struct {
 	// (CPU/GPU) when the OV path succeeds, otherwise deviceCPU for the ONNX
 	// Runtime CPU EP. Set once at construction; reported via Device().
 	device string
+	// backend is the live execution backend (BackendOpenVINO on the OV path, else
+	// BackendONNX), and precision is the effective runtime precision (FP16 on the
+	// OV path; the weight precision detected from the model filename on the ORT
+	// path, e.g. INT8 for perch_v2_int8_arm.onnx). Both set once at construction;
+	// reported via Backend()/Precision().
+	backend   string
+	precision string
 }
 
 // PerchConfig holds configuration for creating a Perch model instance.
@@ -88,6 +95,11 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 	// device records the compute device actually bound to (the OpenVINO device on
 	// the OV path, else the ONNX Runtime CPU EP).
 	classifier, device, ok := tryPerchOpenVINO(cfg, labels)
+	// Perch always compiles OpenVINO at the f16 default (openVINOPrecisionFor
+	// returns "" for Perch, never f32), so the effective OV runtime precision is
+	// FP16. The ORT path overrides both below.
+	backend := BackendOpenVINO
+	precision := string(QuantizationFP16)
 	if !ok {
 		// Initialize ONNX Runtime
 		if err := inference.InitONNXRuntime(cfg.ONNXRuntimePath); err != nil {
@@ -110,8 +122,12 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 				Context("label_count", len(labels)).
 				Build()
 		}
-		// ONNX Runtime currently runs Perch on the CPU execution provider.
+		// ONNX Runtime currently runs Perch on the CPU execution provider, executing
+		// the model file as-is: surface the weight precision detected from the
+		// filename (e.g. INT8 for perch_v2_int8_arm.onnx; empty when no token).
 		device = deviceCPU
+		backend = BackendONNX
+		precision = string(detectQuantization(cfg.ModelPath))
 	}
 
 	info := ModelInfo{
@@ -131,6 +147,8 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 		labels:     labels,
 		info:       info,
 		device:     device,
+		backend:    backend,
+		precision:  precision,
 	}, nil
 }
 
@@ -276,6 +294,17 @@ func (p *Perch) Labels() []string {
 // (the OpenVINO device on the OV path, else "CPU"). Set once and never mutated,
 // so no lock is needed. Implements ModelInstance.
 func (p *Perch) Device() string { return p.device }
+
+// Backend returns the live execution backend the classifier bound to at
+// construction (BackendOpenVINO on the OV path, else BackendONNX). Set once and
+// never mutated, so no lock is needed. Implements ModelInstance.
+func (p *Perch) Backend() string { return p.backend }
+
+// Precision returns the effective runtime precision (FP16 on the OpenVINO path;
+// the weight precision detected from the model filename on the ORT path, e.g.
+// INT8 for perch_v2_int8_arm.onnx, empty when no token). Set once and never
+// mutated, so no lock is needed. Implements ModelInstance.
+func (p *Perch) Precision() string { return p.precision }
 
 // Close releases resources held by the Perch model.
 func (p *Perch) Close() error {

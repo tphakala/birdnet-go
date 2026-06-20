@@ -80,6 +80,11 @@ func (bn *BirdNET) initializeONNXModel() error {
 	// EPs (CUDA, DirectML, CoreML) would set this from the bound provider; until
 	// one is wired in, the runtime path is CPU.
 	bn.device = deviceCPU
+	// ONNX Runtime executes the model file as-is, so the runtime precision is the
+	// weight precision recorded in ModelInfo.Quantization (e.g. INT8 for the
+	// arm64 int8 variant, FP32 for an fp32 ONNX model).
+	bn.backend = BackendONNX
+	bn.precision = string(bn.ModelInfo.Quantization)
 
 	log.Info("ONNX model initialized",
 		logger.String("model", modelPath),

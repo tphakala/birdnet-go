@@ -32,6 +32,8 @@ func (f *fakeModelInstance) NumSpecies() int      { return len(f.labels) }
 func (f *fakeModelInstance) Labels() []string     { return f.labels }
 func (f *fakeModelInstance) Close() error         { return nil }
 func (f *fakeModelInstance) Device() string       { return deviceCPU }
+func (f *fakeModelInstance) Backend() string      { return BackendONNX }
+func (f *fakeModelInstance) Precision() string    { return "" }
 
 func TestShouldAutoSelectV3Geomodel(t *testing.T) {
 	t.Parallel()

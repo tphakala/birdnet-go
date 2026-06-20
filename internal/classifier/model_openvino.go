@@ -179,6 +179,19 @@ func openVINOPrecisionLabel(precision string) string {
 	return precision
 }
 
+// openVINOEffectivePrecision maps an OpenVINO INFERENCE_PRECISION_HINT to the
+// effective runtime precision label shown on the inference status card, using the
+// shared Quantization vocabulary ("FP16"/"FP32"). An empty hint means the backend
+// default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the only
+// explicit override currently emitted is OVPrecisionF32 (BirdNET v2.4 on the GPU),
+// which maps to FP32.
+func openVINOEffectivePrecision(precisionHint string) string {
+	if precisionHint == inference.OVPrecisionF32 {
+		return string(QuantizationFP32)
+	}
+	return string(QuantizationFP16)
+}
+
 // logOpenVINODeclined logs, once at model init, that the OpenVINO backend was not
 // used and why. It logs at WARN when the user explicitly set backend=openvino
 // (they asked for it and did not get it) and at INFO on the auto path (a normal,
@@ -255,6 +268,11 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	// Record the concrete OpenVINO device (CPU/GPU) the classifier bound to so
 	// Device() reports the real execution provider rather than the backend string.
 	bn.device = plan.device
+	// Record the live backend and effective runtime precision so the status card
+	// reports "OpenVINO" + the real compute precision (FP16 by default, FP32 only
+	// for the BirdNET v2.4 GPU path) instead of the static ONNX file metadata.
+	bn.backend = BackendOpenVINO
+	bn.precision = openVINOEffectivePrecision(plan.precision)
 	log.Info("OpenVINO model initialized",
 		logger.String("model", modelPath),
 		logger.String("device", plan.device),
