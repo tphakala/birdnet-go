@@ -3511,6 +3511,9 @@ func (ds *Datastore) SaveNotificationHistory(ctx context.Context, history *datas
 	if ds.notification == nil {
 		return fmt.Errorf("notification repository not configured")
 	}
+	if history == nil {
+		return fmt.Errorf("notification history cannot be nil")
+	}
 
 	// Resolve scientific name to label ID using default model
 	label, err := ds.label.GetOrCreate(ctx, history.ScientificName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
