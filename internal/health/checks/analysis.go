@@ -105,7 +105,7 @@ type ModelInferenceInfo struct {
 	ModelID   string
 	ModelName string
 	AvgMS     float64
-	P99MS     float64
+	MaxMS     float64 // recent (windowed) max single-inference latency in ms
 	WindowMS  float64 // model-specific analysis window (BufferInterval in ms)
 }
 
@@ -178,19 +178,19 @@ func (c *PerModelInferenceLatencyCheck) RunMulti(_ context.Context) []health.Res
 			continue
 		}
 
-		ratio := s.P99MS / s.WindowMS
+		ratio := s.MaxMS / s.WindowMS
 		status := health.StatusHealthy
-		msg := fmt.Sprintf("%s latency OK (p99=%.1fms, window=%.1fms)", s.ModelName, s.P99MS, s.WindowMS)
+		msg := fmt.Sprintf("%s latency OK (max=%.1fms, window=%.1fms)", s.ModelName, s.MaxMS, s.WindowMS)
 
 		switch {
 		case ratio >= latencyCriticalRatio:
 			status = health.StatusCritical
-			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
-				s.ModelName, s.P99MS, latencyCriticalRatio*100, s.WindowMS)
+			msg = fmt.Sprintf("%s max latency (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
+				s.ModelName, s.MaxMS, latencyCriticalRatio*100, s.WindowMS)
 		case ratio >= latencyWarningRatio:
 			status = health.StatusWarning
-			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
-				s.ModelName, s.P99MS, latencyWarningRatio*100, s.WindowMS)
+			msg = fmt.Sprintf("%s max latency (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
+				s.ModelName, s.MaxMS, latencyWarningRatio*100, s.WindowMS)
 		}
 
 		results = append(results, health.Result{
@@ -202,7 +202,7 @@ func (c *PerModelInferenceLatencyCheck) RunMulti(_ context.Context) []health.Res
 				"model_id":   s.ModelID,
 				"model_name": s.ModelName,
 				"avg_ms":     s.AvgMS,
-				"p99_ms":     s.P99MS,
+				"max_ms":     s.MaxMS,
 				"window_ms":  s.WindowMS,
 			},
 			Timestamp: time.Now(),

@@ -141,7 +141,8 @@ func TestBuildModelStatus(t *testing.T) {
 		NumSpecies:   6522,
 		Spec:         classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 	}
-	snap := inferencestats.PeekSnapshot{InvokeCount: 1000, InvokeTotalUs: 47_200_000, InvokeMaxUs: 130_000}
+	// MaxMs is sourced from the lifetime max (the model card uses the all-time peak).
+	snap := inferencestats.PeekSnapshot{InvokeCount: 1000, InvokeTotalUs: 47_200_000, InvokeMaxUsLifetime: 130_000}
 	rss := map[string]int64{"BirdNET_V2.4": rssVal}
 
 	got := buildModelStatus(&info, snap, rss, nil, nil, nil)

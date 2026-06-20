@@ -15,8 +15,14 @@ import (
 type Counters struct {
 	InvokeCount   atomic.Int64 // total invocations since startup
 	InvokeTotalUs atomic.Int64 // cumulative invoke duration in microseconds
-	InvokeMaxUs   atomic.Int64 // max single invoke duration since last snapshot
-	InvokeErrors  atomic.Int64 // total invocation errors since startup
+	// InvokeMaxUs is the windowed peak: max single invoke duration since the last
+	// Snapshot read, reset-on-read so the collector can emit per-interval maxima.
+	InvokeMaxUs atomic.Int64
+	// InvokeMaxUsLifetime is the all-time peak single invoke duration since
+	// startup. It is never reset on read, so non-destructive status/health views
+	// (PeekAll) report a max that is always >= the lifetime average.
+	InvokeMaxUsLifetime atomic.Int64
+	InvokeErrors        atomic.Int64 // total invocation errors since startup
 }
 
 // RecordInvoke records a single model invocation duration in microseconds.
@@ -24,6 +30,7 @@ func (c *Counters) RecordInvoke(durationUs int64) {
 	c.InvokeCount.Add(1)
 	c.InvokeTotalUs.Add(durationUs)
 	updateAtomicMax(&c.InvokeMaxUs, durationUs)
+	updateAtomicMax(&c.InvokeMaxUsLifetime, durationUs)
 }
 
 // RecordError increments the cumulative error counter by one.
@@ -138,27 +145,35 @@ func (m *CounterMap) SnapshotAll() map[string]Snapshot {
 	return result
 }
 
-// PeekSnapshot is a non-destructive point-in-time view of a model's counters.
-// Unlike Snapshot, it does not reset InvokeMaxUs on read.
+// PeekSnapshot is a non-destructive point-in-time view of a model's counters,
+// used by status and health views. It carries both maxima so each consumer
+// reads the one that fits: InvokeMaxUs is the windowed peak (max since the last
+// collector tick, matching Snapshot.InvokeMaxUs) for recency-sensitive checks
+// like the latency health check, while InvokeMaxUsLifetime is the all-time peak
+// for the model card, where reporting the lifetime peak keeps the displayed max
+// latency >= the lifetime average latency. PeekAll never resets either counter.
 type PeekSnapshot struct {
-	InvokeCount   int64
-	InvokeTotalUs int64
-	InvokeMaxUs   int64
-	InvokeErrors  int64 // cumulative error count; not reset on read
+	InvokeCount         int64
+	InvokeTotalUs       int64
+	InvokeMaxUs         int64 // windowed max since last collector tick; not reset by Peek
+	InvokeMaxUsLifetime int64 // all-time max single invoke duration; never reset
+	InvokeErrors        int64 // cumulative error count; not reset on read
 }
 
-// PeekAll returns a non-destructive snapshot of all per-model counters.
-// Unlike SnapshotAll, it uses Load() instead of Swap(0) for InvokeMaxUs,
-// so the metrics collector's data is not affected.
+// PeekAll returns a non-destructive snapshot of all per-model counters. Unlike
+// SnapshotAll, it never resets any counter (it Loads instead of Swap(0)), so the
+// collector's reset-on-read windowed max is unaffected. It exposes both the
+// windowed max (InvokeMaxUs) and the never-reset lifetime max (InvokeMaxUsLifetime).
 func (m *CounterMap) PeekAll() map[string]PeekSnapshot {
 	result := make(map[string]PeekSnapshot)
 	m.models.Range(func(key, value any) bool {
 		c := value.(*Counters)
 		result[key.(string)] = PeekSnapshot{
-			InvokeCount:   c.InvokeCount.Load(),
-			InvokeTotalUs: c.InvokeTotalUs.Load(),
-			InvokeMaxUs:   c.InvokeMaxUs.Load(),
-			InvokeErrors:  c.InvokeErrors.Load(),
+			InvokeCount:         c.InvokeCount.Load(),
+			InvokeTotalUs:       c.InvokeTotalUs.Load(),
+			InvokeMaxUs:         c.InvokeMaxUs.Load(),
+			InvokeMaxUsLifetime: c.InvokeMaxUsLifetime.Load(),
+			InvokeErrors:        c.InvokeErrors.Load(),
 		}
 		return true
 	})
