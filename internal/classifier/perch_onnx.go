@@ -144,10 +144,12 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 // dynamic-rank DFT op).
 func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (inference.Classifier, string, bool) {
 	if !isPerchNoDFT(cfg.ModelPath) {
+		logOpenVINODeclined(RegistryIDPerchV2, cfg.Backend, ovReasonNotPerchNoDFT)
 		return nil, "", false
 	}
-	plan, ok := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDPerchV2, cfg.OpenVINOPath, perchLogitsOutputIndex)
+	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDPerchV2, cfg.OpenVINOPath, perchLogitsOutputIndex)
 	if !ok {
+		logOpenVINODeclined(RegistryIDPerchV2, cfg.Backend, reason)
 		return nil, "", false
 	}
 
@@ -177,6 +179,7 @@ func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (inference.Classifier, 
 
 	log.Info("Perch v2 model using OpenVINO backend",
 		logger.String("device", plan.device),
+		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("species", classifier.NumSpecies()),
 		logger.String("init_time", time.Since(start).String()))
 	return classifier, plan.device, true

@@ -3,12 +3,40 @@
 package classifier
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// newCaptureLogger swaps the process-global logger for one that writes to the
+// returned buffer at debug level, restoring the previous logger on cleanup. It is
+// used to assert which lines logOpenVINODeclined emits. Callers must NOT run in
+// parallel: it mutates global state.
+func newCaptureLogger(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	cl, err := logger.NewCentralLogger(
+		&logger.LoggingConfig{
+			Console:      &logger.ConsoleOutput{Enabled: false},
+			FileOutput:   &logger.FileOutput{Enabled: false},
+			DefaultLevel: "debug",
+		},
+		capture,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cl.Close() })
+	prev := logger.Global()
+	logger.SetGlobal(cl)
+	t.Cleanup(func() { logger.SetGlobal(prev) })
+	return &buf
+}
 
 // TestShouldTryOpenVINO_FalseWithoutTag verifies that without the openvino build
 // tag, shouldTryOpenVINO returns false regardless of config or CPU state.
@@ -45,4 +73,46 @@ func TestShouldTryOpenVINO_FalseForAutoWithoutTag(t *testing.T) {
 	bn := &BirdNET{Settings: &conf.Settings{}}
 	bn.ModelInfo = ModelInfo{ID: DefaultModelVersion, Backend: BackendONNX}
 	assert.False(t, bn.shouldTryOpenVINO())
+}
+
+// TestOpenVINOPlanReason_NotBuilt verifies that in the default (no-tag) build the
+// planner reports the not-built reason for an otherwise-eligible BirdNET v2.4
+// model, so initializeModel can log why OpenVINO was declined rather than falling
+// back silently.
+func TestOpenVINOPlanReason_NotBuilt(t *testing.T) {
+	t.Parallel()
+	bn := &BirdNET{Settings: &conf.Settings{}}
+	bn.ModelInfo = ModelInfo{ID: DefaultModelVersion, Backend: BackendONNX}
+	_, ok, reason := bn.openVINOPlan()
+	assert.False(t, ok)
+	assert.Equal(t, ovReasonNotBuilt, reason)
+}
+
+// TestOpenVINOPlanReason_WrongModel verifies the wrong-model reason short-circuits
+// before the build-tag check, so a non-v2.4 model is reported as such in any build.
+func TestOpenVINOPlanReason_WrongModel(t *testing.T) {
+	t.Parallel()
+	bn := &BirdNET{Settings: &conf.Settings{}}
+	bn.ModelInfo = ModelInfo{ID: "BirdNET_V2.3", Backend: BackendONNX}
+	_, ok, reason := bn.openVINOPlan()
+	assert.False(t, ok)
+	assert.Equal(t, ovReasonNotBirdNETv24, reason)
+}
+
+// TestLogOpenVINODeclined_StandardBuild verifies the noise-control policy on a
+// non-openvino build: the auto path (the common case) stays silent so it does not
+// add a line to every standard-build startup, while an explicit backend=openvino
+// opt-in still warns at WARN so the user learns their request could not be honored.
+// Not parallel: it swaps the process-global logger.
+func TestLogOpenVINODeclined_StandardBuild(t *testing.T) {
+	buf := newCaptureLogger(t)
+
+	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefAuto, ovReasonNotBuilt)
+	assert.Empty(t, buf.String(), "auto-path decline must be silent on a non-openvino build")
+
+	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefOpenVINO, ovReasonNotBuilt)
+	out := buf.String()
+	assert.Contains(t, out, "OpenVINO requested but not used", "explicit opt-in must warn even on a non-openvino build")
+	assert.Contains(t, out, ovReasonNotBuilt)
+	assert.Contains(t, out, "level=WARN")
 }
