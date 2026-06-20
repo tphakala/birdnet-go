@@ -83,6 +83,28 @@ func TestWikipediaProvider_FetchSuccess(t *testing.T) {
 	assert.Contains(t, g.Description, "Dialects")
 }
 
+// TestWikipediaProvider_UserAgent guards the Wikimedia UA-policy fix: the
+// provider must send a "Mozilla/5.0 (compatible; ...)" User-Agent. Bare
+// "App/1.0 (url)" agents are rejected by Wikimedia with HTTP 403 (phab T400119),
+// which silently degraded every guide lookup to "not found".
+func TestWikipediaProvider_UserAgent(t *testing.T) {
+	t.Parallel()
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(sampleWikiResponse))
+	}))
+	t.Cleanup(srv.Close)
+
+	p := newWikipediaTestProvider(t, srv)
+	_, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{Locale: "en"})
+	require.NoError(t, err)
+	assert.Equal(t, wikipediaUserAgent, gotUA)
+	assert.True(t, strings.HasPrefix(gotUA, "Mozilla/5.0 (compatible;"),
+		"Wikimedia rejects non-browser-shaped User-Agents with 403")
+}
+
 func TestWikipediaProvider_NotFound(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

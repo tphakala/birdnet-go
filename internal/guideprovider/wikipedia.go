@@ -20,6 +20,12 @@ const (
 	wikipediaLicense    = "CC BY-SA 4.0"
 	wikipediaLicenseURL = "https://creativecommons.org/licenses/by-sa/4.0/"
 
+	// wikipediaUserAgent identifies the client to the Wikimedia API. Wikimedia's
+	// UA-policy enforcement (phab T400119) rejects bare "App/1.0 (url)" agents
+	// with HTTP 403, so we use the standard polite-bot "Mozilla/5.0 (compatible;
+	// ...)" form that includes the app name and a contact URL.
+	wikipediaUserAgent = "Mozilla/5.0 (compatible; BirdNET-Go/1.0; +https://github.com/tphakala/birdnet-go)"
+
 	// wikipediaTimeout bounds a single Wikipedia HTTP request.
 	wikipediaTimeout = 15 * time.Second
 	// wikipediaRateLimit is the steady-state request rate (requests/second).
@@ -91,8 +97,7 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 			Build()
 	}
 	req.Header.Set("Accept", "application/json")
-	// Wikipedia API policy asks for a descriptive User-Agent with contact info.
-	req.Header.Set("User-Agent", "BirdNET-Go/1.0 (species-guide; +https://github.com/tphakala/birdnet-go)")
+	req.Header.Set("User-Agent", wikipediaUserAgent)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
