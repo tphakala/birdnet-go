@@ -4087,8 +4087,8 @@ ${wifi_power_save_script:+${wifi_power_save_script}
 }ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
     -p ${WEB_PORT}:8080 \\
-    -p 80:80 \\
-    -p 443:443 \\
+    -p 80:8080 \\
+    -p 443:8443 \\
     -p 8090:8090 \\
     --env TZ="${TZ}" \\
     --env BIRDNET_UID=${HOST_UID} \\

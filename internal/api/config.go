@@ -40,7 +40,7 @@ type Config struct {
 	AutoTLS     bool   // Use Let's Encrypt automatic TLS
 	TLSCertFile string // Path to TLS certificate file (manual TLS)
 	TLSKeyFile  string // Path to TLS key file (manual TLS)
-	TLSPort     string // Port for HTTPS (when using manual/self-signed TLS)
+	TLSPort     string // Port for HTTPS (when TLS is enabled)
 
 	// Security settings
 	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
@@ -103,6 +103,22 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 		cfg.AutoTLS = true
 		cfg.TLSEnabled = true
 		cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+		cfg.TLSPort = settings.Security.TLSPort
+		if cfg.TLSPort == "" {
+			cfg.TLSPort = "8443"
+		}
+		if cfg.TLSPort == cfg.Port {
+			fallback := "8443"
+			if cfg.Port == "8443" {
+				fallback = "8444"
+			}
+			GetLogger().Warn("TLS port must differ from HTTP port",
+				logger.String("http_port", cfg.Port),
+				logger.String("configured_tls_port", cfg.TLSPort),
+				logger.String("resolved_tls_port", fallback),
+			)
+			cfg.TLSPort = fallback
+		}
 	case conf.TLSModeManual, conf.TLSModeSelfSigned:
 		tm := conf.GetTLSManager()
 		certPath := tm.GetCertificatePath("webserver", conf.TLSCertTypeServerCert)

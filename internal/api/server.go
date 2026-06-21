@@ -90,7 +90,7 @@ type Server struct {
 	staticServer *StaticFileServer
 	spaHandler   *SPAHandler
 
-	// HTTP redirect server (when TLS is enabled with manual/self-signed certs)
+	// HTTP server for redirect/ACME challenges (when TLS is enabled)
 	httpRedirectServer *http.Server
 
 	// Lifecycle management
@@ -611,8 +611,6 @@ func (s *Server) startBlocking() error {
 	var err error
 	switch {
 	case s.config.AutoTLS:
-		// AutoTLS with Let's Encrypt
-		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)")
 		// Configure persistent cert cache so certificates survive restarts.
 		// Without this, Echo's AutoTLSManager has no storage backend and certs
 		// are lost on every shutdown, triggering a fresh ACME request each time
@@ -639,7 +637,32 @@ func (s *Server) startBlocking() error {
 				Build()
 		}
 		s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(host)
-		err = s.echo.StartAutoTLS(addr)
+
+		// Start HTTP server on the configured port for ACME HTTP-01 challenges.
+		// The fallback handler determines what happens to non-ACME traffic:
+		// nil = redirect to HTTPS, Echo instance = serve the app over HTTP.
+		var httpFallback http.Handler
+		if !s.config.RedirectToHTTPS {
+			httpFallback = s.echo
+		}
+		s.httpRedirectServer = &http.Server{
+			Addr:         addr,
+			Handler:      s.echo.AutoTLSManager.HTTPHandler(httpFallback),
+			ReadTimeout:  s.config.ReadTimeout,
+			WriteTimeout: s.config.WriteTimeout,
+		}
+		go s.serveHTTPRedirect()
+
+		// Start HTTPS server on TLS port (this blocks)
+		tlsAddr := s.config.TLSAddress()
+		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)",
+			logger.String("https_address", tlsAddr),
+			logger.String("http_address", addr),
+		)
+		err = s.echo.StartAutoTLS(tlsAddr)
+		if err != nil && s.httpRedirectServer != nil {
+			_ = s.httpRedirectServer.Close()
+		}
 	case s.config.TLSEnabled:
 		// Manual/Self-signed TLS: HTTPS on TLSPort, HTTP stays on configured port
 		tlsAddr := s.config.TLSAddress()

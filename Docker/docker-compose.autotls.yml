@@ -4,8 +4,8 @@ services:
     container_name: birdnet-go
     restart: unless-stopped
     ports:
-      - "80:80"      # Required for ACME HTTP-01 challenge
-      - "443:443"    # Required for HTTPS/AutoTLS
+      - "80:8080"    # ACME HTTP-01 challenges + HTTPS redirect
+      - "443:8443"   # HTTPS/AutoTLS
     environment:
       - TZ=${TZ:-UTC}
       - BIRDNET_UID=${BIRDNET_UID:-1000}
@@ -30,9 +30,9 @@ services:
     # For ALSA audio input (sound card)
     devices:
       - /dev/snd:/dev/snd
-    # Required for privileged port binding
-    cap_add:
-      - NET_BIND_SERVICE
+    # Add any capabilities needed
+    # cap_add:
+    #   - NET_BIND_SERVICE
     # Add any host mappings needed
     extra_hosts:
       - "host.docker.internal:host-gateway"
