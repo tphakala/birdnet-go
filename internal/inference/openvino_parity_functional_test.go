@@ -225,6 +225,112 @@ func TestOpenVINOPrecisionDivergence_Functional(t *testing.T) {
 	require.LessOrEqual(t, maxConfDiff, maxConfErr, "f16 confidence drift from f32 exceeds tolerance")
 }
 
+// TestOpenVINOBatEmbeddingParity_Functional runs the bat pipeline's heavy embedding
+// model through both ONNX Runtime (the f32 reference) and the OpenVINO embedding
+// extractor on identical input, and compares the embedding vectors element-wise. It
+// is the evidence harness behind enabling the bat embedding extractor on OpenVINO:
+// the bat classifier consumes the raw embedding, so the OV path must reproduce it.
+// The bat embedding model is forced to f32 because f16 overflows its embedding head;
+// this test would blow up if that forcing regressed. Run it on amd64 (iGPU and CPU)
+// and arm64 (A76 CPU) to confirm per-device parity.
+//
+// Skipped unless OV_TEST_BAT_EMB_MODEL is set, so normal CI stays green. Env:
+//
+//   - OV_TEST_BAT_EMB_MODEL:        path to the FP32 bat embedding ONNX
+//     (birdnet-v24-embeddings.onnx, [batch,144000] -> logits + embedding).
+//   - OV_TEST_BAT_EMB_AUDIO:        optional raw little-endian float32 PCM (48 kHz
+//     mono, 3 s = 144000 samples). Zeros if unset, but a real clip is more telling.
+//   - OV_TEST_BAT_EMB_OUTPUT_INDEX: embedding output port (default 1; port 0 is logits).
+//   - OV_TEST_DEVICE:               "cpu", "gpu", or "auto"/"" (defaults to "gpu").
+//   - OV_TEST_LIB / OV_TEST_ORT_LIB: optional libopenvino_c / libonnxruntime paths.
+//   - OV_TEST_BAT_EMB_MAX_ERR:      max allowed |emb_ov - emb_ort| (default 0.05: see
+//     the tolerance note in the body).
+func TestOpenVINOBatEmbeddingParity_Functional(t *testing.T) {
+	modelPath := os.Getenv("OV_TEST_BAT_EMB_MODEL")
+	if modelPath == "" {
+		t.Skip("set OV_TEST_BAT_EMB_MODEL to run the OpenVINO bat embedding parity test")
+	}
+
+	samples := readAudioOrZeros(t, os.Getenv("OV_TEST_BAT_EMB_AUDIO"))
+	device := mapDevice(os.Getenv("OV_TEST_DEVICE"))
+
+	outputIndex := batEmbeddingParityDefaultOutputIndex
+	if v := os.Getenv("OV_TEST_BAT_EMB_OUTPUT_INDEX"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		require.NoError(t, err)
+		outputIndex = parsed
+	}
+	// f32-vs-f32 cross-runtime drift is small but not bit-exact: measured ~0.002 on
+	// the amd64 CPU and ~0.005 on the Iris Xe GPU, because ORT and OpenVINO use
+	// different f32 kernels and FMA ordering. The default tolerance sits an order of
+	// magnitude above that and two orders below the f16-overflow regime (~5.0), so it
+	// catches an f16 regression (which would corrupt the embedding and flip bat
+	// detections) without flagging benign GPU f32 numerics.
+	maxErr := 0.05
+	if v := os.Getenv("OV_TEST_BAT_EMB_MAX_ERR"); v != "" {
+		parsed, err := strconv.ParseFloat(v, 64)
+		require.NoError(t, err)
+		maxErr = parsed
+	}
+
+	// Reference backend: ONNX Runtime (f32) embedding extractor. The label list is
+	// irrelevant to the embedding output, so use a single placeholder with validation
+	// skipped, mirroring how the bat pipeline loads the embedding model.
+	require.NoError(t, InitONNXRuntime(os.Getenv("OV_TEST_ORT_LIB")))
+	t.Cleanup(func() { _ = DestroyONNXRuntime() })
+	ortClassifier, err := NewONNXClassifier(modelPath, ONNXClassifierOptions{
+		Labels:              []string{"placeholder"},
+		Threads:             1,
+		SkipLabelValidation: true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(ortClassifier.Close)
+	ortExtractor, ok := ortClassifier.(EmbeddingExtractor)
+	require.True(t, ok, "ORT embedding model must implement EmbeddingExtractor (2 outputs)")
+
+	_, ortEmb, err := ortExtractor.PredictWithEmbeddings(samples)
+	require.NoError(t, err)
+	require.NotEmpty(t, ortEmb, "ORT embedding must be non-empty")
+
+	// Candidate backend: OpenVINO embedding extractor at forced f32 (the bat policy).
+	require.NoError(t, InitOpenVINO(os.Getenv("OV_TEST_LIB")))
+	t.Cleanup(func() { _ = DestroyOpenVINO() })
+	ovExtractor, err := NewOpenVINOEmbeddingExtractor(modelPath, OpenVINOEmbeddingExtractorOptions{
+		Threads:       1,
+		Device:        device,
+		OutputIndex:   outputIndex,
+		PrecisionHint: OVPrecisionF32,
+		ExpectedDim:   len(ortEmb),
+	})
+	require.NoError(t, err)
+	t.Cleanup(ovExtractor.Close)
+
+	require.Equal(t, len(ortEmb), ovExtractor.NumSpecies(),
+		"OV embedding dim must equal the ORT embedding dim")
+
+	_, ovEmb, err := ovExtractor.PredictWithEmbeddings(samples)
+	require.NoError(t, err)
+	require.Len(t, ovEmb, len(ortEmb))
+
+	var maxAbsErr float64
+	for i := range ortEmb {
+		if d := math.Abs(float64(ovEmb[i] - ortEmb[i])); d > maxAbsErr {
+			maxAbsErr = d
+		}
+	}
+	t.Logf("device=%s outputIndex=%d model=%s", device, outputIndex, modelPath)
+	t.Logf("embedding dim = %d", len(ortEmb))
+	t.Logf("max |emb_ov - emb_ort| = %.6g", maxAbsErr)
+
+	require.LessOrEqual(t, maxAbsErr, maxErr,
+		"OpenVINO f32 embedding drift from ORT exceeds tolerance (an f16 regression would blow this up)")
+}
+
+// batEmbeddingParityDefaultOutputIndex is the embedding output port of the bat
+// embedding model (port 0 is the species logits). Kept local to the test to avoid a
+// cross-package dependency on the classifier constant.
+const batEmbeddingParityDefaultOutputIndex = 1
+
 func sigmoid(x float32) float64 { return 1.0 / (1.0 + math.Exp(-float64(x))) }
 
 // mapDevice maps an OV_TEST_DEVICE value to an OpenVINO device string, defaulting

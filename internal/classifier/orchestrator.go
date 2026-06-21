@@ -1279,9 +1279,9 @@ func secondaryTripletFor(settings *conf.Settings) secondaryBackendKey {
 	}
 }
 
-// ReloadSecondaryModels rebuilds the OV-capable secondary models (currently
-// Perch) when the BirdNET inference backend or OpenVINO device preference
-// changes at runtime, so they move to the new device without a full restart.
+// ReloadSecondaryModels rebuilds the OV-capable secondary models (Perch, and the
+// bat embedding extractor) when the BirdNET inference backend or OpenVINO device
+// preference changes at runtime, so they move to the new device without a full restart.
 // It mirrors the primary reload's transactional safety: each model is built on
 // the new backend BEFORE the old instance is closed, and a build failure leaves
 // the old instance serving (one model failing does not abort the others).
@@ -1547,10 +1547,10 @@ type secondaryModelBuilder func(o *Orchestrator, settings *conf.Settings, thread
 // whose construction honors the BirdNET inference backend / OpenVINO device
 // preference to a builder returning a fresh, unregistered instance.
 // ReloadSecondaryModels rebuilds exactly these models when the backend/device
-// changes at runtime. ORT-only secondaries (e.g. Bat, which consumes only
-// ONNXRuntimePath) are intentionally absent: rebuilding them on a device change
-// would be wasted native work. Giving a new secondary OpenVINO support is a
-// one-line entry here, paired with the OV fields on its loader config.
+// changes at runtime. For Bat, only the heavy embedding extractor honors the
+// preference; the tiny bat classifier head always runs on ORT. Giving a new
+// secondary OpenVINO support is a one-line entry here, paired with the OV fields on
+// its loader config.
 var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDPerchV2: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
@@ -1560,6 +1560,15 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 			return nil, err
 		}
 		return p, nil
+	},
+	RegistryIDBat: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		// Explicit nil-on-error return avoids the typed-nil interface trap (a
+		// nil *Bat wrapped in a non-nil ModelInstance).
+		b, err := o.buildBat(settings, threads)
+		if err != nil {
+			return nil, err
+		}
+		return b, nil
 	},
 }
 

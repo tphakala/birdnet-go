@@ -102,9 +102,18 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // ~0.8, wrong top-1, confidences fall to ~0) while a loud single-species clip
 // survives by luck; f32 is bit-exact with ORT (~6e-6) and still ~4.6x faster than
 // ORT CPU. CPU f16 (incl. ARM A76) and Perch v2 f16-GPU are unaffected, so the
-// override is scoped to BirdNET-on-GPU. Do NOT widen it to f16 without re-running
-// the inference/openvino_parity_functional_test.go soundscape parity check.
+// BirdNET-v2.4 override is scoped to its GPU path. Do NOT widen it to f16 without
+// re-running the inference/openvino_parity_functional_test.go soundscape parity check.
+//
+// The bat embedding model is the exception that is forced to f32 on EVERY device:
+// its embedding head overflows at f16 on genuine f16 hardware (the A76 CPU's f16 NEON
+// and the Intel iGPU), corrupting the raw embedding the bat classifier consumes and
+// flipping detections. Unlike BirdNET v2.4 this is not GPU-only. Do NOT relax it to
+// f16 without re-running the bat embedding parity check.
 func openVINOPrecisionFor(modelID, device string) string {
+	if modelID == RegistryIDBat {
+		return inference.OVPrecisionF32
+	}
 	if device == inference.OVDeviceGPU && modelID == DefaultModelVersion {
 		return inference.OVPrecisionF32
 	}

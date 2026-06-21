@@ -213,17 +213,30 @@ func TestReloadSecondaryModels_KeepsOldOnBuildFailure(t *testing.T) {
 func TestReloadSecondaryModels_SkipsNonOVCapableSecondary(t *testing.T) {
 	setGlobalBackend(t, "openvino", "gpu", "")
 
-	// A non-OV-capable secondary (no builder registered, e.g. ORT-only Bat) must
-	// not be touched by the reload.
-	batLike := &reloadFakeModel{id: RegistryIDBat}
+	// A secondary with no registered OV builder must not be touched by the reload.
+	// (Bat used to be the example here, but it is now OV-capable, so use a synthetic
+	// ID that is genuinely absent from openvinoCapableSecondaryBuilders.)
+	const ortOnlyID = "ORTOnlySecondary"
+	ortOnly := &reloadFakeModel{id: ortOnlyID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
 	o.ModelInfo.ID = permanentRegistryID
-	o.models[RegistryIDBat] = &modelEntry{instance: batLike}
+	o.models[ortOnlyID] = &modelEntry{instance: ortOnly}
 
 	require.NoError(t, o.ReloadSecondaryModels())
 
-	assert.Same(t, ModelInstance(batLike), o.models[RegistryIDBat].instance, "non-OV secondary must be untouched")
-	assert.Equal(t, int32(0), batLike.closes.Load(), "non-OV secondary must not be closed")
+	assert.Same(t, ModelInstance(ortOnly), o.models[ortOnlyID].instance, "non-OV secondary must be untouched")
+	assert.Equal(t, int32(0), ortOnly.closes.Load(), "non-OV secondary must not be closed")
+}
+
+// TestBatRegisteredAsOVCapableSecondary pins that the bat model is wired as an
+// OpenVINO-capable secondary, so ReloadSecondaryModels rebuilds it on a backend or
+// device change (only its heavy embedding extractor honors the preference; the bat
+// head stays on ORT). The rebuild/swap/triplet mechanics are covered by the
+// synthetic-ID reload tests above.
+func TestBatRegisteredAsOVCapableSecondary(t *testing.T) {
+	t.Parallel()
+	_, ok := openvinoCapableSecondaryBuilders[RegistryIDBat]
+	assert.True(t, ok, "bat must be registered as an OpenVINO-capable secondary")
 }
 
 func TestReloadSecondaryModels_OrphanedEntrySkipsSwapAndClosesNew(t *testing.T) {

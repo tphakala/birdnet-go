@@ -26,6 +26,32 @@ func TestNewOpenVINOClassifier_UnavailableWithoutTag(t *testing.T) {
 	assert.ErrorIs(t, err, ov.ErrOpenVINOUnavailable)
 }
 
+// TestNewOpenVINOEmbeddingExtractor_UnavailableWithoutTag verifies that without the
+// openvino build tag, the embedding extractor construction fails with the sentinel so
+// the bat pipeline falls back to its ORT embedding extractor.
+func TestNewOpenVINOEmbeddingExtractor_UnavailableWithoutTag(t *testing.T) {
+	t.Parallel()
+	e, err := NewOpenVINOEmbeddingExtractor("/x.onnx", OpenVINOEmbeddingExtractorOptions{
+		OutputIndex: 1,
+		ExpectedDim: 1024,
+	})
+	assert.Nil(t, e)
+	assert.ErrorIs(t, err, ov.ErrOpenVINOUnavailable)
+}
+
+// TestNewOpenVINOEmbeddingExtractor_RejectsInvalidExpectedDim verifies the guard that
+// rejects a non-positive ExpectedDim before any native call. A missing expected
+// dimension is a caller bug, not a runtime fallback, so it returns a validation error
+// rather than the unavailable sentinel.
+func TestNewOpenVINOEmbeddingExtractor_RejectsInvalidExpectedDim(t *testing.T) {
+	t.Parallel()
+	e, err := NewOpenVINOEmbeddingExtractor("/x.onnx", OpenVINOEmbeddingExtractorOptions{OutputIndex: 1})
+	assert.Nil(t, e)
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ov.ErrOpenVINOUnavailable,
+		"a bad ExpectedDim is a validation error, not the unavailable sentinel")
+}
+
 // TestInitOpenVINO_GuardWithoutTag verifies that without the openvino build tag,
 // InitOpenVINO returns an error via the stub and does NOT mark the runtime as
 // initialized, leaving DestroyOpenVINO a safe no-op.
