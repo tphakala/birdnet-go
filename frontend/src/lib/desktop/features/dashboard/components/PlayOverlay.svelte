@@ -686,6 +686,7 @@
     z-index: 25;
     opacity: 0;
     transition: opacity 0.2s ease;
+    pointer-events: none;
   }
 
   :global(.group:hover) .controls-bar {
