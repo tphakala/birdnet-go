@@ -204,6 +204,12 @@ func validateCatalog(entries []CatalogEntry) error {
 				Build()
 		}
 		seen[entry.ID] = struct{}{}
+		if len(entry.Files) == 0 {
+			return errors.Newf("catalog entry %q declares no files", entry.ID).
+				Component("classifier.catalog_loader").
+				Category(errors.CategoryValidation).
+				Build()
+		}
 		for j := range entry.Files {
 			f := &entry.Files[j]
 			if f.RemotePath == "" || f.LocalName == "" || f.Role == "" {

@@ -153,6 +153,10 @@ func TestLoadCatalog_ValidationFailureFallsBack(t *testing.T) {
 				Files: []CatalogFile{{RemotePath: "m", LocalName: "m"}}, // role empty
 			}},
 		},
+		{
+			name:    "entry with no files",
+			entries: []CatalogEntry{{ID: "no-files"}}, // empty Files
+		},
 	}
 
 	for _, tt := range tests {

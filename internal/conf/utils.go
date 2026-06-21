@@ -182,6 +182,13 @@ func FindConfigFile() (string, error) {
 // config path. This is the directory where co-located config artifacts such as
 // the user-editable model catalog are read from and written to.
 func ResolveConfigDir() (string, error) {
+	// An explicit --config path wins even when the file does not exist yet (a
+	// fresh install whose config.yaml has not been saved): co-locate artifacts
+	// with the user-specified config rather than the default directory.
+	if ConfigPath != "" {
+		return filepath.Dir(ConfigPath), nil
+	}
+
 	if path, err := FindConfigFile(); err == nil {
 		return filepath.Dir(path), nil
 	}
