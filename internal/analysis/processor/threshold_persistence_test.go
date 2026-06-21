@@ -160,6 +160,9 @@ func (m *MockDatastore) GetSpeciesFirstDetectionInPeriod(context.Context, string
 func (m *MockDatastore) GetSpeciesDiversityData(context.Context, string, string) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
+func (m *MockDatastore) GetActivityHeatmap(context.Context, string, string, string) (datastore.ActivityHeatmapData, error) {
+	return datastore.ActivityHeatmapData{}, nil
+}
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return make([]datastore.DetectionRecord, 0), 0, nil
 }

@@ -1421,6 +1421,18 @@ export type TranslationKey =
   | 'analytics.advanced.charts.diversity.noDataHint'
   | 'analytics.advanced.charts.diversity.axisDate'
   | 'analytics.advanced.charts.diversity.axisUniqueSpecies'
+  | 'analytics.advanced.charts.heatmap.title'
+  | 'analytics.advanced.charts.heatmap.description'
+  | 'analytics.advanced.charts.heatmap.noData'
+  | 'analytics.advanced.charts.heatmap.noDataHint'
+  | 'analytics.advanced.charts.heatmap.axisDate'
+  | 'analytics.advanced.charts.heatmap.axisTime'
+  | 'analytics.advanced.charts.heatmap.tooltipTime'
+  | 'analytics.advanced.charts.heatmap.tooltipCount'
+  | 'analytics.advanced.charts.heatmap.legendLess'
+  | 'analytics.advanced.charts.heatmap.legendMore' // params: max
+  | 'analytics.advanced.charts.heatmap.ariaLabel'
+  | 'analytics.advanced.charts.heatmap.summary' // params: total, days, time, date
   | 'analytics.advanced.charts.tooltips.date'
   | 'analytics.advanced.charts.tooltips.percentage'
   | 'analytics.advanced.charts.tooltips.detections'
@@ -3925,6 +3937,13 @@ export type TranslationParams = {
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
+  'analytics.advanced.charts.heatmap.legendMore': { max: string | number };
+  'analytics.advanced.charts.heatmap.summary': {
+    total: string | number;
+    days: string | number;
+    time: string | number;
+    date: string | number;
+  };
   'settings.notFound.message': { section: string | number };
   'settings.main.sections.falsePositiveFilter.detectionCount': {
     count: string | number;

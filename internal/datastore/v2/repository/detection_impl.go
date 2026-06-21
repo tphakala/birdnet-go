@@ -1578,6 +1578,18 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, 
 	return results, err
 }
 
+// GetDetectionTimestamps returns raw detected_at epochs for [start, end), false positives
+// excluded, in no particular order. See the interface doc for why bucketing happens in Go,
+// not SQL.
+func (r *detectionRepository) GetDetectionTimestamps(ctx context.Context, start, end int64, labelID *uint) ([]int64, error) {
+	var timestamps []int64
+	// No ORDER BY: the caller buckets timestamps into a map and sorts the resulting cells
+	// itself, so ordering (potentially millions of) rows in SQL would be wasted work.
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, nil).
+		Pluck("d.detected_at", &timestamps).Error
+	return timestamps, err
+}
+
 // GetDailyAnalytics returns daily statistics.
 func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]DailyAnalyticsData, error) {
 	var results []DailyAnalyticsData

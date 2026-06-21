@@ -242,6 +242,12 @@ type DetectionRepository interface {
 	// that zone rather than the database/OS-local zone. labelID and modelID are optional filters.
 	GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]HourlyDistributionData, error)
 
+	// GetDetectionTimestamps returns the raw detected_at epochs (seconds) for the half-open
+	// range [start, end), excluding false positives, in no particular order. labelID is an
+	// optional species filter. Callers bucket the timestamps in Go (e.g. the seasonal heatmap),
+	// which keeps the slot/date math out of dialect SQL and correct across DST.
+	GetDetectionTimestamps(ctx context.Context, start, end int64, labelID *uint) ([]int64, error)
+
 	// GetDailyAnalytics returns daily statistics.
 	// tzOffsetSeconds is the configured timezone's UTC offset, applied so detections bucket by
 	// wall-clock date in that zone rather than the database/OS-local zone.

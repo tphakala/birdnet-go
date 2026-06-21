@@ -15,6 +15,8 @@ import { parseLocalDateString } from '$lib/utils/date';
 import TimeOfDaySpeciesChart from '../components/charts/d3/TimeOfDaySpeciesChart.svelte';
 import DailySpeciesTrendChart from '../components/charts/d3/DailySpeciesTrendChart.svelte';
 import SpeciesDiversityChart from '../components/charts/d3/SpeciesDiversityChart.svelte';
+import SeasonalHeatmap from '../components/charts/d3/SeasonalHeatmap.svelte';
+import type { HeatmapData } from '../components/charts/d3/utils/heatmap';
 import TrendChartOptions from '../components/TrendChartOptions.svelte';
 
 import { formatDateForAPI } from './analyticsParams';
@@ -180,9 +182,116 @@ async function fetchDiversity(
     .filter((item): item is DiversityDatum => item !== null);
 }
 
+interface HeatmapResponse {
+  dates?: unknown;
+  slotResolutionMinutes?: unknown;
+  cells?: { dateIndex?: unknown; slot?: unknown; count?: unknown };
+}
+
+const DEFAULT_SLOT_RESOLUTION_MINUTES = 15;
+const VALID_SLOT_RESOLUTIONS = [15, 30, 60];
+
+/**
+ * Coerces the three parallel cell columns in lockstep. dateIndex, slot, and count are parallel
+ * by contract, so a cell is kept only when all three values at that index are finite numbers;
+ * coercing each column independently could drop a value from one column and shift the others
+ * out of alignment, mispairing date/slot/count.
+ */
+function coerceCells(cells: { dateIndex?: unknown; slot?: unknown; count?: unknown }): {
+  dateIndex: number[];
+  slot: number[];
+  count: number[];
+} {
+  const rawDateIndex = Array.isArray(cells.dateIndex) ? cells.dateIndex : [];
+  const rawSlot = Array.isArray(cells.slot) ? cells.slot : [];
+  const rawCount = Array.isArray(cells.count) ? cells.count : [];
+  const n = Math.min(rawDateIndex.length, rawSlot.length, rawCount.length);
+
+  const dateIndex: number[] = [];
+  const slot: number[] = [];
+  const count: number[] = [];
+  /* eslint-disable security/detect-object-injection -- i is a bounded loop index over our own arrays */
+  for (let i = 0; i < n; i++) {
+    const di = rawDateIndex[i];
+    const s = rawSlot[i];
+    const c = rawCount[i];
+    if (
+      typeof di === 'number' &&
+      Number.isFinite(di) &&
+      typeof s === 'number' &&
+      Number.isFinite(s) &&
+      typeof c === 'number' &&
+      Number.isFinite(c)
+    ) {
+      dateIndex.push(di);
+      slot.push(s);
+      count.push(c);
+    }
+  }
+  /* eslint-enable security/detect-object-injection */
+  return { dateIndex, slot, count };
+}
+
+/**
+ * Seasonal density heatmap: detection counts by (date, intra-day slot). Honors an optional
+ * single-species filter (the control bar's first selected species; none means all species).
+ * Returns the server's columnar sparse payload, defensively coerced.
+ */
+async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Promise<HeatmapData> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+  });
+  // The endpoint filters by a single species; use the first selected (none = all species).
+  if (params.species.length > 0) search.append('species', params.species[0]);
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/time/heatmap?${search}`), { signal });
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Invalid heatmap response: expected an object');
+  }
+  const body = data as HeatmapResponse;
+  const cells = (body.cells ?? {}) as { dateIndex?: unknown; slot?: unknown; count?: unknown };
+
+  // Restrict the resolution to the values the server can emit so the chart's slot math
+  // (1440 / resolution) and hourly fold stay well-defined.
+  const slotResolutionMinutes =
+    typeof body.slotResolutionMinutes === 'number' &&
+    VALID_SLOT_RESOLUTIONS.includes(body.slotResolutionMinutes)
+      ? body.slotResolutionMinutes
+      : DEFAULT_SLOT_RESOLUTION_MINUTES;
+
+  return {
+    dates: Array.isArray(body.dates)
+      ? body.dates.filter((d): d is string => typeof d === 'string')
+      : [],
+    slotResolutionMinutes,
+    cells: coerceCells(cells),
+  };
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
+  {
+    id: 'seasonal-heatmap',
+    group: 'patterns',
+    titleKey: 'analytics.advanced.charts.heatmap.title',
+    descKey: 'analytics.advanced.charts.heatmap.description',
+    emptyKey: 'analytics.advanced.charts.heatmap.noData',
+    emptyHintKey: 'analytics.advanced.charts.heatmap.noDataHint',
+    component: SeasonalHeatmap,
+    fetch: fetchHeatmap,
+    // The fetch result is the columnar payload (an object), so count its non-zero cells rather
+    // than relying on ChartCard's default array-length count.
+    countDataPoints: data => (data as HeatmapData).cells.count.length,
+    size: 'full',
+    supports: { species: true, source: false },
+    minDataPoints: 20,
+    export: 'csv',
+  },
   {
     id: 'time-of-day-species',
     group: 'patterns',

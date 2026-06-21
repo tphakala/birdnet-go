@@ -1020,6 +1020,65 @@ func (_c *MockInterface_GetActiveNotificationHistory_Call) RunAndReturn(run func
 	return _c
 }
 
+// GetActivityHeatmap provides a mock function with given fields: ctx, startDate, endDate, species
+func (_m *MockInterface) GetActivityHeatmap(ctx context.Context, startDate string, endDate string, species string) (datastore.ActivityHeatmapData, error) {
+	ret := _m.Called(ctx, startDate, endDate, species)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetActivityHeatmap")
+	}
+
+	var r0 datastore.ActivityHeatmapData
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) (datastore.ActivityHeatmapData, error)); ok {
+		return rf(ctx, startDate, endDate, species)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) datastore.ActivityHeatmapData); ok {
+		r0 = rf(ctx, startDate, endDate, species)
+	} else {
+		r0 = ret.Get(0).(datastore.ActivityHeatmapData)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = rf(ctx, startDate, endDate, species)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetActivityHeatmap_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetActivityHeatmap'
+type MockInterface_GetActivityHeatmap_Call struct {
+	*mock.Call
+}
+
+// GetActivityHeatmap is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - species string
+func (_e *MockInterface_Expecter) GetActivityHeatmap(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}) *MockInterface_GetActivityHeatmap_Call {
+	return &MockInterface_GetActivityHeatmap_Call{Call: _e.mock.On("GetActivityHeatmap", ctx, startDate, endDate, species)}
+}
+
+func (_c *MockInterface_GetActivityHeatmap_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string)) *MockInterface_GetActivityHeatmap_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetActivityHeatmap_Call) Return(_a0 datastore.ActivityHeatmapData, _a1 error) *MockInterface_GetActivityHeatmap_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetActivityHeatmap_Call) RunAndReturn(run func(context.Context, string, string, string) (datastore.ActivityHeatmapData, error)) *MockInterface_GetActivityHeatmap_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetAllComments provides a mock function with no fields
 func (_m *MockInterface) GetAllComments() ([]datastore.NoteComment, error) {
 	ret := _m.Called()

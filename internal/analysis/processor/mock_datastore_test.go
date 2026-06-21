@@ -291,6 +291,9 @@ func (m *ActionMockDatastore) GetSpeciesFirstDetectionInPeriod(_ context.Context
 func (m *ActionMockDatastore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
+func (m *ActionMockDatastore) GetActivityHeatmap(_ context.Context, _, _, _ string) (datastore.ActivityHeatmapData, error) {
+	return datastore.ActivityHeatmapData{}, nil
+}
 func (m *ActionMockDatastore) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil
 }
