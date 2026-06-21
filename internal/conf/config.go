@@ -1,6 +1,8 @@
 // config.go defines the configuration types for the BirdNET-Go application.
 package conf
 
+//go:generate go run ../../cmd/gen-schema/
+
 import (
 	"crypto/rand"
 	"embed"
