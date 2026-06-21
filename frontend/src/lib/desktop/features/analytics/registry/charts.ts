@@ -17,6 +17,7 @@ import DailySpeciesTrendChart from '../components/charts/d3/DailySpeciesTrendCha
 import SpeciesDiversityChart from '../components/charts/d3/SpeciesDiversityChart.svelte';
 import SeasonalHeatmap from '../components/charts/d3/SeasonalHeatmap.svelte';
 import type { HeatmapData } from '../components/charts/d3/utils/heatmap';
+import SpeciesRidgeline from '../components/charts/d3/SpeciesRidgeline.svelte';
 import TrendChartOptions from '../components/TrendChartOptions.svelte';
 
 import { formatDateForAPI } from './analyticsParams';
@@ -272,6 +273,63 @@ async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Prom
   };
 }
 
+// Top-N species the ridgeline requests; mirrors the chart's maxSpecies cap and the server default.
+const SPECIES_RIDGELINE_LIMIT = 5;
+const SPECIES_DISTRIBUTION_BUCKETS = 24;
+
+interface SpeciesDistributionDatum {
+  scientificName: string;
+  density: number[];
+  total: number;
+}
+
+/**
+ * Who-sings-when ridgeline: the top-N species by detection volume in range, each with a normalized
+ * 24-bucket hour-of-day distribution. Server-ranked and server-normalized; this defensively coerces
+ * the array payload. Common names are resolved later (registry mapProps) from the hub's species map.
+ */
+async function fetchSpeciesDistribution(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<SpeciesDistributionDatum[]> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+    limit: String(SPECIES_RIDGELINE_LIMIT),
+  });
+
+  const response = await fetch(
+    buildAppUrl(`/api/v2/analytics/time/distribution/species?${search}`),
+    { signal }
+  );
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid species distribution response: expected an array');
+  }
+
+  return data
+    .map(raw => {
+      if (!raw || typeof raw !== 'object') return null;
+      const item = raw as { scientificName?: unknown; buckets?: unknown; total?: unknown };
+      const scientificName = typeof item.scientificName === 'string' ? item.scientificName : '';
+      if (!scientificName) return null;
+      // Coerce every bucket to a finite number; pad/truncate defensively to 24 so the chart's
+      // hour axis stays well-defined even on a malformed payload.
+      const rawBuckets = Array.isArray(item.buckets) ? item.buckets : [];
+      const density: number[] = [];
+      for (let i = 0; i < SPECIES_DISTRIBUTION_BUCKETS; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- i is a bounded loop index
+        const b = rawBuckets[i];
+        density.push(typeof b === 'number' && Number.isFinite(b) ? b : 0);
+      }
+      const total = typeof item.total === 'number' && Number.isFinite(item.total) ? item.total : 0;
+      return { scientificName, density, total };
+    })
+    .filter((d): d is SpeciesDistributionDatum => d !== null);
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
@@ -291,6 +349,32 @@ export const CHART_REGISTRY: ChartDef[] = [
     supports: { species: true, source: false },
     minDataPoints: 20,
     export: 'csv',
+  },
+  {
+    id: 'species-ridgeline',
+    group: 'patterns',
+    titleKey: 'analytics.advanced.charts.ridgeline.title',
+    descKey: 'analytics.advanced.charts.ridgeline.description',
+    emptyKey: 'analytics.advanced.charts.ridgeline.noData',
+    emptyHintKey: 'analytics.advanced.charts.ridgeline.noDataHint',
+    component: SpeciesRidgeline,
+    fetch: fetchSpeciesDistribution,
+    // The endpoint is always top-N by volume; supports.species lets the patterns tab's species
+    // auto-select run, and the chart notes that it shows the top N regardless of selection.
+    mapProps: (data, _params, ctx) => ({
+      series: (data as SpeciesDistributionDatum[]).map(d => ({
+        scientificName: d.scientificName,
+        commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+        density: d.density,
+        total: d.total,
+      })),
+      noteKey: 'analytics.advanced.charts.ridgeline.note',
+    }),
+    size: 'full',
+    supports: { species: true, source: false },
+    // A ridgeline needs at least a couple of species to read as one; one lonely ridge is not useful.
+    minDataPoints: 2,
+    maxSpecies: SPECIES_RIDGELINE_LIMIT,
   },
   {
     id: 'time-of-day-species',

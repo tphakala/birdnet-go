@@ -67,6 +67,20 @@ type ActivityHeatmapData struct {
 	CellCount             []int
 }
 
+// SpeciesHourlyDistribution is one species' normalized hour-of-day activity distribution,
+// behind the "who sings when" ridgeline (design spec section 6.2).
+//
+// Buckets holds 24 values (index = hour 0..23, station-local) that sum to 1.0 for a species
+// with any detections in range, so each species' shape is comparable regardless of its raw
+// volume. Total is the species' detection count over the range (false positives excluded),
+// used to rank species by volume and shown in the tooltip. ScientificName is the stable key;
+// the localized common name is resolved client-side (the v2 label schema stores no common name).
+type SpeciesHourlyDistribution struct {
+	ScientificName string
+	Buckets        [24]float64
+	Total          int
+}
+
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
@@ -416,6 +430,14 @@ func (ds *DataStore) GetActivityHeatmap(_ context.Context, _, _, _ string) (Acti
 		CellSlot:              []int{},
 		CellCount:             []int{},
 	}, nil
+}
+
+// GetHourlyDistributionBySpecies is a stub on the legacy store. The who-sings-when ridgeline is a
+// v2only feature; the legacy datastore is deprecated and being removed, so it returns an empty
+// (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only for the
+// real method.
+func (ds *DataStore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ int) ([]SpeciesHourlyDistribution, error) {
+	return []SpeciesHourlyDistribution{}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time

@@ -2399,6 +2399,67 @@ func (_c *MockInterface_GetHourlyDistribution_Call) RunAndReturn(run func(contex
 	return _c
 }
 
+// GetHourlyDistributionBySpecies provides a mock function with given fields: ctx, startDate, endDate, limit
+func (_m *MockInterface) GetHourlyDistributionBySpecies(ctx context.Context, startDate string, endDate string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
+	ret := _m.Called(ctx, startDate, endDate, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetHourlyDistributionBySpecies")
+	}
+
+	var r0 []datastore.SpeciesHourlyDistribution
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) ([]datastore.SpeciesHourlyDistribution, error)); ok {
+		return rf(ctx, startDate, endDate, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) []datastore.SpeciesHourlyDistribution); ok {
+		r0 = rf(ctx, startDate, endDate, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SpeciesHourlyDistribution)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = rf(ctx, startDate, endDate, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetHourlyDistributionBySpecies_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetHourlyDistributionBySpecies'
+type MockInterface_GetHourlyDistributionBySpecies_Call struct {
+	*mock.Call
+}
+
+// GetHourlyDistributionBySpecies is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - limit int
+func (_e *MockInterface_Expecter) GetHourlyDistributionBySpecies(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}) *MockInterface_GetHourlyDistributionBySpecies_Call {
+	return &MockInterface_GetHourlyDistributionBySpecies_Call{Call: _e.mock.On("GetHourlyDistributionBySpecies", ctx, startDate, endDate, limit)}
+}
+
+func (_c *MockInterface_GetHourlyDistributionBySpecies_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int)) *MockInterface_GetHourlyDistributionBySpecies_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetHourlyDistributionBySpecies_Call) Return(_a0 []datastore.SpeciesHourlyDistribution, _a1 error) *MockInterface_GetHourlyDistributionBySpecies_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetHourlyDistributionBySpecies_Call) RunAndReturn(run func(context.Context, string, string, int) ([]datastore.SpeciesHourlyDistribution, error)) *MockInterface_GetHourlyDistributionBySpecies_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetHourlyWeather provides a mock function with given fields: date
 func (_m *MockInterface) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) {
 	ret := _m.Called(date)
