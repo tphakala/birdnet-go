@@ -239,6 +239,20 @@
     isLoading = true;
     error = null;
 
+    // Clear the previous range's data up front so a slow or failing request can
+    // never leave stale metrics on screen (the loading overlays mask the blank
+    // slate). Each fetcher then only commits success; failures just log + rethrow.
+    summary = {
+      totalDetections: 0,
+      uniqueSpecies: 0,
+      avgConfidence: 0,
+      mostCommonSpecies: '',
+      mostCommonScientific: '',
+      mostCommonCount: 0,
+    };
+    recentDetections = [];
+    chartData = { species: [], timeOfDay: [], trend: null, newSpecies: [] };
+
     logger.debug('Loading overview analytics', { startDate, endDate });
 
     // Each fetcher commits only for the latest run (the sequence-token guard)
@@ -327,7 +341,6 @@
     } catch (err) {
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching species summary:', err);
-      chartData.species = [];
       throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
@@ -343,7 +356,7 @@
         // Compute timestamp once to avoid 'undefined undefined' edge case
         const computedTimestamp =
           detection.timestamp ||
-          (detection.date && detection.time ? `${detection.date} ${detection.time}` : null);
+          (detection.date && detection.time ? `${detection.date}T${detection.time}` : null);
 
         return {
           id: detection.id,
@@ -359,7 +372,6 @@
     } catch (err) {
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching recent detections:', err);
-      recentDetections = [];
       throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
@@ -389,7 +401,6 @@
     } catch (err) {
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching time of day data:', err);
-      chartData.timeOfDay = [];
       throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
@@ -418,7 +429,6 @@
     } catch (err) {
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching trend data:', err);
-      chartData.trend = { data: [] };
       throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
@@ -437,7 +447,6 @@
     } catch (err) {
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching new species data:', err);
-      chartData.newSpecies = [];
       throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
