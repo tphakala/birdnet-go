@@ -398,7 +398,8 @@
     // Analytics charts now live across Patterns/Trends/Biodiversity) and
     // preserving any existing query params (range/species/source/tab/...). Uses
     // replace so the dead URL does not linger in history.
-    if (path === uiPath('analytics', 'advanced')) {
+    const retiredAdvancedPath = uiPath('analytics', 'advanced');
+    if (path === retiredAdvancedPath || path === `${retiredAdvancedPath}/`) {
       const search = typeof window !== 'undefined' ? window.location.search : '';
       const sp = new URLSearchParams(search);
       if (!sp.has('tab')) sp.set('tab', 'patterns');

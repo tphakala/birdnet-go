@@ -239,42 +239,40 @@
     isLoading = true;
     error = null;
 
-    try {
-      logger.debug('Loading overview analytics', { startDate, endDate });
+    logger.debug('Loading overview analytics', { startDate, endDate });
 
-      // Run all API calls in parallel. Each fetcher logs and swallows its own
-      // errors and guards its own commit with the fetch-sequence token, so
-      // allSettled always fulfills and there is nothing to inspect afterwards.
-      await Promise.allSettled([
-        fetchSummaryData(seq, startDate, endDate),
-        fetchSpeciesSummary(seq, startDate, endDate),
-        fetchRecentDetections(seq),
-        fetchTimeOfDayData(seq, startDate, endDate),
-        fetchTrendData(seq, startDate, endDate),
-        fetchNewSpeciesData(seq, startDate, endDate),
-      ]);
-    } catch (err) {
-      if (seq !== analyticsFetchSeq) return;
-      logger.error('General error fetching analytics data:', err);
+    // Each fetcher commits only for the latest run (the sequence-token guard)
+    // and rethrows on failure after logging, so allSettled lets us tell whether
+    // the whole load failed. Only the most recent run owns the shared loading /
+    // error state; a superseded run bails before touching it.
+    const results = await Promise.allSettled([
+      fetchSummaryData(seq, startDate, endDate),
+      fetchSpeciesSummary(seq, startDate, endDate),
+      fetchRecentDetections(seq),
+      fetchTimeOfDayData(seq, startDate, endDate),
+      fetchTrendData(seq, startDate, endDate),
+      fetchNewSpeciesData(seq, startDate, endDate),
+    ]);
+
+    if (seq !== analyticsFetchSeq) return;
+
+    // Surface a global error only when every request failed; a partial failure
+    // is communicated by the affected chart's own empty state, so a full-page
+    // error banner over otherwise-loaded data would be misleading.
+    if (results.every(result => result.status === 'rejected')) {
       error = t('analytics.loadingError');
     }
-
-    // The D3 chart components render reactively from the derived chart inputs,
-    // so there is nothing to imperatively create here. Only the most recent run
-    // clears the loading flag; a superseded run leaves it for the active fetch.
-    if (seq === analyticsFetchSeq) {
-      isLoading = false;
-    }
+    isLoading = false;
   }
 
   // Fetch summary metrics
   async function fetchSummaryData(seq: number, startDate: string, endDate: string) {
     try {
-      const params = new URLSearchParams();
-      if (startDate) params.set('start_date', startDate);
-      if (endDate) params.set('end_date', endDate);
+      const search = new URLSearchParams();
+      if (startDate) search.set('start_date', startDate);
+      if (endDate) search.set('end_date', endDate);
 
-      const url = `/api/v2/analytics/species/summary?${params}`;
+      const url = `/api/v2/analytics/species/summary?${search}`;
       const speciesData = await api.get<SpeciesData[]>(url);
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       const speciesArray = Array.isArray(speciesData) ? speciesData : [];
@@ -311,17 +309,18 @@
     } catch (err) {
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching summary data:', err);
+      throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
 
   // Fetch species summary for chart
   async function fetchSpeciesSummary(seq: number, startDate: string, endDate: string) {
     try {
-      const params = new URLSearchParams({ limit: '10' });
-      if (startDate) params.set('start_date', startDate);
-      if (endDate) params.set('end_date', endDate);
+      const search = new URLSearchParams({ limit: '10' });
+      if (startDate) search.set('start_date', startDate);
+      if (endDate) search.set('end_date', endDate);
 
-      const url = `/api/v2/analytics/species/summary?${params}`;
+      const url = `/api/v2/analytics/species/summary?${search}`;
       const speciesData = await api.get<SpeciesData[]>(url);
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.species = Array.isArray(speciesData) ? speciesData : [];
@@ -329,6 +328,7 @@
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching species summary:', err);
       chartData.species = [];
+      throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
 
@@ -360,6 +360,7 @@
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching recent detections:', err);
       recentDetections = [];
+      throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
 
@@ -377,11 +378,11 @@
   // Fetch time of day data
   async function fetchTimeOfDayData(seq: number, startDate: string, endDate: string) {
     try {
-      const params = new URLSearchParams();
-      if (startDate) params.set('start_date', startDate);
-      if (endDate) params.set('end_date', endDate);
+      const search = new URLSearchParams();
+      if (startDate) search.set('start_date', startDate);
+      if (endDate) search.set('end_date', endDate);
 
-      const url = `/api/v2/analytics/time/distribution/hourly?${params}`;
+      const url = `/api/v2/analytics/time/distribution/hourly?${search}`;
       const timeData = await api.get<TimeOfDayData[]>(url);
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.timeOfDay = Array.isArray(timeData) ? timeData : [];
@@ -389,27 +390,28 @@
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching time of day data:', err);
       chartData.timeOfDay = [];
+      throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
 
   // Fetch trend data
   async function fetchTrendData(seq: number, startDate: string, endDate: string) {
     try {
-      const params = new URLSearchParams();
+      const search = new URLSearchParams();
 
       // The daily analytics endpoint requires a start_date parameter; the shared
-      // params always resolve one, but keep the legacy 30-day fallback for safety.
+      // range always resolves one, but keep the legacy 30-day fallback for safety.
       if (startDate) {
-        params.set('start_date', startDate);
+        search.set('start_date', startDate);
       } else {
         const defaultStart = new Date();
         defaultStart.setDate(defaultStart.getDate() - 30);
-        params.set('start_date', formatDateForAPI(defaultStart));
+        search.set('start_date', formatDateForAPI(defaultStart));
       }
 
-      if (endDate) params.set('end_date', endDate);
+      if (endDate) search.set('end_date', endDate);
 
-      const url = `/api/v2/analytics/time/daily?${params}`;
+      const url = `/api/v2/analytics/time/daily?${search}`;
       const trendData = await api.get<TrendData>(url);
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.trend = trendData ?? { data: [] };
@@ -417,17 +419,18 @@
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching trend data:', err);
       chartData.trend = { data: [] };
+      throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
 
   // Fetch new species data
   async function fetchNewSpeciesData(seq: number, startDate: string, endDate: string) {
     try {
-      const params = new URLSearchParams();
-      if (startDate) params.set('start_date', startDate);
-      if (endDate) params.set('end_date', endDate);
+      const search = new URLSearchParams();
+      if (startDate) search.set('start_date', startDate);
+      if (endDate) search.set('end_date', endDate);
 
-      const url = `/api/v2/analytics/species/detections/new?${params}`;
+      const url = `/api/v2/analytics/species/detections/new?${search}`;
       const data = await api.get<NewSpeciesData[]>(url);
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.newSpecies = Array.isArray(data) ? data : [];
@@ -435,6 +438,7 @@
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching new species data:', err);
       chartData.newSpecies = [];
+      throw err; // rethrow so fetchData can detect a total-failure load
     }
   }
 </script>
