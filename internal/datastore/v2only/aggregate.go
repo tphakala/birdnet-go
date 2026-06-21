@@ -43,6 +43,14 @@ type cellKey struct {
 	slot      int
 }
 
+// dateKey identifies a calendar day. Keying the date index by this struct (rather than a
+// formatted string) lets the per-timestamp lookup avoid a string allocation on every row.
+type dateKey struct {
+	year  int
+	month time.Month
+	day   int
+}
+
 // buildActivityHeatmap buckets raw detection timestamps (Unix epoch seconds) into a columnar,
 // sparse (date, slot) grid for the seasonal density heatmap.
 //
@@ -76,13 +84,15 @@ func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, end
 			Build()
 	}
 
-	// Enumerate every calendar date in the inclusive range and index it for O(1) lookup.
+	// Enumerate every calendar date in the inclusive range and index it for O(1) lookup. The
+	// index is keyed by a (year, month, day) struct so the per-timestamp lookup below allocates
+	// nothing; the human-readable date string is formatted just once per day here.
 	dates := make([]string, 0)
-	dateIndex := make(map[string]int)
+	dateIndex := make(map[dateKey]int)
 	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
-		key := d.Format(time.DateOnly)
-		dateIndex[key] = len(dates)
-		dates = append(dates, key)
+		y, m, day := d.Date()
+		dateIndex[dateKey{year: y, month: m, day: day}] = len(dates)
+		dates = append(dates, d.Format(time.DateOnly))
 	}
 
 	resolution := heatmapSlotResolution(len(dates))
@@ -94,7 +104,8 @@ func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, end
 	counts := make(map[cellKey]int)
 	for _, ts := range timestamps {
 		lt := time.Unix(ts, 0).In(loc)
-		idx, ok := dateIndex[lt.Format(time.DateOnly)]
+		y, m, day := lt.Date()
+		idx, ok := dateIndex[dateKey{year: y, month: m, day: day}]
 		if !ok {
 			continue // detection falls outside the requested range in loc
 		}

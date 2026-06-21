@@ -79,10 +79,13 @@
     theme: ChartTheme;
   } | null>(null);
 
+  // Cached once: constructing an Intl.DateTimeFormat per tick is costly on frequent redraws.
+  const dateTickFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+
   function formatDateTick(dateStr: string): string {
     const d = parseLocalDateString(dateStr);
     if (!d || isNaN(d.getTime())) return dateStr;
-    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(d);
+    return dateTickFormatter.format(d);
   }
 
   // Evenly spaced subset of the domain so axis labels never crowd.
@@ -94,6 +97,9 @@
 
   function drawChart(context: NonNullable<typeof chartContext>): void {
     const { chartGroup, innerWidth, innerHeight, theme } = context;
+    // Hide any active tooltip first: a redraw removes the hovered rect, so its mouseleave
+    // would never fire and the tooltip could otherwise get stuck on screen.
+    tooltip?.hide();
     chartGroup.selectAll('*').remove();
     if (innerWidth <= 0 || innerHeight <= 0) return;
 
