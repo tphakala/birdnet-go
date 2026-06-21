@@ -196,20 +196,27 @@ func MergeHourFilters(timeOfDay []string, hour *datastore.HourFilter) []int {
 	return intersection
 }
 
-// GetTimezoneOffset returns the timezone offset in seconds for the given location.
-// Uses the current time to determine the offset (handles DST).
-//
-// LIMITATION: This applies the current DST state to all data. When filtering
-// historical data that spans DST transitions, hour boundaries may be off by
-// up to 1 hour for data recorded in a different DST state than the current one.
-// For most use cases (recent data, non-DST timezones), this is acceptable.
-// For precise historical hour filtering across DST boundaries, consider using
-// database-native timezone conversion functions.
+// GetTimezoneOffset returns the timezone offset in seconds for the given location at the
+// current time (handles DST for "now"). See GetTimezoneOffsetAt for the DST limitation.
 func GetTimezoneOffset(tz *time.Location) int {
+	return GetTimezoneOffsetAt(tz, time.Now())
+}
+
+// GetTimezoneOffsetAt returns the timezone offset in seconds for the given location at the
+// instant t (handles DST for that instant). Prefer this over GetTimezoneOffset when the
+// query has a known reference time (e.g. the start of the queried day), so the offset
+// reflects the data's DST state rather than the current one.
+//
+// LIMITATION: a single offset is applied to a whole query. When bucketing or filtering data
+// that spans a DST transition, hours may be off by up to 1 hour for rows recorded in a
+// different DST state than t. For most use cases (recent data, single-day windows, non-DST
+// timezones) this is acceptable; for precise historical conversion across DST boundaries,
+// use database-native timezone conversion functions.
+func GetTimezoneOffsetAt(tz *time.Location, t time.Time) int {
 	if tz == nil {
 		tz = time.Local
 	}
-	_, offset := time.Now().In(tz).Zone()
+	_, offset := t.In(tz).Zone()
 	return offset
 }
 
@@ -491,7 +498,9 @@ func ResolveCommonNameToLabelIDs(ctx context.Context, deps *FilterLookupDeps, sp
 }
 
 // ResolveDeviceToSourceIDs converts a device name to audio source IDs.
-// Uses LIKE matching on NodeName to support partial matches.
+// Matches case-insensitively against NodeName, DisplayName, and SourceURI,
+// preferring exact matches and falling back to substring matches so that
+// selecting "Camera 1" from the UI does not also match "Camera 10".
 // Returns nil if device is empty (no filtering).
 // Returns sentinel []uint{0} if device is non-empty but no sources are found.
 func ResolveDeviceToSourceIDs(ctx context.Context, deps *FilterLookupDeps, device string) ([]uint, error) {
@@ -502,7 +511,7 @@ func ResolveDeviceToSourceIDs(ctx context.Context, deps *FilterLookupDeps, devic
 		return nil, nil
 	}
 
-	// Get all sources and filter by device name (LIKE match)
+	// Get all sources and filter by device name
 	// This is not ideal for large source counts, but source tables are typically small
 	allSources, err := deps.SourceRepo.GetAll(ctx)
 	if err != nil {
@@ -510,13 +519,29 @@ func ResolveDeviceToSourceIDs(ctx context.Context, deps *FilterLookupDeps, devic
 	}
 
 	device = strings.ToLower(device)
-	var sourceIDs []uint
+	var exactIDs, partialIDs []uint
 	for _, src := range allSources {
-		if strings.Contains(strings.ToLower(src.NodeName), device) {
-			sourceIDs = append(sourceIDs, src.ID)
+		nodeName := strings.ToLower(src.NodeName)
+		displayName := ""
+		if src.DisplayName != nil {
+			displayName = strings.ToLower(*src.DisplayName)
+		}
+		sourceURI := strings.ToLower(src.SourceURI)
+
+		switch {
+		case device == nodeName || (displayName != "" && device == displayName) || device == sourceURI:
+			exactIDs = append(exactIDs, src.ID)
+		case strings.Contains(nodeName, device) ||
+			(displayName != "" && strings.Contains(displayName, device)) ||
+			strings.Contains(sourceURI, device):
+			partialIDs = append(partialIDs, src.ID)
 		}
 	}
 
+	sourceIDs := exactIDs
+	if len(sourceIDs) == 0 {
+		sourceIDs = partialIDs
+	}
 	if len(sourceIDs) == 0 {
 		return sentinelNoMatchIDs, nil
 	}
@@ -645,6 +670,19 @@ func ConvertSearchFilters(
 		sf.CommonLabelIDs, err = ResolveCommonNameToLabelIDs(ctx, deps, filters.Species)
 		if err != nil {
 			return nil, err
+		}
+
+		// Exact scientific names the client already resolved (per-visitor dictionary)
+		// are resolved to label IDs and OR-ed into the same label-ID branch as
+		// common-name matches, so an ambiguous localized name can match multiple
+		// species. ResolveSpeciesToLabelIDs returns the no-match sentinel when none
+		// resolve, yielding zero results rather than silently dropping the filter.
+		if len(filters.SpeciesScientific) > 0 {
+			sciLabelIDs, sciErr := ResolveSpeciesToLabelIDs(ctx, deps, filters.SpeciesScientific)
+			if sciErr != nil {
+				return nil, sciErr
+			}
+			sf.CommonLabelIDs = append(sf.CommonLabelIDs, sciLabelIDs...)
 		}
 
 		// Convert device string to audio source IDs

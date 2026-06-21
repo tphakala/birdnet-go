@@ -146,6 +146,14 @@ func TestDefaultGzipSkipper(t *testing.T) {
 		setPathForContext(t, c, "/api/v2/detections")
 		assert.False(t, DefaultGzipSkipper(c))
 	})
+
+	t.Run("skips precompressed route", func(t *testing.T) {
+		t.Parallel()
+		c, _ := newTestContext(t, http.MethodGet, "/api/v2/species/dictionary/fi")
+		setPathForContext(t, c, "/api/v2/species/dictionary/:locale")
+		assert.True(t, DefaultGzipSkipper(c),
+			"the species dictionary route serves precompressed bytes and must not be re-gzipped")
+	})
 }
 
 // TestNewGzip_EndToEnd_AudioRouteNotCompressed is a regression test for
@@ -272,4 +280,46 @@ func TestNewGzip_EndToEnd_SSEStillNotCompressed(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Empty(t, rec.Header().Get(echo.HeaderContentEncoding),
 		"SSE endpoint must not be gzip-compressed")
+}
+
+// TestNewGzip_EndToEnd_PrecompressedRouteNotDoubleCompressed guards the species
+// dictionary endpoint: it serves bytes the handler already gzip-compressed and sets
+// Content-Encoding: gzip itself. Echo's gzip middleware does not check for an existing
+// Content-Encoding, so without the precompressedRoutes skip it would compress the body
+// a second time, and a browser decompressing once would get gzip bytes instead of JSON.
+// This drives the production gzip stack and asserts the body decompresses in ONE pass.
+func TestNewGzip_EndToEnd_PrecompressedRouteNotDoubleCompressed(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"Barbastella barbastellus":"mopsilepakko"}`)
+	var gzBuf bytes.Buffer
+	zw := gzip.NewWriter(&gzBuf)
+	_, err := zw.Write(payload)
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	precompressed := gzBuf.Bytes()
+
+	e := echo.New()
+	e.Use(NewGzip())
+	e.GET("/api/v2/species/dictionary/:locale", func(c echo.Context) error {
+		c.Response().Header().Set(echo.HeaderContentEncoding, "gzip")
+		return c.Blob(http.StatusOK, "application/json", precompressed)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
+	req.Header.Set(echo.HeaderAcceptEncoding, "gzip")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "gzip", rec.Header().Get(echo.HeaderContentEncoding))
+
+	// A single gzip pass: decompressing the body once must yield the JSON payload.
+	// If the middleware had re-compressed it, one pass would yield gzip bytes instead.
+	zr, err := gzip.NewReader(bytes.NewReader(rec.Body.Bytes()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = zr.Close() })
+	got, err := io.ReadAll(zr)
+	require.NoError(t, err)
+	assert.Equal(t, payload, got, "dictionary body must decompress in a single gzip pass")
 }

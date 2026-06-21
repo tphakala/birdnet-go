@@ -163,13 +163,10 @@ func (m *mockStore) SetMetrics(metrics *datastore.Metrics)                      
 func (m *mockStore) SetSunCalcMetrics(suncalcMetrics any)                         {}
 func (m *mockStore) Optimize(ctx context.Context) error                           { return nil }
 func (m *mockStore) GetAllNotes() ([]datastore.Note, error)                       { return []datastore.Note{}, nil }
-func (m *mockStore) GetTopBirdsData(date string, minConf float64, limit int) ([]datastore.Note, error) {
+func (m *mockStore) GetTopBirdsData(_ context.Context, date string, minConf float64, limit int) ([]datastore.Note, error) {
 	return []datastore.Note{}, nil
 }
-func (m *mockStore) GetHourlyOccurrences(date, name string, minConf float64) ([24]int, error) {
-	return [24]int{}, nil
-}
-func (m *mockStore) GetBatchHourlyOccurrences(date string, species []string, minConf float64) (map[string][24]int, error) {
+func (m *mockStore) GetBatchHourlyOccurrences(_ context.Context, date string, species []string, minConf float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (m *mockStore) SpeciesDetections(species, date, hour string, duration int, asc bool, limit, offset int) ([]datastore.Note, error) {
@@ -298,19 +295,19 @@ func (m *mockStore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]d
 }
 
 // BG-17 fix: Add notification history methods
-func (m *mockStore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+func (m *mockStore) GetActiveNotificationHistory(_ context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
 	return []datastore.NotificationHistory{}, nil
 }
 
-func (m *mockStore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+func (m *mockStore) GetNotificationHistory(_ context.Context, scientificName, notificationType string) (*datastore.NotificationHistory, error) {
 	return nil, datastore.ErrNotificationHistoryNotFound
 }
 
-func (m *mockStore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+func (m *mockStore) SaveNotificationHistory(_ context.Context, history *datastore.NotificationHistory) error {
 	return nil
 }
 
-func (m *mockStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+func (m *mockStore) DeleteExpiredNotificationHistory(_ context.Context, before time.Time) (int64, error) {
 	return 0, nil
 }
 

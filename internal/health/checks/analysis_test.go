@@ -2,10 +2,12 @@ package checks
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // --- ModelsLoadedCheck tests ---
@@ -98,8 +100,8 @@ func TestPerModelInferenceLatencyCheck_Healthy(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 100, P99MS: 200, WindowMS: 1500},
-			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 300, P99MS: 600, WindowMS: 2500},
+			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 100, P95MS: 200, WindowMS: 1500},
+			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 300, P95MS: 600, WindowMS: 2500},
 		}
 	})
 
@@ -114,7 +116,7 @@ func TestPerModelInferenceLatencyCheck_Warning(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 100, P99MS: 800, WindowMS: 1500},
+			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 100, P95MS: 800, WindowMS: 1500},
 		}
 	})
 
@@ -128,7 +130,7 @@ func TestPerModelInferenceLatencyCheck_Critical(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 500, P99MS: 2300, WindowMS: 2500},
+			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 500, P95MS: 2300, WindowMS: 2500},
 		}
 	})
 
@@ -142,8 +144,8 @@ func TestPerModelInferenceLatencyCheck_MixedStatus(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 50, P99MS: 100, WindowMS: 1500},
-			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 500, P99MS: 2300, WindowMS: 2500},
+			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 50, P95MS: 100, WindowMS: 1500},
+			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 500, P95MS: 2300, WindowMS: 2500},
 		}
 	})
 
@@ -179,7 +181,7 @@ func TestPerModelInferenceLatencyCheck_ZeroWindow(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "Test", ModelName: "Test Model", AvgMS: 100, P99MS: 200, WindowMS: 0},
+			{ModelID: "Test", ModelName: "Test Model", AvgMS: 100, P95MS: 200, WindowMS: 0},
 		}
 	})
 
@@ -193,11 +195,11 @@ func TestPerModelInferenceLatencyCheck_CorrectWindowPerModel(t *testing.T) {
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
 			// BirdNET v2.4: 3s clips, 50% overlap -> 1500ms window
-			// 800ms p99 / 1500ms = 53% -> Warning
-			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 400, P99MS: 800, WindowMS: 1500},
+			// 800ms p95 / 1500ms = 53% -> Warning
+			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 400, P95MS: 800, WindowMS: 1500},
 			// Perch V2: 5s clips, 50% overlap -> 2500ms window
-			// 800ms p99 / 2500ms = 32% -> Healthy
-			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 400, P99MS: 800, WindowMS: 2500},
+			// 800ms p95 / 2500ms = 32% -> Healthy
+			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 400, P95MS: 800, WindowMS: 2500},
 		}
 	})
 
@@ -249,6 +251,43 @@ func TestORTAvailabilityCheck_FoundNotInitialized(t *testing.T) {
 	assert.Contains(t, result.Message, "not yet initialized")
 }
 
+func TestOpenVINOAvailabilityCheck_NotSupported(t *testing.T) {
+	t.Parallel()
+	// Default build: OpenVINO not compiled in. The check stays silent (skipped)
+	// rather than reporting an always-"inactive" line.
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return false, false })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
+func TestOpenVINOAvailabilityCheck_Active(t *testing.T) {
+	t.Parallel()
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return true, true })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+	// "backend active" is unique to the active message; the not-in-use message also
+	// contains the bare token "active" ("ONNX Runtime active"), so asserting the
+	// full phrase catches a flag inversion that "active" alone would not.
+	assert.Contains(t, result.Message, "backend active")
+}
+
+func TestOpenVINOAvailabilityCheck_SupportedNotInUse(t *testing.T) {
+	t.Parallel()
+	// Built with the openvino tag but no classifier is running on it (the core may
+	// have loaded for device probing, but inference fell back to ORT).
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return true, false })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+	assert.Contains(t, result.Message, "not in use")
+}
+
+func TestOpenVINOAvailabilityCheck_NilProvider(t *testing.T) {
+	t.Parallel()
+	check := NewOpenVINOAvailabilityCheck(nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
 // --- Helper tests ---
 
 func TestSanitizeID(t *testing.T) {
@@ -265,4 +304,111 @@ func TestSanitizeID(t *testing.T) {
 	for _, tt := range tests {
 		assert.Equal(t, tt.expected, sanitizeID(tt.input), "sanitizeID(%q)", tt.input)
 	}
+}
+
+// --- ResultsQueueDropCheck tests ---
+
+const resultsQueueDropKey = observability.MetricPrefixResultsQueueDrops + "src1"
+
+func TestResultsQueueDropCheck_NilStore(t *testing.T) {
+	t.Parallel()
+	check := NewResultsQueueDropCheck(nil, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+	assert.Equal(t, "results_queue_drops", result.Name)
+	assert.Equal(t, health.CategoryAnalysis, result.Category)
+}
+
+func TestResultsQueueDropCheck_NoData(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	check := NewResultsQueueDropCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
+func TestResultsQueueDropCheck_HealthyWithHistory(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	buf := newTestEventBuffer(t)
+
+	now := time.Now()
+	store.RecordAt(resultsQueueDropKey, 50, now.Add(-3*time.Hour))
+	buf.Add(observability.HealthEvent{Time: now.Add(-3 * time.Hour), Source: "src1", Delta: 50, Metric: observability.MetricTypeResultsQueueDrops})
+	store.RecordAt(resultsQueueDropKey, 0, now)
+
+	check := NewResultsQueueDropCheck(store, eventGetter(buf))
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+	assert.Contains(t, result.Message, "No detections dropped in last 1h")
+	assert.Contains(t, result.Message, "50 lifetime")
+}
+
+func TestResultsQueueDropCheck_WarningOnAnyDrop(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+
+	// A single dropped detection within the window must surface as a warning:
+	// every drop is a species that was heard and never recorded.
+	store.RecordAt(resultsQueueDropKey, 1, time.Now())
+
+	check := NewResultsQueueDropCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusWarning, result.Status)
+	assert.Contains(t, result.Message, "1 detections dropped in 1h")
+}
+
+func TestResultsQueueDropCheck_Critical(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+
+	store.RecordAt(resultsQueueDropKey, 50, time.Now())
+
+	check := NewResultsQueueDropCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusCritical, result.Status)
+	assert.Contains(t, result.Message, "50", "critical message should report the drop count")
+}
+
+func TestResultsQueueDropCheck_WithWindow(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	now := time.Now()
+
+	store.RecordAt(resultsQueueDropKey, 20, now.Add(-3*time.Hour))
+	store.RecordAt(resultsQueueDropKey, 0, now)
+
+	check := NewResultsQueueDropCheck(store, nil)
+
+	// The historical spike is outside a 1h window, so the check is healthy.
+	narrowed := check.WithWindow(1 * time.Hour)
+	result := narrowed.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+
+	// Widening the window to 6h pulls the spike back into view.
+	wide := check.WithWindow(6 * time.Hour)
+	result = wide.Run(t.Context())
+	assert.Equal(t, health.StatusWarning, result.Status)
+}
+
+func TestResultsQueueDropCheck_SparklineInDetails(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	buf := newTestEventBuffer(t)
+
+	now := time.Now()
+	store.RecordAt(resultsQueueDropKey, 10, now.Add(-2*time.Hour))
+	buf.Add(observability.HealthEvent{Time: now.Add(-2 * time.Hour), Source: "src1", Delta: 10, Metric: observability.MetricTypeResultsQueueDrops})
+	store.RecordAt(resultsQueueDropKey, 5, now)
+	buf.Add(observability.HealthEvent{Time: now, Source: "src1", Delta: 5, Metric: observability.MetricTypeResultsQueueDrops})
+
+	check := NewResultsQueueDropCheck(store, eventGetter(buf))
+	result := check.Run(t.Context())
+
+	require.NotNil(t, result.Details)
+	assert.NotNil(t, result.Details["sparkline"])
+	assert.Equal(t, "1h", result.Details["window"])
+	// Recent events are filtered by the "queue_drops" metric type and must
+	// surface so the System Health page can show a trend view.
+	assert.NotNil(t, result.Details["recent_events"])
 }

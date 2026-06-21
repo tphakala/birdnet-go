@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
@@ -33,9 +34,9 @@ const (
 	NightSolarRadiationThreshold = 5.0
 	// Daytime solar radiation above this indicates clear sky.
 	DayClearSRThreshold = 600.0
-	// Daytime solar radiation range for partly cloudy (inclusive).
+	// Daytime solar radiation at or above this (up to DayClearSRThreshold)
+	// indicates partly cloudy; below it is treated as cloudy.
 	DayPartlyCloudyLowerSR = 200.0
-	DayPartlyCloudyUpperSR = 600.0
 
 	// Temperature thresholds for weather conditions
 	FreezingPointC     = 0.0  // Celsius freezing point for snow/rain determination
@@ -270,6 +271,9 @@ func buildWundergroundURL(cfg *wundergroundConfig) (string, error) {
 			errors.CategoryConfiguration, "parse_endpoint", wundergroundProviderName,
 		)
 	}
+	if err := validateEndpointScheme(u, wundergroundProviderName); err != nil {
+		return "", err
+	}
 	q := u.Query()
 	q.Set("stationId", cfg.stationID)
 	q.Set("format", "json")
@@ -280,7 +284,7 @@ func buildWundergroundURL(cfg *wundergroundConfig) (string, error) {
 	return u.String(), nil
 }
 
-func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
+func (p *WundergroundProvider) FetchWeather(ctx context.Context, settings *conf.Settings) (*WeatherData, error) {
 	cfg, err := validateWundergroundConfig(settings)
 	if err != nil {
 		return nil, err
@@ -291,11 +295,11 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		return nil, err
 	}
 
-	providerLogger := getLogger().With(logger.String("provider", wundergroundProviderName))
-	providerLogger.Info("Fetching weather data", logger.String("url", maskAPIKey(apiURL, "apiKey")))
+	providerLogger := getLogger().WithContext(ctx).With(logger.String("provider", wundergroundProviderName))
+	providerLogger.Info("Fetching weather data", logger.String("url", maskURLForLog(apiURL)))
 
 	// Execute request
-	body, err := p.executeRequest(apiURL, cfg, providerLogger)
+	body, err := p.executeRequest(ctx, apiURL, cfg, providerLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -310,14 +314,25 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	return mapWundergroundResponse(wuResp, providerLogger), nil
 }
 
-// executeRequest performs the HTTP request with context timeout
-func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundConfig, log logger.Logger) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+// executeRequest performs the HTTP request with a context timeout derived from
+// the caller's context, so both the per-request timeout and a shutdown
+// cancellation abort the in-flight call.
+//
+// Wunderground deliberately keeps its own one-shot request path rather than
+// using the shared executeWeatherRequest: it does not retry, and it maps each
+// non-OK status to a provider-specific, user-facing message via
+// parseWundergroundError (including HTTP 204 -> ErrWeatherNoData). Routing that
+// through the shared retry/handler callback would add more complexity than the
+// duplication it removes.
+func (p *WundergroundProvider) executeRequest(ctx context.Context, apiURL string, cfg *wundergroundConfig, log logger.Logger) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, RequestTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
-		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", wundergroundProviderName)
+		// Scrub before wrapping: http.NewRequest can return a *url.Error that
+		// embeds apiURL, which carries the apiKey query parameter.
+		return nil, newWeatherError(privacy.WrapError(err), errors.CategoryNetwork, "create_http_request", wundergroundProviderName)
 	}
 	req.Header.Set("User-Agent", UserAgent())
 	req.Header.Set("Accept", "application/json")
@@ -357,18 +372,23 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 	return io.ReadAll(resp.Body)
 }
 
-// handleWundergroundRequestError categorizes HTTP request errors
+// handleWundergroundRequestError categorizes HTTP request errors. The raw
+// transport error is a *url.Error that embeds the request URL, including the
+// apiKey query parameter, so it is scrubbed before wrapping to prevent an
+// upstream logger.Error in weather.go from leaking the key.
 func handleWundergroundRequestError(ctx context.Context, err error) error {
-	var category errors.ErrorCategory
-	switch ctx.Err() {
-	case context.Canceled:
-		category = errors.CategoryTimeout
-	case context.DeadlineExceeded:
-		category = errors.CategoryTimeout
-	default:
-		category = errors.CategoryNetwork
+	// Surface a parent cancellation directly (unwrapped) so fetchAndSave treats a
+	// shutdown as benign, matching the shared executeWeatherRequest. The
+	// per-request RequestTimeout deadline is a real timeout worth a backoff, so it
+	// stays a categorized weather error.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
 	}
-	return newWeatherError(err, category, "weather_api_request", wundergroundProviderName)
+	category := errors.CategoryNetwork
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		category = errors.CategoryTimeout
+	}
+	return newWeatherError(privacy.WrapError(err), category, "weather_api_request", wundergroundProviderName)
 }
 
 // parseWundergroundResponse parses and validates the JSON response
@@ -400,11 +420,21 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, log logger.Logger) *W
 
 	measurements := extractMeasurements(&obs)
 	feelsLike := calculateFeelsLike(measurements)
-	precipMMH := getPrecipitationRate(&obs)
+	// PrecipRate is the metric precipitation rate in mm/h; clamp a negative
+	// value to zero (the JSON decoder never yields NaN here).
+	precipMMH := max(0, obs.Metric.PrecipRate)
 
 	iconCode := InferWundergroundIcon(
 		measurements.temp, precipMMH, float64(obs.Humidity), obs.SolarRadiation, measurements.windGust,
 	)
+
+	// Wunderground reports a precipitation rate (mm/h); for an hourly
+	// observation this stands in for the amount. The type has no native field,
+	// so derive it from the inferred icon when precipitation is present.
+	precipType := ""
+	if precipMMH > 0 {
+		precipType = precipTypeFromIconCode(iconCode)
+	}
 
 	return &WeatherData{
 		Time: obsTime,
@@ -425,19 +455,16 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, log logger.Logger) *W
 			Deg:   obs.Winddir,
 			Gust:  measurements.windGust,
 		},
+		Precipitation: Precipitation{
+			Amount: precipMMH,
+			Type:   precipType,
+		},
 		Pressure:    int(math.Round(measurements.pressure)),
 		Humidity:    int(math.Round(obs.Humidity)),
-		Description: IconDescription[iconCode],
+		WeatherMain: weatherMainFromIconCode(iconCode),
+		Description: GetIconDescription(iconCode),
 		Icon:        string(iconCode),
 	}
-}
-
-// getPrecipitationRate extracts precipitation rate in mm/h from metric data.
-func getPrecipitationRate(obs *wundergroundObservation) float64 {
-	if obs.Metric.PrecipRate > 0 {
-		return obs.Metric.PrecipRate
-	}
-	return 0.0
 }
 
 // isInvalid checks if a float64 value is NaN (invalid for HeatIndex/WindChill logic)

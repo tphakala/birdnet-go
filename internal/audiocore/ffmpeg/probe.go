@@ -18,6 +18,9 @@ import (
 // models. Streams below this rate cannot carry ultrasonic content.
 const MinBatSampleRate = 96000
 
+// ErrNoAudioStreamsFound reports that ffprobe found no audio streams in the input.
+var ErrNoAudioStreamsFound = errors.NewStd("no audio streams found in probe output")
+
 // probeTimeout is the maximum time to wait for ffprobe stream probing.
 // This is separate from FFprobeTimeout (3s) used for local file validation;
 // live streams may need longer to connect and negotiate.
@@ -107,7 +110,7 @@ func parseProbeOutput(data []byte) (*StreamInfo, error) {
 	}
 
 	if len(output.Streams) == 0 {
-		return nil, errors.NewStd("no audio streams found in probe output")
+		return nil, ErrNoAudioStreamsFound
 	}
 
 	stream := output.Streams[0]

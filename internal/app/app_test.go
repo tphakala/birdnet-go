@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
 	"syscall"
 	"testing"
@@ -260,6 +261,12 @@ func TestApp_ShutdownContinuesOnError(t *testing.T) {
 
 func TestApp_Wait_ShutdownOnSignal(t *testing.T) {
 	t.Parallel()
+	// os.Process.Signal only supports os.Kill on Windows, so SIGINT cannot be
+	// delivered to self there. The no-signal teardown path through Wait() is
+	// covered cross-platform by TestRequestShutdownUnblocksWait.
+	if runtime.GOOS == "windows" {
+		t.Skip("cannot deliver SIGINT to self on Windows")
+	}
 	var order []string
 	var mu sync.Mutex
 

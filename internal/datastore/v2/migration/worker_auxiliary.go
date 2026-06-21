@@ -437,7 +437,7 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 	}
 
 	// Get active notification history (not expired)
-	legacyHistory, err := m.legacyStore.GetActiveNotificationHistory(time.Now())
+	legacyHistory, err := m.legacyStore.GetActiveNotificationHistory(ctx, time.Now())
 	if err != nil {
 		m.logger.Warn("failed to get legacy notification history", logger.Error(err))
 		result.Notifications.Error = err

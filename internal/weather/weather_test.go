@@ -1,9 +1,12 @@
 package weather
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/jarcoal/httpmock"
@@ -20,7 +23,7 @@ type mockProvider struct {
 	fetchFunc func(settings *conf.Settings) (*WeatherData, error)
 }
 
-func (m *mockProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
+func (m *mockProvider) FetchWeather(_ context.Context, settings *conf.Settings) (*WeatherData, error) {
 	return m.fetchFunc(settings)
 }
 
@@ -135,182 +138,51 @@ func TestAbsoluteZeroCelsiusConstant(t *testing.T) {
 	assert.InDelta(t, -273.15, absoluteZeroCelsius, 0.01)
 }
 
-// TestTimezoneConversionForWeatherStorage tests the behavior of timezone conversion
-// when storing weather data. This demonstrates the expected behavior and can reveal
-// timezone-related bugs.
-func TestTimezoneConversionForWeatherStorage(t *testing.T) {
-	// This test documents the timezone handling behavior in SaveWeatherData.
-	// The UTC time from weather providers is converted to local time for storage.
-	// This is critical for correct date-based queries.
+// TestSaveWeatherData_StoresUTCAndLocalDate drives saveWeatherData and asserts the
+// timezone contract that the old "bug demonstration" tests only documented with
+// t.Logf: the hourly record's Time is normalized to UTC, while the daily events
+// Date is the local calendar date. Using a non-UTC provider timestamp makes the
+// UTC normalization an actual conversion rather than a no-op.
+func TestSaveWeatherData_StoresUTCAndLocalDate(t *testing.T) {
+	mockDB := mocks.NewMockInterface(t)
+	settings := createTestSettings(t, "yrno")
+	service := &Service{
+		provider: NewYrNoProvider(nil),
+		db:       mockDB,
+		settings: settings,
+	}
 
-	t.Run("utc_to_local_conversion", func(t *testing.T) {
-		// Simulate weather data received at midnight UTC on Jan 13, 2026
-		utcTime := time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC)
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	// 01:30 +02:00 on Jan 13 is 23:30 UTC on Jan 12.
+	providerTime := time.Date(2026, 1, 13, 1, 30, 0, 0, helsinki)
+	wantUTC := providerTime.UTC()
+	wantLocalDate := wantUTC.In(time.Local).Format(time.DateOnly)
 
-		// In Finland (UTC+2), this should be 02:00 on Jan 13
-		// The date should still be Jan 13
-		localTime := utcTime.In(time.Local)
-
-		// This test will behave differently based on the system timezone
-		// The key assertion is that the date conversion happens correctly
-		assert.False(t, localTime.IsZero(), "Local time should not be zero")
-		assert.Equal(t, utcTime.Unix(), localTime.Unix(), "Unix timestamps should be equal")
+	data := createTestWeatherData(t, func(d *WeatherData) {
+		d.Time = providerTime
 	})
 
-	t.Run("late_night_utc_conversion", func(t *testing.T) {
-		// Weather data at 22:00 UTC on Jan 12, 2026
-		utcTime := time.Date(2026, 1, 12, 22, 0, 0, 0, time.UTC)
+	mockDB.On("SaveDailyEvents", mock.MatchedBy(func(de *datastore.DailyEvents) bool {
+		return de.Date == wantLocalDate
+	})).Run(func(args mock.Arguments) {
+		args.Get(0).(*datastore.DailyEvents).ID = 7
+	}).Return(nil).Once()
 
-		// In Finland (UTC+2), this would be 00:00 on Jan 13
-		// This is where the timezone bug can cause issues
-		localTime := utcTime.In(time.Local)
+	var savedHW *datastore.HourlyWeather
+	mockDB.On("SaveHourlyWeather", mock.Anything).Run(func(args mock.Arguments) {
+		savedHW = args.Get(0).(*datastore.HourlyWeather)
+	}).Return(nil).Once()
 
-		// Document the expected behavior
-		t.Logf("UTC time: %v", utcTime.Format(time.RFC3339))
-		t.Logf("Local time: %v", localTime.Format(time.RFC3339))
-		t.Logf("UTC date: %s", utcTime.Format(time.DateOnly))
-		t.Logf("Local date: %s", localTime.Format(time.DateOnly))
-	})
-}
+	require.NoError(t, service.saveWeatherData(data))
+	require.NotNil(t, savedHW, "HourlyWeather should have been saved")
 
-// TestWeatherDataDateFormatting tests the date formatting used for storage.
-// This is critical for the daily events feature to work correctly.
-func TestWeatherDataDateFormatting(t *testing.T) {
-	t.Run("date_format_consistency", func(t *testing.T) {
-		testTime := time.Date(2026, 1, 13, 14, 30, 0, 0, time.UTC)
-		localTime := testTime.In(time.Local)
+	// Time is persisted as the same instant in UTC.
+	assert.True(t, savedHW.Time.Equal(wantUTC), "hourly Time should equal the UTC instant")
+	assert.Equal(t, "UTC", savedHW.Time.Location().String(), "hourly Time should be stored in UTC")
+	assert.Equal(t, uint(7), savedHW.DailyEventsID)
 
-		expectedFormat := "2006-01-02"
-		formattedDate := localTime.Format(expectedFormat)
-
-		assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, formattedDate, "Date should be in YYYY-MM-DD format")
-	})
-}
-
-// TIMEZONE BUG DEMONSTRATION TESTS
-// These tests document the timezone bug that causes weather data for hours 00-01
-// in UTC+2 (Finland) to be missing from daily weather queries.
-//
-// THE BUG: SQLite's date() function converts timezone-aware timestamps to UTC
-// before extracting the date, causing local midnight (00:00+02:00) to be
-// associated with the previous UTC date (2026-01-12 instead of 2026-01-13).
-//
-// EXPECTED BEHAVIOR: Querying weather for "2026-01-13" should return all weather
-// data where the LOCAL date is 2026-01-13.
-//
-// ACTUAL BEHAVIOR: Weather data stored at 00:00+02:00 (midnight local) is not
-// returned because SQLite date() extracts 2026-01-12 from the UTC conversion.
-
-func TestTimezoneAwareWeatherQuery_BugDemonstration(t *testing.T) {
-	// This test demonstrates what the expected behavior should be.
-	// It can be used to verify a fix for the timezone bug.
-
-	t.Run("midnight_local_time_date_extraction", func(t *testing.T) {
-		// Create a time representing midnight local time on Jan 13, 2026
-		// in Finland (UTC+2)
-		loc, err := time.LoadLocation("Europe/Helsinki")
-		if err != nil {
-			t.Skip("Could not load Europe/Helsinki timezone")
-		}
-
-		// Midnight on Jan 13 in Helsinki = 22:00 on Jan 12 in UTC
-		localMidnight := time.Date(2026, 1, 13, 0, 0, 0, 0, loc)
-
-		// The expected date for this weather data should be 2026-01-13
-		expectedDate := "2026-01-13"
-		actualLocalDate := localMidnight.Format(time.DateOnly)
-
-		assert.Equal(t, expectedDate, actualLocalDate,
-			"Local midnight should be associated with local date, not UTC date")
-
-		// Document the UTC equivalent
-		utcTime := localMidnight.UTC()
-		utcDate := utcTime.Format(time.DateOnly)
-
-		t.Logf("Local time: %v (date: %s)", localMidnight.Format(time.RFC3339), actualLocalDate)
-		t.Logf("UTC time: %v (date: %s)", utcTime.Format(time.RFC3339), utcDate)
-		t.Logf("BUG: SQLite date() would use UTC date %s instead of local date %s", utcDate, actualLocalDate)
-
-		// This assertion shows the discrepancy that causes the bug
-		if utcDate != actualLocalDate {
-			t.Log("CONFIRMED: UTC date differs from local date - this causes the timezone bug")
-		}
-	})
-
-	t.Run("early_morning_hours_affected", func(t *testing.T) {
-		loc, err := time.LoadLocation("Europe/Helsinki")
-		if err != nil {
-			t.Skip("Could not load Europe/Helsinki timezone")
-		}
-
-		// Test hours 00:00 and 01:00 local time - these are affected by the bug
-		affectedHours := []int{0, 1}
-
-		for _, hour := range affectedHours {
-			localTime := time.Date(2026, 1, 13, hour, 30, 0, 0, loc)
-			utcTime := localTime.UTC()
-
-			localDate := localTime.Format(time.DateOnly)
-			utcDate := utcTime.Format(time.DateOnly)
-
-			t.Logf("Hour %02d:30 local -> UTC date: %s, Local date: %s",
-				hour, utcDate, localDate)
-
-			// For hours 00-01 in UTC+2, the UTC date will be the previous day
-			if utcDate != localDate {
-				t.Logf("  BUG AFFECTS THIS HOUR: Weather at %02d:30 local time "+
-					"will be queried by UTC date %s instead of local date %s",
-					hour, utcDate, localDate)
-			}
-		}
-	})
-
-	t.Run("hours_not_affected_by_bug", func(t *testing.T) {
-		loc, err := time.LoadLocation("Europe/Helsinki")
-		if err != nil {
-			t.Skip("Could not load Europe/Helsinki timezone")
-		}
-
-		// Hours from 02:00 onwards should not be affected in UTC+2
-		unaffectedHours := []int{2, 3, 12, 18, 23}
-
-		for _, hour := range unaffectedHours {
-			localTime := time.Date(2026, 1, 13, hour, 30, 0, 0, loc)
-			utcTime := localTime.UTC()
-
-			localDate := localTime.Format(time.DateOnly)
-			utcDate := utcTime.Format(time.DateOnly)
-
-			if hour >= 2 { // In UTC+2, hours 02:00+ should have same date
-				assert.Equal(t, localDate, utcDate,
-					"Hour %02d:30 should have same date in UTC and local", hour)
-			}
-		}
-	})
-}
-
-// TestSQLiteDateFunctionBehavior demonstrates the SQLite date() function behavior
-// that causes the timezone bug.
-func TestSQLiteDateFunctionBehavior(t *testing.T) {
-	// This test documents what SQLite's date() function does with timezone info.
-	// SQLite: date('2026-01-13 00:00:00+02:00') returns '2026-01-12'
-	// because it converts to UTC before extracting the date.
-
-	t.Run("documented_sqlite_behavior", func(t *testing.T) {
-		// Input: timestamp with +02:00 timezone
-		input := "2026-01-13 00:00:00+02:00"
-
-		// What SQLite date() returns (converts to UTC first)
-		expectedSQLiteResult := "2026-01-12" // UTC date, not local date
-
-		// What we actually want for local queries
-		expectedLocalResult := "2026-01-13"
-
-		t.Logf("Input timestamp: %s", input)
-		t.Logf("SQLite date() returns: %s (UTC date)", expectedSQLiteResult)
-		t.Logf("Expected for local queries: %s (local date)", expectedLocalResult)
-		t.Log("This mismatch causes weather data to be missing for hours 00-01 in positive UTC offsets")
-	})
+	mockDB.AssertExpectations(t)
 }
 
 // TestWeatherDataCreation tests the creation of WeatherData structures.
@@ -363,7 +235,7 @@ func TestSettingsCreation(t *testing.T) {
 // DATABASE INTEGRATION TESTS WITH MOCK DATASTORE
 // =============================================================================
 
-// TestService_SaveWeatherData tests the SaveWeatherData method with mock datastore.
+// TestService_SaveWeatherData tests the saveWeatherData method with mock datastore.
 func TestService_SaveWeatherData(t *testing.T) {
 	t.Run("success_saves_daily_and_hourly", func(t *testing.T) {
 		mockDB := mocks.NewMockInterface(t)
@@ -371,7 +243,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		// Create service with mock DB
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -398,7 +270,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 				hw.WindSpeed == testData.Wind.Speed
 		})).Return(nil).Once()
 
-		err := service.SaveWeatherData(testData)
+		err := service.saveWeatherData(testData)
 
 		require.NoError(t, err)
 		mockDB.AssertExpectations(t)
@@ -409,7 +281,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -439,7 +311,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 			capturedHW = args.Get(0).(*datastore.HourlyWeather)
 		}).Return(nil).Once()
 
-		err := service.SaveWeatherData(testData)
+		err := service.saveWeatherData(testData)
 
 		require.NoError(t, err)
 		require.NotNil(t, capturedHW, "HourlyWeather should have been saved")
@@ -453,7 +325,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -467,7 +339,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		// First SaveDailyEvents fails (e.g., SQLITE_BUSY)
 		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
 
-		// GetDailyEvents also fails — no existing row
+		// GetDailyEvents also fails: no existing row
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
 		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.New("no rows")).Once()
 
@@ -483,7 +355,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 			capturedHW = args.Get(0).(*datastore.HourlyWeather)
 		}).Return(nil).Once()
 
-		err := service.SaveWeatherData(testData)
+		err := service.saveWeatherData(testData)
 
 		require.NoError(t, err)
 		require.NotNil(t, capturedHW, "HourlyWeather should have been saved")
@@ -497,7 +369,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -511,14 +383,14 @@ func TestService_SaveWeatherData(t *testing.T) {
 		// First SaveDailyEvents fails
 		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
 
-		// GetDailyEvents also fails — no existing row
+		// GetDailyEvents also fails: no existing row
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
 		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.New("no rows")).Once()
 
 		// Retry SaveDailyEvents also fails
 		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
 
-		err := service.SaveWeatherData(testData)
+		err := service.saveWeatherData(testData)
 
 		// Graceful skip: no error returned, next poll will retry
 		require.NoError(t, err)
@@ -532,7 +404,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -562,7 +434,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 			capturedHW = args.Get(0).(*datastore.HourlyWeather)
 		}).Return(nil).Once()
 
-		err := service.SaveWeatherData(testData)
+		err := service.saveWeatherData(testData)
 
 		require.NoError(t, err)
 		require.NotNil(t, capturedHW, "HourlyWeather should have been saved")
@@ -576,7 +448,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -593,7 +465,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		// SaveHourlyWeather fails
 		mockDB.On("SaveHourlyWeather", mock.Anything).Return(errors.New("disk full")).Once()
 
-		err := service.SaveWeatherData(testData)
+		err := service.saveWeatherData(testData)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "disk full")
@@ -605,7 +477,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -627,7 +499,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 			capturedHW = args.Get(0).(*datastore.HourlyWeather)
 		}).Return(nil).Once()
 
-		err := service.SaveWeatherData(testData)
+		err := service.saveWeatherData(testData)
 
 		require.NoError(t, err)
 		require.NotNil(t, capturedHW, "HourlyWeather should have been captured")
@@ -639,7 +511,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -666,7 +538,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 			capturedHW = args.Get(0).(*datastore.HourlyWeather)
 		}).Return(nil).Once()
 
-		err := service.SaveWeatherData(testData)
+		err := service.saveWeatherData(testData)
 
 		require.NoError(t, err)
 		require.NotNil(t, capturedDE)
@@ -696,7 +568,7 @@ func TestService_Poll(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -709,7 +581,7 @@ func TestService_Poll(t *testing.T) {
 		}).Return(nil).Once()
 		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
 
-		err := service.Poll()
+		err := service.Poll(t.Context())
 
 		require.NoError(t, err)
 		mockDB.AssertExpectations(t)
@@ -724,13 +596,13 @@ func TestService_Poll(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
 		}
 
-		err := service.Poll()
+		err := service.Poll(t.Context())
 
 		require.Error(t, err)
 		// DB should not be called when fetch fails
@@ -754,7 +626,7 @@ func TestService_Poll(t *testing.T) {
 			})
 
 		settings := createTestSettings(t, "yrno")
-		provider := NewYrNoProvider()
+		provider := NewYrNoProvider(nil)
 		service := &Service{
 			provider: provider,
 			db:       mockDB,
@@ -769,11 +641,11 @@ func TestService_Poll(t *testing.T) {
 		}).Return(nil).Once()
 		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
 
-		err := service.Poll()
+		err := service.Poll(t.Context())
 		require.NoError(t, err)
 
 		// Second poll should return "not modified" - no DB calls
-		err = service.Poll()
+		err = service.Poll(t.Context())
 		require.NoError(t, err, "Not modified should return nil, not error")
 
 		// Only the first poll should have called DB
@@ -795,7 +667,7 @@ func TestService_StartPolling(t *testing.T) {
 			s.Realtime.Weather.PollInterval = 60
 		})
 		service := &Service{
-			provider:     NewYrNoProvider(),
+			provider:     NewYrNoProvider(nil),
 			db:           mockDB,
 			settings:     settings,
 			metrics:      nil,
@@ -848,153 +720,92 @@ func TestService_StartPolling(t *testing.T) {
 // STARTUP DELAY TESTS
 // =============================================================================
 
-// TestService_StartPolling_StartupDelay tests the startup delay behavior.
+// TestService_StartPolling_StartupDelay tests the startup delay behavior using
+// testing/synctest so the delay advances deterministically instead of relying on
+// real wall-clock sleeps with timing-sensitive bounds (issue #991 flaky-test guard).
 func TestService_StartPolling_StartupDelay(t *testing.T) {
-	t.Run("delay_postpones_initial_fetch", func(t *testing.T) {
-		setupHTTPMock(t)
-		mockDB := mocks.NewMockInterface(t)
-
-		registerYrNoResponder(t, http.StatusOK, yrNoSuccessResponse(), nil)
-
+	// newDelayService builds a service whose provider returns the 204 "no data"
+	// sentinel (so no DB is needed) and records, in virtual time, how long after
+	// start the first fetch ran. It closes stopChan after the first fetch so
+	// StartPolling returns without spinning through the ticker loop.
+	newDelayService := func(startupDelay time.Duration, start time.Time, fetchElapsed *time.Duration, fetched *bool, stopChan chan struct{}) *Service {
+		t.Helper()
 		settings := createTestSettings(t, "yrno", func(s *conf.Settings) {
 			s.Realtime.Weather.PollInterval = 60
 		})
-
-		delay := 200 * time.Millisecond
-		service := &Service{
-			provider:     NewYrNoProvider(),
-			db:           mockDB,
-			settings:     settings,
-			metrics:      nil,
-			startupDelay: delay,
+		var stopOnce sync.Once
+		provider := &mockProvider{
+			fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+				*fetched = true
+				*fetchElapsed = time.Since(start)
+				stopOnce.Do(func() { close(stopChan) })
+				return nil, ErrWeatherNoData
+			},
 		}
-
-		fetchCalled := make(chan struct{})
-		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
-			de := args.Get(0).(*datastore.DailyEvents)
-			de.ID = 1
-			close(fetchCalled)
-		}).Return(nil).Once()
-		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
-
-		stopChan := make(chan struct{})
-		done := make(chan struct{})
-		startTime := time.Now()
-
-		go func() {
-			service.StartPolling(stopChan)
-			close(done)
-		}()
-
-		// Wait for initial fetch to complete
-		select {
-		case <-fetchCalled:
-			elapsed := time.Since(startTime)
-			assert.GreaterOrEqual(t, elapsed, delay,
-				"Initial fetch should be delayed by at least the startup delay")
-		case <-time.After(5 * time.Second):
-			t.Fatal("Initial fetch did not complete within timeout")
-		}
-
-		close(stopChan)
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-			t.Fatal("StartPolling did not stop within timeout")
-		}
-
-		mockDB.AssertExpectations(t)
-	})
-
-	t.Run("zero_delay_fetches_immediately", func(t *testing.T) {
-		setupHTTPMock(t)
-		mockDB := mocks.NewMockInterface(t)
-
-		registerYrNoResponder(t, http.StatusOK, yrNoSuccessResponse(), nil)
-
-		settings := createTestSettings(t, "yrno", func(s *conf.Settings) {
-			s.Realtime.Weather.PollInterval = 60
-		})
-
-		service := &Service{
-			provider:     NewYrNoProvider(),
-			db:           mockDB,
-			settings:     settings,
-			metrics:      nil,
-			startupDelay: 0,
-		}
-
-		fetchCalled := make(chan struct{})
-		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
-			de := args.Get(0).(*datastore.DailyEvents)
-			de.ID = 1
-			close(fetchCalled)
-		}).Return(nil).Once()
-		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
-
-		stopChan := make(chan struct{})
-		done := make(chan struct{})
-		startTime := time.Now()
-
-		go func() {
-			service.StartPolling(stopChan)
-			close(done)
-		}()
-
-		// Fetch should happen almost immediately
-		select {
-		case <-fetchCalled:
-			elapsed := time.Since(startTime)
-			assert.Less(t, elapsed, 500*time.Millisecond,
-				"With zero delay, fetch should happen almost immediately")
-		case <-time.After(2 * time.Second):
-			t.Fatal("Initial fetch did not complete within timeout")
-		}
-
-		close(stopChan)
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-			t.Fatal("StartPolling did not stop within timeout")
-		}
-
-		mockDB.AssertExpectations(t)
-	})
-
-	t.Run("delay_interruptible_via_stop_chan", func(t *testing.T) {
-		settings := createTestSettings(t, "yrno", func(s *conf.Settings) {
-			s.Realtime.Weather.PollInterval = 60
-		})
-
-		// Use a long delay that we will interrupt
-		service := &Service{
-			provider:     NewYrNoProvider(),
+		return &Service{
+			provider:     provider,
+			providerName: yrNoProviderName,
 			db:           nil,
 			settings:     settings,
 			metrics:      nil,
-			startupDelay: 10 * time.Second,
+			startupDelay: startupDelay,
 		}
+	}
 
-		stopChan := make(chan struct{})
-		done := make(chan struct{})
+	t.Run("delay_postpones_initial_fetch", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			const delay = 30 * time.Second
+			stopChan := make(chan struct{})
+			var fetchElapsed time.Duration
+			var fetched bool
+			service := newDelayService(delay, time.Now(), &fetchElapsed, &fetched, stopChan)
 
-		go func() {
 			service.StartPolling(stopChan)
-			close(done)
-		}()
 
-		// Close stop channel after a short time to interrupt the delay
-		time.AfterFunc(50*time.Millisecond, func() {
-			close(stopChan)
+			assert.True(t, fetched, "the initial fetch should run after the startup delay")
+			assert.Equal(t, delay, fetchElapsed,
+				"initial fetch must be postponed by exactly the startup delay")
 		})
+	})
 
-		// StartPolling should return quickly after stopChan is closed
-		select {
-		case <-done:
-			// Success - StartPolling was interrupted during delay
-		case <-time.After(2 * time.Second):
-			t.Fatal("StartPolling was not interrupted by stopChan during startup delay")
-		}
+	t.Run("zero_delay_fetches_immediately", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			stopChan := make(chan struct{})
+			var fetchElapsed time.Duration
+			var fetched bool
+			service := newDelayService(0, time.Now(), &fetchElapsed, &fetched, stopChan)
+
+			service.StartPolling(stopChan)
+
+			assert.True(t, fetched, "the initial fetch should run immediately")
+			assert.Zero(t, fetchElapsed,
+				"with zero startup delay the initial fetch must run at t=0")
+		})
+	})
+
+	t.Run("delay_interruptible_via_stop_chan", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			const delay = 10 * time.Minute
+			stopChan := make(chan struct{})
+			var fetchElapsed time.Duration
+			var fetched bool
+			service := newDelayService(delay, time.Now(), &fetchElapsed, &fetched, stopChan)
+
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				service.StartPolling(stopChan)
+			}()
+
+			// Advance virtual time partway into the startup delay, then interrupt:
+			// StartPolling must return without ever running a fetch.
+			time.Sleep(50 * time.Millisecond)
+			close(stopChan)
+			<-done
+
+			assert.False(t, fetched,
+				"fetch must not run if the service is stopped during the startup delay")
+		})
 	})
 }
 
@@ -1064,8 +875,10 @@ func TestBackoffState_AuthFailureThreshold(t *testing.T) {
 	assert.True(t, b.shouldSkip(), "After auth disabled, shouldSkip should be true")
 }
 
-// TestBackoffState_AuthDisabledNotResetByReset verifies that authDisabled persists
-// through reset() calls — a restart or config change is required.
+// TestBackoffState_AuthDisabledNotResetByReset verifies that authDisabled
+// persists through reset() (so a 304/204/success path cannot silently
+// re-enable a locked-out provider) and is cleared only by clearAuthDisabled(),
+// which the service calls when the auth-relevant config changes.
 func TestBackoffState_AuthDisabledNotResetByReset(t *testing.T) {
 	b := &backoffState{}
 
@@ -1076,7 +889,13 @@ func TestBackoffState_AuthDisabledNotResetByReset(t *testing.T) {
 
 	b.reset()
 	assert.True(t, b.isAuthDisabled(),
-		"authDisabled should persist through reset — requires service restart")
+		"authDisabled should persist through reset (cleared only on config change)")
+
+	b.clearAuthDisabled()
+	assert.False(t, b.isAuthDisabled(),
+		"clearAuthDisabled should re-enable fetching")
+	assert.Equal(t, 0, b.consecutiveAuthFails,
+		"clearAuthDisabled should reset the auth-failure counter")
 }
 
 // TestBackoffState_ShouldSkipDuringBackoff verifies skip behavior during backoff window.
@@ -1113,7 +932,7 @@ func TestFetchAndSave_AuthFailure(t *testing.T) {
 
 	// First few calls should attempt fetches and return auth error
 	for range maxConsecutiveAuthFailures {
-		err := service.fetchAndSave()
+		err := service.fetchAndSave(t.Context())
 		require.ErrorIs(t, err, ErrWeatherAuthFailed)
 	}
 	assert.Equal(t, maxConsecutiveAuthFailures, callCount,
@@ -1121,9 +940,39 @@ func TestFetchAndSave_AuthFailure(t *testing.T) {
 
 	// After threshold, fetchAndSave should skip without calling provider
 	prevCount := callCount
-	err := service.fetchAndSave()
+	err := service.fetchAndSave(t.Context())
 	require.NoError(t, err, "Should return nil when skipping due to auth disabled")
 	assert.Equal(t, prevCount, callCount, "Provider should NOT be called after auth disabled")
+}
+
+// TestFetchAndSave_CancelledContextPropagatesWithoutBackoff verifies that a
+// provider returning context.Canceled (a service shutdown or an aborted
+// on-demand request) propagates the cancellation to the caller so an on-demand
+// Poll(ctx) observes it, while still skipping the failure backoff. The
+// StartPolling loop ignores fetchAndSave's return value, so a background
+// shutdown stays benign; only the on-demand path sees the error.
+func TestFetchAndSave_CancelledContextPropagatesWithoutBackoff(t *testing.T) {
+	settings := createTestSettings(t, "yrno")
+
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			return nil, context.Canceled
+		},
+	}
+	service := &Service{
+		provider: provider,
+		db:       nil,
+		settings: settings,
+		metrics:  nil,
+	}
+
+	err := service.fetchAndSave(t.Context())
+	require.ErrorIs(t, err, context.Canceled, "cancellation must propagate so on-demand Poll(ctx) callers observe it")
+
+	authDisabled, failures, inBackoff := service.backoff.snapshot()
+	assert.False(t, authDisabled, "cancellation must not disable auth")
+	assert.Zero(t, failures, "cancellation must not increment the failure counter")
+	assert.False(t, inBackoff, "cancellation must not start a backoff window")
 }
 
 // TestFetchAndSave_NoData tests that HTTP 204 is handled gracefully without backoff.
@@ -1146,12 +995,12 @@ func TestFetchAndSave_NoData(t *testing.T) {
 	}
 
 	// Should return nil and not trigger backoff
-	err := service.fetchAndSave()
+	err := service.fetchAndSave(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount)
 
 	// Next call should still attempt (no backoff)
-	err = service.fetchAndSave()
+	err = service.fetchAndSave(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount, "No backoff should be applied for no-data responses")
 }
@@ -1176,12 +1025,12 @@ func TestFetchAndSave_GeneralFailureBackoff(t *testing.T) {
 	}
 
 	// First call should fail and apply backoff
-	err := service.fetchAndSave()
+	err := service.fetchAndSave(t.Context())
 	require.Error(t, err)
 	assert.Equal(t, 1, callCount)
 
 	// Second call should be skipped due to backoff (nextAllowedFetchTime is 1 minute away)
-	err = service.fetchAndSave()
+	err = service.fetchAndSave(t.Context())
 	require.NoError(t, err, "Should return nil when skipping due to backoff")
 	assert.Equal(t, 1, callCount, "Provider should NOT be called during backoff")
 }
@@ -1217,8 +1066,8 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 		metrics:  nil,
 	}
 
-	// First call fails — sets backoff
-	err := service.fetchAndSave()
+	// First call fails: sets backoff
+	err := service.fetchAndSave(t.Context())
 	require.Error(t, err)
 	assert.True(t, service.backoff.shouldSkip(), "Should be in backoff after failure")
 
@@ -1228,8 +1077,8 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 	service.backoff.nextAllowedFetchTime = time.Time{}
 	service.backoff.mu.Unlock()
 
-	// Second call succeeds — should reset backoff
-	err = service.fetchAndSave()
+	// Second call succeeds: should reset backoff
+	err = service.fetchAndSave(t.Context())
 	require.NoError(t, err)
 	assert.False(t, service.backoff.shouldSkip(), "Backoff should be cleared after success")
 
@@ -1248,7 +1097,7 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 // TestSettings_GetStore_NoRace in the conf package.
 func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 	// Capture the previous snapshot so any earlier test's state is restored
-	// on cleanup — blindly clearing with StoreSettings(nil) could perturb
+	// on cleanup: blindly clearing with StoreSettings(nil) could perturb
 	// siblings that depend on a previously-loaded global.
 	prevSettings := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(prevSettings) })
@@ -1268,7 +1117,7 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 		},
 	}
 
-	// Service is constructed with the initial (zero-coord) snapshot — this
+	// Service is constructed with the initial (zero-coord) snapshot: this
 	// mirrors how NewService is called at startup before the user has
 	// configured their location.
 	service := &Service{
@@ -1279,12 +1128,12 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 		metrics:      nil,
 	}
 
-	_ = service.fetchAndSave()
+	_ = service.fetchAndSave(t.Context())
 	assert.InDelta(t, 0.0, observedLat, 1e-9, "initial fetch should use the captured coords")
 	assert.InDelta(t, 0.0, observedLon, 1e-9, "initial fetch should use the captured coords")
 
 	// Clear backoff so the second fetch runs, then publish a new snapshot
-	// with real coords — exactly what the settings UI does.
+	// with real coords: exactly what the settings UI does.
 	service.backoff.mu.Lock()
 	service.backoff.nextAllowedFetchTime = time.Time{}
 	service.backoff.mu.Unlock()
@@ -1295,7 +1144,7 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 	})
 	conf.StoreSettings(updated)
 
-	_ = service.fetchAndSave()
+	_ = service.fetchAndSave(t.Context())
 	assert.InDelta(t, 60.1699, observedLat, 1e-9,
 		"fetch should pick up updated latitude from global settings")
 	assert.InDelta(t, 24.9384, observedLon, 1e-9,
@@ -1340,7 +1189,7 @@ func TestWundergroundProvider_HTTP204_NoContent(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -1359,7 +1208,7 @@ func TestWundergroundProvider_HTTP401_AuthFailed(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -1441,4 +1290,351 @@ func TestRegisterUnregisterService(t *testing.T) {
 	ok, msg = GetStatus()
 	assert.False(t, ok)
 	assert.Contains(t, msg, "not started")
+}
+
+// =============================================================================
+// LIFECYCLE AND STATE-MACHINE HARDENING TESTS (#987, #988, #989)
+// =============================================================================
+
+// TestFetchAndSave_NoDataResetsTransientBackoff verifies that an HTTP 204
+// (ErrWeatherNoData) clears prior transient-failure backoff, so a station that
+// starts returning 204 does not stay stuck reporting "degraded" after earlier
+// transient errors (issue #989). Auth state is left untouched.
+func TestFetchAndSave_NoDataResetsTransientBackoff(t *testing.T) {
+	settings := createTestSettings(t, "wunderground")
+
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			return nil, ErrWeatherNoData
+		},
+	}
+	service := &Service{
+		provider:     provider,
+		providerName: wundergroundProviderName,
+		db:           nil,
+		settings:     settings,
+		metrics:      nil,
+	}
+
+	// Simulate accumulated transient failures whose backoff window has already
+	// elapsed: nextAllowedFetchTime left zero so the fetch proceeds, but the
+	// failure counter still reports "degraded".
+	service.backoff.mu.Lock()
+	service.backoff.consecutiveFailures = 3
+	service.backoff.currentBackoff = initialBackoffDuration
+	service.backoff.mu.Unlock()
+
+	ok, _ := service.Status()
+	require.False(t, ok, "precondition: service should report degraded before the 204")
+
+	err := service.fetchAndSave(t.Context())
+	require.NoError(t, err, "204 is a successful round-trip, not an error")
+
+	ok, msg := service.Status()
+	assert.True(t, ok, "204 should clear transient backoff, got: %s", msg)
+	assert.Equal(t, 0, service.backoff.consecutiveFailures,
+		"204 should reset the consecutive-failure counter")
+}
+
+// TestFetchAndSave_AuthRecoveryOnConfigChange verifies that after the service
+// locks out on repeated 401s, changing the auth-relevant config (the API key,
+// as the settings UI does) re-enables fetching on the next cycle without a
+// restart (issue #987).
+//
+// Intentionally NOT t.Parallel(): mutates the package-global settings snapshot.
+func TestFetchAndSave_AuthRecoveryOnConfigChange(t *testing.T) {
+	prevSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prevSettings) })
+
+	settings := createTestSettings(t, "wunderground", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.APIKey = "bad-key"
+	})
+	conf.StoreSettings(settings)
+
+	authBad := true
+	callCount := 0
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			callCount++
+			if authBad {
+				return nil, ErrWeatherAuthFailed
+			}
+			return nil, ErrWeatherNoData // recovered; no data to persist (no DB needed)
+		},
+	}
+	service := &Service{
+		provider:     provider,
+		providerName: wundergroundProviderName,
+		db:           nil,
+		settings:     settings,
+		metrics:      nil,
+	}
+
+	// Drive the lockout.
+	for range maxConsecutiveAuthFailures {
+		err := service.fetchAndSave(t.Context())
+		require.ErrorIs(t, err, ErrWeatherAuthFailed)
+	}
+	require.True(t, service.backoff.isAuthDisabled(), "should be locked out after threshold")
+	require.Equal(t, maxConsecutiveAuthFailures, callCount)
+
+	// A cycle with unchanged config must keep skipping (no recovery yet).
+	require.NoError(t, service.fetchAndSave(t.Context()))
+	require.Equal(t, maxConsecutiveAuthFailures, callCount,
+		"provider must not be called while locked out and config unchanged")
+
+	// Fix the key (as the settings UI would) and publish the new snapshot.
+	authBad = false
+	updated := createTestSettings(t, "wunderground", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.APIKey = "good-key"
+	})
+	conf.StoreSettings(updated)
+
+	require.NoError(t, service.fetchAndSave(t.Context()), "should recover and fetch after config change")
+	assert.Equal(t, maxConsecutiveAuthFailures+1, callCount,
+		"provider should be called again after the key changed")
+	assert.False(t, service.backoff.isAuthDisabled(),
+		"auth lockout should clear automatically on config change")
+}
+
+// TestFetchAndSave_SunCalcRebuiltOnLocationChange verifies that after the
+// configured location changes, the saved sunrise/sunset reflect the new
+// location rather than the one captured at construction (issue #987). A stale
+// sunCalc would persist the old location's sun times for the new city.
+//
+// Intentionally NOT t.Parallel(): mutates the package-global settings snapshot.
+func TestFetchAndSave_SunCalcRebuiltOnLocationChange(t *testing.T) {
+	prevSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prevSettings) })
+
+	// Fixed observation time so sunrise/sunset depend only on the location.
+	fixedTime := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			return createTestWeatherData(t, func(d *WeatherData) { d.Time = fixedTime }), nil
+		},
+	}
+
+	mockDB := mocks.NewMockInterface(t)
+	var capturedSunrise []int64
+	mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
+		de := args.Get(0).(*datastore.DailyEvents)
+		de.ID = 1
+		capturedSunrise = append(capturedSunrise, de.Sunrise)
+	}).Return(nil)
+	mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil)
+
+	// Start in Helsinki. sunCalc is left nil so reconcileConfig builds it on the
+	// first cycle from the configured coordinates.
+	helsinki := createTestSettings(t, "yrno", func(s *conf.Settings) {
+		s.BirdNET.Latitude = 60.1699
+		s.BirdNET.Longitude = 24.9384
+	})
+	conf.StoreSettings(helsinki)
+	service := &Service{
+		provider:     provider,
+		providerName: yrNoProviderName,
+		db:           mockDB,
+		settings:     helsinki,
+		metrics:      nil,
+	}
+
+	require.NoError(t, service.fetchAndSave(t.Context()))
+
+	// Move to Sydney: a very different latitude/longitude yields different sun
+	// times for the same instant.
+	sydney := createTestSettings(t, "yrno", func(s *conf.Settings) {
+		s.BirdNET.Latitude = -33.8688
+		s.BirdNET.Longitude = 151.2093
+	})
+	conf.StoreSettings(sydney)
+
+	require.NoError(t, service.fetchAndSave(t.Context()))
+
+	require.Len(t, capturedSunrise, 2)
+	assert.NotEqual(t, capturedSunrise[0], capturedSunrise[1],
+		"sunrise should differ after the location changed, proving sunCalc was rebuilt")
+	assert.InDelta(t, -33.8688, service.sunCalcLat, 1e-9, "sunCalcLat should track the new location")
+	assert.InDelta(t, 151.2093, service.sunCalcLon, 1e-9, "sunCalcLon should track the new location")
+}
+
+// TestStartPolling_RecurringTick verifies the ticker path fires fetchAndSave
+// repeatedly, not just the initial fetch (issue #991 guard). Uses
+// testing/synctest so the poll interval advances deterministically instead of
+// relying on wall-clock sleeps.
+func TestStartPolling_RecurringTick(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		settings := createTestSettings(t, "yrno", func(s *conf.Settings) {
+			s.Realtime.Weather.PollInterval = 1 // 1 minute, advanced instantly by synctest
+		})
+
+		stopChan := make(chan struct{})
+		var stopOnce sync.Once
+		fetches := 0
+		provider := &mockProvider{
+			fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+				fetches++
+				if fetches >= 3 {
+					// Stop after the initial fetch plus two ticks. sync.Once
+					// guards against a double close if the ticker and stopChan
+					// are both ready in the same select.
+					stopOnce.Do(func() { close(stopChan) })
+				}
+				return nil, ErrWeatherNoData // 204 path needs no DB
+			},
+		}
+		service := &Service{
+			provider:     provider,
+			providerName: yrNoProviderName,
+			db:           nil,
+			settings:     settings,
+			metrics:      nil,
+			startupDelay: 0,
+		}
+
+		service.StartPolling(stopChan)
+
+		assert.GreaterOrEqual(t, fetches, 3,
+			"the ticker should fire fetchAndSave beyond the initial fetch")
+	})
+}
+
+// TestFetchAndSave_SerializedByMutex verifies that concurrent fetch cycles are
+// serialized by s.fetchMu (issue #988). The provider increments a deliberately
+// non-atomic counter; serialization makes this safe, and the -race detector
+// would flag it if the mutex regressed.
+func TestFetchAndSave_SerializedByMutex(t *testing.T) {
+	settings := createTestSettings(t, "wunderground")
+
+	const goroutines = 8
+	unsafeCounter := 0 // guarded only by fetchMu serialization
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			unsafeCounter++ // racy iff fetchAndSave runs concurrently
+			return nil, ErrWeatherNoData
+		},
+	}
+	service := &Service{
+		provider:     provider,
+		providerName: wundergroundProviderName,
+		db:           nil,
+		settings:     settings,
+		metrics:      nil,
+	}
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			_ = service.fetchAndSave(t.Context())
+		})
+	}
+	wg.Wait()
+
+	assert.Equal(t, goroutines, unsafeCounter,
+		"every serialized fetch should have incremented the counter exactly once")
+}
+
+// TestWeatherAuthConfigKey_ScopedToActiveProvider verifies the auth fingerprint
+// only reflects the active provider's credentials, so editing the inactive
+// provider's key does not spuriously clear an active-provider auth lockout.
+func TestWeatherAuthConfigKey_ScopedToActiveProvider(t *testing.T) {
+	t.Parallel()
+
+	base := createTestSettings(t, "openweather")
+	baseKey := weatherAuthConfigKey(base)
+
+	// Editing the inactive provider's credentials must NOT change the fingerprint.
+	inactiveEdit := createTestSettings(t, "openweather", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.APIKey = "different-wunderground-key"
+	})
+	assert.Equal(t, baseKey, weatherAuthConfigKey(inactiveEdit),
+		"changing the inactive provider's credentials must not change the fingerprint")
+
+	// Editing the active provider's credentials MUST change the fingerprint.
+	activeEdit := createTestSettings(t, "openweather", func(s *conf.Settings) {
+		s.Realtime.Weather.OpenWeather.APIKey = "different-openweather-key"
+	})
+	assert.NotEqual(t, baseKey, weatherAuthConfigKey(activeEdit),
+		"changing the active provider's credentials must change the fingerprint")
+}
+
+// TestSafeFetchAndSave_PanicRecordsFailure verifies that a panic in the fetch
+// cycle is recovered (not propagated) and recorded as a failure, so it surfaces
+// as degraded via Status() instead of leaving the service reporting healthy.
+func TestSafeFetchAndSave_PanicRecordsFailure(t *testing.T) {
+	t.Parallel()
+
+	settings := createTestSettings(t, "wunderground")
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			panic("provider boom")
+		},
+	}
+	service := &Service{
+		provider:     provider,
+		providerName: wundergroundProviderName,
+		db:           nil,
+		settings:     settings,
+		metrics:      nil,
+	}
+
+	require.NotPanics(t, func() { service.safeFetchAndSave(t.Context()) },
+		"a provider panic must be recovered, not propagated")
+
+	ok, msg := service.Status()
+	assert.False(t, ok, "a panicking fetch should report unhealthy, got: %s", msg)
+	assert.Positive(t, service.backoff.consecutiveFailures,
+		"recovered panic should record a failure")
+}
+
+// TestPoll_RecoversAfterConfigChange verifies that an on-demand Poll() recovers
+// from an auth lockout once the API key is fixed, instead of returning the
+// lockout error until the background ticker reconciles.
+//
+// Intentionally NOT t.Parallel(): mutates the package-global settings snapshot.
+func TestPoll_RecoversAfterConfigChange(t *testing.T) {
+	prevSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prevSettings) })
+
+	settings := createTestSettings(t, "wunderground", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.APIKey = "bad-key"
+	})
+	conf.StoreSettings(settings)
+
+	authBad := true
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			if authBad {
+				return nil, ErrWeatherAuthFailed
+			}
+			return nil, ErrWeatherNoData // recovered; no data to persist (no DB needed)
+		},
+	}
+	service := &Service{
+		provider:     provider,
+		providerName: wundergroundProviderName,
+		db:           nil,
+		settings:     settings,
+		metrics:      nil,
+	}
+
+	// Drive the lockout via Poll.
+	for range maxConsecutiveAuthFailures {
+		_ = service.Poll(t.Context())
+	}
+	require.True(t, service.backoff.isAuthDisabled(), "should be locked out after threshold")
+
+	// Still locked out with unchanged config: Poll surfaces the auth failure.
+	require.ErrorIs(t, service.Poll(t.Context()), ErrWeatherAuthFailed)
+
+	// Fix the key; a manual Poll must now recover without waiting for the ticker.
+	authBad = false
+	updated := createTestSettings(t, "wunderground", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.APIKey = "good-key"
+	})
+	conf.StoreSettings(updated)
+
+	require.NoError(t, service.Poll(t.Context()), "manual Poll should recover after the key is fixed")
+	assert.False(t, service.backoff.isAuthDisabled(),
+		"auth lockout should clear on the recovering Poll")
 }

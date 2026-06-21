@@ -636,12 +636,11 @@ func (c *Controller) checkExistingV2Data() PrerequisiteCheck {
 		return check
 	}
 
-	// Check if detections table has data
+	// Check if detections table has data. Derive the table name from the manager's
+	// actual prefix (empty for fresh installs, "v2_" during migration) instead of
+	// guessing from the dialect, matching every other v2 consumer.
 	var count int64
-	tableName := "detections"
-	if c.isUsingMySQL() {
-		tableName = "v2_detections"
-	}
+	tableName := c.V2Manager.TablePrefix() + "detections"
 
 	if err := db.Table(tableName).Count(&count).Error; err != nil {
 		// Table might not exist yet, which is fine

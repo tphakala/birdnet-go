@@ -133,7 +133,8 @@
       "downloadCsv": "Lataa lajilista CSV-tiedostona",
       "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
       "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
-      "resizeHandle": "Vedä muuttaaksesi kokoa"
+      "resizeHandle": "Vedä muuttaaksesi kokoa",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Luottamus",
@@ -404,6 +405,8 @@
         "recalculatingThresholds": "Lasketaan dynaamisia kynnysarvoja uudelleen uudelle perusarvolle",
         "reconfiguringDynamicThresholds": "Määritetään dynaamisia kynnysarvoja uudelleen...",
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
         "reconfiguringAudioSources": "Määritetään äänilähteitä uudelleen...",
         "rebuildingExtendedCapture": "Rakennetaan laajennetun tallennuksen suodatinta uudelleen...",
@@ -486,7 +489,8 @@
       "confidenceMax": "Enimmäisluottamusprosentti",
       "verifiedStatus": "Todennettu tila",
       "lockedStatus": "Lukittu tila",
-      "timeOfDay": "Vuorokaudenaika"
+      "timeOfDay": "Vuorokaudenaika",
+      "source": "Äänilähde"
     },
     "advancedFilters": "Lisäsuodattimet",
     "showAdvancedFilters": "Näytä lisäsuodattimet",
@@ -508,6 +512,9 @@
       "sunrise": "Auringonnousu +/- 30min",
       "sunset": "Auringonlasku +/- 30min"
     },
+    "sourceOptions": {
+      "any": "Kaikki lähteet"
+    },
     "sortOptions": {
       "dateDesc": "Päivämäärä (Uusin ensin)",
       "dateAsc": "Päivämäärä (Vanhin ensin)",
@@ -519,6 +526,7 @@
       "timeOfDay": "Vuorokaudenaika",
       "species": "Laji",
       "confidence": "Luottamus",
+      "source": "Lähde",
       "status": "Tila",
       "actions": "Toiminnot"
     },
@@ -788,7 +796,23 @@
     },
     "detail": {
       "species": "Laji",
-      "observation": "Havainto"
+      "observation": "Havainto",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Tieteellinen nimi",
+        "classificationBadges": "Lajin luokitusmerkit",
+        "confidence": "Havainnon luottamus {confidence}%",
+        "metadata": "Havainnon metatiedot",
+        "weatherConditions": "Sääolosuhteet havaintohetkellä",
+        "comments": "Havainnon kommentit",
+        "commentText": "Kommentin teksti",
+        "commentTimestamp": "Kommentin aikaleima",
+        "mainRegion": "Havainnon tiedot",
+        "tabsHeading": "Havaintotietojen välilehdet",
+        "tabList": "Havainnon tietojen välilehdet",
+        "speciesHeadingSuffix": "havainnon tiedot"
+      }
     },
     "headers": {
       "dateTime": "Päivä ja aika",
@@ -1129,6 +1153,7 @@
     "sections": {
       "overview": "Yleiskatsaus",
       "database": "Tietokanta",
+      "inference": "AI Models",
       "terminal": "Terminaali"
     },
     "database": {
@@ -1484,6 +1509,90 @@
         }
       }
     },
+    "inference": {
+      "title": "AI Models & Inference",
+      "loading": "Loading inference status",
+      "error": "Could not load inference status",
+      "sectionHardware": "Hardware",
+      "sectionBackends": "Inference Backends",
+      "sectionModels": "Models",
+      "noModels": "No models are currently loaded",
+      "architecture": "Architecture",
+      "cpu": "CPU",
+      "environment": "Environment",
+      "fp16": "FP16",
+      "fp16Supported": "FP16 supported",
+      "fp16Unsupported": "FP16 not supported",
+      "backendTflite": "TensorFlow Lite",
+      "backendOnnx": "ONNX Runtime",
+      "backendOpenvino": "OpenVINO",
+      "available": "Available",
+      "notAvailable": "Not available",
+      "active": "Active",
+      "inactive": "Inactive",
+      "initialized": "Initialized",
+      "version": "Version",
+      "devices": "Devices",
+      "stock": "Stock",
+      "custom": "Custom",
+      "sampleRate": "Sample rate",
+      "clipLength": "Segmentin pituus",
+      "species": "Species",
+      "invocations": "Segments analysed",
+      "avgLatency": "Avg latency",
+      "maxLatency": "Max latency",
+      "rtf": "RTF",
+      "rtfLabel": "Real-time factor",
+      "approxRam": "Approx. host RAM (RSS)",
+      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
+      "latencyChart": "Latency (ms)",
+      "rtfChart": "Real-time factor",
+      "sources": "Audio sources",
+      "noSources": "No sources attached",
+      "primaryFallback": "primary (fallback)",
+      "notMeasured": "n/a",
+      "unitMs": "ms",
+      "unitKhz": "kHz",
+      "unitSec": "s",
+      "sectionAudio": "Audio",
+      "queueDepth": "Queue depth",
+      "queueDepthChart": "Queue depth",
+      "droppedChunks": "Dropped chunks",
+      "queueCapacity": "Capacity",
+      "lastSeen": "Last seen",
+      "lastSeenNever": "No detections yet",
+      "deviceHelp": "Laskentalaite, jolla tämä malli suorittaa päättelyn (CPU, GPU tai tuntematon).",
+      "paused": "Tauolla",
+      "pausedScheduleHelp": "Tämä malli toimii vain aikataulun mukaan ja on tällä hetkellä tauolla, joten se ei käsittele ääntä.",
+      "activityPaused": "Tauolla aikataulun mukaan",
+      "lastHeard": "Viimeksi kuultu",
+      "lastHeardHint": "Viimeisimmät kynnyksen ylittävät ennusteet, diagnostiikkaa varten. Sisältää muut kuin lintu- ja alueen ulkopuoliset tulokset, joita ei tallenneta havaintoina.",
+      "lastHeardNever": "Ei vielä kuultu mitään",
+      "confidenceColumn": "Varm.",
+      "heardWhen": "Milloin",
+      "coDetectedColumn": "Myös",
+      "coDetectedHelp": "Muut mallit, jotka havaitsivat tämän lajin {seconds}s sisällä",
+      "outOfRangeHelp": "Aluesuodattimen ulkopuolella (näytetään diagnostiikkaa varten, ei tallenneta havaintona)",
+      "peak": "huippu",
+      "activityActive": "Inference active",
+      "activityIdle": "Idle",
+      "throughput": "Throughput",
+      "throughputUnit": "/s",
+      "throughputChart": "Throughput (/s)",
+      "errorRate": "Error rate",
+      "loadFailures": "Load failures",
+      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
+      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
+      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
+      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
+      "throughputHelp": "Segments analysed per second by this model.",
+      "errorRateHelp": "Share of analysis attempts that failed.",
+      "loadFailuresHelp": "Number of times this model failed to load.",
+      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
+      "invocationsHelp": "Total audio segments this model has analysed since startup.",
+      "noModelsHint": "No audio source configured yet?",
+      "noModelsHintLink": "Configure audio sources"
+    },
     "metrics": {
       "cpu": "CPU",
       "memory": "Muisti",
@@ -1539,6 +1648,35 @@
     "reattach": "Liitä takaisin"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Yleiskatsaus",
+        "patterns": "Aktiivisuuskuviot",
+        "trends": "Trendit",
+        "biodiversity": "Luonnon monimuotoisuus",
+        "quality": "Tarkistus ja tarkkuus"
+      },
+      "aria": {
+        "tabs": "Analyysiosiot"
+      },
+      "controls": {
+        "source": "Lähde",
+        "sourceAll": "Kaikki lähteet",
+        "sourceComingSoon": "Suodatus lähteen mukaan tulee myöhemmässä päivityksessä.",
+        "speciesNotApplicable": "Tämän osion kaaviot eivät suodata lajin mukaan."
+      },
+      "card": {
+        "error": "Kaavion lataaminen epäonnistui",
+        "retry": "Yritä uudelleen",
+        "notEnoughData": "Ei vielä tarpeeksi tietoja",
+        "notEnoughDataHint": "Tämä kaavio tarvitsee vähintään {min} datapistettä. Jatka tallentamista ja palaa pian takaisin.",
+        "export": "Vie",
+        "exportComingSoon": "CSV-vienti tulee pian."
+      },
+      "comingSoon": {
+        "description": "Tämä osio on rakenteilla ja tulee tulevassa päivityksessä."
+      }
+    },
     "title": "Yleiskatsaus",
     "loadingError": "Joidenkin analytiikkatietojen lataus epäonnistui. Yritä myöhemmin uudelleen.",
     "stats": {
@@ -1619,6 +1757,7 @@
         "dateTime": "Päivä ja aika",
         "species": "Laji",
         "confidence": "Luottamus",
+        "source": "Lähde",
         "timeOfDay": "Vuorokaudenaika"
       },
       "noRecentDetections": "Viimeaikaisia havaintoja ei löytynyt",
@@ -1719,6 +1858,14 @@
     },
     "errors": {
       "loadFailed": "Analytiikkatietojen lataaminen epäonnistui. Yritä uudelleen."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -3653,16 +3800,22 @@
         "configureActions": "Määritä toiminnot",
         "actionsConfigured": "Määritetty",
         "list": {
-          "threshold": "Kynnysarvo:",
-          "interval": "Väli:",
-          "intervalNone": "Ei mitään",
-          "actionBadge": "Toiminto",
           "editTitle": "Muokkaa määritystä",
           "removeTitle": "Poista määritys"
         },
         "emptyState": {
           "title": "Määrityksiä ei vielä ole.",
           "description": "Napsauta \"Lisää määritys\" mukauttaaksesi lajintunnistusasetuksia."
+        },
+        "table": {
+          "columnScientificName": "Tieteellinen nimi",
+          "intervalDefault": "Oletus",
+          "intervalDefaultTooltip": "0 = käytä globaalia oletusväliä",
+          "noActions": "Ei mitään",
+          "searchPlaceholder": "Etsi lajeja...",
+          "noResults": "Ei vastaavia asetuksia",
+          "editDisabledReason": "Tallenna tai sulje nykyinen muokkain ennen toisen lajin muokkaamista",
+          "actionsDisabledBusy": "Odota, että nykyinen toiminto on valmis"
         }
       },
       "synonyms": {
@@ -4439,6 +4592,11 @@
       "removeCertificate": "Poista sertifikaatti",
       "fileReadError": "Tiedoston lukeminen epäonnistui",
       "loading": "Ladataan sertifikaattitietoja..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {
@@ -4542,7 +4700,8 @@
         "invalidUrl": "Virheellinen URL-muoto. Syötä täydellinen URL, esim. rtsp://host:portti/polku",
         "unsupportedScheme": "URL-skeemaa \"{scheme}\" ei tueta. Käytä rtsp, rtsps, http, https, rtmp tai udp",
         "blockedDestination": "Tämä kohde on estetty turvallisuussyistä",
-        "connectionFailed": "Striimiin ei saatu yhteyttä. Tarkista, että URL on oikein ja striimi on saavutettavissa"
+        "connectionFailed": "Striimiin ei saatu yhteyttä. Tarkista, että URL on oikein ja striimi on saavutettavissa",
+        "noAudioTrack": "Striimissä ei ole ääniraitaa. Vain ääntä sisältäviä striimejä voidaan käyttää"
       }
     },
     "debug": {
@@ -4836,7 +4995,13 @@
     "bannerTitle": "Uudelleenkäynnistys vaaditaan",
     "bannerMessage": "Asetusten muutokset vaativat uudelleenkäynnistyksen:",
     "bannerAction": "Käynnistä uudelleen nyt",
-    "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui"
+    "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Ohje ja tuki",

@@ -151,13 +151,10 @@ func (m *ActionMockDatastore) Optimize(_ context.Context) error { return nil }
 func (m *ActionMockDatastore) GetAllNotes() ([]datastore.Note, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetTopBirdsData(_ string, _ float64, _ int) ([]datastore.Note, error) {
+func (m *ActionMockDatastore) GetTopBirdsData(_ context.Context, _ string, _ float64, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetHourlyOccurrences(_, _ string, _ float64) ([24]int, error) {
-	return [24]int{}, nil
-}
-func (m *ActionMockDatastore) GetBatchHourlyOccurrences(_ string, _ []string, _ float64) (map[string][24]int, error) {
+func (m *ActionMockDatastore) GetBatchHourlyOccurrences(_ context.Context, _ string, _ []string, _ float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (m *ActionMockDatastore) SpeciesDetections(_, _, _ string, _ int, _ bool, _, _ int) ([]datastore.Note, error) {
@@ -341,16 +338,16 @@ func (m *ActionMockDatastore) DeleteThresholdEvents(_ string) error {
 func (m *ActionMockDatastore) DeleteAllThresholdEvents() (int64, error) {
 	return 0, nil
 }
-func (m *ActionMockDatastore) SaveNotificationHistory(_ *datastore.NotificationHistory) error {
+func (m *ActionMockDatastore) SaveNotificationHistory(_ context.Context, _ *datastore.NotificationHistory) error {
 	return nil
 }
-func (m *ActionMockDatastore) GetNotificationHistory(_, _ string) (*datastore.NotificationHistory, error) {
+func (m *ActionMockDatastore) GetNotificationHistory(_ context.Context, _, _ string) (*datastore.NotificationHistory, error) {
 	return nil, datastore.ErrNotificationHistoryNotFound
 }
-func (m *ActionMockDatastore) GetActiveNotificationHistory(_ time.Time) ([]datastore.NotificationHistory, error) {
+func (m *ActionMockDatastore) GetActiveNotificationHistory(_ context.Context, _ time.Time) ([]datastore.NotificationHistory, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) DeleteExpiredNotificationHistory(_ time.Time) (int64, error) {
+func (m *ActionMockDatastore) DeleteExpiredNotificationHistory(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
 func (m *ActionMockDatastore) SchemaVersion() string                           { return datastore.SchemaVersionLegacy }

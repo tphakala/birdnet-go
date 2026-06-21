@@ -6,7 +6,9 @@
 // The dataset is large (tens of thousands of species across 40+ locales), so the
 // package never materializes all of it. Build a sparse Index for just the species
 // and locale you need with BuildIndex, and use Lookup/LookupMeta for the rare
-// species that fall outside a pre-built Index.
+// species that fall outside a pre-built Index. LookupScientificNames serves the
+// reverse direction (localized common name -> scientific name) for the rare need to
+// canonicalize a user-supplied common name.
 //
 // The embedded data is a committed, gzipped snapshot; see README.md for the
 // command that regenerates it from an openfauna checkout.
@@ -17,6 +19,8 @@ import (
 	"compress/gzip"
 	"encoding/csv"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/csvutil"
@@ -345,6 +349,229 @@ func Lookup(scientific, locale string) (string, bool) {
 		logger.Bool("found", ok),
 	)
 	return found, ok
+}
+
+// LookupScientificNames is the reverse of Lookup: for each requested localized common
+// name it returns the scientific name(s) carrying that name in the locale mapped from
+// bngLocale, resolving every request in a single pass over the embedded dataset. The
+// result is keyed by the caller's exact input strings (matching is case-insensitive
+// and whitespace-trimmed); a requested name with no match is absent from the result.
+// Each name's scientific list is de-duplicated and sorted.
+//
+// It exists for the rare cold-path need to canonicalize user-supplied localized common
+// names (for example a non-primary model's bat or mammal, whose model label is
+// scientific-only so the forward, scientific-keyed resolvers cannot reverse it). The
+// scan is O(dataset) once regardless of how many names are requested, so callers batch
+// all of a rebuild's unresolved overrides into one call rather than looping; it must
+// not be used on a hot path.
+//
+// Resolution mirrors Resolver.Resolve: bngLocale is mapped to an openfauna locale
+// (mapLocale) and matches there take precedence; the English fallback is consulted
+// only for names the active locale did not resolve, so an English common name still
+// resolves on a sparsely-translated locale.
+func LookupScientificNames(commonNames []string, bngLocale string) map[string][]string {
+	// Map each distinct normalized name to the caller's original input strings, so the
+	// result can be keyed by exactly what the caller passed.
+	inputs := make(map[string][]string) // normalized name -> original inputs
+	for _, in := range commonNames {
+		norm := normalizeName(in)
+		if norm == "" {
+			continue
+		}
+		inputs[norm] = append(inputs[norm], in)
+	}
+	if len(inputs) == 0 {
+		return map[string][]string{}
+	}
+	eff := mapLocale(bngLocale)
+
+	// One pass collects both the active locale and (when distinct) the English fallback;
+	// the active locale wins per name, English rescues only the names it missed.
+	inLocale := make(map[string]map[string]struct{})  // normalized name -> set of scientific
+	inEnglish := make(map[string]map[string]struct{}) // normalized name -> set of scientific
+	collect := func(dst map[string]map[string]struct{}, norm, sci string) {
+		set := dst[norm]
+		if set == nil {
+			set = make(map[string]struct{})
+			dst[norm] = set
+		}
+		set[sci] = struct{}{}
+	}
+	if err := streamTranslations(func(sci, loc, common string) error {
+		isLocale := loc == eff
+		isEnglish := eff != localeFallback && loc == localeFallback
+		if !isLocale && !isEnglish {
+			return nil
+		}
+		norm := normalizeName(common)
+		if _, want := inputs[norm]; !want {
+			return nil
+		}
+		if isLocale {
+			collect(inLocale, norm, sci)
+		} else {
+			collect(inEnglish, norm, sci)
+		}
+		return nil
+	}); err != nil {
+		GetLogger().Error("openfauna reverse common-name lookup failed",
+			logger.String("locale", eff),
+			logger.Int("requested", len(inputs)),
+			logger.Error(err),
+		)
+		return map[string][]string{}
+	}
+
+	out := make(map[string][]string, len(inputs))
+	for norm, origins := range inputs {
+		set := inLocale[norm]
+		if len(set) == 0 {
+			set = inEnglish[norm]
+		}
+		if len(set) == 0 {
+			continue
+		}
+		sciNames := slices.Collect(maps.Keys(set))
+		slices.Sort(sciNames)
+		for _, in := range origins {
+			out[in] = sciNames
+		}
+	}
+	GetLogger().Debug("openfauna reverse common-name lookup",
+		logger.String("locale", eff),
+		logger.Int("requested", len(inputs)),
+		logger.Int("resolved", len(out)),
+	)
+	return out
+}
+
+// ReverseResolveToScientificNames reverse-resolves localized common-name entries to their
+// lower-cased scientific name(s) for the given BirdNET locale. It is a thin convenience over
+// LookupScientificNames that applies the lower-casing callers need when matching against
+// lower-cased scientific names, so the lower-casing and locale handling live in one place
+// instead of being duplicated (and able to drift) across call sites.
+//
+// The result is keyed by the caller's original entry strings; entries that resolve to no
+// scientific name are absent. Each entry's scientific names keep the sorted, de-duplicated
+// order from LookupScientificNames and are lower-cased. Returns an empty (non-nil) map when
+// entries is empty or nothing resolves. Like LookupScientificNames this is O(dataset) per
+// call and must not be used on a hot path.
+func ReverseResolveToScientificNames(entries []string, bngLocale string) map[string][]string {
+	resolved := LookupScientificNames(entries, bngLocale)
+	out := make(map[string][]string, len(resolved))
+	for entry, sciNames := range resolved {
+		lowered := make([]string, len(sciNames))
+		for i, sci := range sciNames {
+			lowered[i] = strings.ToLower(sci)
+		}
+		out[entry] = lowered
+	}
+	return out
+}
+
+// ReverseResolveToScientificSet reverse-resolves localized common-name entries to a single
+// flat set of lower-cased scientific names for the given BirdNET locale, flattening the
+// per-entry result of ReverseResolveToScientificNames. It serves callers that only need to
+// test membership of a label's scientific name (e.g. the range-filter exclude matcher) and
+// do not care which entry produced which name. Returns an empty (non-nil) set when entries
+// is empty or nothing resolves. O(dataset) per call; not for hot paths.
+func ReverseResolveToScientificSet(entries []string, bngLocale string) map[string]struct{} {
+	resolved := ReverseResolveToScientificNames(entries, bngLocale)
+	set := make(map[string]struct{}, len(resolved))
+	for _, sciNames := range resolved {
+		for _, sci := range sciNames {
+			set[sci] = struct{}{}
+		}
+	}
+	return set
+}
+
+// LookupCommonNames is the forward, batched companion to LookupScientificNames:
+// for each requested scientific name it returns the localized common name in the
+// locale mapped from bngLocale, resolving every request in a single pass over the
+// embedded dataset. The result is keyed by the caller's exact input strings
+// (matching is case-insensitive and whitespace-trimmed); a requested name with no
+// translation in either the active locale or English is absent from the result.
+//
+// It exists for the cold-path need to give the reverse search maps a localized
+// common name for every model label, including the scientific-only labels emitted
+// by non-primary models (bats, Perch-unique species) that the forward,
+// scientific-keyed working-set resolver (ResolveLocal) does not cover. The scan is
+// O(dataset) once regardless of how many names are requested, so callers batch all
+// of a name-map rebuild's unresolved labels into one call; it must not be used on a
+// hot path.
+//
+// Resolution mirrors Resolver.Resolve: bngLocale is mapped via mapLocale and matches
+// there take precedence; the English fallback is consulted only for names the active
+// locale did not resolve.
+func LookupCommonNames(scientificNames []string, bngLocale string) map[string]string {
+	return lookupCommonNamesEffective(scientificNames, mapLocale(bngLocale))
+}
+
+// lookupCommonNamesEffective is the locale-already-mapped core of LookupCommonNames,
+// shared with (*Resolver).ResolveLocalizedBatch which holds an effective locale.
+func lookupCommonNamesEffective(scientificNames []string, eff string) map[string]string {
+	inputs := make(map[string][]string) // normalized sci -> original inputs
+	for _, in := range scientificNames {
+		norm := normalizeName(in)
+		if norm == "" {
+			continue
+		}
+		inputs[norm] = append(inputs[norm], in)
+	}
+	if len(inputs) == 0 {
+		return map[string]string{}
+	}
+
+	inLocale := make(map[string]string)  // normalized sci -> common (active locale)
+	inEnglish := make(map[string]string) // normalized sci -> common (English fallback)
+	if err := streamTranslations(func(sci, loc, common string) error {
+		norm := normalizeName(sci)
+		if _, want := inputs[norm]; !want {
+			return nil
+		}
+		if common == "" {
+			return nil // an empty translation cannot satisfy a lookup; skip so it cannot block a real name
+		}
+		switch {
+		case loc == eff:
+			if _, exists := inLocale[norm]; !exists {
+				inLocale[norm] = common
+			}
+		case eff != localeFallback && loc == localeFallback:
+			if _, exists := inEnglish[norm]; !exists {
+				inEnglish[norm] = common
+			}
+		}
+		return nil
+	}); err != nil {
+		GetLogger().Error("openfauna forward common-name batch lookup failed",
+			logger.String("locale", eff),
+			logger.Int("requested", len(inputs)),
+			logger.Error(err),
+		)
+		return map[string]string{}
+	}
+
+	out := make(map[string]string, len(inputs))
+	for norm, origins := range inputs {
+		name := inLocale[norm]
+		if name == "" {
+			name = inEnglish[norm]
+		}
+		if name == "" {
+			continue
+		}
+		for _, in := range origins {
+			out[in] = name
+		}
+	}
+	GetLogger().Debug("openfauna forward common-name batch lookup",
+		logger.String("locale", eff),
+		logger.Int("requested", len(inputs)),
+		logger.Int("resolved", len(out)),
+	)
+	return out
 }
 
 // LookupMeta returns taxonomy/link metadata for one scientific name by scanning

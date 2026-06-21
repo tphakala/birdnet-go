@@ -1,21 +1,29 @@
 package weather
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
 	openWeatherBaseURL      = "https://api.openweathermap.org/data/2.5/weather"
 	openWeatherProviderName = "openweather"
+
+	// openWeatherCoordPrecision is the number of decimal places used when
+	// formatting latitude/longitude into the request URL (~110 m resolution).
+	openWeatherCoordPrecision = 3
 )
 
 // OpenWeatherResponse represents the structure of weather data returned by the OpenWeather API
@@ -47,6 +55,15 @@ type OpenWeatherResponse struct {
 	Clouds struct {
 		All int `json:"all"`
 	} `json:"clouds"`
+	// Rain and Snow carry the precipitation volume for the last hour ("1h").
+	// OpenWeather omits each object entirely when there is no precipitation of
+	// that type, so a zero value means "none".
+	Rain struct {
+		OneHour float64 `json:"1h"`
+	} `json:"rain"`
+	Snow struct {
+		OneHour float64 `json:"1h"`
+	} `json:"snow"`
 	Dt  int64 `json:"dt"`
 	Sys struct {
 		Country string `json:"country"`
@@ -56,8 +73,42 @@ type OpenWeatherResponse struct {
 	Name string `json:"name"`
 }
 
+// buildOpenWeatherURL constructs the OpenWeather API request URL using
+// url.Values so the API key and other parameters are properly escaped. Building
+// the query with fmt.Sprintf risked producing a malformed URL when a value
+// required escaping; http.NewRequest would then reject it and return a
+// *url.Error carrying the raw key. Escaping at build time avoids that leak path
+// and mirrors buildWundergroundURL.
+func buildOpenWeatherURL(settings *conf.Settings, apiKey string) (string, error) {
+	// Fall back to the default base URL when the configured endpoint is empty or
+	// whitespace-only; otherwise url.Parse succeeds with a relative URL and the
+	// request later fails. Mirrors validateWundergroundConfig.
+	endpoint := strings.TrimSpace(settings.Realtime.Weather.OpenWeather.Endpoint)
+	if endpoint == "" {
+		endpoint = openWeatherBaseURL
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return "", newWeatherError(
+			fmt.Errorf("invalid openweather endpoint: %w", err),
+			errors.CategoryConfiguration, "parse_endpoint", openWeatherProviderName,
+		)
+	}
+	if err := validateEndpointScheme(u, openWeatherProviderName); err != nil {
+		return "", err
+	}
+	q := u.Query()
+	q.Set("lat", strconv.FormatFloat(settings.BirdNET.Latitude, 'f', openWeatherCoordPrecision, 64))
+	q.Set("lon", strconv.FormatFloat(settings.BirdNET.Longitude, 'f', openWeatherCoordPrecision, 64))
+	q.Set("appid", apiKey)
+	q.Set("units", settings.Realtime.Weather.OpenWeather.Units)
+	q.Set("lang", "en")
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
 // FetchWeather implements the Provider interface for OpenWeatherProvider
-func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
+func (p *OpenWeatherProvider) FetchWeather(ctx context.Context, settings *conf.Settings) (*WeatherData, error) {
 	apiKey := settings.Realtime.Weather.OpenWeather.APIKey
 	if apiKey == "" {
 		return nil, newWeatherError(
@@ -68,25 +119,25 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		)
 	}
 
-	apiURL := fmt.Sprintf("%s?lat=%.3f&lon=%.3f&appid=%s&units=%s&lang=en",
-		settings.Realtime.Weather.OpenWeather.Endpoint,
-		settings.BirdNET.Latitude,
-		settings.BirdNET.Longitude,
-		apiKey,
-		settings.Realtime.Weather.OpenWeather.Units,
-	)
-
-	providerLogger := getLogger().With(logger.String("provider", openWeatherProviderName))
-	providerLogger.Info("Fetching weather data", logger.String("url", maskAPIKey(apiURL, "appid")))
-
-	req, err := http.NewRequest("GET", apiURL, http.NoBody)
+	apiURL, err := buildOpenWeatherURL(settings, apiKey)
 	if err != nil {
-		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", openWeatherProviderName)
+		return nil, err
+	}
+
+	providerLogger := getLogger().WithContext(ctx).With(logger.String("provider", openWeatherProviderName))
+	providerLogger.Info("Fetching weather data", logger.String("url", maskURLForLog(apiURL)))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
+	if err != nil {
+		// Scrub before wrapping: http.NewRequestWithContext can return a
+		// *url.Error that embeds apiURL, which carries the appid API key query
+		// parameter.
+		return nil, newWeatherError(privacy.WrapError(err), errors.CategoryNetwork, "create_http_request", openWeatherProviderName)
 	}
 	req.Header.Set("User-Agent", UserAgent())
 
-	// Execute request with retry
-	body, err := executeOpenWeatherRequest(req, providerLogger)
+	// Execute request with retry via the shared executor.
+	body, err := executeWeatherRequest(ctx, p.httpClient, req, openWeatherProviderName, providerLogger, p.handleResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -114,67 +165,41 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 	return mappedData, nil
 }
 
-// executeOpenWeatherRequest executes HTTP request with retry logic
-func executeOpenWeatherRequest(req *http.Request, log logger.Logger) ([]byte, error) {
-	client := &http.Client{Timeout: RequestTimeout}
+// handleResponse classifies a single OpenWeather HTTP response for the shared
+// retry executor. A 401 maps to the auth-failed sentinel without retrying; any
+// other non-200 retries until the final attempt; a 200 returns the body.
+func (p *OpenWeatherProvider) handleResponse(resp *http.Response, attemptLog logger.Logger, isLastAttempt bool) (body []byte, retry bool, err error) {
+	// Close the body on every return path; the error-status branches still drain
+	// it first so the shared keep-alive connection can be reused. This also keeps
+	// the body closed if a read panics, matching WundergroundProvider.executeRequest.
+	defer func() { _ = resp.Body.Close() }()
 
-	for i := range MaxRetries {
-		isLastAttempt := i == MaxRetries-1
-		attemptLogger := log.With(
-			logger.Int("attempt", i+1),
-			logger.Int("max_attempts", MaxRetries))
-
-		resp, err := client.Do(req)
-		if err != nil {
-			attemptLogger.Warn("HTTP request failed", logger.Error(err))
-			if isLastAttempt {
-				return nil, newWeatherErrorWithRetries(err, errors.CategoryNetwork, "weather_api_request", openWeatherProviderName)
-			}
-			time.Sleep(RetryDelay)
-			continue
-		}
-
-		attemptLogger.Debug("Received HTTP response", logger.Int("status_code", resp.StatusCode))
-
-		// HTTP 401: authentication failed — don't retry, return sentinel
-		if resp.StatusCode == http.StatusUnauthorized {
-			_, _ = io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			attemptLogger.Error("Weather API authentication failed — check your API key")
-			return nil, ErrWeatherAuthFailed
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			attemptLogger.Warn("Received non-OK status code", logger.Int("status_code", resp.StatusCode))
-			if isLastAttempt {
-				return nil, newWeatherErrorWithRetries(
-					fmt.Errorf("received non-200 response (%d)", resp.StatusCode),
-					errors.CategoryNetwork,
-					"weather_api_response",
-					openWeatherProviderName,
-				)
-			}
-			_ = bodyBytes // Suppress unused warning
-			time.Sleep(RetryDelay)
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			return nil, newWeatherError(err, errors.CategoryNetwork, "read_response_body", openWeatherProviderName)
-		}
-		return body, nil
+	// HTTP 401: authentication failed — don't retry, return sentinel.
+	if resp.StatusCode == http.StatusUnauthorized {
+		_, _ = io.ReadAll(resp.Body)
+		attemptLog.Error("Weather API authentication failed — check your API key")
+		return nil, false, ErrWeatherAuthFailed
 	}
 
-	return nil, newWeatherErrorWithRetries(
-		fmt.Errorf("max retries exceeded"),
-		errors.CategoryNetwork,
-		"weather_api_request",
-		openWeatherProviderName,
-	)
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.ReadAll(resp.Body)
+		attemptLog.Warn("Received non-OK status code", logger.Int("status_code", resp.StatusCode))
+		if isLastAttempt {
+			return nil, false, newWeatherErrorWithRetries(
+				fmt.Errorf("received non-200 response (%d)", resp.StatusCode),
+				errors.CategoryNetwork,
+				"weather_api_response",
+				openWeatherProviderName,
+			)
+		}
+		return nil, true, nil
+	}
+
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false, newWeatherError(err, errors.CategoryNetwork, "read_response_body", openWeatherProviderName)
+	}
+	return body, false, nil
 }
 
 // mapOpenWeatherResponse converts OpenWeatherResponse to WeatherData
@@ -186,6 +211,11 @@ func mapOpenWeatherResponse(data *OpenWeatherResponse, settings *conf.Settings) 
 		data.Main.TempMax,
 		settings.Realtime.Weather.OpenWeather.Units,
 	)
+
+	// OpenWeather reports rain and snow volume separately. Snow takes precedence
+	// when both are present in the same hour so the persisted type matches the
+	// dominant winter condition.
+	precipAmount, precipType := openWeatherPrecipitation(data)
 
 	return &WeatherData{
 		Time: time.Unix(data.Dt, 0),
@@ -206,12 +236,31 @@ func mapOpenWeatherResponse(data *OpenWeatherResponse, settings *conf.Settings) 
 			Deg:   data.Wind.Deg,
 			Gust:  data.Wind.Gust,
 		},
+		Precipitation: Precipitation{
+			Amount: precipAmount,
+			Type:   precipType,
+		},
 		Clouds:      data.Clouds.All,
 		Visibility:  data.Visibility,
 		Pressure:    data.Main.Pressure,
 		Humidity:    data.Main.Humidity,
+		WeatherMain: data.Weather[0].Main,
 		Description: data.Weather[0].Description,
 		Icon:        string(GetStandardIconCode(data.Weather[0].Icon, openWeatherProviderName)),
+	}
+}
+
+// openWeatherPrecipitation extracts the precipitation amount (mm in the last
+// hour) and type from an OpenWeather response. Snow is preferred over rain when
+// both are reported in the same hour.
+func openWeatherPrecipitation(data *OpenWeatherResponse) (amount float64, precipType string) {
+	switch {
+	case data.Snow.OneHour > 0:
+		return data.Snow.OneHour, "snow"
+	case data.Rain.OneHour > 0:
+		return data.Rain.OneHour, "rain"
+	default:
+		return 0, ""
 	}
 }
 
@@ -238,17 +287,4 @@ func convertOpenWeatherTemps(temp, feelsLike, tempMin, tempMax float64, units st
 		// metric: already Celsius
 		return temp, feelsLike, tempMin, tempMax
 	}
-}
-
-func maskAPIKey(rawURL, keyParamName string) string {
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-	queryParams := parsedURL.Query()
-	if queryParams.Has(keyParamName) {
-		queryParams.Set(keyParamName, "***MASKED***")
-	}
-	parsedURL.RawQuery = queryParams.Encode()
-	return parsedURL.String()
 }

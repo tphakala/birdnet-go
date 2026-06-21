@@ -2,6 +2,8 @@ package classifier
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -18,10 +20,13 @@ import (
 
 // mockModelInstance implements ModelInstance for testing.
 type mockModelInstance struct {
-	id      string
-	spec    ModelSpec
-	labels  []string // optional; when nil a single default label is returned
-	predict func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
+	id        string
+	spec      ModelSpec
+	labels    []string // optional; when nil a single default label is returned
+	device    string   // optional; when empty Device() reports "CPU"
+	backend   string   // optional; reported verbatim by Backend()
+	precision string   // optional; reported verbatim by Precision()
+	predict   func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
 func (m *mockModelInstance) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
@@ -44,7 +49,15 @@ func (m *mockModelInstance) Labels() []string {
 	}
 	return []string{"Turdus merula_Common Blackbird"}
 }
-func (m *mockModelInstance) Close() error { return nil }
+func (m *mockModelInstance) Close() error      { return nil }
+func (m *mockModelInstance) Backend() string   { return m.backend }
+func (m *mockModelInstance) Precision() string { return m.precision }
+func (m *mockModelInstance) Device() string {
+	if m.device != "" {
+		return m.device
+	}
+	return deviceCPU
+}
 
 // newTestOrchestrator creates an Orchestrator with mock models for unit testing.
 // It does not require real model files.
@@ -55,7 +68,8 @@ func newTestOrchestrator(t *testing.T, mocks ...*mockModelInstance) *Orchestrato
 		models[m.id] = &modelEntry{instance: m}
 	}
 	return &Orchestrator{
-		models: models,
+		models:   models,
+		modelRSS: make(map[string]int64),
 	}
 }
 
@@ -467,4 +481,172 @@ func TestOrchestrator_MultipleModelsEachExtractOwnEmbedding(t *testing.T) {
 
 	assert.Len(t, e1, birdnetEmbDim, "birdnet model yields its own 4-dim embedding")
 	assert.Len(t, e2, perchEmbDim, "perch model yields its own 3-dim embedding")
+}
+
+func TestUnionLabels_DedupesAcrossModelsPreservingOrder(t *testing.T) {
+	t.Parallel()
+
+	primary := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	bat := []string{"Barbastella barbastellus", "Turdus merula_Common Blackbird"}
+
+	got := unionLabels(primary, bat)
+
+	assert.Equal(t, []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Barbastella barbastellus",
+	}, got)
+}
+
+func TestUnionLabels_SkipsEmptyEntries(t *testing.T) {
+	t.Parallel()
+
+	got := unionLabels([]string{"", "Parus major_Great Tit", ""})
+	assert.Equal(t, []string{"Parus major_Great Tit"}, got)
+}
+
+// TestModelInfos_LivePrimaryInfo verifies that ModelInfos returns the live
+// o.ModelInfo for the primary model entry rather than the static registry
+// template. This matters for the arm64 ONNX-only default, where o.ModelInfo
+// carries Backend=ONNX and Quantization=INT8 while the registry template has
+// Backend=TFLite and Quantization=FP32.
+func TestModelInfos_LivePrimaryInfo(t *testing.T) {
+	t.Parallel()
+
+	primaryInfo := stockBirdNETV24ONNXVariant("/models/BirdNET_INT8_ARM.onnx", QuantizationINT8)
+
+	o := &Orchestrator{
+		ModelInfo: primaryInfo,
+		models: map[string]*modelEntry{
+			primaryInfo.ID: {instance: &mockModelInstance{id: primaryInfo.ID}},
+		},
+	}
+
+	infos := o.ModelInfos()
+
+	require.Len(t, infos, 1)
+	got := infos[0]
+	assert.Equal(t, BackendONNX, got.Backend, "live backend must be ONNX, not the TFLite template")
+	assert.Equal(t, QuantizationINT8, got.Quantization, "live quantization must be INT8")
+	assert.True(t, got.IsStock, "IsStock must carry through from live info")
+	assert.Equal(t, "/models/BirdNET_INT8_ARM.onnx", got.CustomPath)
+
+	// Confirm ToDetectionModelInfo keeps attribution correct: IsStock keeps Variant "default".
+	det := got.ToDetectionModelInfo()
+	assert.Equal(t, "default", det.Variant, "IsStock stock model must attribute as default")
+}
+
+// TestAllLabels_IncludesSecondaryModelLabels verifies that AllLabels returns the
+// union of primary and secondary model labels, including scientific-only bat labels.
+// This is the label source used by the reverse name-search maps, so a secondary
+// model label must appear for localized search to find it.
+// When o.primary is nil (as in unit tests that avoid real model files), AllLabels
+// iterates o.models only; unionLabels deduplicates, so the result is still correct.
+func TestAllLabels_IncludesSecondaryModelLabels(t *testing.T) {
+	t.Parallel()
+
+	bird := &mockModelInstance{
+		id:     "BirdNET_V2.4",
+		labels: []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"},
+	}
+	bat := &mockModelInstance{
+		id:     "BattyBirdNET_V1.0",
+		labels: []string{"Barbastella barbastellus", "Myotis daubentonii"},
+	}
+
+	// newTestOrchestrator builds o.models but leaves o.primary nil, which is fine:
+	// AllLabels handles nil primary by iterating all entries in o.models.
+	o := newTestOrchestrator(t, bird, bat)
+
+	got := o.AllLabels()
+
+	assert.Contains(t, got, "Turdus merula_Common Blackbird", "bird model label must be included")
+	assert.Contains(t, got, "Parus major_Great Tit", "bird model label must be included")
+	assert.Contains(t, got, "Barbastella barbastellus", "bat model scientific-only label must be included")
+	assert.Contains(t, got, "Myotis daubentonii", "bat model scientific-only label must be included")
+}
+
+// TestOrchestrator_PredictModel_ErrorIncrementsInvokeErrors verifies that a
+// failed model Predict call increments the readable inference error counter via
+// GetInferenceCounters().PeekAll()[id].InvokeErrors.
+func TestOrchestrator_PredictModel_ErrorIncrementsInvokeErrors(t *testing.T) {
+	// Not parallel: asserts a delta on the package-global inference counters
+	// (globalInferenceCounters). Keeping it serial avoids coupling the delta to
+	// any other test that touches the shared counters.
+	const modelID = "error-model"
+	predictErr := errors.New("injected predict failure")
+
+	mock := &mockModelInstance{
+		id:   modelID,
+		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			return nil, predictErr
+		},
+	}
+
+	o := newTestOrchestrator(t, mock)
+
+	// Confirm the counter starts at zero (entry may not exist yet).
+	before := GetInferenceCounters().PeekAll()[modelID].InvokeErrors
+
+	results, err := o.PredictModel(t.Context(), modelID, [][]float32{{0.1}})
+
+	require.Error(t, err)
+	assert.Nil(t, results)
+
+	after := GetInferenceCounters().PeekAll()[modelID].InvokeErrors
+	assert.Equal(t, before+1, after, "InvokeErrors must be incremented on predict failure")
+
+	// The success counter must not have been touched.
+	assert.Equal(t, int64(0), GetInferenceCounters().PeekAll()[modelID].InvokeCount,
+		"InvokeCount must remain zero after a failed predict")
+}
+
+// testRegistryIDForLoadFailure is a synthetic registry ID used only in tests
+// that exercise the LoadModel failure path. It is registered in ModelRegistry
+// and modelLoaders inside TestOrchestrator_LoadModel_FailureIncrementsLoadFailures.
+const testRegistryIDForLoadFailure = "__test_load_fail__"
+
+// TestOrchestrator_LoadModel_FailureIncrementsLoadFailures verifies that a
+// failed LoadModel call increments the per-model load-failure counter returned
+// by LoadFailures().
+func TestOrchestrator_LoadModel_FailureIncrementsLoadFailures(t *testing.T) {
+	// Do NOT run in parallel: mutates package-level ModelRegistry and modelLoaders.
+
+	loaderErr := fmt.Errorf("injected loader failure")
+
+	// Register a synthetic model so LoadModel's registry check passes.
+	ModelRegistry[testRegistryIDForLoadFailure] = ModelInfo{
+		ID:      testRegistryIDForLoadFailure,
+		IsStock: false,
+	}
+	modelLoaders[testRegistryIDForLoadFailure] = func(_ *Orchestrator, _ int) error {
+		return loaderErr
+	}
+	t.Cleanup(func() {
+		delete(ModelRegistry, testRegistryIDForLoadFailure)
+		delete(modelLoaders, testRegistryIDForLoadFailure)
+	})
+
+	o := &Orchestrator{
+		Settings: conftest.GetTestSettings(),
+		models:   map[string]*modelEntry{},
+		modelRSS: make(map[string]int64),
+	}
+
+	// The first failure must register the counter and set it to 1.
+	err := o.LoadModel(testRegistryIDForLoadFailure)
+	require.Error(t, err, "LoadModel should propagate the loader error")
+
+	failures := o.LoadFailures()
+	assert.Equal(t, int64(1), failures[testRegistryIDForLoadFailure],
+		"LoadFailures must be 1 after one failed LoadModel call")
+
+	// A second failure must increment to 2.
+	err = o.LoadModel(testRegistryIDForLoadFailure)
+	require.Error(t, err)
+
+	failures = o.LoadFailures()
+	assert.Equal(t, int64(2), failures[testRegistryIDForLoadFailure],
+		"LoadFailures must be 2 after two failed LoadModel calls")
 }

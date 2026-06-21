@@ -15,6 +15,7 @@
   - onSort: (field: string) => void - Sort toggle callback
   - className?: string - Additional CSS classes on <th>
   - srOnly?: string - Screen reader text override
+  - width?: string - Optional fixed column width (applied as inline style on <th>)
 -->
 <script lang="ts">
   import { ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
@@ -29,9 +30,19 @@
     onSort: (_field: string) => void;
     className?: string;
     srOnly?: string;
+    width?: string;
   }
 
-  let { label, field, activeField, direction, onSort, className = '', srOnly }: Props = $props();
+  let {
+    label,
+    field,
+    activeField,
+    direction,
+    onSort,
+    className = '',
+    srOnly,
+    width,
+  }: Props = $props();
 
   const isActive = $derived(field === activeField);
 </script>
@@ -39,6 +50,7 @@
 <th
   scope="col"
   class={cn(className)}
+  style:width
   aria-sort={isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
 >
   <button

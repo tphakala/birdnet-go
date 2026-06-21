@@ -1,8 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
 import NewSpeciesTimelineChart from './NewSpeciesTimelineChart.svelte';
 
 // jsdom has no layout engine; assert on element counts/attributes only.
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 afterEach(() => {
   cleanup();
@@ -54,5 +58,38 @@ describe('NewSpeciesTimelineChart', () => {
     });
     const labelled = container.querySelector('[aria-label="New species timeline"]');
     expect(labelled).toBeTruthy();
+  });
+
+  // Localization: the y band scale is keyed on the scientific name (stable across
+  // locales) while the axis renders the display name via tickFormat. Two species
+  // that share a common name must still get distinct rows; a naive scale keyed on
+  // the common name would dedupe the band and collapse them onto one row.
+  it('keeps two species sharing a common name on distinct rows', async () => {
+    const sameCommonName = [
+      { commonName: 'Owl', scientificName: 'Strix aluco', firstHeard: new Date(2024, 2, 1) },
+      { commonName: 'Owl', scientificName: 'Bubo bubo', firstHeard: new Date(2024, 2, 5) },
+    ];
+    const { container } = render(NewSpeciesTimelineChart, { props: { data: sameCommonName } });
+    await Promise.resolve();
+    const markers = container.querySelectorAll('rect.timeline-marker');
+    expect(markers).toHaveLength(2);
+    const ys = Array.from(markers, m => m.getAttribute('y'));
+    // Distinct band positions: a common-name-keyed scale would place both at the
+    // same y (the regression this decoupling prevents).
+    expect(ys[0]).not.toBe(ys[1]);
+  });
+
+  it('renders display names, not the scientific-name band keys, on the y axis', async () => {
+    const { container } = render(NewSpeciesTimelineChart, { props: { data: sampleData } });
+    await Promise.resolve();
+    const tickText = Array.from(
+      container.querySelectorAll('.y-axis .tick text'),
+      node => node.textContent
+    );
+    // No dictionary is loaded in the test, so localizeSpeciesName falls back to the
+    // common name. The tickFormat must map the scientific-name keys back to that
+    // display name rather than leaving the raw scientific key on the axis.
+    expect(tickText).toContain('Robin');
+    expect(tickText).not.toContain('Erithacus rubecula');
   });
 });

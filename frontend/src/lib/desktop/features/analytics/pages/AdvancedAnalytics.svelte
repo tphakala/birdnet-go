@@ -1,819 +1,322 @@
-<!-- Advanced Analytics Page with D3.js Charts -->
-<script lang="ts">
-  import { onMount } from 'svelte';
-  import { t } from '$lib/i18n';
+<!--
+  Analytics hub (PR0 foundation).
 
-  import TimeOfDaySpeciesChart from '../components/charts/d3/TimeOfDaySpeciesChart.svelte';
-  import DailySpeciesTrendChart from '../components/charts/d3/DailySpeciesTrendChart.svelte';
-  import SpeciesDiversityChart from '../components/charts/d3/SpeciesDiversityChart.svelte';
-  import SpeciesSelector from '$lib/components/ui/SpeciesSelector.svelte';
-  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
-  import Input from '$lib/desktop/components/ui/Input.svelte';
-  import type { Species, SpeciesId } from '$lib/types/species';
-  import { createSpeciesId } from '$lib/types/species';
+  Registry-driven tabbed surface for the Advanced Analytics route: a sticky
+  shared control bar, a tab bar whose active tab lives in the `?tab=` URL param,
+  and a responsive grid of ChartCards for the active tab only. Date range,
+  species, source, and active tab all live in URL query params, so views are
+  deep-linkable and survive reload and Back/Forward.
+
+  PR0 migrates the three existing charts (time-of-day species, daily species
+  trend, species diversity) onto the registry with no behavior change. The
+  Overview and Review & Accuracy tabs are intentionally empty here; later PRs
+  populate them.
+-->
+<script lang="ts">
+  import { onMount, untrack } from 'svelte';
+  import {
+    Activity,
+    TrendingUp,
+    Leaf,
+    LayoutDashboard,
+    BadgeCheck,
+    Construction,
+  } from '@lucide/svelte';
+
+  import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { parseLocalDateString } from '$lib/utils/date';
+  import type { Species, SpeciesFrequency } from '$lib/types/species';
+  import { createSpeciesId } from '$lib/types/species';
 
-  const logger = getLogger('advanced-analytics');
+  import AnalyticsControlBar from '../components/AnalyticsControlBar.svelte';
+  import ChartCard from '../components/ChartCard.svelte';
+  import { chartsForGroup, groupHasCharts } from '../registry/charts';
+  import {
+    GROUP_ORDER,
+    formatDateForAPI,
+    parseAnalyticsParams,
+    resolveDateRange,
+    serializeAnalyticsParams,
+  } from '../registry/analyticsParams';
+  import type { AnalyticsParams, ChartGroup } from '../registry/types';
 
-  // Chart data interfaces
-  interface TimeOfDayDatum {
-    hour: number;
-    count: number;
-  }
+  const logger = getLogger('analytics-hub');
 
-  interface TimeOfDaySpeciesData {
-    species: string;
-    commonName: string;
-    data: TimeOfDayDatum[];
-    visible: boolean;
-  }
+  // Default landing tab: the first group (in display order) that actually has
+  // charts. Self-adjusts to Overview once PR0b populates it, so PR0 never lands
+  // the user on an empty tab.
+  const defaultTab: ChartGroup = GROUP_ORDER.find(groupHasCharts) ?? 'overview';
 
-  interface DailyTrendDatum {
-    date: Date;
-    count: number;
-  }
+  // Match the legacy behavior: auto-select the top species when none are in the URL.
+  const AUTO_SELECT_TOP = 5;
+  const SPECIES_SUMMARY_LIMIT = 50;
 
-  interface DailyTrendSpeciesData {
-    species: string;
-    commonName: string;
-    data: DailyTrendDatum[];
-    visible: boolean;
-  }
-
-  // API response interfaces
   interface SpeciesSummaryResponse {
     scientific_name?: string;
     common_name?: string;
     count?: number;
   }
 
-  interface HourlyDataItem {
-    hour: number;
-    count: number;
+  // Tab metadata (label key + icon), in display order.
+  const TABS: { group: ChartGroup; labelKey: string; icon: typeof Activity }[] = [
+    { group: 'overview', labelKey: 'analytics.hub.tabs.overview', icon: LayoutDashboard },
+    { group: 'patterns', labelKey: 'analytics.hub.tabs.patterns', icon: Activity },
+    { group: 'trends', labelKey: 'analytics.hub.tabs.trends', icon: TrendingUp },
+    { group: 'biodiversity', labelKey: 'analytics.hub.tabs.biodiversity', icon: Leaf },
+    { group: 'quality', labelKey: 'analytics.hub.tabs.quality', icon: BadgeCheck },
+  ];
+
+  function readParams(): AnalyticsParams {
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    return parseAnalyticsParams(search, { defaultTab });
   }
 
-  interface DailyDataItem {
-    date: string;
-    count: number;
-  }
+  let params = $state<AnalyticsParams>(readParams());
 
-  interface SpeciesDailyData {
-    start_date: string;
-    end_date: string;
-    species: string;
-    data: DailyDataItem[];
-    total: number;
-  }
-
-  interface DiversityDataItem {
-    date: string;
-    unique_species: number;
-  }
-
-  interface DiversityResponse {
-    start_date: string;
-    end_date: string;
-    data: DiversityDataItem[];
-    max_diversity: number;
-  }
-
-  interface DiversityDatum {
-    date: Date;
-    uniqueSpecies: number;
-  }
-
-  // Component state
-  let isLoading = $state(false);
-  let error = $state<string | null>(null);
-
-  // Date range controls
-  let dateRange = $state<'week' | 'month' | 'quarter' | 'year' | 'custom'>('month');
-  let startDate = $state('');
-  let endDate = $state('');
-
-  // Species selection
+  // Species available for the current range: powers the selector and provides
+  // the scientific -> common name map used to label chart series.
   let availableSpecies = $state<Species[]>([]);
-  let selectedSpecies = $state<SpeciesId[]>([]);
-  let maxSpecies = 10;
-
-  // Abort controllers for preventing race conditions
+  let loadingSpecies = $state(false);
   let speciesController: AbortController | null = null;
-  let timeOfDayController: AbortController | null = null;
-  let dailyTrendController: AbortController | null = null;
-  let diversityController: AbortController | null = null;
 
-  // Chart options
-  let showRelativeTrends = $state(false);
-  let enableZoom = $state(true);
-  let enableBrush = $state(false);
-
-  // Chart data
-  let timeOfDayData = $state<TimeOfDaySpeciesData[]>([]);
-  let dailyTrendData = $state<DailyTrendSpeciesData[]>([]);
-  let diversityData = $state<DiversityDatum[]>([]);
-
-  // Date range options for custom Select component
-  const dateRangeOptions = $derived([
-    { value: 'week', label: t('analytics.advanced.dateRangeOptions.week') },
-    { value: 'month', label: t('analytics.advanced.dateRangeOptions.month') },
-    { value: 'quarter', label: t('analytics.advanced.dateRangeOptions.quarter') },
-    { value: 'year', label: t('analytics.advanced.dateRangeOptions.year') },
-    { value: 'custom', label: t('analytics.advanced.dateRangeOptions.custom') },
-  ]);
-
-  // Computed date range
-  const computedDateRange = $derived(
-    (() => {
-      const today = new Date();
-      let start: Date, end: Date;
-
-      switch (dateRange) {
-        case 'week':
-          end = today;
-          start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case 'month':
-          end = today;
-          start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        case 'quarter':
-          end = today;
-          start = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
-          break;
-        case 'year':
-          end = today;
-          start = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
-          break;
-        case 'custom':
-          start = startDate
-            ? (parseLocalDateString(startDate) ??
-              new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000))
-            : new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-          end = endDate ? (parseLocalDateString(endDate) ?? today) : today;
-          break;
-        default:
-          end = today;
-          start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-      }
-
-      return [start, end] as [Date, Date];
-    })()
+  const speciesNames = $derived(
+    new Map(availableSpecies.map(s => [s.scientificName ?? s.id, s.commonName]))
   );
 
-  // Format date for API calls (avoid timezone issues)
-  function formatDateForAPI(date: Date): string {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const activeCharts = $derived(chartsForGroup(params.tab));
+  const speciesApplicable = $derived(activeCharts.some(c => c.supports.species));
+  const activeTabLabelKey = $derived(
+    TABS.find(tab => tab.group === params.tab)?.labelKey ?? 'analytics.hub.tabs.overview'
+  );
+
+  // --- URL state -----------------------------------------------------------
+
+  function writeUrl(mode: 'push' | 'replace'): void {
+    if (typeof window === 'undefined') return;
+    const qs = serializeAnalyticsParams(params, { defaultTab });
+    const url = window.location.pathname + (qs ? `?${qs}` : '');
+    if (mode === 'replace') {
+      window.history.replaceState(window.history.state, '', url);
+    } else {
+      window.history.pushState(window.history.state, '', url);
+    }
   }
 
-  // Fetch available species
-  async function fetchAvailableSpecies() {
+  function applyParams(partial: Partial<AnalyticsParams>, mode: 'push' | 'replace' = 'push'): void {
+    const next: AnalyticsParams = { ...params, ...partial };
+    // Keep the parsed dates in sync with range/start/end.
+    const [startDate, endDate] = resolveDateRange(next.range, next.start, next.end);
+    next.startDate = startDate;
+    next.endDate = endDate;
+    params = next;
+    writeUrl(mode);
+  }
+
+  function selectTab(group: ChartGroup): void {
+    if (group === params.tab) return;
+    applyParams({ tab: group }, 'push');
+  }
+
+  // Browser Back/Forward: re-read params from the URL without writing (no loop).
+  onMount(() => {
+    const handlePopState = () => {
+      params = readParams();
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  });
+
+  // --- Available species ----------------------------------------------------
+
+  // Refetch the species list only when the resolved date range changes.
+  const rangeKey = $derived(
+    `${formatDateForAPI(params.startDate)}|${formatDateForAPI(params.endDate)}`
+  );
+
+  function classifyFrequency(count: number): SpeciesFrequency {
+    if (count > 100) return 'very-common';
+    if (count > 50) return 'common';
+    if (count > 10) return 'uncommon';
+    return 'rare';
+  }
+
+  async function fetchAvailableSpecies(): Promise<void> {
+    const snapshot = untrack(() => params);
+    speciesController?.abort();
+    const ac = new AbortController();
+    speciesController = ac;
+    loadingSpecies = true;
+
     try {
-      // Abort any previous species fetch
-      if (speciesController) {
-        speciesController.abort();
-      }
-      speciesController = new AbortController();
-
-      const [start, end] = computedDateRange;
-      const params = new URLSearchParams({
-        start_date: formatDateForAPI(start),
-        end_date: formatDateForAPI(end),
-        limit: '50', // Get top 50 species
+      const search = new URLSearchParams({
+        start_date: formatDateForAPI(snapshot.startDate),
+        end_date: formatDateForAPI(snapshot.endDate),
+        limit: String(SPECIES_SUMMARY_LIMIT),
       });
-
-      const response = await fetch(buildAppUrl(`/api/v2/analytics/species/summary?${params}`), {
-        signal: speciesController.signal,
+      const response = await fetch(buildAppUrl(`/api/v2/analytics/species/summary?${search}`), {
+        signal: ac.signal,
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
       const data: unknown = await response.json();
-
+      // Invariant: id === scientificName for real rows. The species selector,
+      // the URL `species` param, the registry fetchers' `species` query arg, and
+      // the chart series keys all identify a species by its scientific name, so
+      // id must equal scientificName for the round-trip to work. (The index
+      // fallback only applies to degenerate rows missing a scientific name.)
       availableSpecies = Array.isArray(data)
         ? (data as SpeciesSummaryResponse[]).map((item, index) => {
             const count = item.count ?? 0;
-            const frequency =
-              count > 100
-                ? 'very-common'
-                : count > 50
-                  ? 'common'
-                  : count > 10
-                    ? 'uncommon'
-                    : 'rare';
             return {
               id: createSpeciesId(item.scientific_name ?? `species-${index}`),
               commonName: item.common_name ?? t('common.unknown'),
               scientificName: item.scientific_name ?? t('common.unknown'),
-              frequency: frequency as 'very-common' | 'common' | 'uncommon' | 'rare',
+              frequency: classifyFrequency(count),
               category: t('analytics.advanced.categories.birds'),
               description: t('analytics.advanced.detections', { count }),
-              count, // Keep count for backwards compatibility
+              count,
             };
           })
         : [];
 
-      // Auto-select top species if none selected (limited by backend cap)
-      if (selectedSpecies.length === 0 && availableSpecies.length > 0) {
-        const maxToSelect = Math.min(availableSpecies.length, 5, 10); // Client wants 5, backend allows 10
-        selectedSpecies = availableSpecies.slice(0, maxToSelect).map(s => s.id);
+      // Auto-select the top species when the URL specifies none. Written via
+      // replace so the deep-link is reproducible without adding a history entry.
+      if (untrack(() => params).species.length === 0 && availableSpecies.length > 0) {
+        const top = availableSpecies
+          .slice(0, Math.min(availableSpecies.length, AUTO_SELECT_TOP))
+          .map(s => s.scientificName ?? s.id);
+        applyParams({ species: top }, 'replace');
       }
     } catch (err) {
-      // Don't log abort errors as they're expected
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
-      logger.error('Error fetching available species:', err);
+      if (err instanceof Error && err.name === 'AbortError') return;
+      logger.error('Failed to fetch available species', err);
       availableSpecies = [];
-    }
-  }
-
-  // Fetch time of day data for selected species
-  async function fetchTimeOfDayData() {
-    if (selectedSpecies.length === 0) {
-      timeOfDayData = [];
-      return;
-    }
-
-    try {
-      // Abort any previous time of day fetch
-      if (timeOfDayController) {
-        timeOfDayController.abort();
-      }
-      timeOfDayController = new AbortController();
-
-      const [start] = computedDateRange;
-      const params = new URLSearchParams({
-        date: formatDateForAPI(start),
-        min_confidence: '0',
-      });
-
-      // Add species parameters (convert IDs back to scientific names)
-      selectedSpecies.forEach(speciesId => {
-        const species = availableSpecies.find(s => s.id === speciesId);
-        if (species?.scientificName) {
-          params.append('species', species.scientificName);
-        }
-      });
-
-      const response = await fetch(buildAppUrl(`/api/v2/analytics/time/hourly/batch?${params}`), {
-        signal: timeOfDayController.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data: unknown = await response.json();
-
-      if (!data || typeof data !== 'object' || Array.isArray(data)) {
-        throw new Error('Invalid hourly batch response: expected an object');
-      }
-
-      // Convert API response to chart format
-      const newTimeOfDayData: TimeOfDaySpeciesData[] = Object.entries(
-        data as Record<string, unknown>
-      ).map(([species, hourlyData]) => {
-        const speciesInfo = availableSpecies.find(s => s.scientificName === species);
-        return {
-          species,
-          commonName: speciesInfo?.commonName ?? species,
-          data: Array.isArray(hourlyData)
-            ? (hourlyData as HourlyDataItem[]).map(item => ({
-                hour: typeof item.hour === 'number' ? item.hour : 0,
-                count: typeof item.count === 'number' ? item.count : 0,
-              }))
-            : [],
-          visible: true,
-        };
-      });
-
-      // Only update if we have valid data
-      if (newTimeOfDayData.length > 0) {
-        timeOfDayData = newTimeOfDayData;
-      }
-    } catch (err) {
-      // Don't log abort errors as they're expected
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
-      logger.error('Error fetching time of day data:', err);
-      // Don't clear existing data on error, just log it
-    }
-  }
-
-  // Fetch daily trend data for selected species
-  async function fetchDailyTrendData() {
-    if (selectedSpecies.length === 0) {
-      dailyTrendData = [];
-      return;
-    }
-
-    try {
-      // Abort any previous daily trend fetch
-      if (dailyTrendController) {
-        dailyTrendController.abort();
-      }
-      dailyTrendController = new AbortController();
-
-      const [start, end] = computedDateRange;
-      const params = new URLSearchParams({
-        start_date: formatDateForAPI(start),
-        end_date: formatDateForAPI(end),
-      });
-
-      // Add species parameters (convert IDs back to scientific names)
-      selectedSpecies.forEach(speciesId => {
-        const species = availableSpecies.find(s => s.id === speciesId);
-        if (species?.scientificName) {
-          params.append('species', species.scientificName);
-        }
-      });
-
-      const response = await fetch(buildAppUrl(`/api/v2/analytics/time/daily/batch?${params}`), {
-        signal: dailyTrendController.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data: unknown = await response.json();
-
-      if (!data || typeof data !== 'object' || Array.isArray(data)) {
-        throw new Error('Invalid daily batch response: expected an object');
-      }
-
-      // Convert API response to chart format
-      const newDailyTrendData: DailyTrendSpeciesData[] = Object.entries(
-        data as Record<string, unknown>
-      ).map(([species, trendData]) => {
-        const speciesInfo = availableSpecies.find(s => s.scientificName === species);
-
-        // Validate that trendData has the expected structure
-        if (!trendData || typeof trendData !== 'object') {
-          return {
-            species,
-            commonName: speciesInfo?.commonName ?? species,
-            data: [],
-            visible: true,
-          };
-        }
-
-        const apiData = trendData as SpeciesDailyData;
-        const dataArray = Array.isArray(apiData.data) ? apiData.data : [];
-
-        return {
-          species,
-          commonName: speciesInfo?.commonName ?? species,
-          data: dataArray
-            .map(item => {
-              if (!item || typeof item !== 'object') return null;
-
-              const date = parseLocalDateString(item.date);
-              const count = typeof item.count === 'number' ? item.count : 0;
-
-              // Skip invalid dates
-              if (!date || isNaN(date.getTime())) return null;
-
-              return { date, count };
-            })
-            .filter((item): item is DailyTrendDatum => item !== null),
-          visible: true,
-        };
-      });
-
-      // Only update if we have valid data
-      if (newDailyTrendData.length > 0) {
-        dailyTrendData = newDailyTrendData;
-      }
-    } catch (err) {
-      // Don't log abort errors as they're expected
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
-      logger.error('Error fetching daily trend data:', err);
-      // Don't clear existing data on error, just log it
-    }
-  }
-
-  // Fetch species diversity data (independent of species selection)
-  async function fetchDiversityData() {
-    try {
-      if (diversityController) {
-        diversityController.abort();
-      }
-      diversityController = new AbortController();
-
-      const [start, end] = computedDateRange;
-      const params = new URLSearchParams({
-        start_date: formatDateForAPI(start),
-        end_date: formatDateForAPI(end),
-      });
-
-      const response = await fetch(buildAppUrl(`/api/v2/analytics/species/diversity?${params}`), {
-        signal: diversityController.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data: unknown = await response.json();
-
-      if (!data || typeof data !== 'object' || Array.isArray(data)) {
-        throw new Error('Invalid diversity response: expected an object');
-      }
-
-      const result = data as DiversityResponse;
-
-      diversityData = (result.data ?? [])
-        .map(item => {
-          const date = parseLocalDateString(item.date);
-          if (!date || isNaN(date.getTime())) return null;
-          return { date, uniqueSpecies: item.unique_species };
-        })
-        .filter((item): item is DiversityDatum => item !== null);
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
-      logger.error('Error fetching diversity data:', err);
-    }
-  }
-
-  // Fetch all data
-  async function fetchAllData() {
-    isLoading = true;
-    error = null;
-
-    try {
-      // Fetch species list and diversity data in parallel (diversity is species-independent)
-      await Promise.all([fetchAvailableSpecies(), fetchDiversityData()]);
-
-      if (selectedSpecies.length > 0) {
-        await Promise.all([fetchTimeOfDayData(), fetchDailyTrendData()]);
-      } else {
-        // Clear species-dependent chart data if no species selected
-        timeOfDayData = [];
-        dailyTrendData = [];
-      }
-    } catch (err) {
-      // Don't log abort errors as they're expected
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
-      logger.error('Error fetching analytics data:', err);
-      error = t('analytics.errors.loadFailed');
     } finally {
-      isLoading = false;
+      if (!ac.signal.aborted) loadingSpecies = false;
     }
   }
 
-  // Handle date range changes
-  function handleDateRangeChange(range: [Date, Date]) {
-    startDate = formatDateForAPI(range[0]);
-    endDate = formatDateForAPI(range[1]);
-    dateRange = 'custom';
-    fetchAllData();
-  }
-
-  // Initialize default custom date inputs on mount
-  onMount(() => {
-    const today = new Date();
-    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    startDate = formatDateForAPI(monthAgo);
-    endDate = formatDateForAPI(today);
-  });
-
-  // Watch for changes that require data refresh
+  // Refetch only when the resolved date range changes. `rangeKey` is day-granular
+  // (built from formatDateForAPI), which is load-bearing: the auto-select below
+  // writes params via `applyParams` (re-resolving the dates with a fresh clock),
+  // and day-granularity keeps `rangeKey` stable so that write does not re-trigger
+  // this effect into a fetch loop.
   $effect(() => {
-    // Only fetch if we have a valid date range and are not in the initial loading phase
-    if (dateRange !== 'custom' || (dateRange === 'custom' && startDate && endDate)) {
-      // Debounce multiple rapid changes
-      const timeoutId = setTimeout(() => {
-        fetchAllData();
-      }, 100);
-
-      return () => clearTimeout(timeoutId);
-    }
+    void rangeKey;
+    // Run untracked: the synchronous param reads inside fetchAvailableSpecies must
+    // not become effect dependencies, so only rangeKey drives the refetch.
+    untrack(() => fetchAvailableSpecies());
+    return () => speciesController?.abort();
   });
+
+  // Roving-tabindex keyboard navigation for the tab bar. Focus moves by id so we
+  // avoid holding element refs (and the array-index access that comes with them).
+  function handleTabKeydown(event: KeyboardEvent): void {
+    const currentIndex = TABS.findIndex(tab => tab.group === params.tab);
+    if (currentIndex < 0) return;
+
+    let nextIndex = currentIndex;
+    switch (event.key) {
+      case 'ArrowRight':
+        nextIndex = (currentIndex + 1) % TABS.length;
+        break;
+      case 'ArrowLeft':
+        nextIndex = (currentIndex - 1 + TABS.length) % TABS.length;
+        break;
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = TABS.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const next = TABS.at(nextIndex);
+    if (!next) return;
+    selectTab(next.group);
+    document.getElementById(`analytics-tab-${next.group}`)?.focus();
+  }
 </script>
 
-<div class="col-span-12 space-y-6" role="region" aria-label="Advanced Analytics">
-  <!-- Error Display -->
-  {#if error}
-    <div
-      class="p-4 bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[var(--color-error)] text-[var(--color-error)] rounded-lg flex items-center gap-3"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="stroke-current shrink-0 h-6 w-6"
-        fill="none"
-        viewBox="0 0 24 24"
+<div class="col-span-12" role="region" aria-label={t('analytics.advanced.title')}>
+  <!-- Tab bar: primary navigation, above the filters. Scrolls rather than wraps
+       so longer locales (DE/FI) keep a single clean strip; overflow-y is hidden
+       so the horizontal scroll container never shows a stray vertical bar. -->
+  <div
+    role="tablist"
+    aria-label={t('analytics.hub.aria.tabs')}
+    class="flex flex-nowrap gap-1 overflow-x-auto overflow-y-hidden border-b border-[var(--color-base-300)]/60"
+  >
+    {#each TABS as tab (tab.group)}
+      {@const Icon = tab.icon}
+      {@const isActive = params.tab === tab.group}
+      <button
+        type="button"
+        role="tab"
+        id={`analytics-tab-${tab.group}`}
+        aria-selected={isActive}
+        aria-controls={`analytics-panel-${tab.group}`}
+        tabindex={isActive ? 0 : -1}
+        class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-t-md {isActive
+          ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
+          : 'border-transparent text-[var(--color-base-content)] opacity-70 hover:opacity-100 hover:border-[var(--color-base-300)]'}"
+        onclick={() => selectTab(tab.group)}
+        onkeydown={handleTabKeydown}
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
-      <span>{error}</span>
-    </div>
-  {/if}
-
-  <!-- Controls Section -->
-  <div
-    class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]"
-  >
-    <div class="p-6 overflow-visible">
-      <h2 class="text-lg font-semibold mb-4">{t('analytics.advanced.chartControls')}</h2>
-
-      <!-- Top Row: Date Range and Chart Options -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
-        <!-- Date Range Selection -->
-        <div class="space-y-2">
-          <SelectDropdown
-            bind:value={dateRange}
-            options={dateRangeOptions}
-            label={t('analytics.advanced.dateRange')}
-            variant="select"
-            size="sm"
-            menuSize="sm"
-          />
-
-          {#if dateRange === 'custom'}
-            <div class="grid grid-cols-2 gap-2 mt-2">
-              <label for="startDateInput" class="sr-only"
-                >{t('analytics.advanced.filters.startDate')}</label
-              >
-              <Input
-                id="startDateInput"
-                type="date"
-                bind:value={startDate}
-                max={endDate}
-                aria-label={t('analytics.advanced.filters.startDate')}
-              />
-              <label for="endDateInput" class="sr-only"
-                >{t('analytics.advanced.filters.endDate')}</label
-              >
-              <Input
-                id="endDateInput"
-                type="date"
-                bind:value={endDate}
-                min={startDate}
-                aria-label={t('analytics.advanced.filters.endDate')}
-              />
-            </div>
-          {/if}
-        </div>
-
-        <!-- Chart Options -->
-        <div class="space-y-2">
-          <div class="label">
-            <span class="label-text font-medium">{t('analytics.advanced.chartOptions')}</span>
-          </div>
-
-          <div class="flex flex-wrap gap-x-6 gap-y-2">
-            <Checkbox
-              bind:checked={showRelativeTrends}
-              label={t('analytics.advanced.options.relativeTrends')}
-              size="sm"
-            />
-
-            <Checkbox
-              bind:checked={enableZoom}
-              label={t('analytics.advanced.options.zoomPan')}
-              size="sm"
-            />
-
-            <Checkbox
-              bind:checked={enableBrush}
-              label={t('analytics.advanced.options.brushSelection')}
-              size="sm"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- Bottom Row: Species Selection (Full Width) -->
-      <div class="space-y-2">
-        <div class="flex items-baseline justify-between">
-          <span class="label-text font-medium"
-            >{t('analytics.advanced.speciesSelection', {
-              count: selectedSpecies.length,
-              max: maxSpecies,
-            })}</span
-          >
-          <span class="label-text-alt text-xs text-[var(--color-base-content)] opacity-60">
-            {t('analytics.advanced.speciesSelectionHint')}
-          </span>
-        </div>
-
-        <div class="w-full">
-          <div class="min-h-[100px] relative">
-            <SpeciesSelector
-              species={availableSpecies}
-              selected={selectedSpecies}
-              variant="chip"
-              size="md"
-              maxSelections={maxSpecies}
-              placeholder={t('analytics.advanced.speciesPlaceholder')}
-              searchable={true}
-              showFrequency={true}
-              categorized={false}
-              loading={isLoading}
-              emptyText={t('analytics.advanced.noSpeciesFound')}
-              className="w-full"
-              on:change={e => {
-                selectedSpecies = e.detail.selected.map(createSpeciesId);
-                // Refresh chart data when species selection changes
-                if (selectedSpecies.length > 0) {
-                  fetchTimeOfDayData();
-                  fetchDailyTrendData();
-                } else {
-                  // Clear data if no species selected
-                  timeOfDayData = [];
-                  dailyTrendData = [];
-                }
-              }}
-            >
-              {#snippet speciesDisplay(species)}
-                <div class="flex items-center justify-between gap-2">
-                  <div class="flex-1 min-w-0">
-                    <div class="font-medium truncate">{species.commonName}</div>
-                    <div
-                      class="text-xs text-[var(--color-base-content)] opacity-60 truncate italic"
-                    >
-                      {species.scientificName}
-                    </div>
-                  </div>
-                  {#if species.count !== undefined}
-                    <div
-                      class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-[var(--color-base-200)]/50 text-[var(--color-base-content)]"
-                    >
-                      {t('analytics.advanced.detections', { count: species.count ?? 0 })}
-                    </div>
-                  {/if}
-                </div>
-              {/snippet}
-            </SpeciesSelector>
-          </div>
-        </div>
-      </div>
-    </div>
+        <Icon class="h-4 w-4" aria-hidden="true" />
+        <span>{t(tab.labelKey)}</span>
+      </button>
+    {/each}
   </div>
 
-  <!-- Charts Section -->
-  <div class="grid grid-cols-1 gap-6">
-    <!-- Time of Day Chart -->
-    <div
-      class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]"
-    >
-      <div class="p-6">
-        <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.timeOfDay.title')}</h2>
-        <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
-          {t('analytics.advanced.charts.timeOfDay.description')}
-        </p>
-
-        <div class="h-96 relative">
-          <TimeOfDaySpeciesChart data={timeOfDayData} {selectedSpecies} width={1200} height={384} />
-
-          {#if isLoading}
-            <div
-              class="absolute inset-0 bg-[var(--color-base-100)]/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
-              role="status"
-              aria-busy="true"
-              aria-label={t('analytics.advanced.aria.loadingAnalytics')}
-            >
-              <div
-                class="w-12 h-12 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"
-              ></div>
-              <span class="sr-only">{t('analytics.advanced.aria.loadingAnalytics')}</span>
-            </div>
-          {:else if timeOfDayData.length === 0}
-            <div
-              class="absolute inset-0 flex items-center justify-center text-[var(--color-base-content)] opacity-60 rounded-lg"
-              role="status"
-              aria-label={t('analytics.advanced.charts.timeOfDay.noData')}
-            >
-              <div class="text-center">
-                <p class="text-lg mb-2">{t('analytics.advanced.charts.timeOfDay.noData')}</p>
-                <p class="text-sm">{t('analytics.advanced.charts.timeOfDay.noDataHint')}</p>
-              </div>
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <!-- Daily Trend Chart -->
-    <div
-      class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]"
-    >
-      <div class="p-6">
-        <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.dailyTrend.title')}</h2>
-        <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
-          {t('analytics.advanced.charts.dailyTrend.description')}
-        </p>
-
-        <div class="h-96 relative">
-          <DailySpeciesTrendChart
-            data={dailyTrendData}
-            {selectedSpecies}
-            dateRange={computedDateRange}
-            showRelative={showRelativeTrends}
-            {enableZoom}
-            {enableBrush}
-            onDateRangeChange={handleDateRangeChange}
-            width={1200}
-            height={384}
-          />
-
-          {#if isLoading}
-            <div
-              class="absolute inset-0 bg-[var(--color-base-100)]/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
-              role="status"
-              aria-busy="true"
-              aria-label={t('analytics.advanced.aria.loadingTrends')}
-            >
-              <div
-                class="w-12 h-12 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"
-              ></div>
-              <span class="sr-only">{t('analytics.advanced.aria.loadingTrends')}</span>
-            </div>
-          {:else if dailyTrendData.length === 0}
-            <div
-              class="absolute inset-0 flex items-center justify-center text-[var(--color-base-content)] opacity-60 rounded-lg"
-              role="status"
-              aria-label={t('analytics.advanced.charts.dailyTrend.noData')}
-            >
-              <div class="text-center">
-                <p class="text-lg mb-2">{t('analytics.advanced.charts.dailyTrend.noData')}</p>
-                <p class="text-sm">{t('analytics.advanced.charts.dailyTrend.noDataHint')}</p>
-              </div>
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
+  <!-- Compact filter toolbar (below the tabs) -->
+  <div class="mt-3">
+    <AnalyticsControlBar
+      {params}
+      {availableSpecies}
+      {loadingSpecies}
+      {speciesApplicable}
+      onParamsChange={partial => applyParams(partial, 'push')}
+    />
   </div>
 
-  <!-- Species Diversity Chart (Full Width) -->
+  <!-- Active tab panel: only this tab's charts are mounted -->
   <div
-    class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]"
+    role="tabpanel"
+    id={`analytics-panel-${params.tab}`}
+    aria-labelledby={`analytics-tab-${params.tab}`}
+    tabindex="0"
+    class="mt-6 focus-visible:outline-none"
   >
-    <div class="p-6">
-      <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.diversity.title')}</h2>
-      <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
-        {t('analytics.advanced.charts.diversity.description')}
-      </p>
-
-      <div class="h-96 relative">
-        <SpeciesDiversityChart
-          data={diversityData}
-          dateRange={computedDateRange}
-          width={1200}
-          height={384}
-        />
-
-        {#if isLoading}
-          <div
-            class="absolute inset-0 bg-[var(--color-base-100)]/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
-            role="status"
-            aria-busy="true"
-            aria-label={t('analytics.advanced.aria.loadingDiversity')}
-          >
-            <div
-              class="w-12 h-12 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"
-            ></div>
-            <span class="sr-only">{t('analytics.advanced.aria.loadingDiversity')}</span>
-          </div>
-        {:else if diversityData.length === 0}
-          <div
-            class="absolute inset-0 flex items-center justify-center text-[var(--color-base-content)] opacity-60 rounded-lg"
-            role="status"
-            aria-label={t('analytics.advanced.charts.diversity.noData')}
-          >
-            <div class="text-center">
-              <p class="text-lg mb-2">{t('analytics.advanced.charts.diversity.noData')}</p>
-              <p class="text-sm">{t('analytics.advanced.charts.diversity.noDataHint')}</p>
-            </div>
-          </div>
-        {/if}
+    {#if activeCharts.length === 0}
+      <!-- Coming soon: populated in later PRs. Never a blank wall. -->
+      <div
+        class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)] p-12"
+        role="status"
+      >
+        <div class="flex flex-col items-center text-center text-[var(--color-base-content)]">
+          <Construction class="h-12 w-12 mb-4 opacity-40" aria-hidden="true" />
+          <p class="text-lg font-medium mb-1">{t(activeTabLabelKey)}</p>
+          <p class="text-sm opacity-70 max-w-md">{t('analytics.hub.comingSoon.description')}</p>
+        </div>
       </div>
-    </div>
+    {:else}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {#each activeCharts as chart (chart.id)}
+          <div class={chart.size === 'normal' ? 'lg:col-span-1' : 'lg:col-span-2'}>
+            <ChartCard
+              {chart}
+              {params}
+              {speciesNames}
+              speciesLoading={loadingSpecies}
+              onParamsChange={partial => applyParams(partial, 'push')}
+            />
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 </div>
-
-<style>
-  /* Card-like containers */
-  .bg-\[var\(--color-base-100\)\] {
-    transition: box-shadow 0.2s ease;
-  }
-</style>

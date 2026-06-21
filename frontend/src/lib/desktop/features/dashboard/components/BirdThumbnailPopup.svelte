@@ -28,9 +28,15 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import type { ImageAttribution } from '$lib/types/detection.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { validateProtocolURL } from '$lib/utils/security';
+  import { t } from '$lib/i18n';
   import { portal } from '$lib/utils/portal';
   import { dropdown } from '$lib/utils/transitions';
+  import { loggers } from '$lib/utils/logger';
   import { Image } from '@lucide/svelte';
+
+  const logger = loggers.ui;
 
   interface Props {
     thumbnailUrl: string;
@@ -42,10 +48,38 @@
 
   let { thumbnailUrl, commonName, scientificName, detectionUrl, className = '' }: Props = $props();
 
+  // Localized common name for display in the visitor's UI locale. Falls back to
+  // the server-provided common name, then the scientific name.
+  const displayName = $derived(localizeSpeciesName(scientificName, commonName));
+
+  // The popup width is fixed (also applied via style:width below), so the
+  // constant is the authoritative width. The height is content-driven, so
+  // calculatePosition() measures the mounted element and uses the height
+  // estimate only as the first-pass fallback before the popup is in the DOM.
+  const POPUP_WIDTH = 320;
+  const POPUP_HEIGHT_ESTIMATE = 320;
+
+  // Positioning tuning constants (px).
+  const POPUP_VIEWPORT_MARGIN = 10; // minimum gap kept from the viewport edges
+  const POPUP_OFFSET_X = 10; // horizontal gap from the trigger
+  const POPUP_OFFSET_Y = 10; // vertical gap from the trigger when below
+  const POPUP_OFFSET_Y_ABOVE = 20; // larger vertical gap when above, for separation
+  const POPUP_ARROW_SIZE = 12; // arrow square size, matches the w-3/h-3 classes
+  // Flip to the 'above' placement once free space below drops under the popup
+  // height plus this buffer, so it flips before the trigger reaches the edge.
+  const POPUP_EARLY_FLIP_BUFFER = 200;
+
   // State for popup visibility and positioning
   let showPopup = $state(false);
   let popupX = $state(0);
-  let popupY = $state(0);
+  // Vertical anchor. When the popup sits below the trigger we pin its `top`;
+  // when it sits above we pin its `bottom` so the bottom edge aligns to the row
+  // top regardless of the popup's rendered height. Exactly one is non-null.
+  let popupTop = $state<number | null>(0);
+  let popupBottom = $state<number | null>(null);
+  // Horizontal offset (px) of the arrow within the popup, so it points at the
+  // trigger's center instead of a fixed corner.
+  let popupArrowX = $state(20);
   let popupPosition = $state<'above' | 'below'>('below');
   let triggerElement: HTMLElement | undefined = $state();
   let popupElement: HTMLElement | undefined = $state();
@@ -56,30 +90,63 @@
   let imageAttribution = $state<ImageAttribution | null>(null);
   let lastFetchedScientificName = '';
 
-  // Fetch image attribution when popup opens
+  // Only allow http(s) license links. The attribution payload comes from an
+  // external image provider, so a javascript:/data: URL must never reach href.
+  const safeLicenseURL = $derived(
+    imageAttribution?.licenseURL &&
+      validateProtocolURL(imageAttribution.licenseURL, ['http', 'https'])
+      ? imageAttribution.licenseURL
+      : undefined
+  );
+
+  // Fetch image attribution when popup opens. Attribution is non-critical: a
+  // failure only suppresses the credit overlay, it never blocks the popup.
   async function fetchImageAttribution() {
-    if (!scientificName?.trim() || lastFetchedScientificName === scientificName) return;
-    lastFetchedScientificName = scientificName;
+    const name = scientificName?.trim();
+    if (!name || lastFetchedScientificName === name) return;
+    // Mark as fetched up front so concurrent/repeat hovers do not re-request,
+    // and clear any prior attribution so a reused row cannot show it as stale.
+    lastFetchedScientificName = name;
+    imageAttribution = null;
 
     try {
-      const url = buildAppUrl(
-        `/api/v2/media/species-image/info?name=${encodeURIComponent(scientificName)}`
-      );
+      const url = buildAppUrl(`/api/v2/media/species-image/info?name=${encodeURIComponent(name)}`);
       const response = await fetch(url);
       if (response.ok) {
-        imageAttribution = (await response.json()) as ImageAttribution;
+        const data = (await response.json()) as ImageAttribution;
+        // Only apply if this row still represents the requested species (it may
+        // have been reused for a different one while the request was in flight).
+        if (lastFetchedScientificName === name) {
+          imageAttribution = data;
+        }
+      } else if (response.status >= 500 && lastFetchedScientificName === name) {
+        // Transient server error: allow a later hover to retry. A 4xx (e.g. a
+        // 404 when a species has no attribution) is permanent, so keep the
+        // dedupe key to avoid re-querying the API on every subsequent hover.
+        lastFetchedScientificName = '';
       }
-    } catch {
-      // Attribution is non-critical — fail silently
+    } catch (error) {
+      // Clear the dedupe key so a later hover can retry after a network error,
+      // unless a newer request for a different species has superseded this one.
+      if (lastFetchedScientificName === name) {
+        lastFetchedScientificName = '';
+      }
+      logger.debug('Failed to fetch bird image attribution', { error, species: name });
     }
   }
 
   // Show popup and calculate position
-  function handleMouseEnter(event: MouseEvent) {
+  function handleMouseEnter() {
     if (!triggerElement) return;
 
     showPopup = true;
-    calculatePosition(event);
+    // First pass positions the popup with size estimates (it is not in the DOM
+    // yet). Re-measure on the next frame, once mounted, so the 'above' branch
+    // uses the real height. Mirrors ActionMenu/AudioSettingsButton.
+    calculatePosition();
+    globalThis.requestAnimationFrame(() => {
+      if (showPopup) calculatePosition();
+    });
     imageLoaded = false;
     imageError = false;
     fetchImageAttribution();
@@ -90,25 +157,41 @@
     showPopup = false;
   }
 
-  // Update position on mouse move for better UX
-  function handleMouseMove(event: MouseEvent) {
-    if (showPopup) {
-      calculatePosition(event);
-    }
-  }
+  // Keep the popup anchored to its trigger while open. It is portaled to
+  // <body> with position:fixed, so without this it would drift away from the
+  // row on scroll/resize. Placement is trigger-relative (not cursor-relative),
+  // so there is no need to recompute on mousemove.
+  $effect(() => {
+    if (!showPopup) return;
 
-  // Calculate optimal popup position
-  function calculatePosition(_event: MouseEvent) {
+    const reposition = () => calculatePosition();
+    // Capture phase so scrolls inside nested overflow containers are caught too.
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  });
+
+  // Calculate optimal popup position.
+  //
+  // Vertical placement uses the real rendered popup height once it is mounted
+  // (offsetHeight, which ignores the dropdown transition's scale transform);
+  // POPUP_HEIGHT_ESTIMATE is only the fallback for the first synchronous pass,
+  // before the popup exists in the DOM. Width is fixed via POPUP_WIDTH.
+  function calculatePosition() {
     if (!triggerElement) return;
 
     const triggerRect = triggerElement.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const popupWidth = 320; // Popup width
-    const popupHeight = 280; // Popup height
-    const offsetX = 10; // Horizontal offset from trigger
-    const offsetY = 10; // Vertical offset from trigger when below
-    const offsetYAbove = 20; // Larger vertical offset when above for better separation
+    const popupWidth = POPUP_WIDTH;
+    // offsetHeight is 0 before the first layout pass (or while hidden); fall
+    // back to the estimate then instead of positioning against a 0 height.
+    const measuredHeight = popupElement?.offsetHeight ?? 0;
+    const popupHeight = measuredHeight > 0 ? measuredHeight : POPUP_HEIGHT_ESTIMATE;
 
     // Calculate available space in each direction
     const spaceAbove = triggerRect.top;
@@ -118,45 +201,57 @@
 
     // Determine horizontal position
     let x: number;
-    if (spaceRight >= popupWidth + offsetX) {
+    if (spaceRight >= popupWidth + POPUP_OFFSET_X) {
       // Position to the right of trigger
-      x = triggerRect.right + offsetX;
-    } else if (spaceLeft >= popupWidth + offsetX) {
+      x = triggerRect.right + POPUP_OFFSET_X;
+    } else if (spaceLeft >= popupWidth + POPUP_OFFSET_X) {
       // Position to the left of trigger
-      x = triggerRect.left - popupWidth - offsetX;
+      x = triggerRect.left - popupWidth - POPUP_OFFSET_X;
     } else {
       // Center horizontally if not enough space on sides
       x = Math.max(
-        10,
-        Math.min(viewportWidth / 2 - popupWidth / 2, viewportWidth - popupWidth - 10)
+        POPUP_VIEWPORT_MARGIN,
+        Math.min(
+          viewportWidth / 2 - popupWidth / 2,
+          viewportWidth - popupWidth - POPUP_VIEWPORT_MARGIN
+        )
       );
     }
+    // Ensure popup stays within viewport bounds horizontally
+    popupX = Math.max(
+      POPUP_VIEWPORT_MARGIN,
+      Math.min(x, viewportWidth - popupWidth - POPUP_VIEWPORT_MARGIN)
+    );
 
-    // Determine vertical position
-    // Add extra buffer to trigger earlier (200px buffer)
-    const earlyTriggerBuffer = 200;
-    let y: number;
+    // Align the arrow's midpoint (not its left edge) with the trigger center,
+    // clamped so the arrow stays within the popup body and clear of its corners.
+    const triggerCenterX = triggerRect.left + triggerRect.width / 2;
+    popupArrowX = Math.max(
+      POPUP_ARROW_SIZE,
+      Math.min(triggerCenterX - popupX - POPUP_ARROW_SIZE / 2, popupWidth - POPUP_ARROW_SIZE * 2)
+    );
 
-    if (spaceBelow >= popupHeight + offsetY + earlyTriggerBuffer) {
-      // Position below trigger
-      y = triggerRect.bottom + offsetY;
+    // Determine vertical position. Flip to 'above' early via the buffer (before
+    // the trigger reaches the very edge of the viewport).
+    if (spaceBelow >= popupHeight + POPUP_OFFSET_Y + POPUP_EARLY_FLIP_BUFFER) {
+      // Below: anchor the popup's TOP edge just under the trigger row. Height
+      // independent, which is why the 'below' case never misaligned.
       popupPosition = 'below';
-    } else if (spaceAbove >= popupHeight + offsetYAbove) {
-      // Position above trigger with larger offset
-      y = triggerRect.top - popupHeight - offsetYAbove;
+      popupTop = triggerRect.bottom + POPUP_OFFSET_Y;
+      popupBottom = null;
+    } else if (spaceAbove >= popupHeight + POPUP_OFFSET_Y_ABOVE) {
+      // Above: anchor the popup's BOTTOM edge just above the trigger row by
+      // pinning `bottom` to the viewport. Aligning the bottom edge means the
+      // exact height is irrelevant and the popup grows upward from the row.
       popupPosition = 'above';
+      popupBottom = viewportHeight - triggerRect.top + POPUP_OFFSET_Y_ABOVE;
+      popupTop = null;
     } else {
-      // Position at the top of viewport if not enough space
-      y = 10;
+      // Not enough room either way: pin near the top of the viewport.
       popupPosition = 'below';
+      popupTop = POPUP_VIEWPORT_MARGIN;
+      popupBottom = null;
     }
-
-    // Ensure popup stays within viewport bounds
-    x = Math.max(10, Math.min(x, viewportWidth - popupWidth - 10));
-    y = Math.max(10, Math.min(y, viewportHeight - popupHeight - 10));
-
-    popupX = x;
-    popupY = y;
   }
 
   // Handle image load success
@@ -172,12 +267,9 @@
     imageError = true;
   }
 
-  // Handle focus events for keyboard users
-  function handleFocus() {
-    // Don't show popup on focus to avoid interference with screen readers
-    // Users can press Enter/Space to navigate
-  }
-
+  // Close the popup if the trigger loses focus. The popup is intentionally not
+  // opened on focus, to avoid interfering with screen readers; keyboard users
+  // press Enter/Space to navigate to the detail page instead.
   function handleBlur() {
     showPopup = false;
   }
@@ -192,17 +284,15 @@
     class="flex {className} relative"
     onmouseenter={handleMouseEnter}
     onmouseleave={handleMouseLeave}
-    onmousemove={handleMouseMove}
-    onfocus={handleFocus}
     onblur={handleBlur}
-    aria-label="View {commonName} detections"
+    aria-label={t('components.birdThumbnail.viewDetections', { name: displayName })}
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
     <!-- Thumbnail placeholder -->
     <div class="thumbnail-placeholder w-8 h-6 rounded-sm bg-[var(--color-base-200)]"></div>
     <img
       src={thumbnailUrl}
-      alt={commonName}
+      alt={displayName}
       class="thumbnail-image w-8 h-6 rounded-sm object-cover cursor-pointer hover:opacity-80 transition-opacity"
       onerror={handleImageError}
       loading="lazy"
@@ -219,8 +309,9 @@
       out:dropdown={{ duration: 100 }}
       class="fixed z-50 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-xl p-4"
       style:left="{popupX}px"
-      style:top="{popupY}px"
-      style:width="320px"
+      style:top={popupTop !== null ? `${popupTop}px` : undefined}
+      style:bottom={popupBottom !== null ? `${popupBottom}px` : undefined}
+      style:width="{POPUP_WIDTH}px"
       role="tooltip"
       aria-live="polite"
     >
@@ -229,7 +320,7 @@
         <!-- Species information header -->
         <div class="text-center space-y-1">
           <h3 class="font-semibold text-[var(--color-base-content)] text-sm leading-tight">
-            {commonName}
+            {displayName}
           </h3>
           <p
             class="text-xs italic"
@@ -245,7 +336,11 @@
         >
           {#if !imageLoaded && !imageError}
             <!-- Loading state -->
-            <div class="absolute inset-0 flex items-center justify-center">
+            <div
+              class="absolute inset-0 flex items-center justify-center"
+              role="status"
+              aria-label={t('common.ui.loading')}
+            >
               <div class="loading loading-spinner loading-md"></div>
             </div>
           {/if}
@@ -257,13 +352,13 @@
               style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
             >
               <Image class="size-8 mb-2" />
-              <p class="text-xs text-center">Image not available</p>
+              <p class="text-xs text-center">{t('common.ui.imageNotAvailable')}</p>
             </div>
           {:else}
             <!-- Large image -->
             <img
               src={thumbnailUrl}
-              alt={`Large view of ${commonName}`}
+              alt={t('components.birdThumbnail.largeView', { name: displayName })}
               class="w-full h-full object-contain transition-opacity duration-200"
               class:opacity-0={!imageLoaded}
               class:opacity-100={imageLoaded}
@@ -274,13 +369,16 @@
 
           <!-- Photo credit overlay -->
           {#if imageAttribution?.authorName && imageLoaded}
-            <div class="thumbnail-credit" aria-label="Image credit: {imageAttribution.authorName}">
+            <div
+              class="thumbnail-credit"
+              aria-label={t('common.aria.imageCredit', { name: imageAttribution.authorName })}
+            >
               <span class="credit-text">{imageAttribution.authorName}</span>
               {#if imageAttribution.licenseName}
                 <span class="credit-separator">·</span>
-                {#if imageAttribution.licenseURL}
+                {#if safeLicenseURL}
                   <a
-                    href={imageAttribution.licenseURL}
+                    href={safeLicenseURL}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="credit-license">{imageAttribution.licenseName}</a
@@ -299,7 +397,7 @@
             class="text-xs"
             style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
           >
-            Click to view detections
+            {t('components.birdThumbnail.clickToView')}
           </p>
         </div>
       </div>
@@ -309,14 +407,14 @@
         <!-- Arrow at top of popup -->
         <div
           class="absolute w-3 h-3 bg-[var(--color-base-100)] border-l border-t border-[var(--color-base-300)] rotate-45 -z-10"
-          style:left="20px"
+          style:left="{popupArrowX}px"
           style:top="-6px"
         ></div>
       {:else}
         <!-- Arrow at bottom of popup -->
         <div
           class="absolute w-3 h-3 bg-[var(--color-base-100)] border-r border-b border-[var(--color-base-300)] rotate-45 -z-10"
-          style:left="20px"
+          style:left="{popupArrowX}px"
           style:bottom="-6px"
         ></div>
       {/if}

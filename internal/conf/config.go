@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"iter"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -1215,7 +1216,26 @@ type BirdNETConfig struct {
 	Labels             []string            `yaml:"-" json:"-"`                                                 // list of available species labels, runtime value
 	UseXNNPACK         bool                `yaml:"usexnnpack" json:"useXnnpack"`                               // true to use XNNPACK delegate for inference acceleration
 	ONNXRuntimePath    string              `yaml:"onnxruntimepath,omitempty" json:"onnxRuntimePath,omitempty"` // path to ONNX Runtime shared library (required for ONNX models)
+	OpenVINOPath       string              `yaml:"openvinopath,omitempty" json:"openVinoPath,omitempty"`       // path to libopenvino_c shared library (OpenVINO image variants only)
+	Backend            string              `yaml:"backend,omitempty" json:"backend,omitempty"`                 // inference backend preference: "auto" (default), "onnx", or "openvino"
+	OpenVINODevice     string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`   // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
 }
+
+// Inference backend preferences for BirdNET.Backend.
+const (
+	BackendPrefAuto     = "auto"
+	BackendPrefONNX     = "onnx"
+	BackendPrefOpenVINO = "openvino"
+)
+
+// OpenVINO device preferences for BirdNET.OpenVINODevice. "auto" picks the GPU
+// (Intel iGPU) when present for eligible models, else the f16 CPU path; "cpu"
+// and "gpu" force a device. An empty string is treated as "auto".
+const (
+	OVDeviceAuto = "auto"
+	OVDeviceCPU  = "cpu"
+	OVDeviceGPU  = "gpu"
+)
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
@@ -1291,6 +1311,40 @@ type EmbeddingsStorageConfig struct {
 	Path    string `yaml:"path" json:"path"`       // db file path; empty => dir(output.sqlite.path)/embeddings.db
 	MaxRows int    `yaml:"maxrows" json:"maxRows"` // rolling row-count cap; <=0 => default (50000)
 	Format  string `yaml:"format" json:"format"`   // vector encoding; "fp16" is the only implemented value (int8 reserved)
+}
+
+// Low-memory mode constants for the manual override.
+const (
+	LowMemoryModeAuto = "auto" // detect from system memory (default)
+	LowMemoryModeOn   = "on"   // force low-memory controls on
+	LowMemoryModeOff  = "off"  // force low-memory controls off
+)
+
+// LowMemoryConfig is the manual override for the runtime memory policy. The
+// policy (memory detection, GOMEMLIMIT, glibc arena cap, and future feature
+// gating) lives in internal/mempolicy; this only carries the operator's choice.
+//
+// This setting is applied once at startup (the arena cap must precede inference
+// threads), so changing it requires a restart; it is intentionally not exposed
+// as a hot-reloadable section.
+type LowMemoryConfig struct {
+	Mode string `yaml:"mode" json:"mode" mapstructure:"mode"` // "auto" (default), "on", "off"
+}
+
+// GetMode returns the effective low-memory mode, defaulting to "auto" for empty
+// or unrecognized values. Mirrors SpectrogramPreRender.GetMode.
+func (c *LowMemoryConfig) GetMode() string {
+	// Case-insensitive and whitespace-tolerant so the mode is robust even on a
+	// LowMemoryConfig that has not been through ValidateSettings (e.g. tests).
+	mode := strings.TrimSpace(c.Mode)
+	switch {
+	case strings.EqualFold(mode, LowMemoryModeOn):
+		return LowMemoryModeOn
+	case strings.EqualFold(mode, LowMemoryModeOff):
+		return LowMemoryModeOff
+	default:
+		return LowMemoryModeAuto
+	}
 }
 
 // BasicAuth holds settings for the password authentication
@@ -1638,6 +1692,8 @@ type Settings struct {
 	BSG        BSGConfig        `yaml:"bsg" json:"bsg"`               // BSG regional bird model configuration
 	Models     ModelsConfig     `yaml:"models" json:"models"`         // Global model enablement and management
 	Embeddings EmbeddingsConfig `yaml:"embeddings" json:"embeddings"` // Embedding extraction configuration
+
+	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 
 	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
 

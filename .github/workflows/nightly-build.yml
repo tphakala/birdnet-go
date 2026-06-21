@@ -39,7 +39,7 @@ jobs:
 
       - name: Install Linux system dependencies
         if: matrix.os == 'ubuntu-24.04'
-        uses: awalsh128/cache-apt-pkgs-action@acb598e5ddbc6f68a970c5da0688d2f3a9f04d05 # v1.6.0
+        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
         with:
           packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
           version: 1.0
@@ -132,10 +132,10 @@ jobs:
             fi
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
-            cp /tmp/onnxruntime/lib/*.dll artifacts/
+            cp "${RUNNER_TEMP}"/onnxruntime/lib/*.dll artifacts/
           elif [ "${{ matrix.goos }}" = "darwin" ]; then
             cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
-            cp /tmp/onnxruntime/lib/libonnxruntime.dylib artifacts/
+            cp "${RUNNER_TEMP}"/onnxruntime/lib/libonnxruntime.dylib artifacts/
           fi
 
           # Copy platform-specific README

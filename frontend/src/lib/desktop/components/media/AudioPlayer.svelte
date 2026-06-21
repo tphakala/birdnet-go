@@ -52,7 +52,7 @@
     releaseAudioContext,
   } from '$lib/utils/audioContextManager';
   import {
-    createAudioNodeChain,
+    attachAudioGraphWhenRunning,
     disconnectAudioNodes,
     type AudioNodeChain,
   } from '$lib/utils/audioNodes';
@@ -941,7 +941,9 @@
         throw new Error('AudioContext not supported');
       }
       audioContext = await getAudioContext();
-      audioContextAvailable = true;
+      // Availability is derived by the caller from whether the graph actually
+      // attached (audioNodes !== null), so it is not reported true while the
+      // context is still suspended.
       return audioContext;
     } catch {
       logger.warn('Web Audio API is not supported in this browser');
@@ -958,19 +960,29 @@
       if (isPlaying) {
         audioElement.pause();
       } else {
-        // Initialize audio context on first play
-        // Guard against rapid clicks that could create multiple AudioContexts
-        if (!audioContext && !isInitializingContext) {
+        // Initialize the audio context on first play, and re-enter whenever the
+        // graph is not attached OR the context has fallen back to suspended
+        // (e.g. tab backgrounding / audio-session interruption) so
+        // getAudioContext() resumes it. Without the state re-check, an
+        // already-attached graph on a re-suspended context plays silently.
+        // Guard against rapid clicks that could create multiple AudioContexts.
+        if ((!audioNodes || audioContext?.state !== 'running') && !isInitializingContext) {
           isInitializingContext = true;
           try {
             audioContext = await initializeAudioContext();
-            if (audioContext && !audioNodes) {
-              audioNodes = createAudioNodeChain(audioContext, audioElement, {
-                gainDb: gainValue,
-                highPassFreq: filterFreq,
-                includeCompressor: true,
-              });
-            }
+            // Attach the Web Audio graph only when the context is running;
+            // while suspended the element plays through native output and the
+            // graph is deferred to a later play (see attachAudioGraphWhenRunning).
+            audioNodes = attachAudioGraphWhenRunning(audioContext, audioElement, audioNodes, {
+              gainDb: gainValue,
+              highPassFreq: filterFreq,
+              includeCompressor: true,
+            });
+            // Reflect whether the EQ/gain graph is actually live: attached AND
+            // the context running. A previously-attached graph on a re-suspended
+            // context that failed to resume is inert, so the audio settings
+            // control must not be enabled in that case.
+            audioContextAvailable = audioNodes !== null && audioContext?.state === 'running';
           } finally {
             isInitializingContext = false;
           }

@@ -1,10 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import SpeciesInput from './SpeciesInput.svelte';
 
 const defaultPredictions = ['American Robin', 'Blue Jay', 'Northern Cardinal', 'House Sparrow'];
 
 describe('SpeciesInput', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders with basic props', () => {
     render(SpeciesInput, {
       props: {
@@ -382,6 +386,67 @@ describe('SpeciesInput', () => {
       // Verify portal is attached to body
       const portal = document.body.querySelector('[id^="species-predictions-"]');
       expect(portal?.parentElement).toBe(document.body);
+    });
+
+    // Regression for #1030: clicking outside must remove the portal node from
+    // document.body even while the input still holds text. Previously the portal
+    // lingered because handleDocumentClick only set showPredictions = false and
+    // the $effect never observed it.
+    it('destroys the portal dropdown when clicking outside while text remains', async () => {
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox');
+      await fireEvent.focus(input);
+
+      // Portal exists after focus.
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeTruthy();
+      });
+
+      // Click outside the input and the portal.
+      await fireEvent.click(document.body);
+
+      // Portal is removed even though the input value ('rob') is unchanged.
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeNull();
+      });
+    });
+
+    // After an explicit dismissal (click-outside), typing must reopen the dropdown
+    // (handleInput resets manuallyDismissed). This proves the dismiss -> type ->
+    // reopen cycle works and the dropdown isn't stuck closed.
+    it('reopens the portal dropdown on typing after a click-outside dismissal', async () => {
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox');
+      await fireEvent.focus(input);
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeTruthy();
+      });
+
+      // Dismiss by clicking outside.
+      await fireEvent.click(document.body);
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeNull();
+      });
+
+      // Typing clears the dismissal and recreates the dropdown.
+      await fireEvent.input(input, { target: { value: 'robi' } });
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeTruthy();
+      });
     });
 
     it('positions dropdown below input when space is available', async () => {
@@ -838,5 +903,82 @@ describe('SpeciesInput', () => {
     await fireEvent.click(addButton);
 
     expect(onAdd).toHaveBeenCalledWith('test species');
+  });
+
+  describe('localized predictions (value/display split)', () => {
+    // Finnish labels for canonical English predictions.
+    const FI = new Map<string, string>([
+      ['American Robin', 'Punarinta'],
+      ['Blue Jay', 'Sinitöyhtönärhi'],
+    ]);
+    const localizeLabel = (value: string): string => FI.get(value) ?? value;
+
+    it('shows the localized label but emits the canonical value on select', async () => {
+      const onAdd = vi.fn();
+      const onPredictionSelect = vi.fn();
+
+      render(SpeciesInput, {
+        props: {
+          // Typing the localized name filters by label.
+          value: 'puna',
+          predictions: ['American Robin', 'Blue Jay'],
+          localizeLabel,
+          onAdd,
+          onPredictionSelect,
+        },
+      });
+
+      // The dropdown renders the localized label, not the canonical value.
+      const option = screen.getByText('Punarinta');
+      expect(option).toBeInTheDocument();
+      expect(screen.queryByText('American Robin')).not.toBeInTheDocument();
+
+      await fireEvent.click(option);
+
+      // The persisted value is canonical, never the localized label.
+      expect(onPredictionSelect).toHaveBeenCalledWith('American Robin');
+      await waitFor(() => {
+        expect(onAdd).toHaveBeenCalledWith('American Robin');
+      });
+      expect(onAdd).not.toHaveBeenCalledWith('Punarinta');
+    });
+
+    it('maps a typed localized name to the canonical value on Add', async () => {
+      const onAdd = vi.fn();
+
+      render(SpeciesInput, {
+        props: {
+          // User typed the full localized name without picking from the dropdown.
+          value: 'Punarinta',
+          predictions: ['American Robin', 'Blue Jay'],
+          localizeLabel,
+          onAdd,
+        },
+      });
+
+      const addButton = screen.getByRole('button', { name: 'Add species' });
+      await fireEvent.click(addButton);
+
+      expect(onAdd).toHaveBeenCalledWith('American Robin');
+      expect(onAdd).not.toHaveBeenCalledWith('Punarinta');
+    });
+
+    it('keeps unmatched free text as-is (advanced raw entry)', async () => {
+      const onAdd = vi.fn();
+
+      render(SpeciesInput, {
+        props: {
+          value: 'Some Unlisted Name',
+          predictions: ['American Robin', 'Blue Jay'],
+          localizeLabel,
+          onAdd,
+        },
+      });
+
+      const addButton = screen.getByRole('button', { name: 'Add species' });
+      await fireEvent.click(addButton);
+
+      expect(onAdd).toHaveBeenCalledWith('Some Unlisted Name');
+    });
   });
 });

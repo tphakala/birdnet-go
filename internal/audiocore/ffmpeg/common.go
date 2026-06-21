@@ -119,7 +119,7 @@ func GetFFmpegFormat(sampleRate, numChannels, bitDepth int) (sampleRateStr, chan
 
 // getSoxBinaryName returns the platform-appropriate sox binary name.
 func getSoxBinaryName() string {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return "sox.exe"
 	}
 

@@ -236,19 +236,34 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 		return []datastore.Results{}
 	}
 
+	// Number of elements the caller will receive.
+	n := min(k, len(results))
+
 	if k >= len(results) {
-		// If k is greater than or equal to the number of results, sort everything
+		// If k is greater than or equal to the number of results, sort everything.
 		sortResults(results)
-		return results
+	} else {
+		// Use partial sort to move the top k elements to the front, then sort
+		// just those k in descending order.
+		partialSort(results, k)
+		sortResults(results[:k])
 	}
 
-	// Use partial sort to find top k elements
-	partialSort(results, k)
-
-	// Sort the top k elements in descending order
-	sortResults(results[:k])
-
-	return results[:k]
+	// Return a freshly-allocated copy so the result never aliases the caller's
+	// backing array. BirdNET.Predict passes a reused per-instance scratch buffer
+	// (bn.resultsBuffer) that the next inference window overwrites in place via
+	// pairLabelsAndConfidenceReuse; without this copy a top-K slice already handed
+	// to classifier.ResultsQueue would be mutated concurrently with the queue
+	// consumer reading it, an unsynchronized read/write data race that can corrupt
+	// queued detections. The Bat and Perch Predict paths pass
+	// freshly-allocated slices, so the copy is redundant-but-harmless there; doing
+	// it unconditionally keeps the ownership contract uniform for every model. n
+	// is small (defaultTopKResults = 10), so the copy is cheap and the upstream
+	// large-buffer reuse optimization stays intact: bn.resultsBuffer remains
+	// internal scratch that never escapes.
+	out := make([]datastore.Results, n)
+	copy(out, results[:n])
+	return out
 }
 
 // partialSort performs a partial sort to move the top k elements to the front.

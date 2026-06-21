@@ -11,12 +11,34 @@ import (
 // defaultBucketCount is 168 hourly buckets covering 7 days of retention.
 const defaultBucketCount = 168
 
-// Metric key prefixes for health counters. Used by both the collector
-// (recording) and health checks (querying) to ensure consistency.
+// Metric-type tokens are the trailing segment of each health-counter prefix and
+// double as the HealthEvent.Metric label used for event-buffer filtering. The
+// recorder tags each event with the token; the checks filter recent events by
+// extractMetricType(prefix). Building the prefixes from these tokens keeps the
+// two sides from drifting apart. Tokens must stay distinct from one another so
+// events do not cross-match between checks.
 const (
-	MetricPrefixAudioDrops     = "audio.drops."
-	MetricPrefixAudioOverruns  = "audio.overruns."
-	MetricPrefixStreamRestarts = "stream.restarts."
+	MetricTypeAudioDrops        = "drops"
+	MetricTypeAudioOverruns     = "overruns"
+	MetricTypeStreamRestarts    = "restarts"
+	MetricTypeResultsQueueDrops = "queue_drops"
+)
+
+// Metric key prefixes for health counters. Used by both the collector
+// (recording) and health checks (querying) to ensure consistency. Each is
+// derived from its metric-type token above so the prefix and the recorded
+// event label cannot drift.
+const (
+	MetricPrefixAudioDrops     = "audio." + MetricTypeAudioDrops + "."
+	MetricPrefixAudioOverruns  = "audio." + MetricTypeAudioOverruns + "."
+	MetricPrefixStreamRestarts = "stream." + MetricTypeStreamRestarts + "."
+	// MetricPrefixResultsQueueDrops counts detection results dropped because the
+	// classifier results queue was full.
+	MetricPrefixResultsQueueDrops = "results." + MetricTypeResultsQueueDrops + "."
+	// MetricKeyAudioQueueDepthAggregate is the MetricsStore key for the sum of all
+	// per-source audio queue depths. Recorded via RecordBatch (the metrics-store path)
+	// so the frontend sparkline series and the metrics history API can serve it.
+	MetricKeyAudioQueueDepthAggregate = "audio.queue_depth"
 )
 
 // HourlyBucket holds the aggregated event count for a single hour.

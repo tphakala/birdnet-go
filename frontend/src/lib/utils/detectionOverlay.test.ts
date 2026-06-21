@@ -4,6 +4,8 @@ import {
   shouldDedup,
   promoteFromQueue,
   nextYSlot,
+  buildQueuedLabel,
+  LABEL_LEAD_IN_SECONDS,
   type QueuedLabel,
 } from './detectionOverlay';
 
@@ -159,5 +161,43 @@ describe('nextYSlot', () => {
     expect(nextYSlot(0, 4)).toEqual({ slot: 0, next: 1 });
     expect(nextYSlot(1, 4)).toEqual({ slot: 1, next: 2 });
     expect(nextYSlot(4, 4)).toEqual({ slot: 0, next: 5 });
+  });
+});
+
+describe('buildQueuedLabel', () => {
+  const det = {
+    species: 'American Robin',
+    scientificName: 'Turdus migratorius',
+    firstDetected: 1000,
+  };
+
+  // Stand-in for localizeSpeciesName: returns a localized name only for the
+  // mapped scientific name, otherwise the server-locale fallback.
+  const localize = (scientificName: string | undefined, fallback: string): string =>
+    scientificName === 'Turdus migratorius' ? 'Punarinta' : fallback;
+
+  it('localizes the label text via the injected localizer', () => {
+    const label = buildQueuedLabel(det, 2, localize);
+    expect(label.text).toBe('Punarinta');
+    expect(label.ySlot).toBe(2);
+  });
+
+  it('falls back to the server-locale common name when no localized name exists', () => {
+    const label = buildQueuedLabel(
+      { ...det, scientificName: 'Troglodytes troglodytes' },
+      0,
+      localize
+    );
+    expect(label.text).toBe('American Robin');
+  });
+
+  it('back-dates firstDetected by the lead-in to align the label with the sound', () => {
+    const label = buildQueuedLabel(det, 0, localize);
+    expect(label.firstDetected).toBe(1000 - LABEL_LEAD_IN_SECONDS);
+  });
+
+  it('prefers audioCapturedAt over firstDetected for back-dating when present', () => {
+    const label = buildQueuedLabel({ ...det, audioCapturedAt: 950 }, 0, localize);
+    expect(label.firstDetected).toBe(950 - LABEL_LEAD_IN_SECONDS);
   });
 });

@@ -13,6 +13,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { speciesTrackingSettings } from '$lib/stores/settings';
   import { confidenceColorClasses } from '$lib/desktop/features/dashboard/utils/confidenceColors';
   import {
@@ -133,6 +134,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
     <div class="grid grid-cols-1 gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {#each visibleHighlights as { species, category } (species.scientific_name)}
         {@const percent = confidencePercent(species)}
+        {@const displayName = localizeSpeciesName(species.scientific_name, species.common_name)}
         <a
           href={speciesUrl(species)}
           class="group flex items-center gap-2.5 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-2.5 shadow-sm transition-shadow hover:shadow-md"
@@ -143,7 +145,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
           {#if showThumbnails}
             <img
               src={thumbnailUrl(species)}
-              alt={species.common_name}
+              alt={displayName}
               loading="lazy"
               onerror={handleBirdImageError}
               class="size-10 shrink-0 rounded-md object-cover"
@@ -157,7 +159,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
                 <span
                   class="truncate text-sm font-medium leading-tight group-hover:text-[var(--color-primary)]"
                 >
-                  {species.common_name}
+                  {displayName}
                 </span>
                 {@render categoryIcon(category, species.current_season)}
               </span>

@@ -17,8 +17,6 @@
  * - Tests FAIL when Svelte throws each_key_duplicate errors
  *
  * Related components and their issues:
- * - SpeciesManager.svelte:272    → {#each predictions as prediction (prediction)}
- * - SpeciesManager.svelte:295    → {#each displaySpecies as item, index (item)}
  * - SubnetInput.svelte:179       → {#each subnets as subnet, index (subnet)}
  * - SelectDropdown.svelte:477    → {#each options as option (option.value)}
  * - SelectField.svelte:103       → {#each options as option (option.value)}
@@ -41,7 +39,7 @@ import IndexKeyFixed from './wrappers/IndexKeyFixed.svelte';
 
 // ============================================================================
 // Pattern: String value as key — {#each items as item (item)}
-// Affected: SpeciesManager predictions, SpeciesManager displaySpecies, SubnetInput
+// Affected: any {#each items as item (item)} list that uses a bare string as the key
 // ============================================================================
 
 describe('Duplicate Key: String value as key — (item)', () => {
@@ -58,10 +56,9 @@ describe('Duplicate Key: String value as key — (item)', () => {
     await expect.element(items.nth(2)).toHaveTextContent('Erithacus rubecula');
   });
 
-  it('throws on duplicate string items (SpeciesManager predictions bug)', async () => {
-    // Reproduces SpeciesManager.svelte:272 — {#each predictions as prediction (prediction)}
-    // When the API returns the same species twice in predictions,
-    // Svelte throws each_key_duplicate at runtime
+  it('throws on duplicate string items', async () => {
+    // Reproduces the {#each items as item (item)} pattern: when a list contains the
+    // same string twice, Svelte throws each_key_duplicate at runtime.
     expect(() => {
       render(StringListKey, {
         items: ['Parus major', 'Turdus merula', 'Parus major'],

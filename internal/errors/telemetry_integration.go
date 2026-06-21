@@ -178,6 +178,32 @@ func isContextCancellation(err error) bool {
 	return Is(err, context.Canceled) || Is(err, context.DeadlineExceeded)
 }
 
+// isSuppressibleOperationalError reports whether ee is an expected operational
+// interruption that should not be forwarded to Sentry. Such interruptions arise
+// routinely during graceful shutdown, client disconnects, and request timeouts
+// (e.g. an HTTP client disconnects mid-query, or Sox/FFmpeg is killed when the
+// requesting client navigates away).
+//
+// Two signals qualify:
+//   - A context sentinel (context.Canceled / context.DeadlineExceeded) anywhere in
+//     the chain, for either CategoryDatabase or CategorySystem. Database and system
+//     operations observe these directly when interrupted.
+//   - PriorityLow, but ONLY for CategorySystem. An external OS process killed by a
+//     cancelled context does not surface a context sentinel (on Windows it exits with
+//     status 1, on Linux a mid-run kill surfaces as "signal: killed"), so the producer
+//     (the spectrogram generator) tags the CategorySystem error PriorityLow using the
+//     governing context, which is the only platform-independent signal. PriorityLow is
+//     deliberately NOT honored for CategoryDatabase: the datastore tags genuine
+//     query/scan/cleanup failures PriorityLow to control user-notification routing, not
+//     to mark them expected, and a real DB fault (corruption, lock contention) during
+//     such a low-priority job must still reach Sentry.
+func isSuppressibleOperationalError(ee *EnhancedError) bool {
+	if isContextCancellation(ee.Err) {
+		return ee.Category == CategoryDatabase || ee.Category == CategorySystem
+	}
+	return ee.Category == CategorySystem && ee.GetPriority() == PriorityLow
+}
+
 // shouldReportToSentry determines if an error should be sent to Sentry
 // It filters out operational/configuration errors that aren't code bugs
 func shouldReportToSentry(ee *EnhancedError) bool {
@@ -185,13 +211,12 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		return true
 	}
 
-	// Database and system operations frequently observe context.Canceled and
-	// context.DeadlineExceeded during graceful shutdown and client-disconnect
-	// conditions (e.g. an HTTP client disconnects mid-query, or Sox/FFmpeg is
-	// killed when the requesting client navigates away). These are not code
-	// bugs; suppressing here prevents hundreds of duplicate events per day
-	// from drowning legitimate errors.
-	if (ee.Category == CategoryDatabase || ee.Category == CategorySystem) && isContextCancellation(ee.Err) {
+	// Suppress expected operational interruptions for database/system operations
+	// (graceful shutdown, client disconnect, request timeout). These are not code
+	// bugs; suppressing prevents hundreds of duplicate events per day from drowning
+	// legitimate errors. See isSuppressibleOperationalError for why PriorityLow is
+	// honored alongside the context sentinels.
+	if isSuppressibleOperationalError(ee) {
 		return false
 	}
 
@@ -240,12 +265,26 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
+	// Filter out audio capture buffer validation errors that are expected during
+	// normal operation (e.g., after service start when buffer hasn't filled yet,
+	// or Extended Capture requesting audio from before the buffer window).
+	if ee.Category == CategoryValidation && ee.GetComponent() == "audiocore" {
+		if strings.Contains(errorMsg, "requested time range is empty after clamping") ||
+			strings.Contains(errorMsg, "requested segment exceeds") {
+			return false
+		}
+	}
+
 	// Filter out expected not-found conditions that are not code bugs:
 	// - "note not found": transient race between write commit and read, or retention cleanup
 	// - "not found in ebird taxonomy": non-bird species (e.g., Canis latrans) detected by BirdNET
+	// - "dynamic threshold not found": a user queried the dynamic threshold for a species
+	//   that has none; both the v2only and legacy datastore backends produce this benign
+	//   404 (#1068), so it must not reach Sentry
 	if ee.Category == CategoryNotFound {
 		if strings.Contains(errorMsg, "note not found") ||
-			strings.Contains(errorMsg, "not found in ebird taxonomy") {
+			strings.Contains(errorMsg, "not found in ebird taxonomy") ||
+			strings.Contains(errorMsg, "dynamic threshold not found") {
 			return false
 		}
 	}

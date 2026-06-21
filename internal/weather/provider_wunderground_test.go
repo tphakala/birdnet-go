@@ -1,7 +1,10 @@
 package weather
 
 import (
+	"context"
+	"math"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -9,7 +12,41 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// TestBuildWundergroundURL_RejectsSchemelessEndpoint mirrors the OpenWeather
+// guard: a custom endpoint without a scheme parses as a relative path and would
+// produce a request http.NewRequest rejects with "unsupported protocol scheme".
+// buildWundergroundURL must reject it with a configuration error instead.
+func TestBuildWundergroundURL_RejectsSchemelessEndpoint(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+	}{
+		{"no_scheme", "api.custom-wunderground.com"},
+		{"no_scheme_with_path", "api.custom-wunderground.com/v2/pws/observations/current"},
+		{"scheme_without_host", "https://"},
+		{"non_http_scheme", "ftp://api.custom-wunderground.com"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &wundergroundConfig{
+				apiKey:    "test-api-key",
+				stationID: "KTEST123",
+				endpoint:  tt.endpoint,
+			}
+
+			_, err := buildWundergroundURL(cfg)
+
+			require.Error(t, err)
+			var ee *errors.EnhancedError
+			require.ErrorAs(t, err, &ee)
+			assert.Equal(t, string(errors.CategoryConfiguration), ee.GetCategory(),
+				"a malformed endpoint must classify as a configuration error")
+		})
+	}
+}
 
 func TestWundergroundProvider_FetchWeather_Success(t *testing.T) {
 	setupHTTPMock(t)
@@ -19,7 +56,7 @@ func TestWundergroundProvider_FetchWeather_Success(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.NoError(t, err)
 	assertWeatherDataBasics(t, data)
@@ -49,7 +86,7 @@ func TestWundergroundProvider_TimeParsing(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 	require.NoError(t, err)
 
 	// The fixture contains obsTimeUtc: "2026-01-13T12:00:00Z"
@@ -77,7 +114,7 @@ func TestWundergroundProvider_FetchWeather_ImperialConfigIgnored(t *testing.T) {
 		s.Realtime.Weather.Wunderground.Units = "e" // User configured imperial
 	})
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.NoError(t, err)
 	assertWeatherDataBasics(t, data)
@@ -95,7 +132,7 @@ func TestWundergroundProvider_FetchWeather_NoAPIKey(t *testing.T) {
 		s.Realtime.Weather.Wunderground.APIKey = ""
 	})
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -108,7 +145,7 @@ func TestWundergroundProvider_FetchWeather_NoStationID(t *testing.T) {
 		s.Realtime.Weather.Wunderground.StationID = ""
 	})
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -121,7 +158,7 @@ func TestWundergroundProvider_FetchWeather_InvalidStationID(t *testing.T) {
 		s.Realtime.Weather.Wunderground.StationID = "invalid!station@id"
 	})
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -166,7 +203,7 @@ func TestWundergroundProvider_FetchWeather_HTTPError(t *testing.T) {
 			provider := NewWundergroundProvider(nil)
 			settings := createTestSettings(t, "wunderground")
 
-			data, err := provider.FetchWeather(settings)
+			data, err := provider.FetchWeather(t.Context(), settings)
 
 			require.Error(t, err)
 			assert.Nil(t, data)
@@ -182,7 +219,7 @@ func TestWundergroundProvider_FetchWeather_InvalidJSON(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -197,7 +234,7 @@ func TestWundergroundProvider_FetchWeather_EmptyObservations(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -440,6 +477,112 @@ func TestValidateWundergroundConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCalculateFeelsLike guards every branch of the feels-like selection logic,
+// including the NaN guards that prevent a bogus heat-index/wind-chill reading
+// from replacing the actual temperature. All values are metric (Celsius, m/s).
+func TestCalculateFeelsLike(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		m    weatherMeasurements
+		want float64
+	}{
+		{
+			name: "hot uses heat index",
+			m:    weatherMeasurements{temp: 30, heatIndex: 33},
+			want: 33,
+		},
+		{
+			name: "hot but non-positive heat index falls back to temp",
+			m:    weatherMeasurements{temp: 30, heatIndex: 0},
+			want: 30,
+		},
+		{
+			name: "hot but NaN heat index falls back to temp",
+			m:    weatherMeasurements{temp: 30, heatIndex: math.NaN()},
+			want: 30,
+		},
+		{
+			name: "hot boundary at threshold uses heat index",
+			m:    weatherMeasurements{temp: MetricHotTempC, heatIndex: 29},
+			want: 29,
+		},
+		{
+			name: "cold and windy uses wind chill",
+			m:    weatherMeasurements{temp: 5, windSpeed: 2.0, windChill: 2.0},
+			want: 2.0,
+		},
+		{
+			name: "cold but calm falls back to temp",
+			m:    weatherMeasurements{temp: 5, windSpeed: 1.0, windChill: 2.0},
+			want: 5,
+		},
+		{
+			name: "cold and windy but NaN wind chill falls back to temp",
+			m:    weatherMeasurements{temp: 5, windSpeed: 2.0, windChill: math.NaN()},
+			want: 5,
+		},
+		{
+			name: "cold boundary at threshold uses wind chill",
+			m:    weatherMeasurements{temp: MetricColdTempC, windSpeed: 2.0, windChill: 8.0},
+			want: 8.0,
+		},
+		{
+			name: "moderate temperature uses raw temp",
+			m:    weatherMeasurements{temp: 20, heatIndex: 99, windChill: -99},
+			want: 20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := calculateFeelsLike(tt.m)
+			assert.InDelta(t, tt.want, got, 0.001)
+		})
+	}
+}
+
+// TestHandleWundergroundRequestError_CancellationIsBenign guards that a parent
+// context cancellation (shutdown) surfaces as raw context.Canceled so
+// fetchAndSave treats it as benign, while a per-request deadline stays a real
+// categorized timeout failure. Wunderground keeps its own one-shot request path,
+// so this must match the shared executeWeatherRequest cancellation behavior.
+func TestHandleWundergroundRequestError_CancellationIsBenign(t *testing.T) {
+	t.Parallel()
+
+	t.Run("parent cancellation is benign", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		// net/http returns a *url.Error embedding the request URL on cancellation.
+		transportErr := &url.Error{Op: "Get", URL: "https://api.weather.com/v2/pws/observations/current?apiKey=secret", Err: context.Canceled}
+
+		got := handleWundergroundRequestError(ctx, transportErr)
+
+		require.ErrorIs(t, got, context.Canceled, "cancellation must surface as context.Canceled so fetchAndSave skips backoff")
+		assert.Equal(t, context.Canceled, got, "cancellation must be returned unwrapped, not as a categorized weather error")
+	})
+
+	t.Run("deadline is a real timeout failure", func(t *testing.T) {
+		t.Parallel()
+		// A context whose deadline is already in the past reports DeadlineExceeded.
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Hour))
+		defer cancel()
+		transportErr := &url.Error{Op: "Get", URL: "https://api.weather.com/v2/pws/observations/current?apiKey=secret", Err: context.DeadlineExceeded}
+
+		got := handleWundergroundRequestError(ctx, transportErr)
+
+		require.Error(t, got)
+		require.NotErrorIs(t, got, context.Canceled, "a deadline must NOT be treated as a benign cancellation")
+		var ee *errors.EnhancedError
+		require.ErrorAs(t, got, &ee)
+		assert.Equal(t, string(errors.CategoryTimeout), ee.GetCategory(), "a deadline must classify as a timeout failure")
+		assert.NotContains(t, got.Error(), "secret", "the API key must be scrubbed from the wrapped error")
+	})
 }
 
 func TestNewWundergroundProvider(t *testing.T) {

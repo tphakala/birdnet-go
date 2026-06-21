@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -182,6 +184,129 @@ func TestGenerator_GenerateFromFile_MissingBinaries(t *testing.T) {
 
 	err = gen.GenerateFromFile(t.Context(), audioPath, outputPath, 400, false)
 	assert.Error(t, err, "GenerateFromFile() should error when binaries not configured")
+}
+
+// assertNoSpectrogramTemp fails if any "<outputPath>.<pid>.<seq>.temp" sidecar
+// temp from an interrupted or raced render was left behind next to outputPath.
+// outputPath must not contain glob metacharacters (callers pass t.TempDir paths).
+func assertNoSpectrogramTemp(t *testing.T, outputPath string) {
+	t.Helper()
+	leftover, err := filepath.Glob(outputPath + ".*" + audiotemp.Ext)
+	require.NoError(t, err)
+	assert.Empty(t, leftover, "spectrogram temp files must not be left behind")
+}
+
+// partialWriteSoxStub returns a path to an executable stub that mimics a Sox
+// runtime failure: it writes partial bytes to its "-o <target>" argument and then
+// exits non-zero. Pointing the generator at this stub forces the failure to occur
+// AFTER the output file has been opened and partially written, which is the path
+// the temp-then-rename design must contain. POSIX-only (uses /bin/sh).
+func partialWriteSoxStub(t *testing.T) string {
+	t.Helper()
+	stub := filepath.Join(t.TempDir(), "sox")
+	// Scan args for "-o" and write to the following argument, so the stub finds
+	// the output target regardless of its position in the Sox command line.
+	script := "#!/bin/sh\n" +
+		"prev=\"\"\n" +
+		"for a in \"$@\"; do\n" +
+		"  if [ \"$prev\" = \"-o\" ]; then printf 'PARTIAL' > \"$a\"; fi\n" +
+		"  prev=\"$a\"\n" +
+		"done\n" +
+		"exit 1\n"
+	require.NoError(t, os.WriteFile(stub, []byte(script), 0o700)) //nolint:gosec // G306: test stub must be executable
+	return stub
+}
+
+// TestGenerator_GenerateFromPCM_RuntimeFailureLeavesNoPartialFinal is the core
+// regression guard for the atomic-write fix. A Sox runtime failure writes partial
+// bytes to its output target then fails; the temp-then-rename design must keep
+// those partial bytes in the temp file (cleaned up on the failure) and NEVER
+// publish them to the final path. On the previous non-atomic code (which passed
+// the final path as Sox's -o) this same stub would have left a corrupt final
+// .png, so this test discriminates the fix from the old behaviour. POSIX-only
+// (the stub is a shell script).
+func TestGenerator_GenerateFromPCM_RuntimeFailureLeavesNoPartialFinal(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == osWindows {
+		t.Skip("partial-write Sox stub requires a POSIX shell")
+	}
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.SoxPath = partialWriteSoxStub(t)
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	outputPath := filepath.Join(env.TempDir, "rt.png")
+	err := gen.GenerateFromPCM(t.Context(), []byte{0, 1, 2, 3, 4, 5, 6, 7}, outputPath, 400, false, 0)
+
+	require.Error(t, err, "a Sox runtime failure must surface as an error")
+	assert.NoFileExists(t, outputPath, "a partial write must NOT be published to the final path")
+	assertNoSpectrogramTemp(t, outputPath)
+}
+
+// TestGenerator_GenerateFromPCM_FailureLeavesNoPartialOutput covers the early
+// config-validation failure (Sox not configured): the entry point returns an
+// error before any subprocess runs and publishes nothing. This is a cheap,
+// cross-platform smoke test; the temp-cleanup-after-partial-write guarantee is
+// covered by TestGenerator_GenerateFromPCM_RuntimeFailureLeavesNoPartialFinal.
+func TestGenerator_GenerateFromPCM_FailureLeavesNoPartialOutput(t *testing.T) {
+	t.Parallel()
+	env := setupTestEnv(t)
+	// Leave SoxPath unset to force a failure before any image is written.
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	outputPath := filepath.Join(env.TempDir, "fail.png")
+	err := gen.GenerateFromPCM(t.Context(), []byte{0, 1, 2, 3}, outputPath, 400, false, 0)
+
+	require.Error(t, err)
+	assert.NoFileExists(t, outputPath, "a failed render must not leave a partial final .png")
+	assertNoSpectrogramTemp(t, outputPath)
+}
+
+// TestGenerator_GenerateFromFile_FailureLeavesNoPartialOutput is the file-input
+// counterpart of the early config-validation smoke test: both Sox and the FFmpeg
+// fallback fail path validation, so nothing is published.
+func TestGenerator_GenerateFromFile_FailureLeavesNoPartialOutput(t *testing.T) {
+	t.Parallel()
+	env := setupTestEnv(t)
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	audioPath := filepath.Join(env.TempDir, "in.wav")
+	require.NoError(t, os.WriteFile(audioPath, []byte("fake audio"), 0o600))
+	outputPath := filepath.Join(env.TempDir, "fail.png")
+
+	err := gen.GenerateFromFile(t.Context(), audioPath, outputPath, 400, false)
+
+	require.Error(t, err)
+	assert.NoFileExists(t, outputPath, "a failed render must not leave a partial final .png")
+	assertNoSpectrogramTemp(t, outputPath)
+}
+
+// TestGenerator_GenerateFromPCM_AtomicWrite verifies the success path: the final
+// spectrogram is published and the temp sidecar is removed. It asserts the
+// post-conditions (final exists, non-empty, no leftover temp); it does not, and a
+// unit test cannot cheaply, prove the no-partial-window invariant directly.
+// Requires a real Sox.
+func TestGenerator_GenerateFromPCM_AtomicWrite(t *testing.T) {
+	t.Parallel()
+	soxPath := requireSoxAvailable(t)
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.SoxPath = soxPath
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	// 0.5s of 16-bit mono PCM with a non-constant signal so Sox has content.
+	// 251 is a prime, so the byte ramp never settles into a constant value.
+	pcm := make([]byte, defaultSampleRate) // defaultSampleRate bytes = 0.5s of int16 mono
+	for i := range pcm {
+		pcm[i] = byte(i % 251)
+	}
+
+	outputPath := filepath.Join(env.TempDir, "ok.png")
+	err := gen.GenerateFromPCM(t.Context(), pcm, outputPath, 400, true, defaultSampleRate)
+	require.NoError(t, err)
+
+	info, statErr := os.Stat(outputPath)
+	require.NoError(t, statErr, "the final spectrogram must exist after a successful render")
+	assert.Positive(t, info.Size(), "the published spectrogram must be non-empty")
+	assertNoSpectrogramTemp(t, outputPath)
 }
 
 // TestAudioDurationCache_Cleanup tests that the cache evicts old entries when exceeding max size
@@ -609,8 +734,11 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			errContain: "invalid FFmpeg path",
 		},
 		{
-			name:       "missing sox",
-			ffmpegPath: "/usr/bin/ffmpeg",
+			name: "missing sox",
+			// Absolute (real binary not needed) so it passes the FFmpeg path-format
+			// check and the failure surfaces at the missing Sox path. A literal
+			// /usr/bin/ffmpeg is not absolute on Windows and would fail first.
+			ffmpegPath: filepath.Join(env.TempDir, "ffmpeg"),
 			soxPath:    "",
 			errContain: "invalid Sox path",
 		},
@@ -861,8 +989,11 @@ func TestOperationalErrors_SetLowPriority(t *testing.T) {
 	t.Parallel()
 
 	env := setupTestEnv(t)
-	// We need a bogus path here so `generateWithSoxPCM` doesn't fail at the "binary not configured" check.
-	env.Settings.Realtime.Audio.SoxPath = "/nonexistent/sox"
+	// Bogus but absolute path so generateWithSoxPCM passes the path-format check
+	// (and the failure comes from the cancelled context, not path validation).
+	// A literal /nonexistent/sox is not absolute on Windows, so it would fail the
+	// Sox path check first and the error would not carry PriorityLow.
+	env.Settings.Realtime.Audio.SoxPath = filepath.Join(env.TempDir, "nonexistent-sox")
 
 	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
@@ -915,7 +1046,11 @@ func TestNonOperationalErrors_NoExplicitPriority(t *testing.T) {
 	t.Parallel()
 
 	env := setupTestEnv(t)
-	env.Settings.Realtime.Audio.SoxPath = "/nonexistent/sox"
+	// Bogus but absolute path so the Sox path-format check passes and the failure
+	// comes from exec (binary not found), which is non-operational. A literal
+	// /nonexistent/sox is not absolute on Windows and would fail path validation
+	// first, masking the intended path; build an OS-absolute non-existent path.
+	env.Settings.Realtime.Audio.SoxPath = filepath.Join(env.TempDir, "nonexistent-sox")
 
 	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 

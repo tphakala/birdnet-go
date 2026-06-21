@@ -21,6 +21,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -224,15 +225,18 @@ func New(settings *conf.Settings) (*BwClient, error) {
 func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude float64) {
 	log := GetLogger()
 
-	// Create a new local random generator seeded with current Unix time
-	rnd := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))) //nolint:gosec // G404: weak randomness acceptable for upload retry jitter, not security-critical
-
 	// Calculate the degree offset using metersPerDegree approximation
 	degreeOffset := radiusMeters / metersPerDegree
 
-	// Generate random offsets within +/- degreeOffset
-	latOffset := (rnd.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
-	lonOffset := (rnd.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
+	// Generate random offsets within +/- degreeOffset. Use the top-level
+	// math/rand/v2 generator (auto-seeded at startup, goroutine-safe) instead of
+	// seeding a fresh PCG from time.Now() on every call: successive calls within
+	// the same clock tick (coarse on Windows, ~15ms) would seed identically and
+	// produce the same "random" offset, defeating the location-fuzzing privacy
+	// guarantee. math/rand/v2 is not crypto-secure, which is fine for privacy
+	// fuzzing of an already-approximate coordinate.
+	latOffset := (rand.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
+	lonOffset := (rand.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
 
 	// Apply the offsets to the original coordinates and truncate to 4 decimal places
 	latitude = math.Floor((b.Latitude+latOffset)*coordinatePrecisionFactor) / coordinatePrecisionFactor
@@ -1095,10 +1099,21 @@ type audioEncodingResult struct {
 	ext    string
 }
 
-// encodeAudioForUpload handles the PCM to FLAC encoding using FFmpeg
-// FFmpeg is required as BirdWeather only accepts FLAC format
+// encodeAudioForUpload encodes the PCM soundscape to FLAC for upload. With the
+// BIRDNET_FLAC_ENCODER=native gate on it uses the native go-flac + audionorm
+// path (no FFmpeg dependency); otherwise it falls back to the FFmpeg encoder,
+// which BirdWeather has always required for its FLAC-only API.
 func (b *BwClient) encodeAudioForUpload(settings *conf.Settings, pcmData []byte, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
+
+	// Native path first: gated by the same flag as the detection save path. This
+	// must be checked BEFORE the FFmpeg-availability guard so a host without
+	// FFmpeg can still upload natively.
+	if flac.NativeEncoderEnabled() && flac.SupportedBitDepth(conf.BitDepth) {
+		log.Debug("Using native go-flac encoder for BirdWeather upload",
+			logger.String("timestamp", timestamp))
+		return b.encodeWithNativeFLAC(pcmData, timestamp)
+	}
 
 	// Use the validated FFmpeg path from settings (validated at startup)
 	// This avoids redundant exec.LookPath calls on every upload

@@ -56,7 +56,11 @@ func TestDeriveV2Path(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := deriveV2Path(tt.configuredPath)
-			assert.Equal(t, tt.expectedV2Path, result)
+			// deriveV2Path uses filepath, which emits OS-native separators
+			// (backslashes on Windows). The cases use forward-slash literals, so
+			// normalize before comparing to assert the path structure, not the
+			// platform separator.
+			assert.Equal(t, tt.expectedV2Path, filepath.ToSlash(result))
 		})
 	}
 }
@@ -65,8 +69,10 @@ func TestPathDeriver_V2MigrationPath(t *testing.T) {
 	deriver := NewPathDeriver("/data/birdnet.db")
 
 	assert.Equal(t, "/data/birdnet.db", deriver.ConfiguredPath())
-	assert.Equal(t, "/data/birdnet_v2.db", deriver.V2MigrationPath())
-	assert.Equal(t, "/data", deriver.DataDir())
+	// V2MigrationPath and DataDir derive via filepath; normalize separators so
+	// the forward-slash expectations hold on Windows too.
+	assert.Equal(t, "/data/birdnet_v2.db", filepath.ToSlash(deriver.V2MigrationPath()))
+	assert.Equal(t, "/data", filepath.ToSlash(deriver.DataDir()))
 }
 
 func TestPathDeriver_ValidateV2PathAvailable_PathDoesNotExist(t *testing.T) {
@@ -119,5 +125,5 @@ func TestPathDeriver_ValidateV2PathAvailable_PathExistsButNotV2Database(t *testi
 
 func TestV2MigrationPathFromConfigured(t *testing.T) {
 	result := V2MigrationPathFromConfigured("/data/birdnet.db")
-	assert.Equal(t, "/data/birdnet_v2.db", result)
+	assert.Equal(t, "/data/birdnet_v2.db", filepath.ToSlash(result))
 }

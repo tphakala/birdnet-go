@@ -233,7 +233,7 @@ func (s *SQLiteStore) Open() (retErr error) {
 	// happens to execute the statement gets them; new pool connections
 	// remain at SQLite defaults and miss busy_timeout entirely, leading
 	// to immediate "database is locked" errors under concurrency.
-	dsn := buildSQLiteDSN(dbPath, "_journal_mode=WAL&_busy_timeout=30000&_foreign_keys=ON&_synchronous=NORMAL&_cache_size=-4000")
+	dsn := buildSQLiteDSN(dbPath, "_journal_mode=WAL&_busy_timeout=30000&_foreign_keys=ON&_synchronous=NORMAL&_cache_size=-16000")
 
 	// Open SQLite database with GORM
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
@@ -271,6 +271,16 @@ func (s *SQLiteStore) Open() (retErr error) {
 			Build()
 	}
 	sqlDB.SetMaxOpenConns(1)
+
+	// Enable memory-mapped I/O for reads. mattn/go-sqlite3 has no _mmap_size DSN
+	// param, so set it per-connection; with SetMaxOpenConns(1) and no connection
+	// expiry there is a single long-lived connection, so this one Exec persists.
+	// mmap maps the main DB file (up to the cap or its size) into the page cache,
+	// avoiding read() syscalls; it is read-only and WAL/durability are unaffected.
+	if err := db.Exec(fmt.Sprintf("PRAGMA mmap_size=%d", sqliteMmapSizeBytes)).Error; err != nil {
+		GetLogger().Warn("Failed to set SQLite mmap_size (continuing without memory-mapped reads)",
+			logger.Error(err))
+	}
 
 	// Clean up connection pool if any subsequent initialization step fails.
 	defer func() {
@@ -352,6 +362,12 @@ func (s *SQLiteStore) Open() (retErr error) {
 
 // integrityCheckInterval is how often PRAGMA quick_check runs (24 hours).
 const integrityCheckInterval = 24 * time.Hour
+
+// sqliteMmapSizeBytes caps SQLite's memory-mapped I/O for the main DB file at
+// 256 MiB. This is a max (SQLite maps at most the file size) and consumes virtual
+// address space, not resident memory, so it is safe on small 64-bit hosts and a
+// large win for cold reads on slow storage (e.g. an SD card).
+const sqliteMmapSizeBytes = 256 * 1024 * 1024
 
 // startIntegrityCheckLoop runs PRAGMA quick_check at startup and every 24 hours.
 // Uses the monitoring context for clean shutdown.

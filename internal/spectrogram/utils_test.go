@@ -5,10 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	apperrors "github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestSizeToPixels(t *testing.T) {
@@ -400,9 +404,15 @@ func TestIsOperationalError_ExitCodes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Generate a real *exec.ExitError with the specified exit code
-			// Use 'sh -c "exit N"' to produce the desired exit code
-			cmd := exec.Command("sh", "-c", fmt.Sprintf("exit %d", tt.exitCode)) // #nosec G204 - exit code is from hardcoded test table
+			// Generate a real *exec.ExitError with the specified exit code.
+			// Use the platform shell to produce the desired exit code: "sh -c exit N"
+			// on Unix, "cmd /c exit N" on Windows (which lacks sh).
+			var cmd *exec.Cmd
+			if runtime.GOOS == "windows" {
+				cmd = exec.Command("cmd", "/c", fmt.Sprintf("exit %d", tt.exitCode)) // #nosec G204 - exit code is from hardcoded test table
+			} else {
+				cmd = exec.Command("sh", "-c", fmt.Sprintf("exit %d", tt.exitCode)) // #nosec G204 - exit code is from hardcoded test table
+			}
 			err := cmd.Run()
 
 			require.Error(t, err, "command should fail with exit code %d", tt.exitCode)
@@ -417,6 +427,84 @@ func TestIsOperationalError_ExitCodes(t *testing.T) {
 			assert.Equal(t, tt.want, got, "IsOperationalError should return %v for exit code %d", tt.want, tt.exitCode)
 		})
 	}
+}
+
+// TestIsOperationalError_HonorsPriorityLow verifies that an error already tagged
+// with PriorityLow by the generator is treated as operational. This is the bridge
+// that gives downstream consumers a correct, platform-independent answer on Windows,
+// where a context-killed process exits with status 1 and never matches the
+// signal-based checks.
+func TestIsOperationalError_HonorsPriorityLow(t *testing.T) {
+	t.Parallel()
+
+	// A Windows-style "exit status 1" tagged PriorityLow by the generator.
+	lowPriorityErr := apperrors.Newf("exit status 1").
+		Component("spectrogram").
+		Category(apperrors.CategorySystem).
+		Priority(apperrors.PriorityLow).
+		Build()
+	assert.True(t, IsOperationalError(lowPriorityErr),
+		"a CategorySystem error carrying PriorityLow should be classified as operational")
+
+	// Production propagates the error wrapped (fmt.Errorf("...: %w", err)); errors.As
+	// must still reach the EnhancedError through the wrap.
+	assert.True(t, IsOperationalError(fmt.Errorf("generate spectrogram: %w", lowPriorityErr)),
+		"a wrapped PriorityLow CategorySystem error should still be classified as operational")
+
+	// The same surface error without an explicit priority is a genuine failure and
+	// must still surface as a notification.
+	genuineErr := apperrors.Newf("exit status 1").
+		Component("spectrogram").
+		Category(apperrors.CategorySystem).
+		Build()
+	assert.False(t, IsOperationalError(genuineErr),
+		"an enhanced error without PriorityLow should not be classified as operational")
+
+	// PriorityLow alone is not sufficient: a low-priority error in a category other
+	// than the CategorySystem the generator pairs with interruptions must not be
+	// misread as operational.
+	otherCategoryLowErr := apperrors.Newf("non-fatal validation issue").
+		Component("spectrogram").
+		Category(apperrors.CategoryValidation).
+		Priority(apperrors.PriorityLow).
+		Build()
+	assert.False(t, IsOperationalError(otherCategoryLowErr),
+		"a PriorityLow error in a non-system category should not be classified as operational")
+}
+
+// TestIsOperationalExecError verifies the context-aware classification helper used at
+// the generator exec sites: a done context means the failure is attributable to
+// cancellation/timeout regardless of the platform-dependent surface error.
+func TestIsOperationalExecError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("canceled context is operational regardless of surface error", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		// Errors that IsOperationalError alone would reject (the exact Windows
+		// surfaces: missing-binary lookup error and TerminateProcess exit code 1).
+		assert.True(t, isOperationalExecError(ctx, fmt.Errorf("executable file not found in PATH")))
+		assert.True(t, isOperationalExecError(ctx, fmt.Errorf("exit status 1")))
+	})
+
+	t.Run("deadline-exceeded context is operational", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+		t.Cleanup(cancel)
+		<-ctx.Done()
+		assert.True(t, isOperationalExecError(ctx, fmt.Errorf("exit status 1")))
+	})
+
+	t.Run("live context delegates to IsOperationalError", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		assert.False(t, isOperationalExecError(ctx, fmt.Errorf("exit status 1")),
+			"a genuine failure under a live context stays non-operational")
+		assert.True(t, isOperationalExecError(ctx, context.Canceled),
+			"a surfaced context.Canceled is operational even under a live context")
+		assert.True(t, isOperationalExecError(ctx, fmt.Errorf("process failed: %s", signalKilledMessage)))
+	})
 }
 
 func TestSizeToPixelsRoundTrip(t *testing.T) {

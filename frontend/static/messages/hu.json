@@ -133,7 +133,8 @@
       "downloadCsv": "Fajlista letöltése CSV formátumban",
       "visitEbirdLink": "eBird.org megnyitása új lapon",
       "learnEbirdTaxonomyLink": "eBird taxonómia megnyitása új lapon",
-      "resizeHandle": "Húzza az átméretezéshez"
+      "resizeHandle": "Húzza az átméretezéshez",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Megbízhatóság",
@@ -404,6 +405,8 @@
         "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
         "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
         "webserverRestartRequired": "Webszerver beállítások megváltoztak. Újraindítás szükséges.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
         "reconfiguringAudioSources": "Hangforrások újrakonfigurálása...",
         "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése...",
@@ -486,7 +489,8 @@
       "confidenceMax": "Maximum megbízhatósági százalék",
       "verifiedStatus": "Ellenőrzött állapot",
       "lockedStatus": "Zárolt állapot",
-      "timeOfDay": "Napszak"
+      "timeOfDay": "Napszak",
+      "source": "Hangforrás"
     },
     "advancedFilters": "Speciális szűrők",
     "showAdvancedFilters": "Speciális szűrők megjelenítése",
@@ -508,6 +512,9 @@
       "sunrise": "Napkelte +/- 30 perc",
       "sunset": "Napnyugta +/- 30 perc"
     },
+    "sourceOptions": {
+      "any": "Összes forrás"
+    },
     "sortOptions": {
       "dateDesc": "Dátum (Legújabb elöl)",
       "dateAsc": "Dátum (Legrégebbi elöl)",
@@ -519,6 +526,7 @@
       "timeOfDay": "Napszak",
       "species": "Faj",
       "confidence": "Megbízhatóság",
+      "source": "Forrás",
       "status": "Állapot",
       "actions": "Műveletek"
     },
@@ -592,6 +600,18 @@
       "empty": "Csend van — most nincs észlelhető madárhang"
     },
     "rejected": "Elutasítva",
+    "newSpeciesHighlights": {
+      "title": "Új és visszatérő fajok",
+      "subtitle": "Első alkalommal és nemrég visszatért észlelések",
+      "trackingDisabled": "Kérjük, aktiválja az \"Fajkövetés engedélyezése\" funkciót ennek a funkciónak a használatához.",
+      "categoryLifetime": "Új fajok",
+      "categoryYear": "Idén új",
+      "categorySeason": "Ebben az évszakban új",
+      "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
+      "maxConfidenceShort": "Max {confidence}%",
+      "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
+      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
+    },
     "dailySummary": {
       "title": "Napi aktivitás",
       "subtitle": "Faj detektálások óránként",
@@ -755,26 +775,14 @@
       "resetConfirm": "Visszaállítja az irányítópultot az alapértelmezett elrendezésre? Ez eltávolítja az összes testreszabást.",
       "resetting": "Visszaállítás..."
     },
-    "newSpeciesHighlights": {
-      "title": "Új és visszatérő fajok",
-      "subtitle": "Első alkalommal és nemrég visszatért észlelések",
-      "trackingDisabled": "Kérjük, aktiválja az \"Fajkövetés engedélyezése\" funkciót ennek a funkciónak a használatához.",
-      "categoryLifetime": "Új fajok",
-      "categoryYear": "Idén új",
-      "categorySeason": "Ebben az évszakban új",
-      "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
-      "maxConfidenceShort": "Max {confidence}%",
-      "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
-      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
-    },
     "elements": {
       "banner": "Irányítópult banner",
       "dailySummary": "Napi összefoglaló",
+      "newSpeciesHighlights": "Új fajok kiemelése",
       "currentlyHearing": "Jelenleg hallható",
       "detectionsGrid": "Legutóbbi észlelések",
       "liveSpectrogram": "Élő spektrogram",
-      "videoEmbed": "Videó beágyazás",
-      "newSpeciesHighlights": "Új fajok kiemelése"
+      "videoEmbed": "Videó beágyazás"
     }
   },
   "detections": {
@@ -788,7 +796,23 @@
     },
     "detail": {
       "species": "Faj",
-      "observation": "Megfigyelés"
+      "observation": "Megfigyelés",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Tudományos név",
+        "classificationBadges": "Faj besorolási jelvények",
+        "confidence": "Detektálás megbízhatósága {confidence}%",
+        "metadata": "Detektálás metaadatok",
+        "weatherConditions": "Időjárási viszonyok a detektálás idején",
+        "comments": "Detektálás megjegyzései",
+        "commentText": "Megjegyzés szövege",
+        "commentTimestamp": "Megjegyzés időbélyege",
+        "mainRegion": "Detektálás részletei",
+        "tabsHeading": "Detektálási információk lapjai",
+        "tabList": "Detektálás részleteinek lapjai",
+        "speciesHeadingSuffix": "detektálás részletei"
+      }
     },
     "headers": {
       "dateTime": "Dátum és idő",
@@ -1129,6 +1153,7 @@
     "sections": {
       "overview": "Áttekintés",
       "database": "Adatbázis",
+      "inference": "AI Models",
       "terminal": "Terminál"
     },
     "database": {
@@ -1484,6 +1509,90 @@
         }
       }
     },
+    "inference": {
+      "title": "AI Models & Inference",
+      "loading": "Loading inference status",
+      "error": "Could not load inference status",
+      "sectionHardware": "Hardware",
+      "sectionBackends": "Inference Backends",
+      "sectionModels": "Models",
+      "noModels": "No models are currently loaded",
+      "architecture": "Architecture",
+      "cpu": "CPU",
+      "environment": "Environment",
+      "fp16": "FP16",
+      "fp16Supported": "FP16 supported",
+      "fp16Unsupported": "FP16 not supported",
+      "backendTflite": "TensorFlow Lite",
+      "backendOnnx": "ONNX Runtime",
+      "backendOpenvino": "OpenVINO",
+      "available": "Available",
+      "notAvailable": "Not available",
+      "active": "Active",
+      "inactive": "Inactive",
+      "initialized": "Initialized",
+      "version": "Version",
+      "devices": "Devices",
+      "stock": "Stock",
+      "custom": "Custom",
+      "sampleRate": "Sample rate",
+      "clipLength": "Szegmens hossza",
+      "species": "Species",
+      "invocations": "Segments analysed",
+      "avgLatency": "Avg latency",
+      "maxLatency": "Max latency",
+      "rtf": "RTF",
+      "rtfLabel": "Real-time factor",
+      "approxRam": "Approx. host RAM (RSS)",
+      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
+      "latencyChart": "Latency (ms)",
+      "rtfChart": "Real-time factor",
+      "sources": "Audio sources",
+      "noSources": "No sources attached",
+      "primaryFallback": "primary (fallback)",
+      "notMeasured": "n/a",
+      "unitMs": "ms",
+      "unitKhz": "kHz",
+      "unitSec": "s",
+      "sectionAudio": "Audio",
+      "queueDepth": "Queue depth",
+      "queueDepthChart": "Queue depth",
+      "droppedChunks": "Dropped chunks",
+      "queueCapacity": "Capacity",
+      "lastSeen": "Last seen",
+      "lastSeenNever": "No detections yet",
+      "deviceHelp": "A számítási eszköz, amelyen ez a modell a következtetést futtatja (CPU, GPU vagy ismeretlen).",
+      "paused": "Szüneteltetve",
+      "pausedScheduleHelp": "Ez a modell csak ütemezés szerint fut, és jelenleg szünetel, így nem dolgoz fel hangot.",
+      "activityPaused": "Ütemezés miatt szünetel",
+      "lastHeard": "Utoljára hallva",
+      "lastHeardHint": "Legutóbbi küszöb feletti előrejelzések, diagnosztikához. Tartalmazza a nem madár és tartományon kívüli eredményeket, amelyek nem kerülnek mentésre észlelésként.",
+      "lastHeardNever": "Még semmi sem hallatszott",
+      "confidenceColumn": "Konf.",
+      "heardWhen": "Mikor",
+      "coDetectedColumn": "Még",
+      "coDetectedHelp": "Más modellek, amelyek {seconds} mp-en belül észlelték ezt a fajt",
+      "outOfRangeHelp": "A területszűrőn kívül (diagnosztikához megjelenítve, nem mentve észlelésként)",
+      "peak": "csúcs",
+      "activityActive": "Inference active",
+      "activityIdle": "Idle",
+      "throughput": "Throughput",
+      "throughputUnit": "/s",
+      "throughputChart": "Throughput (/s)",
+      "errorRate": "Error rate",
+      "loadFailures": "Load failures",
+      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
+      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
+      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
+      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
+      "throughputHelp": "Segments analysed per second by this model.",
+      "errorRateHelp": "Share of analysis attempts that failed.",
+      "loadFailuresHelp": "Number of times this model failed to load.",
+      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
+      "invocationsHelp": "Total audio segments this model has analysed since startup.",
+      "noModelsHint": "No audio source configured yet?",
+      "noModelsHintLink": "Configure audio sources"
+    },
     "metrics": {
       "cpu": "CPU",
       "memory": "Memória",
@@ -1539,6 +1648,35 @@
     "reattach": "Újracsatlakozás"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Áttekintés",
+        "patterns": "Tevékenységi minták",
+        "trends": "Trendek",
+        "biodiversity": "Biodiverzitás",
+        "quality": "Ellenőrzés és pontosság"
+      },
+      "aria": {
+        "tabs": "Elemzési szakaszok"
+      },
+      "controls": {
+        "source": "Forrás",
+        "sourceAll": "Minden forrás",
+        "sourceComingSoon": "A forrás szerinti szűrés egy későbbi frissítésben érkezik.",
+        "speciesNotApplicable": "Az ebben a szakaszban lévő diagramok nem szűrnek faj szerint."
+      },
+      "card": {
+        "error": "Nem sikerült betölteni ezt a diagramot",
+        "retry": "Újra",
+        "notEnoughData": "Még nincs elég adat",
+        "notEnoughDataHint": "Ehhez a diagramhoz legalább {min} adatpont szükséges. Folytassa a rögzítést, és nézzen vissza hamarosan.",
+        "export": "Exportálás",
+        "exportComingSoon": "A CSV-exportálás hamarosan érkezik."
+      },
+      "comingSoon": {
+        "description": "Ez a szakasz fejlesztés alatt áll, és egy közelgő frissítésben érkezik."
+      }
+    },
     "title": "Áttekintés",
     "loadingError": "Néhány analitikai adat betöltése sikertelen. Próbálja később újra.",
     "stats": {
@@ -1619,6 +1757,7 @@
         "dateTime": "Dátum és idő",
         "species": "Faj",
         "confidence": "Megbízhatóság",
+        "source": "Forrás",
         "timeOfDay": "Napszak"
       },
       "noRecentDetections": "Nem található legutóbbi detektálás",
@@ -1719,6 +1858,14 @@
     },
     "errors": {
       "loadFailed": "Az analitikai adatok betöltése sikertelen. Próbálja újra."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -3347,8 +3494,6 @@
         "redirectUriNotConfigured": "Nincs konfigurálva - állítsa be a hosztcímet vagy a Base URL-t a Szerverkonfiguráció fülön",
         "noProviders": "Nincs OAuth szolgáltató konfigurálva",
         "noProvidersDescription": "Adjon hozzá egy szolgáltatót a bejelentkezés engedélyezéséhez Google, GitHub, Microsoft, LINE, Kakao vagy egyedi OIDC szolgáltatóval.",
-        "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
-        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva – a bejelentkezés sikertelen lesz",
         "enableProviderLabel": "Engedélyezze ezt a szolgáltatót",
         "getCredentialsLabel": "Szerezze be a hitelesítési adatait a {provider}-tól",
         "redirectUriTitle": "Átirányítási URI:",
@@ -3358,6 +3503,8 @@
         "clientSecretHelpText": "Az OAuth 2.0 Client Secret a szolgáltató fejlesztői konzoljáról",
         "userIdLabel": "Felhasználói ID (opcionális)",
         "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint",
+        "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
+        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva – a bejelentkezés sikertelen lesz",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Google OAuth2 bejelentkezés engedélyezése",
@@ -3441,16 +3588,16 @@
       "exceptions": {
         "title": "Kivételek"
       },
-      "privateMode": {
-        "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
-        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül \u2013 bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
-      },
       "publicAccess": {
         "title": "Nyilvános hozzáférés",
         "description": "Specifikus funkciók hozzáférhetőségének engedélyezése hitelesítés nélkül.",
         "liveAudioLabel": "Élő hang lejátszás engedélyezése",
         "liveAudioHelp": "Ha engedélyezve van, bárki hallgathatja az élő hang streameket bejelentkezés nélkül. A beállítások és törlés továbbra is hitelesítést igényel.",
         "warningText": "A nyilvános hozzáférési funkciók engedélyezése kiteszi azokat bárkinek, aki elérheti ezt a szervert. Csak akkor engedélyezze, ha megbízik a hálózati környezetében."
+      },
+      "privateMode": {
+        "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
+        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül – bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -3653,16 +3800,22 @@
         "configureActions": "Műveletek konfigurálása",
         "actionsConfigured": "Konfigurálva",
         "list": {
-          "threshold": "Küszöbérték:",
-          "interval": "Intervallum:",
-          "intervalNone": "Nincs",
-          "actionBadge": "Művelet",
           "editTitle": "Konfiguráció szerkesztése",
           "removeTitle": "Konfiguráció eltávolítása"
         },
         "emptyState": {
           "title": "Még nincs konfiguráció.",
           "description": "Kattintson a \"Konfiguráció hozzáadása\" gombra a faj detektálási beállítások testreszabásához."
+        },
+        "table": {
+          "columnScientificName": "Tudományos név",
+          "intervalDefault": "Alapértelmezett",
+          "intervalDefaultTooltip": "0 = globális alapértelmezett intervallum használata",
+          "noActions": "Nincs",
+          "searchPlaceholder": "Fajok keresése...",
+          "noResults": "Nincs megfelelő konfiguráció",
+          "editDisabledReason": "Mentse el vagy zárja be a jelenlegi szerkesztőt egy másik faj szerkesztése előtt",
+          "actionsDisabledBusy": "Kérjük, várja meg a jelenlegi művelet befejezését"
         }
       },
       "synonyms": {
@@ -4439,6 +4592,11 @@
       "removeCertificate": "Tanúsítvány eltávolítása",
       "fileReadError": "A fájl olvasása sikertelen",
       "loading": "Tanúsítvány információ betöltése..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {
@@ -4542,7 +4700,8 @@
         "invalidUrl": "Érvénytelen URL-formátum. Adjon meg egy teljes URL-t, pl. rtsp://host:port/útvonal",
         "unsupportedScheme": "Nem támogatott URL-séma: \"{scheme}\". Használjon rtsp, rtsps, http, https, rtmp vagy udp sémát",
         "blockedDestination": "Ez a cél biztonsági okokból le van tiltva",
-        "connectionFailed": "Nem sikerült csatlakozni a streamhez. Ellenőrizze, hogy az URL helyes-e és a stream elérhető-e"
+        "connectionFailed": "Nem sikerült csatlakozni a streamhez. Ellenőrizze, hogy az URL helyes-e és a stream elérhető-e",
+        "noAudioTrack": "A stream nem tartalmaz hangsávot. Csak hangot tartalmazó streamek használhatók"
       }
     },
     "debug": {
@@ -4836,7 +4995,13 @@
     "bannerTitle": "Újraindítás szükséges",
     "bannerMessage": "A konfigurációs változtatásokhoz újraindítás szükséges:",
     "bannerAction": "Újraindítás most",
-    "restartFailed": "Az újraindítás kezdeményezése sikertelen"
+    "restartFailed": "Az újraindítás kezdeményezése sikertelen",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Súgó és támogatás",

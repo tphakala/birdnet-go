@@ -156,16 +156,14 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 			logger.Any("args", args))
 	}
 
-	// Add timeout to prevent indefinite execution
-	// Use 30 seconds as a reasonable upper bound for analytics queries
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
 	// Track transaction duration for performance monitoring
 	txStart := time.Now()
 
-	// Use GORM's Transaction helper for automatic commit/rollback handling
-	err := ds.DB.WithContext(ctxWithTimeout).Transaction(func(tx *gorm.DB) error {
+	// Use GORM's Transaction helper for automatic commit/rollback handling.
+	// The query is bounded by the caller's request context, which the API layer
+	// wraps with analyticsQueryTimeout (internal/api/v2/analytics.go). The v2only
+	// implementation relies on the caller's context the same way.
+	err := ds.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Execute query within transaction
 		rows, err := tx.Raw(queryStr, args...).Rows()
 		if err != nil {
@@ -189,11 +187,14 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 		}
 		rowCount := 0
 
-		// NOTE: Transaction has 30-second timeout at the top level (ctxWithTimeout)
-		// TODO(context-deadline): For very large result sets, consider adding context checks in loop
-		// Example: select { case <-ctxWithTimeout.Done(): rows.Close(); return ctxWithTimeout.Err(); default: }
-		// TODO(telemetry): Report context cancellations during row processing to internal/telemetry
+		// The query is bounded by the caller's request context (the API layer wraps
+		// it with analyticsQueryTimeout). Check cancellation inside the scan loop so a
+		// client disconnect or deadline on a large result set surfaces immediately
+		// instead of after scanning every remaining row.
 		for rows.Next() {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			rowCount++
 			var summary SpeciesSummaryData
 			var firstSeenStr, lastSeenStr string

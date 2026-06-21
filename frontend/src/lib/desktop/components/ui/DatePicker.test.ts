@@ -579,19 +579,28 @@ describe('DatePicker Component', () => {
       expect(gridcells.length).toBeGreaterThan(30); // At least 31 date buttons plus empty cells
     });
 
-    it('cleans up event listeners on unmount', () => {
+    it('adds the click-outside listener only while open and removes it on unmount', async () => {
       const onChange = vi.fn();
       const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
       const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
 
       const { unmount } = render(DatePicker, { value: '', onChange });
 
-      // Should add click listener
+      // The click-outside listener is gated on the calendar being open, so a
+      // closed picker keeps no global document listener.
+      expect(addEventListenerSpy).not.toHaveBeenCalledWith('click', expect.any(Function));
+
+      // Opening the calendar registers the listener.
+      const button = screen.getByLabelText('Select date');
+      await user.click(button);
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
       expect(addEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function));
 
       unmount();
 
-      // Should remove click listener
+      // Unmounting while open tears the listener down.
       expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function));
 
       addEventListenerSpy.mockRestore();

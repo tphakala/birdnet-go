@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -131,6 +132,57 @@ func TestSearch_QueryAndCommonLabelIDs(t *testing.T) {
 	})
 }
 
+// TestGetSpeciesFirstDetectionInPeriod characterizes the per-species first-detection
+// query: period filtering, aggregation across multiple labels of the same scientific
+// name, MIN(detected_at) selection, and ascending order. It must hold for any
+// implementation (window function or GROUP BY+MIN).
+func TestGetSpeciesFirstDetectionInPeriod(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	// Two species with a single label, plus one species with two labels (two models)
+	// to verify aggregation across labels by scientific_name.
+	corone := createTestLabel(t, db, "Corvus corone", 1)
+	robin := createTestLabel(t, db, "Erithacus rubecula", 1)
+	merulaM1 := createTestLabel(t, db, "Turdus merula", 1)
+	merulaM2 := createTestLabel(t, db, "Turdus merula", 2)
+
+	const start, end int64 = 2000, 4000
+
+	// Corvus corone: two detections in period -> first is 2000.
+	createDetectionForLabel(t, db, corone.ID, 2000)
+	createDetectionForLabel(t, db, corone.ID, 2500)
+	// Erithacus rubecula: one BEFORE the period (excluded), one inside -> first is 3000.
+	createDetectionForLabel(t, db, robin.ID, 1000)
+	createDetectionForLabel(t, db, robin.ID, 3000)
+	// Turdus merula: detections under two different labels; first across both is 2100.
+	createDetectionForLabel(t, db, merulaM1.ID, 2200)
+	createDetectionForLabel(t, db, merulaM2.ID, 2100)
+	// A detection AFTER the period end is excluded (end is exclusive).
+	createDetectionForLabel(t, db, corone.ID, 5000)
+
+	results, err := repo.GetSpeciesFirstDetectionInPeriod(ctx, start, end, 100, 0)
+	require.NoError(t, err)
+
+	// Build a name->firstDetected map for order-independent value checks.
+	got := make(map[string]int64, len(results))
+	for _, r := range results {
+		got[r.ScientificName] = r.FirstDetected
+	}
+	assert.Equal(t, int64(2000), got["Corvus corone"], "corone first detection in period")
+	assert.Equal(t, int64(3000), got["Erithacus rubecula"], "robin first in-period detection (pre-period excluded)")
+	assert.Equal(t, int64(2100), got["Turdus merula"], "merula first across both labels")
+	assert.Len(t, results, 3, "exactly the three species detected within the period")
+
+	// Results are ordered by first_detected ascending.
+	firsts := make([]int64, len(results))
+	for i, r := range results {
+		firsts[i] = r.FirstDetected
+	}
+	assert.Equal(t, []int64{2000, 2100, 3000}, firsts, "ascending by first_detected")
+}
+
 // TestSearch_ScientificLikeNotTruncated guards against the prior 100-row cap: the scientific
 // LIKE runs in SQL and must return all matches, not a capped subset. See issue #3378.
 func TestSearch_ScientificLikeNotTruncated(t *testing.T) {
@@ -234,6 +286,134 @@ func TestDeleteBatch_ChunksRemainderCorrectly(t *testing.T) {
 	require.NoError(t, db.Table(tableDetections).Find(&remaining).Error)
 	require.Len(t, remaining, 1)
 	assert.Equal(t, dets[len(dets)-1].ID, remaining[0].ID)
+}
+
+// ============================================================================
+// Batch Hourly Occurrence Tests
+// ============================================================================
+
+// TestGetBatchHourlyOccurrences verifies the batch hourly query returns per-label-ID
+// counts, omits labels with no detections, honors the confidence filter, handles empty
+// input, and propagates context cancellation (rather than silently returning zeros).
+func TestGetBatchHourlyOccurrences(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := &detectionRepository{db: db}
+
+	// Fixed epoch so the test does not depend on the wall clock. Per-label daily totals
+	// (sum across hours) are asserted to stay independent of the OS-local hour bucketing.
+	const base = int64(1_700_000_000)
+	createDetectionForLabel(t, db, 10, base)
+	createDetectionForLabel(t, db, 10, base+3600)
+	createDetectionForLabel(t, db, 20, base+7200)
+	// Low-confidence detection on label 30 must be filtered out by minConfidence below.
+	require.NoError(t, db.Table(tableDetections).Create(
+		&entities.Detection{LabelID: 30, ModelID: 1, Confidence: 0.2, DetectedAt: base}).Error)
+
+	t.Run("per-label counts with confidence filter", func(t *testing.T) {
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), []uint{10, 20, 30, 99}, base-1, base+10_000, 0, 0.5)
+		require.NoError(t, err)
+
+		require.Contains(t, got, uint(10))
+		require.Contains(t, got, uint(20))
+		assert.NotContains(t, got, uint(30), "below-confidence detection must be filtered out")
+		assert.NotContains(t, got, uint(99), "label with no detections must be absent from the map")
+		assert.Equal(t, 2, totalBatchHourly(got, 10), "label 10 has two qualifying detections")
+		assert.Equal(t, 1, totalBatchHourly(got, 20), "label 20 has one qualifying detection")
+	})
+
+	t.Run("empty input returns empty map", func(t *testing.T) {
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), nil, base-1, base+10_000, 0, 0.0)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("cancelled context surfaces an error", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, base-1, base+10_000, 0, 0.0)
+		require.ErrorIs(t, err, context.Canceled, "a cancelled context must abort the query with context.Canceled, not return zeros")
+	})
+}
+
+// totalBatchHourly returns the total detections for a label across its 24-hour occurrence
+// array. It takes the map and key (rather than the [24]int by value) to avoid copying the
+// 192-byte array, and returns 0 for a label that is absent from the map.
+func totalBatchHourly(byLabel map[uint][24]int, labelID uint) int {
+	total := 0
+	hours := byLabel[labelID]
+	for _, c := range hours {
+		total += c
+	}
+	return total
+}
+
+// TestGetBatchHourlyOccurrences_TimezoneOffset verifies that a detection buckets into the
+// hour given by the supplied timezone offset, not the database/OS-local zone. A single
+// detection at UTC midnight must land in hour 0 at UTC, hour 2 at UTC+2, and hour 23
+// (previous day) at UTC-1. Guards against bucketing in the engine's local timezone.
+func TestGetBatchHourlyOccurrences_TimezoneOffset(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := &detectionRepository{db: db}
+
+	// 2024-06-15T00:00:00Z.
+	const utcMidnight = int64(1718409600)
+	createDetectionForLabel(t, db, 10, utcMidnight)
+
+	cases := []struct {
+		name       string
+		offsetSecs int
+		wantHour   int
+	}{
+		{"utc", 0, 0},
+		{"plus two hours", 2 * 3600, 2},
+		{"minus one hour wraps to previous day", -3600, 23},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := repo.GetBatchHourlyOccurrences(
+				t.Context(), []uint{10}, utcMidnight-86_400, utcMidnight+86_400, tc.offsetSecs, 0.0)
+			require.NoError(t, err)
+			require.Equal(t, 1, totalBatchHourly(got, 10), "exactly one detection regardless of offset")
+			counts := got[10]
+			assert.Equal(t, 1, counts[tc.wantHour],
+				"detection must bucket into the offset-adjusted hour %d", tc.wantHour)
+		})
+	}
+}
+
+// TestGetDailyAnalytics_TimezoneOffset verifies that a near-midnight detection buckets into the
+// calendar date given by the supplied timezone offset, not the database/OS-local zone. A detection
+// at 2024-06-14T23:30:00Z falls on 2024-06-14 at UTC, crosses to 2024-06-15 at UTC+2, and stays on
+// 2024-06-14 at UTC-1. Guards against date bucketing in the engine's local timezone (the deferred
+// half of the hourly fix in TestGetBatchHourlyOccurrences_TimezoneOffset).
+func TestGetDailyAnalytics_TimezoneOffset(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := &detectionRepository{db: db}
+
+	// 2024-06-14T23:30:00Z, 30 minutes before UTC midnight.
+	const nearMidnight = int64(1718407800)
+	createDetectionForLabel(t, db, 10, nearMidnight)
+
+	cases := []struct {
+		name       string
+		offsetSecs int
+		wantDate   string
+	}{
+		{"utc", 0, "2024-06-14"},
+		{"plus two hours crosses midnight", 2 * 3600, "2024-06-15"},
+		{"minus one hour stays previous day", -3600, "2024-06-14"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := repo.GetDailyAnalytics(
+				t.Context(), nearMidnight-86_400, nearMidnight+86_400, tc.offsetSecs, nil, nil)
+			require.NoError(t, err)
+			require.Len(t, got, 1, "exactly one date bucket regardless of offset")
+			assert.Equal(t, tc.wantDate, got[0].Date,
+				"detection must bucket into the offset-adjusted date %s", tc.wantDate)
+			assert.Equal(t, int64(1), got[0].TotalDetections)
+		})
+	}
 }
 
 // ============================================================================
@@ -497,4 +677,79 @@ func TestSaveReview_ConcurrentUpsertNoDuplicates(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Table(tableDetectionReviews).Where("detection_id = ?", det.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
+}
+
+// ============================================================================
+// GetByHour / CountByHour boundary tests
+// ============================================================================
+
+// TestGetByHour_HalfOpenBoundary verifies that GetByHour and CountByHour use
+// a half-open interval [hourStart, hourStart+3600) so a detection whose
+// detected_at equals the next hour's start is not double-counted.
+//
+// Three detections are seeded:
+//   - t+10    (inside the hour, clearly included)
+//   - t+3599  (last second of the hour, included)
+//   - t+3600  (next hour's first second, must be EXCLUDED from the current hour)
+//
+// The current hour must return exactly 2. The next hour must return exactly 1.
+func TestGetByHour_HalfOpenBoundary(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const hourStart = int64(1_700_000_000)
+
+	createTestDetection(t, db, hourStart+10)
+	createTestDetection(t, db, hourStart+3599)
+	createTestDetection(t, db, hourStart+3600) // boundary: next hour's first second
+
+	t.Run("GetByHour current hour excludes boundary second", func(t *testing.T) {
+		dets, total, err := repo.GetByHour(ctx, hourStart, 100, 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), total,
+			"GetByHour must use half-open [hourStart, hourStart+3600): expected 2, got %d", total)
+		assert.Len(t, dets, 2)
+	})
+
+	t.Run("CountByHour current hour excludes boundary second", func(t *testing.T) {
+		n, err := repo.CountByHour(ctx, hourStart)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), n,
+			"CountByHour must use half-open [hourStart, hourStart+3600): expected 2, got %d", n)
+	})
+
+	t.Run("GetByHour next hour includes boundary second exactly once", func(t *testing.T) {
+		dets, total, err := repo.GetByHour(ctx, hourStart+3600, 100, 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), total,
+			"boundary second must belong to the next hour exactly once: expected 1, got %d", total)
+		assert.Len(t, dets, 1)
+	})
+
+	t.Run("CountByHour next hour includes boundary second exactly once", func(t *testing.T) {
+		n, err := repo.CountByHour(ctx, hourStart+3600)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), n,
+			"boundary second must belong to the next hour exactly once: expected 1, got %d", n)
+	})
+}
+
+// TestGetByHour_PaginationHonored verifies that LIMIT is applied by GetByHour even
+// though the query is used for a Count first. If the GORM query object's state leaked
+// across the Count/Find boundary, LIMIT would be ignored and all rows returned.
+func TestGetByHour_PaginationHonored(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const hourStart = int64(1_700_000_000)
+	for i := int64(0); i < 5; i++ {
+		createTestDetection(t, db, hourStart+i*60)
+	}
+
+	dets, total, err := repo.GetByHour(ctx, hourStart, 2, 0)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), total, "total must count all rows in the hour")
+	assert.Len(t, dets, 2, "LIMIT must be honored; query reuse after Count would return all 5")
 }

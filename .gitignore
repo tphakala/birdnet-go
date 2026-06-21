@@ -12,6 +12,7 @@ docs/superpowers/
 db/
 cache/
 spectrograms/
+.cache/
 .task/*
 .vscode/*
 .mcp.json
@@ -47,7 +48,15 @@ frontend/blob-report/
 frontend/tests/.auth/
 frontend/coverage/
 frontend/playwright-report*.zip
+frontend/report/
 REFACTOR_CHANGELOG.md
 .worktrees/
 .leann/
-.serena/
+.codegraph/
+# Track the shared Serena project config; ignore caches, logs, memories, and local overrides
+.serena/*
+!.serena/project.yml
+
+# Python bytecode caches (db-doctor and other tools/ scripts)
+__pycache__/
+*.pyc

@@ -22,6 +22,7 @@
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { generateSessionId } from '$lib/utils/session';
   import { loggers } from '$lib/utils/logger';
   import type { ColorMapName } from '$lib/utils/spectrogramColorMaps';
@@ -34,8 +35,8 @@
     promoteFromQueue,
     nextYSlot,
     computeWallClockAtPlayhead,
+    buildQueuedLabel,
     STALE_DEDUP_PRUNE_SECONDS,
-    LABEL_LEAD_IN_SECONDS,
   } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
@@ -471,15 +472,16 @@
         const nowUnix = Date.now() / 1000;
 
         for (const det of newDetections) {
+          // Dedup on the server-locale common name: a stable identity key that
+          // does not shift when the visitor switches UI locale.
           if (shouldDedup(det.species, nowUnix, lastSeenSpecies)) continue;
           lastSeenSpecies.set(det.species, nowUnix);
           const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
           slotCounter = next;
-          labelQueue.push({
-            text: det.species,
-            firstDetected: (det.audioCapturedAt ?? det.firstDetected) - LABEL_LEAD_IN_SECONDS,
-            ySlot: slot,
-          });
+          // Label text follows per-visitor localization (server-locale fallback),
+          // matching the rest of the dashboard. See buildQueuedLabel for why it is
+          // fixed at queue time rather than reactive to later locale switches.
+          labelQueue.push(buildQueuedLabel(det, slot, localizeSpeciesName));
         }
         prevSnapshot = curr;
       } catch {

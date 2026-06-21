@@ -350,19 +350,75 @@ func parseRawParameter(rawParam string) bool {
 	}
 }
 
-// isAudioBeingEncoded checks if an audio file at the given relative path is
-// currently being encoded by FFmpeg. FFmpeg exports use a temporary file with
-// a ".temp" suffix that is atomically renamed upon completion. If a recent
-// temp file exists, the audio is still being written and the caller should
-// return 503 instead of 404.
-func (c *Controller) isAudioBeingEncoded(relClipPath string) bool {
-	tempPath := relClipPath + ffmpeg.TempExt
-	info, err := c.SFS.StatRel(tempPath)
+// findEncodingTempPath looks for an in-progress export temp file for relClipPath
+// and, if a recent one exists, returns its path (relative to the SecureFS root)
+// and true. Exports write to a per-export unique temp file named
+// "<clip>.<pid>.<seq>.temp" (see ffmpeg.ExportAudio / flac.EncodePCM) that is
+// atomically renamed to the final clip on completion, so the clip's directory is
+// scanned for any matching temp. The pre-fix "<clip>.temp" name is matched too,
+// so a temp written by an older build mid-upgrade is handled. Returning the
+// concrete path lets a waiting caller poll that fixed name with StatRel instead
+// of re-scanning the directory on every tick.
+func (c *Controller) findEncodingTempPath(relClipPath string) (string, bool) {
+	dir := filepath.Dir(relClipPath)
+	entries, err := c.SFS.ReadDirRel(dir)
 	if err != nil {
+		return "", false
+	}
+	base := filepath.Base(relClipPath)
+	for _, entry := range entries {
+		if !isExportTempFor(entry.Name(), base) {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			continue
+		}
+		// Guard against stale temp files from failed exports.
+		if time.Since(info.ModTime()) < audioEncodingMaxAge {
+			return filepath.Join(dir, entry.Name()), true
+		}
+	}
+	return "", false
+}
+
+// isExportTempFor reports whether name is an in-progress export temp file for the
+// clip file named base. It matches the per-export unique form
+// "<base>.<pid>.<seq>.temp" (pid and seq are integers, see audiotemp.UniquePath)
+// and the pre-fix "<base>.temp" form, but NOT unrelated sidecar temps that merely
+// share the prefix and suffix, e.g. a spectrogram's "<base>.png.<pid>.<seq>.temp".
+func isExportTempFor(name, base string) bool {
+	// Pre-fix format: exactly "<base>.temp".
+	if name == base+ffmpeg.TempExt {
+		return true
+	}
+	// Unique format: "<base>.<pid>.<seq>.temp" with integer pid and seq.
+	middle, ok := strings.CutPrefix(name, base+".")
+	if !ok {
 		return false
 	}
-	// Guard against stale temp files from failed exports
-	return time.Since(info.ModTime()) < audioEncodingMaxAge
+	middle, ok = strings.CutSuffix(middle, ffmpeg.TempExt)
+	if !ok {
+		return false
+	}
+	pidStr, seqStr, ok := strings.Cut(middle, ".")
+	if !ok {
+		return false
+	}
+	if _, err := strconv.Atoi(pidStr); err != nil {
+		return false
+	}
+	_, err := strconv.Atoi(seqStr)
+	return err == nil
+}
+
+// isAudioBeingEncoded reports whether a recent in-progress export temp file
+// exists for relClipPath. Callers that then wait for the clip should use
+// findEncodingTempPath directly so they can poll the temp's fixed name with
+// StatRel rather than re-scanning the directory each tick.
+func (c *Controller) isAudioBeingEncoded(relClipPath string) bool {
+	_, ok := c.findEncodingTempPath(relClipPath)
+	return ok
 }
 
 // handleAudioNotReady returns a 503 Service Unavailable response with a
@@ -379,7 +435,7 @@ func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
 // timeout, false if encoding is still ongoing or the temp file disappeared.
 // This reduces 503 responses by waiting server-side instead of requiring
 // the client to retry.
-func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool {
+func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath, tempPath string) bool {
 	waitCtx, cancel := context.WithTimeout(ctx.Request().Context(), audioWaitTimeout)
 	defer cancel()
 
@@ -392,10 +448,12 @@ func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool
 		if _, err := c.SFS.StatRel(relClipPath); err == nil {
 			return true
 		}
-		// If the temp file is gone, encoding has finished or failed.
-		// Re-check for the final file to handle the TOCTOU race where encoding
-		// completed (atomic rename) between the StatRel and isAudioBeingEncoded calls.
-		if !c.isAudioBeingEncoded(relClipPath) {
+		// If the temp file is gone (or went stale, i.e. a failed export left it
+		// behind), encoding has finished or failed. Poll the concrete temp path
+		// with a cheap StatRel (no directory re-scan); re-check the final file to
+		// handle the TOCTOU race where encoding completed (atomic rename) between
+		// the two StatRel calls.
+		if info, err := c.SFS.StatRel(tempPath); err != nil || time.Since(info.ModTime()) >= audioEncodingMaxAge {
 			_, err := c.SFS.StatRel(relClipPath)
 			return err == nil
 		}
@@ -451,10 +509,11 @@ func (c *Controller) waitForAudioFileGrace(ctx echo.Context, relClipPath string)
 // created the temp file yet or already renamed it. Returns nil if the file was
 // successfully served, or the original/translated error otherwise.
 func (c *Controller) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, logFields ...logger.Field) error {
-	if c.isAudioBeingEncoded(relClipPath) {
+	if tempPath, encoding := c.findEncodingTempPath(relClipPath); encoding {
 		// Wait server-side for the file to appear instead of immediately
-		// returning 503, reducing unnecessary client round-trips.
-		if c.waitForAudioFile(ctx, relClipPath) {
+		// returning 503, reducing unnecessary client round-trips. Pass the
+		// concrete temp path so the wait loop polls it directly.
+		if c.waitForAudioFile(ctx, relClipPath, tempPath) {
 			// File appeared — serve it now
 			if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
 				return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")

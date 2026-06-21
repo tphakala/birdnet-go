@@ -31,6 +31,7 @@
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import { Volume2 } from '@lucide/svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
@@ -38,15 +39,14 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
-  import { settingsStore } from '$lib/stores/settings';
   import { toastActions } from '$lib/stores/toast';
   import { fetchWithCSRF } from '$lib/utils/api';
-  import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
   import { setDetectionVerification } from '$lib/utils/reviewDetection';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.ui;
 
@@ -76,21 +76,9 @@
     onToggleSelect,
   }: Props = $props();
 
-  // Resolve the audio source label, falling back to the current settings when
-  // the API payload lacks a displayName (e.g. v1 legacy reads) or when the
-  // recorded id has since been renamed in the configuration.
-  let sourceLabel = $derived(
-    getFriendlyAudioSourceName(
-      detection.source,
-      $settingsStore.formData.realtime?.audio?.sources,
-      $settingsStore.formData.realtime?.rtsp?.streams
-    )
-  );
-  // Dim the label when we had to fall back to the raw id (no friendly name
-  // resolved from settings and the server did not send a distinct displayName).
-  let sourceIsRawId = $derived(
-    sourceLabel !== null && sourceLabel === (detection.source?.id ?? '')
-  );
+  // Localized common name for display in the visitor's UI locale. Falls back to
+  // the server-provided common name, then the scientific name.
+  const displayName = $derived(localizeSpeciesName(detection.scientificName, detection.commonName));
 
   // Modal states
   let showConfirmModal = $state(false);
@@ -275,7 +263,7 @@
   // Cleanup is handled automatically by useImageDelayedLoading
   function playMobileAudio() {
     const audioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
-    onPlayMobileAudio?.({ audioUrl, speciesName: detection.commonName, detectionId: detection.id });
+    onPlayMobileAudio?.({ audioUrl, speciesName: displayName, detectionId: detection.id });
   }
 </script>
 
@@ -321,15 +309,7 @@
 
 <!-- Source -->
 <td class="text-sm hidden lg:table-cell">
-  {#if sourceLabel}
-    <span
-      class="truncate max-w-32 inline-block"
-      class:opacity-50={sourceIsRawId}
-      title={sourceLabel}
-    >
-      {sourceLabel}
-    </span>
-  {/if}
+  <SourceBadge {detection} variant="inline" />
 </td>
 
 <!-- Bird species (with thumbnail) -->
@@ -341,8 +321,8 @@
         <!-- Screen reader announcement for loading state -->
         <span class="sr-only" role="status" aria-live="polite">
           {thumbnailLoader.loading
-            ? t('detections.aria.thumbnailLoading', { species: detection.commonName })
-            : t('detections.aria.thumbnailLoaded', { species: detection.commonName })}
+            ? t('detections.aria.thumbnailLoading', { species: displayName })
+            : t('detections.aria.thumbnailLoaded', { species: displayName })}
         </span>
 
         <!-- Loading spinner overlay -->
@@ -382,7 +362,7 @@
             decoding="async"
             fetchpriority="low"
             src={getThumbnailUrl(detection.scientificName)}
-            alt={detection.commonName}
+            alt={displayName}
             class="sp-thumbnail-image"
             class:opacity-0={thumbnailLoader.loading}
             onload={handleThumbnailLoad}
@@ -402,7 +382,7 @@
           onclick={handleDetailsClick}
           class="sp-species-common-name hover:text-primary transition-colors cursor-pointer text-left"
         >
-          {detection.commonName}
+          {displayName}
         </button>
         <div class="sp-species-scientific-name">{detection.scientificName}</div>
       </div>

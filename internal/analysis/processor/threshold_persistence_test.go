@@ -3,6 +3,7 @@ package processor
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,13 +54,10 @@ func (m *MockDatastore) Optimize(context.Context) error                    { ret
 func (m *MockDatastore) GetAllNotes() ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
-func (m *MockDatastore) GetTopBirdsData(string, float64, int) ([]datastore.Note, error) {
+func (m *MockDatastore) GetTopBirdsData(context.Context, string, float64, int) ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
-func (m *MockDatastore) GetHourlyOccurrences(string, string, float64) ([24]int, error) {
-	return [24]int{}, nil
-}
-func (m *MockDatastore) GetBatchHourlyOccurrences(string, []string, float64) (map[string][24]int, error) {
+func (m *MockDatastore) GetBatchHourlyOccurrences(context.Context, string, []string, float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (m *MockDatastore) SpeciesDetections(string, string, string, int, bool, int, int) ([]datastore.Note, error) {
@@ -327,22 +325,22 @@ func (m *MockDatastore) DeleteAllThresholdEvents() (int64, error) {
 }
 
 // BG-17 fix: Add notification history methods
-func (m *MockDatastore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+func (m *MockDatastore) GetActiveNotificationHistory(_ context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
 	return []datastore.NotificationHistory{}, nil
 }
 
-func (m *MockDatastore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+func (m *MockDatastore) GetNotificationHistory(_ context.Context, scientificName, notificationType string) (*datastore.NotificationHistory, error) {
 	return nil, errors.Newf("notification history not found").
 		Component("datastore").
 		Category(errors.CategoryNotFound).
 		Build()
 }
 
-func (m *MockDatastore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+func (m *MockDatastore) SaveNotificationHistory(_ context.Context, history *datastore.NotificationHistory) error {
 	return nil
 }
 
-func (m *MockDatastore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+func (m *MockDatastore) DeleteExpiredNotificationHistory(_ context.Context, before time.Time) (int64, error) {
 	return 0, nil
 }
 
@@ -558,7 +556,7 @@ func TestPersistDynamicThresholds(t *testing.T) {
 			ValidHours:    48,
 		}
 
-		err := p.persistDynamicThresholds()
+		err := p.persistDynamicThresholds(t.Context())
 
 		require.NoError(t, err)
 		assert.True(t, mockDs.batchSaveCalled)
@@ -577,7 +575,7 @@ func TestPersistDynamicThresholds(t *testing.T) {
 		p := createTestProcessor()
 		mockDs := p.Ds.(*MockDatastore)
 
-		err := p.persistDynamicThresholds()
+		err := p.persistDynamicThresholds(t.Context())
 
 		require.NoError(t, err)
 		assert.False(t, mockDs.batchSaveCalled, "Should not call batch save with no thresholds")
@@ -601,7 +599,7 @@ func TestPersistDynamicThresholds(t *testing.T) {
 			Timer:        now.Add(-1 * time.Hour), // Expired
 		}
 
-		err := p.persistDynamicThresholds()
+		err := p.persistDynamicThresholds(t.Context())
 
 		require.NoError(t, err)
 		assert.Len(t, p.DynamicThresholds, 1, "Expired threshold should be removed from memory")
@@ -649,31 +647,55 @@ func TestThresholdGoroutineLifecycle(t *testing.T) {
 	t.Run("StartAndStopGoroutines", func(t *testing.T) {
 		p := createTestProcessor()
 
-		// Start goroutines
-		p.startThresholdPersistence()
-		p.startThresholdCleanup()
+		// Start goroutines (creates the lifecycle context under the lock)
+		p.startThresholdGoroutines()
 
-		// Verify context was created
-		assert.NotNil(t, p.thresholdsCtx)
-		assert.NotNil(t, p.thresholdsCancel)
+		// Capture the context before stopping (snapshot under the lock). A non-nil
+		// snapshot proves the goroutines (and their cancel func) were installed.
+		ctx := p.snapshotThresholdsCtx()
+		require.NotNil(t, ctx)
 
 		// Wait a bit to ensure goroutines are running
 		time.Sleep(100 * time.Millisecond)
 
-		// Cancel the goroutines
-		p.thresholdsCancel()
+		// Stop tears the goroutines down and cancels the context.
+		p.StopDynamicThresholds()
 
 		// Wait for goroutines to stop
 		time.Sleep(100 * time.Millisecond)
 
-		// Verify context is done
+		// Verify the captured context is done
 		select {
-		case <-p.thresholdsCtx.Done():
+		case <-ctx.Done():
 			// Context is properly cancelled
 		default:
 			assert.Fail(t, "Context should be cancelled")
 		}
 	})
+}
+
+// TestStopDynamicThresholds_ConcurrentNoRace verifies that p.thresholdsCtx is never
+// accessed without synchronization. The feature can be toggled off at runtime via the
+// settings UI, so StopDynamicThresholds can be invoked concurrently; the nil-check read
+// must not race with the locked nil-assignment. Run with -race to catch regressions.
+func TestStopDynamicThresholds_ConcurrentNoRace(t *testing.T) {
+	p := createTestProcessor()
+	// Start launches the persistence/cleanup goroutines and sets thresholdsCtx. No
+	// in-memory thresholds, so the concurrent Stop flush path performs no datastore
+	// calls (keeping the unsynchronized MockDatastore fields out of the race window).
+	p.StartDynamicThresholds()
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range goroutines {
+		wg.Go(func() {
+			<-start
+			p.StopDynamicThresholds()
+		})
+	}
+	close(start) // release all goroutines simultaneously
+	wg.Wait()
 }
 
 // TestLoadWithDatabaseErrors tests error handling during load
@@ -721,7 +743,7 @@ func TestBatchSaveWithBaseThreshold(t *testing.T) {
 			Timer:        now.Add(24 * time.Hour),
 		}
 
-		err := p.persistDynamicThresholds()
+		err := p.persistDynamicThresholds(t.Context())
 
 		require.NoError(t, err)
 

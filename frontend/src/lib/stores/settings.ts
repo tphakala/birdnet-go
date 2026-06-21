@@ -829,7 +829,6 @@ export interface GlobalSettingsState {
   isSaving: boolean;
   activeSection: string;
   error: string | null;
-  restartRequired: boolean;
   dataLoaded: boolean;
 }
 
@@ -1083,7 +1082,6 @@ const initialState: GlobalSettingsState = {
   isSaving: false,
   activeSection: 'main',
   error: null,
-  restartRequired: false,
   dataLoaded: false,
 };
 
@@ -1271,6 +1269,36 @@ export const settingsActions = {
     });
   },
 
+  /**
+   * Sync the TLS mode after a certificate operation (upload, generate, delete)
+   * that the backend has ALREADY persisted to disk. Only tlsMode and autoTls are
+   * updated, and they are updated in BOTH formData and originalData so the change
+   * does not register as an unsaved edit. Crucially, every other field in the
+   * security section is left untouched, so unsaved edits the user made elsewhere
+   * in the Security form (for example a typed-but-unsaved Basic Auth password)
+   * are preserved. This replaces a full loadSettings() reload, which overwrote
+   * the entire store and discarded those unsaved edits.
+   */
+  syncTLSMode(mode: string) {
+    settingsStore.update(state => {
+      const autoTls = mode === 'autotls';
+      // Fall back to the store's own defaults (not a bare {}) if a security
+      // section is somehow absent, so required fields are never stripped. In
+      // practice this never fires: the cert handlers that call this only run
+      // after settings have loaded, so security is always populated.
+      const sync = (security?: SecuritySettings): SecuritySettings => ({
+        ...(security ?? createEmptySettings().security ?? ({} as SecuritySettings)),
+        tlsMode: mode,
+        autoTls,
+      });
+      return {
+        ...state,
+        formData: { ...state.formData, security: sync(state.formData.security) },
+        originalData: { ...state.originalData, security: sync(state.originalData.security) },
+      };
+    });
+  },
+
   updateTaxonomySynonyms(synonyms: Record<string, string>) {
     settingsStore.update(state => ({
       ...state,
@@ -1337,24 +1365,14 @@ export const settingsActions = {
         }
       }
 
-      // Check if TLS/security settings changed that require a restart
-      const tlsFields: (keyof SecuritySettings)[] = ['tlsMode', 'tlsPort', 'redirectToHttps'];
-      const origSec = currentState.originalData.security;
-      const newSec = coercedFormData.security;
-      const tlsChanged =
-        origSec &&
-        newSec &&
-        tlsFields.some(
-          // eslint-disable-next-line security/detect-object-injection -- key from controlled array
-          f => origSec[f] !== newSec[f]
-        );
-
-      // Update originalData to match the saved formData (no reload needed)
+      // Update originalData to match the saved formData (no reload needed).
+      // Restart-required state is owned by the backend (refreshed via
+      // fetchRestartStatus above) and surfaced by the global RestartBanner, so
+      // it is no longer tracked client-side here.
       settingsStore.update(state => ({
         ...state,
         originalData: JSON.parse(JSON.stringify(state.formData)),
         isSaving: false,
-        restartRequired: state.restartRequired || Boolean(tlsChanged),
       }));
 
       // Show success toast

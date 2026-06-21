@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -106,12 +107,13 @@ func (b *BirdImage) IsNegativeEntry() bool {
 }
 
 // GetTTL returns the appropriate TTL for this cache entry.
-// Non-avian species (Siren, Dog, etc.) get an effectively permanent TTL
-// since they will never have images from bird image providers.
+// Non-avian classes (legacy BirdNET names like "Siren", "Dog", and Perch v2/FSD50K
+// classes like "power_tool", "speech") get nonAvianCacheTTL (~10 years, effectively
+// permanent) since they will never have images from bird image providers.
 func (b *BirdImage) GetTTL() time.Duration {
 	if b.IsNegativeEntry() {
 		if isNonAvianClass(b.ScientificName) {
-			return 10 * 365 * 24 * time.Hour // ~10 years: effectively permanent
+			return nonAvianCacheTTL
 		}
 		return negativeCacheTTL
 	}
@@ -181,11 +183,6 @@ func GetLogger() logger.Logger {
 	return logger.Global().Module("imageprovider")
 }
 
-// imageProviderLogger is a package-level logger for convenience in functions
-// that don't have access to *BirdImageCache context.
-// Note: This uses slog-style API for backward compatibility with existing code.
-var imageProviderLogger = GetLogger()
-
 // emptyImageProvider is an ImageProvider that always returns an empty BirdImage.
 type emptyImageProvider struct{}
 
@@ -208,12 +205,13 @@ func (c *BirdImageCache) SetImageProvider(provider ImageProvider) {
 }
 
 const (
-	defaultCacheTTL     = 30 * 24 * time.Hour // 30 days for positive entries
-	negativeCacheTTL    = 15 * time.Minute    // 15 minutes for negative entries
-	refreshInterval     = 1 * time.Hour       // Check for stale entries every hour in production
-	refreshBatchSize    = 10                  // Number of entries to refresh in one batch
-	refreshDelay        = 2 * time.Second     // Delay between refreshing individual entries
-	negativeEntryMarker = "__NOT_FOUND__"     // Special URL marker for negative cache entries
+	defaultCacheTTL     = 30 * 24 * time.Hour       // 30 days for positive entries
+	negativeCacheTTL    = 15 * time.Minute          // 15 minutes for negative entries
+	nonAvianCacheTTL    = 10 * 365 * 24 * time.Hour // ~10 years: effectively permanent for non-bird classes
+	refreshInterval     = 1 * time.Hour             // Check for stale entries every hour in production
+	refreshBatchSize    = 10                        // Number of entries to refresh in one batch
+	refreshDelay        = 2 * time.Second           // Delay between refreshing individual entries
+	negativeEntryMarker = "__NOT_FOUND__"           // Special URL marker for negative cache entries
 
 	// Configuration constants
 	fallbackPolicyAll = "all" // Fallback policy to allow all providers
@@ -229,9 +227,13 @@ const (
 // The order matters: avicommons is tried first as it's faster (local data), then wikimedia (remote API).
 var fallbackProviders = []string{"avicommons", "wikimedia"}
 
-// nonAvianClasses lists BirdNET model output classes that are not bird species.
-// These will never have images available from bird image providers, so their
-// negative cache entries should never expire to avoid futile re-fetch attempts.
+// nonAvianClasses lists legacy BirdNET model output class names that are not bird species.
+// These are the Title-case-with-spaces names produced by BirdNET v2.x split labels (e.g.
+// "Power tools", "Human vocal"). They are kept as a fallback because the nonbird package
+// matches lowercase underscore-joined FSD50K names and their first tokens, but does NOT
+// match these BirdNET-specific Title-case strings.
+// All entries will never have images from bird image providers, so their negative cache
+// entries should never expire to avoid futile re-fetch attempts.
 var nonAvianClasses = map[string]bool{
 	"Siren":           true,
 	"Dog":             true,
@@ -247,10 +249,14 @@ var nonAvianClasses = map[string]bool{
 	"Engine":          true,
 }
 
-// isNonAvianClass returns true if the scientific name is a non-bird class
-// that will never have images available from bird image providers.
+// isNonAvianClass returns true if scientificName is a non-bird class that will never
+// have images available from bird image providers.
+// It checks two sources:
+//   - nonAvianClasses: legacy BirdNET v2.x Title-case-with-spaces split names.
+//   - nonbird.IsNonBirdName: Perch v2 (FSD50K) classes and their underscore-split
+//     first tokens (e.g. "Power" from "power_tool", "speech"). Case-insensitive.
 func isNonAvianClass(scientificName string) bool {
-	return nonAvianClasses[scientificName]
+	return nonAvianClasses[scientificName] || nonbird.IsNonBirdName(scientificName)
 }
 
 // --- Shared Helper Functions ---
@@ -1215,11 +1221,13 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 	muInterface, _ := c.Initializing.LoadOrStore(scientificName, &sync.Mutex{})
 	mu := muInterface.(*sync.Mutex)
 	mu.Lock()
-	defer func() {
-		mu.Unlock()
-		c.Initializing.Delete(scientificName)
-		log.Debug("Unlocked and cleaned up mutex")
-	}()
+	// Do not delete the mutex from the map on unlock. A goroutine that has already
+	// run LoadOrStore but not yet acquired the lock holds a reference to this
+	// mutex; deleting it lets a later goroutine LoadOrStore a fresh mutex and fetch
+	// concurrently with that waiter, defeating the single-initialization guarantee.
+	// The map is bounded by the number of distinct species ever queried, so the
+	// retained mutexes are a negligible, fixed cost.
+	defer mu.Unlock()
 
 	log.Debug("Acquired initialization lock")
 
@@ -1779,50 +1787,6 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 	return foundImage, found
 }
 
-// fetchDirect performs a direct fetch from the provider without cache interaction.
-func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
-	log := GetLogger().With(
-		logger.String("provider", c.providerName),
-		logger.String("scientific_name", scientificName))
-	log.Debug("Performing direct fetch from provider (bypassing cache checks)")
-
-	providerPtr := c.provider.Load()
-	if providerPtr == nil {
-		enhancedErr := errors.Newf("image provider %s is not configured", c.providerName).
-			Component("imageprovider").
-			Category(errors.CategoryImageProvider).
-			Context("provider", c.providerName).
-			Context("scientific_name", scientificName).
-			Context("operation", "fetch_direct").
-			Build()
-		log.Error("Cannot perform direct fetch: provider is nil", logger.Error(enhancedErr))
-		return BirdImage{}, enhancedErr
-	}
-	provider := *providerPtr
-
-	img, err := provider.Fetch(scientificName)
-	if err != nil {
-		// Check if it's already an enhanced error, if not enhance it
-		var enhancedErr *errors.EnhancedError
-		if !errors.As(err, &enhancedErr) {
-			enhancedErr = errors.New(err).
-				Component("imageprovider").
-				Category(errors.CategoryImageFetch).
-				Context("provider", c.providerName).
-				Context("scientific_name", scientificName).
-				Context("operation", "direct_fetch").
-				Build()
-		}
-		log.Error("Direct fetch failed", logger.Error(enhancedErr))
-		return BirdImage{}, enhancedErr
-	}
-
-	img.CachedAt = time.Now() // Set time even though it's not 'cached'
-	img.SourceProvider = c.providerName
-	log.Debug("Direct fetch successful", logger.String("url", img.URL))
-	return img, nil
-}
-
 // EstimateSize estimates the size of the BirdImage struct.
 func (img *BirdImage) EstimateSize() int {
 	// Basic estimation, adjust as needed
@@ -1862,21 +1826,6 @@ func (c *BirdImageCache) MemoryUsage() int {
 		return true
 	})
 	return totalSize
-}
-
-// updateMetrics updates prometheus metrics based on cache state.
-func (c *BirdImageCache) updateMetrics() {
-	if c.metrics == nil {
-		return
-	}
-	// Revert to using the single SetCacheSize metric based on previous implementation
-	sizeBytes := float64(c.MemoryUsage())
-	c.metrics.SetCacheSize(sizeBytes)
-	GetLogger().Debug("Updated cache metrics",
-		logger.String("provider", c.providerName),
-		logger.Float64("size_bytes", sizeBytes))
-	// c.metrics.SetMemoryCacheEntries(float64(count)) // Method doesn't exist
-	// c.metrics.SetMemoryCacheSizeBytes(float64(c.MemoryUsage())) // Method doesn't exist
 }
 
 // CreateDefaultCache creates a Wikimedia Commons BirdImageCache via the Wikipedia API.

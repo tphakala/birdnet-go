@@ -3,11 +3,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,6 +27,17 @@ import (
 
 // Test date constant used across multiple test cases
 const testDate = "2023-01-01"
+
+// Scientific names reused as hourly-batch map keys across the daily-summary tests.
+// The daily summary keys hourly aggregation on scientific name.
+const (
+	sciAmericanCrow         = "Corvus brachyrhynchos"
+	sciRedBelliedWoodpecker = "Melanerpes carolinus"
+	sciBarbastelleBat       = "Barbastella barbastellus"
+	sciEurasianBlackbird    = "Turdus merula"
+	sciAmericanRobin        = "Turdus migratorius"
+	sciBlueJay              = "Cyanocitta cristata"
+)
 
 // assertAnalyticsErrorResponse validates analytics error responses.
 func assertAnalyticsErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedBody string) {
@@ -165,6 +178,97 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 
 	// Verify mock expectations
 	mockDS.AssertExpectations(t)
+}
+
+// TestAnalyticsEndpointContextErrors verifies that analytics endpoints which were
+// previously passing the raw request context now bound their datastore query and map
+// context errors to the right HTTP status: a deadline to 408 (not 500), and a client
+// cancellation to 499 (client closed request). Regression guard for the query-timeout
+// consistency fix.
+func TestAnalyticsEndpointContextErrors(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "error-handling")
+	t.Attr("feature", "query-timeout")
+
+	errorCases := []struct {
+		name       string
+		queryErr   error
+		wantStatus int
+		wantMsg    string
+	}{
+		{"deadline exceeded", context.DeadlineExceeded, http.StatusRequestTimeout, "Query timeout"},
+		{"client canceled", context.Canceled, StatusClientClosedRequest, "Request canceled by client"},
+	}
+
+	endpoints := []struct {
+		name      string
+		path      string
+		setupMock func(*mocks.MockInterface, error)
+		invoke    func(*Controller, echo.Context) error
+	}{
+		{
+			name: "species summary",
+			path: "/api/v2/analytics/species/summary",
+			setupMock: func(m *mocks.MockInterface, queryErr error) {
+				m.On("GetSpeciesSummaryData", mock.Anything, "", "").
+					Return([]datastore.SpeciesSummaryData{}, queryErr)
+			},
+			invoke: func(c *Controller, ctx echo.Context) error { return c.GetSpeciesSummary(ctx) },
+		},
+		{
+			name: "time of day distribution",
+			path: "/api/v2/analytics/time/distribution/hourly",
+			setupMock: func(m *mocks.MockInterface, queryErr error) {
+				m.On("GetHourlyDistribution", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]datastore.HourlyDistributionData{}, queryErr)
+			},
+			invoke: func(c *Controller, ctx echo.Context) error { return c.GetTimeOfDayDistribution(ctx) },
+		},
+		{
+			name: "new species detections",
+			path: "/api/v2/analytics/species/detections/new",
+			setupMock: func(m *mocks.MockInterface, queryErr error) {
+				m.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]datastore.NewSpeciesData{}, queryErr)
+			},
+			invoke: func(c *Controller, ctx echo.Context) error { return c.GetNewSpeciesDetections(ctx) },
+		},
+		{
+			// Exercises the now-context-bounded GetTopBirdsData query.
+			name: "daily species summary",
+			path: "/api/v2/analytics/species/daily",
+			setupMock: func(m *mocks.MockInterface, queryErr error) {
+				m.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]datastore.Note{}, queryErr)
+			},
+			invoke: func(c *Controller, ctx echo.Context) error { return c.GetDailySpeciesSummary(ctx) },
+		},
+	}
+
+	for _, ep := range endpoints {
+		for _, ec := range errorCases {
+			t.Run(ep.name+"/"+ec.name, func(t *testing.T) {
+				t.Parallel()
+				e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+				ep.setupMock(mockDS, ec.queryErr)
+
+				req := httptest.NewRequest(http.MethodGet, ep.path, http.NoBody)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				c.SetPath(ep.path)
+
+				require.NoError(t, ep.invoke(controller, c))
+				assert.Equal(t, ec.wantStatus, rec.Code)
+
+				var errorResponse map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errorResponse))
+				assert.Contains(t, errorResponse["message"], ec.wantMsg)
+
+				mockDS.AssertExpectations(t)
+			})
+		}
+	}
 }
 
 // TestGetSpeciesSummaryWithDateFilters tests the species summary endpoint with date filtering
@@ -628,15 +732,15 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	rbwoTotal := 2
 
 	// Setup mock expectations using m.On()
-	mockDS.On("GetTopBirdsData", testDate, minConfidence, 0).Return(mockNotes, nil)
+	mockDS.On("GetTopBirdsData", mock.Anything, testDate, minConfidence, 0).Return(mockNotes, nil)
 	// Now using batch query instead of individual calls
-	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.MatchedBy(func(species []string) bool {
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, mock.MatchedBy(func(species []string) bool {
 		return len(species) == 2 &&
-			((species[0] == "American Crow" && species[1] == "Red-bellied Woodpecker") ||
-				(species[0] == "Red-bellied Woodpecker" && species[1] == "American Crow"))
+			((species[0] == sciAmericanCrow && species[1] == sciRedBelliedWoodpecker) ||
+				(species[0] == sciRedBelliedWoodpecker && species[1] == sciAmericanCrow))
 	}), minConfidence).Return(map[string][24]int{
-		"American Crow":          expectedAmcroHourlyCounts,
-		"Red-bellied Woodpecker": expectedRbwoHourlyCounts,
+		sciAmericanCrow:         expectedAmcroHourlyCounts,
+		sciRedBelliedWoodpecker: expectedRbwoHourlyCounts,
 	}, nil)
 
 	// Mock for image cache initialization
@@ -766,6 +870,104 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetDailySpeciesSummary_LocalizedNonPrimarySpecies is a regression test:
+// a non-primary-model species (a bat from BattyBirdNET) whose common
+// name is localized by OpenFauna to a value different from its scientific name
+// must still appear in the daily summary. The pre-fix pipeline keyed the hourly
+// aggregation on the localized common name and reverse-mapped it through a
+// label-only map that has no bat entry, so the hourly counts came back zero and
+// the species was dropped. The fix keys the aggregation on scientific name end to
+// end.
+func TestGetDailySpeciesSummary_LocalizedNonPrimarySpecies(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "regression")
+	t.Attr("feature", "species-summary")
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	const testDate = "2025-03-07"
+	const minConfidence = 0.0
+
+	// A bat localized by OpenFauna to a Finnish common name that differs from its
+	// scientific name, plus a regular bird as a control.
+	mockNotes := []datastore.Note{
+		{
+			ID:             1,
+			ScientificName: sciBarbastelleBat,
+			CommonName:     "mopsilepakko",
+			Confidence:     0.9,
+			Date:           testDate,
+			Time:           "23:15:00",
+		},
+		{
+			ID:             2,
+			ScientificName: sciEurasianBlackbird,
+			CommonName:     "Common Blackbird",
+			Confidence:     0.8,
+			Date:           testDate,
+			Time:           "08:20:00",
+		},
+	}
+
+	var batHourly [24]int
+	batHourly[23] = 5
+	var blackbirdHourly [24]int
+	blackbirdHourly[8] = 2
+
+	mockDS.On("GetTopBirdsData", mock.Anything, testDate, minConfidence, 0).Return(mockNotes, nil)
+
+	// Post-fix contract: the controller keys the hourly aggregation on scientific
+	// name end to end, so GetBatchHourlyOccurrences receives scientific names and
+	// returns a map keyed by scientific name.
+	var passedSpecies []string
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, mock.Anything, minConfidence).
+		Run(func(args mock.Arguments) {
+			// Args are (ctx, date, species, minConfidence); species is index 2.
+			arg, ok := args.Get(2).([]string)
+			require.True(t, ok, "species argument should be []string")
+			passedSpecies = slices.Clone(arg)
+		}).
+		Return(map[string][24]int{
+			sciBarbastelleBat:    batHourly,
+			sciEurasianBlackbird: blackbirdHourly,
+		}, nil)
+
+	controller := &Controller{DS: mockDS}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date="+testDate, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetDailySpeciesSummary(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response []SpeciesDailySummary
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+	// The controller must pass scientific names (not localized common names) to
+	// the hourly batch fetch.
+	assert.ElementsMatch(t, []string{sciBarbastelleBat, sciEurasianBlackbird}, passedSpecies,
+		"hourly batch should be keyed on scientific name, not localized common name")
+
+	bySci := make(map[string]SpeciesDailySummary, len(response))
+	for i := range response {
+		bySci[response[i].ScientificName] = response[i]
+	}
+
+	bat, ok := bySci[sciBarbastelleBat]
+	require.True(t, ok, "bat species must appear in the daily summary (regression)")
+	assert.Equal(t, 5, bat.Count, "bat hourly counts must be aggregated by scientific name")
+	assert.Equal(t, "mopsilepakko", bat.CommonName, "bat keeps its localized common name for display")
+
+	blackbird, ok := bySci[sciEurasianBlackbird]
+	require.True(t, ok, "control bird must appear in the daily summary")
+	assert.Equal(t, 2, blackbird.Count)
+
+	mockDS.AssertExpectations(t)
+}
+
 // TestGetDailySpeciesSummary_SingleDetection tests that the GetDailySpeciesSummary function
 // correctly handles the case where each species has only one detection
 func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
@@ -807,10 +1009,10 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	expectedRbwoSingleHourly[10] = 1
 
 	// Setup mock expectations using m.On()
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesSingle, nil)
-	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
-		"American Crow":          expectedAmcroSingleHourly,
-		"Red-bellied Woodpecker": expectedRbwoSingleHourly,
+	mockDS.On("GetTopBirdsData", mock.Anything, "2025-03-07", 0.0, 0).Return(mockNotesSingle, nil)
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+		sciAmericanCrow:         expectedAmcroSingleHourly,
+		sciRedBelliedWoodpecker: expectedRbwoSingleHourly,
 	}, nil)
 
 	// Mock for image cache initialization
@@ -898,7 +1100,7 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 
 	// Setup mock expectations using m.On()
 	// Expect GetTopBirdsData to be called and return empty slice
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return([]datastore.Note{}, nil)
+	mockDS.On("GetTopBirdsData", mock.Anything, "2025-03-07", 0.0, 0).Return([]datastore.Note{}, nil)
 	// Expect GetBatchHourlyOccurrences not to be called since there are no birds
 
 	// Create a controller with our mock
@@ -980,9 +1182,9 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	expectedAmcroTimeHourly[21] = 1
 
 	// Setup mock expectations using m.On()
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesTime, nil)
-	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
-		"American Crow": expectedAmcroTimeHourly,
+	mockDS.On("GetTopBirdsData", mock.Anything, "2025-03-07", 0.0, 0).Return(mockNotesTime, nil)
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+		sciAmericanCrow: expectedAmcroTimeHourly,
 	}, nil)
 
 	// Create a controller with our mock
@@ -1062,11 +1264,11 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 
 	// Setup mock expectations
 	// GetTopBirdsData is called with the normalized confidence
-	mockDS.On("GetTopBirdsData", "2025-03-07", expectedMinConfidence, 0).Return(mockNotesConfidence, nil)
+	mockDS.On("GetTopBirdsData", mock.Anything, "2025-03-07", expectedMinConfidence, 0).Return(mockNotesConfidence, nil)
 	// GetBatchHourlyOccurrences is called for all species returned by GetTopBirdsData
-	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, expectedMinConfidence).Return(map[string][24]int{
-		"American Crow":          expectedAmcroConfidenceHourly,
-		"Red-bellied Woodpecker": [24]int{}, // Filtered out later
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", mock.Anything, expectedMinConfidence).Return(map[string][24]int{
+		sciAmericanCrow:         expectedAmcroConfidenceHourly,
+		sciRedBelliedWoodpecker: {}, // Filtered out later
 	}, nil)
 
 	// Create a controller with our mock
@@ -1148,11 +1350,11 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	expectedBcchLimitHourly[12] = 1
 
 	// Setup mock expectations
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 2).Return(mockNotesLimit, nil)
+	mockDS.On("GetTopBirdsData", mock.Anything, "2025-03-07", 0.0, 2).Return(mockNotesLimit, nil)
 	// Expect GetBatchHourlyOccurrences to be called for the 2 species returned
-	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
-		"American Crow":          expectedAmcroLimitHourly,
-		"Red-bellied Woodpecker": expectedRbwoLimitHourly,
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+		sciAmericanCrow:         expectedAmcroLimitHourly,
+		sciRedBelliedWoodpecker: expectedRbwoLimitHourly,
 	}, nil)
 
 	// Create a controller with our mock
@@ -1195,7 +1397,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Override the GetTopBirdsData function to return an error
-	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.New("database connection error"))
+	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.New("database connection error"))
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
@@ -1221,7 +1423,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	assert.Contains(t, errorResponse, "message")
 	assert.Contains(t, errorResponse, "code")
 
-	// Check the error message — in non-debug mode, Error field uses sanitized message
+	// Check the error message: in non-debug mode, Error field uses sanitized message
 	assert.Equal(t, "Failed to get daily species data", errorResponse["error"])
 	assert.Equal(t, "Failed to get daily species data", errorResponse["message"])
 	assert.InDelta(t, http.StatusInternalServerError, errorResponse["code"], 0.01)
@@ -1239,10 +1441,10 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	}
 
 	// Mock successful GetTopBirdsData call
-	mockDS.On("GetTopBirdsData", testDate, 0.0, 0).Return(mockNotes, nil)
+	mockDS.On("GetTopBirdsData", mock.Anything, testDate, 0.0, 0).Return(mockNotes, nil)
 
 	// Mock GetBatchHourlyOccurrences to return an error
-	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.Anything, 0.0).Return(
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, mock.Anything, 0.0).Return(
 		map[string][24]int{}, errors.New("batch query failed: connection timeout"))
 
 	// Create a request
@@ -1267,6 +1469,202 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	assert.Equal(t, "Failed to process daily species data", errorResponse["error"])
 
 	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
+}
+
+// analyticsBatchFakeResolver is a test resolver that satisfies SpeciesNameResolver
+// and the optional batchLocalizer interface. This is distinct from the fakeResolver
+// in insights_nameresolver_test.go, which covers the forward (sci->common) path only.
+// Here we need the batch capability so that scientific-only bat labels (no embedded
+// common name) reach the commonToSci reverse map and become resolvable.
+type analyticsBatchFakeResolver struct{ batch map[string]string }
+
+func (a *analyticsBatchFakeResolver) Resolve(string, string) string      { return "" }
+func (a *analyticsBatchFakeResolver) ResolveLocal(string) (string, bool) { return "", false }
+func (a *analyticsBatchFakeResolver) ResolveLocalizedBatch(names []string) map[string]string {
+	out := make(map[string]string, len(names))
+	for _, n := range names {
+		if v, ok := a.batch[n]; ok {
+			out[n] = v
+		}
+	}
+	return out
+}
+
+// TestAnalytics_ResolvesLocalizedCommonNameToScientific verifies that after wiring a
+// batch-capable resolver and calling UpdateCommonNameMap, the reverse lookup for a
+// localized bat name (which has no embedded common name in the label) returns the
+// correct scientific name. This guards the map-builder wiring for the analytics path.
+func TestAnalytics_ResolvesLocalizedCommonNameToScientific(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "localized-name-resolution")
+
+	e := echo.New()
+	c := &Controller{Group: e.Group("/api/v2")}
+	c.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	// "Barbastella barbastellus" is a scientific-only label (no underscore separator),
+	// which triggers the batchLocalizer path in ResolveLabelNames.
+	c.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	got, hit := c.resolveSpeciesToScientific("mopsilepakko")
+	require.True(t, hit, "expected a reverse-map hit for the Finnish bat name")
+	assert.Equal(t, "Barbastella barbastellus", got)
+}
+
+// TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore verifies that when
+// GetHourlyAnalytics receives a localized common name, the resolved scientific name
+// is what actually reaches the datastore. The API response keeps the user-facing
+// string; only the datastore call uses the resolved value.
+func TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "localized-name-resolution")
+
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	// Wire the resolver so "mopsilepakko" reverse-maps to the scientific name.
+	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	const (
+		localizedName  = "mopsilepakko"
+		scientificName = "Barbastella barbastellus"
+		date           = testDate
+	)
+
+	// Capture the species argument that actually reaches the datastore.
+	var capturedSpecies string
+	mockDS.EXPECT().
+		GetHourlyAnalyticsData(mock.Anything, date, mock.AnythingOfType("string")).
+		RunAndReturn(func(_ context.Context, _ string, species string) ([]datastore.HourlyAnalyticsData, error) {
+			capturedSpecies = species
+			return []datastore.HourlyAnalyticsData{}, nil
+		}).Once()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/hourly", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/analytics/time/hourly")
+	ctx.QueryParams().Set("date", date)
+	ctx.QueryParams().Set("species", localizedName)
+
+	err := controller.GetHourlyAnalytics(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	// The resolved scientific name must reach the datastore, not the localized name.
+	assert.Equal(t, scientificName, capturedSpecies,
+		"datastore must receive the scientific name, not the localized common name")
+
+	mockDS.AssertExpectations(t)
+}
+
+// TestAnalytics_TimeOfDayDistributionResolvesLocalizedSpecies verifies that
+// GetTimeOfDayDistribution passes the scientific name to the datastore when given
+// a localized common name (Finnish bat name "mopsilepakko"). Before the fix the
+// resolver was not wired and the localized string reached the datastore unchanged.
+func TestAnalytics_TimeOfDayDistributionResolvesLocalizedSpecies(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "localized-name-resolution")
+
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	const (
+		startDate      = "2023-01-01"
+		endDate        = "2023-01-31"
+		localizedName  = "mopsilepakko"
+		scientificName = "Barbastella barbastellus"
+	)
+
+	var capturedSpecies string
+	mockDS.EXPECT().
+		GetHourlyDistribution(mock.Anything, startDate, endDate, mock.AnythingOfType("string")).
+		RunAndReturn(func(_ context.Context, _, _ string, species string) ([]datastore.HourlyDistributionData, error) {
+			capturedSpecies = species
+			return []datastore.HourlyDistributionData{}, nil
+		}).Once()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/distribution/hourly", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/analytics/time/distribution/hourly")
+	ctx.QueryParams().Set("start_date", startDate)
+	ctx.QueryParams().Set("end_date", endDate)
+	ctx.QueryParams().Set("species", localizedName)
+
+	err := controller.GetTimeOfDayDistribution(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, scientificName, capturedSpecies,
+		"datastore must receive the scientific name, not the localized common name")
+
+	mockDS.AssertExpectations(t)
+}
+
+// TestAnalytics_BatchDailySpeciesResolvesLocalizedSpecies verifies that
+// GetBatchDailySpeciesData resolves a localized common name to its scientific name
+// before querying the datastore, while keeping the user-facing name as the response key.
+func TestAnalytics_BatchDailySpeciesResolvesLocalizedSpecies(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "localized-name-resolution")
+
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	const (
+		startDate      = "2023-01-01"
+		endDate        = "2023-01-31"
+		localizedName  = "mopsilepakko"
+		scientificName = "Barbastella barbastellus"
+	)
+
+	var capturedSpecies string
+	mockDS.EXPECT().
+		GetDailyAnalyticsData(mock.Anything, startDate, endDate, mock.AnythingOfType("string")).
+		RunAndReturn(func(_ context.Context, _, _, species string) ([]datastore.DailyAnalyticsData, error) {
+			capturedSpecies = species
+			return []datastore.DailyAnalyticsData{}, nil
+		}).Once()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/daily/batch", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/analytics/time/daily/batch")
+	ctx.QueryParams().Set("start_date", startDate)
+	ctx.QueryParams().Set("end_date", endDate)
+	ctx.QueryParams()["species"] = []string{localizedName}
+
+	err := controller.GetBatchDailySpeciesData(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// The datastore must have received the scientific name, not the localized name.
+	assert.Equal(t, scientificName, capturedSpecies,
+		"datastore must receive the scientific name, not the localized common name")
+
+	// The response is a map[string]SpeciesDailyData keyed by user-facing species name.
+	// The localized name must be the key, not the scientific name.
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	_, hasLocalizedKey := resp[localizedName]
+	assert.True(t, hasLocalizedKey,
+		"response must be keyed by the user-facing localized name %q, not the scientific name", localizedName)
+
 	mockDS.AssertExpectations(t)
 }
 

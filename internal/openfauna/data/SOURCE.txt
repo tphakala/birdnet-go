@@ -1,1 +1,1 @@
-openfauna@08b2677 2026-06-08
+openfauna@1de1739 2026-06-16

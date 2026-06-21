@@ -3,6 +3,7 @@
 package species
 
 import (
+	"context"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -263,14 +264,14 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 		logger.String("sent_time", sentTime.Format(time.DateTime)))
 
 	// Persist to database asynchronously to avoid blocking (BG-17 fix)
-	// This ensures notification suppression state survives application restarts
-	//
-	// Note: Database methods don't accept context, so timeout cannot be enforced.
-	// However, SQLite is local and GORM has internal timeouts, so hangs are unlikely.
-	// If a goroutine does leak due to database hang, in-memory suppression still works.
-	// TODO(BG-17): Consider adding context.Context parameter to SaveNotificationHistory interface
+	// This ensures notification suppression state survives application restarts.
+	// The write runs under a bounded context so a stuck SQLite write cannot leak
+	// this goroutine; in-memory suppression still works if the persist fails.
 	if t.ds != nil {
 		t.asyncOpsWg.Go(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), notificationPersistTimeout)
+			defer cancel()
+
 			// ExpiresAt = when the suppression ends (sentTime + suppressionWindow)
 			expiresAt := sentTime.Add(t.notificationSuppressionWindow)
 			history := &datastore.NotificationHistory{
@@ -282,7 +283,7 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 				UpdatedAt:        sentTime,
 			}
 
-			if err := t.ds.SaveNotificationHistory(history); err != nil {
+			if err := t.ds.SaveNotificationHistory(ctx, history); err != nil {
 				getLog().Error("Failed to save notification history to database",
 					logger.String("species", scientificName),
 					logger.Error(err),
@@ -320,15 +321,15 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 	}
 
 	// Clean up database records asynchronously (BG-17 fix)
-	// Deletes records where ExpiresAt < currentTime (i.e., suppression has expired)
-	//
-	// Note: Database methods don't accept context, so timeout cannot be enforced.
-	// However, SQLite is local and GORM has internal timeouts, so hangs are unlikely.
-	// TODO(BG-17): Consider adding context.Context parameter to DeleteExpiredNotificationHistory interface
+	// Deletes records where ExpiresAt < currentTime (i.e., suppression has expired).
+	// Runs under a bounded context so a stuck delete cannot leak this goroutine.
 	if t.ds != nil {
 		t.asyncOpsWg.Go(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), notificationPersistTimeout)
+			defer cancel()
+
 			// Delete records that have expired (ExpiresAt < now)
-			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(currentTime)
+			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(ctx, currentTime)
 			if err != nil {
 				getLog().Error("Failed to cleanup expired notification history from database",
 					logger.Error(err),
@@ -348,6 +349,13 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 // This should be called during application shutdown or when the tracker is no longer needed.
 // It waits for any in-flight async database operations to complete before returning.
 func (t *SpeciesTracker) Close() error {
+	// Cancel any in-flight background historical load first so shutdown does not
+	// block on a long DB scan started by InitFromDatabaseAsync. Done lock-free
+	// (the loader holds t.mu for the scan), and cancel is idempotent.
+	if cancel := t.initCancel.Load(); cancel != nil {
+		(*cancel)()
+	}
+
 	// Wait for any in-flight async database operations (notification persistence/cleanup)
 	// This prevents goroutine leaks and ensures data is persisted before shutdown
 	t.asyncOpsWg.Wait()

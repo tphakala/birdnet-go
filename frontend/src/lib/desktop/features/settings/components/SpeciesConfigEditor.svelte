@@ -15,6 +15,8 @@
   import EditorSlider from './editor/EditorSlider.svelte';
   import EditorFooter from './editor/EditorFooter.svelte';
   import EditorSpeciesInput from './editor/EditorSpeciesInput.svelte';
+  import { toLocalizedPredictions, matchTypedToCanonical } from '$lib/utils/speciesPredictions';
+  import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
 
   interface SavePayload {
     species: string;
@@ -29,6 +31,8 @@
     predictions: string[];
     disabled?: boolean;
     saving?: boolean;
+    /** Resolve a canonical species value to its visitor-locale display label. */
+    localizeLabel?: (_value: string) => string;
     onSave: (_payload: SavePayload) => void;
     onClose: () => void;
     onDelete?: (_species: string) => void;
@@ -42,6 +46,7 @@
     predictions,
     disabled = false,
     saving = false,
+    localizeLabel,
     onSave,
     onClose,
     onDelete,
@@ -52,8 +57,20 @@
   // Form state initialized from props — parent uses {#key} to reset on species change
   // svelte-ignore state_referenced_locally
   const existingAction = config?.actions?.[0];
+  // The field DISPLAYS the localized label, while canonicalSpecies holds the value
+  // persisted as the config-map key. On open, seed the canonical value with the raw
+  // key so saving an unchanged entry re-emits that key (no spurious rename to a
+  // localized label), and seed the display with the localized label.
   // svelte-ignore state_referenced_locally
-  let speciesName = $state(species ?? '');
+  let canonicalSpecies = $state(species ?? '');
+  // svelte-ignore state_referenced_locally
+  let speciesName = $state(species ? (localizeLabel?.(species) ?? species) : '');
+  // Tracks whether the user has typed into the species field. Until they do, the
+  // tracked canonical value is authoritative and is saved verbatim. This makes the
+  // save robust against a UI locale switch while the editor is open: the displayed
+  // label may go stale, but an unchanged save still re-emits the canonical key
+  // instead of persisting the stale label (which would corrupt/rename the config).
+  let speciesEdited = $state(false);
   // svelte-ignore state_referenced_locally
   let threshold = $state(config?.threshold ?? 0.5);
   // svelte-ignore state_referenced_locally
@@ -65,14 +82,56 @@
   );
   let actionExecuteDefaults = $state(existingAction?.executeDefaults !== false);
 
+  // Predictions paired with localized labels for save-time resolution.
+  let localizedPredictions = $derived(toLocalizedPredictions(predictions ?? [], localizeLabel));
+
+  // Keep the displayed label in sync with the active locale (and the current
+  // selection) until the user edits the field. This refreshes the field if the UI
+  // locale changes while the editor is open. It tracks canonicalSpecies (not the
+  // species prop) so that after picking a different prediction the field keeps the
+  // picked label instead of reverting to the originally-opened species.
+  $effect(() => {
+    if (!speciesEdited && canonicalSpecies) {
+      speciesName = localizeLabel?.(canonicalSpecies) ?? canonicalSpecies;
+    }
+  });
+
   // Validation
   let isValid = $derived(speciesName.trim() !== '' && threshold >= 0 && threshold <= 1);
 
   let title = $derived(
     species
-      ? t('settings.species.customConfiguration.editing', { species })
+      ? t('settings.species.customConfiguration.editing', {
+          species: localizeLabel?.(species) ?? species,
+        })
       : t('settings.species.customConfiguration.newConfiguration')
   );
+
+  /**
+   * Resolve the canonical config-map key to persist from the current field text.
+   * Never persists a localized label: it preserves the tracked canonical when the
+   * field is unchanged/just-selected, otherwise maps a typed label/value to its
+   * prediction's canonical value, then to a unique scientific name, and only falls
+   * back to the typed text when nothing resolves (advanced raw entry).
+   */
+  function resolveCanonicalForSave(): string {
+    // 1. Unchanged or just-selected: the tracked canonical value is authoritative.
+    //    Returning it verbatim (instead of re-deriving from the displayed text)
+    //    means an unchanged save never renames the config key, even if the UI locale
+    //    changed while the editor was open and the field shows a stale-locale label.
+    if (!speciesEdited && canonicalSpecies) return canonicalSpecies;
+    const display = speciesName.trim();
+    // 2. Field text matches a prediction's label or canonical value.
+    const matched = matchTypedToCanonical(display, localizedPredictions);
+    if (matched) return matched;
+    // 3. Field text is a localized common name that resolves to a single scientific
+    //    name (a safe canonical key: the backend matches config keys by scientific
+    //    name via EqualFold fallback).
+    const scientific = resolveCommonToScientificUnique(display);
+    if (scientific) return scientific;
+    // 4. Advanced raw entry: keep what the user typed.
+    return display;
+  }
 
   function handleSave() {
     if (!isValid) return;
@@ -91,7 +150,7 @@
     }
 
     onSave({
-      species: speciesName.trim(),
+      species: resolveCanonicalForSave(),
       threshold,
       interval: Number(interval) || 0,
       actions,
@@ -110,13 +169,18 @@
     actionParameters = '';
   }
 
-  function handleSpeciesPicked(picked: string) {
-    speciesName = picked;
-    onPredictionSelect(picked);
+  // EditorSpeciesInput reports the canonical value here and sets the field text to
+  // the localized label via bind:value, so we only record the canonical value. A
+  // clean pick resets the edited flag: the picked canonical is saved verbatim.
+  function handleSpeciesPicked(canonicalValue: string) {
+    canonicalSpecies = canonicalValue;
+    speciesEdited = false;
+    onPredictionSelect(canonicalValue);
   }
 
   function handleSpeciesInput(value: string) {
     speciesName = value;
+    speciesEdited = true;
     onInput(value);
   }
 </script>
@@ -128,6 +192,7 @@
     label={t('settings.species.customConfiguration.columnHeaders.species')}
     placeholder={t('settings.species.customConfiguration.searchPlaceholder')}
     {predictions}
+    {localizeLabel}
     disabled={disabled || saving}
     onInput={handleSpeciesInput}
     onPredictionSelect={handleSpeciesPicked}

@@ -1,12 +1,16 @@
 package openfauna
 
 import (
+	"bytes"
+	"log/slog"
 	"slices"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TestMapLocale_Table pins the birdnet-go -> openfauna locale mapping. Results are
@@ -35,6 +39,12 @@ func TestMapLocale_Table(t *testing.T) {
 		// Region expand: no bare zh/lv, but a single regional variant exists.
 		{"zh", "zh_cn"},
 		{"lv", "lv_lv"},
+		// Code-convention alias: the UI uses ISO 639-1 "nb"/"nn" for Norwegian, but
+		// OpenFauna ships it under the macrolanguage code "no". Without the alias these
+		// would fall through to English.
+		{"nb", "no"},
+		{"nn", "no"},
+		{"no", "no"}, // dataset code passes through unchanged
 		// Languages present in the dataset resolve to their own code (exact, or
 		// "-" -> "_"); coverage level is irrelevant to the mapping.
 		{"af", "af"},
@@ -293,4 +303,87 @@ func TestResolveLocal_NoSlowPath(t *testing.T) {
 	assert.False(t, ok)
 	_, ok = NewResolver().ResolveLocal("Turdus merula")
 	assert.False(t, ok)
+}
+
+// TestMissingFromIndex checks that only species absent from the active-locale index
+// are reported missing, in input order, and that names normalizing to the same key
+// (duplicates, casing variants) are returned at most once so the unresolved count and
+// rebuild WARN log are not inflated.
+func TestMissingFromIndex(t *testing.T) {
+	t.Parallel()
+	// Index keys are stored normalized (lowercased/trimmed) by BuildIndex.
+	active := &Index{locale: "fi", names: map[string]string{"parus major": "talitiainen"}}
+	missing := missingFromIndex(
+		[]string{"Parus major", "Corvus corax", "Apus apus", "Corvus corax", "corvus corax"}, active)
+	assert.Equal(t, []string{"Corvus corax", "Apus apus"}, missing)
+}
+
+// TestClassifyMissing separates English-rescued species from species OpenFauna cannot
+// localize at all. The input is the active-locale-missing set (see missingFromIndex);
+// the unresolved group is the diagnostic the rebuild WARN log names.
+func TestClassifyMissing(t *testing.T) {
+	t.Parallel()
+	// English has Corvus corax but not Accipiter gentilis (a taxonomy-reclassified
+	// miss: OpenFauna carries fi/en only under the new name Astur gentilis).
+	en := &Index{locale: "en", names: map[string]string{"corvus corax": "Northern Raven"}}
+
+	enFallback, unresolved := classifyMissing([]string{"Corvus corax", "Accipiter gentilis"}, en)
+
+	require.Len(t, enFallback, 1)
+	assert.Equal(t, "Northern Raven", enFallback["Corvus corax"])
+	assert.Equal(t, []string{"Accipiter gentilis"}, unresolved)
+}
+
+// TestClassifyMissing_EnglishActiveLocale treats every missing species as unresolved
+// when English is already the active locale (en == nil, nothing wider to fall back to).
+func TestClassifyMissing_EnglishActiveLocale(t *testing.T) {
+	t.Parallel()
+	enFallback, unresolved := classifyMissing([]string{"Corvus corax", "Gibberish nonexistus"}, nil)
+	assert.Empty(t, enFallback)
+	assert.Equal(t, []string{"Corvus corax", "Gibberish nonexistus"}, unresolved)
+}
+
+// TestCapJoinSpecies bounds the rendered unresolved-species log line.
+func TestCapJoinSpecies(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, capJoinSpecies(nil, 3))
+	assert.Equal(t, "a, b", capJoinSpecies([]string{"a", "b"}, 5))
+	assert.Equal(t, "a, b", capJoinSpecies([]string{"a", "b"}, 2))
+	assert.Equal(t, "a, b (+1 more)", capJoinSpecies([]string{"a", "b", "c"}, 2))
+}
+
+// TestRebuild_LogsUnresolvedSpecies locks the diagnostic wiring (not just the helpers):
+// Rebuild must emit the INFO summary and a WARN naming each working-set species
+// OpenFauna cannot localize, so an INFO-level support dump can pinpoint a "wrong name"
+// report. Uses the embedded dataset: "Turdus merula" resolves in fi, while the synthetic
+// binomial "Gibberish nonexistus" is absent from every locale including the English
+// fallback, so it stays unresolved regardless of dataset refreshes (a real species can be
+// backfilled upstream and resolve later). Not parallel: mutates the global logger.
+func TestRebuild_LogsUnresolvedSpecies(t *testing.T) {
+	var buf bytes.Buffer
+	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	cl, err := logger.NewCentralLogger(
+		&logger.LoggingConfig{
+			Console:      &logger.ConsoleOutput{Enabled: false},
+			FileOutput:   &logger.FileOutput{Enabled: false},
+			DefaultLevel: "debug",
+		},
+		capture,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cl.Close() })
+
+	prev := logger.Global()
+	logger.SetGlobal(cl)
+	t.Cleanup(func() { logger.SetGlobal(prev) })
+
+	r := NewResolver()
+	require.NoError(t, r.Rebuild([]string{"Turdus merula", "Gibberish nonexistus"}, "fi"))
+
+	out := buf.String()
+	assert.Contains(t, out, "openfauna name resolver rebuilt", "INFO rebuild summary must be logged")
+	assert.Contains(t, out, "unresolved=1", "INFO summary must count the unresolvable species")
+	assert.Contains(t, out, "openfauna could not localize", "WARN diagnostic must fire for unresolved species")
+	assert.Contains(t, out, "Gibberish nonexistus", "WARN must name the unresolvable species")
+	assert.NotContains(t, out, "Turdus merula", "a species resolved in the active locale must not be flagged")
 }

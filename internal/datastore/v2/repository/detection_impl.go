@@ -117,24 +117,40 @@ func (r *detectionRepository) sourcesTable() string {
 	return tableAudioSources
 }
 
-// dateFromUnixExpr returns a SQL expression to extract DATE from a Unix timestamp in local time.
-// SQLite: DATE(datetime(column, 'unixepoch', 'localtime'))
-// MySQL:  DATE(FROM_UNIXTIME(column))
-func (r *detectionRepository) dateFromUnixExpr(column string) string {
+// dateFromUnixExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD) of a
+// Unix timestamp in the configured timezone. offsetSeconds is that zone's UTC offset; it is added
+// to the epoch before the date is taken, so the result is independent of the database session /
+// OS-local timezone (unlike the older 'localtime' / FROM_UNIXTIME form). This mirrors
+// hourFromUnixExpr. detected_at is always positive, so the integer division stays non-negative
+// even for west-of-UTC (negative) offsets.
+//
+// The MySQL form computes the civil date arithmetically (DATE_ADD on a literal date with an
+// integer day count) so it does not depend on the session time_zone; DATE(FROM_UNIXTIME(...))
+// would apply that zone on top of the offset and double-count. Integer DIV avoids floating-point
+// rounding at exact day boundaries.
+//
+// SQLite: date(column + offset, 'unixepoch')
+// MySQL:  DATE_ADD('1970-01-01', INTERVAL (column + offset) DIV 86400 DAY)
+func (r *detectionRepository) dateFromUnixExpr(column string, offsetSeconds int) string {
 	if r.isMySQL {
-		return fmt.Sprintf("DATE(FROM_UNIXTIME(%s))", column)
+		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (%s + %d) DIV 86400 DAY)", column, offsetSeconds)
 	}
-	return fmt.Sprintf("DATE(datetime(%s, 'unixepoch', 'localtime'))", column)
+	return fmt.Sprintf("date(%s + %d, 'unixepoch')", column, offsetSeconds)
 }
 
-// hourFromUnixExpr returns a SQL expression to extract HOUR (0-23) from a Unix timestamp in local time.
-// SQLite: CAST(strftime('%%H', datetime(column, 'unixepoch', 'localtime')) AS INTEGER)
-// MySQL:  HOUR(FROM_UNIXTIME(column))
-func (r *detectionRepository) hourFromUnixExpr(column string) string {
+// hourFromUnixExpr returns a SQL expression that extracts the wall-clock HOUR (0-23) of a
+// Unix timestamp in the configured timezone. offsetSeconds is that zone's UTC offset; it is
+// added to the epoch before bucketing, so the result is independent of the database/OS-local
+// timezone (unlike the older 'localtime'/FROM_UNIXTIME form). This mirrors the IncludedHours
+// search-filter expression. detected_at is always positive, so the integer division and
+// modulo stay non-negative even for negative (west-of-UTC) offsets.
+// SQLite: CAST((column + offset) / 3600 AS INTEGER) % 24
+// MySQL:  FLOOR((column + offset) / 3600) % 24
+func (r *detectionRepository) hourFromUnixExpr(column string, offsetSeconds int) string {
 	if r.isMySQL {
-		return fmt.Sprintf("HOUR(FROM_UNIXTIME(%s))", column)
+		return fmt.Sprintf("FLOOR((%s + %d) / 3600) %% 24", column, offsetSeconds)
 	}
-	return fmt.Sprintf("CAST(strftime('%%H', datetime(%s, 'unixepoch', 'localtime')) AS INTEGER)", column)
+	return fmt.Sprintf("CAST((%s + %d) / 3600 AS INTEGER) %% 24", column, offsetSeconds)
 }
 
 // ============================================================================
@@ -559,10 +575,29 @@ func (r *detectionRepository) GetByDateRange(ctx context.Context, start, end int
 	return dets, total, err
 }
 
-// GetByHour retrieves detections starting at a specific Unix timestamp hour.
+// GetByHour retrieves detections in the half-open interval [hourStart, hourStart+3600).
+// The exclusive upper bound prevents the first second of the next hour from being
+// counted in both adjacent hours.
 func (r *detectionRepository) GetByHour(ctx context.Context, hourStart int64, limit, offset int) ([]*entities.Detection, int64, error) {
-	hourEnd := hourStart + 3600 // 1 hour in seconds
-	return r.GetByDateRange(ctx, hourStart, hourEnd, limit, offset)
+	return r.listByHalfOpenRange(ctx, hourStart, hourStart+3600, limit, offset)
+}
+
+// listByHalfOpenRange retrieves detections in [start, end) and returns the total count.
+func (r *detectionRepository) listByHalfOpenRange(ctx context.Context, start, end int64, limit, offset int) ([]*entities.Detection, int64, error) {
+	var dets []*entities.Detection
+	var total int64
+
+	query := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("detected_at >= ? AND detected_at < ?", start, end)
+
+	// Count on a cloned session so the Count finisher does not mutate the query that is
+	// reused for the paginated Find below (mirrors the Search method's pattern).
+	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.Order("detected_at DESC").Limit(limit).Offset(offset).Find(&dets).Error
+	return dets, total, err
 }
 
 // GetByAudioSource retrieves detections for a specific audio source.
@@ -796,9 +831,20 @@ func (r *detectionRepository) CountByDateRange(ctx context.Context, start, end i
 	return count, err
 }
 
-// CountByHour returns the count of detections in a specific hour.
+// CountByHour returns the count of detections in the half-open interval
+// [hourStart, hourStart+3600). The exclusive upper bound prevents the first
+// second of the next hour from being counted in both adjacent hours.
 func (r *detectionRepository) CountByHour(ctx context.Context, hourStart int64) (int64, error) {
-	return r.CountByDateRange(ctx, hourStart, hourStart+3600)
+	return r.countByHalfOpenRange(ctx, hourStart, hourStart+3600)
+}
+
+// countByHalfOpenRange counts detections in [start, end).
+func (r *detectionRepository) countByHalfOpenRange(ctx context.Context, start, end int64) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("detected_at >= ? AND detected_at < ?", start, end).
+		Count(&count).Error
+	return count, err
 }
 
 // ============================================================================
@@ -829,55 +875,72 @@ func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int6
 	return results, err
 }
 
-// GetHourlyOccurrences returns detection counts by hour (0-23) for the given labels.
-// Aggregates across all provided label IDs in a single query (multi-model support).
-// minConfidence filters detections by minimum confidence threshold.
-func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) ([24]int, error) {
-	var counts [24]int
+// GetBatchHourlyOccurrences returns per-label-ID hourly detection counts (0-23) for the
+// given label IDs. It groups by (label_id, hour) so a single query (per chunk) covers many
+// labels at once; callers that map one species to multiple model label IDs sum the per-label
+// arrays themselves. False positives are excluded and minConfidence filters by confidence.
+//
+// Large label sets are chunked by batchQuerySize to stay within SQL host-parameter limits;
+// per-chunk results are merged before returning. Each label ID appears in exactly one chunk,
+// so no cross-chunk aggregation is needed.
+func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, tzOffsetSeconds int, minConfidence float64) (map[uint][24]int, error) {
+	result := make(map[uint][24]int, len(labelIDs))
 
-	// Return zero array for empty input
+	// Return empty map for empty input (no query)
 	if len(labelIDs) == 0 {
-		return counts, nil
+		return result, nil
 	}
 
-	type hourCount struct {
-		Hour  int
-		Count int
+	type labelHourCount struct {
+		LabelID uint
+		Hour    int
+		Count   int
 	}
-	var results []hourCount
 
-	// Extract hour from Unix timestamp in local timezone
-	// Exclude detections marked as false_positive
-	hourExpr := r.hourFromUnixExpr("d.detected_at")
+	// Bucket by wall-clock hour in the configured timezone (offset-adjusted); exclude false positives.
+	hourExpr := r.hourFromUnixExpr("d.detected_at", tzOffsetSeconds)
 	detTable := r.tableName()
 	revTable := r.reviewsTable()
-	err := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
-		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
-		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
-		Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", labelIDs, start, end, minConfidence).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
-		Group("hour").
-		Scan(&results).Error
 
-	if err != nil {
-		return counts, err
-	}
+	// Chunk label IDs to avoid exceeding SQL host-parameter limits on the IN clause.
+	for i := 0; i < len(labelIDs); i += batchQuerySize {
+		// Fail fast between chunks if the caller's context was cancelled.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		chunkEnd := min(i+batchQuerySize, len(labelIDs))
+		chunk := labelIDs[i:chunkEnd]
 
-	for _, r := range results {
-		if r.Hour >= 0 && r.Hour < 24 {
-			counts[r.Hour] = r.Count
+		var rows []labelHourCount
+		err := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
+			Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
+			Select(fmt.Sprintf("d.label_id as label_id, %s as hour, COUNT(*) as count", hourExpr)).
+			Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", chunk, start, end, minConfidence).
+			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
+			Group(fmt.Sprintf("d.label_id, %s", hourExpr)).
+			Scan(&rows).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch hourly occurrences: %w", err)
+		}
+
+		for _, row := range rows {
+			if row.Hour >= 0 && row.Hour < 24 {
+				counts := result[row.LabelID]
+				counts[row.Hour] = row.Count
+				result[row.LabelID] = counts
+			}
 		}
 	}
 
-	return counts, nil
+	return result, nil
 }
 
 // GetDailyOccurrences returns daily detection counts for a label.
-func (r *detectionRepository) GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64) ([]DailyCount, error) {
+func (r *detectionRepository) GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64, tzOffsetSeconds int) ([]DailyCount, error) {
 	var results []DailyCount
 
-	// Group by date using dialect-appropriate date conversion
-	dateExpr := r.dateFromUnixExpr("detected_at")
+	// Group by wall-clock date in the configured timezone (offset-adjusted).
+	dateExpr := r.dateFromUnixExpr("detected_at", tzOffsetSeconds)
 	err := r.db.WithContext(ctx).Table(r.tableName()).
 		Select(fmt.Sprintf("%s as date, COUNT(*) as count", dateExpr)).
 		Where("label_id = ? AND detected_at >= ? AND detected_at <= ?", labelID, start, end).
@@ -1500,12 +1563,12 @@ func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start
 }
 
 // GetHourlyDistribution returns detection counts by hour.
-func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error) {
+func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]HourlyDistributionData, error) {
 	var results []HourlyDistributionData
 
-	// Use hourFromUnixExpr for correct local timezone conversion
+	// Bucket by wall-clock hour in the configured timezone via hourFromUnixExpr.
 	// Exclude detections marked as false_positive
-	hourExpr := r.hourFromUnixExpr("d.detected_at")
+	hourExpr := r.hourFromUnixExpr("d.detected_at", tzOffsetSeconds)
 	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Group("hour").
@@ -1516,12 +1579,12 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, 
 }
 
 // GetDailyAnalytics returns daily statistics.
-func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, labelID, modelID *uint) ([]DailyAnalyticsData, error) {
+func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]DailyAnalyticsData, error) {
 	var results []DailyAnalyticsData
 
-	// Use dialect-appropriate date conversion
+	// Group by wall-clock date in the configured timezone (offset-adjusted).
 	// Exclude detections marked as false_positive
-	dateExpr := r.dateFromUnixExpr("d.detected_at")
+	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
 	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
 		Select(fmt.Sprintf(`
 			%s as date,
@@ -1537,7 +1600,7 @@ func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end 
 }
 
 // GetDetectionTrends returns detection trends over time.
-func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period string, limit int, modelID *uint) ([]DailyAnalyticsData, error) {
+func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period string, limit, tzOffsetSeconds int, modelID *uint) ([]DailyAnalyticsData, error) {
 	// Calculate start time based on period
 	var startTime int64
 	now := time.Now().Unix()
@@ -1551,7 +1614,7 @@ func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period str
 		startTime = now - (24 * 3600)
 	}
 
-	return r.GetDailyAnalytics(ctx, startTime, now, nil, modelID)
+	return r.GetDailyAnalytics(ctx, startTime, now, tzOffsetSeconds, nil, modelID)
 }
 
 // GetNewSpecies returns species detected for the first time ever within the range.
@@ -1597,29 +1660,27 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 
 // GetSpeciesFirstDetectionInPeriod returns the first detection of each species within a date range.
 // Groups by scientific_name to aggregate across all models for the same species.
-// Uses ROW_NUMBER() window function to correctly identify the detection with the earliest timestamp
-// per species, with id as tie-breaker for deterministic results.
+//
+// It uses a plain GROUP BY + MIN(detected_at) rather than a ROW_NUMBER() window
+// function. The only consumer is the species tracker (yearly/seasonal first-seen
+// loads), which uses just scientific_name + first_detected and discards label_id
+// and detection_id; MIN(detected_at) per scientific_name is exactly that first-seen
+// date, and avoids the window function's full per-period sort (a large cost on the
+// startup load). label_id is reported as MIN(label_id) (a representative, not
+// necessarily the first row's label); detection_id is no longer selected (left zero).
 func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error) {
 	var results []SpeciesFirstSeen
 
-	// Use window function to rank detections per species (by scientific_name) by timestamp
-	// This ensures we get the actual detection_id that corresponds to the first_detected time
-	// Partitioning by scientific_name aggregates across all models for the same species
 	rawSQL := fmt.Sprintf(`
-		SELECT label_id, scientific_name, first_detected, detection_id
-		FROM (
-			SELECT
-				d.label_id,
-				l.scientific_name,
-				d.detected_at as first_detected,
-				d.id as detection_id,
-				ROW_NUMBER() OVER (PARTITION BY l.scientific_name ORDER BY d.detected_at ASC, d.id ASC) as rn
-			FROM %s d
-			JOIN %s l ON l.id = d.label_id
-			WHERE d.detected_at >= ? AND d.detected_at < ?
-		) ranked
-		WHERE rn = 1
-		ORDER BY first_detected ASC
+		SELECT
+			MIN(d.label_id) as label_id,
+			l.scientific_name,
+			MIN(d.detected_at) as first_detected
+		FROM %s d
+		JOIN %s l ON l.id = d.label_id
+		WHERE d.detected_at >= ? AND d.detected_at < ?
+		GROUP BY l.scientific_name
+		ORDER BY first_detected ASC, l.scientific_name ASC
 		LIMIT ? OFFSET ?
 	`, r.tableName(), r.labelsTable())
 

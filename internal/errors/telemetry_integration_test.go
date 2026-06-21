@@ -116,6 +116,18 @@ func TestShouldReportToSentry_FiltersEBirdTaxonomyNotFound(t *testing.T) {
 	assert.False(t, shouldReportToSentry(ee))
 }
 
+func TestShouldReportToSentry_FiltersDynamicThresholdNotFound(t *testing.T) {
+	t.Parallel()
+	// A user querying the dynamic threshold for a species that has none is a
+	// benign 404, not a code bug. Both the v2only and legacy datastore backends
+	// produce this CategoryNotFound error, so it must not reach Sentry (#1068).
+	ee := New(fmt.Errorf("dynamic threshold not found")).
+		Component("datastore").
+		Category(CategoryNotFound).
+		Build()
+	assert.False(t, shouldReportToSentry(ee))
+}
+
 func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
 	t.Parallel()
 	// Network category error that is NOT environmental noise should still report
@@ -424,4 +436,122 @@ func TestShouldReportToSentry_AllowsNonDatabaseContextCancellation(t *testing.T)
 		Build()
 	assert.True(t, shouldReportToSentry(ee),
 		"context.Canceled outside CategoryDatabase should still be forwarded to Sentry")
+}
+
+// TestShouldReportToSentry_FiltersLowPrioritySystemInterruptions verifies that a
+// CategorySystem error explicitly tagged PriorityLow is suppressed even when its
+// surface error is not a context sentinel. The spectrogram generator tags
+// context-driven Sox/FFmpeg interruptions this way using the governing context,
+// because the OS surface error is platform-dependent: on Windows a context-killed
+// process exits with status 1 (no context sentinel) and on Linux a mid-run kill
+// surfaces as "signal: killed", so isContextCancellation alone misses them.
+//
+// PriorityLow is honored ONLY for CategorySystem. CategoryDatabase + PriorityLow is
+// deliberately NOT suppressed: the datastore tags genuine query/scan/cleanup failures
+// PriorityLow for user-notification routing, and a real DB fault (corruption, lock
+// contention) during such a low-priority job must still reach Sentry.
+func TestShouldReportToSentry_FiltersLowPrioritySystemInterruptions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		component  string
+		category   ErrorCategory
+		priority   string
+		err        error
+		wantReport bool
+	}{
+		{
+			name:       "Windows exit-status-1 system error tagged PriorityLow is suppressed",
+			component:  "spectrogram",
+			category:   CategorySystem,
+			priority:   PriorityLow,
+			err:        fmt.Errorf("exit status 1"),
+			wantReport: false,
+		},
+		{
+			name:       "signal-killed system error tagged PriorityLow is suppressed",
+			component:  "spectrogram",
+			category:   CategorySystem,
+			priority:   PriorityLow,
+			err:        fmt.Errorf("process failed: signal: killed"),
+			wantReport: false,
+		},
+		{
+			name:       "wrapped PriorityLow system error is suppressed",
+			component:  "spectrogram",
+			category:   CategorySystem,
+			priority:   PriorityLow,
+			err:        fmt.Errorf("generate spectrogram: %w", fmt.Errorf("exit status 1")),
+			wantReport: false,
+		},
+		{
+			// Regression guard: a genuine DB fault must reach Sentry even though the
+			// datastore tags it PriorityLow for notification routing.
+			name:       "genuine database error tagged PriorityLow is still reported",
+			component:  "datastore",
+			category:   CategoryDatabase,
+			priority:   PriorityLow,
+			err:        fmt.Errorf("database disk image is malformed"),
+			wantReport: true,
+		},
+		{
+			name:       "database scan failure tagged PriorityLow is still reported",
+			component:  "datastore",
+			category:   CategoryDatabase,
+			priority:   PriorityLow,
+			err:        fmt.Errorf("sql: Scan error on column index 0"),
+			wantReport: true,
+		},
+		{
+			// The pre-existing context-sentinel suppression still applies to
+			// CategoryDatabase (independent of priority).
+			name:       "database PriorityLow context cancellation is still suppressed",
+			component:  "datastore",
+			category:   CategoryDatabase,
+			priority:   PriorityLow,
+			err:        fmt.Errorf("iterate rows: %w", context.Canceled),
+			wantReport: false,
+		},
+		{
+			name:       "system error without an explicit priority is reported",
+			component:  "spectrogram",
+			category:   CategorySystem,
+			priority:   "",
+			err:        fmt.Errorf("exit status 1"),
+			wantReport: true,
+		},
+		{
+			// Pins the predicate as == PriorityLow, not != "": a high-priority
+			// system error must NOT be suppressed.
+			name:       "high-priority system error is reported",
+			component:  "spectrogram",
+			category:   CategorySystem,
+			priority:   PriorityHigh,
+			err:        fmt.Errorf("exit status 1"),
+			wantReport: true,
+		},
+		{
+			name:       "PriorityLow in a non-operational category is reported",
+			component:  "birdnet",
+			category:   CategoryWorker,
+			priority:   PriorityLow,
+			err:        fmt.Errorf("exit status 1"),
+			wantReport: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			b := New(tt.err).Component(tt.component).Category(tt.category)
+			if tt.priority != "" {
+				b = b.Priority(tt.priority)
+			}
+			ee := b.Build()
+			got := shouldReportToSentry(ee)
+			assert.Equal(t, tt.wantReport, got,
+				"shouldReportToSentry for %q = %v, want %v", tt.name, got, tt.wantReport)
+		})
+	}
 }

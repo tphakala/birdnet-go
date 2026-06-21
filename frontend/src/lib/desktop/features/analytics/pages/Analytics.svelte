@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { t, type TranslationKey } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
   import { getLogger } from '$lib/utils/logger';
-  import { safeArrayAccess } from '$lib/utils/security';
   import { XCircle } from '@lucide/svelte';
   import { onMount, type Snippet } from 'svelte';
   import FilterForm from '../components/forms/FilterForm.svelte';
@@ -20,6 +19,9 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import type { SourceInfo } from '$lib/types/detection.types';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
 
   const logger = getLogger('app');
 
@@ -39,6 +41,9 @@
     uniqueSpecies: number;
     avgConfidence: number;
     mostCommonSpecies: string;
+    // Canonical scientific name of the most-common species, so the displayed
+    // common name can localize per visitor while the lookup stays canonical.
+    mostCommonScientific: string;
     mostCommonCount: number;
   }
 
@@ -49,6 +54,7 @@
     scientificName: string;
     confidence: number;
     timeOfDay: string;
+    source?: SourceInfo | null;
   }
 
   // API response type (may have date/time instead of timestamp)
@@ -61,6 +67,7 @@
     scientificName: string;
     confidence: number;
     timeOfDay?: string;
+    source?: SourceInfo | null;
   }
 
   interface SpeciesData {
@@ -112,6 +119,7 @@
     uniqueSpecies: 0,
     avgConfidence: 0,
     mostCommonSpecies: '',
+    mostCommonScientific: '',
     mostCommonCount: 0,
   });
 
@@ -127,17 +135,42 @@
     newSpecies: [],
   });
 
+  // Monotonic token guarding against stale-response races. Each fetchData() run
+  // captures the latest value; a fetcher only commits its result when its captured
+  // token still matches, so a slower earlier request can no longer overwrite the
+  // data from a newer one after rapid filter changes. Non-reactive on purpose.
+  let analyticsFetchSeq = 0;
+
   // Derived chart inputs built from the reactive chartData via pure transforms.
   // Species distribution: sorted desc by count, mapped to labelled bars with
   // per-species colors from the D3 theme palette (applied inside BarChart).
   const speciesBars = $derived(
     [...(chartData.species ?? [])]
       .sort((a, b) => b.count - a.count)
-      .map(s => ({ label: s.common_name, value: s.count }))
+      .map(s => ({ label: localizeSpeciesName(s.scientific_name, s.common_name), value: s.count }))
   );
 
-  // Time of day: hourly counts bucketed into the six fixed periods.
-  const timeOfDayBars = $derived(bucketHourlyByPeriod(chartData.timeOfDay));
+  // Time of day: hourly counts bucketed into the six fixed periods. The period
+  // display labels are localized at render time so the pure transform stays
+  // i18n-free. The map is keyed on the transform's stable English labels, so the
+  // localization is robust to bucket order or length; an unmapped label falls
+  // back to its English text. The two Night labels (0-4 and 20-23) must remain
+  // distinct in every locale: the BarChart uses the label as its d3 band-scale
+  // domain key, so identical strings would collapse the two buckets into one bar.
+  const TIME_OF_DAY_PERIOD_LABEL_KEYS = new Map<string, TranslationKey>([
+    ['Night (0-4)', 'analytics.timeOfDayPeriods.night0to4'],
+    ['Dawn (5-8)', 'analytics.timeOfDayPeriods.dawn5to8'],
+    ['Morning (9-11)', 'analytics.timeOfDayPeriods.morning9to11'],
+    ['Afternoon (12-16)', 'analytics.timeOfDayPeriods.afternoon12to16'],
+    ['Evening (17-19)', 'analytics.timeOfDayPeriods.evening17to19'],
+    ['Night (20-23)', 'analytics.timeOfDayPeriods.night20to23'],
+  ]);
+  const timeOfDayBars = $derived.by(() =>
+    bucketHourlyByPeriod(chartData.timeOfDay).map(bucket => {
+      const key = TIME_OF_DAY_PERIOD_LABEL_KEYS.get(bucket.label);
+      return { label: key ? t(key) : bucket.label, value: bucket.value };
+    })
+  );
 
   // Detection trend: aggregated/sorted daily points, wrapped as a single series.
   const trendSeries = $derived([
@@ -210,6 +243,7 @@
 
   // Fetch all data
   async function fetchData() {
+    const seq = ++analyticsFetchSeq;
     isLoading = true;
     error = null;
 
@@ -263,44 +297,33 @@
         calculatedRange: startDate && endDate ? `${startDate} to ${endDate}` : 'unlimited',
       });
 
-      // Run all API calls in parallel
-      const results = await Promise.allSettled([
-        fetchSummaryData(startDate || '', endDate || ''),
-        fetchSpeciesSummary(startDate || '', endDate || ''),
-        fetchRecentDetections(),
-        fetchTimeOfDayData(startDate || '', endDate || ''),
-        fetchTrendData(startDate || '', endDate || ''),
-        fetchNewSpeciesData(startDate || '', endDate || ''),
+      // Run all API calls in parallel. Each fetcher logs and swallows its own
+      // errors and guards its own commit with the fetch-sequence token, so
+      // allSettled always fulfills and there is nothing to inspect afterwards.
+      await Promise.allSettled([
+        fetchSummaryData(seq, startDate || '', endDate || ''),
+        fetchSpeciesSummary(seq, startDate || '', endDate || ''),
+        fetchRecentDetections(seq),
+        fetchTimeOfDayData(seq, startDate || '', endDate || ''),
+        fetchTrendData(seq, startDate || '', endDate || ''),
+        fetchNewSpeciesData(seq, startDate || '', endDate || ''),
       ]);
-
-      // Log any failed API calls (these show up in both dev and prod)
-      const apiNames = ['Summary', 'Species', 'Recent', 'TimeOfDay', 'Trend', 'NewSpecies'];
-      const failures = results
-        .map((result, index) => ({ result, name: safeArrayAccess(apiNames, index) ?? 'Unknown' }))
-        .filter(({ result }) => result.status === 'rejected');
-
-      if (failures.length > 0) {
-        failures.forEach(({ result, name }) => {
-          const reason = result.status === 'rejected' ? result.reason : 'Unknown error';
-          logger.error(`${name} API call failed during filter operation`, reason, {
-            timePeriod: filters.timePeriod,
-            startDate,
-            endDate,
-          });
-        });
-      }
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return;
       logger.error('General error fetching analytics data:', err);
       error = t('analytics.loadingError');
     }
 
     // The D3 chart components render reactively from the derived chart inputs,
-    // so there is nothing to imperatively create here.
-    isLoading = false;
+    // so there is nothing to imperatively create here. Only the most recent run
+    // clears the loading flag; a superseded run leaves it for the active fetch.
+    if (seq === analyticsFetchSeq) {
+      isLoading = false;
+    }
   }
 
   // Fetch summary metrics
-  async function fetchSummaryData(startDate: string, endDate: string) {
+  async function fetchSummaryData(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
@@ -310,6 +333,7 @@
       logger.debug('Fetching summary data:', { url, startDate, endDate });
 
       const speciesData = await api.get<SpeciesData[]>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       const speciesArray = Array.isArray(speciesData) ? speciesData : [];
 
       logger.debug('Summary API response:', {
@@ -323,6 +347,7 @@
       let totalDetections = 0;
       let totalConfidence = 0;
       let mostCommonSpecies = '';
+      let mostCommonScientific = '';
       let mostCommonCount = 0;
 
       speciesArray.forEach(species => {
@@ -335,6 +360,7 @@
         if (count > mostCommonCount) {
           mostCommonCount = count;
           mostCommonSpecies = species.common_name || t('analytics.recentDetections.unknown');
+          mostCommonScientific = species.scientific_name || '';
         }
       });
 
@@ -343,15 +369,17 @@
         uniqueSpecies: speciesArray.length,
         avgConfidence: totalDetections > 0 ? totalConfidence / totalDetections : 0,
         mostCommonSpecies,
+        mostCommonScientific,
         mostCommonCount,
       };
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching summary data:', err);
     }
   }
 
   // Fetch species summary for chart
-  async function fetchSpeciesSummary(startDate: string, endDate: string) {
+  async function fetchSpeciesSummary(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams({ limit: '10' });
       if (startDate) params.set('start_date', startDate);
@@ -361,6 +389,7 @@
       logger.debug('Fetching species chart data:', { url, startDate, endDate });
 
       const speciesData = await api.get<SpeciesData[]>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.species = Array.isArray(speciesData) ? speciesData : [];
 
       logger.debug('Species chart API response:', {
@@ -370,15 +399,17 @@
         length: chartData.species.length,
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching species summary:', err);
       chartData.species = [];
     }
   }
 
   // Fetch recent detections
-  async function fetchRecentDetections() {
+  async function fetchRecentDetections(seq: number) {
     try {
       const data = await api.get<ApiDetection[]>('/api/v2/detections/recent?limit=10');
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       const detections = Array.isArray(data) ? data : [];
 
       recentDetections = detections.map(detection => {
@@ -395,9 +426,11 @@
           confidence: detection.confidence,
           timeOfDay:
             detection.timeOfDay || (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : ''),
+          source: detection.source ?? null,
         };
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching recent detections:', err);
       recentDetections = [];
     }
@@ -415,7 +448,7 @@
   }
 
   // Fetch time of day data
-  async function fetchTimeOfDayData(startDate: string, endDate: string) {
+  async function fetchTimeOfDayData(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
@@ -425,6 +458,7 @@
       logger.debug('Fetching time of day data:', { url, startDate, endDate });
 
       const timeData = await api.get<TimeOfDayData[]>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.timeOfDay = Array.isArray(timeData) ? timeData : [];
 
       logger.debug('Time of day API response:', {
@@ -434,13 +468,14 @@
         length: Array.isArray(timeData) ? timeData.length : 0,
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching time of day data:', err);
       chartData.timeOfDay = [];
     }
   }
 
   // Fetch trend data
-  async function fetchTrendData(startDate: string, endDate: string) {
+  async function fetchTrendData(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
 
@@ -461,6 +496,7 @@
       logger.debug('Fetching trend data:', { url, startDate, endDate });
 
       const trendData = await api.get<TrendData>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.trend = trendData ?? { data: [] };
 
       logger.debug('Trend API response:', {
@@ -469,13 +505,14 @@
         dataLength: trendData?.data?.length || 0,
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching trend data:', err);
       chartData.trend = { data: [] };
     }
   }
 
   // Fetch new species data
-  async function fetchNewSpeciesData(startDate: string, endDate: string) {
+  async function fetchNewSpeciesData(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
@@ -485,6 +522,7 @@
       logger.debug('Fetching new species data:', { url, startDate, endDate });
 
       const data = await api.get<NewSpeciesData[]>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       newSpeciesData = Array.isArray(data) ? data : [];
       chartData.newSpecies = newSpeciesData;
 
@@ -495,6 +533,7 @@
         length: newSpeciesData.length,
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching new species data:', err);
       newSpeciesData = [];
       chartData.newSpecies = [];
@@ -616,7 +655,9 @@
     <!-- Most Common Species Card -->
     <StatCard
       title={t('analytics.stats.mostCommon')}
-      value={summary.mostCommonSpecies || t('analytics.stats.none')}
+      value={summary.mostCommonCount > 0
+        ? localizeSpeciesName(summary.mostCommonScientific, summary.mostCommonSpecies)
+        : t('analytics.stats.none')}
       subtitle={summary.mostCommonCount > 0
         ? formatNumber(summary.mostCommonCount) + ' ' + t('analytics.stats.detections')
         : ''}
@@ -772,6 +813,7 @@
                 <th>{t('analytics.recentDetections.headers.dateTime')}</th>
                 <th>{t('analytics.recentDetections.headers.species')}</th>
                 <th>{t('analytics.recentDetections.headers.confidence')}</th>
+                <th>{t('analytics.recentDetections.headers.source')}</th>
                 <th>{t('analytics.recentDetections.headers.timeOfDay')}</th>
               </tr>
             </thead>
@@ -791,7 +833,8 @@
                           src={buildAppUrl(
                             `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName ?? '')}`
                           )}
-                          alt={detection.commonName || 'Unknown species'}
+                          alt={detection.commonName ||
+                            t('analytics.recentDetections.unknownSpecies')}
                           class="w-full h-full object-cover"
                           onerror={handleBirdImageError}
                           loading="lazy"
@@ -801,7 +844,8 @@
                       </div>
                       <div>
                         <div class="font-medium">
-                          {detection.commonName || t('analytics.recentDetections.unknownSpecies')}
+                          {localizeSpeciesName(detection.scientificName, detection.commonName) ||
+                            t('analytics.recentDetections.unknownSpecies')}
                         </div>
                         <div class="text-xs opacity-50">{detection.scientificName || ''}</div>
                       </div>
@@ -822,12 +866,18 @@
                       <span class="text-sm">{formatPercentage(detection.confidence)}</span>
                     </div>
                   </td>
+                  <td>
+                    <SourceBadge {detection} variant="inline" />
+                    {#if !detection.source}
+                      <span class="text-xs opacity-40">-</span>
+                    {/if}
+                  </td>
                   <td>{detection.timeOfDay || t('analytics.recentDetections.unknown')}</td>
                 </tr>
               {:else}
                 <tr>
                   <td
-                    colspan="4"
+                    colspan="5"
                     class="text-center py-4 text-[var(--color-base-content)] opacity-50"
                     >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
@@ -850,7 +900,7 @@
                     src={buildAppUrl(
                       `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName ?? '')}`
                     )}
-                    alt={detection.commonName || 'Unknown species'}
+                    alt={detection.commonName || t('analytics.recentDetections.unknownSpecies')}
                     class="w-full h-full object-cover"
                     onerror={handleBirdImageError}
                     loading="lazy"
@@ -864,7 +914,8 @@
                     {detection.timestamp ? formatDateTime(detection.timestamp) : '-'}
                   </div>
                   <div class="font-medium leading-tight truncate">
-                    {detection.commonName || t('analytics.recentDetections.unknownSpecies')}
+                    {localizeSpeciesName(detection.scientificName, detection.commonName) ||
+                      t('analytics.recentDetections.unknownSpecies')}
                   </div>
                   <div class="text-xs opacity-60 truncate">{detection.scientificName || ''}</div>
                   <div class="mt-2 flex items-center justify-between">
@@ -878,6 +929,7 @@
                     >
                       {formatPercentage(detection.confidence)}
                     </span>
+                    <SourceBadge {detection} variant="inline" />
                     <span class="text-xs opacity-70"
                       >{detection.timeOfDay || t('analytics.recentDetections.unknown')}</span
                     >

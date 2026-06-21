@@ -21,6 +21,11 @@ func TestExtractScientificName(t *testing.T) {
 		{"scientific name only", "Turdus merula", "Turdus merula"},
 		{"non-species label", "noise", "noise"},
 		{"empty string", "", ""},
+		{"trailing carriage return", "Turdus merula_Common Blackbird\r", "Turdus merula"},
+		{"carriage return before underscore", "Turdus merula\r_Common Blackbird", "Turdus merula"},
+		{"leading whitespace", "  Turdus merula_Common Blackbird", "Turdus merula"},
+		{"trailing whitespace scientific only", "Turdus merula  ", "Turdus merula"},
+		{"carriage return scientific only", "Turdus merula\r", "Turdus merula"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

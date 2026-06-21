@@ -34,7 +34,7 @@
     releaseAudioContext,
   } from '$lib/utils/audioContextManager';
   import {
-    createAudioNodeChain,
+    attachAudioGraphWhenRunning,
     disconnectAudioNodes,
     type AudioNodeChain,
   } from '$lib/utils/audioNodes';
@@ -158,18 +158,27 @@
       if (isPlaying) {
         audioElement.pause();
       } else {
-        // Initialize audio context on first play (for gain/filter controls)
-        // Guard against rapid clicks that could create multiple AudioContexts
-        if (!audioContext && !isInitializingContext) {
+        // Initialize the audio context on first play, and re-enter whenever the
+        // graph is not attached OR the context has fallen back to suspended
+        // (e.g. tab backgrounding / audio-session interruption) so
+        // getAudioContext() resumes it. Without the state re-check, an
+        // already-attached graph on a re-suspended context plays silently.
+        // Guard against rapid clicks that could create multiple AudioContexts.
+        if ((!audioNodes || audioContext?.state !== 'running') && !isInitializingContext) {
           isInitializingContext = true;
           try {
             audioContext = await initializeAudioContextWrapper();
-            if (audioContext && !audioNodes) {
-              audioNodes = createAudioNodeChain(audioContext, audioElement, {
-                gainDb: gainValue,
-                highPassFreq: filterFreq,
-              });
-            }
+            // Attach the Web Audio graph only when the context is running;
+            // while suspended the element plays through native output and the
+            // graph is deferred to a later play (see attachAudioGraphWhenRunning).
+            audioNodes = attachAudioGraphWhenRunning(audioContext, audioElement, audioNodes, {
+              gainDb: gainValue,
+              highPassFreq: filterFreq,
+            });
+            // Report availability based on whether the graph is attached AND
+            // the context is running, so gain/filter controls aren't shown
+            // active when a re-suspended context failed to resume (inert graph).
+            onAudioContextAvailable?.(audioNodes !== null && audioContext?.state === 'running');
           } finally {
             isInitializingContext = false;
           }
@@ -327,9 +336,9 @@
     }
 
     try {
-      const ctx = await getAudioContext();
-      onAudioContextAvailable?.(true);
-      return ctx;
+      // Availability is reported by the caller after the graph actually
+      // attaches (it may stay suspended), not merely when a context exists.
+      return await getAudioContext();
     } catch (err) {
       logger.warn('Failed to initialize audio context:', err);
       onAudioContextAvailable?.(false);

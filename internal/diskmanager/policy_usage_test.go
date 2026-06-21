@@ -276,9 +276,13 @@ func TestSortFiles(t *testing.T) {
 	assert.Equal(t, "bubo_bubo", files[1].Species, "Bubo bubo (oldest) should be second")
 	assert.Equal(t, "bubo_bubo", files[2].Species, "Bubo bubo (newest) should be third")
 
-	// Verify the count map is correct
-	assert.Equal(t, 1, speciesCount["anas_platyrhynchos"]["/base/dir1"])
-	assert.Equal(t, 2, speciesCount["bubo_bubo"]["/base/dir1"])
+	// Verify the count map is correct. buildSpeciesSubDirCountMap keys by
+	// filepath.Dir(file.Path), which uses the OS separator (backslashes on
+	// Windows), so derive the expected sub-directory key the same way rather
+	// than hardcoding a forward-slash literal.
+	subDir := filepath.Dir(files[0].Path)
+	assert.Equal(t, 1, speciesCount["anas_platyrhynchos"][subDir])
+	assert.Equal(t, 2, speciesCount["bubo_bubo"][subDir])
 }
 
 // ----- Tests for Usage-Based Cleanup -----

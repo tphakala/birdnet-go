@@ -1658,10 +1658,18 @@ func TestJobTypeStatistics(t *testing.T) {
 	assert.Equal(t, 0, stats.ActionStats[retryType].Failed, "Retry action should have 0 failure")
 	assert.Equal(t, 1, stats.ActionStats[retryType].Retried, "Retry action should have 1 retry")
 	assert.False(t, stats.ActionStats[retryType].LastSuccessfulTime.IsZero(), "Last successful time should be set")
-	assert.Greater(t, stats.ActionStats[retryType].TotalDuration, time.Duration(0), "Total duration should be positive")
-	assert.Greater(t, stats.ActionStats[retryType].AverageDuration, time.Duration(0), "Average duration should be positive")
-	assert.Greater(t, stats.ActionStats[retryType].MinDuration, time.Duration(0), "Min duration should be positive")
-	assert.Greater(t, stats.ActionStats[retryType].MaxDuration, time.Duration(0), "Max duration should be positive")
+	// Windows' coarse monotonic clock (~15ms) can measure a fast action's
+	// execution as exactly 0, so per-action duration stats are not reliably
+	// positive there. Keep the positivity assertion on Linux/macOS, where the
+	// clock is fine-grained; the count/retry aggregation above is still checked
+	// on every platform. (Driving the action with a real sleep to force a
+	// non-zero span perturbs this timing-sensitive test's retry scheduling.)
+	if runtime.GOOS != "windows" {
+		assert.Greater(t, stats.ActionStats[retryType].TotalDuration, time.Duration(0), "Total duration should be positive")
+		assert.Greater(t, stats.ActionStats[retryType].AverageDuration, time.Duration(0), "Average duration should be positive")
+		assert.Greater(t, stats.ActionStats[retryType].MinDuration, time.Duration(0), "Min duration should be positive")
+		assert.Greater(t, stats.ActionStats[retryType].MaxDuration, time.Duration(0), "Max duration should be positive")
+	}
 
 	// Test JSON output
 	jsonStr, err := stats.ToJSON()

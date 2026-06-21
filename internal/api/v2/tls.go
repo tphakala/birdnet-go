@@ -16,6 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/restart"
 	tlspkg "github.com/tphakala/birdnet-go/internal/tls"
 )
 
@@ -153,6 +154,13 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 	}
 	tlsMgr.CleanupBackups(tlsServiceName)
 
+	// A new certificate is installed and persisted; the running TLS listener only
+	// applies it on restart. Mark restart-required even when TLSMode is unchanged
+	// (a renewal), which handleSettingsChanges above would not detect. Marked here,
+	// after the durable save and before the fallible info parse below, so a parse
+	// failure does not skip the restart prompt.
+	restart.MarkRestartRequired(reasonTLSCertRestart)
+
 	// Return certificate info
 	certPath := tlsMgr.GetCertificatePath(tlsServiceName, conf.TLSCertTypeServerCert)
 	info, err := ParseCertificateInfo(certPath)
@@ -196,6 +204,9 @@ func (c *Controller) DeleteTLSCertificate(ctx echo.Context) error {
 			logger.Error(handleErr))
 	}
 	tlsMgr.CleanupBackups(tlsServiceName)
+
+	// Certificates removed and TLS disabled; the listener applies this on restart.
+	restart.MarkRestartRequired(reasonTLSCertRestart)
 
 	return ctx.NoContent(http.StatusNoContent)
 }
@@ -275,6 +286,11 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 			logger.Error(handleErr))
 	}
 	tlsMgr.CleanupBackups(tlsServiceName)
+
+	// New self-signed certificate installed and persisted; the listener applies it
+	// on restart. Marked here, before the fallible info parse below, so a parse
+	// failure does not skip the restart prompt.
+	restart.MarkRestartRequired(reasonTLSCertRestart)
 
 	// Return certificate info
 	certPath := tlsMgr.GetCertificatePath(tlsServiceName, conf.TLSCertTypeServerCert)

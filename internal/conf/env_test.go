@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -549,7 +550,15 @@ func TestValidateEnvRangeFilterThreshold(t *testing.T) {
 }
 
 func TestValueCanonicalization(t *testing.T) {
-	// Test that values are canonicalized to correct types after validation
+	// Test that values are canonicalized to correct types after validation.
+	// Model paths must be absolute; "/path/to/model" is absolute on Unix but not
+	// on Windows (filepath.IsAbs wants a drive), so use a platform-absolute path
+	// there. canonicalizeValue only trims the model path, so the expected value
+	// is just the trimmed input on either OS.
+	modelPathRaw, modelPathWant := " /path/to/model ", "/path/to/model"
+	if runtime.GOOS == osWindows {
+		modelPathRaw, modelPathWant = ` C:\path\to\model `, `C:\path\to\model`
+	}
 	tests := []struct {
 		name          string
 		envVar        string
@@ -579,7 +588,7 @@ func TestValueCanonicalization(t *testing.T) {
 		// String canonicalization
 		{"locale lowercase", "BIRDNET_LOCALE", "EN-US", "birdnet.locale", typeString, "en-us"},
 		{"locale with spaces", "BIRDNET_LOCALE", " de-DE ", "birdnet.locale", typeString, "de-de"},
-		{"model path trimmed", "BIRDNET_MODELPATH", " /path/to/model ", "birdnet.modelpath", typeString, "/path/to/model"},
+		{"model path trimmed", "BIRDNET_MODELPATH", modelPathRaw, "birdnet.modelpath", typeString, modelPathWant},
 		{"range filter model", "BIRDNET_RANGEFILTER_MODEL", " latest ", "birdnet.rangefilter.model", typeString, "latest"},
 	}
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
@@ -25,10 +26,17 @@
     XCircle,
   } from '@lucide/svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { untrack } from 'svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import {
+    loadDictionary,
+    searchScientificByCommon,
+    PER_VISITOR_SPECIES_LOCALE_ENABLED,
+  } from '$lib/stores/speciesDictionary.svelte';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -63,6 +71,12 @@
     verified: string;
     locked: boolean;
     hasAudio: boolean;
+    source?: string;
+  }
+
+  interface AudioSourceOption {
+    id: string;
+    name: string;
   }
 
   type VerifiedStatus = 'any' | 'correct' | 'unverified' | 'false_positive';
@@ -165,6 +179,8 @@
   let results = $state<SearchResult[]>([]);
   let totalResults = $state(0);
   let sortBy = $state<SortBy>('date_desc');
+  let sourceFilter = $state('');
+  let availableSources = $state<AudioSourceOption[]>([]);
   let errorMessage = $state('');
   // PERFORMANCE OPTIMIZATION: Use Set instead of object for expandedItems
   // Set operations (has/add/delete) are faster than object property access
@@ -172,6 +188,33 @@
   let expandedItems = $state(new Set<string>());
   let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
+
+  // Fetch available audio sources for the source filter dropdown.
+  // The endpoint requires authentication, so skip the request for guests
+  // instead of letting it fail with a 401 on every page visit.
+  $effect(() => {
+    if (!$isAuthenticated) {
+      availableSources = [];
+      return;
+    }
+    const controller = new AbortController();
+    untrack(() => {
+      api
+        .get<{ sources: AudioSourceOption[] }>('/api/v2/system/audio/sources', {
+          signal: controller.signal,
+        })
+        .then(data => {
+          availableSources = data.sources ?? [];
+        })
+        .catch(error => {
+          if (!controller.signal.aborted) {
+            logger.warn('Failed to load audio sources for source filter:', error);
+            availableSources = [];
+          }
+        });
+    });
+    return () => controller.abort();
+  });
 
   // Localized pluralized results count using i18n keys
   function formatResultsCount(count: number) {
@@ -189,7 +232,7 @@
   function openMobilePlayer(result: SearchResult) {
     if (!result?.id) return;
     selectedAudioUrl = buildAppUrl(`/api/v2/audio/${result.id}`);
-    selectedSpeciesName = result.commonName || '';
+    selectedSpeciesName = localizeSpeciesName(result.scientificName, result.commonName);
     selectedDetectionId = result.id;
     showMobilePlayer = true;
   }
@@ -225,15 +268,41 @@
     expandedItems.clear(); // Reset expanded state when loading new results
 
     try {
+      // Resolve the typed text to scientific names via the visitor's per-locale
+      // dictionary. Always send the raw term as the free-text species filter too:
+      // the backend OR-s the free-text species (scientific_name LIKE) with the
+      // resolved speciesScientific label IDs, so sending both makes the resolved
+      // path a strict superset and avoids dropping scientific-substring matches
+      // when the typed text is both a resolvable common name and a substring of a
+      // scientific name.
+      //
+      // Ensure the per-locale dictionary is loaded before resolving. The submit
+      // handler can fire immediately after first paint or a locale switch, before
+      // the dictionary fetch has completed; resolving against empty maps would
+      // silently fall back to the raw term (which the backend cannot resolve for a
+      // foreign-locale name). loadDictionary is cached, so awaiting it when already
+      // loaded is effectively instant.
+      //
+      // PARKED behind PER_VISITOR_SPECIES_LOCALE_ENABLED: while off, we skip the
+      // per-visitor dictionary entirely and send only the raw term, so search
+      // resolves in the server-side species language (settings.BirdNET.Locale).
+      let resolvedScientific: string[] = [];
+      if (PER_VISITOR_SPECIES_LOCALE_ENABLED) {
+        await loadDictionary();
+        resolvedScientific = searchScientificByCommon(speciesSearchTerm);
+      }
+
       // Build request body
       const requestBody = {
         species: speciesSearchTerm,
+        speciesScientific: resolvedScientific,
         dateStart: dateRange.start,
         dateEnd: dateRange.end,
         confidenceMin: confidenceRange.min / 100,
         confidenceMax: confidenceRange.max / 100,
         verifiedStatus: verifiedStatus,
         lockedStatus: lockedStatus,
+        deviceFilter: sourceFilter,
         timeOfDay: timeOfDayFilter,
         page: currentPage,
         sortBy: sortBy,
@@ -271,6 +340,7 @@
     confidenceRange.max = 100;
     verifiedStatus = 'any';
     lockedStatus = 'any';
+    sourceFilter = '';
     timeOfDayFilter = 'any';
     formSubmitted = false;
     results = [];
@@ -603,6 +673,21 @@
                   <option value="sunset">{t('search.timeOfDayOptions.sunset')}</option>
                 </select>
               </div>
+
+              <!-- Audio Source -->
+              {#if availableSources.length > 1}
+                <div class="form-control">
+                  <label class="label" for="sourceFilter">
+                    <span class="label-text">{t('search.fields.source')}</span>
+                  </label>
+                  <select id="sourceFilter" bind:value={sourceFilter} class="select w-full">
+                    <option value="">{t('search.sourceOptions.any')}</option>
+                    {#each availableSources as source (source.id)}
+                      <option value={source.name}>{source.name}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
             </div>
           </div>
         {/if}
@@ -764,6 +849,7 @@
                 <th scope="col">{t('search.tableHeaders.timeOfDay')}</th>
                 <th scope="col">{t('search.tableHeaders.species')}</th>
                 <th scope="col">{t('search.tableHeaders.confidence')}</th>
+                <th scope="col">{t('search.tableHeaders.source')}</th>
                 <th scope="col">{t('search.tableHeaders.status')}</th>
                 <th scope="col">{t('search.tableHeaders.actions')}</th>
               </tr>
@@ -771,6 +857,7 @@
             <tbody>
               <!-- Loop through results -->
               {#each results as result, index (result.id)}
+                {@const displayName = localizeSpeciesName(result.scientificName, result.commonName)}
                 <!-- Main row -->
                 <tr
                   class={index % 2 === 0
@@ -798,10 +885,10 @@
                         }}
                         aria-label={isExpanded(result.id)
                           ? t('search.detailsPanel.collapseDetails', {
-                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                              species: displayName || t('search.detailsPanel.unknownSpecies'),
                             })
                           : t('search.detailsPanel.expandDetails', {
-                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                              species: displayName || t('search.detailsPanel.unknownSpecies'),
                             })}
                         aria-expanded={isExpanded(result.id)}
                         role="button"
@@ -815,7 +902,7 @@
                           src={buildAppUrl(
                             `/api/v2/media/species-image?name=${encodeURIComponent(result.scientificName)}`
                           )}
-                          alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
+                          alt={displayName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
                           onerror={e => {
                             const target = e.currentTarget as HTMLImageElement;
@@ -829,7 +916,7 @@
                       </div>
                       <div>
                         <div class="font-bold">
-                          {result.commonName || t('search.detailsPanel.unknownSpecies')}
+                          {displayName || t('search.detailsPanel.unknownSpecies')}
                         </div>
                         <div class="text-xs opacity-50">{result.scientificName || ''}</div>
                       </div>
@@ -860,6 +947,16 @@
                         >
                       </div>
                     </div>
+                  </td>
+                  <td>
+                    <SourceBadge
+                      detection={{
+                        source: result.source
+                          ? { id: result.source, displayName: result.source }
+                          : null,
+                      }}
+                      variant="inline"
+                    />
                   </td>
                   <td>
                     <div class="flex gap-1 flex-wrap">
@@ -895,7 +992,7 @@
                               toggleReviewMenu(result.id);
                             }}
                             aria-label={t('search.review.reviewDetection', {
-                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                              species: displayName || t('search.detailsPanel.unknownSpecies'),
                             })}
                             aria-haspopup="true"
                             aria-expanded={reviewOpenForId === result.id}
@@ -940,7 +1037,7 @@
                         }}
                         disabled={!result.hasAudio}
                         aria-label={t('search.detailsPanel.playAudio', {
-                          species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                          species: displayName || t('search.detailsPanel.unknownSpecies'),
                         })}
                         aria-pressed="false"
                       >
@@ -950,7 +1047,7 @@
                         class="btn btn-xs btn-square"
                         onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
                         aria-label={t('search.detailsPanel.viewDetails', {
-                          species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                          species: displayName || t('search.detailsPanel.unknownSpecies'),
                         })}
                       >
                         <Eye class="size-4" />
@@ -964,10 +1061,10 @@
                         data-id={result.id}
                         aria-label={isExpanded(result.id)
                           ? t('search.detailsPanel.collapseDetails', {
-                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                              species: displayName || t('search.detailsPanel.unknownSpecies'),
                             })
                           : t('search.detailsPanel.expandDetails', {
-                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                              species: displayName || t('search.detailsPanel.unknownSpecies'),
                             })}
                         aria-expanded={isExpanded(result.id)}
                         aria-controls="expanded-row-{result.id}"
@@ -987,7 +1084,7 @@
                 <!-- Expanded row -->
                 {#if isExpanded(result.id)}
                   <tr class="expanded-row" id="expanded-row-{result.id}">
-                    <td colspan="6" class="p-0 border-t-0">
+                    <td colspan="7" class="p-0 border-t-0">
                       <div
                         class="p-4 {index % 2 === 0
                           ? 'bg-[var(--color-base-100)]'
@@ -1016,8 +1113,7 @@
                               role="button"
                               tabindex="0"
                               aria-label={t('search.detailsPanel.collapseDetails', {
-                                species:
-                                  result.commonName || t('search.detailsPanel.unknownSpecies'),
+                                species: displayName || t('search.detailsPanel.unknownSpecies'),
                               })}
                               aria-expanded={isExpanded(result.id)}
                               aria-controls="expanded-row-{result.id}"
@@ -1027,7 +1123,7 @@
                                 src={buildAppUrl(
                                   `/api/v2/media/species-image?name=${encodeURIComponent(result.scientificName)}`
                                 )}
-                                alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
+                                alt={displayName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
                                 onerror={e => {
                                   const target = e.currentTarget as HTMLImageElement;
@@ -1070,6 +1166,7 @@
         <!-- Mobile card list -->
         <div class="md:hidden mt-4 space-y-2" aria-labelledby="search-results-heading">
           {#each results as result (result.id)}
+            {@const displayName = localizeSpeciesName(result.scientificName, result.commonName)}
             <section class="bg-[var(--color-base-100)] rounded-lg p-3">
               <div class="flex items-start gap-3">
                 <!-- Time of Day + Date/Time -->
@@ -1093,7 +1190,7 @@
                         src={buildAppUrl(
                           `/api/v2/media/species-image?name=${encodeURIComponent(result.scientificName)}`
                         )}
-                        alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
+                        alt={displayName || t('search.detailsPanel.unknownSpecies')}
                         class="w-full h-full object-cover"
                         onerror={handleBirdImageError}
                         loading="lazy"
@@ -1103,7 +1200,7 @@
                     </div>
                     <div class="min-w-0">
                       <div class="font-semibold leading-tight truncate">
-                        {result.commonName || t('search.detailsPanel.unknownSpecies')}
+                        {displayName || t('search.detailsPanel.unknownSpecies')}
                       </div>
                       <div class="text-xs opacity-60 truncate">{result.scientificName || ''}</div>
                     </div>
@@ -1142,6 +1239,16 @@
                     </div>
                   </div>
 
+                  <!-- Source -->
+                  {#if result.source}
+                    <div class="mt-1">
+                      <SourceBadge
+                        detection={{ source: { id: result.source, displayName: result.source } }}
+                        variant="inline"
+                      />
+                    </div>
+                  {/if}
+
                   <!-- Actions -->
                   <div class="mt-2 flex items-center gap-2 flex-wrap">
                     {#if canReview}
@@ -1153,7 +1260,7 @@
                             toggleReviewMenu(result.id);
                           }}
                           aria-label={t('search.review.reviewDetection', {
-                            species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                            species: displayName || t('search.detailsPanel.unknownSpecies'),
                           })}
                           aria-haspopup="true"
                           aria-expanded={reviewOpenForId === result.id}
@@ -1196,7 +1303,7 @@
                       onclick={() => openMobilePlayer(result)}
                       disabled={!result.hasAudio}
                       aria-label={t('search.detailsPanel.playAudio', {
-                        species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                        species: displayName || t('search.detailsPanel.unknownSpecies'),
                       })}
                     >
                       <Volume2 class="size-4" />
@@ -1206,7 +1313,7 @@
                       class="btn btn-outline btn-sm"
                       onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
                       aria-label={t('search.detailsPanel.viewDetails', {
-                        species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                        species: displayName || t('search.detailsPanel.unknownSpecies'),
                       })}
                     >
                       {t('common.actions.view')}
@@ -1369,7 +1476,7 @@
 
   @media (min-width: 768px) {
     .search-filters-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
   }
 

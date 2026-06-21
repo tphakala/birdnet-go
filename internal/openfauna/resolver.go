@@ -1,6 +1,7 @@
 package openfauna
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -10,9 +11,25 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// maxLoggedUnresolvedSpecies caps how many unresolved scientific names are listed in
+// the rebuild WARN log, so the line stays bounded when a model pairs a broad working
+// set with a locale whose species are largely absent from OpenFauna.
+const maxLoggedUnresolvedSpecies = 50
+
 // localeFallback is the ultimate locale used when a requested birdnet-go locale
 // maps to no available openfauna locale. English has the widest coverage.
 const localeFallback = "en"
+
+// localeAliases maps birdnet-go/UI locale codes to the OpenFauna dataset code when
+// the two use different conventions for the same language. Kept deliberately minimal:
+// only genuine code-convention mismatches that base/regional resolution cannot bridge.
+// "nb" (Norwegian Bokmål) and "nn" (Nynorsk) are individual ISO 639-1 codes under the
+// "no" macrolanguage, which is how OpenFauna labels Norwegian; without this alias they
+// would fall through to English.
+var localeAliases = map[string]string{
+	"nb": "no",
+	"nn": "no",
+}
 
 // mapLocale translates a birdnet-go locale code (e.g. "en-uk", "pt-br", "zh") to
 // an available openfauna locale code (e.g. "en_uk", "pt", "zh_cn"). The result is
@@ -44,6 +61,13 @@ func mapLocale(bngLocale string) string {
 		if slices.Contains(available, base) {
 			return base
 		}
+	}
+
+	// 2b. Code-convention aliases for languages OpenFauna ships under a different code
+	// than the UI uses (UI "nb"/"nn" -> dataset macrolanguage "no"). Guarded by
+	// Locales() containment so the mapping self-heals if the dataset code ever changes.
+	if alias, ok := localeAliases[base]; ok && slices.Contains(available, alias) {
+		return alias
 	}
 
 	// 3. First available regional variant of the base (zh -> zh_cn, lv -> lv_lv).
@@ -106,42 +130,36 @@ func (r *Resolver) Rebuild(scientificNames []string, bngLocale string) error {
 		return err
 	}
 
-	// Pre-seed the English fallback for working-set species that have no
-	// translation in the active locale. Sparse locales ship translations for as
-	// little as ~2% of species, so without this every untranslated working-set
-	// species would hit the O(dataset) on-demand Lookup on its first resolve.
-	// Resolving them once here keeps the slow path for out-of-working-set
-	// (historic) species only.
+	// Build an English index for the working-set species missing from the active
+	// locale, so the partition below can tell an English fallback apart from a
+	// species OpenFauna cannot localize at all. Skipped when English is already the
+	// active locale (there is nothing wider to fall back to).
+	missing := missingFromIndex(scientificNames, idx)
+	var enIdx *Index
+	if eff != localeFallback && len(missing) > 0 {
+		built, enErr := BuildIndex(missing, localeFallback)
+		if enErr != nil {
+			return enErr
+		}
+		enIdx = built
+	}
+
+	// Partition the missing species: enFallback species display in English; unresolved
+	// species have no OpenFauna name in either locale and fall through to the model
+	// labels or the scientific name downstream.
+	enFallback, unresolved := classifyMissing(missing, enIdx)
+
+	// Pre-seed both groups into the lookup cache so untranslated working-set species
+	// never hit the O(dataset) on-demand Lookup: an English name when one exists, or a
+	// "" known-miss otherwise. Sparse locales ship translations for as little as ~2%
+	// of species, so this keeps the slow path for out-of-working-set (historic)
+	// species only.
 	cache := &sync.Map{}
-	preseeded := 0
-	if eff != localeFallback {
-		var missing []string
-		for _, sci := range scientificNames {
-			if _, ok := idx.CommonName(sci); !ok {
-				missing = append(missing, sci)
-			}
-		}
-		if len(missing) > 0 {
-			enIdx, enErr := BuildIndex(missing, localeFallback)
-			if enErr != nil {
-				return enErr
-			}
-			for _, sci := range missing {
-				name, _ := enIdx.CommonName(sci) // "" when absent in English too
-				cache.Store(normalizeName(sci), name)
-				preseeded++
-			}
-		}
-	} else {
-		// Active locale is English: a working-set species missing from the index has
-		// no English name at all, so pre-seed it as a known miss to keep it off the
-		// slow path as well.
-		for _, sci := range scientificNames {
-			if _, ok := idx.CommonName(sci); !ok {
-				cache.Store(normalizeName(sci), "")
-				preseeded++
-			}
-		}
+	for sci, name := range enFallback {
+		cache.Store(normalizeName(sci), name)
+	}
+	for _, sci := range unresolved {
+		cache.Store(normalizeName(sci), "")
 	}
 
 	r.cur.Store(&resolverState{index: idx, locale: eff, cache: cache})
@@ -149,9 +167,81 @@ func (r *Resolver) Rebuild(scientificNames []string, bngLocale string) error {
 		logger.String("bng_locale", bngLocale),
 		logger.String("effective_locale", eff),
 		logger.Int("working_set", len(scientificNames)),
-		logger.Int("english_fallbacks", preseeded),
+		logger.Int("english_fallbacks", len(enFallback)),
+		logger.Int("unresolved", len(unresolved)),
 	)
+	// Name the species OpenFauna could not localize at all. This runs only on the cold
+	// rebuild path (startup, locale change, daily range-filter refresh), never on the
+	// hot Resolve path, and is logged at WARN so it lands in INFO-level support dumps:
+	// it is the diagnostic for "species X shows the wrong name" reports, which are
+	// usually upstream taxonomy reclassifications (e.g. a genus rename leaving the old
+	// label untranslated). Capped so the line stays bounded.
+	if len(unresolved) > 0 {
+		GetLogger().Warn("openfauna could not localize some working-set species; falling back to model labels or scientific name",
+			logger.String("effective_locale", eff),
+			logger.Int("count", len(unresolved)),
+			logger.String("species", capJoinSpecies(unresolved, maxLoggedUnresolvedSpecies)),
+		)
+	}
 	return nil
+}
+
+// missingFromIndex returns the working-set species absent from idx, preserving input
+// order. A species is "missing" when the active-locale index holds no common name for
+// it, so it needs an English fallback or is unresolved. Names that normalize to the
+// same key are returned at most once, so a working set with duplicates or casing
+// variants does not inflate the unresolved count or repeat names in the rebuild log.
+func missingFromIndex(scientificNames []string, idx *Index) []string {
+	var missing []string
+	seen := make(map[string]struct{}, len(scientificNames))
+	for _, sci := range scientificNames {
+		key := normalizeName(sci)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		// key is already normalized, so read idx.names directly rather than calling
+		// CommonName (which would re-normalize), mirroring the fast path in Resolve.
+		// A nil index resolves nothing, so every species counts as missing.
+		if idx == nil {
+			missing = append(missing, sci)
+			continue
+		}
+		if _, ok := idx.names[key]; !ok {
+			missing = append(missing, sci)
+		}
+	}
+	return missing
+}
+
+// classifyMissing partitions the active-locale-missing species (as returned by
+// missingFromIndex) into those an English name rescues (enFallback: scientific name ->
+// English common name) and those with no OpenFauna name in either locale (unresolved,
+// input order preserved). en may be nil when English is the active locale, in which
+// case every species is unresolved (there is nothing wider to fall back to).
+func classifyMissing(missing []string, en *Index) (enFallback map[string]string, unresolved []string) {
+	enFallback = make(map[string]string)
+	for _, sci := range missing {
+		var name string
+		if en != nil {
+			name, _ = en.CommonName(sci)
+		}
+		if name != "" {
+			enFallback[sci] = name
+		} else {
+			unresolved = append(unresolved, sci)
+		}
+	}
+	return enFallback, unresolved
+}
+
+// capJoinSpecies joins up to maxNames scientific names with ", ", appending a
+// "(+N more)" suffix when the list is longer so the rendered log line stays bounded.
+func capJoinSpecies(names []string, maxNames int) string {
+	if len(names) <= maxNames {
+		return strings.Join(names, ", ")
+	}
+	return strings.Join(names[:maxNames], ", ") + fmt.Sprintf(" (+%d more)", len(names)-maxNames)
 }
 
 // Resolve returns the localized common name for scientificName, or "" if it is not
@@ -238,6 +328,24 @@ func (r *Resolver) ResolveLocal(scientificName string) (name string, ok bool) {
 		}
 	}
 	return "", false
+}
+
+// ResolveLocalizedBatch resolves localized common names for many scientific names in
+// a single dataset pass at the resolver's current (already mapped) locale, with the
+// English fallback, returning sci -> common keyed by the caller's exact inputs. It is
+// the cold-path companion to ResolveLocal: scientific-only secondary-model labels
+// that ResolveLocal misses (because they are outside the working-set index) are
+// batched here when rebuilding the reverse search maps. Names with no translation are
+// absent from the result. Must not be called on a hot path.
+func (r *Resolver) ResolveLocalizedBatch(scientificNames []string) map[string]string {
+	if r == nil {
+		return map[string]string{}
+	}
+	st := r.cur.Load()
+	if st == nil {
+		return map[string]string{}
+	}
+	return lookupCommonNamesEffective(scientificNames, st.locale)
 }
 
 // Locale reports the effective openfauna locale code of the current index, or ""

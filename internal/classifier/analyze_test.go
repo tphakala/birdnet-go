@@ -784,6 +784,66 @@ func TestGetTopKResults(t *testing.T) {
 	}
 }
 
+// TestGetTopKResults_ReturnsCopyNotAlias verifies getTopKResults returns a
+// freshly-allocated slice that does not share a backing array with the input
+// buffer. This is the guarantee that closes the data race: the
+// Predict implementations pass a reused per-instance scratch buffer
+// (bn.resultsBuffer) which the next inference window overwrites in place via
+// pairLabelsAndConfidenceReuse, while the queue consumer may still be reading a
+// previously-returned top-K slice.
+func TestGetTopKResults_ReturnsCopyNotAlias(t *testing.T) {
+	t.Parallel()
+
+	// Simulate the reused per-instance scratch buffer.
+	buffer := []datastore.Results{
+		{Species: "A", Confidence: 0.9},
+		{Species: "B", Confidence: 0.7},
+		{Species: "C", Confidence: 0.8},
+		{Species: "D", Confidence: 0.6},
+		{Species: "E", Confidence: 0.5},
+	}
+
+	top := getTopKResults(buffer, 3)
+	require.Len(t, top, 3)
+	require.Equal(t, "A", top[0].Species)
+
+	// Overwrite the entire backing buffer the way the next inference window
+	// would (pairLabelsAndConfidenceReuse mutates buffer[i].Species/.Confidence
+	// in place). If top aliased buffer, these writes would corrupt it.
+	for i := range buffer {
+		buffer[i].Species = "OVERWRITTEN"
+		buffer[i].Confidence = -1
+	}
+
+	assert.Equal(t, "A", top[0].Species, "returned slice must not alias the input scratch buffer")
+	assert.InDelta(t, float32(0.9), top[0].Confidence, 0.0001)
+	assert.Equal(t, "C", top[1].Species)
+	assert.Equal(t, "B", top[2].Species)
+}
+
+// TestGetTopKResults_FullSortBranchReturnsCopy covers the k>=len branch: even
+// when the whole slice is returned it must be an independent copy.
+func TestGetTopKResults_FullSortBranchReturnsCopy(t *testing.T) {
+	t.Parallel()
+
+	buffer := []datastore.Results{
+		{Species: "A", Confidence: 0.5},
+		{Species: "B", Confidence: 0.9},
+	}
+
+	top := getTopKResults(buffer, 5) // k > len triggers the full-sort branch
+	require.Len(t, top, 2)
+	require.Equal(t, "B", top[0].Species)
+
+	for i := range buffer {
+		buffer[i].Species = "OVERWRITTEN"
+		buffer[i].Confidence = -1
+	}
+
+	assert.Equal(t, "B", top[0].Species, "full-sort branch must also return an independent copy")
+	assert.Equal(t, "A", top[1].Species)
+}
+
 // generateLargeTestResults creates a large dataset for testing
 func generateLargeTestResults(count int) []datastore.Results {
 	results := make([]datastore.Results, count)

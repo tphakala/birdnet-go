@@ -1,3 +1,5 @@
+//go:build !notflite
+
 package tflite
 
 import (

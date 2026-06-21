@@ -63,6 +63,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"BirdNET.Labels":             {categories: []hotReloadCategory{hotReloadRuntime}},
 	"BirdNET.UseXNNPACK":         {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
 	"BirdNET.ONNXRuntimePath":    {categories: []hotReloadCategory{hotReloadRestart}},
+	"BirdNET.OpenVINOPath":       {categories: []hotReloadCategory{hotReloadRestart}},
+	"BirdNET.Backend":            {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
+	"BirdNET.OpenVINODevice":     {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
 	"BirdNET.Version":            {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
 
 	// --- Perch ---
@@ -79,6 +82,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 
 	// --- Models ---
 	"Models": {categories: []hotReloadCategory{hotReloadRestart}},
+
+	// --- LowMemory (applied once at startup: mallopt before threads, GOMEMLIMIT) ---
+	"LowMemory": {categories: []hotReloadCategory{hotReloadRestart}},
 
 	// --- TaxonomySynonyms ---
 	"TaxonomySynonyms": {categories: []hotReloadCategory{hotReloadFresh}},

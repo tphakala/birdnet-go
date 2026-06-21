@@ -9,6 +9,7 @@
   import type { ZoomTransform } from 'd3-zoom';
 
   import { t } from '$lib/i18n';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import BaseChart from './BaseChart.svelte';
   import { getLocalDateString } from '$lib/utils/date';
   import { createTimeScale, createLinearScale } from './utils/scales';
@@ -60,6 +61,12 @@
     onDateRangeChange,
   }: Props = $props();
 
+  // Non-degenerate fallback for the y-domain max (so an all-zero range keeps zero
+  // at the bottom) plus a fixed headroom above the max. `|| MIN_Y_DOMAIN_MAX` only
+  // replaces a falsy max, preserving a real fractional max in percentage mode.
+  const MIN_Y_DOMAIN_MAX = 1;
+  const Y_AXIS_HEADROOM = 1.1;
+
   // Component state
   let tooltip: ChartTooltip | null = null;
   let zoomTransform: ZoomTransform | null = null;
@@ -78,6 +85,10 @@
       color: species.color || colors[index],
       visible: selectedSpecies.length === 0 || selectedSpecies.includes(species.species),
       id: species.id || species.species, // Use species name as fallback ID
+      // Visitor-locale display label. Computed inside the $derived so the repaint
+      // $effect (which reads processedData) re-runs on dictionary load / locale
+      // switch. Keys, colors, and legend ids below stay on species.species/id.
+      displayName: localizeSpeciesName(species.species, species.commonName),
     }));
   });
 
@@ -139,7 +150,11 @@
         .domain(dateRange || safeDateExtent)
         .range([0, 100]),
       y: scaleLinear()
-        .domain([0, (safeCountExtent[1] || 0) * 1.1])
+        // Default a zero/empty max to 1 so an all-zero range keeps zero pinned to
+        // the bottom instead of a degenerate [0,0] domain that .nice() expands into
+        // negative space. `|| 1` only replaces a falsy (0) max, so a real fractional
+        // max in relative/percentage mode (e.g. 0.5%) is preserved, not squashed.
+        .domain([0, (safeCountExtent[1] || MIN_Y_DOMAIN_MAX) * Y_AXIS_HEADROOM])
         .range([100, 0]),
     };
   });
@@ -293,7 +308,7 @@
     // Draw lines for each species
     const linesGroup = chartArea.append('g').attr('class', 'lines');
 
-    processed.forEach((species: SpeciesTrendData) => {
+    processed.forEach(species => {
       // Add area (subtle background fill)
       linesGroup
         .append('path')
@@ -339,7 +354,7 @@
 
           // Show tooltip
           const tooltipData = {
-            title: species.commonName,
+            title: species.displayName,
             items: [
               {
                 label: t('analytics.advanced.charts.tooltips.date'),
@@ -418,10 +433,8 @@
         onEnd: selection => {
           if (selection) {
             const [x1, x2] = selection;
-            const dateRange: [Date, Date] = [xScale.invert(x1), xScale.invert(x2)];
-            onDateRangeChange?.(dateRange);
-          } else {
-            // Brush cleared
+            const brushRange: [Date, Date] = [xScale.invert(x1), xScale.invert(x2)];
+            onDateRangeChange?.(brushRange);
           }
         },
       });
@@ -429,9 +442,9 @@
 
     // Create legend
     const processedForLegend = processedData;
-    const legendItems = processedForLegend.map((species: SpeciesTrendData) => ({
+    const legendItems = processedForLegend.map(species => ({
       id: species.id || species.species,
-      label: species.commonName,
+      label: species.displayName,
       color: species.color ?? '#999999',
       visible: species.visible,
     }));

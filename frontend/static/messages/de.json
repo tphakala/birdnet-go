@@ -133,7 +133,8 @@
       "downloadCsv": "Artenliste als CSV herunterladen",
       "visitEbirdLink": "eBird.org in neuem Tab öffnen",
       "learnEbirdTaxonomyLink": "eBird-Taxonomie in neuem Tab öffnen",
-      "resizeHandle": "Ziehen zum Ändern der Größe"
+      "resizeHandle": "Ziehen zum Ändern der Größe",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Konfidenz",
@@ -404,6 +405,8 @@
         "recalculatingThresholds": "Dynamische Schwellenwerte werden für neuen Basiswert neu berechnet",
         "reconfiguringDynamicThresholds": "Dynamische Schwellenwerte werden neu konfiguriert...",
         "webserverRestartRequired": "Webserver-Einstellungen geändert. Neustart erforderlich.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
         "reconfiguringAudioSources": "Audioquellen werden neu konfiguriert...",
         "rebuildingExtendedCapture": "Erweiterter Aufnahmefilter wird neu aufgebaut...",
@@ -486,7 +489,8 @@
       "confidenceMax": "Maximaler Konfidenzprozentsatz",
       "verifiedStatus": "Verifizierungsstatus",
       "lockedStatus": "Sperrstatus",
-      "timeOfDay": "Tageszeit"
+      "timeOfDay": "Tageszeit",
+      "source": "Audioquelle"
     },
     "advancedFilters": "Erweiterte Filter",
     "showAdvancedFilters": "Erweiterte Filter anzeigen",
@@ -508,6 +512,9 @@
       "sunrise": "Sonnenaufgang +/- 30min",
       "sunset": "Sonnenuntergang +/- 30min"
     },
+    "sourceOptions": {
+      "any": "Alle Quellen"
+    },
     "sortOptions": {
       "dateDesc": "Datum (Neueste zuerst)",
       "dateAsc": "Datum (Älteste zuerst)",
@@ -519,6 +526,7 @@
       "timeOfDay": "Tageszeit",
       "species": "Art",
       "confidence": "Konfidenz",
+      "source": "Quelle",
       "status": "Status",
       "actions": "Aktionen"
     },
@@ -788,7 +796,23 @@
     },
     "detail": {
       "species": "Art",
-      "observation": "Beobachtung"
+      "observation": "Beobachtung",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Wissenschaftlicher Name",
+        "classificationBadges": "Badges zur Artklassifizierung",
+        "confidence": "Erkennungskonfidenz {confidence}%",
+        "metadata": "Erkennungsmetadaten",
+        "weatherConditions": "Wetterbedingungen zum Zeitpunkt der Erkennung",
+        "comments": "Kommentare zur Erkennung",
+        "commentText": "Kommentartext",
+        "commentTimestamp": "Zeitstempel des Kommentars",
+        "mainRegion": "Erkennungsdetails",
+        "tabsHeading": "Registerkarten mit Erkennungsinformationen",
+        "tabList": "Registerkarten der Erkennungsdetails",
+        "speciesHeadingSuffix": "Erkennungsdetails"
+      }
     },
     "headers": {
       "dateTime": "Datum & Zeit",
@@ -1129,6 +1153,7 @@
     "sections": {
       "overview": "Übersicht",
       "database": "Datenbank",
+      "inference": "AI Models",
       "terminal": "Terminal"
     },
     "database": {
@@ -1484,6 +1509,90 @@
         }
       }
     },
+    "inference": {
+      "title": "AI Models & Inference",
+      "loading": "Loading inference status",
+      "error": "Could not load inference status",
+      "sectionHardware": "Hardware",
+      "sectionBackends": "Inference Backends",
+      "sectionModels": "Models",
+      "noModels": "No models are currently loaded",
+      "architecture": "Architecture",
+      "cpu": "CPU",
+      "environment": "Environment",
+      "fp16": "FP16",
+      "fp16Supported": "FP16 supported",
+      "fp16Unsupported": "FP16 not supported",
+      "backendTflite": "TensorFlow Lite",
+      "backendOnnx": "ONNX Runtime",
+      "backendOpenvino": "OpenVINO",
+      "available": "Available",
+      "notAvailable": "Not available",
+      "active": "Active",
+      "inactive": "Inactive",
+      "initialized": "Initialized",
+      "version": "Version",
+      "devices": "Devices",
+      "stock": "Stock",
+      "custom": "Custom",
+      "sampleRate": "Sample rate",
+      "clipLength": "Segmentlänge",
+      "species": "Species",
+      "invocations": "Segments analysed",
+      "avgLatency": "Avg latency",
+      "maxLatency": "Max latency",
+      "rtf": "RTF",
+      "rtfLabel": "Real-time factor",
+      "approxRam": "Approx. host RAM (RSS)",
+      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
+      "latencyChart": "Latency (ms)",
+      "rtfChart": "Real-time factor",
+      "sources": "Audio sources",
+      "noSources": "No sources attached",
+      "primaryFallback": "primary (fallback)",
+      "notMeasured": "n/a",
+      "unitMs": "ms",
+      "unitKhz": "kHz",
+      "unitSec": "s",
+      "sectionAudio": "Audio",
+      "queueDepth": "Queue depth",
+      "queueDepthChart": "Queue depth",
+      "droppedChunks": "Dropped chunks",
+      "queueCapacity": "Capacity",
+      "lastSeen": "Last seen",
+      "lastSeenNever": "No detections yet",
+      "deviceHelp": "Das Rechengerät, auf dem dieses Modell die Inferenz ausführt (CPU, GPU oder unbekannt).",
+      "paused": "Pausiert",
+      "pausedScheduleHelp": "Dieses Modell läuft nur nach Zeitplan und ist derzeit pausiert, sodass es keine Audiodaten verarbeitet.",
+      "activityPaused": "Durch Zeitplan pausiert",
+      "lastHeard": "Zuletzt gehört",
+      "lastHeardHint": "Aktuelle Vorhersagen über dem Schwellenwert, zur Diagnose. Enthält Nicht-Vogel- und außerhalb des Bereichs liegende Ergebnisse, die nicht als Erkennungen gespeichert werden.",
+      "lastHeardNever": "Noch nichts gehört",
+      "confidenceColumn": "Konf.",
+      "heardWhen": "Wann",
+      "coDetectedColumn": "Auch",
+      "coDetectedHelp": "Andere Modelle, die diese Art innerhalb von {seconds}s erkannt haben",
+      "outOfRangeHelp": "Außerhalb des Bereichsfilters (zur Diagnose angezeigt, nicht als Erkennung gespeichert)",
+      "peak": "Peak",
+      "activityActive": "Inference active",
+      "activityIdle": "Idle",
+      "throughput": "Throughput",
+      "throughputUnit": "/s",
+      "throughputChart": "Throughput (/s)",
+      "errorRate": "Error rate",
+      "loadFailures": "Load failures",
+      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
+      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
+      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
+      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
+      "throughputHelp": "Segments analysed per second by this model.",
+      "errorRateHelp": "Share of analysis attempts that failed.",
+      "loadFailuresHelp": "Number of times this model failed to load.",
+      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
+      "invocationsHelp": "Total audio segments this model has analysed since startup.",
+      "noModelsHint": "No audio source configured yet?",
+      "noModelsHintLink": "Configure audio sources"
+    },
     "metrics": {
       "cpu": "CPU",
       "memory": "Speicher",
@@ -1539,6 +1648,35 @@
     "reattach": "Wieder anhängen"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Übersicht",
+        "patterns": "Aktivitätsmuster",
+        "trends": "Trends",
+        "biodiversity": "Artenvielfalt",
+        "quality": "Überprüfung & Genauigkeit"
+      },
+      "aria": {
+        "tabs": "Analysebereiche"
+      },
+      "controls": {
+        "source": "Quelle",
+        "sourceAll": "Alle Quellen",
+        "sourceComingSoon": "Die Filterung nach Quelle kommt in einem späteren Update.",
+        "speciesNotApplicable": "Die Diagramme in diesem Bereich filtern nicht nach Art."
+      },
+      "card": {
+        "error": "Dieses Diagramm konnte nicht geladen werden",
+        "retry": "Erneut versuchen",
+        "notEnoughData": "Noch nicht genügend Daten",
+        "notEnoughDataHint": "Dieses Diagramm benötigt mindestens {min} Datenpunkte. Nimm weiter auf und schau bald wieder vorbei.",
+        "export": "Exportieren",
+        "exportComingSoon": "CSV-Export kommt bald."
+      },
+      "comingSoon": {
+        "description": "Dieser Bereich befindet sich im Aufbau und kommt in einem kommenden Update."
+      }
+    },
     "title": "Übersicht",
     "loadingError": "Fehler beim Laden einiger Analysedaten. Bitte versuchen Sie es später erneut.",
     "stats": {
@@ -1619,6 +1757,7 @@
         "dateTime": "Datum & Zeit",
         "species": "Art",
         "confidence": "Konfidenz",
+        "source": "Quelle",
         "timeOfDay": "Tageszeit"
       },
       "noRecentDetections": "Keine aktuellen Erkennungen gefunden",
@@ -1719,6 +1858,14 @@
     },
     "errors": {
       "loadFailed": "Analysedaten konnten nicht geladen werden. Bitte versuchen Sie es erneut."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -3653,16 +3800,22 @@
         "configureActions": "Aktionen konfigurieren",
         "actionsConfigured": "Konfiguriert",
         "list": {
-          "threshold": "Schwellenwert:",
-          "interval": "Intervall:",
-          "intervalNone": "Keines",
-          "actionBadge": "Aktion",
           "editTitle": "Konfiguration bearbeiten",
           "removeTitle": "Konfiguration entfernen"
         },
         "emptyState": {
           "title": "Noch keine Konfigurationen.",
           "description": "Klicken Sie auf \"Konfiguration hinzufügen\", um die Artenerkennungseinstellungen anzupassen."
+        },
+        "table": {
+          "columnScientificName": "Wissenschaftlicher Name",
+          "intervalDefault": "Standard",
+          "intervalDefaultTooltip": "0 = globales Standardintervall verwenden",
+          "noActions": "Keines",
+          "searchPlaceholder": "Arten suchen...",
+          "noResults": "Keine passenden Konfigurationen",
+          "editDisabledReason": "Speichern oder schließen Sie den aktuellen Editor, bevor Sie eine andere Art bearbeiten",
+          "actionsDisabledBusy": "Bitte warten Sie, bis der aktuelle Vorgang abgeschlossen ist"
         }
       },
       "synonyms": {
@@ -4439,6 +4592,11 @@
       "removeCertificate": "Zertifikat entfernen",
       "fileReadError": "Datei konnte nicht gelesen werden",
       "loading": "Zertifikatsinformationen werden geladen..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {
@@ -4542,7 +4700,8 @@
         "invalidUrl": "Ungültiges URL-Format. Geben Sie eine vollständige URL ein, z. B. rtsp://host:port/pfad",
         "unsupportedScheme": "Nicht unterstütztes URL-Schema \"{scheme}\". Verwenden Sie rtsp, rtsps, http, https, rtmp oder udp",
         "blockedDestination": "Dieses Ziel ist aus Sicherheitsgründen gesperrt",
-        "connectionFailed": "Verbindung zum Stream konnte nicht hergestellt werden. Überprüfen Sie, ob die URL korrekt ist und der Stream erreichbar ist"
+        "connectionFailed": "Verbindung zum Stream konnte nicht hergestellt werden. Überprüfen Sie, ob die URL korrekt ist und der Stream erreichbar ist",
+        "noAudioTrack": "Der Stream enthält keine Audiospur. Es können nur Streams mit Audio verwendet werden"
       }
     },
     "debug": {
@@ -4836,7 +4995,13 @@
     "bannerTitle": "Neustart erforderlich",
     "bannerMessage": "Konfigurationsänderungen erfordern einen Neustart:",
     "bannerAction": "Jetzt neu starten",
-    "restartFailed": "Neustart konnte nicht eingeleitet werden"
+    "restartFailed": "Neustart konnte nicht eingeleitet werden",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Hilfe & Support",

@@ -32,7 +32,7 @@ func testNotes() []datastore.Note {
 		{
 			ID:             1,
 			CommonName:     "American Robin",
-			ScientificName: "Turdus migratorius",
+			ScientificName: sciAmericanRobin,
 			Confidence:     0.85,
 			Date:           today,
 			Time:           "08:30:00",
@@ -40,7 +40,7 @@ func testNotes() []datastore.Note {
 		{
 			ID:             2,
 			CommonName:     "Blue Jay",
-			ScientificName: "Cyanocitta cristata",
+			ScientificName: sciBlueJay,
 			Confidence:     0.72,
 			Date:           today,
 			Time:           "09:15:00",
@@ -83,13 +83,13 @@ func TestDailySpeciesSummary_DefaultParams(t *testing.T) {
 	notes := testNotes()
 
 	// Key assertion: GetTopBirdsData must be called with today's date and the raw limit (0 = no limit)
-	mockDS.On("GetTopBirdsData", today, 0.0, 0).Return(notes, nil).Once()
+	mockDS.On("GetTopBirdsData", mock.Anything, today, 0.0, 0).Return(notes, nil).Once()
 
 	// aggregateDailySpeciesData calls GetBatchHourlyOccurrences for hourly counts
-	mockDS.On("GetBatchHourlyOccurrences", today, mock.Anything, 0.0).
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, today, mock.Anything, 0.0).
 		Return(map[string][24]int{
-			"American Robin": {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			"Blue Jay":       {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			sciAmericanRobin: {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			sciBlueJay:       {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		}, nil).Once()
 
 	rec := executeRequest(t, e, http.MethodGet, "/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)
@@ -116,7 +116,7 @@ func TestSpeciesSummary_DefaultParams(t *testing.T) {
 
 	mockData := []datastore.SpeciesSummaryData{
 		{
-			ScientificName: "Turdus migratorius",
+			ScientificName: sciAmericanRobin,
 			CommonName:     "American Robin",
 			SpeciesCode:    "amerob",
 			Count:          42,
@@ -148,7 +148,7 @@ func TestNewSpeciesDetections_DefaultParams(t *testing.T) {
 
 	mockData := []datastore.NewSpeciesData{
 		{
-			ScientificName: "Turdus migratorius",
+			ScientificName: sciAmericanRobin,
 			CommonName:     "American Robin",
 			FirstSeenDate:  "2025-01-15",
 			CountInPeriod:  5,
@@ -390,11 +390,11 @@ func TestDailySpeciesSummary_DefaultParams_AfterMigration(t *testing.T) {
 	notes := testNotes()
 
 	// After migration, the API handler still passes limit=0 (its default for "no limit param").
-	mockDS.On("GetTopBirdsData", today, 0.0, 0).Return(notes, nil).Once()
-	mockDS.On("GetBatchHourlyOccurrences", today, mock.Anything, 0.0).
+	mockDS.On("GetTopBirdsData", mock.Anything, today, 0.0, 0).Return(notes, nil).Once()
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, today, mock.Anything, 0.0).
 		Return(map[string][24]int{
-			"American Robin": {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			"Blue Jay":       {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			sciAmericanRobin: {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			sciBlueJay:       {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		}, nil).Once()
 
 	rec := executeRequest(t, e, http.MethodGet, "/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)

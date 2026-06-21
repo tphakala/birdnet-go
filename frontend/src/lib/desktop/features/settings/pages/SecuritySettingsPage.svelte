@@ -43,6 +43,7 @@
     securitySettings,
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
+  import { fetchRestartStatus } from '$lib/stores/restart.svelte';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
   import { toastActions } from '$lib/stores/toast';
@@ -191,9 +192,13 @@
       certInfo = await settingsAPI.tls.generateSelfSigned({
         validity: settings?.selfSignedValidity ?? '1825d',
       });
-      // Reload settings to sync frontend with backend TLSMode change
-      await settingsActions.loadSettings();
-      settingsStore.update(state => ({ ...state, restartRequired: true }));
+      // Sync only the TLS mode the backend just persisted. A full loadSettings()
+      // reload would overwrite the whole store and discard any unsaved edits the
+      // user made in other Security fields. The backend sets mode to "selfsigned".
+      settingsActions.syncTLSMode(certInfo?.mode ?? 'selfsigned');
+      // The backend marks restart-required for TLS cert operations; refresh the
+      // shared restart state so the global RestartBanner reflects it.
+      await fetchRestartStatus();
       toastActions.success(t('settings.security.tls.generateSuccess'));
     } catch (err) {
       toastActions.error(
@@ -213,9 +218,13 @@
         privateKey: uploadKey,
         caCertificate: uploadCA || undefined,
       });
-      // Reload settings to sync frontend with backend TLSMode change
-      await settingsActions.loadSettings();
-      settingsStore.update(state => ({ ...state, restartRequired: true }));
+      // Sync only the TLS mode the backend just persisted. A full loadSettings()
+      // reload would overwrite the whole store and discard any unsaved edits the
+      // user made in other Security fields. The backend sets mode to "manual".
+      settingsActions.syncTLSMode(certInfo?.mode ?? 'manual');
+      // The backend marks restart-required for TLS cert operations; refresh the
+      // shared restart state so the global RestartBanner reflects it.
+      await fetchRestartStatus();
       toastActions.success(t('settings.security.tls.uploadSuccess'));
       // Clear upload form on success
       uploadCert = '';
@@ -238,9 +247,14 @@
     try {
       await settingsAPI.tls.deleteCertificate();
       certInfo = null;
-      // Reload settings to sync frontend with backend TLSMode reset to none
-      await settingsActions.loadSettings();
-      settingsStore.update(state => ({ ...state, restartRequired: true }));
+      // Sync only the TLS mode the backend just persisted (reset to none). The
+      // DELETE endpoint returns no body, so use "" directly. A full loadSettings()
+      // reload would overwrite the whole store and discard any unsaved edits the
+      // user made in other Security fields.
+      settingsActions.syncTLSMode('');
+      // The backend marks restart-required for TLS cert operations; refresh the
+      // shared restart state so the global RestartBanner reflects it.
+      await fetchRestartStatus();
       toastActions.success(t('settings.security.tls.deleteSuccess'));
     } catch (err) {
       toastActions.error(
@@ -709,7 +723,7 @@
         label={t('settings.security.baseUrlLabel')}
         placeholder={t('settings.security.placeholders.baseUrl')}
         helpText={t('settings.security.baseUrlHelp')}
-        pattern="^https?://[^/:]+.*$"
+        pattern="^https?://[^\/:]+.*$"
         validationMessage={t('settings.security.baseUrlValidation')}
         disabled={store.isLoading || store.isSaving}
         onchange={updateBaseUrl}

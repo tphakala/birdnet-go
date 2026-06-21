@@ -46,12 +46,17 @@ export const LABEL_LEAD_IN_SECONDS = 1.5;
  * Diff two pending snapshots, returning species with new activity for a given source.
  * Returns species that are newly appeared OR have an increased hitCount (new inference hit).
  * Filters by sourceID and ignores rejected status.
+ *
+ * Generic over the element type so the concrete input type is preserved on the way
+ * out: callers passing PendingDetection[] get PendingDetection[] back, keeping fields
+ * like scientificName strictly typed (string, not string | undefined) for the label
+ * builders that localize the display name.
  */
-export function diffPendingSnapshot(
-  prev: PendingEntry[],
-  curr: PendingEntry[],
+export function diffPendingSnapshot<T extends PendingEntry>(
+  prev: T[],
+  curr: T[],
   activeSourceID: string
-): PendingEntry[] {
+): T[] {
   const prevBySpecies = new Map(
     prev.filter(d => d.sourceID === activeSourceID).map(d => [d.species, d])
   );
@@ -141,4 +146,36 @@ export function computeWallClockAtPlayhead(
 export function nextYSlot(counter: number, maxSlots: number): { slot: number; next: number } {
   const slot = counter % maxSlots;
   return { slot, next: counter + 1 };
+}
+
+/**
+ * Build a queued overlay label for one pending detection.
+ *
+ * Centralizes the lead-in back-dating and the display-text choice so the
+ * dashboard MiniSpectrogram and the full-page LiveStreamPage stay in lockstep.
+ * The localizer (localizeSpeciesName) is injected so this module stays pure (no
+ * dependency on the visitor-dictionary store) and the text choice is unit
+ * testable. The label follows the same per-visitor localization as the rest of
+ * the dashboard; with that feature gated off, localize falls back to the
+ * server-locale common name.
+ *
+ * Note: text is fixed at queue time and does not react to a later UI-locale
+ * switch. Overlay labels are ephemeral (pruned within ~60s), so a label left
+ * stale by a mid-session locale change clears on its own.
+ */
+export function buildQueuedLabel(
+  det: {
+    species: string;
+    firstDetected: number;
+    audioCapturedAt?: number;
+    scientificName?: string;
+  },
+  ySlot: number,
+  localize: (scientificName: string | undefined, fallbackCommonName: string) => string
+): QueuedLabel {
+  return {
+    text: localize(det.scientificName, det.species),
+    firstDetected: (det.audioCapturedAt ?? det.firstDetected) - LABEL_LEAD_IN_SECONDS,
+    ySlot,
+  };
 }

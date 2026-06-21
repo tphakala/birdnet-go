@@ -413,6 +413,64 @@ func TestTaxonomyInfoJSONSerialization(t *testing.T) {
 	assert.Len(t, subspecies, 1)
 }
 
+// TestGetAllSpecies_LocalizedSecondaryModel verifies that GetAllSpecies serves
+// secondary-model species (a scientific-only bat label resolved via the batch
+// localizer) with their localized common name, sourced from the controller's
+// cached resolver-built maps rather than the raw primary BirdNET.Labels.
+func TestGetAllSpecies_LocalizedSecondaryModel(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species")
+	t.Attr("feature", "localized-name-resolution")
+
+	e := echo.New()
+	controller := &Controller{
+		Echo:  e,
+		Group: e.Group("/api/v2"),
+	}
+	controller.Settings.Store(&conf.Settings{})
+
+	// Wire a batch-capable resolver so the scientific-only bat label gets a
+	// Finnish localized name, then populate the cached maps the way production
+	// does (control_monitor -> UpdateCommonNameMap with the AllLabels union).
+	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	controller.UpdateCommonNameMap([]string{
+		"Parus major_Great Tit",
+		"Barbastella barbastellus",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/all", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetAllSpecies(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AllSpeciesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+	byScientific := make(map[string]RangeFilterSpecies, len(response.Species))
+	for _, s := range response.Species {
+		byScientific[s.ScientificName] = s
+	}
+
+	bat, ok := byScientific["Barbastella barbastellus"]
+	require.True(t, ok, "secondary-model bat species must be present in /species/all")
+	assert.Equal(t, "mopsilepakko", bat.CommonName, "bat must carry its localized common name")
+
+	tit, ok := byScientific["Parus major"]
+	require.True(t, ok, "primary species must still be present")
+	assert.Equal(t, "Great Tit", tit.CommonName)
+
+	// Response must be deterministically sorted by scientific name.
+	require.Len(t, response.Species, 2)
+	assert.Equal(t, "Barbastella barbastellus", response.Species[0].ScientificName, "response must be sorted by scientific name")
+	assert.Equal(t, "Parus major", response.Species[1].ScientificName)
+
+	assert.Equal(t, len(response.Species), response.Count)
+}
+
 // TestGetAllSpecies tests the GetAllSpecies endpoint returns all BirdNET labels.
 func TestGetAllSpecies(t *testing.T) {
 	t.Parallel()

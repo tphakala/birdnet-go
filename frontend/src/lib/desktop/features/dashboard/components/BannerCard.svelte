@@ -303,8 +303,7 @@
               aria-label={t('dashboard.banner.descriptionPlaceholder')}
               class="w-full resize-y border-0 border-b-2 border-transparent bg-transparent text-sm leading-relaxed text-[var(--color-base-content)]/70 placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
               rows="2"
-              oninput={e => update({ description: textareaValue(e) })}
-            ></textarea>
+              oninput={e => update({ description: textareaValue(e) })}></textarea>
 
             {#if config.showWeather}
               <div

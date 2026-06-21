@@ -50,7 +50,7 @@
   import SpeciesTable from '$lib/desktop/features/settings/components/SpeciesTable.svelte';
   import SpeciesListCard from '$lib/desktop/features/settings/components/SpeciesListCard.svelte';
   import SpeciesConfigEditor from '$lib/desktop/features/settings/components/SpeciesConfigEditor.svelte';
-  import SpeciesConfigList from '$lib/desktop/features/settings/components/SpeciesConfigList.svelte';
+  import SpeciesConfigTable from '$lib/desktop/features/settings/components/SpeciesConfigTable.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -59,8 +59,15 @@
   import {
     buildSpeciesNameMaps,
     isSpeciesInList,
+    normalizeForLookup,
     type SpeciesNameMaps,
   } from '$lib/utils/speciesNames';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import {
+    rankPredictions,
+    toLocalizedPredictions,
+    type SpeciesPrediction,
+  } from '$lib/utils/speciesPredictions';
   import {
     ArrowLeftRight,
     ChevronRight,
@@ -261,10 +268,30 @@
   // Derived species list: contains both common and scientific names for bidirectional search
   let allSpecies = $derived(speciesListState.data);
 
+  // Predictions paired with their localized labels and pre-normalized lookup keys.
+  // Rebuilt only when the species list, name maps, or visitor locale change
+  // (localizeSpeciesLabel reads the dictionary store, so this $derived tracks it and
+  // refreshes labels on locale switch). Precomputing here keeps ~12k dictionary
+  // lookups and NFC normalizations OUT of the per-keystroke filter hot path.
+  let searchableSpecies = $derived(toLocalizedPredictions(allSpecies, localizeSpeciesLabel));
+
   // Species predictions state
   let includePredictions = $state<string[]>([]);
   let excludePredictions = $state<string[]>([]);
   let configPredictions = $state<string[]>([]);
+
+  // Range-filtered probable-species set for the configured location, keyed by
+  // normalized common AND scientific name. Lets the picker autocomplete rank
+  // species probable at this location ahead of global look-alikes (e.g. native
+  // woodpeckers ahead of exotic ones). Loaded independently of the Active tab,
+  // since the pickers live on the Custom/Include/Exclude tabs.
+  let localSpeciesSet = $state<Set<string>>(new Set());
+  let isLoadingLocalSpecies = false;
+  // Inputs (location + range threshold) the locality set was last loaded for. Lets the
+  // loaders refresh when the user changes location or threshold while skipping a
+  // redundant refetch when those inputs are unchanged. Plain (non-reactive) like the
+  // loading guard; the picker-tab effect reads it via untrack.
+  let localSpeciesKey: string | null = null;
 
   // Input values for species inputs
   let includeInputValue = $state('');
@@ -289,7 +316,7 @@
   }
 
   function extractScientificName(prediction: string): string {
-    // Format: "ScientificName (CommonName)" — extract before the first opening paren
+    // Format: "ScientificName (CommonName)": extract before the first opening paren
     // Use indexOf (not lastIndexOf) since scientific names never contain parentheses
     // but common names can, e.g., "Herring Gull (European)"
     const parenIndex = prediction.indexOf(' (');
@@ -640,11 +667,18 @@
       }>('/api/v2/range/species/test', {
         latitude: birdnetData.latitude,
         longitude: birdnetData.longitude,
-        threshold: birdnetData.rangeFilter?.threshold ?? 0.01,
+        threshold: birdnetData.rangeFilter?.threshold ?? DEFAULT_RANGE_FILTER_THRESHOLD,
       });
 
       // Cross-reference with include/exclude and config lists (using captured values)
       const threshold = response.threshold;
+
+      // Feed the picker locality set from the same probable list. Refresh it on every
+      // active-species reload (e.g. after a location change or retry) so it never goes
+      // stale. The Active tab loads first by default, so this also primes the set and
+      // stamps the key, so the tab-independent loader below normally never refetches.
+      localSpeciesSet = buildLocalSpeciesSet(response.species ?? [], threshold);
+      localSpeciesKey = localSpeciesKeyFor(birdnetData);
 
       // Check if a species (by common or scientific name) is in a name set.
       // Handles users who add species by scientific name to include/config lists.
@@ -653,13 +687,15 @@
         commonName: string,
         scientificName: string
       ): boolean =>
-        nameSet.has(commonName.toLowerCase()) || nameSet.has(scientificName.toLowerCase());
+        nameSet.has(normalizeForLookup(commonName)) ||
+        nameSet.has(normalizeForLookup(scientificName));
 
-      const includeSet = new Set((currentInclude ?? []).map(s => s.toLowerCase()));
-      const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => s.toLowerCase()));
+      const includeSet = new Set((currentInclude ?? []).map(s => normalizeForLookup(s)));
+      const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => normalizeForLookup(s)));
 
       // Filter species that pass the threshold OR are manually included
-      const mappedSpecies: ActiveSpecies[] = response.species
+      // Go serializes a nil slice as JSON null, so guard before iterating.
+      const mappedSpecies: ActiveSpecies[] = (response.species ?? [])
         .filter(
           s => s.score >= threshold || isInNameSet(includeSet, s.commonName, s.scientificName)
         )
@@ -714,6 +750,70 @@
     }
   }
 
+  // Build the picker locality set (normalized common + scientific names) from a
+  // range-filter probable-species response, keeping only species at/above the
+  // threshold (i.e. actually probable at the configured location).
+  // Identifies the inputs the locality set was last loaded for, so both loaders refetch
+  // when the user changes location or the range-filter threshold but not otherwise.
+  function localSpeciesKeyFor(birdnetData: {
+    latitude: number;
+    longitude: number;
+    rangeFilter?: { threshold: number };
+  }): string {
+    const threshold = birdnetData.rangeFilter?.threshold ?? DEFAULT_RANGE_FILTER_THRESHOLD;
+    return `${birdnetData.latitude},${birdnetData.longitude},${threshold}`;
+  }
+
+  function buildLocalSpeciesSet(
+    species: Array<{ scientificName?: string; commonName?: string; score?: number }>,
+    threshold: number
+  ): Set<string> {
+    const next = new Set<string>();
+    for (const s of species) {
+      // The range-filter entry fields are all optional; a missing score must NOT
+      // pass the threshold (undefined < threshold is false), or non-probable species
+      // would be marked local and skew ranking.
+      if (typeof s.score !== 'number' || s.score < threshold) continue;
+      if (s.commonName) next.add(normalizeForLookup(s.commonName));
+      if (s.scientificName) next.add(normalizeForLookup(s.scientificName));
+    }
+    return next;
+  }
+
+  // Load the picker locality set independently of the Active tab. loadActiveSpecies
+  // also populates it, so this only fetches when the visitor opens a picker tab
+  // without having visited Active. Non-fatal on error: the picker still ranks by
+  // exact/prefix, just without local prioritization.
+  async function loadLocalSpeciesSet(birdnetData: {
+    latitude: number;
+    longitude: number;
+    locationConfigured?: boolean;
+    rangeFilter?: { threshold: number };
+  }) {
+    if (!(birdnetData.locationConfigured ?? false)) return;
+    const key = localSpeciesKeyFor(birdnetData);
+    // Skip if already loading, or already loaded for these exact inputs.
+    if (isLoadingLocalSpecies || localSpeciesKey === key) return;
+    isLoadingLocalSpecies = true;
+    try {
+      const response = await api.post<{
+        species: Array<{ scientificName: string; commonName: string; score: number }>;
+        threshold: number;
+      }>('/api/v2/range/species/test', {
+        latitude: birdnetData.latitude,
+        longitude: birdnetData.longitude,
+        threshold: birdnetData.rangeFilter?.threshold ?? DEFAULT_RANGE_FILTER_THRESHOLD,
+      });
+      // Go serializes a nil slice as JSON null, so guard before iterating.
+      localSpeciesSet = buildLocalSpeciesSet(response.species ?? [], response.threshold);
+      localSpeciesKey = key;
+    } catch (error) {
+      logger.error('Failed to load local species set for picker ranking:', error);
+    } finally {
+      isLoadingLocalSpecies = false;
+    }
+  }
+
   // Auto-load active species when tab becomes active and settings are loaded
   $effect(() => {
     // Track these as dependencies - re-run when they change
@@ -754,6 +854,35 @@
         loadActiveSpecies(birdnetData);
       });
     }
+  });
+
+  // Load the picker locality set when location is configured but the visitor is on a
+  // picker tab (Custom/Include/Exclude) rather than Active, so local prioritization
+  // works without first visiting Active. The Active tab's own loader covers that tab
+  // and feeds the same set, so this skips it; it also skips once the set is loaded.
+  $effect(() => {
+    const currentTab = activeTab;
+    const settingsLoading = store.isLoading;
+    const birdnetData = store.formData?.birdnet;
+    const hasOriginalData = store.originalData?.birdnet !== undefined;
+    if (settingsLoading || !hasOriginalData || !birdnetData) return;
+
+    const hasRealCoordinates =
+      birdnetData.latitude !== undefined &&
+      birdnetData.longitude !== undefined &&
+      (birdnetData.locationConfigured ?? false);
+    if (!hasRealCoordinates || currentTab === 'active') return;
+    // Refetch only when the location/threshold inputs differ from what the set was last
+    // loaded for, so changing location on a picker tab refreshes ranking but an
+    // unrelated birdnet edit or tab switch does not. Read the key untracked so the
+    // loader's own write to it cannot re-trigger this effect.
+    if (untrack(() => localSpeciesKey) === localSpeciesKeyFor(birdnetData)) return;
+
+    // Defer out of the effect's synchronous context (same rationale as the active
+    // species loader above) to avoid mutating state during the reactive update.
+    queueMicrotask(() => {
+      loadLocalSpeciesSet(birdnetData);
+    });
   });
 
   // CSV download function for active species
@@ -812,6 +941,61 @@
     clearTimeout(debounceTimeouts.config);
   });
 
+  // Resolve a canonical species value (server-locale common name or scientific
+  // name from allNames) to its visitor-locale display label. Reads speciesNameMaps
+  // and the dictionary store, so callers must invoke it in a reactive context to
+  // re-run on locale change. Passed to the pickers as localizeLabel; the predictions
+  // and stored values stay canonical.
+  function localizeSpeciesLabel(value: string): string {
+    const lower = normalizeForLookup(value);
+    const scientific = speciesNameMaps.scientificToCommon.has(lower)
+      ? value
+      : speciesNameMaps.commonToScientific.get(lower);
+    return localizeSpeciesName(scientific, value);
+  }
+
+  // Maximum predictions surfaced per picker. The source list is the full global
+  // multi-model species union (~12k entries), so the cap keeps the dropdown usable;
+  // rankPredictions guarantees exact, prefix, and locally-relevant matches survive
+  // it instead of being cut off by an arbitrary alphabetical slice.
+  const PREDICTION_LIMIT = 25;
+
+  // Fallback range-filter threshold used when the user has not configured one, matching
+  // the range-filter test endpoint's own default. Keeps probable-species probes
+  // consistent across the active-species and picker-locality loaders.
+  const DEFAULT_RANGE_FILTER_THRESHOLD = 0.01;
+
+  // True when a prediction's canonical value is in the range-filtered probable set
+  // for the configured location. The set is keyed by normalized common AND scientific
+  // names, so the prediction's pre-normalized canonical value (a common name) hits
+  // directly; the scientific alias is checked as a fallback for scientific-only entries.
+  function isLocalPrediction(prediction: SpeciesPrediction): boolean {
+    const valueKey = prediction.normalizedValue ?? normalizeForLookup(prediction.value);
+    if (localSpeciesSet.has(valueKey)) return true;
+    // Bidirectional alias fallback for range entries that carried only one name form:
+    // resolve a common-name value to its scientific alias, and a scientific-name value
+    // to its common alias, then re-check the set.
+    const scientific = speciesNameMaps.commonToScientific.get(valueKey);
+    if (scientific !== undefined && localSpeciesSet.has(normalizeForLookup(scientific)))
+      return true;
+    const common = speciesNameMaps.scientificToCommon.get(valueKey);
+    return common !== undefined && localSpeciesSet.has(normalizeForLookup(common));
+  }
+
+  // Build ranked, capped autocomplete predictions for a picker. rankPredictions
+  // matches the typed input against each species' canonical value OR localized label
+  // (so a visitor can search by the name they see), drops species already in
+  // `excludeList` via the exclude predicate, ranks exact > local > non-local, and
+  // caps to PREDICTION_LIMIT. Returns canonical values; the picker localizes them.
+  function computeRankedPredictions(input: string, excludeList: string[]): string[] {
+    return rankPredictions(searchableSpecies, input, {
+      limit: PREDICTION_LIMIT,
+      isLocal: isLocalPrediction,
+      // Alias-aware exclusion; rankPredictions only runs it on matched candidates.
+      exclude: prediction => isSpeciesInList(prediction.value, excludeList, speciesNameMaps),
+    }).map(prediction => prediction.value);
+  }
+
   function updateIncludePredictions(input: string) {
     clearTimeout(debounceTimeouts.include);
     debounceTimeouts.include = window.setTimeout(() => {
@@ -819,15 +1003,7 @@
         includePredictions = [];
         return;
       }
-
-      const inputLower = input.toLowerCase();
-      includePredictions = allSpecies
-        .filter(
-          species =>
-            species.toLowerCase().includes(inputLower) &&
-            !isSpeciesInList(species, settings.include, speciesNameMaps)
-        )
-        .slice(0, 10);
+      includePredictions = computeRankedPredictions(input, settings.include);
     }, 150); // Debounce by 150ms
   }
 
@@ -838,15 +1014,7 @@
         excludePredictions = [];
         return;
       }
-
-      const inputLower = input.toLowerCase();
-      excludePredictions = allSpecies
-        .filter(
-          species =>
-            species.toLowerCase().includes(inputLower) &&
-            !isSpeciesInList(species, settings.exclude, speciesNameMaps)
-        )
-        .slice(0, 10);
+      excludePredictions = computeRankedPredictions(input, settings.exclude);
     }, 150); // Debounce by 150ms
   }
 
@@ -857,18 +1025,10 @@
         configPredictions = [];
         return;
       }
-
-      const inputLower = input.toLowerCase();
       // Exclude the currently-editing species from the collision check so its
       // own alias remains selectable during rename operations.
       const existingConfigKeys = Object.keys(settings.config).filter(key => key !== editingSpecies);
-      configPredictions = allSpecies
-        .filter(
-          species =>
-            species.toLowerCase().includes(inputLower) &&
-            !isSpeciesInList(species, existingConfigKeys, speciesNameMaps)
-        )
-        .slice(0, 10);
+      configPredictions = computeRankedPredictions(input, existingConfigKeys);
     }, 150); // Debounce by 150ms
   }
 
@@ -1292,6 +1452,7 @@
     scientificNameMap={speciesNameMaps.commonToScientific}
     scientificToCommonMap={speciesNameMaps.scientificToCommon}
     predictions={includePredictions}
+    localizeLabel={localizeSpeciesLabel}
     bind:inputValue={includeInputValue}
     inputLabel={t('settings.species.addSpeciesToIncludeLabel')}
     inputPlaceholder={t('settings.species.addSpeciesToInclude')}
@@ -1313,6 +1474,7 @@
     scientificNameMap={speciesNameMaps.commonToScientific}
     scientificToCommonMap={speciesNameMaps.scientificToCommon}
     predictions={excludePredictions}
+    localizeLabel={localizeSpeciesLabel}
     bind:inputValue={excludeInputValue}
     inputLabel={t('settings.species.addSpeciesToExcludeLabel')}
     inputPlaceholder={t('settings.species.addSpeciesToExclude')}
@@ -1327,39 +1489,6 @@
 <!-- Custom Configuration Tab Content -->
 {#snippet configTabContent()}
   <div class="space-y-4">
-    <!-- Header with Add button -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <div class="p-1.5 rounded-lg bg-teal-500/10">
-          <Settings2 class="w-4 h-4 text-teal-500" />
-        </div>
-        <h3
-          class="text-xs font-semibold uppercase tracking-wider text-[var(--color-base-content)]/60"
-        >
-          {t('settings.species.customConfiguration.title')}
-        </h3>
-        {#if Object.keys(settings.config).length > 0}
-          <span
-            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-[var(--color-base-content)]/60"
-          >
-            {Object.keys(settings.config).length}
-          </span>
-        {/if}
-      </div>
-      {#if !editorOpen}
-        <button
-          type="button"
-          class="inline-flex items-center justify-center gap-2 h-8 px-3 text-xs font-medium rounded-lg bg-teal-500 text-white hover:bg-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          data-testid="add-configuration-button"
-          onclick={() => openEditor()}
-          disabled={store.isLoading || store.isSaving}
-        >
-          <Plus class="size-3.5" />
-          {t('settings.species.customConfiguration.addConfiguration')}
-        </button>
-      {/if}
-    </div>
-
     <!-- Editor panel (conditional, keyed to reset state on species change) -->
     {#if editorOpen}
       <div bind:this={editorElement}>
@@ -1368,6 +1497,7 @@
             species={editingSpecies}
             config={editingSpecies ? (safeGet(settings.config, editingSpecies) ?? null) : null}
             predictions={configPredictions}
+            localizeLabel={localizeSpeciesLabel}
             disabled={store.isLoading}
             saving={store.isSaving}
             onSave={handleEditorSave}
@@ -1385,12 +1515,13 @@
       </div>
     {/if}
 
-    <!-- Config list -->
-    <SpeciesConfigList
+    <!-- Config table (owns its header, count badge, search, and Add button) -->
+    <SpeciesConfigTable
       configs={settings.config}
       scientificNameMap={speciesNameMaps.commonToScientific}
       {editingSpecies}
       disabled={store.isLoading || store.isSaving}
+      onAdd={() => openEditor()}
       onEdit={openEditor}
       onDelete={species => {
         removeConfig(species);

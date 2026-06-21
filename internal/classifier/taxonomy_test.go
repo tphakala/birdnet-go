@@ -1,11 +1,46 @@
 package classifier
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestGeneratePlaceholderCode_MultibyteSingleWordScientificName guards against
+// slicing a single-word scientific name by bytes. A genus whose first rune spans
+// 3+ bytes (e.g. CJK) was cut mid-rune by words[0][:2], so strings.ToUpper
+// sanitized the partial bytes into U+FFFD replacement characters and the prefix
+// became garbage. The prefix must instead be the first two runes, uppercased.
+func TestGeneratePlaceholderCode_MultibyteSingleWordScientificName(t *testing.T) {
+	t.Parallel()
+
+	// "中a" is a single Fields() word whose first rune is 3 bytes; the second
+	// element forces the underscore branch that builds a prefix.
+	code := GeneratePlaceholderCode("中a_Common")
+
+	assert.True(t, utf8.ValidString(code), "placeholder code must be valid UTF-8")
+	assert.False(t, strings.ContainsRune(code, utf8.RuneError),
+		"placeholder code must not contain a U+FFFD replacement character")
+	assert.True(t, strings.HasPrefix(code, "中A"),
+		"prefix must be the first two runes uppercased, got %q", code)
+}
+
+// TestGeneratePlaceholderCode_MultibyteBinomialScientificName guards the two-word
+// branch: it must use the first rune of each word, not the first byte. Reading
+// the first byte of a multibyte genus/species produces the wrong characters.
+func TestGeneratePlaceholderCode_MultibyteBinomialScientificName(t *testing.T) {
+	t.Parallel()
+
+	// Two Fields() words, each starting with a 3-byte rune.
+	code := GeneratePlaceholderCode("中文 鸟类_Common")
+
+	assert.True(t, utf8.ValidString(code), "placeholder code must be valid UTF-8")
+	assert.True(t, strings.HasPrefix(code, "中鸟"),
+		"prefix must be the first rune of each word uppercased, got %q", code)
+}
 
 // TestRemapLegacyCode verifies that retired eBird species codes are
 // remapped to their current replacements.

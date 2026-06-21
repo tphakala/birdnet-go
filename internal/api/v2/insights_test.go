@@ -15,7 +15,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
 
-// mockInsightsRepo is a simple mock for handler tests.
+// mockInsightsRepo is a simple mock for handler tests. When err is non-nil every
+// query method returns it, which exercises the handlers' error-mapping path.
 type mockInsightsRepo struct {
 	phantomSpecies  []repository.PhantomSpecies
 	expectedSpecies []repository.ExpectedSpecies
@@ -23,30 +24,37 @@ type mockInsightsRepo struct {
 	newArrivals     []repository.NewArrival
 	goneQuiet       []repository.GoneQuietSpecies
 	dashboardKPIs   *repository.DashboardKPIs
+	err             error
+
+	// lastTzOffsetSeconds records the most recent timezone offset forwarded by a handler, so
+	// tests can assert the handler actually threads analyticsTZOffset into the repository rather
+	// than passing 0 or a stale reference time.
+	lastTzOffsetSeconds int
 }
 
-func (m *mockInsightsRepo) GetExpectedSpeciesToday(_ context.Context, _ []repository.TimeRange, _ *uint) ([]repository.ExpectedSpecies, error) {
-	return m.expectedSpecies, nil
+func (m *mockInsightsRepo) GetExpectedSpeciesToday(_ context.Context, _ []repository.TimeRange, _ int, _ *uint) ([]repository.ExpectedSpecies, error) {
+	return m.expectedSpecies, m.err
 }
 
 func (m *mockInsightsRepo) GetPhantomSpecies(_ context.Context, _ int64, _ int, _ float64, _ *uint) ([]repository.PhantomSpecies, error) {
-	return m.phantomSpecies, nil
+	return m.phantomSpecies, m.err
 }
 
-func (m *mockInsightsRepo) GetDawnChorusRaw(_ context.Context, _ int64, _, _ int, _ *uint) ([]repository.DawnChorusRawEntry, error) {
-	return m.dawnChorusRaw, nil
+func (m *mockInsightsRepo) GetDawnChorusRaw(_ context.Context, _ int64, _, _, _ int, _ *uint) ([]repository.DawnChorusRawEntry, error) {
+	return m.dawnChorusRaw, m.err
 }
 
 func (m *mockInsightsRepo) GetNewArrivals(_ context.Context, _ int64, _ *uint) ([]repository.NewArrival, error) {
-	return m.newArrivals, nil
+	return m.newArrivals, m.err
 }
 
 func (m *mockInsightsRepo) GetGoneQuiet(_ context.Context, _ int64, _ int, _ *uint) ([]repository.GoneQuietSpecies, error) {
-	return m.goneQuiet, nil
+	return m.goneQuiet, m.err
 }
 
-func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, _ int64, _ *uint) (*repository.DashboardKPIs, error) {
-	return m.dashboardKPIs, nil
+func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, _ int64, tzOffsetSeconds int, _ *uint) (*repository.DashboardKPIs, error) {
+	m.lastTzOffsetSeconds = tzOffsetSeconds
+	return m.dashboardKPIs, m.err
 }
 
 // setupInsightsTestController creates a minimal controller with a mock insights repo.
@@ -115,8 +123,13 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
+	// Bracket the handler's internal time.Now() so the offset assertion holds even if a DST
+	// transition lands mid-test: the handler's offset must equal the local offset at some instant
+	// during the call (before or after are the only possible values, even across a boundary).
+	beforeOffset := repository.GetTimezoneOffsetAt(time.Local, time.Now())
 	err := controller.getDashboardKPIsImpl(ctx)
 	require.NoError(t, err)
+	afterOffset := repository.GetTimezoneOffsetAt(time.Local, time.Now())
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp DashboardKPIsResponse
@@ -124,6 +137,11 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	assert.Equal(t, int64(87), resp.LifetimeSpecies)
 	assert.Equal(t, int64(42), resp.TodayDetections)
 	assert.Equal(t, 2, resp.DetectionStreak.Days)
+
+	// The handler must forward the configured-timezone offset (not 0) so the repository buckets
+	// "today" in the same zone the handler computed the day boundary in.
+	assert.Contains(t, []int{beforeOffset, afterOffset}, mockRepo.lastTzOffsetSeconds,
+		"handler must thread analyticsTZOffset into GetDashboardKPIs")
 }
 
 func TestGetMigration_Handler(t *testing.T) {
@@ -153,6 +171,82 @@ func TestGetMigration_Handler(t *testing.T) {
 	require.Len(t, resp.GoneQuiet, 1)
 	assert.Equal(t, "Great Tit", resp.NewArrivals[0].CommonName)
 	assert.Equal(t, "Eurasian Blackbird", resp.GoneQuiet[0].CommonName)
+}
+
+// TestInsightsEndpointContextErrors verifies that insights endpoints map a query
+// context error to the right HTTP status: a deadline to 408 (not 500) and a client
+// cancellation to 499 (client closed request). Regression guard for the insights
+// query-timeout consistency fix; mirrors TestAnalyticsEndpointContextErrors for the
+// insights handlers. The eBird regional endpoint is excluded because its failure
+// path is an external HTTP client, not the insights repository.
+func TestInsightsEndpointContextErrors(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "insights")
+	t.Attr("type", "error-handling")
+	t.Attr("feature", "query-timeout")
+
+	errorCases := []struct {
+		name       string
+		queryErr   error
+		wantStatus int
+		wantMsg    string
+	}{
+		{"deadline exceeded", context.DeadlineExceeded, http.StatusRequestTimeout, "Query timeout"},
+		{"client canceled", context.Canceled, StatusClientClosedRequest, "Request canceled by client"},
+	}
+
+	endpoints := []struct {
+		name   string
+		path   string
+		invoke func(*Controller, echo.Context) error
+	}{
+		{
+			name:   "expected today",
+			path:   "/api/v2/insights/expected-today",
+			invoke: func(c *Controller, ctx echo.Context) error { return c.getExpectedTodayImpl(ctx) },
+		},
+		{
+			name:   "phantom species",
+			path:   "/api/v2/insights/phantom-species",
+			invoke: func(c *Controller, ctx echo.Context) error { return c.getPhantomSpeciesImpl(ctx) },
+		},
+		{
+			name:   "dawn chorus",
+			path:   "/api/v2/insights/dawn-chorus",
+			invoke: func(c *Controller, ctx echo.Context) error { return c.getDawnChorusImpl(ctx) },
+		},
+		{
+			name:   "migration",
+			path:   "/api/v2/insights/migration",
+			invoke: func(c *Controller, ctx echo.Context) error { return c.getMigrationImpl(ctx) },
+		},
+		{
+			name:   "dashboard kpis",
+			path:   "/api/v2/dashboard/kpis",
+			invoke: func(c *Controller, ctx echo.Context) error { return c.getDashboardKPIsImpl(ctx) },
+		},
+	}
+
+	for _, ep := range endpoints {
+		for _, ec := range errorCases {
+			t.Run(ep.name+"/"+ec.name, func(t *testing.T) {
+				t.Parallel()
+				e, controller := setupInsightsTestController(t, &mockInsightsRepo{err: ec.queryErr})
+
+				req := httptest.NewRequest(http.MethodGet, ep.path, http.NoBody)
+				rec := httptest.NewRecorder()
+				ctx := e.NewContext(req, rec)
+				ctx.SetPath(ep.path)
+
+				require.NoError(t, ep.invoke(controller, ctx))
+				assert.Equal(t, ec.wantStatus, rec.Code)
+
+				var errorResponse map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errorResponse))
+				assert.Contains(t, errorResponse["message"], ec.wantMsg)
+			})
+		}
+	}
 }
 
 func TestCalculateStreak(t *testing.T) {

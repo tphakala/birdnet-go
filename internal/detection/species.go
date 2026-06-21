@@ -66,7 +66,18 @@ func ParseSpeciesString(species string) Species {
 
 // ExtractScientificName returns the scientific name portion from a
 // "ScientificName_CommonName" label string.
+//
+// It applies the same sanitization as ParseSpeciesString, in the same order
+// (trim surrounding whitespace, then drop carriage returns), before splitting,
+// so a scientific name extracted here keys identically to one obtained via
+// ParseSpeciesString. Model label files commonly carry a trailing CR on CRLF
+// lines, and a stray leading/trailing space would otherwise hash the same
+// species to two distinct keys across the call sites that mix the two
+// extractors (for example the scientific-name dedup keys in the orchestrator's
+// probable-species merge).
 func ExtractScientificName(label string) string {
+	label = strings.TrimSpace(label)
+	label = strings.ReplaceAll(label, "\r", "")
 	if sci, _, ok := strings.Cut(label, "_"); ok {
 		return sci
 	}

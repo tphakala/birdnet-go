@@ -744,6 +744,21 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 		}
 		if _, raced := p.soundLevelConsumers[sid]; raced {
 			p.soundLevelMu.Unlock()
+			// Deliberately do NOT RemoveRoute here, unlike the disable branch
+			// above. consumerID is deterministic ("soundlevel_"+sid) and
+			// Router.AddRoute rejects a duplicate consumer ID on a source, so at
+			// most one sound-level route can exist per source at a time. The only
+			// way to reach this branch is if THIS goroutine's freshly added route
+			// was already torn down externally (e.g. engine.RemoveSource ->
+			// Router.RemoveAllRoutes during a stream disconnect) before we could
+			// track it, which let a concurrent registration add and track a new
+			// route under the same consumerID. Calling RemoveRoute(sid,
+			// consumerID) now would delete that OTHER registration's live,
+			// tracked route, leaving soundLevelConsumers[sid] pointing at a route
+			// that no longer exists and silently stopping sound-level processing
+			// for the source until the next hot-reload. So the route this branch
+			// "skips" is never actually orphaned. A static review once flagged a
+			// leak here; it is a false positive under these semantics.
 			log.Debug("sound level consumer already registered concurrently, skipping",
 				logger.String("source_id", sid),
 				logger.String("consumer_id", consumerID),

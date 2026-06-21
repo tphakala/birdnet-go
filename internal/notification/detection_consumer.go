@@ -229,6 +229,16 @@ func (c *DetectionNotificationConsumer) getDefaultValue(field string, event even
 }
 
 // buildDetectionNotification creates a notification with all metadata.
+//
+// Localization note: title and message are rendered server-side from the
+// (user-configurable) templates with the species common name resolved at the
+// configured BirdNET.Locale. They are free text, not substitutable i18n params,
+// so the frontend's per-visitor species localization (localizeSpeciesName) does
+// not apply to detection notifications; they stay on the server locale. The
+// scientific_name metadata below is the hook a future per-visitor notification
+// localizer would use. Doing this resolution server-side per request was
+// rejected for the dashboard (DoS risk on resource-constrained hosts), so any
+// future fix should localize client-side from this metadata.
 func (c *DetectionNotificationConsumer) buildDetectionNotification(event events.DetectionEvent, title, message string, templateData *TemplateData) *Notification {
 	notification := NewNotification(TypeDetection, PriorityHigh, title, message).
 		WithComponent("detection").

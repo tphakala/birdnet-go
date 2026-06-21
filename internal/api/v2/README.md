@@ -179,11 +179,11 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | Method | Route                   | Handler                       | Auth | Description                                                 |
 | ------ | ----------------------- | ----------------------------- | ---- | ----------------------------------------------------------- |
 | GET    | `/range/status`         | `GetRangeFilterStatus`        | ❌   | Per-classifier geomodel coverage, auto-selection, threshold |
-| GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores` | ❌   | All species with raw geomodel scores (no threshold cutoff)  |
+| GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores` | ❌   | Raw geomodel scores, primary model only; excludes always-active secondary models (e.g. bats) by design |
 | GET    | `/range/species/count`  | `GetRangeFilterSpeciesCount`  | ❌   | Species count with range filter                             |
 | GET    | `/range/species/list`   | `GetRangeFilterSpeciesList`   | ❌   | Species list with taxonomy groups                           |
-| GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`    | ❌   | Export species list as CSV download                         |
-| POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter configuration                             |
+| GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`    | ❌   | Export species as CSV; with custom params includes always-active secondary models (matches the test endpoint); no-param export returns the persisted filter |
+| POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter; returns the active set (range-filtered birds plus always-active secondary models) |
 | POST   | `/range/rebuild`        | `RebuildRangeFilter`          | ❌   | Rebuild range filter data                                   |
 
 ### Search (`search.go`)
@@ -207,6 +207,8 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 The `GET /settings/dashboard` endpoint is intentionally public so that unauthenticated guests can render the SPA dashboard (species summary limit, layout, locale, thumbnails). The Dashboard section contains no secrets, tokens, or PII, and the layout is already exposed via `/app/config`. All mutations (PATCH) on the dashboard section remain auth-protected.
 
+**Restart-required signal:** `PUT /settings` and `PATCH /settings/:section` responses include `restart_required` (bool) and `restart_reasons` (string[]), reflecting the global restart state also served by `GET /system/restart-status`. Settings bound once at startup that cannot hot-reload set this flag: web server / TLS settings, database (`output`), logging, and TLS certificate operations. `restart_reasons` carries i18n message keys (e.g. `restart.reasons.database`), not English text; the SPA resolves them via the translation catalog. The flag is sticky (it clears when the process actually restarts) and is not cleared by reverting the change.
+
 **Quiet Hours** (`settings_audio.go`): The `realtime` settings section includes quiet hours configuration for both individual RTSP streams (`realtime.rtsp.streams[].quietHours`) and the sound card (`realtime.audio.quietHours`). Each `QuietHoursConfig` supports:
 
 - `enabled` (bool): Enable/disable quiet hours for this source
@@ -225,10 +227,11 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 | Method | Route                      | Handler               | Auth | Description                                                       |
 | ------ | -------------------------- | --------------------- | ---- | ----------------------------------------------------------------- |
-| GET    | `/species`                 | `GetSpeciesInfo`      | ❌   | Get extended species information including rarity status          |
-| GET    | `/species/all`             | `GetAllSpecies`       | ❌   | Get all BirdNET species labels (not filtered by location)         |
-| GET    | `/species/taxonomy`        | `GetSpeciesTaxonomy`  | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
-| GET    | `/species/:code/thumbnail` | `GetSpeciesThumbnail` | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
+| GET    | `/species`                          | `GetSpeciesInfo`          | ❌   | Get extended species information including rarity status          |
+| GET    | `/species/all`                      | `GetAllSpecies`           | ❌   | Get all BirdNET species labels (not filtered by location)         |
+| GET    | `/species/taxonomy`                 | `GetSpeciesTaxonomy`      | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
+| GET    | `/species/:code/thumbnail`          | `GetSpeciesThumbnail`     | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
+| GET    | `/species/dictionary/:locale`       | `ServeSpeciesDictionary`  | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
 ### Server-Sent Events (`sse.go`)
 
@@ -419,6 +422,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/system/audio/sources`          | `ListAudioSources`        | ✅   | Active audio sources (all types)     |
 | GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding  |
 | GET    | `/system/models`                 | `GetActiveModels`         | ✅   | Active model metadata                |
+| GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats/RAM/source attachment, audio pipeline metrics, per-model error rate, load failures, last detection, and metric key names for time-series lookups. |
 
 ### Events (`events.go`, `events_aggregation.go`)
 

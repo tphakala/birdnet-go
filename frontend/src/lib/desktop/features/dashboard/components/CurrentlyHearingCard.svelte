@@ -12,12 +12,14 @@ Props:
 - className?: string - Additional CSS classes (default: '')
 -->
 <script lang="ts">
-  import { Check, X } from '@lucide/svelte';
+  import { Check, Mic, X } from '@lucide/svelte';
   import { fade } from 'svelte/transition';
   import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import type { PendingDetection } from '$lib/types/pending.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { settingsStore } from '$lib/stores/settings';
 
   interface Props {
     detections: PendingDetection[];
@@ -123,8 +125,15 @@ Props:
     return elapsedTexts[key] ?? '';
   }
 
-  // Show source column only when multiple sources are present
-  let hasMultipleSources = $derived(new Set(displayDetections.map(d => d.source)).size > 1);
+  // Show source when the instance has multiple audio sources configured.
+  // Source names are private data, so this must stay settings-driven: guests
+  // never load settings, which keeps the counts at 0 and the labels hidden
+  // for unauthenticated viewers.
+  let hasMultipleSources = $derived(
+    ($settingsStore?.formData?.realtime?.audio?.sources?.length ?? 0) +
+      ($settingsStore?.formData?.realtime?.rtsp?.streams?.filter(s => s.enabled).length ?? 0) >=
+      2
+  );
 
   // Clean up pending timers on component destroy
   $effect(() => {
@@ -156,6 +165,10 @@ Props:
       {#each displayDetections as detection (`${detection.source}_${detection.scientificName}`)}
         {@const key = detection.source + detection.scientificName}
         {@const elapsedText = getElapsedForKey(key)}
+        <!-- Localized common name in the visitor's UI locale; falls back to the
+             server-provided common name, then the scientific name. Keeps the
+             "currently hearing" card consistent with the rest of the dashboard. -->
+        {@const displayName = localizeSpeciesName(detection.scientificName, detection.species)}
         <div
           class="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors duration-300
             {detection.status === 'approved'
@@ -169,26 +182,28 @@ Props:
           {#if detection.thumbnail}
             <img
               src={buildAppUrl(detection.thumbnail)}
-              alt={detection.species}
+              alt={displayName}
               class="h-8 aspect-[4/3] rounded-md object-cover"
             />
           {:else}
             <div
               class="flex h-8 aspect-[4/3] items-center justify-center rounded-md bg-[var(--color-base-content)]/10 text-xs font-bold text-[var(--color-base-content)]/50"
             >
-              {detection.species.slice(0, 2).toUpperCase()}
+              {displayName.slice(0, 2).toUpperCase()}
             </div>
           {/if}
 
           <!-- Species info -->
           <div class="flex flex-col">
             <span class="text-sm font-medium leading-tight text-[var(--color-base-content)]">
-              {detection.species}
+              {displayName}
             </span>
             <span class="text-xs text-[var(--color-base-content)]/60">
               {elapsedText}
-              {#if hasMultipleSources}
-                · {detection.source}
+              {#if hasMultipleSources && detection.source}
+                <span class="inline-flex items-center gap-0.5">
+                  · <Mic class="size-3 inline" />{detection.source}
+                </span>
               {/if}
             </span>
           </div>

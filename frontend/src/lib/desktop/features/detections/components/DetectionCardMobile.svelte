@@ -2,13 +2,13 @@
   // Use prop callback instead of legacy event dispatcher
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import { Volume2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { settingsStore } from '$lib/stores/settings';
-  import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   interface Props {
     detection: Detection;
@@ -23,25 +23,17 @@
 
   let { detection, onDetailsClick, onPlayMobileAudio, className = '' }: Props = $props();
 
-  // Legacy dispatcher removed
+  // Localize the common name for the visitor's UI locale, falling back to the
+  // server-provided common name then the scientific name (mirrors DetectionRow).
+  const displayName = $derived(localizeSpeciesName(detection.scientificName, detection.commonName));
 
   let spectrogramError = $state(false);
   let spectrogramUrl = $derived(buildAppUrl(`/api/v2/spectrogram/${detection.id}?size=md`));
 
-  // Resolve the audio source label, falling back to settings when the server
-  // payload lacks a displayName or carries a stale (renamed) source id.
-  let sourceLabel = $derived(
-    getFriendlyAudioSourceName(
-      detection.source,
-      $settingsStore.formData.realtime?.audio?.sources,
-      $settingsStore.formData.realtime?.rtsp?.streams
-    )
-  );
-
   function handlePlay() {
     const audioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
     if (onPlayMobileAudio) {
-      onPlayMobileAudio({ audioUrl, speciesName: detection.commonName, detectionId: detection.id });
+      onPlayMobileAudio({ audioUrl, speciesName: displayName, detectionId: detection.id });
     }
   }
 
@@ -69,7 +61,7 @@
     <div class="flex items-start gap-3">
       <div class="flex-1 min-w-0">
         <div class="text-base font-semibold leading-tight truncate">
-          {detection.commonName}
+          {displayName}
         </div>
         <div class="text-xs opacity-70 truncate">
           {detection.scientificName}
@@ -77,10 +69,12 @@
         <div class="mt-1 text-xs opacity-70">
           {detection.date}
           {detection.time}
-          {#if sourceLabel}
-            <span class="ml-1">· {sourceLabel}</span>
-          {/if}
         </div>
+        {#if detection.source}
+          <div class="mt-1">
+            <SourceBadge {detection} variant="inline" />
+          </div>
+        {/if}
       </div>
       <div class="shrink-0">
         <ConfidenceCircle confidence={detection.confidence} size="sm" />
@@ -97,7 +91,7 @@
       <button
         class="btn btn-primary btn-sm"
         onclick={handlePlay}
-        aria-label={t('search.detailsPanel.playAudio', { species: detection.commonName })}
+        aria-label={t('search.detailsPanel.playAudio', { species: displayName })}
       >
         <Volume2 class="h-4 w-4" />
         {t('common.actions.play')}
@@ -105,7 +99,7 @@
       <button
         class="btn btn-outline btn-sm"
         onclick={goToDetails}
-        aria-label={t('search.detailsPanel.viewDetails', { species: detection.commonName })}
+        aria-label={t('search.detailsPanel.viewDetails', { species: displayName })}
       >
         {t('common.actions.view')}
       </button>

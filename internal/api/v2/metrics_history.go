@@ -97,6 +97,11 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 	ch, cancel := c.metricsStore.Subscribe()
 	defer cancel()
 
+	// Subscribe to inference topology changes (model add/remove, source
+	// reassignment) so the client re-fetches the inference snapshot.
+	topoCh, topoCancel := c.metricsStore.SubscribeTopology()
+	defer topoCancel()
+
 	// Set SSE headers
 	setSSEHeaders(ctx)
 
@@ -157,6 +162,17 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 					)
 					return err
 				}
+			}
+
+		case <-topoCh:
+			if err := c.sendSSEMessage(ctx, eventInferenceTopologyChanged, map[string]any{
+				"timestamp": time.Now().Unix(),
+			}); err != nil {
+				c.logDebugIfEnabled("Metrics SSE topology-changed send failed, client likely disconnected",
+					logger.String("client_id", clientID),
+					logger.Error(err),
+				)
+				return err
 			}
 
 		case <-heartbeatTicker.C:
@@ -227,6 +243,25 @@ func (c *Controller) initMetricsHistoryRoutes() {
 
 		// Wire BirdNET inference counters
 		collector.SetInferenceCounters(classifier.GetInferenceCounters())
+
+		// Wire per-model clip length and RSS functions for RTF computation and RSS gauges
+		if c.Processor != nil {
+			if bn := c.Processor.GetBirdNET(); bn != nil {
+				collector.SetModelClipFunc(func() map[string]float64 {
+					infos := bn.ModelInfos()
+					out := make(map[string]float64, len(infos))
+					for i := range infos {
+						out[infos[i].ID] = infos[i].Spec.ClipLength.Seconds()
+					}
+					return out
+				})
+				collector.SetModelRSSFunc(bn.ModelRSS)
+			}
+		}
+		if c.metrics != nil && c.metrics.BirdNET != nil {
+			collector.SetInferenceGaugeSetters(c.metrics.BirdNET.SetInferenceRTF, c.metrics.BirdNET.SetModelRSSBytes, c.metrics.BirdNET.DeleteInferenceMetrics)
+			collector.SetAudioGaugeSetters(c.metrics.BirdNET.SetAudioQueueDepth, c.metrics.BirdNET.SetAudioDroppedChunks)
+		}
 
 		// Wire health counter collection (drops, overruns, stream restarts)
 		if c.healthMetricsStore != nil {

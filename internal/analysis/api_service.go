@@ -214,6 +214,15 @@ func (s *APIServerService) Start(ctx context.Context) error {
 		s.server.APIController().SetShutdownRequester(appInstance)
 	}
 
+	// Surface results-queue detection drops on the System Health page by
+	// bridging them from the analysis pipeline into the diagnostics health
+	// store owned by the API controller. The store is the bridge because
+	// internal/api/v2 must not import internal/analysis (import cycle):
+	// analysis pushes drops into the store, ResultsQueueDropCheck reads them.
+	if ctrl := s.server.APIController(); ctrl != nil {
+		SetResultsQueueDropHealthSink(ctrl.HealthMetricsStore(), ctrl.HealthEventBuffer())
+	}
+
 	startSucceeded = true
 	return nil
 }
@@ -269,6 +278,10 @@ func (s *APIServerService) Stop(ctx context.Context) error {
 		}
 		s.proc = nil
 	}
+
+	// Detach the results-queue drop health sink so it does not retain the
+	// controller's metrics store after shutdown. A subsequent Start re-wires it.
+	SetResultsQueueDropHealthSink(nil, nil)
 
 	// Stop notification service (after processor, which may send final notifications).
 	if notification.IsInitialized() {

@@ -29,6 +29,10 @@ web interface, database) and runs until interrupted.
 
 The "realtime" command is an alias for backward compatibility.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Apply the runtime memory policy before any inference threads start,
+			// so the glibc arena cap takes effect. Gated by lowmemory.mode.
+			analysis.ApplyMemoryPolicy(settings)
+
 			// Print system details early, before any service starts.
 			analysis.PrintSystemDetails(settings)
 

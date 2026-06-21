@@ -81,7 +81,12 @@ jobs:
           CI: true
           MQTT_TEST_BROKER: tcp://localhost:1883
         run: |
-          set -euo pipefail
+          # Drop errexit (-e) but keep nounset + pipefail: a failing `go test`
+          # makes the pipeline non-zero, and with -e the shell would abort right
+          # here, before TEST_EXIT_CODE=${PIPESTATUS[0]} runs, so the failure
+          # summary below never renders. The explicit `exit $TEST_EXIT_CODE` still
+          # fails the step. (macos-test.yml / windows-test.yml use the same pattern.)
+          set -uo pipefail
 
           # Run tests with JSON output
           # Note: We must capture PIPESTATUS immediately after the pipeline
@@ -194,6 +199,7 @@ jobs:
           go test -tags=integration -race -timeout 300s -v \
             ./internal/datastore/v2 \
             ./internal/datastore/v2/repository/... \
+            ./internal/datastore/v2only \
             ./internal/mqtt/... \
             ./internal/spectrogram/... \
             ./internal/testutil/containers/... \

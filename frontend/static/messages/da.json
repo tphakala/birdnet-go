@@ -133,7 +133,8 @@
       "downloadCsv": "Download artsliste som CSV",
       "visitEbirdLink": "Åbn eBird.org i en ny fane",
       "learnEbirdTaxonomyLink": "Åbn eBird Taxonomy i en ny fane",
-      "resizeHandle": "Træk for at ændre størrelse"
+      "resizeHandle": "Træk for at ændre størrelse",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Sikkerhed",
@@ -404,6 +405,8 @@
         "recalculatingThresholds": "Genberegner dynamiske tærskler for ny basisværdi",
         "reconfiguringDynamicThresholds": "Genkonfigurerer dynamiske tærskler...",
         "webserverRestartRequired": "Webserverindstillinger ændret. Genstart påkrævet.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Opdaterer lydniveauovervågning...",
         "reconfiguringAudioSources": "Genkonfigurerer lydkilder...",
         "rebuildingExtendedCapture": "Genopbygger udvidet optagelsesfilter...",
@@ -486,7 +489,8 @@
       "confidenceMax": "Maksimum sikkerhedsprocent",
       "verifiedStatus": "Bekræftelsesstatus",
       "lockedStatus": "Låsestatus",
-      "timeOfDay": "Tidspunkt på dagen"
+      "timeOfDay": "Tidspunkt på dagen",
+      "source": "Lydkilde"
     },
     "advancedFilters": "Avancerede filtre",
     "showAdvancedFilters": "Vis avancerede filtre",
@@ -508,6 +512,9 @@
       "sunrise": "Solopgang +/- 30 min",
       "sunset": "Solnedgang +/- 30 min"
     },
+    "sourceOptions": {
+      "any": "Alle kilder"
+    },
     "sortOptions": {
       "dateDesc": "Dato (nyeste først)",
       "dateAsc": "Dato (ældste først)",
@@ -519,6 +526,7 @@
       "timeOfDay": "Tidspunkt på dagen",
       "species": "Art",
       "confidence": "Sikkerhed",
+      "source": "Kilde",
       "status": "Status",
       "actions": "Handlinger"
     },
@@ -788,7 +796,23 @@
     },
     "detail": {
       "species": "Art",
-      "observation": "Observation"
+      "observation": "Observation",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Videnskabeligt navn",
+        "classificationBadges": "Mærker for artsklassifikation",
+        "confidence": "Registreringssikkerhed {confidence}%",
+        "metadata": "Registreringsmetadata",
+        "weatherConditions": "Vejrforhold på registreringstidspunktet",
+        "comments": "Kommentarer til registreringen",
+        "commentText": "Kommentartekst",
+        "commentTimestamp": "Tidsstempel for kommentar",
+        "mainRegion": "Registreringsdetaljer",
+        "tabsHeading": "Faner med registreringsoplysninger",
+        "tabList": "Faner for registreringsdetaljer",
+        "speciesHeadingSuffix": "registreringsdetaljer"
+      }
     },
     "headers": {
       "dateTime": "Dato og tid",
@@ -1129,6 +1153,7 @@
     "sections": {
       "overview": "Oversigt",
       "database": "Database",
+      "inference": "AI Models",
       "terminal": "Terminal"
     },
     "database": {
@@ -1484,6 +1509,90 @@
         }
       }
     },
+    "inference": {
+      "title": "AI Models & Inference",
+      "loading": "Loading inference status",
+      "error": "Could not load inference status",
+      "sectionHardware": "Hardware",
+      "sectionBackends": "Inference Backends",
+      "sectionModels": "Models",
+      "noModels": "No models are currently loaded",
+      "architecture": "Architecture",
+      "cpu": "CPU",
+      "environment": "Environment",
+      "fp16": "FP16",
+      "fp16Supported": "FP16 supported",
+      "fp16Unsupported": "FP16 not supported",
+      "backendTflite": "TensorFlow Lite",
+      "backendOnnx": "ONNX Runtime",
+      "backendOpenvino": "OpenVINO",
+      "available": "Available",
+      "notAvailable": "Not available",
+      "active": "Active",
+      "inactive": "Inactive",
+      "initialized": "Initialized",
+      "version": "Version",
+      "devices": "Devices",
+      "stock": "Stock",
+      "custom": "Custom",
+      "sampleRate": "Sample rate",
+      "clipLength": "Segmentlængde",
+      "species": "Species",
+      "invocations": "Segments analysed",
+      "avgLatency": "Avg latency",
+      "maxLatency": "Max latency",
+      "rtf": "RTF",
+      "rtfLabel": "Real-time factor",
+      "approxRam": "Approx. host RAM (RSS)",
+      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
+      "latencyChart": "Latency (ms)",
+      "rtfChart": "Real-time factor",
+      "sources": "Audio sources",
+      "noSources": "No sources attached",
+      "primaryFallback": "primary (fallback)",
+      "notMeasured": "n/a",
+      "unitMs": "ms",
+      "unitKhz": "kHz",
+      "unitSec": "s",
+      "sectionAudio": "Audio",
+      "queueDepth": "Queue depth",
+      "queueDepthChart": "Queue depth",
+      "droppedChunks": "Dropped chunks",
+      "queueCapacity": "Capacity",
+      "lastSeen": "Last seen",
+      "lastSeenNever": "No detections yet",
+      "deviceHelp": "Den beregningsenhed, som denne model kører inferens på (CPU, GPU eller ukendt).",
+      "paused": "Pauseret",
+      "pausedScheduleHelp": "Denne model kører kun efter en tidsplan og er i øjeblikket sat på pause, så den behandler ikke lyd.",
+      "activityPaused": "Pauseret af tidsplan",
+      "lastHeard": "Sidst hørt",
+      "lastHeardHint": "Seneste forudsigelser over tærsklen, til diagnostik. Inkluderer ikke-fugle- og uden for område-resultater, der ikke gemmes som registreringer.",
+      "lastHeardNever": "Intet hørt endnu",
+      "confidenceColumn": "Konf.",
+      "heardWhen": "Hvornår",
+      "coDetectedColumn": "Også",
+      "coDetectedHelp": "Andre modeller, der registrerede denne art inden for {seconds} s",
+      "outOfRangeHelp": "Uden for områdefilteret (vist til diagnostik, ikke gemt som registrering)",
+      "peak": "spids",
+      "activityActive": "Inference active",
+      "activityIdle": "Idle",
+      "throughput": "Throughput",
+      "throughputUnit": "/s",
+      "throughputChart": "Throughput (/s)",
+      "errorRate": "Error rate",
+      "loadFailures": "Load failures",
+      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
+      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
+      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
+      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
+      "throughputHelp": "Segments analysed per second by this model.",
+      "errorRateHelp": "Share of analysis attempts that failed.",
+      "loadFailuresHelp": "Number of times this model failed to load.",
+      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
+      "invocationsHelp": "Total audio segments this model has analysed since startup.",
+      "noModelsHint": "No audio source configured yet?",
+      "noModelsHintLink": "Configure audio sources"
+    },
     "metrics": {
       "cpu": "CPU",
       "memory": "Hukommelse",
@@ -1539,6 +1648,35 @@
     "reattach": "Tilknyt igen"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Oversigt",
+        "patterns": "Aktivitetsmønstre",
+        "trends": "Tendenser",
+        "biodiversity": "Biodiversitet",
+        "quality": "Gennemgang og nøjagtighed"
+      },
+      "aria": {
+        "tabs": "Analyseafsnit"
+      },
+      "controls": {
+        "source": "Kilde",
+        "sourceAll": "Alle kilder",
+        "sourceComingSoon": "Filtrering efter kilde kommer i en senere opdatering.",
+        "speciesNotApplicable": "Diagrammerne i dette afsnit filtrerer ikke efter art."
+      },
+      "card": {
+        "error": "Diagrammet kunne ikke indlæses",
+        "retry": "Prøv igen",
+        "notEnoughData": "Ikke nok data endnu",
+        "notEnoughDataHint": "Dette diagram kræver mindst {min} datapunkter. Fortsæt optagelsen, og kig forbi igen snart.",
+        "export": "Eksporter",
+        "exportComingSoon": "CSV-eksport kommer snart."
+      },
+      "comingSoon": {
+        "description": "Dette afsnit er under opbygning og kommer i en kommende opdatering."
+      }
+    },
     "title": "Oversigt",
     "loadingError": "Kunne ikke indlæse nogle analysedata. Prøv venligst igen senere.",
     "stats": {
@@ -1619,6 +1757,7 @@
         "dateTime": "Dato & tid",
         "species": "Art",
         "confidence": "Sikkerhed",
+        "source": "Kilde",
         "timeOfDay": "Tid på dagen"
       },
       "noRecentDetections": "Ingen seneste registreringer fundet",
@@ -1719,6 +1858,14 @@
     },
     "errors": {
       "loadFailed": "Kunne ikke indlæse analysedata. Prøv venligst igen."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -3653,16 +3800,22 @@
         "configureActions": "Konfigurer handlinger",
         "actionsConfigured": "Konfigureret",
         "list": {
-          "threshold": "Tærskel:",
-          "interval": "Interval:",
-          "intervalNone": "Ingen",
-          "actionBadge": "Handling",
           "editTitle": "Rediger konfiguration",
           "removeTitle": "Fjern konfiguration"
         },
         "emptyState": {
           "title": "Ingen konfigurationer endnu.",
           "description": "Klik på \"Tilføj konfiguration\" for at tilpasse artsregistreringsindstillinger."
+        },
+        "table": {
+          "columnScientificName": "Videnskabeligt navn",
+          "intervalDefault": "Standard",
+          "intervalDefaultTooltip": "0 = brug det globale standardinterval",
+          "noActions": "Ingen",
+          "searchPlaceholder": "Søg arter...",
+          "noResults": "Ingen matchende konfigurationer",
+          "editDisabledReason": "Gem eller luk den aktuelle editor, før du redigerer en anden art",
+          "actionsDisabledBusy": "Vent venligst, mens den aktuelle handling fuldføres"
         }
       },
       "synonyms": {
@@ -4439,6 +4592,11 @@
       "removeCertificate": "Fjern certifikat",
       "fileReadError": "Kunne ikke læse fil",
       "loading": "Indlæser certifikatoplysninger..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {
@@ -4542,7 +4700,8 @@
         "invalidUrl": "Ugyldigt URL-format. Indtast en fuld URL som rtsp://host:port/sti",
         "unsupportedScheme": "Ikke-understøttet URL-skema \"{scheme}\". Brug rtsp, rtsps, http, https, rtmp eller udp",
         "blockedDestination": "Denne destination er blokeret af sikkerhedsmæssige årsager",
-        "connectionFailed": "Kunne ikke oprette forbindelse til streamen. Kontrollér, at URL'en er korrekt, og at streamen er tilgængelig"
+        "connectionFailed": "Kunne ikke oprette forbindelse til streamen. Kontrollér, at URL'en er korrekt, og at streamen er tilgængelig",
+        "noAudioTrack": "Streamen har ikke noget lydspor. Kun streams, der indeholder lyd, kan bruges"
       }
     },
     "debug": {
@@ -4836,7 +4995,13 @@
     "bannerTitle": "Genstart påkrævet",
     "bannerMessage": "Konfigurationsændringer kræver en genstart:",
     "bannerAction": "Genstart nu",
-    "restartFailed": "Kunne ikke starte genstart"
+    "restartFailed": "Kunne ikke starte genstart",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Hjælp og support",

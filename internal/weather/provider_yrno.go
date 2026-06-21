@@ -2,21 +2,30 @@ package weather
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
 	YrNoBaseURL        = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
 	yrNoProviderName   = "yrno"
 	maxBodyPreviewSize = 200 // Maximum characters to show in error logs
+
+	// yrNoCoordPrecision is the number of decimal places used when formatting
+	// latitude/longitude into the request URL (~110 m resolution), matching the
+	// OpenWeather provider.
+	yrNoCoordPrecision = 3
 )
 
 // YrResponse represents the structure of the Yr.no API response
@@ -95,15 +104,20 @@ func readYrNoResponseBody(resp *http.Response, log logger.Logger) ([]byte, error
 	return body, nil
 }
 
-// handleYrNoResponse processes a single HTTP response and returns the result
+// handleYrNoResponse processes a single HTTP response and returns the result.
+// It owns closing resp.Body (per the executeWeatherRequest handler contract); a
+// single deferred close covers every return path instead of one per branch.
 func handleYrNoResponse(resp *http.Response, log logger.Logger, isLastAttempt bool) (*yrNoRequestResult, error) {
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Debug("Failed to close response body", logger.Error(closeErr))
+		}
+	}()
+
 	result := &yrNoRequestResult{}
 
 	// Handle Not Modified
 	if resp.StatusCode == http.StatusNotModified {
-		if err := resp.Body.Close(); err != nil {
-			log.Debug("Failed to close response body", logger.Error(err))
-		}
 		result.notModified = true
 		return result, nil
 	}
@@ -111,9 +125,6 @@ func handleYrNoResponse(resp *http.Response, log logger.Logger, isLastAttempt bo
 	// Handle non-OK status
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		if err := resp.Body.Close(); err != nil {
-			log.Debug("Failed to close response body", logger.Error(err))
-		}
 		responseBodyStr := truncateBodyPreview(string(bodyBytes))
 		log.Warn("Received non-OK status code",
 			logger.Int("status_code", resp.StatusCode),
@@ -136,9 +147,6 @@ func handleYrNoResponse(resp *http.Response, log logger.Logger, isLastAttempt bo
 	// Status is OK - read body
 	result.lastMod = resp.Header.Get("Last-Modified")
 	body, err := readYrNoResponseBody(resp, log)
-	if closeErr := resp.Body.Close(); closeErr != nil {
-		log.Debug("Failed to close response body", logger.Error(closeErr))
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +167,16 @@ func mapYrResponseToWeatherData(response *YrResponse, settings *conf.Settings) *
 	current := response.Properties.Timeseries[0]
 	iconCode := GetStandardIconCode(current.Data.Next1Hours.Summary.SymbolCode, yrNoProviderName)
 
+	// yr.no reports a precipitation amount but no explicit type; derive the type
+	// from the standardized icon, and only when precipitation is actually present.
+	// Clamp a negative amount to zero (defensive against API/sensor anomalies),
+	// matching the Wunderground provider.
+	precipAmount := max(0, current.Data.Next1Hours.Details.PrecipitationAmount)
+	precipType := ""
+	if precipAmount > 0 {
+		precipType = precipTypeFromIconCode(iconCode)
+	}
+
 	return &WeatherData{
 		Time: current.Time,
 		Location: Location{
@@ -174,28 +192,40 @@ func mapYrResponseToWeatherData(response *YrResponse, settings *conf.Settings) *
 			Gust:  current.Data.Instant.Details.WindGust,
 		},
 		Precipitation: Precipitation{
-			Amount: current.Data.Next1Hours.Details.PrecipitationAmount,
+			Amount: precipAmount,
+			Type:   precipType,
 		},
 		Clouds:      int(current.Data.Instant.Details.CloudArea),
 		Pressure:    int(current.Data.Instant.Details.AirPressure),
 		Humidity:    int(current.Data.Instant.Details.RelHumidity),
+		WeatherMain: weatherMainFromIconCode(iconCode),
 		Description: current.Data.Next1Hours.Summary.SymbolCode,
 		Icon:        string(iconCode),
 	}
 }
 
 // FetchWeather implements the Provider interface for YrNoProvider
-func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
-	apiURL := fmt.Sprintf("%s?lat=%.3f&lon=%.3f", YrNoBaseURL,
-		settings.BirdNET.Latitude,
-		settings.BirdNET.Longitude)
+func (p *YrNoProvider) FetchWeather(ctx context.Context, settings *conf.Settings) (*WeatherData, error) {
+	// Build the query with url.Values so the coordinates are properly escaped,
+	// matching buildOpenWeatherURL and buildWundergroundURL. yr.no (api.met.no)
+	// needs no API key, so only the coordinates go in the query. YrNoBaseURL is a
+	// constant with no existing query, so appending "?" + encoded is safe.
+	query := url.Values{
+		"lat": {strconv.FormatFloat(settings.BirdNET.Latitude, 'f', yrNoCoordPrecision, 64)},
+		"lon": {strconv.FormatFloat(settings.BirdNET.Longitude, 'f', yrNoCoordPrecision, 64)},
+	}
+	apiURL := YrNoBaseURL + "?" + query.Encode()
 
-	providerLogger := getLogger().With(logger.String("provider", yrNoProviderName))
-	providerLogger.Info("Fetching weather data", logger.String("url", apiURL))
+	providerLogger := getLogger().WithContext(ctx).With(logger.String("provider", yrNoProviderName))
+	// Mask the URL before logging: its query carries the user's lat/lon, which
+	// are PII (yr.no needs no API key, so coordinates are the sensitive part).
+	providerLogger.Info("Fetching weather data", logger.String("url", maskURLForLog(apiURL)))
 
-	req, err := http.NewRequest("GET", apiURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
-		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", yrNoProviderName)
+		// Scrub before wrapping: http.NewRequestWithContext can return a
+		// *url.Error that embeds apiURL, which carries the user's lat/lon coordinates.
+		return nil, newWeatherError(privacy.WrapError(err), errors.CategoryNetwork, "create_http_request", yrNoProviderName)
 	}
 	req.Header.Set("User-Agent", UserAgent())
 	req.Header.Set("Accept-Encoding", "gzip")
@@ -205,8 +235,8 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 	}
 	p.mu.Unlock()
 
-	// Execute request with retry
-	body, err := p.executeWithRetry(req, providerLogger)
+	// Execute request with retry via the shared executor.
+	body, err := executeWeatherRequest(ctx, p.httpClient, req, yrNoProviderName, providerLogger, p.handleResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -234,58 +264,34 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 	return mappedData, nil
 }
 
-// executeWithRetry executes the HTTP request with retry logic
-func (p *YrNoProvider) executeWithRetry(req *http.Request, log logger.Logger) ([]byte, error) {
-	client := &http.Client{Timeout: RequestTimeout}
-
-	for i := range MaxRetries {
-		isLastAttempt := i == MaxRetries-1
-		attemptLogger := log.With(
-			logger.Int("attempt", i+1),
-			logger.Int("max_attempts", MaxRetries))
-
-		resp, err := client.Do(req)
-		if err != nil {
-			attemptLogger.Warn("HTTP request failed", logger.Error(err))
-			if isLastAttempt {
-				return nil, newWeatherErrorWithRetries(err, errors.CategoryNetwork, "weather_api_request", yrNoProviderName)
-			}
-			time.Sleep(RetryDelay)
-			continue
-		}
-
-		attemptLogger.Debug("Received HTTP response", logger.Int("status_code", resp.StatusCode))
-		result, err := handleYrNoResponse(resp, attemptLogger, isLastAttempt)
-		if err != nil {
-			return nil, err
-		}
-
-		if result.notModified {
-			p.mu.Lock()
-			lm := p.lastModified
-			p.mu.Unlock()
-			log.Info("Weather data not modified since last fetch", logger.String("last_modified", lm))
-			return nil, ErrWeatherDataNotModified
-		}
-
-		if result.shouldRetry {
-			time.Sleep(RetryDelay)
-			continue
-		}
-
-		// Success
-		if result.lastMod != "" {
-			p.mu.Lock()
-			p.lastModified = result.lastMod
-			p.mu.Unlock()
-		}
-		return result.body, nil
+// handleResponse adapts the yr.no per-status handling (conditional GET, gzip
+// decode, Last-Modified tracking) to the shared retry executor. A 304 returns
+// the not-modified sentinel; a transient non-OK asks for a retry; a 200 records
+// the new Last-Modified value for the next conditional request and returns the
+// body.
+func (p *YrNoProvider) handleResponse(resp *http.Response, attemptLog logger.Logger, isLastAttempt bool) (body []byte, retry bool, err error) {
+	result, err := handleYrNoResponse(resp, attemptLog, isLastAttempt)
+	if err != nil {
+		return nil, false, err
 	}
 
-	return nil, newWeatherErrorWithRetries(
-		fmt.Errorf("max retries exceeded"),
-		errors.CategoryNetwork,
-		"weather_api_request",
-		yrNoProviderName,
-	)
+	if result.notModified {
+		p.mu.Lock()
+		lm := p.lastModified
+		p.mu.Unlock()
+		attemptLog.Info("Weather data not modified since last fetch", logger.String("last_modified", lm))
+		return nil, false, ErrWeatherDataNotModified
+	}
+
+	if result.shouldRetry {
+		return nil, true, nil
+	}
+
+	// Success: persist the Last-Modified value for the next conditional request.
+	if result.lastMod != "" {
+		p.mu.Lock()
+		p.lastModified = result.lastMod
+		p.mu.Unlock()
+	}
+	return result.body, false, nil
 }

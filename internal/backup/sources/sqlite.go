@@ -376,12 +376,12 @@ func (s *SQLiteSource) validatePageCount(total, sourcePages int) (totalPages, re
 	return total, total, nil
 }
 
-// performBackupSteps executes the backup process in chunks
-func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlite3.SQLiteBackup, total int) error {
-	remaining := total
+// performBackupSteps executes the backup process in chunks until the backup
+// connection reports completion or an error occurs.
+func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlite3.SQLiteBackup) error {
 	const pagesPerStep = 1000
 
-	for remaining > 0 {
+	for {
 		select {
 		case <-ctx.Done():
 			return errors.New(ctx.Err()).
@@ -604,7 +604,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	s.log.Debug("Validated page count for backup", logger.Int("validated_total_pages", validatedTotal))
 
 	// Perform the backup in chunks
-	if err := s.performBackupSteps(ctx, backupConn, validatedTotal); err != nil {
+	if err := s.performBackupSteps(ctx, backupConn); err != nil {
 		return err
 	}
 

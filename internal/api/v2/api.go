@@ -149,6 +149,11 @@ type Controller struct {
 	processingCache     *processingCache
 	processingSemaphore chan struct{}
 
+	// probeStreamInfo probes a live stream's audio characteristics for the
+	// stream-test endpoint. Nil in production, where TestStream falls back to
+	// ffmpeg.ProbeStreamInfo; tests set it to stub probing without ffprobe.
+	probeStreamInfo probeStreamInfoFunc
+
 	// Legacy cleanup state tracker
 	cleanupStatus *CleanupStatus
 
@@ -271,6 +276,10 @@ func WithAudioEngine(e *engine.AudioEngine) Option {
 func WithModelManager(mm *classifier.ModelManager) Option {
 	return func(c *Controller) {
 		c.ModelManager = mm
+		// Wire the topology-changed callback so model add/remove broadcasts over
+		// the metrics SSE stream. The method value binds c; c.metricsStore is read
+		// lazily at call time, so option ordering is irrelevant.
+		mm.SetTopologyChangedCallback(c.BroadcastInferenceTopologyChanged)
 	}
 }
 
@@ -880,6 +889,20 @@ func (c *Controller) Shutdown() {
 
 	// Wait for all goroutines to finish
 	c.wg.Wait()
+
+	// Release the media SecureFS sandbox handle (an open os.Root): otherwise it
+	// leaks across controller restarts, and on Windows the open directory handle
+	// blocks t.TempDir() cleanup of the export dir in tests. This runs before
+	// echo.Shutdown() drains in-flight HTTP requests, so a request still reading
+	// the media filesystem in the brief shutdown window can observe os.ErrClosed
+	// (surfaced as a 5xx, no panic) - acceptable for a shutting-down process.
+	// Draining first was rejected because it would delay cancelling
+	// controller-context-bound streaming handlers.
+	if c.SFS != nil {
+		if err := c.SFS.Close(); err != nil {
+			GetLogger().Error("Error closing media SecureFS", logger.Error(err))
+		}
+	}
 
 	// Shutdown the backup job manager to stop its cleanup goroutine
 	if backupJobManager != nil {

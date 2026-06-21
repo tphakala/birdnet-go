@@ -520,6 +520,11 @@ func (m *mockLabelRepository) GetByScientificNames(_ context.Context, names []st
 	return result, nil
 }
 
+// UpdateLabelType implements LabelRepository (no-op for testing).
+func (m *mockLabelRepository) UpdateLabelType(_ context.Context, _, _ uint) error {
+	return nil
+}
+
 // mockAudioSourceRepository is a simple mock for testing ResolveLocationsToSourceIDs
 type mockAudioSourceRepository struct {
 	sources map[string][]*entities.AudioSource
@@ -621,6 +626,66 @@ func TestResolveSpeciesToLabelIDs(t *testing.T) {
 		require.NoError(t, err)
 		// Should return only the found one
 		assert.Equal(t, []uint{1}, result)
+	})
+}
+
+// TestConvertSearchFilters_SpeciesScientific verifies that explicit scientific
+// names supplied by the client (resolved in the browser from the per-visitor
+// dictionary) are resolved to label IDs and OR-ed into the same label-ID branch
+// as common-name matches, so an ambiguous localized name can match multiple
+// species without a server-locale round trip.
+func TestConvertSearchFilters_SpeciesScientific(t *testing.T) {
+	t.Parallel()
+
+	deps := &FilterLookupDeps{
+		LabelRepo: &mockLabelRepository{
+			labels: map[string]*entities.Label{
+				"Barbastella barbastellus": {ID: 11},
+				"Myotis daubentonii":       {ID: 22},
+			},
+		},
+	}
+
+	t.Run("multiple scientific names resolve into the label-ID branch", func(t *testing.T) {
+		t.Parallel()
+		sf, err := ConvertSearchFilters(t.Context(), &datastore.SearchFilters{
+			SpeciesScientific: []string{"Barbastella barbastellus", "Myotis daubentonii"},
+		}, deps, time.UTC)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{11, 22}, sf.CommonLabelIDs)
+		assert.Empty(t, sf.Query, "explicit scientific names are resolved to label IDs, not a LIKE query")
+	})
+
+	t.Run("unknown scientific names yield the no-match sentinel", func(t *testing.T) {
+		t.Parallel()
+		sf, err := ConvertSearchFilters(t.Context(), &datastore.SearchFilters{
+			SpeciesScientific: []string{"Nonexistent species"},
+		}, deps, time.UTC)
+		require.NoError(t, err)
+		assert.Equal(t, sentinelNoMatchIDs, sf.CommonLabelIDs)
+	})
+
+	t.Run("empty scientific list leaves the free-text species filter intact", func(t *testing.T) {
+		t.Parallel()
+		sf, err := ConvertSearchFilters(t.Context(), &datastore.SearchFilters{
+			Species: "Barbastella",
+		}, deps, time.UTC)
+		require.NoError(t, err)
+		assert.Equal(t, "Barbastella", sf.Query)
+	})
+
+	t.Run("free-text and scientific names coexist (scientific OR-ed, not replaced)", func(t *testing.T) {
+		t.Parallel()
+		sf, err := ConvertSearchFilters(t.Context(), &datastore.SearchFilters{
+			Species:           "Strix",
+			SpeciesScientific: []string{"Myotis daubentonii"},
+		}, deps, time.UTC)
+		require.NoError(t, err)
+		// The free-text term stays as the scientific_name LIKE branch...
+		assert.Equal(t, "Strix", sf.Query)
+		// ...and the resolved scientific name is appended to the label-ID branch
+		// (buildSearchJoins OR-s Query with CommonLabelIDs), not dropped.
+		assert.Contains(t, sf.CommonLabelIDs, uint(22))
 	})
 }
 
@@ -1256,8 +1321,45 @@ func TestResolveDeviceToSourceIDs(t *testing.T) {
 
 		result, err := ResolveDeviceToSourceIDs(ctx, deps, "node1")
 		require.NoError(t, err)
-		// Should match "node1" and "mynode1" (contains "node1")
-		assert.ElementsMatch(t, []uint{1, 3}, result)
+		// Exact match on "node1" wins; "mynode1" (substring match) is not
+		// included so that picking a specific source never selects siblings
+		// whose name merely contains the query.
+		assert.ElementsMatch(t, []uint{1}, result)
+	})
+
+	t.Run("substring fallback when no exact match", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			SourceRepo: &mockAudioSourceRepositoryWithGetAll{
+				allSources: []*entities.AudioSource{
+					{ID: 1, NodeName: "node1"},
+					{ID: 2, NodeName: "node2"},
+					{ID: 3, NodeName: "mynode1"},
+				},
+			},
+		}
+
+		result, err := ResolveDeviceToSourceIDs(ctx, deps, "node")
+		require.NoError(t, err)
+		// No source is named exactly "node", so all substring matches apply
+		assert.ElementsMatch(t, []uint{1, 2, 3}, result)
+	})
+
+	t.Run("exact match on display name preferred", func(t *testing.T) {
+		camera1 := "Camera 1"
+		camera10 := "Camera 10"
+		deps := &FilterLookupDeps{
+			SourceRepo: &mockAudioSourceRepositoryWithGetAll{
+				allSources: []*entities.AudioSource{
+					{ID: 1, NodeName: "node1", DisplayName: &camera1},
+					{ID: 2, NodeName: "node1", DisplayName: &camera10},
+				},
+			},
+		}
+
+		result, err := ResolveDeviceToSourceIDs(ctx, deps, "camera 1")
+		require.NoError(t, err)
+		// "Camera 1" matches exactly; "Camera 10" only as substring
+		assert.ElementsMatch(t, []uint{1}, result)
 	})
 
 	t.Run("case insensitive matching", func(t *testing.T) {

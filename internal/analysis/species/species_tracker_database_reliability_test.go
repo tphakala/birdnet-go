@@ -116,7 +116,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 			}
 
 			// BG-17: InitFromDatabase requires notification history (optional)
-			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 				Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 			// Mock other required methods (optional based on settings)
@@ -135,7 +135,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 
 			// Test the critical loadLifetimeDataFromDatabase function
 			now := time.Now()
-			err := tracker.loadLifetimeDataFromDatabase(now)
+			err := tracker.loadLifetimeDataFromDatabase(t.Context(), now)
 
 			if tt.expectedError {
 				require.Error(t, err, "Expected error for scenario: %s", tt.name)
@@ -250,7 +250,7 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			// BG-17: InitFromDatabase now loads notification history
-			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 				Return([]datastore.NotificationHistory{}, nil).Maybe() // Lifetime data
 
 			if tt.mockError != nil {
@@ -277,7 +277,7 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 			require.NotNil(t, tracker)
 
 			// Test loadYearlyDataFromDatabase directly
-			err := tracker.loadYearlyDataFromDatabase(tt.currentTime)
+			err := tracker.loadYearlyDataFromDatabase(t.Context(), tt.currentTime)
 
 			if tt.expectedError {
 				require.Error(t, err, "Expected error for scenario: %s", tt.name)
@@ -424,7 +424,7 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 			}
 
 			// BG-17: InitFromDatabase requires notification history (optional)
-			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 				Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 			// Always setup for period data calls (optional based on settings)

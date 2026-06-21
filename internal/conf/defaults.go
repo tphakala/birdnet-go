@@ -28,6 +28,13 @@ func setDefaultConfig() {
 	// Core processing modules
 	setModuleLogDefaults("analysis", true)    // Bird detection analysis
 	setModuleLogDefaults("birdnet", true)     // BirdNET model inference
+	// Mirror the birdnet module to the console so backend selection, model-init,
+	// reload, and bat-scheduler lines are visible in journald/containers and not
+	// only in logs/birdnet.log. This realigns the viper default with the intent in
+	// logger/config.go (applyConfigDefaults), which the generated config was
+	// silently overriding. Console mirroring is filtered at the console level
+	// (info), so the module's debug-level per-inference file logs never reach stdout.
+	viper.SetDefault("logging.modules.birdnet.console_also", true)
 	setModuleLogDefaults("audio", true)       // Audio capture/processing
 	setModuleLogDefaults("datastore", true)   // Database operations
 	setModuleLogDefaults("spectrogram", true) // Spectrogram generation
@@ -60,6 +67,9 @@ func setDefaultConfig() {
 	// Main configuration
 	viper.SetDefault("main.name", "BirdNET-Go")
 	viper.SetDefault("main.timeas24h", true)
+
+	// Low-memory mode: auto-detect constrained systems by default.
+	viper.SetDefault("lowmemory.mode", LowMemoryModeAuto)
 
 	// BirdNET configuration
 	viper.SetDefault("birdnet.debug", false)

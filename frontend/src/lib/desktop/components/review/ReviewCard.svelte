@@ -235,8 +235,7 @@
                 id="comment-textarea"
                 bind:value={comment}
                 class="textarea h-24 w-full"
-                placeholder={t('common.review.form.commentPlaceholder')}
-              ></textarea>
+                placeholder={t('common.review.form.commentPlaceholder')}></textarea>
             </div>
           {/if}
         </div>

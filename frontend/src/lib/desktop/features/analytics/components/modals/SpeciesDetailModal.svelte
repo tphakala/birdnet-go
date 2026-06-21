@@ -3,6 +3,7 @@
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   interface SpeciesData {
     common_name: string;
@@ -47,6 +48,9 @@
 
   // Use cached data for rendering, fall back to current prop
   let displaySpecies = $derived(species ?? cachedSpecies);
+  let displayName = $derived(
+    localizeSpeciesName(displaySpecies?.scientific_name, displaySpecies?.common_name)
+  );
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
@@ -59,7 +63,7 @@
 
 <Modal
   isOpen={isOpen && displaySpecies !== null}
-  title={displaySpecies?.common_name ?? ''}
+  title={displayName}
   size="md"
   type="default"
   onClose={handleClose}
@@ -70,7 +74,7 @@
       <div class="flex items-center justify-between">
         <div class="min-w-0">
           <h3 id="modal-title" class="font-bold text-lg truncate">
-            {displaySpecies.common_name}
+            {displayName}
           </h3>
           <p class="text-sm text-[var(--color-base-content)] opacity-70 italic truncate">
             {displaySpecies.scientific_name}
@@ -86,7 +90,7 @@
         <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)]">
           <img
             src={displaySpecies.thumbnail_url}
-            alt={displaySpecies.common_name}
+            alt={displayName}
             class="w-full h-full object-cover"
           />
         </div>

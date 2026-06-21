@@ -637,7 +637,7 @@ func (s *testLegacyInterface) GetThresholdEvents(speciesName string, limit int) 
 }
 
 // GetActiveNotificationHistory implements datastore.Interface.
-func (s *testLegacyInterface) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+func (s *testLegacyInterface) GetActiveNotificationHistory(_ context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
 	var history []datastore.NotificationHistory
 	err := s.db.Where("expires_at > ?", after).Find(&history).Error
 	return history, err
@@ -670,13 +670,10 @@ func (s *testLegacyInterface) SetMetrics(_ *datastore.Metrics)                  
 func (s *testLegacyInterface) SetSunCalcMetrics(_ any)                             {}
 func (s *testLegacyInterface) Optimize(_ context.Context) error                    { return nil }
 func (s *testLegacyInterface) GetAllNotes() ([]datastore.Note, error)              { return nil, nil }
-func (s *testLegacyInterface) GetTopBirdsData(_ string, _ float64, _ int) ([]datastore.Note, error) {
+func (s *testLegacyInterface) GetTopBirdsData(_ context.Context, _ string, _ float64, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetHourlyOccurrences(_, _ string, _ float64) ([24]int, error) {
-	return [24]int{}, nil
-}
-func (s *testLegacyInterface) GetBatchHourlyOccurrences(_ string, _ []string, _ float64) (map[string][24]int, error) {
+func (s *testLegacyInterface) GetBatchHourlyOccurrences(_ context.Context, _ string, _ []string, _ float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (s *testLegacyInterface) SpeciesDetections(_, _, _ string, _ int, _ bool, _, _ int) ([]datastore.Note, error) {
@@ -785,13 +782,13 @@ func (s *testLegacyInterface) GetRecentThresholdEvents(_ int) ([]datastore.Thres
 }
 func (s *testLegacyInterface) DeleteThresholdEvents(_ string) error     { return nil }
 func (s *testLegacyInterface) DeleteAllThresholdEvents() (int64, error) { return 0, nil }
-func (s *testLegacyInterface) SaveNotificationHistory(_ *datastore.NotificationHistory) error {
+func (s *testLegacyInterface) SaveNotificationHistory(_ context.Context, _ *datastore.NotificationHistory) error {
 	return nil
 }
-func (s *testLegacyInterface) GetNotificationHistory(_, _ string) (*datastore.NotificationHistory, error) {
+func (s *testLegacyInterface) GetNotificationHistory(_ context.Context, _, _ string) (*datastore.NotificationHistory, error) {
 	return nil, nil //nolint:nilnil // stub
 }
-func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ time.Time) (int64, error) {
+func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
 func (s *testLegacyInterface) SchemaVersion() string                           { return datastore.SchemaVersionLegacy }

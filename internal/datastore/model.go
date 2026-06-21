@@ -43,12 +43,15 @@ type Note struct {
 	Sensitivity    float64
 	ClipName       string
 	ProcessingTime time.Duration
-	Unlikely       bool          `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
-	Occurrence     float64       `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
-	Results        []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
-	Review         *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
-	Comments       []NoteComment `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-many relationship with cascade delete
-	Lock           *NoteLock     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
+	Unlikely       bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
+	Occurrence     float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
+	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
+	// not persisted. Used at Save time to classify non-bird sound classes correctly.
+	RawLabel string        `gorm:"-"`
+	Results  []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
+	Review   *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
+	Comments []NoteComment `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-many relationship with cascade delete
+	Lock     *NoteLock     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
 
 	// Virtual fields to maintain compatibility with templates
 	Verified string `gorm:"-"` // This will be populated from Review.Verified
@@ -61,6 +64,9 @@ type Results struct {
 	NoteID     uint `gorm:"index;not null;constraint:OnDelete:CASCADE,OnUpdate:CASCADE;foreignKey:NoteID;references:ID"` // Foreign key to associate with Note
 	Species    string
 	Confidence float32
+	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
+	// not persisted. Used at Save time to classify non-bird sound classes correctly.
+	RawLabel string `gorm:"-"`
 }
 
 // Copy creates a deep copy of the Results struct
@@ -70,6 +76,7 @@ func (r Results) Copy() Results {
 		NoteID:     r.NoteID,
 		Species:    r.Species,
 		Confidence: r.Confidence,
+		RawLabel:   r.RawLabel,
 	}
 }
 
@@ -132,6 +139,14 @@ type HourlyWeather struct {
 	WeatherMain   string
 	WeatherDesc   string
 	WeatherIcon   string
+
+	// Precipitation and PrecipitationType are transport-only fields carried
+	// across the datastore.Interface boundary into the v2only datastore, which
+	// persists them on the v2 hourly_weathers schema. They are tagged gorm:"-"
+	// so the deprecated legacy datastore schema stays untouched: the legacy
+	// GORM model neither migrates nor reads/writes these columns.
+	Precipitation     float64 `gorm:"-"` // Precipitation amount in mm
+	PrecipitationType string  `gorm:"-"` // "rain", "snow", "sleet", or ""
 }
 
 // ImageCache represents cached image metadata for species

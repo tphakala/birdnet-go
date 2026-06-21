@@ -1,0 +1,54 @@
+name: Species Dict Drift
+
+on:
+  pull_request:
+    paths:
+      - 'internal/openfauna/**'
+      - 'internal/speciesdict/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'internal/openfauna/**'
+      - 'internal/speciesdict/**'
+
+permissions:
+  contents: read
+
+jobs:
+  species-dict-drift:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          # This job only reads, regenerates, and diffs; it never pushes, so the
+          # checkout token does not need to persist for later steps.
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Regenerate species dictionaries
+        run: go generate ./internal/speciesdict
+
+      - name: Check for drift
+        run: |
+          if git diff --exit-code -- internal/speciesdict/data; then
+            echo "### Species Dict In Sync" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Species Dict Out Of Sync" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The committed \`internal/speciesdict/data/*.json.gz\` files do not match" >> $GITHUB_STEP_SUMMARY
+            echo "the output of \`go generate ./internal/speciesdict\`." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Run the following and commit the result:" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "go generate ./internal/speciesdict" >> $GITHUB_STEP_SUMMARY
+            echo "git add internal/speciesdict/data" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi

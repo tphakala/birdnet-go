@@ -13,6 +13,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -37,13 +38,27 @@ func buildTestConfig(t *testing.T, labels []string) (cfg *Config, cleanup func()
 	err = manager.Initialize()
 	require.NoError(t, err)
 
+	// useV2Prefix=false, isMySQL=false for the SQLite test path.
+	cfg = buildConfigForManager(t, manager, testLogger, false, labels)
+
+	// tempDir is auto-cleaned by t.TempDir(); no additional cleanup needed
+	return cfg, func() {}
+}
+
+// buildConfigForManager wires the repositories, seeds the required lookup-table
+// entries, and assembles a *Config for an already-initialized v2 manager. The
+// isMySQL flag is threaded into every repository constructor so the same wiring
+// drives both the SQLite (in-memory) and MySQL (testcontainer) test paths.
+func buildConfigForManager(t *testing.T, manager v2.Manager, testLogger logger.Logger, isMySQL bool, labels []string) *Config {
+	t.Helper()
+
 	db := manager.DB()
 
 	// Create lookup table entries for tests
 	// The LabelType and TaxonomicClass tables should be created by Initialize()
 	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, false)
 	taxClassRepo := repository.NewTaxonomicClassRepository(db, nil, false)
-	modelRepo := repository.NewModelRepository(db, nil, false, false)
+	modelRepo := repository.NewModelRepository(db, nil, false, isMySQL)
 
 	ctx := t.Context()
 
@@ -61,16 +76,17 @@ func buildTestConfig(t *testing.T, labels []string) (cfg *Config, cleanup func()
 
 	avesClassID := avesClass.ID
 
-	// Create repositories (useV2Prefix = false for SQLite, isMySQL = false)
-	detectionRepo := repository.NewDetectionRepository(db, nil, false, false)
-	labelRepo := repository.NewLabelRepository(db, nil, false, false)
-	sourceRepo := repository.NewAudioSourceRepository(db, nil, false, false)
-	weatherRepo := repository.NewWeatherRepository(db, nil, false, false)
-	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, false, false)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, labelRepo, false, false)
-	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, false, false)
+	// Create repositories. useV2Prefix=false (fresh install / clean table names);
+	// isMySQL selects the dialect-specific SQL the repositories generate.
+	detectionRepo := repository.NewDetectionRepository(db, nil, false, isMySQL)
+	labelRepo := repository.NewLabelRepository(db, nil, false, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(db, nil, false, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(db, nil, false, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, false, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, labelRepo, false, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, false, isMySQL)
 
-	cfg = &Config{
+	return &Config{
 		Manager:            manager,
 		Detection:          detectionRepo,
 		Label:              labelRepo,
@@ -87,9 +103,6 @@ func buildTestConfig(t *testing.T, labels []string) (cfg *Config, cleanup func()
 		AvesClassID:        &avesClassID,
 		Labels:             labels,
 	}
-
-	// tempDir is auto-cleaned by t.TempDir(); no additional cleanup needed
-	return cfg, func() {}
 }
 
 // setupTestDatastore creates a V2OnlyDatastore with an in-memory SQLite database for testing.
@@ -112,6 +125,116 @@ func setupTestDatastoreWithLabels(t *testing.T, labels []string) (ds *Datastore,
 	return ds, func() { _ = ds.Close(); cfgCleanup() }
 }
 
+// seedDetection creates (or reuses) a label for sciName and inserts one detection
+// at the given instant. The label scientific_name is stored verbatim so callers
+// can exercise both bare names and legacy "Scientific_Common" concatenated labels.
+// Shared by the SQLite and MySQL (integration) datastore tests.
+func seedDetection(t *testing.T, ds *Datastore, sciName string, at time.Time) *entities.Detection {
+	t.Helper()
+	ctx := t.Context()
+	label, err := ds.label.GetOrCreate(ctx, sciName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err, "failed to create label %q", sciName)
+	det := &entities.Detection{
+		ModelID:    ds.defaultModelID,
+		LabelID:    label.ID,
+		DetectedAt: at.Unix(),
+		Confidence: 0.9,
+	}
+	require.NoError(t, ds.detection.Save(ctx, det), "failed to save detection for %q", sciName)
+	return det
+}
+
+// TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore exercises the LIKE ... ESCAPE
+// query on SQLite. It is portable regression coverage for the escaping logic: the
+// MySQL-specific syntax failure is reproduced in the //go:build integration test,
+// while these cases pin the matching semantics (exact match, the latest date before
+// the cutoff, the legacy concatenated-label prefix match, and that %/_ in the queried
+// name are treated as literals rather than LIKE wildcards).
+func TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.timezone = time.UTC
+	ctx := t.Context()
+
+	const cutoff = "2024-06-15"
+	day := func(d int) time.Time { return time.Date(2024, 6, d, 12, 0, 0, 0, time.UTC) }
+
+	t.Run("returns the latest detection date before the cutoff", func(t *testing.T) {
+		seedDetection(t, ds, "Turdus merula", day(10))
+		seedDetection(t, ds, "Turdus merula", day(13))
+		seedDetection(t, ds, "Turdus merula", day(20)) // on/after cutoff: excluded
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Turdus merula", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-13", got)
+	})
+
+	t.Run("returns empty when the only detection is on or after the cutoff", func(t *testing.T) {
+		seedDetection(t, ds, "Erithacus rubecula", day(20))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Erithacus rubecula", cutoff)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("matches a legacy concatenated label via the LIKE prefix", func(t *testing.T) {
+		seedDetection(t, ds, "Strix aluco_lehtopöllö", day(11))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Strix aluco", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-11", got)
+	})
+
+	t.Run("treats percent in the queried name as a literal, not a wildcard", func(t *testing.T) {
+		seedDetection(t, ds, "Ab%cd_Name", day(11))
+		seedDetection(t, ds, "AbZZcd_Name", day(13)) // decoy: matched only if % is a wildcard
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Ab%cd", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-11", got)
+	})
+
+	t.Run("treats underscore in the queried name as a literal, not a wildcard", func(t *testing.T) {
+		seedDetection(t, ds, "Ax_cy_Name", day(11))
+		seedDetection(t, ds, "AxXcy_Name", day(13)) // decoy: matched only if _ is a wildcard
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Ax_cy", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-11", got)
+	})
+
+	t.Run("excludes a detection at exactly the cutoff instant", func(t *testing.T) {
+		// before.Unix() is midnight at the start of the cutoff date in ds.timezone,
+		// and the filter is a strict less-than, so a detection at exactly that
+		// instant must be excluded.
+		seedDetection(t, ds, "Cyanistes caeruleus", time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Cyanistes caeruleus", cutoff)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("excludes detections reviewed as false positive", func(t *testing.T) {
+		det := seedDetection(t, ds, "Fringilla coelebs", day(10))
+		require.NoError(t, ds.manager.DB().Create(&entities.DetectionReview{
+			DetectionID: det.ID,
+			Verified:    entities.VerificationFalsePositive,
+		}).Error)
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Fringilla coelebs", cutoff)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("returns empty for an unknown species", func(t *testing.T) {
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Nonexistent species", cutoff)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+}
+
 type nilInjectingLabelRepository struct {
 	repository.LabelRepository
 }
@@ -123,6 +246,21 @@ func (r nilInjectingLabelRepository) GetByIDs(ctx context.Context, ids []uint) (
 	}
 	labels[0] = nil
 	return labels, nil
+}
+
+// errInjectingThresholdRepository wraps a DynamicThresholdRepository and forces
+// GetThresholdEvents to fail for one species, used to prove the second
+// (scientific-name) query error is propagated rather than swallowed.
+type errInjectingThresholdRepository struct {
+	repository.DynamicThresholdRepository
+	failOnSpecies string
+}
+
+func (r errInjectingThresholdRepository) GetThresholdEvents(ctx context.Context, speciesName string, limit int) ([]entities.ThresholdEvent, error) {
+	if speciesName == r.failOnSpecies {
+		return nil, fmt.Errorf("injected DB failure for %q", speciesName)
+	}
+	return r.DynamicThresholdRepository.GetThresholdEvents(ctx, speciesName, limit)
 }
 
 func TestV2OnlyDatastore_Open(t *testing.T) {
@@ -586,6 +724,58 @@ func TestV2OnlyDatastore_DynamicThreshold_DeleteEventsByCommonName(t *testing.T)
 	assert.Empty(t, events, "events should be deleted when using common name")
 }
 
+// TestV2OnlyDatastore_DeleteThresholdEvents_LegacyCommonNameLabel pins the read/delete
+// symmetry: an event saved under a legacy common-name-shaped label (its scientific_name
+// column actually holds the common name, mimicking pre-#1907 mis-saved data) must
+// be deleted, not just the post-#1907 scientific-name-shaped event. On the pre-fix
+// code DeleteThresholdEvents resolved only to the scientific name, so the legacy
+// event survived and GetThresholdEvents resurfaced it on the next read.
+func TestV2OnlyDatastore_DeleteThresholdEvents_LegacyCommonNameLabel(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	// Legacy mis-saved event: an empty ScientificName forces SaveThresholdEvent's
+	// fallback to use the common name, creating a label whose scientific_name = "great tit".
+	legacy := &datastore.ThresholdEvent{
+		SpeciesName:   "great tit",
+		PreviousLevel: 0,
+		NewLevel:      1,
+		PreviousValue: 0.8,
+		NewValue:      0.6,
+		ChangeReason:  "high_confidence",
+		Confidence:    0.95,
+		CreatedAt:     time.Now(),
+	}
+	require.NoError(t, ds.SaveThresholdEvent(legacy))
+
+	// Correctly-shaped event (post-#1907): label scientific_name = "Parus major".
+	correct := &datastore.ThresholdEvent{
+		SpeciesName:    "great tit",
+		ScientificName: "Parus major",
+		PreviousLevel:  1,
+		NewLevel:       2,
+		PreviousValue:  0.6,
+		NewValue:       0.5,
+		ChangeReason:   "high_confidence",
+		Confidence:     0.97,
+		CreatedAt:      time.Now().Add(time.Second),
+	}
+	require.NoError(t, ds.SaveThresholdEvent(correct))
+
+	// The dual-read by common name surfaces both label shapes before delete.
+	events, err := ds.GetThresholdEvents("great tit", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 2, "both legacy and correct events should be visible before delete")
+
+	// Delete by common name must remove BOTH shapes (the read/delete symmetry fix).
+	require.NoError(t, ds.DeleteThresholdEvents("great tit"))
+
+	// Nothing should reappear on the next read.
+	events, err = ds.GetThresholdEvents("great tit", 10)
+	require.NoError(t, err)
+	assert.Empty(t, events, "legacy common-name event must not survive the delete")
+}
+
 func TestV2OnlyDatastore_ImageCache(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
@@ -658,17 +848,17 @@ func TestV2OnlyDatastore_NotificationHistory(t *testing.T) {
 	}
 
 	// Save history
-	err := ds.SaveNotificationHistory(history)
+	err := ds.SaveNotificationHistory(t.Context(), history)
 	require.NoError(t, err)
 
 	// Get history
-	retrieved, err := ds.GetNotificationHistory("Passer domesticus", "new_species")
+	retrieved, err := ds.GetNotificationHistory(t.Context(), "Passer domesticus", "new_species")
 	require.NoError(t, err)
 	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
 	assert.Equal(t, "new_species", retrieved.NotificationType)
 
 	// Get active history
-	active, err := ds.GetActiveNotificationHistory(time.Now().Add(-1 * time.Hour))
+	active, err := ds.GetActiveNotificationHistory(t.Context(), time.Now().Add(-1*time.Hour))
 	require.NoError(t, err)
 	assert.Len(t, active, 1)
 }
@@ -695,7 +885,7 @@ func TestV2OnlyDatastore_ThresholdEvent(t *testing.T) {
 	// Get events
 	events, err := ds.GetThresholdEvents("house sparrow", 10)
 	require.NoError(t, err)
-	assert.Len(t, events, 1)
+	require.Len(t, events, 1)
 	assert.Equal(t, "house sparrow", events[0].SpeciesName)
 	assert.Equal(t, "high_confidence", events[0].ChangeReason)
 
@@ -703,6 +893,194 @@ func TestV2OnlyDatastore_ThresholdEvent(t *testing.T) {
 	recent, err := ds.GetRecentThresholdEvents(10)
 	require.NoError(t, err)
 	assert.Len(t, recent, 1)
+}
+
+// TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry pins #1019 and #1068: the v2only
+// threshold read methods must wrap genuine DB errors with datastore Component/Category
+// telemetry, while a benign not-found (ErrDynamicThresholdNotFound) must be wrapped as a
+// CategoryNotFound EnhancedError (never CategoryDatabase) so the API maps it to 404 and it
+// never reaches Sentry as a database error, all while staying reachable via errors.Is.
+func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
+	t.Run("NotFoundWrappedAsNotFoundCategory", func(t *testing.T) {
+		ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+		defer cleanup()
+
+		// Label exists but no threshold was saved, so the repository returns the
+		// ErrDynamicThresholdNotFound sentinel. This is a benign not-found, not a DB fault.
+		// It is wrapped as a CategoryNotFound EnhancedError so the API layer's
+		// handleErrorWithNotFound maps it to HTTP 404 (#1068), while the sentinel stays
+		// reachable via errors.Is (EnhancedError.Unwrap) and the CategoryNotFound
+		// "dynamic threshold not found" message is suppressed from Sentry, so it is never
+		// surfaced as a database error (#1019).
+		_, err := ds.GetDynamicThreshold("Parus major", "")
+		require.Error(t, err)
+		require.ErrorIs(t, err, repository.ErrDynamicThresholdNotFound,
+			"not-found sentinel must propagate so callers can distinguish a benign miss from a genuine DB fault")
+		var ee *errors.EnhancedError
+		require.True(t, errors.As(err, &ee),
+			"not-found must be a CategoryNotFound EnhancedError so the API maps it to 404")
+		assert.Equal(t, string(errors.CategoryNotFound), ee.GetCategory(),
+			"not-found must be CategoryNotFound, never CategoryDatabase (which would be Sentry noise)")
+	})
+
+	t.Run("GenuineDBErrorIsWrapped", func(t *testing.T) {
+		ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+		defer cleanup()
+
+		// Close the underlying DB so every query on the read paths fails for real.
+		require.NoError(t, ds.Close())
+
+		assertDatastoreWrapped := func(t *testing.T, err error, op string) {
+			t.Helper()
+			require.Error(t, err, "%s should surface the DB error", op)
+			var ee *errors.EnhancedError
+			require.True(t, errors.As(err, &ee), "%s error must be an EnhancedError", op)
+			assert.Equal(t, "datastore", ee.GetComponent(), "%s must tag datastore component", op)
+			assert.Equal(t, string(errors.CategoryDatabase), ee.GetCategory(), "%s must tag database category", op)
+		}
+
+		_, errGet := ds.GetDynamicThreshold("Parus major", "")
+		assertDatastoreWrapped(t, errGet, "GetDynamicThreshold")
+
+		_, errAll := ds.GetAllDynamicThresholds()
+		assertDatastoreWrapped(t, errAll, "GetAllDynamicThresholds")
+
+		_, errRecent := ds.GetRecentThresholdEvents(10)
+		assertDatastoreWrapped(t, errRecent, "GetRecentThresholdEvents")
+
+		_, _, _, _, errStats := ds.GetDynamicThresholdStats()
+		assertDatastoreWrapped(t, errStats, "GetDynamicThresholdStats")
+	})
+}
+
+// TestV2OnlyDatastore_ThresholdEvent_ModelName verifies that GetThresholdEvents and
+// GetRecentThresholdEvents return ModelName constructed from the event Label's AIModel
+// (e.g., "BirdNET_V2.4"), the event-side parallel of the GitHub #2902 record fix.
+// Regression test for #1025: events previously returned an empty ModelName because the
+// repository only preloaded Label (not Label.Model) and the converter never set it.
+func TestV2OnlyDatastore_ThresholdEvent_ModelName(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	event := &datastore.ThresholdEvent{
+		SpeciesName:   "Parus major",
+		PreviousLevel: 0,
+		NewLevel:      1,
+		PreviousValue: 0.6,
+		NewValue:      0.7,
+		ChangeReason:  "high_confidence",
+		Confidence:    0.95,
+		CreatedAt:     time.Now(),
+	}
+	require.NoError(t, ds.SaveThresholdEvent(event))
+
+	events, err := ds.GetThresholdEvents("Parus major", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "BirdNET_V2.4", events[0].ModelName,
+		"event ModelName must be constructed from the Label's Model (Name_VVersion)")
+
+	recent, err := ds.GetRecentThresholdEvents(10)
+	require.NoError(t, err)
+	require.Len(t, recent, 1)
+	assert.Equal(t, "BirdNET_V2.4", recent[0].ModelName,
+		"recent event ModelName must be constructed from the Label's Model")
+}
+
+// TestV2OnlyDatastore_GetThresholdEvents_ResolvesScientificName covers the
+// second (scientific-name) query path: a common-name input resolves to a
+// different scientific name, so the merge query runs and finds events stored
+// under the scientific name.
+func TestV2OnlyDatastore_GetThresholdEvents_ResolvesScientificName(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	// Save an event under the scientific name (the correctly-saved, post-#1907 shape).
+	event := &datastore.ThresholdEvent{
+		SpeciesName:   "Parus major",
+		PreviousLevel: 0,
+		NewLevel:      1,
+		PreviousValue: 0.6,
+		NewValue:      0.7,
+		ChangeReason:  "high_confidence",
+		Confidence:    0.95,
+		CreatedAt:     time.Now(),
+	}
+	require.NoError(t, ds.SaveThresholdEvent(event))
+
+	// Query by the common name. resolveToScientificName("Great Tit") -> "Parus major",
+	// so the second query runs and finds the event stored under the scientific name.
+	events, err := ds.GetThresholdEvents("Great Tit", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "Parus major", events[0].SpeciesName)
+}
+
+// TestV2OnlyDatastore_GetThresholdEvents_SecondQueryError pins the #1010 fix:
+// a DB failure on the second (scientific-name) query must surface, not be
+// swallowed and returned as an empty/partial success.
+func TestV2OnlyDatastore_GetThresholdEvents_SecondQueryError(t *testing.T) {
+	cfg, cfgCleanup := buildTestConfig(t, []string{"Parus major_Great Tit"})
+	defer cfgCleanup()
+
+	// Fail only the scientific-name (second) query; the common-name (first)
+	// query still succeeds, isolating the previously-swallowed error path.
+	cfg.Threshold = errInjectingThresholdRepository{
+		DynamicThresholdRepository: cfg.Threshold,
+		failOnSpecies:              "Parus major",
+	}
+
+	ds, err := New(cfg)
+	require.NoError(t, err)
+	defer func() { _ = ds.Close() }()
+
+	// resolveToScientificName("Great Tit") -> "Parus major", so the second query
+	// runs and the injected error must propagate. Assert on the injected message so
+	// the test pins the second (scientific-name) query as the failing one, not just
+	// any error.
+	_, err = ds.GetThresholdEvents("Great Tit", 10)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "injected DB failure")
+}
+
+// TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTieBreak pins the
+// CreatedAt/ID sort tie-break. The per-query LIMIT is applied in SQL, so a
+// single query cannot exercise the Go-side sort; the tie-break only governs how
+// the MERGED result of the two queries (common-name + scientific-name) is
+// truncated. We store one event found by Query 1 (a legacy common-name label)
+// and one found by Query 2 (the resolved scientific name) sharing a timestamp,
+// then assert the higher-ID event wins truncation to one row.
+func TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTieBreak(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	ts := time.Now()
+	// Query 1 finds this event (label scientific_name == the common-name input).
+	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+		SpeciesName: "Great Tit", NewLevel: 1, NewValue: 0.7, ChangeReason: "legacy", Confidence: 0.95, CreatedAt: ts,
+	}))
+	// Query 2 finds this event (label scientific_name == resolved scientific name).
+	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+		SpeciesName: "Parus major", NewLevel: 1, NewValue: 0.7, ChangeReason: "correct", Confidence: 0.95, CreatedAt: ts,
+	}))
+
+	// Both events come back from the merge; learn the higher ID (saved second).
+	all, err := ds.GetThresholdEvents("Great Tit", 10)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	maxID := all[0].ID
+	for _, e := range all[1:] {
+		if e.ID > maxID {
+			maxID = e.ID
+		}
+	}
+
+	// Truncating the same-timestamp merge to one row must deterministically keep
+	// the higher ID via the tie-break.
+	top, err := ds.GetThresholdEvents("Great Tit", 1)
+	require.NoError(t, err)
+	require.Len(t, top, 1)
+	assert.Equal(t, maxID, top[0].ID)
 }
 
 func TestV2OnlyDatastore_SearchNotes(t *testing.T) {
@@ -1196,7 +1574,7 @@ func TestV2OnlyDatastore_ConcatenatedLabelExtraction(t *testing.T) {
 
 	t.Run("GetTopBirdsData extracts scientific name from concatenated label", func(t *testing.T) {
 		dateStr := now.Format(time.DateOnly)
-		topBirds, err := ds.GetTopBirdsData(dateStr, 0.0, 10)
+		topBirds, err := ds.GetTopBirdsData(t.Context(), dateStr, 0.0, 10)
 		require.NoError(t, err)
 		require.Len(t, topBirds, 1)
 
@@ -1300,7 +1678,7 @@ func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 		require.NoError(t, ds.Save(note, nil))
 	}
 
-	topBirds, err := ds.GetTopBirdsData(dateStr, 0.0, 10)
+	topBirds, err := ds.GetTopBirdsData(t.Context(), dateStr, 0.0, 10)
 	require.NoError(t, err)
 	require.Len(t, topBirds, 3)
 
@@ -1313,6 +1691,79 @@ func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 	assert.Equal(t, "comrav", codeByScientific["Corvus corax"], "taxonomy species code should be populated")
 	assert.Equal(t, "eurbla1", codeByScientific["Turdus merula"], "taxonomy species code should be populated")
 	assert.Empty(t, codeByScientific["Passer domesticus"], "species not in taxonomy should have empty code")
+}
+
+// TestV2OnlyDatastore_GetBatchHourlyOccurrences_ScientificName is a regression
+// test: the batch hourly query is keyed strictly on scientific
+// name. One label carries an embedded common name that differs from the
+// scientific name (Turdus merula -> "Common Blackbird"); the other is
+// scientific-only like a BattyBirdNET bat label. Before the fix, the query
+// reverse-mapped the localized common name to a scientific name and keyed the
+// result by the input string, so querying by the common name returned the count
+// and scientific-only labels were dropped. The negative assertion (querying by
+// the localized common name now returns zero) is the discriminator that fails on
+// the pre-fix code.
+func TestV2OnlyDatastore_GetBatchHourlyOccurrences_ScientificName(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{
+		"Turdus merula_Common Blackbird",
+		"Barbastella barbastellus", // scientific-only, like a BattyBirdNET label
+	})
+	defer cleanup()
+
+	const date = "2024-01-15"
+	saveTestNote(t, ds, date, "08:20:00", "Turdus merula", 0.8)
+	saveTestNote(t, ds, date, "23:15:00", "Barbastella barbastellus", 0.9)
+
+	// Querying by scientific name returns the counts keyed by scientific name,
+	// including the scientific-only bat label. Assert the daily total per species
+	// rather than a specific hour index: the query buckets hours using SQLite's
+	// OS-local timezone, which may differ from the test datastore's configured UTC.
+	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), date,
+		[]string{"Turdus merula", "Barbastella barbastellus"}, 0.0)
+	require.NoError(t, err)
+
+	blackbird, ok := counts["Turdus merula"]
+	require.True(t, ok, "result must be keyed by scientific name")
+	assert.Equal(t, 1, hourlyTotal(&blackbird), "blackbird must be counted under its scientific name")
+
+	bat, ok := counts["Barbastella barbastellus"]
+	require.True(t, ok, "result must be keyed by scientific name")
+	assert.Equal(t, 1, hourlyTotal(&bat), "scientific-only bat label must be counted under its scientific name")
+
+	// The localized common name is no longer an accepted key. Pre-fix, the batch
+	// query reverse-mapped "Common Blackbird" -> "Turdus merula" and returned the
+	// blackbird's count under the common-name key; the fixed query returns zero.
+	byCommon, err := ds.GetBatchHourlyOccurrences(t.Context(), date, []string{"Common Blackbird"}, 0.0)
+	require.NoError(t, err)
+	common, ok := byCommon["Common Blackbird"]
+	require.True(t, ok)
+	assert.Equal(t, 0, hourlyTotal(&common),
+		"localized common name must not resolve to detections")
+}
+
+// TestV2OnlyDatastore_GetBatchHourlyOccurrences_CancelledContext verifies that a cancelled
+// request context surfaces as an error rather than silently returning zeroed counts. Before
+// the #984 fix the per-species label lookup logged a warning and continued on error, so a
+// cancelled context produced an all-zero result with a nil error (HTTP 200 with wrong data).
+func TestV2OnlyDatastore_GetBatchHourlyOccurrences_CancelledContext(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Turdus merula_Common Blackbird"})
+	defer cleanup()
+	saveTestNote(t, ds, "2024-01-15", "08:20:00", "Turdus merula", 0.8)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := ds.GetBatchHourlyOccurrences(ctx, "2024-01-15", []string{"Turdus merula"}, 0.0)
+	require.ErrorIs(t, err, context.Canceled, "cancelled context must surface as context.Canceled, not silently zeroed counts")
+}
+
+// hourlyTotal sums a 24-hour occurrence array.
+func hourlyTotal(hours *[24]int) int {
+	total := 0
+	for _, c := range hours {
+		total += c
+	}
+	return total
 }
 
 // TestGetSpeciesSummaryData_NoDateFilter verifies that species summary returns
@@ -1342,7 +1793,7 @@ func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
 	}
 	require.NoError(t, ds.Save(note, nil))
 
-	// Query with no date filter — this was returning empty before the fix
+	// Query with no date filter; this was returning empty before the fix
 	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
 	require.NoError(t, err)
 	require.NotEmpty(t, summaries, "summary should return data when no date filter is provided")
@@ -1474,4 +1925,138 @@ func TestV2OnlyDatastore_UpdateNameMaps_ConcurrentAccess(t *testing.T) {
 	})
 
 	wg.Wait()
+}
+
+// batchFakeResolver misses ResolveLocal (the cold-path branch) and resolves only via the
+// batch seam, like the real resolver does for out-of-working-set bats.
+type batchFakeResolver struct{ batch map[string]string }
+
+func (b *batchFakeResolver) Resolve(string, string) string      { return "" }
+func (b *batchFakeResolver) ResolveLocal(string) (string, bool) { return "", false }
+func (b *batchFakeResolver) ResolveLocalizedBatch(names []string) map[string]string {
+	out := make(map[string]string, len(names))
+	for _, n := range names {
+		if v, ok := b.batch[n]; ok {
+			out[n] = v
+		}
+	}
+	return out
+}
+
+func TestBuildNameMaps_SecondaryModelScientificOnlyLabelIsReverseSearchable(t *testing.T) {
+	t.Parallel()
+
+	r := &batchFakeResolver{batch: map[string]string{"Barbastella barbastellus": "mopsilepakko"}}
+	nm := buildNameMaps([]string{"Barbastella barbastellus"}, r)
+
+	// Reverse exact map is NFC-folded, lowercased.
+	assert.Equal(t, "Barbastella barbastellus", nm.species["mopsilepakko"])
+	// Forward + substring maps present too.
+	assert.Equal(t, "mopsilepakko", nm.common["Barbastella barbastellus"])
+	assert.Equal(t, "mopsilepakko", nm.commonFolded["Barbastella barbastellus"])
+}
+
+func TestBuildNameMaps_AmbiguousCommonNameDeletedNotLastWriterWins(t *testing.T) {
+	t.Parallel()
+
+	// Two scientific names sharing one common name must not silently route to an
+	// arbitrary winner; the ambiguous reverse key is dropped.
+	nm := buildNameMaps([]string{"Strix aluco_Owl", "Bubo bubo_Owl"}, nil)
+	_, ok := nm.species["owl"]
+	assert.False(t, ok, "ambiguous common name must be deleted from the exact reverse map")
+
+	// The forward display maps must still contain both species so their common names
+	// are shown correctly in the UI. Ambiguity handling must only drop the reverse
+	// lookup key, not the forward display names.
+	assert.Equal(t, "Owl", nm.common["Strix aluco"], "forward map must retain common name for Strix aluco")
+	assert.Equal(t, "Owl", nm.common["Bubo bubo"], "forward map must retain common name for Bubo bubo")
+}
+
+// TestUnixTimeOrZero verifies that a non-positive epoch yields the zero time (so the
+// API renders an empty timestamp) instead of the 1970 epoch origin, while a positive
+// epoch converts in the supplied location.
+func TestUnixTimeOrZero(t *testing.T) {
+	t.Parallel()
+
+	t.Run("positive epoch converts in location", func(t *testing.T) {
+		t.Parallel()
+		got := unixTimeOrZero(1718000000, time.UTC)
+		require.False(t, got.IsZero())
+		assert.Equal(t, int64(1718000000), got.Unix())
+		assert.Equal(t, time.UTC, got.Location())
+	})
+
+	t.Run("zero epoch returns zero time", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, unixTimeOrZero(0, time.UTC).IsZero())
+	})
+
+	t.Run("negative epoch returns zero time", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, unixTimeOrZero(-1, time.UTC).IsZero())
+	})
+
+	t.Run("nil location does not panic", func(t *testing.T) {
+		t.Parallel()
+		got := unixTimeOrZero(1718000000, nil)
+		require.False(t, got.IsZero())
+		assert.Equal(t, int64(1718000000), got.Unix())
+	})
+}
+
+// TestConvertToNewSpeciesData_ZeroEpoch verifies the new-species path emits an empty
+// date for a zero/negative FirstDetected epoch rather than formatting 1970-01-01.
+func TestConvertToNewSpeciesData_ZeroEpoch(t *testing.T) {
+	t.Parallel()
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	got := ds.convertToNewSpeciesData(t.Context(), []speciesFirstSeenInfo{
+		{ScientificName: "Parus major", FirstDetected: 0, LastDetected: 0},
+		{ScientificName: "Turdus merula", FirstDetected: 1718000000, LastDetected: 1718600000},
+	})
+
+	require.Len(t, got, 2)
+	assert.Empty(t, got[0].FirstSeenDate, "zero epoch must not render the 1970 origin")
+	assert.Empty(t, got[0].LastSeenDate)
+	assert.NotEmpty(t, got[1].FirstSeenDate)
+	assert.NotEmpty(t, got[1].LastSeenDate)
+}
+
+// TestV2OnlyDatastore_GetSpeciesDiversityData_TimezoneBucketing verifies the date grouping in
+// GetSpeciesDiversityData buckets by the configured timezone, not UTC or the OS-local zone. A
+// detection at a fixed UTC instant 30 minutes before midnight must group on the NEXT calendar day
+// when the configured zone is UTC+5. The negative assertion (the UTC date does not match) proves
+// the bucketing is genuinely offset-aware, and exercises the BETWEEN date filter end-to-end.
+func TestV2OnlyDatastore_GetSpeciesDiversityData_TimezoneBucketing(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ctx := t.Context()
+
+	// Force a deterministic non-UTC zone so the assertion does not depend on the test host.
+	ds.timezone = time.FixedZone("UTC+5", 5*3600)
+
+	label, err := ds.label.GetOrCreate(ctx, "Turdus merula", ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+
+	// 2024-06-14T23:30:00Z -> 2024-06-15 04:30 in UTC+5, so the detection belongs to 2024-06-15.
+	nearMidnight := time.Date(2024, 6, 14, 23, 30, 0, 0, time.UTC).Unix()
+	require.NoError(t, ds.detection.Save(ctx, &entities.Detection{
+		ModelID:    ds.defaultModelID,
+		LabelID:    label.ID,
+		DetectedAt: nearMidnight,
+		Confidence: 0.9,
+	}))
+
+	// The configured-zone date matches.
+	data, err := ds.GetSpeciesDiversityData(ctx, "2024-06-15", "2024-06-15")
+	require.NoError(t, err)
+	require.Len(t, data, 1, "near-midnight detection must bucket on the configured-zone date 2024-06-15")
+	assert.Equal(t, "2024-06-15", data[0].Date)
+	assert.Equal(t, 1, data[0].Count)
+
+	// The UTC date must NOT match, proving bucketing is not in UTC.
+	none, err := ds.GetSpeciesDiversityData(ctx, "2024-06-14", "2024-06-14")
+	require.NoError(t, err)
+	assert.Empty(t, none, "detection must not bucket on the UTC date when the configured zone is UTC+5")
 }

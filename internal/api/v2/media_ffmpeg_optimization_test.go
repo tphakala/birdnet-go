@@ -20,6 +20,11 @@ func getSoxSpectrogramArgsHelper(t *testing.T, ctx context.Context, audioPath, o
 	tempDir := t.TempDir()
 	sfs, err := securefs.New(tempDir)
 	require.NoError(t, err, "Failed to create SecureFS")
+	// securefs.New holds an open os.Root handle on tempDir. On Windows that
+	// handle blocks t.TempDir()'s RemoveAll cleanup ("being used by another
+	// process"), which fails the test even though its assertions passed. Close
+	// it before the TempDir teardown (t.Cleanup is LIFO).
+	t.Cleanup(func() { _ = sfs.Close() })
 	gen := spectrogram.NewGenerator(settings, sfs, logger.Global().Module("spectrogram.test"))
 	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
 }
@@ -30,6 +35,9 @@ func getSoxSpectrogramArgsBenchHelper(b *testing.B, ctx context.Context, audioPa
 	tempDir := b.TempDir()
 	sfs, err := securefs.New(tempDir)
 	require.NoError(b, err, "Failed to create SecureFS")
+	// Release the os.Root handle before b.TempDir() cleanup (see the test helper
+	// above for the Windows rationale).
+	b.Cleanup(func() { _ = sfs.Close() })
 	gen := spectrogram.NewGenerator(settings, sfs, logger.Global().Module("spectrogram.test"))
 	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
 }

@@ -356,14 +356,13 @@ describe('Duplicate Keys: Dynamic Thresholds', () => {
 });
 
 // ============================================================================
-// All Species Labels — used by SpeciesManager autocomplete
+// All Species Labels: used by the species autocomplete pickers
 // ============================================================================
 
 describe('Duplicate Keys: All Species Labels', () => {
   it('species label list has no duplicates', async () => {
-    // SpeciesManager predictions come from species/all or species/predictions
-    // If the label list itself has duplicates, the predictions dropdown could
-    // return duplicate values
+    // Species picker predictions come from species/all. If the label list itself
+    // has duplicates, the predictions dropdown could return duplicate values.
     const response = await apiCall('/species/all');
 
     if (!response.ok) {

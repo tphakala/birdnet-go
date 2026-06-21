@@ -268,7 +268,11 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		response.Reason = "Cannot access database connection"
 		return ctx.JSON(http.StatusOK, response)
 	}
-	db := dbProvider.GetDB()
+	// Bind the request context so the existence checks and information_schema
+	// queries below abort if the client disconnects, rather than running
+	// unbounded on the request thread.
+	reqCtx := ctx.Request().Context()
+	db := dbProvider.GetDB().WithContext(reqCtx)
 
 	// Check each legacy table and get its size
 	var totalSize int64
@@ -282,6 +286,13 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		// Check if table exists
 		exists, err := c.tableExistsMySQL(db, tableName)
 		if err != nil {
+			// Client disconnected: the request context is cancelled and every
+			// remaining table query would fail the same way, so stop quietly
+			// instead of logging a warning per table.
+			if reqCtx.Err() != nil {
+				c.logDebugIfEnabled("Legacy status query cancelled by client", logger.Error(reqCtx.Err()))
+				break
+			}
 			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
 				logger.String("table", tableName),
 				logger.Error(err))
@@ -364,7 +375,7 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 	// Get size before deletion for reporting
 	var sizeBytes int64
 	if c.isUsingMySQL() {
-		sizeBytes = c.getMySQLLegacySize()
+		sizeBytes = c.getMySQLLegacySize(ctx.Request().Context())
 	} else {
 		sizeBytes = c.getSQLiteLegacySize()
 	}
@@ -459,7 +470,11 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 	if !ok {
 		return legacyTables, fmt.Errorf("cannot access database connection")
 	}
-	db := dbProvider.GetDB()
+	// Bind the cleanup context to the GORM session so both the per-table
+	// existence check (tableExistsMySQL's Raw) and the DROP TABLE Exec below
+	// observe cancellation. Without this, an in-flight DROP cannot abort on
+	// shutdown, stalling graceful shutdown and leaking the cleanup goroutine.
+	db := dbProvider.GetDB().WithContext(ctx)
 
 	var remaining []string
 	var droppedCount int
@@ -527,18 +542,25 @@ func (c *Controller) getSQLiteLegacySize() int64 {
 	return totalSize
 }
 
-// getMySQLLegacySize returns the total size of MySQL legacy tables.
-func (c *Controller) getMySQLLegacySize() int64 {
+// getMySQLLegacySize returns the total size of MySQL legacy tables. ctx (the
+// request context) bounds the information_schema queries so they abort if the
+// caller disconnects instead of running unbounded on the request thread.
+func (c *Controller) getMySQLLegacySize(ctx context.Context) int64 {
 	dbProvider, ok := c.Repo.(gormDBProvider)
 	if !ok {
 		return 0
 	}
-	db := dbProvider.GetDB()
+	db := dbProvider.GetDB().WithContext(ctx)
 
 	var totalSize int64
 	for _, tableName := range legacyTables {
 		exists, err := c.tableExistsMySQL(db, tableName)
 		if err != nil {
+			// Client disconnected: stop quietly instead of warning per table.
+			if ctx.Err() != nil {
+				c.logDebugIfEnabled("Legacy size query cancelled by client", logger.Error(ctx.Err()))
+				break
+			}
 			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
 				logger.String("table", tableName),
 				logger.Error(err))

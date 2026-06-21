@@ -235,17 +235,22 @@ func TestEncodeFlacUsingFFmpeg(t *testing.T) {
 }
 
 func getFFmpegPath() string {
-	// Try to get FFmpeg path from environment variable first
-	path := os.Getenv("FFMPEG_PATH")
-	if path != "" {
+	// Honor an explicit override first.
+	if path := os.Getenv("FFMPEG_PATH"); path != "" {
 		return path
 	}
 
-	// Fall back to a common system location on Linux/macOS
-	if _, err := os.Stat("/usr/bin/ffmpeg"); err == nil {
-		return "/usr/bin/ffmpeg"
+	// Resolve the binary to an absolute path via PATH. The production encoder
+	// (ValidateFFmpegPath) requires an absolute path, and FFmpeg lives in
+	// different places across platforms (e.g. /usr/bin on Linux, /opt/homebrew/bin
+	// on macOS), so the old hardcoded /usr/bin/ffmpeg fell through to the bare
+	// "ffmpeg" name on macOS and was rejected as non-absolute. LookPath returns an
+	// absolute path for a binary found on PATH.
+	if path, err := exec.LookPath(conf.GetFfmpegBinaryName()); err == nil {
+		return path
 	}
 
-	// Fall back to just the binary name, assuming it's in PATH
-	return "ffmpeg"
+	// Last resort: the bare binary name. Callers requiring an absolute path will
+	// reject it, but TestEncodeFlacUsingFFmpeg skips when LookPath finds nothing.
+	return conf.GetFfmpegBinaryName()
 }

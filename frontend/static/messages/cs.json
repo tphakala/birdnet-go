@@ -133,7 +133,8 @@
       "downloadCsv": "Stáhnout seznam druhů jako CSV",
       "visitEbirdLink": "Otevřít eBird.org v nové kartě",
       "learnEbirdTaxonomyLink": "Otevřít taxonomii eBird v nové kartě",
-      "resizeHandle": "Tažením změníte velikost"
+      "resizeHandle": "Tažením změníte velikost",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Spolehlivost",
@@ -404,6 +405,8 @@
         "recalculatingThresholds": "Přepočítávám dynamické prahy pro novou základní hodnotu",
         "reconfiguringDynamicThresholds": "Překonfiguruji dynamické prahy…",
         "webserverRestartRequired": "Nastavení webového serveru byla změněna. Je vyžadován restart.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Aktualizuji monitorování hladiny zvuku…",
         "reconfiguringAudioSources": "Překonfiguruji zdroje zvuku…",
         "rebuildingExtendedCapture": "Přestavuji filtr rozšířeného nahrávání…",
@@ -486,7 +489,8 @@
       "confidenceMax": "Maximální procento spolehlivosti",
       "verifiedStatus": "Stav ověření",
       "lockedStatus": "Stav uzamčení",
-      "timeOfDay": "Denní doba"
+      "timeOfDay": "Denní doba",
+      "source": "Zdroj zvuku"
     },
     "advancedFilters": "Pokročilé filtry",
     "showAdvancedFilters": "Zobrazit pokročilé filtry",
@@ -508,6 +512,9 @@
       "sunrise": "Východ slunce +/- 30 min",
       "sunset": "Západ slunce +/- 30 min"
     },
+    "sourceOptions": {
+      "any": "Všechny zdroje"
+    },
     "sortOptions": {
       "dateDesc": "Datum (od nejnovějších)",
       "dateAsc": "Datum (od nejstarších)",
@@ -519,6 +526,7 @@
       "timeOfDay": "Denní doba",
       "species": "Druh",
       "confidence": "Spolehlivost",
+      "source": "Zdroj",
       "status": "Stav",
       "actions": "Akce"
     },
@@ -788,7 +796,23 @@
     },
     "detail": {
       "species": "Druh",
-      "observation": "Pozorování"
+      "observation": "Pozorování",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Vědecký název",
+        "classificationBadges": "Odznaky klasifikace druhu",
+        "confidence": "Spolehlivost detekce {confidence}%",
+        "metadata": "Metadata detekce",
+        "weatherConditions": "Povětrnostní podmínky v době detekce",
+        "comments": "Komentáře k detekci",
+        "commentText": "Text komentáře",
+        "commentTimestamp": "Časové razítko komentáře",
+        "mainRegion": "Podrobnosti detekce",
+        "tabsHeading": "Karty s informacemi o detekci",
+        "tabList": "Karty podrobností detekce",
+        "speciesHeadingSuffix": "podrobnosti detekce"
+      }
     },
     "headers": {
       "dateTime": "Datum a čas",
@@ -1129,6 +1153,7 @@
     "sections": {
       "overview": "Přehled",
       "database": "Databáze",
+      "inference": "AI Models",
       "terminal": "Terminál"
     },
     "database": {
@@ -1484,6 +1509,90 @@
         }
       }
     },
+    "inference": {
+      "title": "AI Models & Inference",
+      "loading": "Loading inference status",
+      "error": "Could not load inference status",
+      "sectionHardware": "Hardware",
+      "sectionBackends": "Inference Backends",
+      "sectionModels": "Models",
+      "noModels": "No models are currently loaded",
+      "architecture": "Architecture",
+      "cpu": "CPU",
+      "environment": "Environment",
+      "fp16": "FP16",
+      "fp16Supported": "FP16 supported",
+      "fp16Unsupported": "FP16 not supported",
+      "backendTflite": "TensorFlow Lite",
+      "backendOnnx": "ONNX Runtime",
+      "backendOpenvino": "OpenVINO",
+      "available": "Available",
+      "notAvailable": "Not available",
+      "active": "Active",
+      "inactive": "Inactive",
+      "initialized": "Initialized",
+      "version": "Version",
+      "devices": "Devices",
+      "stock": "Stock",
+      "custom": "Custom",
+      "sampleRate": "Sample rate",
+      "clipLength": "Délka segmentu",
+      "species": "Species",
+      "invocations": "Segments analysed",
+      "avgLatency": "Avg latency",
+      "maxLatency": "Max latency",
+      "rtf": "RTF",
+      "rtfLabel": "Real-time factor",
+      "approxRam": "Approx. host RAM (RSS)",
+      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
+      "latencyChart": "Latency (ms)",
+      "rtfChart": "Real-time factor",
+      "sources": "Audio sources",
+      "noSources": "No sources attached",
+      "primaryFallback": "primary (fallback)",
+      "notMeasured": "n/a",
+      "unitMs": "ms",
+      "unitKhz": "kHz",
+      "unitSec": "s",
+      "sectionAudio": "Audio",
+      "queueDepth": "Queue depth",
+      "queueDepthChart": "Queue depth",
+      "droppedChunks": "Dropped chunks",
+      "queueCapacity": "Capacity",
+      "lastSeen": "Last seen",
+      "lastSeenNever": "No detections yet",
+      "deviceHelp": "Výpočetní zařízení, na kterém tento model provádí inferenci (CPU, GPU nebo neznámé).",
+      "paused": "Pozastaveno",
+      "pausedScheduleHelp": "Tento model běží pouze podle plánu a je momentálně pozastaven, takže nezpracovává zvuk.",
+      "activityPaused": "Pozastaveno plánem",
+      "lastHeard": "Naposledy slyšeno",
+      "lastHeardHint": "Nedávné predikce nad prahem, pro diagnostiku. Zahrnuje neptačí a mimo-oblastní výsledky, které se neukládají jako detekce.",
+      "lastHeardNever": "Zatím nic neslyšeno",
+      "confidenceColumn": "Spol.",
+      "heardWhen": "Kdy",
+      "coDetectedColumn": "Také",
+      "coDetectedHelp": "Jiné modely, které tento druh zachytily do {seconds} s",
+      "outOfRangeHelp": "Mimo oblastní filtr (zobrazeno pro diagnostiku, neuloženo jako detekce)",
+      "peak": "špička",
+      "activityActive": "Inference active",
+      "activityIdle": "Idle",
+      "throughput": "Throughput",
+      "throughputUnit": "/s",
+      "throughputChart": "Throughput (/s)",
+      "errorRate": "Error rate",
+      "loadFailures": "Load failures",
+      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
+      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
+      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
+      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
+      "throughputHelp": "Segments analysed per second by this model.",
+      "errorRateHelp": "Share of analysis attempts that failed.",
+      "loadFailuresHelp": "Number of times this model failed to load.",
+      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
+      "invocationsHelp": "Total audio segments this model has analysed since startup.",
+      "noModelsHint": "No audio source configured yet?",
+      "noModelsHintLink": "Configure audio sources"
+    },
     "metrics": {
       "cpu": "CPU",
       "memory": "Paměť",
@@ -1539,6 +1648,35 @@
     "reattach": "Připojit zpět"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Přehled",
+        "patterns": "Vzorce aktivity",
+        "trends": "Trendy",
+        "biodiversity": "Biodiverzita",
+        "quality": "Kontrola a přesnost"
+      },
+      "aria": {
+        "tabs": "Sekce analýzy"
+      },
+      "controls": {
+        "source": "Zdroj",
+        "sourceAll": "Všechny zdroje",
+        "sourceComingSoon": "Filtrování podle zdroje přijde v pozdější aktualizaci.",
+        "speciesNotApplicable": "Grafy v této sekci nefiltrují podle druhu."
+      },
+      "card": {
+        "error": "Tento graf se nepodařilo načíst",
+        "retry": "Zkusit znovu",
+        "notEnoughData": "Zatím není dostatek dat",
+        "notEnoughDataHint": "Tento graf potřebuje alespoň {min} datových bodů. Pokračujte v nahrávání a vraťte se brzy.",
+        "export": "Exportovat",
+        "exportComingSoon": "Export do CSV brzy přijde."
+      },
+      "comingSoon": {
+        "description": "Tato sekce se připravuje a přijde v některé z příštích aktualizací."
+      }
+    },
     "title": "Přehled",
     "loadingError": "Nepodařilo se načíst některá analytická data. Zkuste to prosím později.",
     "stats": {
@@ -1619,6 +1757,7 @@
         "dateTime": "Datum a čas",
         "species": "Druh",
         "confidence": "Spolehlivost",
+        "source": "Zdroj",
         "timeOfDay": "Denní doba"
       },
       "noRecentDetections": "Nebyly nalezeny žádné nedávné detekce",
@@ -1719,6 +1858,14 @@
     },
     "errors": {
       "loadFailed": "Nepodařilo se načíst analytická data. Zkuste to prosím znovu."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -3653,16 +3800,22 @@
         "configureActions": "Nakonfigurovat akce",
         "actionsConfigured": "Nakonfigurováno",
         "list": {
-          "threshold": "Práh:",
-          "interval": "Interval:",
-          "intervalNone": "Žádný",
-          "actionBadge": "Akce",
           "editTitle": "Upravit konfiguraci",
           "removeTitle": "Odstranit konfiguraci"
         },
         "emptyState": {
           "title": "Zatím žádné konfigurace.",
           "description": "Klikněte na \"Přidat konfiguraci\" pro přizpůsobení nastavení detekce druhů."
+        },
+        "table": {
+          "columnScientificName": "Vědecký název",
+          "intervalDefault": "Výchozí",
+          "intervalDefaultTooltip": "0 = použít globální výchozí interval",
+          "noActions": "Žádný",
+          "searchPlaceholder": "Hledat druhy...",
+          "noResults": "Žádné odpovídající konfigurace",
+          "editDisabledReason": "Před úpravou jiného druhu uložte nebo zavřete aktuální editor",
+          "actionsDisabledBusy": "Počkejte prosím na dokončení aktuální operace"
         }
       },
       "synonyms": {
@@ -4439,6 +4592,11 @@
       "removeCertificate": "Odstranit certifikát",
       "fileReadError": "Soubor se nepodařilo přečíst",
       "loading": "Načítání informací o certifikátu…"
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {
@@ -4542,7 +4700,8 @@
         "invalidUrl": "Neplatný formát URL. Zadejte úplnou URL, např. rtsp://host:port/cesta",
         "unsupportedScheme": "Nepodporované schéma URL \"{scheme}\". Použijte rtsp, rtsps, http, https, rtmp nebo udp",
         "blockedDestination": "Tento cíl je z bezpečnostních důvodů blokován",
-        "connectionFailed": "Nelze se připojit ke streamu. Zkontrolujte, zda je URL správná a stream je dostupný"
+        "connectionFailed": "Nelze se připojit ke streamu. Zkontrolujte, zda je URL správná a stream je dostupný",
+        "noAudioTrack": "Stream neobsahuje žádnou zvukovou stopu. Lze použít pouze streamy obsahující zvuk"
       }
     },
     "debug": {
@@ -4836,7 +4995,13 @@
     "bannerTitle": "Vyžadován restart",
     "bannerMessage": "Změny konfigurace vyžadují restart, aby se projevily:",
     "bannerAction": "Restartovat nyní",
-    "restartFailed": "Restart se nepodařilo spustit"
+    "restartFailed": "Restart se nepodařilo spustit",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Nápověda a podpora",

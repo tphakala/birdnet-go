@@ -265,6 +265,84 @@ func TestMemoryStore_ConcurrentAccess(t *testing.T) {
 	assert.NotEmpty(t, store.Names())
 }
 
+func TestMemoryStore_TopologyBroadcast(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		store := NewMemoryStore(10)
+		ch, cancel := store.SubscribeTopology()
+		t.Cleanup(cancel)
+
+		// Broadcast; the subscriber should receive within a short deadline.
+		store.BroadcastTopologyChanged()
+
+		select {
+		case <-ch:
+			// Expected: signal received.
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for topology signal")
+		}
+	})
+}
+
+func TestMemoryStore_TopologyBroadcast_Cancel(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		store := NewMemoryStore(10)
+		ch, cancel := store.SubscribeTopology()
+
+		// Cancel the subscription, then broadcast: no panic, no receive.
+		cancel()
+		store.BroadcastTopologyChanged()
+
+		select {
+		case <-ch:
+			t.Fatal("cancelled subscriber should not receive a topology signal")
+		case <-time.After(100 * time.Millisecond):
+			// Expected: no signal received.
+		}
+	})
+}
+
+func TestMemoryStore_TopologyBroadcast_Coalesces(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		store := NewMemoryStore(10)
+		ch, cancel := store.SubscribeTopology()
+		t.Cleanup(cancel)
+
+		// Three broadcasts without a consumer; cap is 1, so they coalesce.
+		store.BroadcastTopologyChanged()
+		store.BroadcastTopologyChanged()
+		store.BroadcastTopologyChanged()
+
+		// First receive succeeds.
+		select {
+		case <-ch:
+		case <-time.After(time.Second):
+			t.Fatal("expected at least one coalesced topology signal")
+		}
+
+		// No second buffered signal remains.
+		select {
+		case <-ch:
+			t.Fatal("topology signals should coalesce to a single pending value")
+		case <-time.After(100 * time.Millisecond):
+			// Expected: nothing more buffered.
+		}
+	})
+}
+
+func TestMemoryStore_TopologyBroadcast_NoSubscribers(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+
+	// Broadcasting with no subscribers must not panic.
+	assert.NotPanics(t, store.BroadcastTopologyChanged)
+}
+
 func TestRingBuffer_EmptyRead(t *testing.T) {
 	t.Parallel()
 	rb := newRingBuffer(5)

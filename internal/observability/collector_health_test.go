@@ -42,7 +42,7 @@ func TestCollector_AudioHealthDelta(t *testing.T) {
 	assert.Equal(t, int64(5), healthStore.LifetimeTotal("audio.drops.src1"))
 	assert.Equal(t, int64(3), healthStore.LifetimeTotal("audio.overruns.src1"))
 
-	events := healthEvents.Recent("drops", 10)
+	events := healthEvents.Recent(MetricTypeAudioDrops, 10)
 	require.Len(t, events, 1)
 	assert.Equal(t, int64(5), events[0].Delta)
 }
@@ -105,7 +105,7 @@ func TestCollector_StreamHealthDelta(t *testing.T) {
 
 	assert.Equal(t, int64(3), healthStore.LifetimeTotal("stream.restarts.stream_abc123"))
 
-	events := healthEvents.Recent("restarts", 10)
+	events := healthEvents.Recent(MetricTypeStreamRestarts, 10)
 	require.Len(t, events, 1)
 	assert.Equal(t, int64(3), events[0].Delta)
 }
@@ -178,11 +178,14 @@ func TestCollector_SeedsKeysOnFirstTick(t *testing.T) {
 		MetricPrefixAudioDrops+"src1")
 	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixAudioOverruns),
 		MetricPrefixAudioOverruns+"src1")
+	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixResultsQueueDrops),
+		MetricPrefixResultsQueueDrops+"src1")
 	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixStreamRestarts),
 		MetricPrefixStreamRestarts+"stream1")
 
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixAudioDrops+"src1"))
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixAudioOverruns+"src1"))
+	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixResultsQueueDrops+"src1"))
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixStreamRestarts+"stream1"))
 }
 

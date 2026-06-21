@@ -166,7 +166,9 @@ describe('formatFiltersForAPI', () => {
     expect(result).toEqual({ timeOfDay: 'dawn' });
   });
 
-  it('should map source filter to location API param', () => {
+  // location and source are aliases for the same backend dimension (source_node),
+  // exposed by GET /api/v2/detections as the single `location` query param.
+  it('should map source filter to the location API param (shared source_node dimension)', () => {
     const filters = [
       {
         type: 'source' as const,
@@ -178,6 +180,35 @@ describe('formatFiltersForAPI', () => {
 
     const result = formatFiltersForAPI(filters);
     expect(result).toEqual({ location: 'rtsp_87b89761' });
+  });
+
+  it('should map location filter to the location API param', () => {
+    const filters = [
+      {
+        type: 'location' as const,
+        operator: ':' as const,
+        value: 'Back Yard',
+        raw: 'location:Back Yard',
+      },
+    ];
+
+    const result = formatFiltersForAPI(filters);
+    expect(result).toEqual({ location: 'Back Yard' });
+  });
+
+  it('should map daterange filter to snake_case start_date/end_date API params', () => {
+    const filters = [
+      {
+        type: 'daterange' as const,
+        operator: ':' as const,
+        value: '2024-01-01',
+        value2: '2024-01-31',
+        raw: 'daterange:2024-01-01:2024-01-31',
+      },
+    ];
+
+    const result = formatFiltersForAPI(filters);
+    expect(result).toEqual({ start_date: '2024-01-01', end_date: '2024-01-31' });
   });
 
   it('should format multiple filters', () => {
@@ -241,5 +272,78 @@ describe('getFilterSuggestions', () => {
   it('should include source: in filter-type suggestions', () => {
     const result = getFilterSuggestions('sou');
     expect(result).toContain('source:');
+  });
+
+  it('should include daterange: in filter-type suggestions', () => {
+    const result = getFilterSuggestions('dater');
+    expect(result).toContain('daterange:');
+  });
+
+  it('should suggest both date: and daterange: for the "date" prefix', () => {
+    const result = getFilterSuggestions('date');
+    expect(result).toEqual(expect.arrayContaining(['date:', 'daterange:']));
+  });
+});
+
+describe('parseSearchQuery multi-word species filter', () => {
+  it('captures an unquoted multi-word species value', () => {
+    const result = parseSearchQuery('species:Great Tit');
+    expect(result.errors).toHaveLength(0);
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].type).toBe('species');
+    expect(result.filters[0].value).toBe('Great Tit');
+  });
+
+  it('captures a quoted multi-word species value and strips the quotes', () => {
+    const result = parseSearchQuery('species:"Great Tit"');
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].value).toBe('Great Tit');
+  });
+
+  it('stops a multi-word value at the next recognized filter key', () => {
+    const result = parseSearchQuery('species:Great Tit confidence:>90');
+    expect(result.errors).toHaveLength(0);
+    const species = result.filters.find(f => f.type === 'species');
+    const confidence = result.filters.find(f => f.type === 'confidence');
+    expect(species?.value).toBe('Great Tit');
+    expect(confidence?.value).toBe(90);
+    expect(confidence?.operator).toBe('>');
+  });
+
+  it('preserves free text before a multi-word filter', () => {
+    const result = parseSearchQuery('flying species:Great Tit');
+    expect(result.textQuery).toBe('flying');
+    expect(result.filters.find(f => f.type === 'species')?.value).toBe('Great Tit');
+  });
+
+  it('captures trailing free text after a quoted value', () => {
+    const result = parseSearchQuery('species:"Great Tit" flying');
+    expect(result.filters.find(f => f.type === 'species')?.value).toBe('Great Tit');
+    expect(result.textQuery).toBe('flying');
+  });
+
+  it('greedily swallows trailing free text after an unquoted multi-word value (documented limitation)', () => {
+    const result = parseSearchQuery('species:Great Tit flying');
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].value).toBe('Great Tit flying');
+    expect(result.textQuery).toBe('');
+  });
+
+  it('handles an unmatched trailing quote without throwing', () => {
+    const result = parseSearchQuery('species:"Great Tit');
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].value).toBe('Great Tit');
+  });
+
+  it('captures a multi-word location value', () => {
+    const result = parseSearchQuery('location:Back Yard');
+    expect(result.filters.find(f => f.type === 'location')?.value).toBe('Back Yard');
+  });
+
+  it('pushes an error for a single-token filter with no value', () => {
+    const result = parseSearchQuery('confidence:');
+    expect(result.filters).toHaveLength(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.textQuery).toBe('');
   });
 });

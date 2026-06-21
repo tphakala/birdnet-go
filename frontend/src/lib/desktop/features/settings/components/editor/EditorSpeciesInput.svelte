@@ -15,6 +15,7 @@
 <script lang="ts">
   import { Z_INDEX } from '$lib/utils/z-index';
   import { t } from '$lib/i18n';
+  import { toLocalizedPredictions, type SpeciesPrediction } from '$lib/utils/speciesPredictions';
 
   interface Props {
     value?: string;
@@ -23,6 +24,12 @@
     placeholder?: string;
     disabled?: boolean;
     id?: string;
+    /**
+     * Resolve a canonical prediction value to its visitor-locale label. The input
+     * displays the label after selection, while onPredictionSelect reports the
+     * canonical value so the parent persists a canonical config key, not a label.
+     */
+    localizeLabel?: (_value: string) => string;
     onInput?: (_value: string) => void;
     onPredictionSelect?: (_prediction: string) => void;
   }
@@ -34,6 +41,7 @@
     placeholder = '',
     disabled = false,
     id,
+    localizeLabel,
     onInput,
     onPredictionSelect,
   }: Props = $props();
@@ -66,8 +74,11 @@
       }`
   );
 
-  // All predictions are pre-filtered by the parent; show them as-is
-  let filteredPredictions = $derived(predictions ?? []);
+  // All predictions are pre-filtered by the parent; pair each with its localized
+  // label. Reactive to the dictionary store via localizeLabel.
+  let filteredPredictions = $derived<SpeciesPrediction[]>(
+    toLocalizedPredictions(predictions ?? [], localizeLabel)
+  );
 
   // Manage portal lifecycle based on prediction visibility
   $effect(() => {
@@ -98,9 +109,10 @@
   function handlePortalClick(event: MouseEvent) {
     const button = (event.target as HTMLElement).closest('.species-prediction-item');
     if (button) {
-      const prediction = button.getAttribute('data-prediction');
-      if (prediction) {
-        selectPrediction(prediction);
+      // data-prediction carries the canonical value; the visible text is the label.
+      const canonicalValue = button.getAttribute('data-prediction');
+      if (canonicalValue) {
+        selectPrediction(canonicalValue, button.textContent ?? canonicalValue);
       }
     }
   }
@@ -108,10 +120,10 @@
   function handlePortalKeydown(event: KeyboardEvent) {
     const button = (event.target as HTMLElement).closest('.species-prediction-item');
     if (button) {
-      const prediction = button.getAttribute('data-prediction');
+      const canonicalValue = button.getAttribute('data-prediction');
       const index = parseInt(button.getAttribute('data-index') ?? '0', 10);
-      if (prediction !== null) {
-        handlePredictionKeydown(event, prediction, index);
+      if (canonicalValue !== null) {
+        handlePredictionKeydown(event, canonicalValue, button.textContent ?? canonicalValue, index);
       }
     }
   }
@@ -144,14 +156,15 @@
     const predictionsCount = filteredPredictions.length;
     const existingCount = existingButtons.length;
 
-    // Update existing buttons in place to avoid DOM churn
+    // Update existing buttons in place to avoid DOM churn. Visible text is the
+    // localized label; data-prediction holds the canonical value.
     for (let i = 0; i < Math.min(predictionsCount, existingCount); i++) {
       // eslint-disable-next-line security/detect-object-injection
       const button = existingButtons[i] as HTMLButtonElement;
       // eslint-disable-next-line security/detect-object-injection
-      button.textContent = filteredPredictions[i];
-      // eslint-disable-next-line security/detect-object-injection
-      button.setAttribute('data-prediction', filteredPredictions[i]);
+      const prediction = filteredPredictions[i];
+      button.textContent = prediction.label;
+      button.setAttribute('data-prediction', prediction.value);
       button.setAttribute('data-index', i.toString());
       button.style.display = 'block';
     }
@@ -159,17 +172,17 @@
     // Append new buttons when list grows
     if (predictionsCount > existingCount) {
       for (let i = existingCount; i < predictionsCount; i++) {
+        // eslint-disable-next-line security/detect-object-injection
+        const prediction = filteredPredictions[i];
         const button = document.createElement('button');
         button.type = 'button';
         button.className =
           'species-prediction-item w-full text-left px-4 py-2 hover:bg-[var(--color-base-200)] focus:bg-[var(--color-base-200)] focus:outline-hidden border-none bg-transparent text-sm';
-        // eslint-disable-next-line security/detect-object-injection
-        button.textContent = filteredPredictions[i];
+        button.textContent = prediction.label;
         button.setAttribute('role', 'option');
         button.setAttribute('aria-selected', 'false');
         button.setAttribute('tabindex', '-1');
-        // eslint-disable-next-line security/detect-object-injection
-        button.setAttribute('data-prediction', filteredPredictions[i]);
+        button.setAttribute('data-prediction', prediction.value);
         button.setAttribute('data-index', i.toString());
         portalDropdown.appendChild(button);
       }
@@ -186,11 +199,26 @@
     updatePortalPosition();
   }
 
+  // Fallback dropdown-height estimate (px), used only before the dropdown has
+  // been laid out and its real offsetHeight can be measured.
+  const DROPDOWN_MAX_HEIGHT_ESTIMATE = 240;
+  const DROPDOWN_ITEM_HEIGHT_ESTIMATE = 40;
+
   function updatePortalPosition() {
     if (!portalDropdown || !inputElement) return;
 
     const rect = inputElement.getBoundingClientRect();
-    const dropdownHeight = Math.min(240, filteredPredictions.length * 40);
+    // Use the real rendered height (the dropdown is already populated when this
+    // runs) so the 'above' flip aligns the dropdown's bottom edge to the input.
+    // Fall back to an item-count estimate only before the first layout.
+    const measuredHeight = portalDropdown.offsetHeight;
+    const dropdownHeight =
+      measuredHeight > 0
+        ? measuredHeight
+        : Math.min(
+            DROPDOWN_MAX_HEIGHT_ESTIMATE,
+            filteredPredictions.length * DROPDOWN_ITEM_HEIGHT_ESTIMATE
+          );
     const viewportHeight = window.innerHeight;
     const spaceBelow = viewportHeight - rect.bottom;
     const spaceAbove = rect.top;
@@ -248,6 +276,7 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      manuallyDismissed = true;
       destroyPortalDropdown();
       inputElement?.blur();
     } else if (event.key === 'ArrowDown' && showPredictions && portalDropdown) {
@@ -257,18 +286,25 @@
     }
   }
 
-  function selectPrediction(prediction: string) {
-    value = prediction;
-    onPredictionSelect?.(prediction);
+  function selectPrediction(canonicalValue: string, predictionLabel: string) {
+    // Show the localized label in the field, but report the canonical value so the
+    // parent persists a canonical config key rather than the displayed label.
+    value = predictionLabel;
+    onPredictionSelect?.(canonicalValue);
     showPredictions = false;
     destroyPortalDropdown();
     inputElement?.focus();
   }
 
-  function handlePredictionKeydown(event: KeyboardEvent, prediction: string, index: number) {
+  function handlePredictionKeydown(
+    event: KeyboardEvent,
+    canonicalValue: string,
+    predictionLabel: string,
+    index: number
+  ) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      selectPrediction(prediction);
+      selectPrediction(canonicalValue, predictionLabel);
     } else if (event.key === 'ArrowDown') {
       event.preventDefault();
       if (portalDropdown) {
@@ -288,6 +324,7 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      manuallyDismissed = true;
       destroyPortalDropdown();
       inputElement?.focus();
     }
@@ -303,17 +340,21 @@
     }
   }
 
-  // Register document-level listeners and clean up on destroy
+  // Register outside-click/touch and scroll/resize listeners only while the
+  // dropdown is open, so closed inputs do not keep global listeners that thrash
+  // layout on every scroll. Capture phase catches scrolls in nested containers.
   $effect(() => {
+    if (!showPredictions) return;
+
     document.addEventListener('click', handleDocumentClick);
     document.addEventListener('touchstart', handleDocumentClick);
-    window.addEventListener('scroll', updatePortalPosition, { passive: true });
+    window.addEventListener('scroll', updatePortalPosition, { passive: true, capture: true });
     window.addEventListener('resize', updatePortalPosition);
 
     return () => {
       document.removeEventListener('click', handleDocumentClick);
       document.removeEventListener('touchstart', handleDocumentClick);
-      window.removeEventListener('scroll', updatePortalPosition);
+      window.removeEventListener('scroll', updatePortalPosition, { capture: true });
       window.removeEventListener('resize', updatePortalPosition);
       destroyPortalDropdown();
     };
@@ -338,10 +379,19 @@
       oninput={handleInput}
       onkeydown={handleKeydown}
       onfocus={() => {
-        if (filteredPredictions.length > 0) {
+        // Don't auto-reopen a dropdown the user explicitly dismissed (Escape or
+        // click-outside); typing resets manuallyDismissed. Recreate the portal
+        // directly rather than relying on the $effect, which won't re-run when
+        // neither filteredPredictions nor manuallyDismissed changed.
+        if (filteredPredictions.length > 0 && !manuallyDismissed) {
           showPredictions = true;
           if (portalDropdown) {
             updatePortalPosition();
+          } else {
+            createPortalDropdown();
+            // createPortalDropdown only appends an empty container; populate it now
+            // since the portal $effect won't re-run (no dependency changed).
+            updatePortalDropdown();
           }
         }
       }}

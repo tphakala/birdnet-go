@@ -4,9 +4,11 @@ package api
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -15,12 +17,14 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -52,6 +56,21 @@ func (c *Controller) initDiagnosticsRoutes() {
 	diagnosticsGroup.POST("/run", c.RunDiagnostics)
 	diagnosticsGroup.GET("/report/:id", c.GetDiagnosticsReport)
 	diagnosticsGroup.GET("/errors", c.GetRecentErrors)
+}
+
+// HealthMetricsStore returns the diagnostics health metrics store, or nil if
+// the diagnostics subsystem has not been initialized. It lets other subsystems
+// (e.g. the analysis pipeline) record health counters into the same store the
+// health checks read, avoiding an import cycle on internal/api/v2.
+func (c *Controller) HealthMetricsStore() *observability.HealthMetricsStore {
+	return c.healthMetricsStore
+}
+
+// HealthEventBuffer returns the diagnostics health event buffer, or nil if the
+// diagnostics subsystem has not been initialized. Paired with HealthMetricsStore
+// so recorded counters can also surface as recent events on the System Health page.
+func (c *Controller) HealthEventBuffer() *observability.HealthEventBuffer {
+	return c.healthEvents
 }
 
 // registerHealthChecks registers all health checks with dependency injection closures.
@@ -114,9 +133,14 @@ func (c *Controller) registerHealthChecks() {
 			q := classifier.ResultsQueue
 			return len(q), cap(q)
 		}),
+		checks.NewResultsQueueDropCheck(c.healthMetricsStore, c.healthEvents.Recent),
 		checks.NewORTAvailabilityCheck(func() (available, initialized bool, version, libraryPath, errMsg string) {
 			status := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
 			return status.Available, status.Initialized, status.Version, status.LibraryPath, status.Error
+		}),
+		checks.NewOpenVINOAvailabilityCheck(func() (supported, active bool) {
+			status := inference.CheckOpenVINOAvailability()
+			return status.Supported, status.Active
 		}),
 		checks.NewRangeFilterCheck(func() checks.RangeFilterStatusInfo {
 			orch, err := c.getBirdNETInstance()
@@ -317,28 +341,48 @@ func (c *Controller) buildPerModelInferenceProvider() func() []checks.ModelInfer
 		for i := range infos {
 			infoMap[infos[i].ID] = &infos[i]
 		}
-		result := make([]checks.ModelInferenceInfo, 0, len(snapshots))
-		for modelID, s := range snapshots {
-			mi, ok := infoMap[modelID]
-			if !ok {
-				continue
-			}
-			var avgMS, p99MS float64
-			if s.InvokeCount > 0 {
-				avgMS = float64(s.InvokeTotalUs) / float64(s.InvokeCount) / 1000.0
-			}
-			p99MS = float64(s.InvokeMaxUs) / 1000.0
-			windowMS := float64(mi.Spec.BufferInterval().Milliseconds())
-			result = append(result, checks.ModelInferenceInfo{
-				ModelID:   modelID,
-				ModelName: mi.DisplayName(),
-				AvgMS:     avgMS,
-				P99MS:     p99MS,
-				WindowMS:  windowMS,
-			})
-		}
-		return result
+		return mapInferenceSnapshots(snapshots, infoMap)
 	}
+}
+
+// mapInferenceSnapshots converts a per-model PeekSnapshot map into a slice of
+// ModelInferenceInfo suitable for health reporting. When a snapshot's modelID
+// is not present in infoMap (e.g. due to a model-ID drift), the entry is still
+// surfaced using the raw modelID as ModelName and a zero WindowMS, and a
+// warning is logged. This prevents a missing registry entry from silently
+// dropping a model from the inference chart.
+func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, infoMap map[string]*classifier.ModelInfo) []checks.ModelInferenceInfo {
+	result := make([]checks.ModelInferenceInfo, 0, len(snapshots))
+	// Iterate in sorted model-ID order so the returned slice (and the health
+	// results derived from it) is deterministic; map iteration order is random.
+	for _, modelID := range slices.Sorted(maps.Keys(snapshots)) {
+		s := snapshots[modelID]
+		var avgMS, p95MS, windowMS float64
+		if s.InvokeCount > 0 {
+			avgMS = float64(s.InvokeTotalUs) / float64(s.InvokeCount) / 1000.0
+		}
+		// Use the rolling-window p95 latency, not the lifetime max, so a single
+		// slow warm-up inference does not permanently latch the health check into
+		// Warning/Critical, and so an occasional GC pause does not flap it. The
+		// model card uses the lifetime max instead (see buildModelStatus).
+		p95MS = float64(s.RecentP95Us) / 1000.0
+		name := modelID
+		if mi, ok := infoMap[modelID]; ok {
+			name = mi.DisplayName()
+			windowMS = float64(mi.Spec.BufferInterval().Milliseconds())
+		} else {
+			GetLogger().Warn("inference counter has no matching model info; surfacing raw id",
+				logger.String("model_id", modelID))
+		}
+		result = append(result, checks.ModelInferenceInfo{
+			ModelID:   modelID,
+			ModelName: name,
+			AvgMS:     avgMS,
+			P95MS:     p95MS,
+			WindowMS:  windowMS,
+		})
+	}
+	return result
 }
 
 // errNoTempSensors is returned when no temperature sensors are found on the system.
@@ -405,14 +449,22 @@ func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.A
 		snaps := make([]observability.AudioRouterSnapshot, 0, len(sourceIDs))
 		for _, sid := range sourceIDs {
 			var totalDrops, totalErrors int64
+			// QueueDepth is the MAX inbox occupancy across all routes for this source.
+			// The analysis/buffer route dominates under load, and max keeps the value
+			// within one inbox capacity rather than summing unrelated consumer queues.
+			var maxQueueDepth int64
 			for _, ri := range router.Routes(sid) {
 				totalDrops += ri.Drops
 				totalErrors += ri.Errors
+				if int64(ri.QueueDepth) > maxQueueDepth {
+					maxQueueDepth = int64(ri.QueueDepth)
+				}
 			}
 			snaps = append(snaps, observability.AudioRouterSnapshot{
-				SourceID: sid,
-				Drops:    totalDrops,
-				Errors:   totalErrors,
+				SourceID:   sid,
+				Drops:      totalDrops,
+				Errors:     totalErrors,
+				QueueDepth: maxQueueDepth,
 			})
 		}
 		return snaps

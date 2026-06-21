@@ -1,0 +1,94 @@
+name: Container test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "Docker/**"
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Taskfile.yml"
+      - ".github/workflows/container-test.yml"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "Docker/**"
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Taskfile.yml"
+      - ".github/workflows/container-test.yml"
+
+concurrency:
+  group: container-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  arbitrary-uid-start:
+    name: Arbitrary-UID startup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build container image (amd64, load locally)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: birdnet-go:test
+          platforms: linux/amd64
+          # Reads the registry cache the publish workflow populates (anonymous,
+          # public); writes/reads the PR-scoped GHA cache. Never pushes.
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Arbitrary-UID startup smoke test
+        run: Docker/test/arbitrary-uid-smoke.sh birdnet-go:test
+
+  arbitrary-uid-start-arm64:
+    name: ONNX-only arm64 startup
+    # Native arm64 runner (free for public repos): the only PR-time job that
+    # exercises the arm64 Dockerfile path (ONNX-only, no libtensorflowlite_c).
+    # Without this the arm64 image first builds on push-to-main.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build container image (arm64 ONNX-only, load locally)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: birdnet-go:test-arm64
+          platforms: linux/arm64
+          # Reads the registry cache the publish workflow populates (anonymous,
+          # public); writes/reads an arm64-scoped GHA cache so it never collides
+          # with the amd64 job's default-scope cache. Never pushes.
+          cache-from: |
+            type=gha,scope=arm64
+            type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+          cache-to: type=gha,mode=max,scope=arm64
+          provenance: false
+
+      - name: Arbitrary-UID startup smoke test (arm64 ONNX-only)
+        run: Docker/test/arbitrary-uid-smoke.sh birdnet-go:test-arm64
