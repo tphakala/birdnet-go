@@ -113,6 +113,24 @@ describe('SpeciesDetailModal species guide panel', () => {
     );
   });
 
+  // Regression guard: the modal title already shows the species name, so the
+  // embedded guide panel must NOT repeat it — it shows the generic guide heading
+  // instead. Previously both showed the species name (two identical titles).
+  it('labels the guide panel with the guide heading, not a duplicate species name', async () => {
+    enableGuide();
+    const { container } = modalTest.render({ props: { isOpen: true, species } });
+
+    await waitFor(
+      () => {
+        if (!container.querySelector(COMPARISON_CLOSE)) throw new Error('not mounted yet');
+      },
+      { timeout: 5000 }
+    );
+
+    // The panel header now renders the guide-title key (t() returns keys in tests).
+    expect(screen.getByText('analytics.species.guide.title')).toBeInTheDocument();
+  });
+
   // Regression guard: reusing one modal instance for a different species must
   // refetch the guide. Without keying on the species, the onMount-only child
   // would keep showing the previous species' guide.

@@ -140,6 +140,7 @@
                 <SpeciesComparison
                   scientificName={displaySpecies.scientific_name}
                   commonName={displayName}
+                  heading={t('analytics.species.guide.title')}
                   onclose={() => (guidePanelOpen = false)}
                 />
               {:else}

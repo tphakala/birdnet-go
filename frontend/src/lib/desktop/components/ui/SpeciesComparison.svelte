@@ -25,11 +25,17 @@
     scientificName: string;
     commonName: string;
     onclose: () => void;
+    /**
+     * Heading shown in the panel header. Defaults to the species name. Parents
+     * that already display the species name (e.g. the species detail modal, whose
+     * title is the species name) pass a generic label so it isn't shown twice.
+     */
+    heading?: string;
     className?: string;
     [key: string]: unknown;
   }
 
-  let { scientificName, commonName, onclose, className = '' }: Props = $props();
+  let { scientificName, commonName, onclose, heading, className = '' }: Props = $props();
 
   // Instance-scoped id prefix so two instances on one page don't collide on
   // aria-controls (DetectionDetail + an open modal).
@@ -135,7 +141,7 @@
   aria-label={t('analytics.species.similar.title')}
 >
   <header class="flex items-center justify-between gap-2 mb-3">
-    <h2 class="text-lg font-semibold">{commonName || scientificName}</h2>
+    <h2 class="text-lg font-semibold">{heading ?? (commonName || scientificName)}</h2>
     <button
       type="button"
       class="btn btn-ghost btn-sm btn-circle"
