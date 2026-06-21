@@ -7,8 +7,64 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// hoursPerDay is the number of hour-of-day buckets in a species distribution (0..23).
+const hoursPerDay = 24
+
+// buildSpeciesHourlyDistribution turns per-label hourly counts into per-species normalized
+// hour-of-day distributions for the who-sings-when ridgeline.
+//
+// top is the top-N species by volume from GetTopSpecies, in descending-volume order; each row is
+// one label ID. hourlyByLabel maps a label ID to its [24]int false-positive-excluded hourly counts.
+// Label IDs that resolve to the same scientific name (one per model) are merged into a single ridge
+// whose buckets are the summed counts, preserving the first-seen volume order. Each species' 24
+// buckets are then normalized to sum to 1.0 so timing shape is comparable across species regardless
+// of raw volume; Total carries the unnormalized count for the tooltip.
+//
+// A species whose merged FP-excluded total is zero is dropped: GetTopSpecies ranks by raw volume
+// without excluding false positives, so an all-false-positive species can rank into the top-N yet
+// contribute no real detections; rendering it as an empty "0 detections" ridge would be misleading.
+// The result is always non-nil.
+func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int) []datastore.SpeciesHourlyDistribution {
+	// Merge label rows that share a scientific name, preserving first-seen (descending-volume)
+	// order. Each distinct species accumulates the hourly counts of all its label IDs.
+	order := make([]string, 0, len(top))
+	countsByName := make(map[string]*[hoursPerDay]int, len(top))
+	for i := range top {
+		name := top[i].ScientificName
+		acc, ok := countsByName[name]
+		if !ok {
+			acc = &[hoursPerDay]int{}
+			countsByName[name] = acc
+			order = append(order, name)
+		}
+		hours := hourlyByLabel[top[i].LabelID] // zero [24]int when the label has no detections
+		for h := range hoursPerDay {
+			acc[h] += hours[h]
+		}
+	}
+
+	result := make([]datastore.SpeciesHourlyDistribution, 0, len(order))
+	for _, name := range order {
+		acc := countsByName[name]
+		total := 0
+		for h := range hoursPerDay {
+			total += acc[h]
+		}
+		if total == 0 {
+			continue // ranked by raw volume but no FP-excluded detections; skip the empty ridge
+		}
+		dist := datastore.SpeciesHourlyDistribution{ScientificName: name, Total: total}
+		for h := range hoursPerDay {
+			dist.Buckets[h] = float64(acc[h]) / float64(total)
+		}
+		result = append(result, dist)
+	}
+	return result
+}
 
 // Slot resolution constants for the seasonal density heatmap. The intra-day slot width is
 // downsampled as the requested range widens so the payload (and the rendered grid) stays

@@ -1433,6 +1433,16 @@ export type TranslationKey =
   | 'analytics.advanced.charts.heatmap.legendMore' // params: max
   | 'analytics.advanced.charts.heatmap.ariaLabel'
   | 'analytics.advanced.charts.heatmap.summary' // params: total, days, time, date
+  | 'analytics.advanced.charts.ridgeline.title'
+  | 'analytics.advanced.charts.ridgeline.description'
+  | 'analytics.advanced.charts.ridgeline.noData'
+  | 'analytics.advanced.charts.ridgeline.noDataHint'
+  | 'analytics.advanced.charts.ridgeline.ariaLabel'
+  | 'analytics.advanced.charts.ridgeline.axisTime'
+  | 'analytics.advanced.charts.ridgeline.note' // params: count
+  | 'analytics.advanced.charts.ridgeline.tooltipDetections'
+  | 'analytics.advanced.charts.ridgeline.tooltipPeak'
+  | 'analytics.advanced.charts.ridgeline.summary' // params: count, species, time
   | 'analytics.advanced.charts.tooltips.date'
   | 'analytics.advanced.charts.tooltips.percentage'
   | 'analytics.advanced.charts.tooltips.detections'
@@ -3943,6 +3953,12 @@ export type TranslationParams = {
     days: string | number;
     time: string | number;
     date: string | number;
+  };
+  'analytics.advanced.charts.ridgeline.note': { count: string | number };
+  'analytics.advanced.charts.ridgeline.summary': {
+    count: string | number;
+    species: string | number;
+    time: string | number;
   };
   'settings.notFound.message': { section: string | number };
   'settings.main.sections.falsePositiveFilter.detectionCount': {
