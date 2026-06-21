@@ -40,8 +40,16 @@ const (
 	ConfigKeyRangeFilterPassUnmappedSpecies = "birdnet.rangefilter.passunmappedspecies"
 	ConfigKeyRangeFilterDebug               = "birdnet.rangefilter.debug"
 
+	// Web Server Configuration
+	ConfigKeyWebServerPort = "webserver.port"
+
 	// Security Configuration
-	ConfigKeyBaseURL = "security.baseurl"
+	ConfigKeyBaseURL            = "security.baseurl"
+	ConfigKeySecurityHost       = "security.host"
+	ConfigKeySecurityAutoTLS    = "security.autotls"
+	ConfigKeySecurityTLSMode    = "security.tlsmode"
+	ConfigKeySecurityTLSPort    = "security.tlsport"
+	ConfigKeySecurityRedirect   = "security.redirecttohttps"
 )
 
 // Environment variable names that map to configuration keys.
@@ -69,8 +77,16 @@ const (
 	EnvVarRangeFilterPassUnmappedSpecies = "BIRDNET_RANGEFILTER_PASSUNMAPPEDSPECIES"
 	EnvVarRangeFilterDebug               = "BIRDNET_RANGEFILTER_DEBUG"
 
+	// Web Server Configuration
+	EnvVarWebServerPort = "BIRDNET_WEBSERVER_PORT"
+
 	// Security Configuration
-	EnvVarBaseURL = "BIRDNET_URL"
+	EnvVarBaseURL            = "BIRDNET_URL"
+	EnvVarSecurityHost       = "BIRDNET_SECURITY_HOST"
+	EnvVarSecurityAutoTLS    = "BIRDNET_SECURITY_AUTOTLS"
+	EnvVarSecurityTLSMode    = "BIRDNET_SECURITY_TLSMODE"
+	EnvVarSecurityTLSPort    = "BIRDNET_SECURITY_TLSPORT"
+	EnvVarSecurityRedirect   = "BIRDNET_SECURITY_REDIRECTTOHTTPS"
 )
 
 // Validation constraint constants for environment variable ranges.
@@ -130,8 +146,16 @@ func getEnvBindings() []envBinding {
 		{ConfigKeyRangeFilterPassUnmappedSpecies, EnvVarRangeFilterPassUnmappedSpecies, validateEnvBool},
 		{ConfigKeyRangeFilterDebug, EnvVarRangeFilterDebug, validateEnvBool},
 
+		// Web Server Configuration
+		{ConfigKeyWebServerPort, EnvVarWebServerPort, validateEnvPort},
+
 		// Security Configuration
 		{ConfigKeyBaseURL, EnvVarBaseURL, validateEnvBaseURL},
+		{ConfigKeySecurityHost, EnvVarSecurityHost, nil},
+		{ConfigKeySecurityAutoTLS, EnvVarSecurityAutoTLS, validateEnvBool},
+		{ConfigKeySecurityTLSMode, EnvVarSecurityTLSMode, validateEnvTLSMode},
+		{ConfigKeySecurityTLSPort, EnvVarSecurityTLSPort, validateEnvPort},
+		{ConfigKeySecurityRedirect, EnvVarSecurityRedirect, validateEnvBool},
 	}
 }
 
@@ -269,6 +293,27 @@ func validateEnvThreads(value string) error {
 	}
 	if threads < ThreadsMin {
 		return fmt.Errorf("threads must be >= %d, got %d", ThreadsMin, threads)
+	}
+	return nil
+}
+
+func validateEnvPort(value string) error {
+	value = strings.TrimSpace(value)
+	port, err := strconv.Atoi(value)
+	if err != nil {
+		return fmt.Errorf("invalid port: %w", err)
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535, got %d", port)
+	}
+	return nil
+}
+
+func validateEnvTLSMode(value string) error {
+	value = strings.TrimSpace(strings.ToLower(value))
+	validModes := []string{"", "autotls", "manual", "selfsigned"}
+	if !slices.Contains(validModes, value) {
+		return fmt.Errorf("must be one of: autotls, manual, selfsigned (or empty to disable)")
 	}
 	return nil
 }
