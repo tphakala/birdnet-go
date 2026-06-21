@@ -39,6 +39,7 @@
   let cardElement = $state<HTMLElement | undefined>(undefined);
   let isVisible = $state(false);
   let isMenuOpen = $state(false);
+  let isExcluded = $state(false);
 
   let audioGainValue = $state(getDefaultAudioGain());
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
@@ -86,9 +87,14 @@
 
   function handleToggleSpecies() {
     const commonName = detection.commonName;
+    const currentlyExcluded = isExcluded;
     confirmModalConfig = {
-      title: t('dashboard.recentDetections.modals.ignoreSpecies', { species: commonName }),
-      message: t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', { species: commonName }),
+      title: currentlyExcluded
+        ? t('dashboard.recentDetections.modals.showSpecies', { species: commonName })
+        : t('dashboard.recentDetections.modals.ignoreSpecies', { species: commonName }),
+      message: currentlyExcluded
+        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', { species: commonName })
+        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', { species: commonName }),
       confirmLabel: t('common.confirm'),
       onConfirm: async () => {
         try {
@@ -97,6 +103,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ common_name: commonName }),
           });
+          isExcluded = !currentlyExcluded;
           onRefresh?.();
         } catch {
           toastActions.error(t('dashboard.recentDetections.errors.toggleSpeciesFailed'));
@@ -217,7 +224,9 @@
           <span class="loading loading-spinner loading-md text-[var(--color-base-content)]/50"
           ></span>
           {#if loader.isQueued}
-            <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Waiting...</span>
+            <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
+              >{t('components.audio.waiting')}</span
+            >
           {:else if loader.isGenerating}
             <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
               >{t('components.audio.generating')}</span
@@ -290,6 +299,7 @@
       onMarkCorrect={handleMarkCorrect}
       onMarkFalsePositive={handleMarkFalsePositive}
       onReview={handleReview}
+      {isExcluded}
       onToggleSpecies={handleToggleSpecies}
       onToggleLock={handleToggleLock}
       onDelete={handleDelete}
