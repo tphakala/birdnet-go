@@ -158,8 +158,8 @@ const YEAR_THRESHOLD = 365;
  * Pick the appropriate date-axis bucket for a daily-granularity time domain.
  *
  * NOTE: This intentionally NEVER returns 'day'. The 'day' bucket maps to a
- * clock-time format (%H:%M) via createDateAxisFormatter, which is only correct
- * for intra-day (hourly) data. The analytics charts that use this helper plot
+ * clock-time (hour:minute) format via createDateAxisFormatter, which is only
+ * correct for intra-day (hourly) data. The analytics charts that use this helper plot
  * one point per calendar day, so a short (<= 7 day) span must still show date
  * labels, not "00:00 00:00 ...". A 7-day or shorter span therefore uses 'week'
  * (weekday + day), longer spans use 'month', and spans over a year use 'year'.
@@ -194,11 +194,15 @@ export function createDateAxisFormatter(
 
   switch (range) {
     case 'day': {
-      // Clock time (e.g. "14:30" or "02:30 PM"), locale-aware.
+      // Clock time (e.g. "14:30" or "02:30 PM"), locale-aware. An explicit
+      // hourCycle keeps parity with the previous D3 '%H:%M' / '%I:%M %p' tokens:
+      // h23 renders midnight as "00:00" (never "24:00"), h12 renders 12-hour
+      // with the AM/PM marker. This avoids depending on each locale's default
+      // 24-hour cycle, which can be h24 for some locales.
       const time = new Intl.DateTimeFormat(locale, {
         hour: '2-digit',
         minute: '2-digit',
-        hour12: !use24Hour,
+        hourCycle: use24Hour ? 'h23' : 'h12',
       });
       return (d: Date) => time.format(d);
     }

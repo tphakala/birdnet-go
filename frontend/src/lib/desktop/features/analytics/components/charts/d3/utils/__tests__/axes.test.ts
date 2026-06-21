@@ -1,8 +1,7 @@
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getLocale } from '$lib/i18n';
 import { select } from 'd3-selection';
 import { scaleLinear } from 'd3-scale';
-import { timeFormatDefaultLocale } from 'd3-time-format';
 import {
   createHourAxisFormatter,
   createDateAxisFormatter,
@@ -92,45 +91,9 @@ describe('createHourAxisFormatter', () => {
 });
 
 describe('createDateAxisFormatter', () => {
-  // Set fixed English locale for deterministic date formatting
-  beforeAll(() => {
-    timeFormatDefaultLocale({
-      dateTime: '%x, %X',
-      date: '%-m/%-d/%Y',
-      time: '%-I:%M:%S %p',
-      periods: ['AM', 'PM'],
-      days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-      shortDays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-      months: [
-        'January',
-        'February',
-        'March',
-        'April',
-        'May',
-        'June',
-        'July',
-        'August',
-        'September',
-        'October',
-        'November',
-        'December',
-      ],
-      shortMonths: [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ],
-    });
-  });
+  // Date formatting is locale-driven via Intl.DateTimeFormat; the shared test
+  // setup mocks getLocale() to 'en', so the English expectations below are
+  // deterministic without configuring d3-time-format.
 
   // Fixed dates for deterministic testing
   const testDate = new Date('2024-01-15T14:30:00');
