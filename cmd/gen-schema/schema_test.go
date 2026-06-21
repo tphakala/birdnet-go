@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // TestSchemaUpToDate verifies that config.schema.json and
@@ -88,6 +90,43 @@ func TestSchemaUsesYAMLKeys(t *testing.T) {
 	audio := schema.Defs["AudioSettings"].Properties
 	assert.NotContains(t, audio, "ffmpegVersion", "runtime field 'ffmpegVersion' should be excluded")
 	assert.Contains(t, audio, "ffmpegpath", "user-configurable field 'ffmpegpath' should be present")
+}
+
+// TestConfigYAMLValidates ensures internal/conf/config.yaml passes validation
+// against config.schema.json. This catches drift between the schema and the
+// reference config (case mismatches, deprecated fields, type errors).
+func TestConfigYAMLValidates(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	schemaPath := filepath.Join(repoRoot, "config.schema.json")
+	configPath := filepath.Join(repoRoot, "internal", "conf", "config.yaml")
+
+	schemaFile, err := os.Open(schemaPath)
+	if os.IsNotExist(err) {
+		t.Skip("config.schema.json not yet generated; run 'task generate-schema'")
+	}
+	require.NoError(t, err)
+	defer schemaFile.Close()
+
+	schemaDoc, err := jsonschema.UnmarshalJSON(schemaFile)
+	require.NoError(t, err, "parsing schema JSON")
+
+	configData, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	var config any
+	require.NoError(t, yaml.Unmarshal(configData, &config))
+
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource("schema.json", schemaDoc))
+	schema, err := compiler.Compile("schema.json")
+	require.NoError(t, err, "compiling schema")
+
+	err = schema.Validate(config)
+	if err != nil {
+		t.Fatalf("config.yaml does not validate against schema:\n%v", err)
+	}
 }
 
 func findRepoRoot(t *testing.T) string {

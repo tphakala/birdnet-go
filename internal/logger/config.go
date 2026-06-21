@@ -9,8 +9,8 @@ type LoggingConfig struct {
 	DefaultLevel  string                  `yaml:"default_level" json:"default_level" mapstructure:"default_level"`    // default log level for all modules
 	Console       *ConsoleOutput          `yaml:"console" json:"console" mapstructure:"console"`                      // console output configuration
 	FileOutput    *FileOutput             `yaml:"file_output" json:"file_output" mapstructure:"file_output"`          // file output configuration
-	ModuleOutputs map[string]ModuleOutput `yaml:"modules" json:"modules" mapstructure:"modules"`                      // per-module output configuration
-	ModuleLevels  map[string]string       `yaml:"module_levels" json:"module_levels" mapstructure:"module_levels"`    // per-module log levels
+	ModuleOutputs map[string]ModuleOutput `yaml:"modules" json:"modules" mapstructure:"modules" jsonschema:"nullable"`                   // per-module output configuration
+	ModuleLevels  map[string]string       `yaml:"module_levels" json:"module_levels" mapstructure:"module_levels" jsonschema:"nullable"` // per-module log levels
 }
 
 // ConsoleOutput represents console logging configuration.

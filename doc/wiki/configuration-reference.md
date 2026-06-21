@@ -34,8 +34,8 @@ LoggingConfig represents logging configuration
 | `logging.file_output.max_rotated_files` | integer | maximum number of rotated log files to keep (0 = no limit) |
 | `logging.file_output.compress` | boolean | compress rotated logs with gzip |
 | `logging.file_output.level` | string | log level for file output |
-| `logging.modules` | object | per-module output configuration |
-| `logging.module_levels` | object | per-module log levels |
+| `logging.modules` | any |  |
+| `logging.module_levels` | any |  |
 
 ## main
 
@@ -133,8 +133,6 @@ LowMemoryConfig is the manual override for the runtime memory policy.
 | `lowmemory.mode` | string | "auto" (default), "on", "off" |
 
 ## taxonomySynonyms
-
-Optional scientific-name synonym overrides merged with built-ins
 
 | Setting | Type | Description |
 |---------|------|-------------|
@@ -284,7 +282,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.monitoring.disk.paths` | string[] | filesystem paths to monitor |
 | `realtime.species.include` | string[] | Always include these species |
 | `realtime.species.exclude` | string[] | Always exclude these species |
-| `realtime.species.config` | object | Per-species configuration (keys normalized to lowercase) |
+| `realtime.species.config` | any |  |
 | `realtime.weather.provider` | string | "none", "yrno", "openweather", or "wunderground" |
 | `realtime.weather.pollinterval` | integer | weather data polling interval in minutes |
 | `realtime.weather.debug` | boolean | true to enable debug mode |
@@ -307,7 +305,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.speciestracking.yearlytracking.windowdays` | integer | Days to show "new this year" indicator (default: 30) |
 | `realtime.speciestracking.seasonaltracking.enabled` | boolean | true to enable seasonal tracking |
 | `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 21) |
-| `realtime.speciestracking.seasonaltracking.seasons` | object | Season definitions |
+| `realtime.speciestracking.seasonaltracking.seasons` | any |  |
 | `realtime.extendedcapture.enabled` | boolean |  |
 | `realtime.extendedcapture.maxduration` | integer |  |
 | `realtime.extendedcapture.capturebufferseconds` | integer |  |
@@ -355,8 +353,8 @@ SecurityConfig handles all security-related settings and validations for the app
 | `security.basicauth.clientid` | string | client id for OAuth2 |
 | `security.basicauth.clientsecret` | string | client secret for OAuth2 |
 | `security.basicauth.redirecturi` | string | redirect uri for OAuth2 |
-| `security.basicauth.authcodeexp` | integer | duration for authorization code |
-| `security.basicauth.accesstokenexp` | integer | duration for access token |
+| `security.basicauth.authcodeexp` | string | duration for authorization code |
+| `security.basicauth.accesstokenexp` | string | duration for access token |
 | `security.oauthProviders` | o-auth-provider-config[] | OAuthProviders is the new array-based OAuth configuration. This is the preferred format for configuring OAuth providers. |
 | `security.googleAuth.enabled` | boolean | true to enable social provider |
 | `security.googleAuth.clientid` | string | client id for OAuth2 |
@@ -374,7 +372,7 @@ SecurityConfig handles all security-related settings and validations for the app
 | `security.microsoftAuth.redirecturi` | string | redirect uri for OAuth2 |
 | `security.microsoftAuth.userid` | string | valid user id for OAuth2 |
 | `security.sessionsecret` | string | secret for session cookie |
-| `security.sessionduration` | integer | duration for browser session cookies |
+| `security.sessionduration` | string | duration for browser session cookies |
 
 ## sentry
 
@@ -414,10 +412,10 @@ BackupConfig contains backup-related configuration
 | `backup.retention.minbackups` | integer | Minimum number of recent backups to keep for a given source, regardless of their age. This ensures a baseline number of backups are always available. |
 | `backup.targets` | backup-target[] | A list of configured backup targets (destinations) where backup archives will be stored. |
 | `backup.schedules` | backup-schedule-config[] | A list of schedules (e.g., daily, weekly) that define when automatic backups should run. |
-| `backup.operationtimeouts.backup` | integer |  |
-| `backup.operationtimeouts.store` | integer |  |
-| `backup.operationtimeouts.cleanup` | integer |  |
-| `backup.operationtimeouts.delete` | integer |  |
+| `backup.operationtimeouts.backup` | string |  |
+| `backup.operationtimeouts.store` | string |  |
+| `backup.operationtimeouts.cleanup` | string |  |
+| `backup.operationtimeouts.delete` | string |  |
 
 ## notification
 

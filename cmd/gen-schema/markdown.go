@@ -40,7 +40,7 @@ func renderMarkdown(schema *jsonschema.Schema) string {
 		}
 
 		if isScalar(resolved) {
-			writeScalarSection(&b, key, resolved)
+			writeSubSection(&b, key, resolved)
 			continue
 		}
 
@@ -59,7 +59,7 @@ func renderMarkdown(schema *jsonschema.Schema) string {
 	return b.String()
 }
 
-func writeScalarSection(b *strings.Builder, key string, prop *jsonschema.Schema) {
+func writeSubSection(b *strings.Builder, key string, prop *jsonschema.Schema) {
 	fmt.Fprintf(b, "## %s\n\n", key)
 	b.WriteString("| Setting | Type | Description |\n")
 	b.WriteString("|---------|------|-------------|\n")

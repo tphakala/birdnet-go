@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"time"
 
 	"github.com/invopop/jsonschema"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -20,9 +22,22 @@ func main() {
 
 func run() error {
 	r := &jsonschema.Reflector{
-		AllowAdditionalProperties:  true,
+		AllowAdditionalProperties:  false,
 		RequiredFromJSONSchemaTags: true,
 		FieldNameTag:               "yaml",
+		// Several fields use stdlib time.Duration directly (not conf.Duration),
+		// which reflects as int64 nanoseconds. In YAML these are written as
+		// strings like "1h" or "30s", so override the schema type to match.
+		Mapper: func(t reflect.Type) *jsonschema.Schema {
+			if t == reflect.TypeFor[time.Duration]() {
+				return &jsonschema.Schema{
+					Type:        "string",
+					Description: "Duration string (e.g. \"30s\", \"5m\", \"1h\")",
+					Examples:    []any{"10s", "5m", "1h"},
+				}
+			}
+			return nil
+		},
 	}
 
 	// AddGoComments parses Go source to extract struct field comments and

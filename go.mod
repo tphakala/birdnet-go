@@ -24,6 +24,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	github.com/ringsaturn/tzf v1.2.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sj14/astral v0.2.2
 	github.com/smallnest/ringbuffer v0.1.1
