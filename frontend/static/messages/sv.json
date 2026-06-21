@@ -205,7 +205,6 @@
     "serverError": "500 - Internt serverfel",
     "componentError": "Komponentladdningsfel",
     "speciesAnalytics": "Artanalys",
-    "advancedAnalytics": "Avancerad analys",
     "detectionDetails": "Detektionsdetaljer",
     "settingsNotAvailable": "Inställningar ej tillgängliga"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Avancerad analys",
       "chartControls": "Diagramkontroller",
       "dateRange": "Datumintervall",
       "chartOptions": "Diagramalternativ",

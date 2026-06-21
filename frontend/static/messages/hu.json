@@ -205,7 +205,6 @@
     "serverError": "500 - Belső szerverhiba",
     "componentError": "Komponens betöltési hiba",
     "speciesAnalytics": "Faj elemzés",
-    "advancedAnalytics": "Speciális elemzés",
     "detectionDetails": "Detektálás részletei",
     "settingsNotAvailable": "Beállítások nem elérhetők"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Speciális analitika",
       "chartControls": "Diagram vezérlők",
       "dateRange": "Dátumtartomány",
       "chartOptions": "Diagram opciók",

@@ -205,7 +205,6 @@
     "serverError": "500 - Intern serverfeil",
     "componentError": "Feil ved lasting av komponent",
     "speciesAnalytics": "Artsanalyse",
-    "advancedAnalytics": "Avansert analyse",
     "detectionDetails": "Registreringsdetaljer",
     "settingsNotAvailable": "Innstillinger ikke tilgjengelig"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Avansert analyse",
       "chartControls": "Diagramkontroller",
       "dateRange": "Datoperiode",
       "chartOptions": "Diagramalternativer",

@@ -42,7 +42,6 @@
 
   // Dynamic imports for heavy pages - properly typed component references
   let Analytics = $state<Component | null>(null);
-  let AdvancedAnalytics = $state<Component | null>(null);
   let Species = $state<Component | null>(null);
   let Search = $state<Component | null>(null);
   let About = $state<Component | null>(null);
@@ -136,12 +135,6 @@
       titleKey: 'navigation.analytics',
       component: 'analytics',
     },
-    {
-      route: 'advanced-analytics',
-      page: 'analytics/advanced',
-      titleKey: 'pageTitle.advancedAnalytics',
-      component: 'advanced-analytics',
-    },
     { route: 'search', page: 'search', titleKey: 'navigation.search', component: 'search' },
     {
       route: 'detections',
@@ -211,13 +204,6 @@
           if (!Analytics) {
             const module = await import('./lib/desktop/features/analytics/pages/Analytics.svelte');
             Analytics = module.default;
-          }
-          break;
-        case 'advanced-analytics':
-          if (!AdvancedAnalytics) {
-            const module =
-              await import('./lib/desktop/features/analytics/pages/AdvancedAnalytics.svelte');
-            AdvancedAnalytics = module.default;
           }
           break;
         case 'species':
@@ -359,7 +345,6 @@
     [uiPath('live-stream')]: findRouteConfig('live-stream'),
     [uiPath('notifications')]: findRouteConfig('notifications'),
     [uiPath('analytics', 'species')]: findRouteConfig('species'),
-    [uiPath('analytics', 'advanced')]: findRouteConfig('advanced-analytics'),
     [uiPath('analytics')]: findRouteConfig('analytics'),
     [uiPath('search')]: findRouteConfig('search'),
     [uiPath('detections')]: findRouteConfig('detections'),
@@ -407,6 +392,21 @@
   }
 
   function handleRouting(path: string): void {
+    // Retired route: the Advanced Analytics page folded into the unified
+    // Analytics hub (PR0b). Redirect old deep links to the hub, defaulting to
+    // the Activity Patterns tab (the first charts tab; the former Advanced
+    // Analytics charts now live across Patterns/Trends/Biodiversity) and
+    // preserving any existing query params (range/species/source/tab/...). Uses
+    // replace so the dead URL does not linger in history.
+    if (path === uiPath('analytics', 'advanced')) {
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      const sp = new URLSearchParams(search);
+      if (!sp.has('tab')) sp.set('tab', 'patterns');
+      const qs = sp.toString();
+      navigation.redirect(uiPath('analytics') + (qs ? `?${qs}` : ''));
+      return;
+    }
+
     // Special handling for detection detail pages
     if (UI_DETECTIONS_PREFIX_RE.test(path) && path.split('/').length > 3) {
       const pathParts = path.split('/');
@@ -670,8 +670,6 @@
       {@render renderRoute(Notifications)}
     {:else if currentRoute === 'analytics'}
       {@render renderRoute(Analytics)}
-    {:else if currentRoute === 'advanced-analytics'}
-      {@render renderRoute(AdvancedAnalytics)}
     {:else if currentRoute === 'species'}
       {@render renderRoute(Species)}
     {:else if currentRoute === 'search'}

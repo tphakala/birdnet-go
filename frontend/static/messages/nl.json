@@ -205,7 +205,6 @@
     "serverError": "500 - Interne serverfout",
     "componentError": "Component laadfout",
     "speciesAnalytics": "Soortanalyses",
-    "advancedAnalytics": "Geavanceerde analyses",
     "detectionDetails": "Detectiedetails",
     "settingsNotAvailable": "Instellingen niet beschikbaar"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Geavanceerde analyse",
       "chartControls": "Grafiekbediening",
       "dateRange": "Datumbereik",
       "chartOptions": "Grafiekopties",
