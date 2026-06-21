@@ -273,14 +273,15 @@ func TestCheckAndUpdateSpecies(t *testing.T) {
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
-	currentTime := time.Now()
+	// Use a fixed time at noon to avoid midnight boundary flakiness
+	currentTime := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
 
 	// First detection
 	isNew, daysSince := tracker.CheckAndUpdateSpecies("Parus major", currentTime)
 	assert.True(t, isNew, "First detection should be new")
 	assert.Equal(t, 0, daysSince, "Days since should be 0 for new species")
 
-	// Second detection
+	// Second detection (same calendar day)
 	isNew, daysSince = tracker.CheckAndUpdateSpecies("Parus major", currentTime.Add(time.Hour))
 	assert.True(t, isNew, "Should still be new within window")
 	assert.Equal(t, 0, daysSince, "Days since should still be 0 on same day")
