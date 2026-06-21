@@ -174,16 +174,15 @@ func NewOpenVINOEmbeddingExtractor(modelPath string, opts OpenVINOEmbeddingExtra
 	return &openvinoEmbeddingExtractor{c: c, dim: c.NumClasses()}, nil
 }
 
-// Predict runs one inference and returns the embedding vector. This extractor binds
-// only the embedding output port (the embedding model's logits port is not compiled
-// in), so Predict returns the embedding rather than logits. The bat pipeline calls
-// PredictWithEmbeddings, not Predict; Predict exists to satisfy the Classifier
-// interface that EmbeddingExtractor embeds.
-func (e *openvinoEmbeddingExtractor) Predict(samples []float32) ([]float32, error) {
-	if e.c == nil {
-		return nil, ov.ErrOpenVINOUnavailable
-	}
-	return e.c.PredictRaw(samples)
+// Predict satisfies the Classifier interface that EmbeddingExtractor embeds, but
+// this extractor compiles only the model's embedding output port and so cannot
+// produce the raw logits Predict is contracted to return. It returns an error rather
+// than silently handing back an embedding vector in place of logits, so a caller
+// using it through a generic Classifier reference fails loudly instead of consuming
+// the wrong tensor. The bat pipeline calls PredictWithEmbeddings, never Predict.
+func (e *openvinoEmbeddingExtractor) Predict(_ []float32) ([]float32, error) {
+	return nil, errors.Newf("openvino embedding extractor does not produce logits; use PredictWithEmbeddings").
+		Category(errors.CategoryValidation).Build()
 }
 
 // PredictWithEmbeddings runs one inference and returns the embedding vector as the
