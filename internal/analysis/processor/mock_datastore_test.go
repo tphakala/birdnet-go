@@ -295,7 +295,7 @@ func (m *ActionMockDatastore) GetActivityHeatmap(_ context.Context, _, _, _ stri
 	return datastore.ActivityHeatmapData{}, nil
 }
 func (m *ActionMockDatastore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesHourlyDistribution, error) {
-	return nil, nil
+	return []datastore.SpeciesHourlyDistribution{}, nil
 }
 func (m *ActionMockDatastore) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil

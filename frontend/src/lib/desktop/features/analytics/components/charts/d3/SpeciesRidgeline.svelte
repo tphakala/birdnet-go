@@ -24,7 +24,7 @@
   import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
   import { generateSpeciesColors, type ChartTheme } from './utils/theme';
-  import { ridgelineLayout, peakIndex, type RidgelineSeries } from './utils/ridgeline';
+  import { ridgelineLayout, peakIndex, RIDGE_OVERLAP, type RidgelineSeries } from './utils/ridgeline';
 
   interface Props {
     /** One row per species: { scientificName, commonName, density[], total? }. */
@@ -65,7 +65,7 @@
 
   // Layout / style constants.
   const MARGIN = { top: 24, right: 16, bottom: 44, left: 120 };
-  const RIDGE_OVERLAP = 2; // a full-amplitude ridge spans this many row-steps
+  // RIDGE_OVERLAP is imported from utils/ridgeline so the rendering and the layout math stay in sync.
   const RIDGE_FILL_OPACITY = 0.55; // translucent so overlapping ridges blend
   const RIDGE_STROKE_WIDTH = 1.5;
   const RIDGE_STROKE_WIDTH_HOVER = 2.5;

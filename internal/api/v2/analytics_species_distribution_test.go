@@ -75,8 +75,12 @@ func TestGetSpeciesHourlyDistribution_EmptyArrayNotNull(t *testing.T) {
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
 	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
 	require.Equal(t, http.StatusOK, rec.Code)
-	// Empty result must serialise as [] not null so the client can read .length safely.
-	assert.Equal(t, "[]\n", rec.Body.String())
+	// Empty result must serialize as [] (not null) so the client can read .length safely. Assert
+	// JSON semantics rather than the raw body to avoid coupling to Echo's newline formatting.
+	var resp []speciesDistributionJSON
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotNil(t, resp)
+	assert.Empty(t, resp)
 }
 
 func TestGetSpeciesHourlyDistribution_DefaultsEndDate(t *testing.T) {

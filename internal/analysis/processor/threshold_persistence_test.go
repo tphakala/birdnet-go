@@ -164,7 +164,7 @@ func (m *MockDatastore) GetActivityHeatmap(context.Context, string, string, stri
 	return datastore.ActivityHeatmapData{}, nil
 }
 func (m *MockDatastore) GetHourlyDistributionBySpecies(context.Context, string, string, int) ([]datastore.SpeciesHourlyDistribution, error) {
-	return nil, nil
+	return []datastore.SpeciesHourlyDistribution{}, nil
 }
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return make([]datastore.DetectionRecord, 0), 0, nil

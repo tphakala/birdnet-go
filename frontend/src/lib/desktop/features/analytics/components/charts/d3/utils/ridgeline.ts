@@ -72,7 +72,9 @@ export function ridgelineLayout(
   overlap: number = RIDGE_OVERLAP
 ): RidgelineLayout {
   const n = series.length;
-  if (n === 0 || innerHeight <= 0) {
+  // Guard the overlap too: a non-positive or non-finite value would make rowStep/amplitude NaN or
+  // Infinity (and divide by zero when n === 1), so fall back to the same safe empty layout.
+  if (n === 0 || innerHeight <= 0 || !Number.isFinite(overlap) || overlap <= 0) {
     return { rows: [], amplitude: 0, maxDensity: 0 };
   }
   const rowStep = innerHeight / (n - 1 + overlap);

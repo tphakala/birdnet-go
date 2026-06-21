@@ -20,7 +20,8 @@ func hours(pairs ...[2]int) [24]int {
 }
 
 // bucketSum sums a species' normalized buckets (should be ~1.0 for any non-empty species).
-func bucketSum(b [24]float64) float64 {
+// Takes a pointer to avoid copying the 192-byte array (gocritic hugeParam).
+func bucketSum(b *[24]float64) float64 {
 	sum := 0.0
 	for _, v := range b {
 		sum += v
@@ -56,8 +57,8 @@ func TestBuildSpeciesHourlyDistribution_NormalizesAndOrders(t *testing.T) {
 	assert.Equal(t, 1, got[2].Total)
 
 	// Each species' buckets are a probability distribution (sum to 1.0).
-	for _, d := range got {
-		assert.InDelta(t, 1.0, bucketSum(d.Buckets), 1e-9, "species %s buckets must sum to 1.0", d.ScientificName)
+	for i := range got {
+		assert.InDelta(t, 1.0, bucketSum(&got[i].Buckets), 1e-9, "species %s buckets must sum to 1.0", got[i].ScientificName)
 	}
 
 	// Spot-check normalized values for the first species.

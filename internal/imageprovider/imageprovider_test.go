@@ -297,7 +297,7 @@ func (m *mockStore) GetActivityHeatmap(_ context.Context, _, _, _ string) (datas
 	return datastore.ActivityHeatmapData{}, nil
 }
 func (m *mockStore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesHourlyDistribution, error) {
-	return nil, nil
+	return []datastore.SpeciesHourlyDistribution{}, nil
 }
 
 // BG-17 fix: Add notification history methods

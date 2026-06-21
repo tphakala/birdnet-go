@@ -761,7 +761,7 @@ func (s *testLegacyInterface) GetActivityHeatmap(_ context.Context, _, _, _ stri
 	return datastore.ActivityHeatmapData{}, nil
 }
 func (s *testLegacyInterface) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesHourlyDistribution, error) {
-	return nil, nil
+	return []datastore.SpeciesHourlyDistribution{}, nil
 }
 func (s *testLegacyInterface) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil

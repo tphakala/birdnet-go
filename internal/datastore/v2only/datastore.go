@@ -3024,8 +3024,15 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 	// other time-based analytics; named to avoid a bare magic literal at the two call sites.
 	const noConfidenceFloor = 0.0
 
-	// Top-N species by raw detection volume across all models (modelID nil).
-	top, err := ds.detection.GetTopSpecies(ctx, start, end, noConfidenceFloor, nil, limit)
+	// Top-N species by raw detection volume across all models (modelID nil). GetTopSpecies uses an
+	// inclusive end (<= end) while GetBatchHourlyOccurrences below uses an exclusive end (< end), so
+	// subtract one second to cover the exact same range; otherwise ranking and bucket totals could
+	// disagree on a detection landing exactly on the end boundary.
+	topEnd := end
+	if end != math.MaxInt64 {
+		topEnd--
+	}
+	top, err := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
