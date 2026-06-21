@@ -1,6 +1,6 @@
 // D3 axis utilities for analytics charts
 import { axisBottom, axisLeft, axisRight, axisTop } from 'd3-axis';
-import { timeFormat } from 'd3-time-format';
+import { getLocale } from '$lib/i18n';
 import type { Axis, AxisDomain, AxisScale } from 'd3-axis';
 import type { ScaleLinear, ScaleTime } from 'd3-scale';
 import type { Selection } from 'd3-selection';
@@ -171,26 +171,53 @@ export function pickDateRangeBucket(domain: [Date, Date]): 'day' | 'week' | 'mon
   return 'year';
 }
 
+// Two-digit zero-padded day-of-month, matching the previous D3 '%d' token.
+function padDay(d: Date): string {
+  return d.getDate().toString().padStart(2, '0');
+}
+
 /**
- * Create date axis formatter for different time ranges
+ * Create date axis formatter for different time ranges.
+ *
+ * Weekday and month names are localized to the active app locale via
+ * Intl.DateTimeFormat (e.g. "Sun 24" -> "Dom 24" in Portuguese). The
+ * weekday-/month-first ordering and zero-padded day of the original D3
+ * '%a %d' / '%b %d' / '%b %Y' formats are preserved by composing the parts
+ * manually, so only the translated names change, not the layout.
  */
 export function createDateAxisFormatter(
   range: 'day' | 'week' | 'month' | 'year',
   opts: { use24Hour?: boolean } = {}
 ): (d: Date) => string {
   const use24Hour = opts.use24Hour ?? true;
+  const locale = getLocale();
 
   switch (range) {
-    case 'day':
-      return (d: Date) => timeFormat(use24Hour ? '%H:%M' : '%I:%M %p')(d);
-    case 'week':
-      return (d: Date) => timeFormat('%a %d')(d);
+    case 'day': {
+      // Clock time (e.g. "14:30" or "02:30 PM"), locale-aware.
+      const time = new Intl.DateTimeFormat(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: !use24Hour,
+      });
+      return (d: Date) => time.format(d);
+    }
+    case 'week': {
+      // Localized weekday abbreviation + day (e.g. "Sun 24" / "Dom 24").
+      const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+      return (d: Date) => `${weekday.format(d)} ${padDay(d)}`;
+    }
+    case 'year': {
+      // Localized month abbreviation + year (e.g. "Oct 2025").
+      const month = new Intl.DateTimeFormat(locale, { month: 'short' });
+      return (d: Date) => `${month.format(d)} ${d.getFullYear()}`;
+    }
     case 'month':
-      return (d: Date) => timeFormat('%b %d')(d);
-    case 'year':
-      return (d: Date) => timeFormat('%b %Y')(d);
-    default:
-      return (d: Date) => timeFormat('%b %d')(d);
+    default: {
+      // Localized month abbreviation + day (e.g. "Oct 01").
+      const month = new Intl.DateTimeFormat(locale, { month: 'short' });
+      return (d: Date) => `${month.format(d)} ${padDay(d)}`;
+    }
   }
 }
 

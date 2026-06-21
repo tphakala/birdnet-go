@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
+import { getLocale } from '$lib/i18n';
 import { select } from 'd3-selection';
 import { scaleLinear } from 'd3-scale';
 import { timeFormatDefaultLocale } from 'd3-time-format';
@@ -169,6 +170,18 @@ describe('createDateAxisFormatter', () => {
 
     expect(formatter(testDate)).toBe('Jan 15');
     expect(formatter(anotherDate)).toBe('Dec 25');
+  });
+
+  it('should localize weekday/month names to the active locale', () => {
+    // testDate is a Monday in January; Portuguese should not say "Mon"/"Jan".
+    vi.mocked(getLocale).mockReturnValueOnce('pt');
+    expect(createDateAxisFormatter('week')(testDate)).toBe('seg. 15');
+
+    vi.mocked(getLocale).mockReturnValueOnce('pt');
+    expect(createDateAxisFormatter('month')(testDate)).toBe('jan. 15');
+
+    vi.mocked(getLocale).mockReturnValueOnce('pt');
+    expect(createDateAxisFormatter('year')(testDate)).toBe('jan. 2024');
   });
 });
 
