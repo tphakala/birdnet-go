@@ -69,23 +69,17 @@
   }
 
   function handleReview() {
-    if (onDetailsClick) {
-      onDetailsClick(detection.id);
-    } else {
-      navigation.navigate(`/ui/detections/${detection.id}`);
-    }
+    navigation.navigate(`/ui/detections/${detection.id}?tab=review`);
   }
 
   async function handleMarkCorrect() {
     if (await setDetectionVerification(detection.id, 'correct')) {
-      detection.verified = 'correct';
       onRefresh?.();
     }
   }
 
   async function handleMarkFalsePositive() {
     if (await setDetectionVerification(detection.id, 'false_positive')) {
-      detection.verified = 'false_positive';
       onRefresh?.();
     }
   }
@@ -269,8 +263,18 @@
       playbackSpeed={audioPlaybackSpeed}
     />
 
-    <!-- Bottom Species Info Bar -->
-    <SpeciesInfoBar {detection} />
+    <!-- Bottom Species Info Bar: tappable for all auth levels to view details -->
+    <button
+      type="button"
+      class="absolute inset-x-0 bottom-0 z-[11] text-left"
+      onclick={() =>
+        onDetailsClick
+          ? onDetailsClick(detection.id)
+          : navigation.navigate(`/ui/detections/${detection.id}`)}
+      aria-label={t('detections.viewDetails', { species: detection.commonName })}
+    >
+      <SpeciesInfoBar {detection} />
+    </button>
   </div>
 
   <!-- Top-Right Action Menu - OUTSIDE overflow-hidden container -->
