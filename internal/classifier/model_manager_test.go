@@ -1081,10 +1081,14 @@ func TestModelManager_Uninstall_GeomodelConfigClearing(t *testing.T) {
 	current := conf.GetSettings()
 	require.Equal(t, "v3", current.BirdNET.RangeFilter.Model, "precondition: install must set model to v3")
 
-	// Add entry to EmbeddedCatalog temporarily so Uninstall can find it.
-	origLen := len(EmbeddedCatalog)
-	EmbeddedCatalog = append(EmbeddedCatalog, entry)
-	t.Cleanup(func() { EmbeddedCatalog = EmbeddedCatalog[:origLen] })
+	// Make the entry resolvable by Uninstall via the active catalog. Setting
+	// activeCatalog (under its lock) instead of mutating the shared
+	// EmbeddedCatalog global keeps the lock-guarded catalog accessors race-free.
+	withEntry := make([]CatalogEntry, len(EmbeddedCatalog), len(EmbeddedCatalog)+1)
+	copy(withEntry, EmbeddedCatalog)
+	withEntry = append(withEntry, entry)
+	setActiveCatalog(withEntry)
+	t.Cleanup(func() { setActiveCatalog(nil) })
 
 	// Uninstall should clear the range filter config.
 	require.NoError(t, mm.Uninstall("test-geo-uninstall-config"))
