@@ -161,7 +161,7 @@ func TestComputeCurrentSeason(t *testing.T) {
 func TestBuildExternalLinks(t *testing.T) {
 	t.Parallel()
 
-	links := buildExternalLinks("Common Blackbird", sciEurasianBlackbird)
+	links := buildExternalLinks(sciEurasianBlackbird, "eurbla")
 	assert.NotEmpty(t, links)
 
 	names := make(map[string]string, len(links))
@@ -170,8 +170,22 @@ func TestBuildExternalLinks(t *testing.T) {
 	}
 	assert.Contains(t, names, "Wikipedia")
 	assert.Contains(t, names["Wikipedia"], "Turdus_merula")
+	// eBird links must point at the code-based species page, not a (broken) search.
 	assert.Contains(t, names, "eBird")
+	assert.Contains(t, names["eBird"], "ebird.org/species/eurbla")
+	assert.NotContains(t, names["eBird"], "search?q=")
 	assert.Contains(t, names, "Xeno-canto")
+
+	// Without a resolved eBird code, omit the eBird link entirely rather than
+	// emitting a dead URL.
+	noCode := buildExternalLinks(sciEurasianBlackbird, "")
+	noCodeNames := make(map[string]string, len(noCode))
+	for _, l := range noCode {
+		noCodeNames[l.Name] = l.URL
+	}
+	assert.Contains(t, noCodeNames, "Wikipedia")
+	assert.NotContains(t, noCodeNames, "eBird")
+	assert.Contains(t, noCodeNames, "Xeno-canto")
 
 	assert.Empty(t, buildExternalLinks("", ""))
 }

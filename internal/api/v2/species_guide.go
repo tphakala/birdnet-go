@@ -327,7 +327,7 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 	// in particular) when the feature flag is off.
 	if cfg.IsShowEnrichments() {
 		data.CurrentSeason = computeCurrentSeason(settings.BirdNET.Latitude, time.Now())
-		data.ExternalLinks = buildExternalLinks(guide.CommonName, guide.ScientificName)
+		data.ExternalLinks = buildExternalLinks(guide.ScientificName, c.ebirdSpeciesCode(guide.ScientificName))
 		if exp := c.guideExpectedness(name); exp != "" {
 			data.Expectedness = exp
 		}
@@ -726,26 +726,44 @@ func seasonForHemisphere(northern bool, northSeason, southSeason string) string 
 	return southSeason
 }
 
-// buildExternalLinks builds external resource links for a species.
-func buildExternalLinks(commonName, scientificName string) []GuideExternalLink {
-	links := make([]GuideExternalLink, 0, 3)
-	if scientificName != "" {
-		wikiTitle := strings.ReplaceAll(scientificName, " ", "_")
-		links = append(links,
-			GuideExternalLink{
-				Name: "Wikipedia",
-				URL:  "https://en.wikipedia.org/wiki/" + url.PathEscape(wikiTitle),
-			},
-			GuideExternalLink{
-				Name: "eBird",
-				URL:  "https://ebird.org/search?q=" + url.QueryEscape(scientificName),
-			},
-			GuideExternalLink{
-				Name: "Xeno-canto",
-				URL:  "https://xeno-canto.org/explore?query=" + url.QueryEscape(scientificName),
-			},
-		)
+// ebirdSpeciesCode resolves the eBird species code for a scientific name from
+// the loaded BirdNET taxonomy. Returns "" when no real code is available — the
+// resolver returns a generated placeholder in that case, which is not a valid
+// eBird URL slug, so callers must treat the missing-code case as "no eBird link".
+func (c *Controller) ebirdSpeciesCode(scientificName string) string {
+	if c.Processor == nil || c.Processor.Bn == nil {
+		return ""
 	}
+	if code, ok := c.Processor.Bn.GetSpeciesCode(scientificName); ok {
+		return code
+	}
+	return ""
+}
+
+// buildExternalLinks builds external resource links for a species. The eBird
+// link is only included when a real eBird species code is provided: eBird has
+// no public free-text search endpoint (a ?q= search redirects to a login page),
+// so species pages must be addressed by code as https://ebird.org/species/<code>.
+func buildExternalLinks(scientificName, ebirdCode string) []GuideExternalLink {
+	links := make([]GuideExternalLink, 0, 3)
+	if scientificName == "" {
+		return links
+	}
+	wikiTitle := strings.ReplaceAll(scientificName, " ", "_")
+	links = append(links, GuideExternalLink{
+		Name: "Wikipedia",
+		URL:  "https://en.wikipedia.org/wiki/" + url.PathEscape(wikiTitle),
+	})
+	if ebirdCode != "" {
+		links = append(links, GuideExternalLink{
+			Name: "eBird",
+			URL:  "https://ebird.org/species/" + url.PathEscape(ebirdCode),
+		})
+	}
+	links = append(links, GuideExternalLink{
+		Name: "Xeno-canto",
+		URL:  "https://xeno-canto.org/explore?query=" + url.QueryEscape(scientificName),
+	})
 	return links
 }
 
