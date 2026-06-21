@@ -182,13 +182,6 @@ async function fetchDiversity(
     .filter((item): item is DiversityDatum => item !== null);
 }
 
-/** Keeps only finite numbers from an unknown value; drops anything malformed. */
-function asNumberArray(value: unknown): number[] {
-  return Array.isArray(value)
-    ? value.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
-    : [];
-}
-
 interface HeatmapResponse {
   dates?: unknown;
   slotResolutionMinutes?: unknown;
@@ -196,6 +189,48 @@ interface HeatmapResponse {
 }
 
 const DEFAULT_SLOT_RESOLUTION_MINUTES = 15;
+const VALID_SLOT_RESOLUTIONS = [15, 30, 60];
+
+/**
+ * Coerces the three parallel cell columns in lockstep. dateIndex, slot, and count are parallel
+ * by contract, so a cell is kept only when all three values at that index are finite numbers;
+ * coercing each column independently could drop a value from one column and shift the others
+ * out of alignment, mispairing date/slot/count.
+ */
+function coerceCells(cells: { dateIndex?: unknown; slot?: unknown; count?: unknown }): {
+  dateIndex: number[];
+  slot: number[];
+  count: number[];
+} {
+  const rawDateIndex = Array.isArray(cells.dateIndex) ? cells.dateIndex : [];
+  const rawSlot = Array.isArray(cells.slot) ? cells.slot : [];
+  const rawCount = Array.isArray(cells.count) ? cells.count : [];
+  const n = Math.min(rawDateIndex.length, rawSlot.length, rawCount.length);
+
+  const dateIndex: number[] = [];
+  const slot: number[] = [];
+  const count: number[] = [];
+  /* eslint-disable security/detect-object-injection -- i is a bounded loop index over our own arrays */
+  for (let i = 0; i < n; i++) {
+    const di = rawDateIndex[i];
+    const s = rawSlot[i];
+    const c = rawCount[i];
+    if (
+      typeof di === 'number' &&
+      Number.isFinite(di) &&
+      typeof s === 'number' &&
+      Number.isFinite(s) &&
+      typeof c === 'number' &&
+      Number.isFinite(c)
+    ) {
+      dateIndex.push(di);
+      slot.push(s);
+      count.push(c);
+    }
+  }
+  /* eslint-enable security/detect-object-injection */
+  return { dateIndex, slot, count };
+}
 
 /**
  * Seasonal density heatmap: detection counts by (date, intra-day slot). Honors an optional
@@ -220,19 +255,20 @@ async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Prom
   const body = data as HeatmapResponse;
   const cells = (body.cells ?? {}) as { dateIndex?: unknown; slot?: unknown; count?: unknown };
 
+  // Restrict the resolution to the values the server can emit so the chart's slot math
+  // (1440 / resolution) and hourly fold stay well-defined.
+  const slotResolutionMinutes =
+    typeof body.slotResolutionMinutes === 'number' &&
+    VALID_SLOT_RESOLUTIONS.includes(body.slotResolutionMinutes)
+      ? body.slotResolutionMinutes
+      : DEFAULT_SLOT_RESOLUTION_MINUTES;
+
   return {
     dates: Array.isArray(body.dates)
       ? body.dates.filter((d): d is string => typeof d === 'string')
       : [],
-    slotResolutionMinutes:
-      typeof body.slotResolutionMinutes === 'number'
-        ? body.slotResolutionMinutes
-        : DEFAULT_SLOT_RESOLUTION_MINUTES,
-    cells: {
-      dateIndex: asNumberArray(cells.dateIndex),
-      slot: asNumberArray(cells.slot),
-      count: asNumberArray(cells.count),
-    },
+    slotResolutionMinutes,
+    cells: coerceCells(cells),
   };
 }
 

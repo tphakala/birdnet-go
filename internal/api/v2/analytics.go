@@ -1223,7 +1223,9 @@ func (c *Controller) writeActivityHeatmapCSV(ctx echo.Context, data *datastore.A
 	}
 
 	resolution := data.SlotResolutionMinutes
-	for i := range data.CellDateIndex {
+	// Bound by the shortest parallel slice so a malformed payload can never panic on index access.
+	n := min(len(data.CellDateIndex), len(data.CellSlot), len(data.CellCount))
+	for i := range n {
 		date := ""
 		if di := data.CellDateIndex[i]; di >= 0 && di < len(data.Dates) {
 			date = data.Dates[di]

@@ -407,7 +407,15 @@ func (ds *DataStore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 // feature; the legacy datastore is deprecated and being removed, so it returns an empty grid
 // rather than implementing the aggregation. See internal/datastore/v2only for the real method.
 func (ds *DataStore) GetActivityHeatmap(_ context.Context, _, _, _ string) (ActivityHeatmapData, error) {
-	return ActivityHeatmapData{}, nil
+	// Return a structurally valid empty grid (non-nil slices, a real slot resolution) rather
+	// than a zero value, so consumers never see SlotResolutionMinutes == 0.
+	return ActivityHeatmapData{
+		Dates:                 []string{},
+		SlotResolutionMinutes: 15,
+		CellDateIndex:         []int{},
+		CellSlot:              []int{},
+		CellCount:             []int{},
+	}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time
