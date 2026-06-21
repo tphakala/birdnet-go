@@ -192,6 +192,9 @@ type Interface interface {
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
 	// GetSpeciesDiversityData returns daily unique species counts within the given date range.
 	GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]DailyAnalyticsData, error)
+	// GetActivityHeatmap returns detection counts bucketed by (station-local date, intra-day slot)
+	// over the inclusive date range, as a columnar sparse payload. species is an optional filter.
+	GetActivityHeatmap(ctx context.Context, startDate, endDate, species string) (ActivityHeatmapData, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods

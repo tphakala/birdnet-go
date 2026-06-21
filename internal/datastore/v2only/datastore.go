@@ -2981,6 +2981,33 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	return results, nil
 }
 
+// GetActivityHeatmap returns detection counts bucketed by (station-local date, intra-day slot)
+// over [startDate, endDate]. It fetches the raw detection timestamps in range (false positives
+// excluded) and buckets them in Go (buildActivityHeatmap), keeping the slot/date math out of
+// dialect SQL and correct across DST. species is an optional scientific-name filter; an unknown
+// species yields an empty grid that still carries the full date axis.
+func (ds *Datastore) GetActivityHeatmap(ctx context.Context, startDate, endDate, species string) (datastore.ActivityHeatmapData, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return datastore.ActivityHeatmapData{}, err
+	}
+
+	labelID, err := ds.resolveLabelID(ctx, species)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return buildActivityHeatmap(nil, ds.timezone, startDate, endDate)
+		}
+		return datastore.ActivityHeatmapData{}, err
+	}
+
+	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelID)
+	if err != nil {
+		return datastore.ActivityHeatmapData{}, err
+	}
+
+	return buildActivityHeatmap(timestamps, ds.timezone, startDate, endDate)
+}
+
 // ============================================================
 // Dynamic Threshold Methods
 // ============================================================

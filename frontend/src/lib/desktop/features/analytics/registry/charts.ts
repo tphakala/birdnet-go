@@ -15,6 +15,8 @@ import { parseLocalDateString } from '$lib/utils/date';
 import TimeOfDaySpeciesChart from '../components/charts/d3/TimeOfDaySpeciesChart.svelte';
 import DailySpeciesTrendChart from '../components/charts/d3/DailySpeciesTrendChart.svelte';
 import SpeciesDiversityChart from '../components/charts/d3/SpeciesDiversityChart.svelte';
+import SeasonalHeatmap from '../components/charts/d3/SeasonalHeatmap.svelte';
+import type { HeatmapData } from '../components/charts/d3/utils/heatmap';
 import TrendChartOptions from '../components/TrendChartOptions.svelte';
 
 import { formatDateForAPI } from './analyticsParams';
@@ -180,9 +182,80 @@ async function fetchDiversity(
     .filter((item): item is DiversityDatum => item !== null);
 }
 
+/** Keeps only finite numbers from an unknown value; drops anything malformed. */
+function asNumberArray(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+    : [];
+}
+
+interface HeatmapResponse {
+  dates?: unknown;
+  slotResolutionMinutes?: unknown;
+  cells?: { dateIndex?: unknown; slot?: unknown; count?: unknown };
+}
+
+const DEFAULT_SLOT_RESOLUTION_MINUTES = 15;
+
+/**
+ * Seasonal density heatmap: detection counts by (date, intra-day slot). Honors an optional
+ * single-species filter (the control bar's first selected species; none means all species).
+ * Returns the server's columnar sparse payload, defensively coerced.
+ */
+async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Promise<HeatmapData> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+  });
+  // The endpoint filters by a single species; use the first selected (none = all species).
+  if (params.species.length > 0) search.append('species', params.species[0]);
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/time/heatmap?${search}`), { signal });
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Invalid heatmap response: expected an object');
+  }
+  const body = data as HeatmapResponse;
+  const cells = (body.cells ?? {}) as { dateIndex?: unknown; slot?: unknown; count?: unknown };
+
+  return {
+    dates: Array.isArray(body.dates)
+      ? body.dates.filter((d): d is string => typeof d === 'string')
+      : [],
+    slotResolutionMinutes:
+      typeof body.slotResolutionMinutes === 'number'
+        ? body.slotResolutionMinutes
+        : DEFAULT_SLOT_RESOLUTION_MINUTES,
+    cells: {
+      dateIndex: asNumberArray(cells.dateIndex),
+      slot: asNumberArray(cells.slot),
+      count: asNumberArray(cells.count),
+    },
+  };
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
+  {
+    id: 'seasonal-heatmap',
+    group: 'patterns',
+    titleKey: 'analytics.advanced.charts.heatmap.title',
+    descKey: 'analytics.advanced.charts.heatmap.description',
+    emptyKey: 'analytics.advanced.charts.heatmap.noData',
+    emptyHintKey: 'analytics.advanced.charts.heatmap.noDataHint',
+    component: SeasonalHeatmap,
+    fetch: fetchHeatmap,
+    // The fetch result is the columnar payload (an object), so count its non-zero cells rather
+    // than relying on ChartCard's default array-length count.
+    countDataPoints: data => (data as HeatmapData).cells.count.length,
+    size: 'full',
+    supports: { species: true, source: false },
+    minDataPoints: 20,
+    export: 'csv',
+  },
   {
     id: 'time-of-day-species',
     group: 'patterns',

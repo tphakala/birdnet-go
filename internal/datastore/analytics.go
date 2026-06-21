@@ -51,6 +51,22 @@ type HourlyDistributionData struct {
 	Date  string `json:"date,omitempty"` // Optional field, only set when filtering by specific date
 }
 
+// ActivityHeatmapData is the columnar, sparse aggregation behind the seasonal density
+// heatmap: detection counts bucketed by (station-local calendar date, intra-day slot).
+//
+// Dates lists every calendar date in the requested range, ascending, and forms the x-axis;
+// SlotResolutionMinutes is the effective intra-day slot width (15, 30, or 60), downsampled
+// from 15 on wide ranges so the payload stays bounded. The three Cell* slices are parallel
+// and hold only non-zero cells: cell i is Dates[CellDateIndex[i]] at slot CellSlot[i] with
+// CellCount[i] detections. A slot s covers the wall-clock minutes [s*res, (s+1)*res).
+type ActivityHeatmapData struct {
+	Dates                 []string
+	SlotResolutionMinutes int
+	CellDateIndex         []int
+	CellSlot              []int
+	CellCount             []int
+}
+
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
@@ -385,6 +401,13 @@ func (ds *DataStore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	}
 
 	return diversity, nil
+}
+
+// GetActivityHeatmap is a stub on the legacy store. The seasonal density heatmap is a v2only
+// feature; the legacy datastore is deprecated and being removed, so it returns an empty grid
+// rather than implementing the aggregation. See internal/datastore/v2only for the real method.
+func (ds *DataStore) GetActivityHeatmap(_ context.Context, _, _, _ string) (ActivityHeatmapData, error) {
+	return ActivityHeatmapData{}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time
