@@ -30,9 +30,10 @@ func run() error {
 	}
 
 	r := &jsonschema.Reflector{
-		DoNotReference:          false,
-		ExpandedStruct:          false,
-		AllowAdditionalProperties: true,
+		DoNotReference:             false,
+		ExpandedStruct:             false,
+		AllowAdditionalProperties:  true,
+		RequiredFromJSONSchemaTags: true,
 	}
 
 	schema := r.Reflect(&conf.Settings{})

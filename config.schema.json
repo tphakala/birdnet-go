@@ -10,10 +10,7 @@
           "description": "Days to retain alert history (0 = unlimited)"
         }
       },
-      "type": "object",
-      "required": [
-        "historyRetentionDays"
-      ]
+      "type": "object"
     },
     "AllowSubnetBypass": {
       "properties": {
@@ -26,11 +23,7 @@
           "description": "disable OAuth2 in subnet"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "subnet"
-      ]
+      "type": "object"
     },
     "AudioSettings": {
       "properties": {
@@ -90,18 +83,7 @@
           "description": "liveness watchdog tuning (0 = use default)"
         }
       },
-      "type": "object",
-      "required": [
-        "sources",
-        "ffmpegPath",
-        "soxPath",
-        "streamTransport",
-        "export",
-        "soundLevel",
-        "equalizer",
-        "quietHours",
-        "watchdog"
-      ]
+      "type": "object"
     },
     "AudioSourceConfig": {
       "properties": {
@@ -141,13 +123,7 @@
           "description": "Per-source quiet hours"
         }
       },
-      "type": "object",
-      "required": [
-        "name",
-        "device",
-        "gain",
-        "quietHours"
-      ]
+      "type": "object"
     },
     "BSGConfig": {
       "properties": {
@@ -222,27 +198,10 @@
             }
           },
           "type": "object",
-          "required": [
-            "backup",
-            "store",
-            "cleanup",
-            "delete"
-          ],
           "description": "OperationTimeouts defines timeouts for various backup operations"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "debug",
-        "encryption",
-        "encryptionKey",
-        "sanitizeConfig",
-        "retention",
-        "targets",
-        "schedules",
-        "operationTimeouts"
-      ]
+      "type": "object"
     },
     "BackupRetention": {
       "properties": {
@@ -259,12 +218,7 @@
           "description": "Minimum number of recent backups to keep for a given source, regardless of their age. This ensures a baseline number of backups are always available."
         }
       },
-      "type": "object",
-      "required": [
-        "maxAge",
-        "maxBackups",
-        "minBackups"
-      ]
+      "type": "object"
     },
     "BackupScheduleConfig": {
       "properties": {
@@ -289,14 +243,7 @@
           "description": "If true, this schedule is weekly (runs on the specified Weekday at Hour:Minute). If false, it's a daily schedule (runs every day at Hour:Minute). (Valid: true or false)"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "hour",
-        "minute",
-        "weekday",
-        "isWeekly"
-      ]
+      "type": "object"
     },
     "BackupTarget": {
       "properties": {
@@ -313,12 +260,7 @@
           "description": "A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling."
         }
       },
-      "type": "object",
-      "required": [
-        "type",
-        "enabled",
-        "settings"
-      ]
+      "type": "object"
     },
     "BannerConfig": {
       "properties": {
@@ -359,15 +301,7 @@
           "description": "whether visitors can expand the map (default true)"
         }
       },
-      "type": "object",
-      "required": [
-        "showImage",
-        "imagePath",
-        "title",
-        "description",
-        "showLocationMap",
-        "showWeather"
-      ]
+      "type": "object"
     },
     "BasicAuth": {
       "properties": {
@@ -400,16 +334,7 @@
           "description": "duration for access token"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "password",
-        "clientId",
-        "clientSecret",
-        "redirectUri",
-        "authCodeExp",
-        "accessTokenExp"
-      ]
+      "type": "object"
     },
     "BatConfig": {
       "properties": {
@@ -446,13 +371,7 @@
           "description": "post-detection ultrasonic validation filter"
         }
       },
-      "type": "object",
-      "required": [
-        "threshold",
-        "nighttimeOnly",
-        "falsePositiveFilter",
-        "ultrasonicFilter"
-      ]
+      "type": "object"
     },
     "BirdNETConfig": {
       "properties": {
@@ -529,20 +448,7 @@
           "description": "OpenVINO device preference: \"auto\" (default), \"cpu\", or \"gpu\""
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "sensitivity",
-        "threshold",
-        "overlap",
-        "longitude",
-        "latitude",
-        "locationConfigured",
-        "threads",
-        "locale",
-        "rangeFilter",
-        "useXnnpack"
-      ]
+      "type": "object"
     },
     "BirdweatherSettings": {
       "properties": {
@@ -571,15 +477,7 @@
           "description": "settings for retry mechanism"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "debug",
-        "id",
-        "threshold",
-        "locationAccuracy",
-        "retrySettings"
-      ]
+      "type": "object"
     },
     "CircuitBreakerConfig": {
       "properties": {
@@ -596,13 +494,7 @@
           "type": "integer"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "max_failures",
-        "timeout",
-        "half_open_max_requests"
-      ]
+      "type": "object"
     },
     "ConsoleOutput": {
       "properties": {
@@ -615,11 +507,7 @@
           "description": "log level for console output"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "level"
-      ]
+      "type": "object"
     },
     "CustomColors": {
       "properties": {
@@ -641,10 +529,7 @@
           "description": "number of species to show"
         }
       },
-      "type": "object",
-      "required": [
-        "summaryLimit"
-      ]
+      "type": "object"
     },
     "Dashboard": {
       "properties": {
@@ -693,16 +578,7 @@
           "description": "auto-start live spectrogram on dashboard"
         }
       },
-      "type": "object",
-      "required": [
-        "thumbnails",
-        "summaryLimit",
-        "spectrogram",
-        "temperatureUnit",
-        "layout",
-        "defaultAudioGain",
-        "liveSpectrogram"
-      ]
+      "type": "object"
     },
     "DashboardElement": {
       "properties": {
@@ -739,11 +615,7 @@
           "description": "config for detections grid element"
         }
       },
-      "type": "object",
-      "required": [
-        "type",
-        "enabled"
-      ]
+      "type": "object"
     },
     "DashboardLayout": {
       "properties": {
@@ -754,10 +626,7 @@
           "type": "array"
         }
       },
-      "type": "object",
-      "required": [
-        "elements"
-      ]
+      "type": "object"
     },
     "DaylightFilterSettings": {
       "properties": {
@@ -781,13 +650,7 @@
           "description": "species, families, orders, or genera to filter during daylight"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "enabled",
-        "offset",
-        "species"
-      ]
+      "type": "object"
     },
     "DetectionsGridConfig": {
       "properties": {},
@@ -807,11 +670,7 @@
           "description": "filesystem paths to monitor"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "paths"
-      ]
+      "type": "object"
     },
     "DogBarkFilterSettings": {
       "properties": {
@@ -839,14 +698,7 @@
           "description": "species list for filtering"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "enabled",
-        "confidence",
-        "remember",
-        "species"
-      ]
+      "type": "object"
     },
     "DynamicThresholdSettings": {
       "properties": {
@@ -871,14 +723,7 @@
           "description": "number of hours to consider for dynamic threshold"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "debug",
-        "trigger",
-        "min",
-        "validHours"
-      ]
+      "type": "object"
     },
     "EBirdSettings": {
       "properties": {
@@ -899,13 +744,7 @@
           "description": "locale for eBird data (e.g., \"en\", \"es\")"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "apiKey",
-        "cacheTTL",
-        "locale"
-      ]
+      "type": "object"
     },
     "EqualizerFilter": {
       "properties": {
@@ -932,15 +771,7 @@
           "description": "Filter passes for added attenuation or gain"
         }
       },
-      "type": "object",
-      "required": [
-        "type",
-        "frequency",
-        "q",
-        "gain",
-        "width",
-        "passes"
-      ]
+      "type": "object"
     },
     "EqualizerSettings": {
       "properties": {
@@ -956,11 +787,7 @@
           "description": "equalizer filter configuration"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "filters"
-      ]
+      "type": "object"
     },
     "ExportSettings": {
       "properties": {
@@ -1005,19 +832,7 @@
           "description": "audio normalization settings (EBU R128)"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "enabled",
-        "path",
-        "type",
-        "bitrate",
-        "retention",
-        "length",
-        "preCapture",
-        "gain",
-        "normalization"
-      ]
+      "type": "object"
     },
     "ExtendedCaptureSettings": {
       "properties": {
@@ -1037,13 +852,7 @@
           "type": "array"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "maxDuration",
-        "captureBufferSeconds",
-        "species"
-      ]
+      "type": "object"
     },
     "FalsePositiveFilterSettings": {
       "properties": {
@@ -1052,10 +861,7 @@
           "description": "Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum"
         }
       },
-      "type": "object",
-      "required": [
-        "level"
-      ]
+      "type": "object"
     },
     "FileOutput": {
       "properties": {
@@ -1088,16 +894,7 @@
           "description": "log level for file output"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "path",
-        "max_size",
-        "max_age",
-        "max_rotated_files",
-        "compress",
-        "level"
-      ]
+      "type": "object"
     },
     "HealthCheckConfig": {
       "properties": {
@@ -1111,12 +908,7 @@
           "type": "integer"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "interval",
-        "timeout"
-      ]
+      "type": "object"
     },
     "HomeAssistantSettings": {
       "properties": {
@@ -1133,12 +925,7 @@
           "description": "base name for devices (default: BirdNET-Go)"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "discoveryPrefix",
-        "deviceName"
-      ]
+      "type": "object"
     },
     "LiveStreamSettings": {
       "properties": {
@@ -1163,14 +950,7 @@
           "description": "log level for ffmpeg"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "bitRate",
-        "sampleRate",
-        "segmentLength",
-        "ffmpegLogLevel"
-      ]
+      "type": "object"
     },
     "LogDeduplicationSettings": {
       "properties": {
@@ -1183,11 +963,7 @@
           "description": "Health check interval in seconds (default: 60)"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "healthCheckIntervalSeconds"
-      ]
+      "type": "object"
     },
     "LoggingConfig": {
       "properties": {
@@ -1234,18 +1010,7 @@
           "description": "per-module log levels"
         }
       },
-      "type": "object",
-      "required": [
-        "level",
-        "timezone",
-        "file",
-        "debug_webhooks",
-        "default_level",
-        "console",
-        "file_output",
-        "modules",
-        "module_levels"
-      ]
+      "type": "object"
     },
     "LowMemoryConfig": {
       "properties": {
@@ -1254,10 +1019,7 @@
           "description": "\"auto\" (default), \"on\", \"off\""
         }
       },
-      "type": "object",
-      "required": [
-        "mode"
-      ]
+      "type": "object"
     },
     "MQTTSettings": {
       "properties": {
@@ -1302,19 +1064,7 @@
           "description": "Home Assistant auto-discovery settings"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "debug",
-        "broker",
-        "topic",
-        "username",
-        "password",
-        "retain",
-        "retrySettings",
-        "tls",
-        "homeAssistant"
-      ]
+      "type": "object"
     },
     "MQTTTLSSettings": {
       "properties": {
@@ -1339,11 +1089,7 @@
           "description": "path to client key file (managed internally)"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "insecureSkipVerify"
-      ]
+      "type": "object"
     },
     "ModelsConfig": {
       "properties": {
@@ -1366,10 +1112,7 @@
           "description": "list of installed model IDs managed by the model gallery"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled"
-      ]
+      "type": "object"
     },
     "ModuleOutput": {
       "properties": {
@@ -1406,16 +1149,7 @@
           "description": "compress rotated logs (nil = use FileOutput default)"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "file_path",
-        "level",
-        "console_also",
-        "max_size",
-        "max_age",
-        "max_rotated_files"
-      ]
+      "type": "object"
     },
     "MonitoringSettings": {
       "properties": {
@@ -1440,14 +1174,7 @@
           "description": "Disk metric collection"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "checkInterval",
-        "cpu",
-        "memory",
-        "disk"
-      ]
+      "type": "object"
     },
     "NewSpeciesTemplate": {
       "properties": {
@@ -1458,11 +1185,7 @@
           "type": "string"
         }
       },
-      "type": "object",
-      "required": [
-        "title",
-        "message"
-      ]
+      "type": "object"
     },
     "NormalizationSettings": {
       "properties": {
@@ -1483,13 +1206,7 @@
           "description": "true peak limit in dBTP (default: -2)"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "targetLUFS",
-        "loudnessRange",
-        "truePeak"
-      ]
+      "type": "object"
     },
     "NotificationConfig": {
       "properties": {
@@ -1500,11 +1217,7 @@
           "$ref": "#/$defs/NotificationTemplates"
         }
       },
-      "type": "object",
-      "required": [
-        "push",
-        "templates"
-      ]
+      "type": "object"
     },
     "NotificationTemplates": {
       "properties": {
@@ -1512,10 +1225,7 @@
           "$ref": "#/$defs/NewSpeciesTemplate"
         }
       },
-      "type": "object",
-      "required": [
-        "newSpecies"
-      ]
+      "type": "object"
     },
     "OAuthProviderConfig": {
       "properties": {
@@ -1555,16 +1265,7 @@
           "description": "Custom OAuth scopes (OIDC default: openid, profile, email)"
         }
       },
-      "type": "object",
-      "required": [
-        "provider",
-        "enabled",
-        "clientId",
-        "clientSecret",
-        "redirectUri",
-        "userId",
-        "issuerUrl"
-      ]
+      "type": "object"
     },
     "OpenWeatherSettings": {
       "properties": {
@@ -1589,14 +1290,7 @@
           "description": "language code for the response"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "apiKey",
-        "endpoint",
-        "units",
-        "language"
-      ]
+      "type": "object"
     },
     "PerchConfig": {
       "properties": {
@@ -1617,10 +1311,7 @@
           "description": "locale for species label translation"
         }
       },
-      "type": "object",
-      "required": [
-        "threshold"
-      ]
+      "type": "object"
     },
     "PrivacyFilterSettings": {
       "properties": {
@@ -1637,12 +1328,7 @@
           "description": "confidence threshold for human detection"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "enabled",
-        "confidence"
-      ]
+      "type": "object"
     },
     "PublicAccess": {
       "properties": {
@@ -1651,10 +1337,7 @@
           "description": "allow unauthenticated users to start/listen to live audio streams"
         }
       },
-      "type": "object",
-      "required": [
-        "liveAudio"
-      ]
+      "type": "object"
     },
     "PushFilterConfig": {
       "properties": {
@@ -1680,13 +1363,7 @@
           "type": "object"
         }
       },
-      "type": "object",
-      "required": [
-        "types",
-        "priorities",
-        "components",
-        "metadata_filters"
-      ]
+      "type": "object"
     },
     "PushProviderConfig": {
       "properties": {
@@ -1743,21 +1420,7 @@
           "description": "Custom JSON template"
         }
       },
-      "type": "object",
-      "required": [
-        "type",
-        "enabled",
-        "name",
-        "filter",
-        "urls",
-        "timeout",
-        "command",
-        "args",
-        "environment",
-        "input_format",
-        "endpoints",
-        "template"
-      ]
+      "type": "object"
     },
     "PushSettings": {
       "properties": {
@@ -1797,19 +1460,7 @@
           "description": "0 = disabled"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "default_timeout",
-        "max_retries",
-        "retry_delay",
-        "circuit_breaker",
-        "health_check",
-        "rate_limiting",
-        "providers",
-        "minConfidenceThreshold",
-        "speciesCooldownMinutes"
-      ]
+      "type": "object"
     },
     "QuietHoursConfig": {
       "properties": {
@@ -1846,17 +1497,7 @@
           "description": "minutes relative to end event (positive = after, negative = before)"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "mode",
-        "startTime",
-        "endTime",
-        "startEvent",
-        "startOffset",
-        "endEvent",
-        "endOffset"
-      ]
+      "type": "object"
     },
     "RTSPHealthSettings": {
       "properties": {
@@ -1869,11 +1510,7 @@
           "description": "health check interval in seconds (default: 30)"
         }
       },
-      "type": "object",
-      "required": [
-        "healthyDataThreshold",
-        "monitoringInterval"
-      ]
+      "type": "object"
     },
     "RTSPSettings": {
       "properties": {
@@ -1907,12 +1544,7 @@
           "description": "Custom FFmpeg parameters"
         }
       },
-      "type": "object",
-      "required": [
-        "streams",
-        "health",
-        "ffmpegParameters"
-      ]
+      "type": "object"
     },
     "RangeFilterSettings": {
       "properties": {
@@ -1953,15 +1585,7 @@
           "description": "last time the species list was updated, runtime value"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "model",
-        "modelPath",
-        "threshold",
-        "passUnmappedSpecies",
-        "lastUpdated"
-      ]
+      "type": "object"
     },
     "RateLimitingConfig": {
       "properties": {
@@ -1975,12 +1599,7 @@
           "type": "integer"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "requests_per_minute",
-        "burst_size"
-      ]
+      "type": "object"
     },
     "RealtimeSettings": {
       "properties": {
@@ -2017,11 +1636,7 @@
               "type": "string"
             }
           },
-          "type": "object",
-          "required": [
-            "enabled",
-            "path"
-          ]
+          "type": "object"
         },
         "logDeduplication": {
           "$ref": "#/$defs/LogDeduplicationSettings",
@@ -2080,30 +1695,7 @@
           "description": "Extended capture for long calling species"
         }
       },
-      "type": "object",
-      "required": [
-        "interval",
-        "processingTime",
-        "audio",
-        "dashboard",
-        "dynamicThreshold",
-        "falsePositiveFilter",
-        "log",
-        "logDeduplication",
-        "birdweather",
-        "ebird",
-        "privacyFilter",
-        "dogBarkFilter",
-        "daylightFilter",
-        "rtsp",
-        "mqtt",
-        "telemetry",
-        "monitoring",
-        "species",
-        "weather",
-        "speciesTracking",
-        "extendedCapture"
-      ]
+      "type": "object"
     },
     "ResourceEnabled": {
       "properties": {
@@ -2112,10 +1704,7 @@
           "description": "true to enable monitoring for this resource"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled"
-      ]
+      "type": "object"
     },
     "RetentionSettings": {
       "properties": {
@@ -2148,16 +1737,7 @@
           "description": "cleanup check interval in minutes (default: 15)"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "policy",
-        "maxAge",
-        "maxUsage",
-        "minClips",
-        "keepSpectrograms",
-        "checkInterval"
-      ]
+      "type": "object"
     },
     "RetrySettings": {
       "properties": {
@@ -2182,14 +1762,7 @@
           "description": "multiplier for exponential backoff"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "maxRetries",
-        "initialDelay",
-        "maxDelay",
-        "backoffMultiplier"
-      ]
+      "type": "object"
     },
     "Season": {
       "properties": {
@@ -2202,11 +1775,7 @@
           "description": "Day when season starts (1-31)"
         }
       },
-      "type": "object",
-      "required": [
-        "startMonth",
-        "startDay"
-      ]
+      "type": "object"
     },
     "SeasonalTrackingSettings": {
       "properties": {
@@ -2226,12 +1795,7 @@
           "description": "Season definitions"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "windowDays",
-        "seasons"
-      ]
+      "type": "object"
     },
     "Security": {
       "properties": {
@@ -2314,24 +1878,7 @@
           "description": "duration for browser session cookies"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "baseUrl",
-        "host",
-        "tlsMode",
-        "selfSignedValidity",
-        "tlsPort",
-        "redirectToHttps",
-        "allowSubnetBypass",
-        "trustedProxies",
-        "publicAccess",
-        "privateMode",
-        "basicAuth",
-        "oauthProviders",
-        "sessionSecret",
-        "sessionDuration"
-      ]
+      "type": "object"
     },
     "SentrySettings": {
       "properties": {
@@ -2344,11 +1891,7 @@
           "description": "true to enable transparent telemetry logging"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "debug"
-      ]
+      "type": "object"
     },
     "Settings": {
       "properties": {
@@ -2388,11 +1931,7 @@
               "type": "boolean"
             }
           },
-          "type": "object",
-          "required": [
-            "name",
-            "timeAs24h"
-          ]
+          "type": "object"
         },
         "birdnet": {
           "$ref": "#/$defs/BirdNETConfig",
@@ -2456,11 +1995,7 @@
                   "type": "string"
                 }
               },
-              "type": "object",
-              "required": [
-                "enabled",
-                "path"
-              ]
+              "type": "object"
             },
             "mysql": {
               "properties": {
@@ -2483,23 +2018,10 @@
                   "type": "string"
                 }
               },
-              "type": "object",
-              "required": [
-                "enabled",
-                "username",
-                "password",
-                "database",
-                "host",
-                "port"
-              ]
+              "type": "object"
             }
           },
-          "type": "object",
-          "required": [
-            "file",
-            "sqlite",
-            "mysql"
-          ]
+          "type": "object"
         },
         "backup": {
           "$ref": "#/$defs/BackupConfig",
@@ -2515,26 +2037,6 @@
         }
       },
       "type": "object",
-      "required": [
-        "debug",
-        "logging",
-        "main",
-        "birdnet",
-        "perch",
-        "bat",
-        "bsg",
-        "models",
-        "lowMemory",
-        "taxonomySynonyms",
-        "realtime",
-        "webServer",
-        "security",
-        "sentry",
-        "output",
-        "backup",
-        "notification",
-        "alerting"
-      ],
       "title": "BirdNET-Go Configuration",
       "description": "Top-level configuration for BirdNET-Go."
     },
@@ -2561,14 +2063,7 @@
           "description": "valid user id for OAuth2"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "clientId",
-        "clientSecret",
-        "redirectUri",
-        "userId"
-      ]
+      "type": "object"
     },
     "SoundLevelSettings": {
       "properties": {
@@ -2589,13 +2084,7 @@
           "description": "true to log debug messages for every realtime update, false to log only at configured interval"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "interval",
-        "debug",
-        "debugRealtimeLogging"
-      ]
+      "type": "object"
     },
     "SpeciesAction": {
       "properties": {
@@ -2619,13 +2108,7 @@
           "description": "Whether to also execute default actions"
         }
       },
-      "type": "object",
-      "required": [
-        "type",
-        "command",
-        "parameters",
-        "executeDefaults"
-      ]
+      "type": "object"
     },
     "SpeciesConfig": {
       "properties": {
@@ -2645,12 +2128,7 @@
           "description": "List of actions to execute"
         }
       },
-      "type": "object",
-      "required": [
-        "threshold",
-        "interval",
-        "actions"
-      ]
+      "type": "object"
     },
     "SpeciesSettings": {
       "properties": {
@@ -2676,12 +2154,7 @@
           "description": "Per-species configuration (keys normalized to lowercase)"
         }
       },
-      "type": "object",
-      "required": [
-        "include",
-        "exclude",
-        "config"
-      ]
+      "type": "object"
     },
     "SpeciesTrackingSettings": {
       "properties": {
@@ -2710,15 +2183,7 @@
           "description": "Settings for seasonal species tracking"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "newSpeciesWindowDays",
-        "syncIntervalMinutes",
-        "notificationSuppressionHours",
-        "yearlyTracking",
-        "seasonalTracking"
-      ]
+      "type": "object"
     },
     "SpectrogramPreRender": {
       "properties": {
@@ -2747,15 +2212,7 @@
           "description": "Dynamic range in dB: \"80\" (high contrast), \"100\" (standard), \"120\" (extended)"
         }
       },
-      "type": "object",
-      "required": [
-        "mode",
-        "enabled",
-        "size",
-        "raw",
-        "style",
-        "dynamicRange"
-      ]
+      "type": "object"
     },
     "StreamConfig": {
       "properties": {
@@ -2799,16 +2256,7 @@
           "description": "Model IDs for this stream (e.g., [\"birdnet\", \"perch_v2\"])"
         }
       },
-      "type": "object",
-      "required": [
-        "name",
-        "url",
-        "enabled",
-        "type",
-        "transport",
-        "channelMode",
-        "quietHours"
-      ]
+      "type": "object"
     },
     "TelemetrySettings": {
       "properties": {
@@ -2821,11 +2269,7 @@
           "description": "IP address and port to listen on"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "listen"
-      ]
+      "type": "object"
     },
     "Thumbnails": {
       "properties": {
@@ -2850,14 +2294,7 @@
           "description": "fallback policy: \"none\", \"all\" - try all available providers if preferred fails"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "summary",
-        "recent",
-        "imageProvider",
-        "fallbackPolicy"
-      ]
+      "type": "object"
     },
     "UltrasonicFilterConfig": {
       "properties": {
@@ -2882,14 +2319,7 @@
           "description": "boundary between audible and ultrasonic bands in Hz"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "cvThreshold",
-        "fftSize",
-        "hopSize",
-        "frequencySplitHz"
-      ]
+      "type": "object"
     },
     "VideoEmbedConfig": {
       "properties": {
@@ -2902,11 +2332,7 @@
           "description": "optional display title"
         }
       },
-      "type": "object",
-      "required": [
-        "url",
-        "title"
-      ]
+      "type": "object"
     },
     "WatchdogSettings": {
       "properties": {
@@ -2935,15 +2361,7 @@
           "description": "time in ESCALATED before FAILED (default 60s)"
         }
       },
-      "type": "object",
-      "required": [
-        "checkInterval",
-        "silenceThreshold",
-        "maxRetries",
-        "retryBackoff",
-        "cooldown",
-        "escalationTimeout"
-      ]
+      "type": "object"
     },
     "WeatherSettings": {
       "properties": {
@@ -2968,14 +2386,7 @@
           "description": "WeatherUnderground integration settings"
         }
       },
-      "type": "object",
-      "required": [
-        "provider",
-        "pollInterval",
-        "debug",
-        "openWeather",
-        "wunderground"
-      ]
+      "type": "object"
     },
     "WebServerSettings": {
       "properties": {
@@ -3008,16 +2419,7 @@
           "description": "Enable browser terminal (security risk)"
         }
       },
-      "type": "object",
-      "required": [
-        "debug",
-        "enabled",
-        "port",
-        "basePath",
-        "allowEmbedding",
-        "liveStream",
-        "enableTerminal"
-      ]
+      "type": "object"
     },
     "WebhookAuthConfig": {
       "properties": {
@@ -3062,19 +2464,7 @@
           "description": "Path to file containing header value"
         }
       },
-      "type": "object",
-      "required": [
-        "type",
-        "token",
-        "token_file",
-        "user",
-        "user_file",
-        "pass",
-        "pass_file",
-        "header",
-        "value",
-        "value_file"
-      ]
+      "type": "object"
     },
     "WebhookEndpointConfig": {
       "properties": {
@@ -3101,14 +2491,7 @@
           "description": "Authentication configuration"
         }
       },
-      "type": "object",
-      "required": [
-        "url",
-        "method",
-        "headers",
-        "timeout",
-        "auth"
-      ]
+      "type": "object"
     },
     "WundergroundSettings": {
       "properties": {
@@ -3129,13 +2512,7 @@
           "description": "units of measurement: \"e\" (imperial), \"m\" (metric), \"h\" (UK hybrid)"
         }
       },
-      "type": "object",
-      "required": [
-        "apiKey",
-        "stationId",
-        "endpoint",
-        "units"
-      ]
+      "type": "object"
     },
     "YearlyTrackingSettings": {
       "properties": {
@@ -3156,13 +2533,7 @@
           "description": "Days to show \"new this year\" indicator (default: 30)"
         }
       },
-      "type": "object",
-      "required": [
-        "enabled",
-        "resetMonth",
-        "resetDay",
-        "windowDays"
-      ]
+      "type": "object"
     }
   },
   "title": "BirdNET-Go Configuration",
