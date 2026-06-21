@@ -111,6 +111,111 @@ func (c *openvinoClassifier) Close() {
 	}
 }
 
+// OpenVINOEmbeddingExtractorOptions configures an OpenVINO-backed embedding
+// extractor. Unlike OpenVINOClassifierOptions it carries no label list: the
+// extractor reads a single non-logits output port (the embedding vector) and is
+// validated against the consumer's expected embedding dimension rather than a
+// species label count.
+type OpenVINOEmbeddingExtractorOptions struct {
+	Threads       int    // INFERENCE_NUM_THREADS; 0 = OpenVINO auto-tune (CPU only)
+	PrecisionHint string // INFERENCE_PRECISION_HINT; "" defaults to f16
+	Device        string // ov.DeviceCPU (default) or ov.DeviceGPU
+	OutputIndex   int    // embedding output port index (e.g. 1 for birdnet-v24-embeddings)
+	ExpectedDim   int    // required embedding element count; validated against the model
+}
+
+// openvinoEmbeddingExtractor adapts a single-output ov.Classifier bound to a
+// model's embedding port into an EmbeddingExtractor. The bat pipeline consumes
+// only the embedding vector (the embedding model's logits are discarded), so the
+// underlying classifier is compiled to read just the embedding output port. It is
+// NOT goroutine-safe; callers serialize access.
+type openvinoEmbeddingExtractor struct {
+	c   ov.Classifier
+	dim int
+}
+
+// NewOpenVINOEmbeddingExtractor creates an EmbeddingExtractor backed by the native
+// OpenVINO backend that reads a model's embedding output port (opts.OutputIndex).
+// InitOpenVINO must be called first; if the OpenVINO core is not initialized (or the
+// backend is not compiled in), construction returns ov.ErrOpenVINOUnavailable, which
+// the caller treats as fall back to ORT. The compiled embedding port's element count
+// is validated against opts.ExpectedDim (the consumer's required embedding dimension):
+// a mismatch (a wrong OutputIndex or an unexpected model) is rejected so the caller
+// falls back to ORT rather than feeding a malformed embedding downstream.
+func NewOpenVINOEmbeddingExtractor(modelPath string, opts OpenVINOEmbeddingExtractorOptions) (EmbeddingExtractor, error) {
+	if opts.ExpectedDim <= 0 {
+		return nil, errors.Newf("OpenVINO embedding extractor requires a positive ExpectedDim").
+			Category(errors.CategoryValidation).Build()
+	}
+	prec := opts.PrecisionHint
+	if prec == "" {
+		prec = ov.DefaultPrecisionHint
+	}
+	threads := max(opts.Threads, 0)
+	c, err := ov.NewClassifier(modelPath, ov.Options{
+		PrecisionHint: prec,
+		Threads:       threads,
+		Device:        opts.Device,
+		OutputIndex:   opts.OutputIndex,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Validate the compiled embedding port dimension against the consumer's expected
+	// embedding size (the bat classifier's input dim). The OV backend reports
+	// NumClasses from the selected output port of the compiled model, so a mismatch is
+	// a genuine model/port inconsistency: reject it and let the caller fall back to ORT.
+	if n := c.NumClasses(); n != opts.ExpectedDim {
+		_ = c.Close()
+		return nil, errors.Newf("OpenVINO embedding output dimension %d does not match expected %d", n, opts.ExpectedDim).
+			Category(errors.CategoryValidation).Build()
+	}
+	ovActiveClassifiers.Add(1)
+	return &openvinoEmbeddingExtractor{c: c, dim: c.NumClasses()}, nil
+}
+
+// Predict runs one inference and returns the embedding vector. This extractor binds
+// only the embedding output port (the embedding model's logits port is not compiled
+// in), so Predict returns the embedding rather than logits. The bat pipeline calls
+// PredictWithEmbeddings, not Predict; Predict exists to satisfy the Classifier
+// interface that EmbeddingExtractor embeds.
+func (e *openvinoEmbeddingExtractor) Predict(samples []float32) ([]float32, error) {
+	if e.c == nil {
+		return nil, ov.ErrOpenVINOUnavailable
+	}
+	return e.c.PredictRaw(samples)
+}
+
+// PredictWithEmbeddings runs one inference and returns the embedding vector as the
+// embeddings result with nil logits. The compiled model exposes only the embedding
+// output port (the native backend binds a single output per infer request) and the
+// bat pipeline discards the logits, so logits are intentionally nil.
+func (e *openvinoEmbeddingExtractor) PredictWithEmbeddings(samples []float32) (logits, embeddings []float32, err error) {
+	if e.c == nil {
+		return nil, nil, ov.ErrOpenVINOUnavailable
+	}
+	emb, err := e.c.PredictRaw(samples)
+	if err != nil {
+		return nil, nil, err
+	}
+	return nil, emb, nil
+}
+
+// NumSpecies returns the embedding element count. The extractor has no species
+// output of its own (its logits port is not compiled in); this reports the embedding
+// dimension so the value is non-zero and stable.
+func (e *openvinoEmbeddingExtractor) NumSpecies() int { return e.dim }
+
+// Close releases the underlying compiled model and decrements the active-classifier
+// count. Idempotent.
+func (e *openvinoEmbeddingExtractor) Close() {
+	if e.c != nil {
+		_ = e.c.Close()
+		e.c = nil
+		ovActiveClassifiers.Add(-1)
+	}
+}
+
 // InitOpenVINO initializes the OpenVINO runtime (loads libopenvino_c and the
 // process-global core). Safe to call repeatedly; retries after failure for
 // hot-reload recovery. Mirrors InitONNXRuntime.

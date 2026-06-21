@@ -184,6 +184,14 @@ func (c *onnxCustomClassifier) NumClasses() int {
 	return c.classifier.NumClasses()
 }
 
+// InputDim returns the embedding vector length the classifier expects as input.
+func (c *onnxCustomClassifier) InputDim() int {
+	if c.classifier == nil {
+		return 0
+	}
+	return c.classifier.InputDim()
+}
+
 // Labels returns the classification labels.
 func (c *onnxCustomClassifier) Labels() []string {
 	if c.classifier == nil {

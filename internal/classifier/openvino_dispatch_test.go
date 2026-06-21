@@ -99,6 +99,33 @@ func TestOpenVINOPlanReason_WrongModel(t *testing.T) {
 	assert.Equal(t, ovReasonNotBirdNETv24, reason)
 }
 
+// TestTryBatOpenVINO_FallsBackWithoutTag verifies that without the openvino build
+// tag, tryBatOpenVINO declines (returns a nil extractor and ok=false) so NewBat uses
+// the ORT embedding path. This pins the "OpenVINO must never make the bat model fail
+// to load" contract at the gate level, and the explicit nil return guards against the
+// typed-nil interface trap. It is the observable behavior in a CI (no-tag) build.
+func TestTryBatOpenVINO_FallsBackWithoutTag(t *testing.T) {
+	t.Parallel()
+	cfg := &BatModelConfig{
+		Backend:        conf.BackendPrefOpenVINO,
+		OpenVINODevice: conf.OVDeviceGPU,
+	}
+	ext, device, ok := tryBatOpenVINO(cfg, 1024)
+	assert.False(t, ok, "without the openvino tag, the bat OV path must decline")
+	assert.Nil(t, ext, "a declined OV path must return a nil extractor (no typed-nil trap)")
+	assert.Empty(t, device)
+}
+
+// TestOpenVINOPlanForBat_NotBuilt verifies that in the default (no-tag) build the
+// planner reports the not-built reason for the bat embedding model, so tryBatOpenVINO
+// logs why OpenVINO was declined rather than falling back silently.
+func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
+	t.Parallel()
+	_, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceGPU, RegistryIDBat, "", batEmbeddingOutputIndex)
+	assert.False(t, ok)
+	assert.Equal(t, ovReasonNotBuilt, reason)
+}
+
 // TestLogOpenVINODeclined_StandardBuild verifies the noise-control policy on a
 // non-openvino build: the auto path (the common case) stays silent so it does not
 // add a line to every standard-build startup, while an explicit backend=openvino
