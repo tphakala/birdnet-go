@@ -32,7 +32,6 @@
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
-  import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
@@ -229,30 +228,6 @@
       sortDirection = field === 'dateTime' ? 'desc' : 'asc';
     }
     onSortChange?.(toBackendSortBy(sortField, sortDirection));
-  }
-
-  // Mobile audio player state
-  let showMobilePlayer = $state(false);
-  let selectedAudioUrl = $state('');
-  let selectedSpeciesName = $state('');
-  let selectedDetectionId = $state<number | undefined>(undefined);
-
-  function handlePlayMobileAudio(payload: {
-    audioUrl: string;
-    speciesName: string;
-    detectionId: number;
-  }) {
-    selectedAudioUrl = payload.audioUrl;
-    selectedSpeciesName = payload.speciesName;
-    selectedDetectionId = payload.detectionId;
-    showMobilePlayer = true;
-  }
-
-  function handleCloseMobilePlayer() {
-    showMobilePlayer = false;
-    selectedAudioUrl = '';
-    selectedSpeciesName = '';
-    selectedDetectionId = undefined;
   }
 
   // Selection mode
@@ -644,7 +619,6 @@
                     {detection}
                     {onDetailsClick}
                     {onRefresh}
-                    onPlayMobileAudio={handlePlayMobileAudio}
                     selectionActive={selection.selectionActive}
                     selected={selection.isSelected(String(detection.id))}
                     onToggleSelect={handleToggleSelect}
@@ -687,18 +661,6 @@
           />
         </div>
       </div>
-    </div>
-  {/if}
-
-  <!-- Mobile Audio Player Overlay -->
-  {#if showMobilePlayer}
-    <div class="md:hidden">
-      <MobileAudioPlayer
-        audioUrl={selectedAudioUrl}
-        speciesName={selectedSpeciesName}
-        detectionId={selectedDetectionId}
-        onClose={handleCloseMobilePlayer}
-      />
     </div>
   {/if}
 
