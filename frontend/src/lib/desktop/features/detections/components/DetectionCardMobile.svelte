@@ -48,7 +48,7 @@
   let confirmModalConfig = $state({
     title: '',
     message: '',
-    confirmLabel: 'Confirm',
+    confirmLabel: t('common.confirm'),
     onConfirm: async () => {},
   });
 
@@ -85,20 +85,17 @@
   }
 
   function handleToggleSpecies() {
+    const commonName = detection.commonName;
     confirmModalConfig = {
-      title: t('dashboard.recentDetections.modals.ignoreSpecies', {
-        species: detection.commonName,
-      }),
-      message: t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', {
-        species: detection.commonName,
-      }),
+      title: t('dashboard.recentDetections.modals.ignoreSpecies', { species: commonName }),
+      message: t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', { species: commonName }),
       confirmLabel: t('common.confirm'),
       onConfirm: async () => {
         try {
           await fetchWithCSRF('/api/v2/detections/ignore', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ common_name: detection.commonName }),
+            body: JSON.stringify({ common_name: commonName }),
           });
           onRefresh?.();
         } catch {
@@ -110,24 +107,23 @@
   }
 
   function handleToggleLock() {
+    const detectionId = detection.id;
+    const isLocked = detection.locked;
+    const commonName = detection.commonName;
     confirmModalConfig = {
-      title: detection.locked
+      title: isLocked
         ? t('dashboard.recentDetections.modals.unlockDetection')
         : t('dashboard.recentDetections.modals.lockDetection'),
-      message: detection.locked
-        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', {
-            species: detection.commonName,
-          })
-        : t('dashboard.recentDetections.modals.lockDetectionConfirm', {
-            species: detection.commonName,
-          }),
+      message: isLocked
+        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', { species: commonName })
+        : t('dashboard.recentDetections.modals.lockDetectionConfirm', { species: commonName }),
       confirmLabel: t('common.confirm'),
       onConfirm: async () => {
         try {
-          await fetchWithCSRF(`/api/v2/detections/${detection.id}/lock`, {
+          await fetchWithCSRF(`/api/v2/detections/${detectionId}/lock`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ locked: !detection.locked }),
+            body: JSON.stringify({ locked: !isLocked }),
           });
           onRefresh?.();
         } catch {
@@ -139,17 +135,17 @@
   }
 
   function handleDelete() {
+    const detectionId = detection.id;
+    const commonName = detection.commonName;
     confirmModalConfig = {
-      title: t('dashboard.recentDetections.modals.deleteDetection', {
-        species: detection.commonName,
-      }),
+      title: t('dashboard.recentDetections.modals.deleteDetection', { species: commonName }),
       message: t('dashboard.recentDetections.modals.deleteDetectionConfirm', {
-        species: detection.commonName,
+        species: commonName,
       }),
       confirmLabel: t('common.delete'),
       onConfirm: async () => {
         try {
-          await fetchWithCSRF(`/api/v2/detections/${detection.id}`, { method: 'DELETE' });
+          await fetchWithCSRF(`/api/v2/detections/${detectionId}`, { method: 'DELETE' });
           onRefresh?.();
         } catch {
           toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
@@ -157,6 +153,14 @@
       },
     };
     showConfirmModal = true;
+  }
+
+  function handleViewDetails() {
+    if (onDetailsClick) {
+      onDetailsClick(detection.id);
+    } else {
+      navigation.navigate(`/ui/detections/${detection.id}`);
+    }
   }
 
   function handleDownload() {
@@ -215,14 +219,18 @@
           {#if loader.isQueued}
             <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Waiting...</span>
           {:else if loader.isGenerating}
-            <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Generating...</span>
+            <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
+              >{t('components.audio.generating')}</span
+            >
           {/if}
         </div>
       {/if}
 
       {#if loader.error}
         <div class="spectrogram-error">
-          <span class="text-sm text-[var(--color-base-content)]/50">Spectrogram unavailable</span>
+          <span class="text-sm text-[var(--color-base-content)]/50"
+            >{t('components.audio.spectrogramUnavailable')}</span
+          >
         </div>
       {:else if loader.spectrogramUrl}
         <img
@@ -267,11 +275,8 @@
     <button
       type="button"
       class="absolute inset-x-0 bottom-0 z-[11] text-left"
-      onclick={() =>
-        onDetailsClick
-          ? onDetailsClick(detection.id)
-          : navigation.navigate(`/ui/detections/${detection.id}`)}
-      aria-label={t('detections.viewDetails', { species: detection.commonName })}
+      onclick={handleViewDetails}
+      aria-label={t('detections.row.viewDetails', { species: detection.commonName })}
     >
       <SpeciesInfoBar {detection} />
     </button>
