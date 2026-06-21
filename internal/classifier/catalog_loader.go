@@ -299,6 +299,18 @@ func writeCatalogFileAtomic(path string, entries []CatalogEntry, checksum string
 			Context("path", tmpName).
 			Build()
 	}
+	// Set the final mode on the open descriptor (CreateTemp makes it 0600) rather
+	// than os.Chmod(path) after Close: operating on the fd avoids a TOCTOU window
+	// where the path could be swapped between close and chmod.
+	if cerr := tmp.Chmod(catalogFileMode); cerr != nil {
+		_ = tmp.Close()
+		return errors.New(cerr).
+			Component("classifier.catalog_loader").
+			Category(errors.CategoryFileIO).
+			Context("operation", "chmod_model_catalog").
+			Context("path", tmpName).
+			Build()
+	}
 	if serr := tmp.Sync(); serr != nil {
 		_ = tmp.Close()
 		return errors.New(serr).
@@ -313,14 +325,6 @@ func writeCatalogFileAtomic(path string, entries []CatalogEntry, checksum string
 			Component("classifier.catalog_loader").
 			Category(errors.CategoryFileIO).
 			Context("operation", "close_model_catalog").
-			Context("path", tmpName).
-			Build()
-	}
-	if cerr := os.Chmod(tmpName, catalogFileMode); cerr != nil {
-		return errors.New(cerr).
-			Component("classifier.catalog_loader").
-			Category(errors.CategoryFileIO).
-			Context("operation", "chmod_model_catalog").
 			Context("path", tmpName).
 			Build()
 	}
