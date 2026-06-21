@@ -78,12 +78,13 @@
   type="default"
   onClose={handleClose}
   className="sm:modal-middle"
+  aria-labelledby="species-detail-modal-title"
 >
   {#snippet header()}
     {#if displaySpecies}
       <div class="flex items-center justify-between">
         <div class="min-w-0">
-          <h3 id="modal-title" class="font-bold text-lg truncate">
+          <h3 id="species-detail-modal-title" class="font-bold text-lg truncate">
             {displayName}
           </h3>
           <p class="text-sm text-[var(--color-base-content)] opacity-70 italic truncate">

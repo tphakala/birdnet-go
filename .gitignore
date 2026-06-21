@@ -56,3 +56,4 @@ REFACTOR_CHANGELOG.md
 # Track the shared Serena project config; ignore caches, logs, memories, and local overrides
 .serena/*
 !.serena/project.yml
+.gstack/

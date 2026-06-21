@@ -11,7 +11,6 @@
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
-  import SpeciesCard from '../components/ui/SpeciesCard.svelte';
   import SpeciesCardMobile from '../components/ui/SpeciesCardMobile.svelte';
   import StatCard from '../components/ui/StatCard.svelte';
 
@@ -681,7 +680,7 @@
       {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
         <div class="species-grid hidden sm:grid">
           {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
-            <SpeciesCard {species} />
+            <SpeciesCardMobile {species} variant="card" onClick={handleSpeciesClick} />
           {/each}
         </div>
       {/if}
