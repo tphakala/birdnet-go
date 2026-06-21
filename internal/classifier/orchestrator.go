@@ -466,8 +466,9 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 			logger.String("registry_id", registryID))
 		return "", "", ""
 	}
-	for i := range EmbeddedCatalog {
-		entry := &EmbeddedCatalog[i]
+	catalog := ActiveCatalog()
+	for i := range catalog {
+		entry := &catalog[i]
 		if entry.RegistryID != registryID {
 			continue
 		}

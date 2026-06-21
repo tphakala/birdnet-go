@@ -5,6 +5,7 @@ package classifier
 
 import (
 	"slices"
+	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -29,34 +30,40 @@ const (
 )
 
 // CatalogEntry describes a downloadable model available in the model gallery.
+//
+// The snake_case JSON tags define the on-disk schema for the user-editable
+// model-catalog.json file (see catalog_loader.go). They are intentionally
+// stable and readable for hand-editing. The model-gallery API does NOT
+// serialize this struct directly; it maps to a separate camelCase response
+// type (see internal/api/v2/models.go), so these tags do not affect the API.
 type CatalogEntry struct {
-	ID              string        // unique catalog identifier (e.g., "battybirdnet-eu")
-	Name            string        // user-facing display name
-	Description     string        // short description of the model
-	Author          string        // model author or organization
-	License         string        // license identifier (e.g., "Apache-2.0")
-	CommercialUse   bool          // whether commercial use is permitted
-	Category        string        // "wildlife", "bird", "bat", or "geomodel"
-	Region          string        // geographic region, or empty for global models
-	SpeciesCount    int           // number of species the model can identify
-	Version         string        // model version string
-	GeomodelVersion string        // geomodel range filter version (e.g., "v3"); empty if no geomodel
-	RegistryID      string        // maps to a ModelRegistry key; empty if loader not yet implemented
-	Hidden          bool          // if true, entry is excluded from the gallery UI
-	RequiresONNX    bool          // if true, model needs ONNX Runtime (not just TFLite)
-	UpstreamURL     string        // URL to the upstream project repository
-	HuggingFaceRepo string        // HuggingFace repository path
-	Files           []CatalogFile // files to download for this model
+	ID              string        `json:"id"`                // unique catalog identifier (e.g., "battybirdnet-eu")
+	Name            string        `json:"name"`              // user-facing display name
+	Description     string        `json:"description"`       // short description of the model
+	Author          string        `json:"author"`            // model author or organization
+	License         string        `json:"license"`           // license identifier (e.g., "Apache-2.0")
+	CommercialUse   bool          `json:"commercial_use"`    // whether commercial use is permitted
+	Category        string        `json:"category"`          // "wildlife", "bird", "bat", or "geomodel"
+	Region          string        `json:"region"`            // geographic region, or empty for global models
+	SpeciesCount    int           `json:"species_count"`     // number of species the model can identify
+	Version         string        `json:"version"`           // model version string
+	GeomodelVersion string        `json:"geomodel_version"`  // geomodel range filter version (e.g., "v3"); empty if no geomodel
+	RegistryID      string        `json:"registry_id"`       // maps to a ModelRegistry key; empty if loader not yet implemented
+	Hidden          bool          `json:"hidden"`            // if true, entry is excluded from the gallery UI
+	RequiresONNX    bool          `json:"requires_onnx"`     // if true, model needs ONNX Runtime (not just TFLite)
+	UpstreamURL     string        `json:"upstream_url"`      // URL to the upstream project repository
+	HuggingFaceRepo string        `json:"hugging_face_repo"` // HuggingFace repository path
+	Files           []CatalogFile `json:"files"`             // files to download for this model
 }
 
 // CatalogFile describes a single file within a model's HuggingFace repository.
 type CatalogFile struct {
-	RemotePath      string // path within the HuggingFace repo
-	LocalName       string // filename to use on disk
-	Role            string // file role: "model", "labels", "embeddings", "geomodel_model", "geomodel_labels", or "data"
-	SHA256          string // hex-encoded SHA-256 checksum
-	SizeBytes       int64  // file size in bytes
-	HuggingFaceRepo string // override entry-level HuggingFace repo for this file (empty = use entry repo)
+	RemotePath      string `json:"remote_path"`       // path within the HuggingFace repo
+	LocalName       string `json:"local_name"`        // filename to use on disk
+	Role            string `json:"role"`              // file role: "model", "labels", "embeddings", "geomodel_model", "geomodel_labels", or "data"
+	SHA256          string `json:"sha256"`            // hex-encoded SHA-256 checksum
+	SizeBytes       int64  `json:"size_bytes"`        // file size in bytes
+	HuggingFaceRepo string `json:"hugging_face_repo"` // override entry-level HuggingFace repo for this file (empty = use entry repo)
 }
 
 // EmbeddedCatalog is the built-in list of models available for download.
@@ -369,12 +376,62 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileRegion strin
 	}
 }
 
+// catalogMu guards activeCatalog. activeCatalog is the runtime source of truth
+// for catalog reads. It is nil until LoadCatalog populates it; a nil value means
+// "use EmbeddedCatalog", so behavior is unchanged when LoadCatalog is never
+// called (e.g. in tests). The RWMutex makes a future hot-reload race-safe.
+//
+// A future hot-reload must publish a brand-new slice via setActiveCatalog; it
+// must never mutate an existing entry (or an entry's Files slice) in place,
+// because ActiveCatalog hands out a shallow snapshot that shares those backing
+// arrays with readers.
+var (
+	catalogMu     sync.RWMutex
+	activeCatalog []CatalogEntry
+)
+
+// currentCatalogLocked returns the active runtime catalog, falling back to the
+// built-in EmbeddedCatalog when no catalog has been loaded. Callers must hold
+// catalogMu (read or write).
+func currentCatalogLocked() []CatalogEntry {
+	if activeCatalog == nil {
+		return EmbeddedCatalog
+	}
+	return activeCatalog
+}
+
+// setActiveCatalog replaces the runtime catalog. It is called by LoadCatalog
+// once at startup. Passing EmbeddedCatalog restores the built-in default, and
+// passing nil restores the "use EmbeddedCatalog" sentinel. Test callers that use
+// it to inject a catalog must run serially (no t.Parallel), since it mutates
+// this package-global.
+func setActiveCatalog(entries []CatalogEntry) {
+	catalogMu.Lock()
+	activeCatalog = entries
+	catalogMu.Unlock()
+}
+
+// ActiveCatalog returns a snapshot copy of the active runtime catalog (all
+// entries, including hidden ones). The copy is safe for callers to range over
+// without holding any lock. Entries' Files slices are shared (read-only).
+func ActiveCatalog() []CatalogEntry {
+	catalogMu.RLock()
+	defer catalogMu.RUnlock()
+	cat := currentCatalogLocked()
+	out := make([]CatalogEntry, len(cat))
+	copy(out, cat)
+	return out
+}
+
 // GetCatalogEntry returns the catalog entry with the given ID and true,
 // or a zero value and false if no entry matches.
 func GetCatalogEntry(id string) (CatalogEntry, bool) {
-	for i := range EmbeddedCatalog {
-		if EmbeddedCatalog[i].ID == id {
-			return EmbeddedCatalog[i], true
+	catalogMu.RLock()
+	defer catalogMu.RUnlock()
+	cat := currentCatalogLocked()
+	for i := range cat {
+		if cat[i].ID == id {
+			return cat[i], true
 		}
 	}
 	return CatalogEntry{}, false
@@ -382,10 +439,13 @@ func GetCatalogEntry(id string) (CatalogEntry, bool) {
 
 // VisibleCatalog returns catalog entries that are not hidden.
 func VisibleCatalog() []CatalogEntry {
-	visible := make([]CatalogEntry, 0, len(EmbeddedCatalog))
-	for i := range EmbeddedCatalog {
-		if !EmbeddedCatalog[i].Hidden {
-			visible = append(visible, EmbeddedCatalog[i])
+	catalogMu.RLock()
+	defer catalogMu.RUnlock()
+	cat := currentCatalogLocked()
+	visible := make([]CatalogEntry, 0, len(cat))
+	for i := range cat {
+		if !cat[i].Hidden {
+			visible = append(visible, cat[i])
 		}
 	}
 	return visible

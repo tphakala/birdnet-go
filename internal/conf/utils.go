@@ -175,6 +175,33 @@ func FindConfigFile() (string, error) {
 		Build()
 }
 
+// ResolveConfigDir returns the directory that contains the active config.yaml.
+// It prefers the directory of the resolved config file (honoring the --config
+// flag and viper's resolved path); when no config file is found yet (e.g. a
+// fresh install before the first save), it falls back to the first default
+// config path. This is the directory where co-located config artifacts such as
+// the user-editable model catalog are read from and written to.
+func ResolveConfigDir() (string, error) {
+	if path, err := FindConfigFile(); err == nil {
+		return filepath.Dir(path), nil
+	}
+
+	configPaths, err := GetDefaultConfigPaths()
+	if err != nil {
+		return "", errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "resolve-config-dir").
+			Build()
+	}
+	if len(configPaths) == 0 {
+		return "", errors.Newf("no config directory could be resolved").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "resolve-config-dir").
+			Build()
+	}
+	return configPaths[0], nil
+}
+
 // GetBasePath expands environment variables in the given path and ensures the resulting path exists.
 // If the path is relative, it's interpreted as relative to the directory of the executing binary.
 func GetBasePath(path string) string {

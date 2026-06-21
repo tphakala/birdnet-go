@@ -136,10 +136,14 @@ func (mm *ModelManager) notifyTopologyChanged() {
 func (mm *ModelManager) ScanInstalled() {
 	log := GetLogger()
 
+	// Snapshot the active catalog (honors a user-edited model-catalog.json)
+	// before taking mm.mu; ActiveCatalog acquires its own lock.
+	catalog := ActiveCatalog()
+
 	// Phase 1: scan the filesystem under mm.mu.
 	mm.mu.Lock()
-	for i := range EmbeddedCatalog {
-		entry := &EmbeddedCatalog[i]
+	for i := range catalog {
+		entry := &catalog[i]
 		subdir := filepath.Join(mm.modelsDir, entry.ID)
 
 		modelFile := ""

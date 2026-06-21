@@ -68,15 +68,18 @@ func (c *Controller) ListModels(ctx echo.Context) error {
 	}
 
 	models := make([]ModelListItem, 0, len(enabled))
+
+	// Snapshot the active catalog once (honors a user-edited model-catalog.json).
+	catalog := classifier.ActiveCatalog()
 	for id := range classifier.ModelRegistry {
 		info := classifier.ModelRegistry[id]
 		for _, alias := range info.ConfigAliases {
 			if enabled[strings.ToLower(alias)] {
 				// Determine category from catalog entry (if any), default to "bird".
 				category := "bird"
-				for i := range classifier.EmbeddedCatalog {
-					if classifier.EmbeddedCatalog[i].RegistryID == id {
-						category = classifier.EmbeddedCatalog[i].Category
+				for j := range catalog {
+					if catalog[j].RegistryID == id {
+						category = catalog[j].Category
 						break
 					}
 				}
