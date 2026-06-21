@@ -16,6 +16,11 @@ const (
 	SpeciesGuideProviderAuto      = "auto"
 	SpeciesGuideFallbackAll       = "all"
 	SpeciesGuideFallbackNone      = "none"
+
+	// SpeciesGuideMaxWarmTopN caps the configured startup-warm target. It bounds
+	// the slice preallocation in the warm path so an out-of-range hand-edited
+	// config value cannot force a huge allocation.
+	SpeciesGuideMaxWarmTopN = 1000
 )
 
 // speciesGuideValidProviders is the canonical list of accepted provider values.

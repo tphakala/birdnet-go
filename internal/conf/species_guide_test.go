@@ -105,6 +105,37 @@ func TestValidateSpeciesGuideSettings(t *testing.T) {
 	}
 }
 
+func TestValidateSpeciesGuideSettings_WarmTopNClamp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{name: "negative floored to zero", in: -5, want: 0},
+		{name: "in range preserved", in: 50, want: 50},
+		{name: "at max preserved", in: SpeciesGuideMaxWarmTopN, want: SpeciesGuideMaxWarmTopN},
+		{name: "above max clamped", in: SpeciesGuideMaxWarmTopN + 1, want: SpeciesGuideMaxWarmTopN},
+		{name: "absurd value clamped", in: 1_000_000_000, want: SpeciesGuideMaxWarmTopN},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := SpeciesGuideConfig{Enabled: true, WarmTopN: tt.in}
+			validateSpeciesGuideSettings(&c)
+			assert.Equal(t, tt.want, c.WarmTopN)
+		})
+	}
+
+	t.Run("disabled leaves WarmTopN untouched", func(t *testing.T) {
+		t.Parallel()
+		c := SpeciesGuideConfig{Enabled: false, WarmTopN: 1_000_000_000}
+		validateSpeciesGuideSettings(&c)
+		assert.Equal(t, 1_000_000_000, c.WarmTopN)
+	})
+}
+
 func TestCloneSettings_SpeciesGuideShowFlagsIndependence(t *testing.T) {
 	t.Parallel()
 

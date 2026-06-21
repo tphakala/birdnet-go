@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -756,7 +757,22 @@ func summarizeDescription(description string) string {
 	}
 	intro = strings.TrimSpace(intro)
 	if len(intro) > guideSummaryMaxLength {
-		intro = strings.TrimSpace(intro[:guideSummaryMaxLength])
+		// Back the cut off to a rune boundary so multi-byte text (e.g. accented
+		// non-English guides) is not split mid-rune, which would otherwise leave a
+		// replacement character at the end of the summary.
+		intro = strings.TrimSpace(trimToRuneBoundary(intro, guideSummaryMaxLength))
 	}
 	return intro
+}
+
+// trimToRuneBoundary returns s[:n] backed off to the nearest valid UTF-8 rune
+// boundary so no partial rune remains.
+func trimToRuneBoundary(s string, n int) string {
+	if n >= len(s) {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }

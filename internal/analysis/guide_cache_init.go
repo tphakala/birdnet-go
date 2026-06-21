@@ -89,7 +89,9 @@ func warmGuideCacheWithTopSpecies(cache *guideprovider.GuideCache, ds datastore.
 		log.Warn("Failed to load species for guide cache warming", logger.Error(err))
 		return
 	}
-	names := make([]string, 0, topN)
+	// Preallocate by the smaller of the warm target and the actual species count,
+	// so an out-of-range topN can never drive an oversized allocation here.
+	names := make([]string, 0, min(topN, len(species)))
 	for i := range species {
 		if len(names) >= topN {
 			break

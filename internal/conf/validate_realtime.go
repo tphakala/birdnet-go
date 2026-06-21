@@ -312,6 +312,21 @@ func validateSpeciesGuideSettings(settings *SpeciesGuideConfig) {
 			logger.String("fallback", SpeciesGuideFallbackAll))
 		settings.FallbackPolicy = SpeciesGuideFallbackAll
 	}
+
+	// Clamp the startup-warm target to a sane range. A negative value is
+	// meaningless (treated as "off"); an absurdly large one would force a huge
+	// slice preallocation in the warm path, so cap it.
+	switch {
+	case settings.WarmTopN < 0:
+		GetLogger().Warn("Species guide warmTopN is negative, disabling warm",
+			logger.Int("invalid_value", settings.WarmTopN))
+		settings.WarmTopN = 0
+	case settings.WarmTopN > SpeciesGuideMaxWarmTopN:
+		GetLogger().Warn("Species guide warmTopN out of range, clamping",
+			logger.Int("invalid_value", settings.WarmTopN),
+			logger.Int("max", SpeciesGuideMaxWarmTopN))
+		settings.WarmTopN = SpeciesGuideMaxWarmTopN
+	}
 }
 
 // validWeatherProviders contains all recognized weather provider values.

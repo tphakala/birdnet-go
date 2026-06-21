@@ -1757,7 +1757,8 @@ func (ds *Datastore) SaveSpeciesNote(ctx context.Context, note *datastore.Specie
 	return datastore.RetryOnLock(ctx, "save_species_note", func() error {
 		if createErr := ds.manager.DB().WithContext(ctx).Create(note).Error; createErr != nil {
 			return errors.New(createErr).Component("datastore").
-				Context("operation", "save_species_note").Build()
+				Context("operation", "save_species_note").
+				Context("scientific_name", note.ScientificName).Build()
 		}
 		return nil
 	}, ds.metrics)
@@ -1813,9 +1814,12 @@ func (ds *Datastore) DeleteSpeciesNote(ctx context.Context, noteID string) error
 }
 
 // parseSpeciesNoteID parses a string note ID into a uint, rejecting invalid input.
+// The range guard matters on 32-bit builds (e.g. 32-bit Raspberry Pi OS), where uint
+// is 32-bit: without it a value above math.MaxUint32 would silently wrap and address
+// the wrong row. The check is a no-op on 64-bit, where math.MaxUint == math.MaxUint64.
 func parseSpeciesNoteID(noteID string) (uint, error) {
 	id, err := strconv.ParseUint(strings.TrimSpace(noteID), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > uint64(math.MaxUint) {
 		return 0, errors.Newf("invalid note ID").
 			Component("datastore").Category(errors.CategoryValidation).Build()
 	}

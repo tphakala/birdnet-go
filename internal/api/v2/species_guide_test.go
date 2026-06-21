@@ -1,9 +1,11 @@
 package api
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -186,4 +188,12 @@ func TestSummarizeDescription(t *testing.T) {
 	}
 	got := summarizeDescription(string(long))
 	assert.LessOrEqual(t, len(got), guideSummaryMaxLength)
+
+	// Multi-byte input must be cut on a rune boundary, never mid-rune, so the
+	// summary is always valid UTF-8 (no trailing replacement character). "é" is
+	// two bytes, so a naive byte slice at the cap could land inside a rune.
+	multibyte := strings.Repeat("é", guideSummaryMaxLength)
+	gotMB := summarizeDescription(multibyte)
+	assert.LessOrEqual(t, len(gotMB), guideSummaryMaxLength)
+	assert.True(t, utf8.ValidString(gotMB), "summary must remain valid UTF-8")
 }

@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -112,6 +113,54 @@ func TestNormalizeSpeciesNoteEntry(t *testing.T) {
 
 	_, err = NormalizeSpeciesNoteEntry(strings.Repeat("x", SpeciesNoteMaxLength+1))
 	require.Error(t, err)
+}
+
+func TestParseSpeciesNoteID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   string
+		want    uint
+		wantErr bool
+	}{
+		{name: "valid", input: "42", want: 42},
+		{name: "leading/trailing space", input: "  7 ", want: 7},
+		{name: "zero rejected", input: "0", wantErr: true},
+		{name: "non-numeric rejected", input: "abc", wantErr: true},
+		{name: "empty rejected", input: "", wantErr: true},
+		{name: "negative rejected", input: "-1", wantErr: true},
+		// Above math.MaxUint64 fails ParseUint outright.
+		{name: "overflow uint64 rejected", input: "18446744073709551616", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := parseSpeciesNoteID(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	// A value above math.MaxUint32 must never wrap: on 32-bit builds (uint is
+	// 32-bit) it is rejected; on 64-bit it parses to its exact value rather than
+	// truncating. Build the input from math.MaxUint32 so there is no uint literal
+	// that would overflow at compile time on 32-bit.
+	t.Run("above uint32 does not wrap", func(t *testing.T) {
+		t.Parallel()
+		want := uint64(math.MaxUint32) + 1
+		got, err := parseSpeciesNoteID(strconv.FormatUint(want, 10))
+		if math.MaxUint < math.MaxUint64 { // 32-bit platform
+			require.Error(t, err)
+			return
+		}
+		require.NoError(t, err)
+		assert.Equal(t, want, uint64(got))
+	})
 }
 
 func idString(id uint) string {
