@@ -4482,7 +4482,6 @@
       "spectrogramAlt": "Lydspektrogram",
       "spectrogramGeneratingAria": "Genererer spektrogram",
       "generating": "Genererer...",
-      "waiting": "Waiting...",
       "queuePosition": "Kø: {position}",
       "loadError": "Kunne ikke indlæse lyd"
     },

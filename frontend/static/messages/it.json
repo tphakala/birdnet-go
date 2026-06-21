@@ -4482,7 +4482,6 @@
       "spectrogramAlt": "Spettrogramma audio",
       "spectrogramGeneratingAria": "Generazione spettrogramma",
       "generating": "Generazione...",
-      "waiting": "Waiting...",
       "queuePosition": "Coda: {position}",
       "loadError": "Caricamento audio fallito"
     },

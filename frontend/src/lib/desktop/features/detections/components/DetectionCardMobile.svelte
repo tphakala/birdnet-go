@@ -224,9 +224,7 @@
           <span class="loading loading-spinner loading-md text-[var(--color-base-content)]/50"
           ></span>
           {#if loader.isQueued}
-            <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
-              >{t('components.audio.waiting')}</span
-            >
+            <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Waiting...</span>
           {:else if loader.isGenerating}
             <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
               >{t('components.audio.generating')}</span

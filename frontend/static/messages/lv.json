@@ -4482,7 +4482,6 @@
       "spectrogramAlt": "Audio spektrogramma",
       "spectrogramGeneratingAria": "Ģenerē spektrogrammu",
       "generating": "Ģenerē...",
-      "waiting": "Waiting...",
       "queuePosition": "Rinda: {position}",
       "loadError": "Neizdevās ielādēt audio"
     },

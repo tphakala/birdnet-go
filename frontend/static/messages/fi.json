@@ -4482,7 +4482,6 @@
       "spectrogramAlt": "Äänispektrogrammi",
       "spectrogramGeneratingAria": "Luodaan spektrogrammia",
       "generating": "Luodaan...",
-      "waiting": "Waiting...",
       "queuePosition": "Jono: {position}",
       "loadError": "Äänitiedoston lataaminen epäonnistui"
     },

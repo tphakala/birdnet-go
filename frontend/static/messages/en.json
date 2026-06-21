@@ -4482,7 +4482,6 @@
       "spectrogramAlt": "Audio spectrogram",
       "spectrogramGeneratingAria": "Generating spectrogram",
       "generating": "Generating...",
-      "waiting": "Waiting...",
       "queuePosition": "Queue: {position}",
       "loadError": "Failed to load audio"
     },
