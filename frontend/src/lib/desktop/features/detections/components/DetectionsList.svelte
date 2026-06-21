@@ -661,11 +661,7 @@
       <!-- Mobile: card layout (always mobile cards on small screens) -->
       <div class="md:hidden space-y-2">
         {#each data.notes as detection (detection.id)}
-          <DetectionCardMobile
-            {detection}
-            {onDetailsClick}
-            onPlayMobileAudio={handlePlayMobileAudio}
-          />
+          <DetectionCardMobile {detection} {onDetailsClick} {onRefresh} />
         {/each}
       </div>
     {/if}
