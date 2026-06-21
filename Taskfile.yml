@@ -80,7 +80,7 @@ vars:
 
 tasks:
   default:
-    deps: [native-target]
+    deps: [native-target, generate-schema]
 
   # Task for running tests
   test:

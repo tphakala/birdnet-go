@@ -2,11 +2,9 @@ package main
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/invopop/jsonschema"
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 const markdownHeader = `# Configuration Reference
@@ -21,30 +19,13 @@ const markdownHeader = `# Configuration Reference
 
 `
 
-// runtimeFields returns the set of json keys on Settings that have yaml:"-".
-func runtimeFields() map[string]bool {
-	m := make(map[string]bool)
-	t := reflect.TypeFor[conf.Settings]()
-	for f := range t.Fields() {
-		yamlTag := f.Tag.Get("yaml")
-		jsonTag := f.Tag.Get("json")
-		if yamlTag == "-" && jsonTag != "" && jsonTag != "-" {
-			jsonKey := strings.Split(jsonTag, ",")[0]
-			m[jsonKey] = true
-		}
-	}
-	return m
-}
-
 // renderMarkdown walks the schema and produces a flat markdown reference
 // grouped by top-level config section.
 func renderMarkdown(schema *jsonschema.Schema) string {
 	var b strings.Builder
 	b.WriteString(markdownHeader)
 
-	skip := runtimeFields()
-
-	settingsDef := resolveRef(schema, schema)
+	settingsDef := resolveRefWithDesc(schema, schema)
 	if settingsDef == nil || settingsDef.Properties == nil {
 		return b.String()
 	}
@@ -53,22 +34,16 @@ func renderMarkdown(schema *jsonschema.Schema) string {
 		key := pair.Key
 		prop := pair.Value
 
-		if skip[key] {
-			continue
-		}
-
-		resolved := resolveRef(prop, schema)
+		resolved := resolveRefWithDesc(prop, schema)
 		if resolved == nil {
 			continue
 		}
 
-		// Skip runtime-only fields (json:"-" won't appear, but omitempty version/buildDate etc.)
 		if isScalar(resolved) {
 			writeScalarSection(&b, key, resolved)
 			continue
 		}
 
-		// Section for each top-level object
 		fmt.Fprintf(&b, "## %s\n\n", key)
 		if resolved.Description != "" {
 			b.WriteString(resolved.Description + "\n\n")
@@ -102,7 +77,7 @@ func flattenProperties(b *strings.Builder, prefix string, s, root *jsonschema.Sc
 		prop := pair.Value
 		fullKey := prefix + "." + key
 
-		resolved := resolveRef(prop, root)
+		resolved := resolveRefWithDesc(prop, root)
 		if resolved == nil {
 			continue
 		}
@@ -118,18 +93,24 @@ func flattenProperties(b *strings.Builder, prefix string, s, root *jsonschema.Sc
 	}
 }
 
-// resolveRef follows a $ref to its definition, or returns the schema as-is.
-func resolveRef(s, root *jsonschema.Schema) *jsonschema.Schema {
+// resolveRefWithDesc follows a $ref to its definition. When the reference site
+// carries a description that the definition lacks, it propagates it forward.
+func resolveRefWithDesc(s, root *jsonschema.Schema) *jsonschema.Schema {
 	if s == nil {
 		return nil
 	}
-	if s.Ref != "" && root.Definitions != nil {
-		refName := strings.TrimPrefix(s.Ref, "#/$defs/")
-		if def, ok := root.Definitions[refName]; ok {
-			return def
-		}
+	if s.Ref == "" || root.Definitions == nil {
+		return s
 	}
-	return s
+	refName := strings.TrimPrefix(s.Ref, "#/$defs/")
+	def, ok := root.Definitions[refName]
+	if !ok {
+		return s
+	}
+	if s.Description != "" && def.Description == "" {
+		def.Description = s.Description
+	}
+	return def
 }
 
 func isScalar(s *jsonschema.Schema) bool {

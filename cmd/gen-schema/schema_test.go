@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,6 +54,40 @@ func TestSchemaUpToDate(t *testing.T) {
 
 	require.Equal(t, string(committedMd), string(regeneratedMd),
 		"doc/wiki/configuration-reference.md is out of date; run 'task generate-schema' to update")
+}
+
+// TestSchemaUsesYAMLKeys verifies the schema uses yaml struct tag names (not json)
+// and excludes runtime-only fields (yaml:"-").
+func TestSchemaUsesYAMLKeys(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	data, err := os.ReadFile(filepath.Join(repoRoot, "config.schema.json"))
+	if os.IsNotExist(err) {
+		t.Skip("config.schema.json not yet generated")
+	}
+	require.NoError(t, err)
+
+	var schema struct {
+		Defs map[string]struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		} `json:"$defs"`
+	}
+	require.NoError(t, json.Unmarshal(data, &schema))
+
+	settings := schema.Defs["Settings"].Properties
+	// yaml tag is "webserver", json tag is "webServer" — schema must use yaml
+	assert.Contains(t, settings, "webserver", "schema should use yaml key 'webserver', not json key 'webServer'")
+	assert.NotContains(t, settings, "webServer", "schema should not contain json key 'webServer'")
+
+	// Runtime fields (yaml:"-") must be excluded
+	assert.NotContains(t, settings, "version", "runtime field 'version' should be excluded")
+	assert.NotContains(t, settings, "buildDate", "runtime field 'buildDate' should be excluded")
+	assert.NotContains(t, settings, "systemId", "runtime field 'systemId' should be excluded")
+
+	audio := schema.Defs["AudioSettings"].Properties
+	assert.NotContains(t, audio, "ffmpegVersion", "runtime field 'ffmpegVersion' should be excluded")
+	assert.Contains(t, audio, "ffmpegpath", "user-configurable field 'ffmpegpath' should be present")
 }
 
 func findRepoRoot(t *testing.T) string {
