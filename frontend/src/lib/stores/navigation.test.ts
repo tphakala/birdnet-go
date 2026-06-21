@@ -147,6 +147,28 @@ describe('navigation store', () => {
     });
   });
 
+  describe('redirect', () => {
+    it('should update currentPath and replace (not push) the history entry', () => {
+      const nav = createNavigation();
+      nav.redirect('/ui/analytics?tab=patterns');
+      // currentPath strips the query, matching window.location.pathname behavior.
+      expect(nav.currentPath).toBe('/ui/analytics');
+      // A redirect replaces the current entry so the dead URL does not linger.
+      expect(window.history.replaceState).toHaveBeenCalledWith(
+        {},
+        '',
+        '/ui/analytics?tab=patterns'
+      );
+      expect(window.history.pushState).not.toHaveBeenCalled();
+    });
+
+    it('should normalize paths without the /ui/ prefix', () => {
+      const nav = createNavigation();
+      nav.redirect('/analytics');
+      expect(nav.currentPath).toBe('/ui/analytics');
+    });
+  });
+
   describe('handlePopState', () => {
     it('should update currentPath from window.location', () => {
       const nav = createNavigation();

@@ -205,7 +205,6 @@
     "serverError": "500 - Interná chyba servera",
     "componentError": "Chyba načítania komponentu",
     "speciesAnalytics": "Analytika druhov",
-    "advancedAnalytics": "Rozšírená analytika",
     "detectionDetails": "Podrobnosti detekcie",
     "settingsNotAvailable": "Nastavenia nie sú k dispozícii"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Rozšírená analytika",
       "chartControls": "Ovládanie grafu",
       "dateRange": "Rozsah dátumov",
       "chartOptions": "Možnosti grafu",

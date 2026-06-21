@@ -205,7 +205,6 @@
     "serverError": "500 - Internal Server Error",
     "componentError": "Component Load Error",
     "speciesAnalytics": "Species Analytics",
-    "advancedAnalytics": "Advanced Analytics",
     "detectionDetails": "Detection Details",
     "settingsNotAvailable": "Settings Not Available"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Advanced Analytics",
       "chartControls": "Chart Controls",
       "dateRange": "Date Range",
       "chartOptions": "Chart Options",

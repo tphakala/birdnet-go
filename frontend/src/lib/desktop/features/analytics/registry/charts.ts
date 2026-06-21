@@ -3,9 +3,9 @@
  *
  * Single source of truth for which charts render in which tab. PR0 migrates the
  * three existing Advanced Analytics charts onto this registry with no behavior
- * change: the fetchers below are lifted verbatim from the legacy
- * `AdvancedAnalytics.svelte` (same endpoints, params, and parsing), and the
- * `mapProps` mappers reproduce the props the page used to pass each chart.
+ * change: the fetchers below are lifted verbatim from the legacy Advanced
+ * Analytics page (same endpoints, params, and parsing), and the `mapProps`
+ * mappers reproduce the props the page used to pass each chart.
  *
  * Later PRs add Tier-1 charts to the empty `overview`/`quality` groups.
  */

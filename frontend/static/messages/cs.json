@@ -205,7 +205,6 @@
     "serverError": "500 – Interní chyba serveru",
     "componentError": "Chyba načítání komponenty",
     "speciesAnalytics": "Analýza druhů",
-    "advancedAnalytics": "Pokročilá analýza",
     "detectionDetails": "Podrobnosti detekce",
     "settingsNotAvailable": "Nastavení není k dispozici"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Pokročilá analytika",
       "chartControls": "Ovládání grafu",
       "dateRange": "Rozsah dat",
       "chartOptions": "Možnosti grafu",

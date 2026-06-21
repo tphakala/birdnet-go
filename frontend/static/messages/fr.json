@@ -205,7 +205,6 @@
     "serverError": "500 - Erreur interne du serveur",
     "componentError": "Erreur de chargement du composant",
     "speciesAnalytics": "Analyses des espèces",
-    "advancedAnalytics": "Analyses avancées",
     "detectionDetails": "Détails de détection",
     "settingsNotAvailable": "Paramètres non disponibles"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Analyses avancées",
       "chartControls": "Contrôles du graphique",
       "dateRange": "Plage de dates",
       "chartOptions": "Options du graphique",

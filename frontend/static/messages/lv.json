@@ -205,7 +205,6 @@
     "serverError": "500 - Iekšējā servera kļūda",
     "componentError": "Komponentes ielādes kļūda",
     "speciesAnalytics": "Sugu analītika",
-    "advancedAnalytics": "Paplašinātā analītika",
     "detectionDetails": "Noteikšanas detaļas",
     "settingsNotAvailable": "Iestatījumi nav pieejami"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Paplašinātā analītika",
       "chartControls": "Diagrammu vadība",
       "dateRange": "Datumu diapazons",
       "chartOptions": "Diagrammu opcijas",

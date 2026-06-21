@@ -205,7 +205,6 @@
     "serverError": "500 - Sisäinen palvelinvirhe",
     "componentError": "Komponentin latausvirhe",
     "speciesAnalytics": "Lajianalytiikka",
-    "advancedAnalytics": "Edistynyt analytiikka",
     "detectionDetails": "Tunnistuksen tiedot",
     "settingsNotAvailable": "Asetukset eivät ole käytettävissä"
   },
@@ -1786,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Edistynyt analytiikka",
       "chartControls": "Kaavion hallinta",
       "dateRange": "Päivämääräväli",
       "chartOptions": "Kaavion asetukset",
