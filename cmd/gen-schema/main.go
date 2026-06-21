@@ -56,15 +56,28 @@ func run() error {
 	}
 
 	outPath := "config.schema.json"
+	mdPath := filepath.Join("doc", "wiki", "configuration-reference.md")
 	if len(os.Args) > 1 {
 		outPath = os.Args[1]
+	}
+	if len(os.Args) > 2 {
+		mdPath = os.Args[2]
 	}
 
 	if err := os.WriteFile(outPath, append(out, '\n'), 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", outPath, err)
 	}
-
 	fmt.Printf("wrote %s (%d bytes)\n", outPath, len(out))
+
+	md := renderMarkdown(schema)
+	if err := os.MkdirAll(filepath.Dir(mdPath), 0o755); err != nil {
+		return fmt.Errorf("creating directory for %s: %w", mdPath, err)
+	}
+	if err := os.WriteFile(mdPath, []byte(md), 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", mdPath, err)
+	}
+	fmt.Printf("wrote %s (%d bytes)\n", mdPath, len(md))
+
 	return nil
 }
 

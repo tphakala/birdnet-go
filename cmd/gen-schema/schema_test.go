@@ -3,37 +3,55 @@ package main
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// TestSchemaUpToDate verifies that config.schema.json is in sync with the
-// source code. It regenerates the schema into a temp file and compares it
-// against the committed version.
+// TestSchemaUpToDate verifies that config.schema.json and
+// configuration-reference.md are in sync with the source code.
 func TestSchemaUpToDate(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
+	tmpDir := t.TempDir()
 
-	committed, err := os.ReadFile(repoRoot + "/config.schema.json")
+	schemaPath := filepath.Join(repoRoot, "config.schema.json")
+	mdPath := filepath.Join(repoRoot, "doc", "wiki", "configuration-reference.md")
+
+	committedSchema, err := os.ReadFile(schemaPath)
 	if os.IsNotExist(err) {
 		t.Skip("config.schema.json not yet generated; run 'task generate-schema'")
 	}
 	require.NoError(t, err, "reading committed schema")
 
-	tmpFile := t.TempDir() + "/config.schema.json"
-	cmd := exec.Command("go", "run", "./cmd/gen-schema/", tmpFile)
+	committedMd, err := os.ReadFile(mdPath)
+	if os.IsNotExist(err) {
+		t.Skip("configuration-reference.md not yet generated; run 'task generate-schema'")
+	}
+	require.NoError(t, err, "reading committed markdown")
+
+	tmpSchema := filepath.Join(tmpDir, "config.schema.json")
+	tmpMd := filepath.Join(tmpDir, "configuration-reference.md")
+
+	cmd := exec.Command("go", "run", "./cmd/gen-schema/", tmpSchema, tmpMd)
 	cmd.Dir = repoRoot
 	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "regenerating schema: %s", out)
+	require.NoError(t, err, "regenerating: %s", out)
 
-	regenerated, err := os.ReadFile(tmpFile)
+	regeneratedSchema, err := os.ReadFile(tmpSchema)
 	require.NoError(t, err, "reading regenerated schema")
 
-	require.Equal(t, string(committed), string(regenerated),
+	regeneratedMd, err := os.ReadFile(tmpMd)
+	require.NoError(t, err, "reading regenerated markdown")
+
+	require.Equal(t, string(committedSchema), string(regeneratedSchema),
 		"config.schema.json is out of date; run 'task generate-schema' to update")
+
+	require.Equal(t, string(committedMd), string(regeneratedMd),
+		"doc/wiki/configuration-reference.md is out of date; run 'task generate-schema' to update")
 }
 
 func findRepoRoot(t *testing.T) string {

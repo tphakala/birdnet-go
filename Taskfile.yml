@@ -165,15 +165,17 @@ tasks:
       - internal/speciesdict/data/*.json.gz
 
   generate-schema:
-    desc: Regenerate config.schema.json from the Settings struct
+    desc: Regenerate config.schema.json and configuration-reference.md from the Settings struct
     cmds:
       - go run ./cmd/gen-schema/
     sources:
       - internal/conf/config.go
       - internal/conf/defaults.go
       - cmd/gen-schema/main.go
+      - cmd/gen-schema/markdown.go
     generates:
       - config.schema.json
+      - doc/wiki/configuration-reference.md
 
   native-target:
     cmds:
