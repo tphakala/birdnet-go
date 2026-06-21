@@ -1845,6 +1845,18 @@
           "ariaLabel": "Seasonal activity heatmap: detection density by date and time of day",
           "summary": "{total} detections across {days} days. Busiest around {time} on {date}."
         },
+        "ridgeline": {
+          "title": "Who Sings When",
+          "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
+          "noData": "No species activity data available",
+          "noDataHint": "Select a wider date range to compare species activity patterns",
+          "ariaLabel": "Who-sings-when ridgeline: hour-of-day activity distribution per species",
+          "axisTime": "Time of Day",
+          "note": "Showing the top {count} species by detection volume",
+          "tooltipDetections": "Detections",
+          "tooltipPeak": "Peak",
+          "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+        },
         "tooltips": {
           "date": "Päivämäärä",
           "percentage": "Prosenttiosuus",

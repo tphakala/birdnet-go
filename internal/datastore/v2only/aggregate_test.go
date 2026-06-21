@@ -6,7 +6,127 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
+
+// hours builds a [24]int from (hour, count) pairs for terse test fixtures.
+func hours(pairs ...[2]int) [24]int {
+	var h [24]int
+	for _, p := range pairs {
+		h[p[0]] = p[1]
+	}
+	return h
+}
+
+// bucketSum sums a species' normalized buckets (should be ~1.0 for any non-empty species).
+// Takes a pointer to avoid copying the 192-byte array (gocritic hugeParam).
+func bucketSum(b *[24]float64) float64 {
+	sum := 0.0
+	for _, v := range b {
+		sum += v
+	}
+	return sum
+}
+
+func TestBuildSpeciesHourlyDistribution_NormalizesAndOrders(t *testing.T) {
+	t.Parallel()
+
+	top := []repository.SpeciesCount{
+		{LabelID: 1, ScientificName: "Turdus merula", Count: 100},
+		{LabelID: 2, ScientificName: "Erithacus rubecula", Count: 50},
+		{LabelID: 3, ScientificName: "Strix aluco", Count: 10},
+	}
+	hourlyByLabel := map[uint][24]int{
+		1: hours([2]int{0, 2}, [2]int{12, 6}, [2]int{18, 2}), // total 10
+		2: hours([2]int{6, 4}, [2]int{7, 1}),                 // total 5
+		3: hours([2]int{23, 1}),                              // total 1
+	}
+
+	got := buildSpeciesHourlyDistribution(top, hourlyByLabel)
+	require.Len(t, got, 3)
+
+	// Order preserved (descending volume from GetTopSpecies).
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+	assert.Equal(t, "Erithacus rubecula", got[1].ScientificName)
+	assert.Equal(t, "Strix aluco", got[2].ScientificName)
+
+	// Totals are the FP-excluded hourly counts that drive the tooltip.
+	assert.Equal(t, 10, got[0].Total)
+	assert.Equal(t, 5, got[1].Total)
+	assert.Equal(t, 1, got[2].Total)
+
+	// Each species' buckets are a probability distribution (sum to 1.0).
+	for i := range got {
+		assert.InDelta(t, 1.0, bucketSum(&got[i].Buckets), 1e-9, "species %s buckets must sum to 1.0", got[i].ScientificName)
+	}
+
+	// Spot-check normalized values for the first species.
+	assert.InDelta(t, 0.2, got[0].Buckets[0], 1e-9)
+	assert.InDelta(t, 0.6, got[0].Buckets[12], 1e-9)
+	assert.InDelta(t, 0.2, got[0].Buckets[18], 1e-9)
+}
+
+func TestBuildSpeciesHourlyDistribution_MergesLabelsSharingName(t *testing.T) {
+	t.Parallel()
+
+	// The same species detected under two model label IDs must collapse to one ridge whose
+	// buckets are the summed counts across both labels (systemic multi-model behavior).
+	top := []repository.SpeciesCount{
+		{LabelID: 1, ScientificName: "Turdus merula", Count: 60},
+		{LabelID: 2, ScientificName: "Turdus merula", Count: 40},
+		{LabelID: 3, ScientificName: "Erithacus rubecula", Count: 30},
+	}
+	hourlyByLabel := map[uint][24]int{
+		1: hours([2]int{6, 3}),  // Turdus merula via model A
+		2: hours([2]int{18, 1}), // Turdus merula via model B
+		3: hours([2]int{12, 2}), // Erithacus rubecula
+	}
+
+	got := buildSpeciesHourlyDistribution(top, hourlyByLabel)
+	require.Len(t, got, 2) // two distinct species, not three label rows
+
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+	assert.Equal(t, 4, got[0].Total) // 3 + 1 merged
+	assert.InDelta(t, 0.75, got[0].Buckets[6], 1e-9)
+	assert.InDelta(t, 0.25, got[0].Buckets[18], 1e-9)
+
+	assert.Equal(t, "Erithacus rubecula", got[1].ScientificName)
+	assert.Equal(t, 2, got[1].Total)
+}
+
+func TestBuildSpeciesHourlyDistribution_DropsZeroTotalSpecies(t *testing.T) {
+	t.Parallel()
+
+	// A species ranked into the top-N by raw volume (GetTopSpecies does not exclude false
+	// positives) but with no FP-excluded hourly detections must be dropped rather than rendered
+	// as an empty ridge with "0 detections".
+	top := []repository.SpeciesCount{
+		{LabelID: 1, ScientificName: "Turdus merula", Count: 5},
+		{LabelID: 2, ScientificName: "Pica pica", Count: 3}, // all false positives -> absent from hourly
+	}
+	hourlyByLabel := map[uint][24]int{
+		1: hours([2]int{8, 5}),
+	}
+
+	got := buildSpeciesHourlyDistribution(top, hourlyByLabel)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+}
+
+func TestBuildSpeciesHourlyDistribution_Empty(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, buildSpeciesHourlyDistribution(nil, nil))
+
+	// Non-empty top but no hourly data -> every species drops out, never nil.
+	got := buildSpeciesHourlyDistribution(
+		[]repository.SpeciesCount{{LabelID: 1, ScientificName: "Turdus merula", Count: 5}},
+		map[uint][24]int{},
+	)
+	assert.Empty(t, got)
+	assert.NotNil(t, got)
+}
 
 // epochAt returns the Unix epoch (seconds) for the given wall-clock time in loc.
 func epochAt(loc *time.Location, year, month, day, hour, minute int) int64 {

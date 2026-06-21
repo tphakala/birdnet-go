@@ -195,6 +195,10 @@ type Interface interface {
 	// GetActivityHeatmap returns detection counts bucketed by (station-local date, intra-day slot)
 	// over the inclusive date range, as a columnar sparse payload. species is an optional filter.
 	GetActivityHeatmap(ctx context.Context, startDate, endDate, species string) (ActivityHeatmapData, error)
+	// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for
+	// the top `limit` species by detection volume over the inclusive date range (false positives
+	// excluded), ordered by descending volume. Powers the who-sings-when ridgeline.
+	GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyDistribution, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
