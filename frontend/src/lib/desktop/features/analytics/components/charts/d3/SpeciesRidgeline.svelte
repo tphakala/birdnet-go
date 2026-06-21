@@ -15,6 +15,7 @@
   import { select, type Selection } from 'd3-selection';
   import { area as d3Area, curveBasis } from 'd3-shape';
   import { scaleLinear } from 'd3-scale';
+  import { color as d3Color } from 'd3-color';
   import type { AxisDomain, AxisScale } from 'd3-axis';
 
   import { t } from '$lib/i18n';
@@ -119,11 +120,14 @@
     return label.length > LABEL_MAX_CHARS ? `${label.slice(0, LABEL_MAX_CHARS - 1)}…` : label;
   }
 
-  // Force an rgba palette color to full opacity for the crisp ridge top line; the fill keeps the
-  // translucent original so overlaps blend. Falls back to the input for non-rgba strings.
+  // Force a palette color to full opacity for the crisp ridge top line; the fill keeps the
+  // translucent original so overlaps blend. d3-color robustly parses the rgba palette strings and
+  // returns null for anything it can't (e.g. oklch theme tokens), in which case we keep the input.
   function opaqueStroke(color: string): string {
-    const m = /rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*[\d.]+\s*\)/.exec(color);
-    return m ? `rgb(${m[1]}, ${m[2]}, ${m[3]})` : color;
+    const parsed = d3Color(color);
+    if (!parsed) return color;
+    parsed.opacity = 1;
+    return parsed.formatRgb();
   }
 
   function showRowTooltip(event: MouseEvent, row: (typeof rows)[number], color: string): void {
