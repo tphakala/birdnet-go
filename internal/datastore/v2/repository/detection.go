@@ -248,6 +248,13 @@ type DetectionRepository interface {
 	// which keeps the slot/date math out of dialect SQL and correct across DST.
 	GetDetectionTimestamps(ctx context.Context, start, end int64, labelID *uint) ([]int64, error)
 
+	// GetBatchConfidences returns the per-label-ID detection confidences for the given label IDs over
+	// the half-open range [start, end), false positives excluded and filtered by minConfidence. Results
+	// group by label_id so a single query (per chunk) covers many labels; callers that map one species
+	// to multiple model label IDs concatenate the per-label slices themselves. Order within a label is
+	// unspecified (callers bin the values); the confidence distribution chart buckets them in Go.
+	GetBatchConfidences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][]float64, error)
+
 	// GetDailyAnalytics returns daily statistics.
 	// tzOffsetSeconds is the configured timezone's UTC offset, applied so detections bucket by
 	// wall-clock date in that zone rather than the database/OS-local zone.

@@ -66,6 +66,78 @@ func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel
 	return result
 }
 
+// minConfidenceHistogramDetections is the per-species floor for the confidence distribution (design
+// spec section 6.5). Below this, a ~20-bin histogram averages under one detection per bin and reads
+// as noise rather than a distribution, so the species is dropped from the top-N set. A single
+// explicitly selected species bypasses this (the caller passes a floor of 1) so a requested species
+// is never silently empty.
+const minConfidenceHistogramDetections = 20
+
+// buildSpeciesConfidenceHistogram bins each species' detection confidences into `bins` equal-width
+// bins over [0,1], then normalizes each species so its bins sum to ~1.0 (the distribution shape is
+// comparable across species regardless of detection volume). Label rows sharing a scientific name
+// (multi-model) merge into one species, preserving the input (descending-volume) order. Species with
+// fewer than minCount detections are dropped as noisy. Total is the species' detection count (false
+// positives already excluded upstream), surfaced in the tooltip. Returns a non-nil empty slice when
+// no species qualifies, or when bins is non-positive.
+func buildSpeciesConfidenceHistogram(species []repository.SpeciesCount, confByLabel map[uint][]float64, bins, minCount int) []datastore.SpeciesConfidenceHistogram {
+	if bins <= 0 {
+		return []datastore.SpeciesConfidenceHistogram{}
+	}
+
+	// Merge label rows sharing a scientific name, preserving first-seen (descending-volume) order.
+	// Each distinct species accumulates the confidences of all its label IDs.
+	order := make([]string, 0, len(species))
+	confByName := make(map[string][]float64, len(species))
+	for i := range species {
+		name := species[i].ScientificName
+		if _, ok := confByName[name]; !ok {
+			order = append(order, name)
+		}
+		confByName[name] = append(confByName[name], confByLabel[species[i].LabelID]...)
+	}
+
+	result := make([]datastore.SpeciesConfidenceHistogram, 0, len(order))
+	for _, name := range order {
+		confs := confByName[name]
+		total := len(confs)
+		// Drop low-volume species (and guard the division below). minCount is always >= 1 from the
+		// caller, so total == 0 is covered too.
+		if total < minCount || total == 0 {
+			continue
+		}
+		counts := make([]int, bins)
+		for _, conf := range confs {
+			counts[confidenceBinIndex(conf, bins)]++
+		}
+		dist := datastore.SpeciesConfidenceHistogram{
+			ScientificName: name,
+			Bins:           make([]float64, bins),
+			Total:          total,
+		}
+		for b, count := range counts {
+			dist.Bins[b] = float64(count) / float64(total)
+		}
+		result = append(result, dist)
+	}
+	return result
+}
+
+// confidenceBinIndex maps a confidence score to its bin index in [0, bins-1] for `bins` equal-width
+// bins over [0,1]. Scores are assumed to be in [0,1]; values are clamped so a confidence of exactly
+// 1.0 lands in the last bin and any out-of-range value is pinned to the nearest edge bin rather than
+// indexing out of bounds. Callers guarantee bins > 0.
+func confidenceBinIndex(conf float64, bins int) int {
+	idx := int(conf * float64(bins))
+	if idx < 0 {
+		return 0
+	}
+	if idx >= bins {
+		return bins - 1
+	}
+	return idx
+}
+
 // Slot resolution constants for the seasonal density heatmap. The intra-day slot width is
 // downsampled as the requested range widens so the payload (and the rendered grid) stays
 // bounded: a year at 15-minute resolution would be 365*96 cells, most of them noise.

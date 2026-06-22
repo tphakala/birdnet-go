@@ -935,6 +935,56 @@ func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, lab
 	return result, nil
 }
 
+// GetBatchConfidences returns per-label-ID detection confidences for the given label IDs over
+// [start, end), false positives excluded and filtered by minConfidence. It mirrors
+// GetBatchHourlyOccurrences: one query per chunk covers many labels (grouped client-side by
+// label_id), large label sets are chunked to stay within SQL host-parameter limits, and each label
+// ID appears in exactly one chunk so no cross-chunk merge is needed. The raw values are returned
+// (not pre-binned) so the binning math stays in shared, dialect-agnostic Go.
+func (r *detectionRepository) GetBatchConfidences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][]float64, error) {
+	result := make(map[uint][]float64, len(labelIDs))
+
+	// Return empty map for empty input (no query)
+	if len(labelIDs) == 0 {
+		return result, nil
+	}
+
+	type labelConfidence struct {
+		LabelID    uint
+		Confidence float64
+	}
+
+	detTable := r.tableName()
+	revTable := r.reviewsTable()
+
+	// Chunk label IDs to avoid exceeding SQL host-parameter limits on the IN clause.
+	for i := 0; i < len(labelIDs); i += batchQuerySize {
+		// Fail fast between chunks if the caller's context was cancelled.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		chunkEnd := min(i+batchQuerySize, len(labelIDs))
+		chunk := labelIDs[i:chunkEnd]
+
+		var rows []labelConfidence
+		err := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
+			Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
+			Select("d.label_id as label_id, d.confidence as confidence").
+			Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", chunk, start, end, minConfidence).
+			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
+			Scan(&rows).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch confidences: %w", err)
+		}
+
+		for _, row := range rows {
+			result[row.LabelID] = append(result[row.LabelID], row.Confidence)
+		}
+	}
+
+	return result, nil
+}
+
 // GetDailyOccurrences returns daily detection counts for a label.
 func (r *detectionRepository) GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64, tzOffsetSeconds int) ([]DailyCount, error) {
 	var results []DailyCount
