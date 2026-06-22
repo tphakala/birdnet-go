@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // noopMetrics (a no-op GuideCacheMetrics) is defined in guideprovider.go and
@@ -238,6 +239,25 @@ func TestGuideCache_TransientErrorNotPersisted(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, g)
 	assert.Equal(t, 0, store.count(), "transient failure must not persist a negative entry")
+}
+
+// TestGuideCache_PlainProviderErrorNotNegativeCached verifies that a provider
+// failure that is neither a definitive not-found nor explicitly transient (e.g. a
+// 403 UA rejection or a response-decode error on a malformed 200) does NOT persist
+// a negative entry and does NOT surface as not-found. Only a clean not-found may be
+// cached negative; otherwise a recoverable failure would suppress retries for a
+// species that exists for up to NegativeTTL.
+func TestGuideCache_PlainProviderErrorNotNegativeCached(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	prov := &fakeProvider{name: WikipediaProviderName, err: stubError("boom")}
+	c := newTestCache(t, store, prov)
+
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.Error(t, err)
+	assert.Nil(t, g)
+	assert.False(t, errors.Is(err, ErrGuideNotFound), "a provider failure must not surface as not-found")
+	assert.Equal(t, 0, store.count(), "a non-definitive failure must not persist a negative entry")
 }
 
 func TestGuideCache_StaleWhileRevalidate(t *testing.T) {

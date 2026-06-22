@@ -552,6 +552,18 @@ func (c *GuideCache) fetchFromProviders(ctx context.Context, name, locale string
 	if transient != nil {
 		return nil, transient
 	}
+	// A provider failed for a non-definitive, non-transient reason (e.g. a 4xx
+	// other than 404 such as a 403 UA rejection, or a response-decode error).
+	// Surface a non-NotFound error so fetchAndStore does NOT persist a 30-minute
+	// negative entry for a species that may well exist — the next request retries
+	// instead of being suppressed. Only a clean not-found (no failures at all)
+	// should become a negative entry.
+	if failedCount > 0 {
+		return nil, errors.Newf("all guide providers failed for %q", name).
+			Component("guideprovider").
+			Category(errors.CategoryHTTP).
+			Build()
+	}
 	return nil, ErrGuideNotFound
 }
 
