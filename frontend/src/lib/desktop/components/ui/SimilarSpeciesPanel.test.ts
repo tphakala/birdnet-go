@@ -151,4 +151,59 @@ describe('SimilarSpeciesPanel', () => {
       'analytics.species.similar.cardError'
     );
   });
+
+  it('does not refetch a species whose guide 404s when it is re-selected', async () => {
+    vi.mocked(api.get).mockRejectedValue(
+      new ApiError('not found', 404, new Response(null, { status: 404 }))
+    );
+
+    render(SimilarSpeciesPanel, {
+      props: { mainName: 'American Crow', similar: [entry()] },
+    });
+
+    // Auto-selected on mount → one fetch → 404 soft message.
+    expect(
+      await screen.findByText('analytics.species.similar.cardNoGuide', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledTimes(1);
+
+    // Re-selecting the same (already-resolved 404) species must not re-hit the
+    // rate-limited guide endpoint.
+    await fireEvent.click(screen.getByRole('button', { name: /Common Raven/ }));
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-auto-selects when the similar list changes to a new focal species', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('corax'))
+        return Promise.resolve(makeGuide({ description: 'Raven appearance text.' }) as never);
+      return Promise.resolve(
+        makeGuide({
+          scientific_name: 'Sturnus vulgaris',
+          common_name: 'European Starling',
+          description: 'Starling appearance text.',
+        }) as never
+      );
+    });
+
+    const { rerender } = render(SimilarSpeciesPanel, {
+      props: { mainName: 'American Crow', similar: [entry()] },
+    });
+
+    expect(
+      await screen.findByText('Raven appearance text.', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+
+    // New focal species → an entirely different similar list. The previously
+    // selected 'Corvus corax' is gone, so the panel must auto-select the new
+    // first guide rather than leaving a stale/blank selection.
+    await rerender({
+      mainName: 'House Sparrow',
+      similar: [entry({ scientific_name: 'Sturnus vulgaris', common_name: 'European Starling' })],
+    });
+
+    expect(
+      await screen.findByText('Starling appearance text.', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+  });
 });
