@@ -789,7 +789,7 @@ function coerceSpeciesGuideSettings(value: unknown): UnknownSettings {
     enabled: coerceBoolean(sg.enabled, false),
     provider: coerceString(sg.provider, 'wikipedia'),
     fallbackPolicy: coerceString(sg.fallbackPolicy, 'all'),
-    warmTopN: coerceNumber(sg.warmTopN, 0, 10000, 50),
+    warmTopN: coerceNumber(sg.warmTopN, 0, 1000, 50), // max mirrors backend SpeciesGuideMaxWarmTopN
     preFetchEnabled: coerceBoolean(sg.preFetchEnabled, true),
     showNotes: coerceBoolean(sg.showNotes, true),
     showEnrichments: coerceBoolean(sg.showEnrichments, true),
