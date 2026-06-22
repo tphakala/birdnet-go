@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -20,6 +21,13 @@ import (
 // TestSchemaUpToDate verifies that config.schema.json and
 // configuration-reference.md are in sync with the source code.
 func TestSchemaUpToDate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// invopop/jsonschema's AddGoComments uses filepath.Walk (backslash paths
+		// on Windows) joined with path.Join (forward slashes), producing broken
+		// comment-map keys. Regenerated schemas on Windows lack all Go-comment
+		// descriptions, so this staleness check cannot pass there.
+		t.Skip("skipping on Windows: invopop/jsonschema AddGoComments path bug")
+	}
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
@@ -132,10 +140,10 @@ func TestConfigYAMLValidates(t *testing.T) {
 	}
 }
 
-// normalizeLF strips \r so the comparison is stable on Windows where git
-// may check out files with CRLF line endings.
+// normalizeLF strips all \r so the comparison is stable on Windows where git
+// checks out files with CRLF and AddGoComments may embed \r from source comments.
 func normalizeLF(b []byte) string {
-	return strings.ReplaceAll(string(b), "\r\n", "\n")
+	return strings.ReplaceAll(string(b), "\r", "")
 }
 
 func findRepoRoot(t *testing.T) string {
