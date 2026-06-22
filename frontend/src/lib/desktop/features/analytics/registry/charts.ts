@@ -534,13 +534,9 @@ async function fetchConfidenceDistribution(
       // hourly ridgeline's fixed 24) but cap the length defensively so a malformed payload cannot
       // allocate an unreasonable density array.
       const rawBins = Array.isArray(item.bins) ? item.bins : [];
-      const binCount = Math.min(rawBins.length, MAX_CONFIDENCE_BINS);
-      const density: number[] = [];
-      for (let i = 0; i < binCount; i++) {
-        // eslint-disable-next-line security/detect-object-injection -- i is a bounded loop index
-        const b = rawBins[i];
-        density.push(typeof b === 'number' && Number.isFinite(b) ? b : 0);
-      }
+      const density = rawBins
+        .slice(0, MAX_CONFIDENCE_BINS)
+        .map(b => (typeof b === 'number' && Number.isFinite(b) ? b : 0));
       const total = typeof item.total === 'number' && Number.isFinite(item.total) ? item.total : 0;
       return { scientificName, density, total };
     })
