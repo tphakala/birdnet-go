@@ -1406,19 +1406,29 @@ func TestJobCancellation(t *testing.T) {
 	}()
 
 	longJobStarted := make(chan struct{})
-	longJobBlocked := make(chan struct{})
 
-	// Create a long-running job
+	// The action blocks until the context is cancelled, then returns the
+	// cancellation error. This honors the Action interface contract that
+	// implementations must respect context cancellation, and it makes the
+	// test deterministic: the job can only finish via cancellation, so the
+	// queue always records it as a failure carrying a cancellation error.
+	//
+	// The previous version returned nil immediately after the context was
+	// cancelled, which left executeJobWithTimeout's select racing between the
+	// success branch (action returned nil) and the cancellation branch
+	// (execCtx.Done()). Go picks a ready select case at random, so the job was
+	// marked Completed or Failed depending on scheduler timing; that raced
+	// reliably on loaded CI runners while passing locally.
 	action := &MockAction{
-		ExecuteFunc: func(data any) error {
+		ExecuteFunc: func(_ any) error {
 			close(longJobStarted)
-			<-longJobBlocked // Block until channel is closed
-			return nil
+			<-ctx.Done()
+			return ctx.Err()
 		},
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(t.Context(), action, &TestData{ID: "cancel-test"}, RetryConfig{Enabled: false})
+	_, err := queue.Enqueue(t.Context(), action, &TestData{ID: "cancel-test"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
 	// Process the job to start it
@@ -1427,60 +1437,34 @@ func TestJobCancellation(t *testing.T) {
 	// Wait for job to start
 	waitForChannelWithLog(t, longJobStarted, 2*time.Second, "Job didn't start in time", "Long job started successfully")
 
-	// Cancel the context
+	// Cancel the context. This unblocks the action and signals the queue's
+	// execution cancellation path simultaneously; both outcomes mark the job
+	// as failed with a cancellation error.
 	cancel()
 
-	// Unblock the job
-	close(longJobBlocked)
-
-	// Give some time for cleanup
-	time.Sleep(500 * time.Millisecond)
-
-	// Check job was cancelled
-	stats := queue.GetStats()
-	assert.Equal(t, 1, stats.TotalJobs, "Total jobs should be 1")
-
-	// Job might be reported as failed rather than cancelled due to context cancelled error
-	// Check if the job has the expected error
-	var jobFailed bool
-	var jobHasCancellationError bool
-
-	queue.mu.Lock()
-	// Check in active jobs
-	for _, j := range queue.jobs {
-		if j.ID == job.ID && j.Status == JobStatusFailed {
-			jobFailed = true
-			if j.LastError != nil && strings.Contains(j.LastError.Error(), "cancel") {
-				jobHasCancellationError = true
-			}
-			break
+	// Poll the queue stats until the job is recorded as failed with a
+	// cancellation error, instead of sleeping for a fixed duration (which was
+	// flaky under CI load). FailedJobs and the per-action LastErrorMessage are
+	// updated atomically under the queue lock in handleJobFailure, so observing
+	// FailedJobs > 0 guarantees the matching error message is also visible. The
+	// per-action LastErrorMessage is the durable signal: the Job pointer is
+	// discarded once cleanupStaleJobs runs.
+	require.Eventually(t, func() bool {
+		stats := queue.GetStats()
+		if stats.FailedJobs == 0 {
+			return false
 		}
-	}
-	queue.mu.Unlock()
-
-	if !jobFailed {
-		// After cleanupStaleJobs runs, the failed job pointer is discarded.
-		// Fall back to the queue-wide counter to observe the failure.
-		postStats := queue.GetStats()
-		if postStats.FailedJobs > 0 {
-			jobFailed = true
-		}
-	}
-	if !jobHasCancellationError {
-		// The dropped Job pointer no longer carries the error after cleanup.
-		// The per-action stats still record LastErrorMessage, which captures
-		// the cancellation error emitted by handleExecutionTimeout.
-		postStats := queue.GetStats()
-		for _, as := range postStats.ActionStats {
+		for _, as := range stats.ActionStats {
 			if strings.Contains(as.LastErrorMessage, "cancel") {
-				jobHasCancellationError = true
-				break
+				return true
 			}
 		}
-	}
+		return false
+	}, 5*time.Second, 10*time.Millisecond,
+		"job should be marked failed with a cancellation error after context cancellation")
 
-	assert.True(t, jobFailed, "Job should be marked as failed after cancellation")
-	assert.True(t, jobHasCancellationError, "Job should have a cancellation error")
+	// Exactly one job should have been tracked.
+	assert.Equal(t, 1, queue.GetStats().TotalJobs, "Total jobs should be 1")
 }
 
 // TestLongRunningJobs tests that short jobs can be processed while a long job is running

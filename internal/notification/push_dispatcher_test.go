@@ -62,15 +62,36 @@ func newFakeProvider(name string, enabled bool, types ...Type) *fakeProvider {
 	}
 }
 
-func TestPushDispatcher_ForwardsNotification(t *testing.T) {
-	t.Parallel()
+// installIsolatedService installs svc as the process-global notification service
+// for the duration of the test and restores the previous instance on cleanup.
+// Tests that exercise the dispatcher end to end need their own service because
+// dispatcher.start subscribes to the global singleton (via GetService), yet
+// SetServiceForTesting only sets that singleton when it is nil and never resets
+// it. Without isolation such tests share one service, cross-deliver each other's
+// notifications, and accumulate rate-limiter state across runs. Callers must not
+// run in parallel: they mutate the global singleton.
+func installIsolatedService(t *testing.T, svc *Service) {
+	t.Helper()
+	mu.Lock()
+	prev := instance
+	instance = svc
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		instance = prev
+		mu.Unlock()
+	})
+}
 
+func TestPushDispatcher_ForwardsNotification(t *testing.T) {
+	// Not parallel: the dispatcher subscribes to the process-global notification
+	// service singleton (dispatcher.start calls GetService), so this test
+	// installs its own isolated service for the duration of the test. Two such
+	// tests cannot run concurrently without racing on the singleton and
+	// cross-delivering notifications, which would fail the title assertion. Per
+	// the project rule, tests that mutate global state must not run in parallel.
 	svc := NewService(DefaultServiceConfig())
-	err := SetServiceForTesting(svc)
-	if err != nil {
-		svc = GetService()
-		require.NotNil(t, svc, "failed to attach to notification service")
-	}
+	installIsolatedService(t, svc)
 
 	fp := newFakeProvider("fake", true)
 
@@ -83,7 +104,7 @@ func TestPushDispatcher_ForwardsNotification(t *testing.T) {
 		defaultTimeout: 200 * time.Millisecond,
 	}
 
-	err = d.start()
+	err := d.start()
 	require.NoError(t, err, "failed to start dispatcher")
 	defer func() {
 		if d.cancel != nil {
@@ -247,14 +268,13 @@ func TestMatchesProviderFilter_ConfidenceTypes(t *testing.T) {
 }
 
 func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
-	t.Parallel()
-
+	// Not parallel: like TestPushDispatcher_ForwardsNotification, the dispatcher
+	// subscribes to the process-global notification service singleton, so this
+	// test installs its own isolated service and must run in the sequential
+	// phase. See the project rule against parallelizing tests that mutate global
+	// state.
 	svc := NewService(DefaultServiceConfig())
-	err := SetServiceForTesting(svc)
-	if err != nil {
-		svc = GetService()
-		require.NotNil(t, svc, "failed to attach to notification service")
-	}
+	installIsolatedService(t, svc)
 
 	slowProvider := &fakeProvider{
 		name:      "slow",
@@ -274,7 +294,7 @@ func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
 		concurrencySem: semaphore.NewWeighted(3),
 	}
 
-	err = d.start()
+	err := d.start()
 	require.NoError(t, err, "failed to start dispatcher")
 	defer func() {
 		if d.cancel != nil {
