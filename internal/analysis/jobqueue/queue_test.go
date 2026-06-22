@@ -1013,35 +1013,41 @@ func TestHangingJobTimeout(t *testing.T) {
 }
 
 // TestContextCancellation tests that jobs are properly cancelled when the context is cancelled
+// cancelAwareAction is an Action whose Execute blocks until its execution
+// context is cancelled, then records and returns the cancellation error. Unlike
+// MockAction (whose ExecuteFunc callback does not receive a context), it lets a
+// test assert that stopping the queue actually propagates cancellation into the
+// running job, rather than only that executeJobWithTimeout's own select unblocks.
+type cancelAwareAction struct {
+	started chan struct{}
+	result  chan error
+}
+
+func (a *cancelAwareAction) Execute(ctx context.Context, _ any) error {
+	close(a.started)
+	<-ctx.Done()
+	err := ctx.Err()
+	a.result <- err
+	return err
+}
+
+func (a *cancelAwareAction) GetDescription() string { return "Cancel Aware Action" }
+
+// TestContextCancellation tests that stopping the queue cancels the execution
+// context of in-progress jobs and that the running action actually observes the
+// cancellation (not just that StopWithTimeout returns).
 func TestContextCancellation(t *testing.T) {
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, false)
+	defer teardownTestQueue(t, queue)
 
-	// Create a channel to track job execution
-	executionStarted := make(chan struct{})
-
-	// Create a mock action that blocks until cancelled
-	action := &MockAction{
-		ExecuteFunc: func(data any) error {
-			// Signal that execution has started
-			close(executionStarted)
-
-			// Create a channel that will never be closed
-			neverClosed := make(chan struct{})
-
-			// Wait for either the context to be cancelled or the channel to be closed
-			select {
-			case <-neverClosed:
-				return nil
-			case <-time.After(10 * time.Second):
-				// This should never happen, but we'll add a timeout just in case
-				return errors.New("timed out waiting for cancellation")
-			}
-		},
+	// The action blocks on its execution context and reports the cancellation
+	// error, so the test can prove the job saw ctx.Done() rather than being
+	// abandoned by the queue.
+	action := &cancelAwareAction{
+		started: make(chan struct{}),
+		result:  make(chan error, 1),
 	}
-
-	// Create test data
-	data := &TestData{ID: "cancellation-test"}
 
 	// Create retry config
 	config := RetryConfig{
@@ -1053,24 +1059,27 @@ func TestContextCancellation(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(t.Context(), action, data, config)
+	job, err := queue.Enqueue(t.Context(), action, &TestData{ID: "cancellation-test"}, config)
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
-	// Wait for the job to be picked up and start executing. The action closes
-	// executionStarted at the top of Execute, so this is a precise signal and
-	// no fixed pre-sleep is needed.
-	waitForChannel(t, executionStarted, DefaultTestTimeout, "Timed out waiting for job execution to start")
+	// Wait for the job to start executing. The action closes started at the top
+	// of Execute, so this is a precise signal and no fixed pre-sleep is needed.
+	waitForChannel(t, action.started, DefaultTestTimeout, "Timed out waiting for job execution to start")
 
-	// Stop the queue, which should cancel all running jobs
-	err = queue.StopWithTimeout(500 * time.Millisecond)
+	// Stop the queue. This cancels the execution context of running jobs, which
+	// the action observes via <-ctx.Done(). The stop itself should succeed
+	// within its timeout.
+	require.NoError(t, queue.StopWithTimeout(500*time.Millisecond), "Queue stop should succeed with timeout")
 
-	// The stop should succeed even though the job is still running
-	// because we're using a timeout
-	require.NoError(t, err, "Queue stop should succeed with timeout")
-
-	// Check that the action was executed
-	assert.Equal(t, 1, action.GetExecuteCount(), "Action should have been executed once")
+	// The action must have observed context cancellation rather than the queue
+	// merely abandoning it. Receiving on result also proves the action ran once.
+	select {
+	case actionErr := <-action.result:
+		require.ErrorIs(t, actionErr, context.Canceled, "running action should observe context cancellation")
+	case <-time.After(DefaultTestTimeout):
+		require.Fail(t, "running action did not observe context cancellation")
+	}
 }
 
 // TestStressTest performs a stress test on the job queue with many concurrent jobs
