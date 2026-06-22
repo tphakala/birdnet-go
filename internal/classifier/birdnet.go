@@ -42,6 +42,19 @@ type speciesCacheEntry struct {
 	scores map[string]float64 // Species occurrence scores keyed by scientific name
 }
 
+// modelIdentity is the immutable identity snapshot the ModelInstance getters and
+// the inference span expose: model ID, human-readable name, version string, and
+// audio spec. It is published behind an atomic pointer so those
+// reads are lock-free and never race reloadModelInternal's writes to bn.ModelInfo
+// / bn.modelVersion, nor block on bn.mu (held by inference for the full native
+// call, issue #3336).
+type modelIdentity struct {
+	id      string
+	name    string
+	version string
+	spec    ModelSpec
+}
+
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
 	// classifier and rangeFilter are the native inference backends (TFLite/ONNX).
@@ -63,13 +76,20 @@ type BirdNET struct {
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	modelVersion        string              // Human-readable model version string (per-instance to avoid shared global state)
 	modelsDir           string              // base directory for gallery-installed models (set by Orchestrator)
+	// identity holds the getter-visible model identity snapshot (ID/Name/Spec and
+	// the version string); see modelIdentity. It is published behind an
+	// atomic pointer and kept OFF bn.mu so the ModelInstance getters (ModelID,
+	// ModelName, ModelVersion, Spec) and the inference span read it lock-free without
+	// blocking on an in-flight native call holding bn.mu (issue #3336).
+	identity atomic.Pointer[modelIdentity]
 	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack).
 	// Inference holds mu for the full duration of the native call, not just the field
 	// read: the backends are not goroutine-safe and reload/Delete Close() them under
 	// mu, so dropping mu before the native call would reintroduce the issue #3336
-	// use-after-free segfault. (mu is not a complete guard for ModelInfo, which
-	// reloadModelInternal writes under mu but the Spec/ModelID/ModelName getters read
-	// without it.)
+	// use-after-free segfault. (ModelInfo is written under mu by reloadModelInternal;
+	// the identity fields the getters expose are mirrored into the lock-free identity
+	// snapshot above, and the remaining ModelInfo reads run under mu or before the
+	// instance is shared.)
 	mu               sync.Mutex
 	resultsBuffer    []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations
@@ -209,6 +229,10 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
 	}
+
+	// Publish the getter-visible identity now that ModelInfo and modelVersion are
+	// finalized, so ModelID/ModelName/ModelVersion/Spec read it lock-free.
+	bn.publishIdentity()
 
 	return bn, nil
 }
@@ -1081,6 +1105,7 @@ func (bn *BirdNET) reloadModelInternal() error {
 	bn.Settings = settingsCopy
 
 	// Snapshot all mutable state for transactional rollback on failure.
+	oldModelVersion := bn.modelVersion
 	oldClassifier := bn.classifier
 	oldRangeFilter := bn.rangeFilter
 	oldFellBack := bn.rangeFilterFellBack
@@ -1103,6 +1128,12 @@ func (bn *BirdNET) reloadModelInternal() error {
 		bn.ModelInfo = oldModelInfo
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
+		// Restore the model-version string alongside the classifier so
+		// ModelVersion describes the restored model rather than the failed attempt.
+		bn.modelVersion = oldModelVersion
+		// Republish the getter-visible identity from the restored ModelInfo /
+		// modelVersion so ModelID/ModelName/ModelVersion/Spec revert too.
+		bn.publishIdentity()
 		bn.updateSettings(oldSettings)
 		// Degraded-but-recovered: make it explicit in the log that the previous
 		// model was restored, so a failed reload is not mistaken for a dead
@@ -1244,6 +1275,10 @@ func (bn *BirdNET) reloadModelInternal() error {
 	// Clear species cache as model/labels have changed
 	bn.clearSpeciesCache()
 
+	// Republish the getter-visible identity for the new model now that the reload
+	// has committed (ModelInfo and modelVersion are final).
+	bn.publishIdentity()
+
 	bn.Debug("Model reload completed successfully")
 	return nil
 }
@@ -1334,27 +1369,61 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	return 0.0
 }
 
+// publishIdentity snapshots the current ModelInfo identity and modelVersion into
+// the atomic identity pointer. Call it after every commit point that finalizes
+// those fields: the end of NewBirdNET, a successful reload, and the reload
+// rollback. The caller either holds bn.mu (reload) or runs before the instance is
+// shared (construction), so the bn.ModelInfo / bn.modelVersion reads here are
+// consistent.
+func (bn *BirdNET) publishIdentity() {
+	bn.identity.Store(&modelIdentity{
+		id:      bn.ModelInfo.ID,
+		name:    bn.ModelInfo.Name,
+		version: bn.modelVersion,
+		spec:    bn.ModelInfo.Spec,
+	})
+}
+
+// The ModelID/ModelName/ModelVersion/Spec getters read the published identity
+// snapshot lock-free via bn.identity.Load(), reading the wanted field straight off
+// the loaded pointer (no whole-struct copy, matching the identity snapshot's access
+// pattern). Before the first publish (a struct-literal instance in tests that
+// bypassed NewBirdNET, never concurrently reloaded) the pointer is nil and they
+// fall back to reading the fields directly, which is race-free in that case.
+
 // Spec returns the audio requirements for this BirdNET model.
 // Implements ModelInstance.
 func (bn *BirdNET) Spec() ModelSpec {
+	if id := bn.identity.Load(); id != nil {
+		return id.spec
+	}
 	return bn.ModelInfo.Spec
 }
 
 // ModelID returns the unique model identifier.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelID() string {
+	if id := bn.identity.Load(); id != nil {
+		return id.id
+	}
 	return bn.ModelInfo.ID
 }
 
 // ModelName returns the human-readable model name.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelName() string {
+	if id := bn.identity.Load(); id != nil {
+		return id.name
+	}
 	return bn.ModelInfo.Name
 }
 
 // ModelVersion returns the model version string.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelVersion() string {
+	if id := bn.identity.Load(); id != nil {
+		return id.version
+	}
 	return bn.modelVersion
 }
 
