@@ -125,7 +125,11 @@ jobs:
           # noembed,skipfrontend skip model/frontend embedding. -short skips the
           # heavy suites; testcontainer/integration tests need the `integration`
           # build tag (not set) and are excluded. Longer timeout than Linux: the
-          # native runner with -race is slower.
+          # native runner with -race is slower, and api/v2 (the largest package,
+          # ~2000 tests) intermittently exceeded the old 600s per-package ceiling
+          # under runner load (goroutine dump at timeout was idle, i.e. cumulative
+          # race-instrumented work, not a deadlock). 900s adds headroom and stays
+          # under the 20m step cap below.
           #
           # Write the -json stream to a file and take pass/fail from go test's own
           # exit code. We do NOT pipe through gotestfmt: go wraps the macOS cgo
@@ -133,7 +137,7 @@ jobs:
           # -ltensorflowlite_c, so the rpath/library are harmlessly duplicated)
           # into JSON output events whose content crashes gotestfmt's tokenizer.
           # Failed tests are printed below and in the job summary instead.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 600s ./... > gotest.log 2>&1
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 
