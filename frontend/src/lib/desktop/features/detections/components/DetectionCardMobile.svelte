@@ -8,53 +8,54 @@
   import PlayOverlay from '$lib/desktop/features/dashboard/components/PlayOverlay.svelte';
   import SpeciesInfoBar from '$lib/desktop/features/dashboard/components/SpeciesInfoBar.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
-  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import { cn } from '$lib/utils/cn';
-  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { downloadDetectionAudio } from '$lib/utils/audioDownload';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
-  import { fetchWithCSRF } from '$lib/utils/api';
-  import { toastActions } from '$lib/stores/toast';
-  import { setDetectionVerification } from '$lib/utils/reviewDetection';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
-
-  const logger = loggers.ui;
 
   const getDefaultAudioGain = () => get(dashboardSettings)?.defaultAudioGain ?? 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
-  const DEFAULT_DOWNLOAD_NAME = 'detection';
-  const AUDIO_FILE_EXTENSION = '.wav';
 
+  // Presentational card: the parent (DetectionsList) owns the action handlers
+  // and the ConfirmModal via the shared useDetectionActions composable, and
+  // passes them in as callbacks plus the server-hydrated isExcluded state.
   interface Props {
     detection: Detection;
+    isExcluded?: boolean;
     onDetailsClick?: (_id: number) => void;
-    onRefresh?: () => void;
+    onReview?: () => void;
+    onMarkCorrect?: () => void;
+    onMarkFalsePositive?: () => void;
+    onToggleSpecies?: () => void;
+    onToggleLock?: () => void;
+    onDelete?: () => void;
   }
 
-  let { detection, onDetailsClick, onRefresh }: Props = $props();
+  let {
+    detection,
+    isExcluded = false,
+    onDetailsClick,
+    onReview,
+    onMarkCorrect,
+    onMarkFalsePositive,
+    onToggleSpecies,
+    onToggleLock,
+    onDelete,
+  }: Props = $props();
 
   const loader = createSpectrogramLoader({ size: 'md', raw: true });
 
   let cardElement = $state<HTMLElement | undefined>(undefined);
   let isVisible = $state(false);
   let isMenuOpen = $state(false);
-  let isExcluded = $state(false);
 
   let audioGainValue = $state(getDefaultAudioGain());
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
-
-  let showConfirmModal = $state(false);
-  let confirmModalConfig = $state({
-    title: '',
-    message: '',
-    confirmLabel: t('common.confirm'),
-    onConfirm: async () => {},
-  });
 
   $effect(() => {
     if (isVisible) {
@@ -72,125 +73,12 @@
     isMenuOpen = false;
   }
 
-  function handleReview() {
-    navigation.navigate(`/ui/detections/${detection.id}?tab=review`);
-  }
-
-  async function handleMarkCorrect() {
-    if (await setDetectionVerification(detection.id, 'correct')) {
-      onRefresh?.();
-    }
-  }
-
-  async function handleMarkFalsePositive() {
-    if (await setDetectionVerification(detection.id, 'false_positive')) {
-      onRefresh?.();
-    }
-  }
-
-  function handleToggleSpecies() {
-    const commonName = detection.commonName;
-    const currentlyExcluded = isExcluded;
-    confirmModalConfig = {
-      title: currentlyExcluded
-        ? t('dashboard.recentDetections.modals.showSpecies', { species: commonName })
-        : t('dashboard.recentDetections.modals.ignoreSpecies', { species: commonName }),
-      message: currentlyExcluded
-        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', { species: commonName })
-        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', { species: commonName }),
-      confirmLabel: t('common.confirm'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF('/api/v2/detections/ignore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ common_name: commonName }),
-          });
-          isExcluded = !currentlyExcluded;
-          onRefresh?.();
-        } catch (error) {
-          toastActions.error(t('dashboard.recentDetections.errors.toggleSpeciesFailed'));
-          logger.error('Error toggling species exclusion:', error);
-        }
-      },
-    };
-    showConfirmModal = true;
-  }
-
-  function handleToggleLock() {
-    const detectionId = detection.id;
-    const isLocked = detection.locked;
-    const commonName = detection.commonName;
-    confirmModalConfig = {
-      title: isLocked
-        ? t('dashboard.recentDetections.modals.unlockDetection')
-        : t('dashboard.recentDetections.modals.lockDetection'),
-      message: isLocked
-        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', { species: commonName })
-        : t('dashboard.recentDetections.modals.lockDetectionConfirm', { species: commonName }),
-      confirmLabel: t('common.confirm'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF(`/api/v2/detections/${detectionId}/lock`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ locked: !isLocked }),
-          });
-          onRefresh?.();
-        } catch (error) {
-          toastActions.error(t('dashboard.recentDetections.errors.toggleLockFailed'));
-          logger.error('Error toggling lock status:', error);
-        }
-      },
-    };
-    showConfirmModal = true;
-  }
-
-  function handleDelete() {
-    const detectionId = detection.id;
-    const commonName = detection.commonName;
-    confirmModalConfig = {
-      title: t('dashboard.recentDetections.modals.deleteDetection', { species: commonName }),
-      message: t('dashboard.recentDetections.modals.deleteDetectionConfirm', {
-        species: commonName,
-      }),
-      confirmLabel: t('common.delete'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF(`/api/v2/detections/${detectionId}`, { method: 'DELETE' });
-          onRefresh?.();
-        } catch (error) {
-          toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
-          logger.error('Error deleting detection:', error);
-        }
-      },
-    };
-    showConfirmModal = true;
-  }
-
   function handleViewDetails() {
     if (onDetailsClick) {
       onDetailsClick(detection.id);
     } else {
       navigation.navigate(`/ui/detections/${detection.id}`);
     }
-  }
-
-  function handleDownload() {
-    const link = document.createElement('a');
-    link.href = buildAppUrl(`/api/v2/audio/${detection.id}`);
-    const safeCommonName = (detection.commonName || DEFAULT_DOWNLOAD_NAME).replace(
-      /[^a-zA-Z0-9 ._-]/g,
-      '_'
-    );
-    const dateTime =
-      detection.date && detection.time
-        ? `${detection.date}_${detection.time.replace(/:/g, '-')}`
-        : String(detection.id);
-    link.download = `${safeCommonName}_${dateTime}${AUDIO_FILE_EXTENSION}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   }
 
   // eslint-disable-next-line no-undef -- browser global
@@ -250,7 +138,7 @@
       {:else if loader.spectrogramUrl}
         <img
           src={loader.spectrogramUrl}
-          alt={t('components.audio.spectrogramAlt')}
+          alt={t('components.audio.spectrogramForSpecies', { species: detection.commonName })}
           class="spectrogram-image"
           class:opacity-0={loader.state === 'loading'}
           decoding="async"
@@ -302,31 +190,19 @@
     <ActionMenu
       {detection}
       variant="overlay"
-      onMarkCorrect={handleMarkCorrect}
-      onMarkFalsePositive={handleMarkFalsePositive}
-      onReview={handleReview}
+      {onMarkCorrect}
+      {onMarkFalsePositive}
+      {onReview}
       {isExcluded}
-      onToggleSpecies={handleToggleSpecies}
-      onToggleLock={handleToggleLock}
-      onDelete={handleDelete}
-      onDownload={handleDownload}
+      {onToggleSpecies}
+      {onToggleLock}
+      {onDelete}
+      onDownload={() => downloadDetectionAudio(detection)}
       onMenuOpen={handleMenuOpen}
       onMenuClose={handleMenuClose}
     />
   </div>
 </article>
-
-<ConfirmModal
-  isOpen={showConfirmModal}
-  title={confirmModalConfig.title}
-  message={confirmModalConfig.message}
-  confirmLabel={confirmModalConfig.confirmLabel}
-  onClose={() => (showConfirmModal = false)}
-  onConfirm={async () => {
-    await confirmModalConfig.onConfirm();
-    showConfirmModal = false;
-  }}
-/>
 
 <style>
   .detection-card {

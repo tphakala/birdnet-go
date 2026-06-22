@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Visa detaljer för {species}",
       "play": "Spela upp",
-      "playAudio": "Spela upp ljud"
+      "playAudio": "Spela upp ljud",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Inspelning och spektrogram",
@@ -4559,6 +4560,7 @@
       "spectrogramLoaded": "Spektrogram laddat",
       "spectrogramLoadingAria": "Laddar spektrogram",
       "spectrogramAlt": "Ljudspektrogram",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Genererar spektrogram",
       "generating": "Genererar...",
       "waiting": "Waiting...",

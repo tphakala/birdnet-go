@@ -32,6 +32,11 @@
   import { loggers } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn';
   import { useDetectionActions } from '$lib/desktop/features/detections/composables/useDetectionActions.svelte';
+  import {
+    isExcluded as isSpeciesExcluded,
+    setExcluded,
+    hydrateExcludedSpecies,
+  } from '$lib/stores/excludedSpecies.svelte';
 
   const logger = loggers.ui;
 
@@ -67,25 +72,12 @@
   // svelte-ignore state_referenced_locally
   let selectedLimit = $state(limit);
 
-  // Track excluded species by common name (session-local tracking)
-  let excludedSpecies = $state(new Set<string>());
-
-  function isSpeciesExcluded(commonName: string): boolean {
-    return excludedSpecies.has(commonName);
-  }
-
-  // Shared action handlers (review, delete, lock, ignore species)
+  // Shared action handlers (review, delete, lock, ignore species). Exclusion
+  // state is the shared, server-hydrated excludedSpecies store.
   const actions = useDetectionActions({
     onRefresh: () => onRefresh(),
     isSpeciesExcluded,
-    onToggleExclusion: (name, exclude) => {
-      if (exclude) {
-        excludedSpecies.add(name);
-      } else {
-        excludedSpecies.delete(name);
-      }
-      excludedSpecies = new Set(excludedSpecies);
-    },
+    onToggleExclusion: setExcluded,
   });
 
   // Custom dropdown state
@@ -151,6 +143,7 @@
   }
 
   onMount(() => {
+    void hydrateExcludedSpecies();
     document.addEventListener('click', handleDropdownClickOutside);
     return () => {
       document.removeEventListener('click', handleDropdownClickOutside);
@@ -347,6 +340,12 @@
 
   .limit-dropdown-trigger:focus {
     outline: none;
+  }
+
+  /* Keep a visible focus ring for keyboard users (outline is only removed for mouse focus). */
+  .limit-dropdown-trigger:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .limit-dropdown-value {

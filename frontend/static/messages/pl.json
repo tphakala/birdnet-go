@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Wyświetl szczegóły dla {species}",
       "play": "Odtwórz",
-      "playAudio": "Odtwórz dźwięk"
+      "playAudio": "Odtwórz dźwięk",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Nagranie i Spektrogram",
@@ -4559,6 +4560,7 @@
       "spectrogramLoaded": "Spektrogram załadowany",
       "spectrogramLoadingAria": "Ładowanie spektrogramu",
       "spectrogramAlt": "Spektrogram audio",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Generowanie spektrogramu",
       "generating": "Generowanie...",
       "waiting": "Waiting...",

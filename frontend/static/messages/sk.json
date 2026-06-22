@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Zobraziť podrobnosti pre {species}",
       "play": "Prehrať",
-      "playAudio": "Prehrať zvuk"
+      "playAudio": "Prehrať zvuk",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Nahrávka a spektrogram",
@@ -4559,6 +4560,7 @@
       "spectrogramLoaded": "Spektrogram bol načítaný",
       "spectrogramLoadingAria": "Načítava sa spektrogram",
       "spectrogramAlt": "Zvukový spektrogram",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Generuje sa spektrogram",
       "generating": "Generuje sa...",
       "waiting": "Waiting...",

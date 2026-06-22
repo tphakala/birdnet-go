@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Vis detaljer for {species}",
       "play": "Afspil",
-      "playAudio": "Afspil lyd"
+      "playAudio": "Afspil lyd",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Optagelse og spektrogram",
@@ -4559,6 +4560,7 @@
       "spectrogramLoaded": "Spektrogram indlæst",
       "spectrogramLoadingAria": "Indlæser spektrogram",
       "spectrogramAlt": "Lydspektrogram",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Genererer spektrogram",
       "generating": "Genererer...",
       "waiting": "Waiting...",

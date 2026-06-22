@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Vis detaljer for {species}",
       "play": "Spill av",
-      "playAudio": "Spill av lyd"
+      "playAudio": "Spill av lyd",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Opptak og spektrogram",
@@ -4559,6 +4560,7 @@
       "spectrogramLoaded": "Spektrogram lastet",
       "spectrogramLoadingAria": "Laster spektrogram",
       "spectrogramAlt": "Lydspektrogram",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Genererer spektrogram",
       "generating": "Genererer...",
       "waiting": "Waiting...",
