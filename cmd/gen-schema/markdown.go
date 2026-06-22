@@ -109,9 +109,9 @@ func resolveRefWithDesc(s, root *jsonschema.Schema) *jsonschema.Schema {
 		return s
 	}
 	if s.Description != "" && def.Description == "" {
-		copy := *def
-		copy.Description = s.Description
-		return &copy
+		patched := *def
+		patched.Description = s.Description
+		return &patched
 	}
 	return def
 }

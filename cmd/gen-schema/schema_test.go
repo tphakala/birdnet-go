@@ -54,10 +54,10 @@ func TestSchemaUpToDate(t *testing.T) {
 	regeneratedMd, err := os.ReadFile(tmpMd)
 	require.NoError(t, err, "reading regenerated markdown")
 
-	require.Equal(t, string(committedSchema), string(regeneratedSchema),
+	require.Equal(t, normalizeLF(committedSchema), normalizeLF(regeneratedSchema),
 		"config.schema.json is out of date; run 'task generate-schema' to update")
 
-	require.Equal(t, string(committedMd), string(regeneratedMd),
+	require.Equal(t, normalizeLF(committedMd), normalizeLF(regeneratedMd),
 		"doc/wiki/configuration-reference.md is out of date; run 'task generate-schema' to update")
 }
 
@@ -110,7 +110,7 @@ func TestConfigYAMLValidates(t *testing.T) {
 		t.Skip("config.schema.json not yet generated; run 'task generate-schema'")
 	}
 	require.NoError(t, err)
-	defer schemaFile.Close()
+	defer func() { _ = schemaFile.Close() }()
 
 	schemaDoc, err := jsonschema.UnmarshalJSON(schemaFile)
 	require.NoError(t, err, "parsing schema JSON")
@@ -130,6 +130,12 @@ func TestConfigYAMLValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.yaml does not validate against schema:\n%v", err)
 	}
+}
+
+// normalizeLF strips \r so the comparison is stable on Windows where git
+// may check out files with CRLF line endings.
+func normalizeLF(b []byte) string {
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
 }
 
 func findRepoRoot(t *testing.T) string {

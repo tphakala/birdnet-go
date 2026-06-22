@@ -25,7 +25,12 @@
   import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
   import { generateSpeciesColors, type ChartTheme } from './utils/theme';
-  import { ridgelineLayout, peakIndex, RIDGE_OVERLAP, type RidgelineSeries } from './utils/ridgeline';
+  import {
+    ridgelineLayout,
+    peakIndex,
+    RIDGE_OVERLAP,
+    type RidgelineSeries,
+  } from './utils/ridgeline';
 
   interface Props {
     /** One row per species: { scientificName, commonName, density[], total? }. */
