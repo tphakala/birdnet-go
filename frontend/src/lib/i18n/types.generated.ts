@@ -1443,6 +1443,20 @@ export type TranslationKey =
   | 'analytics.advanced.charts.ridgeline.tooltipDetections'
   | 'analytics.advanced.charts.ridgeline.tooltipPeak'
   | 'analytics.advanced.charts.ridgeline.summary' // params: count, species, time
+  | 'analytics.advanced.charts.dawnOnset.title'
+  | 'analytics.advanced.charts.dawnOnset.description'
+  | 'analytics.advanced.charts.dawnOnset.noData'
+  | 'analytics.advanced.charts.dawnOnset.noDataHint'
+  | 'analytics.advanced.charts.dawnOnset.ariaLabel'
+  | 'analytics.advanced.charts.dawnOnset.axisDate'
+  | 'analytics.advanced.charts.dawnOnset.axisOnset'
+  | 'analytics.advanced.charts.dawnOnset.civilDawn'
+  | 'analytics.advanced.charts.dawnOnset.tooltipOnset'
+  | 'analytics.advanced.charts.dawnOnset.tooltipOnsetAfter' // params: minutes
+  | 'analytics.advanced.charts.dawnOnset.tooltipOnsetBefore' // params: minutes
+  | 'analytics.advanced.charts.dawnOnset.tooltipOnsetAt'
+  | 'analytics.advanced.charts.dawnOnset.tooltipCount'
+  | 'analytics.advanced.charts.dawnOnset.summary' // params: days, plotted
   | 'analytics.advanced.charts.tooltips.date'
   | 'analytics.advanced.charts.tooltips.percentage'
   | 'analytics.advanced.charts.tooltips.detections'
@@ -3959,6 +3973,12 @@ export type TranslationParams = {
     count: string | number;
     species: string | number;
     time: string | number;
+  };
+  'analytics.advanced.charts.dawnOnset.tooltipOnsetAfter': { minutes: string | number };
+  'analytics.advanced.charts.dawnOnset.tooltipOnsetBefore': { minutes: string | number };
+  'analytics.advanced.charts.dawnOnset.summary': {
+    days: string | number;
+    plotted: string | number;
   };
   'settings.notFound.message': { section: string | number };
   'settings.main.sections.falsePositiveFilter.detectionCount': {

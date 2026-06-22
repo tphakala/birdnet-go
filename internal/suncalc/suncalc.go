@@ -234,3 +234,25 @@ func (sc *SunCalc) GetSunsetTime(date time.Time) (time.Time, error) {
 	}
 	return sunEventTimes.Sunset, nil
 }
+
+// GetCivilDawn returns civil dawn for the given date and whether civil dawn is astronomically
+// defined for it. ok is false when civil dawn does not occur: during polar day / white nights
+// (civil twilight never happens, and GetSunEventTimes substitutes sunrise for civil dawn), or
+// during polar night (the sun does not rise and the underlying calculation errors).
+//
+// Callers that must distinguish a genuine civil dawn from the sunrise fallback (for example the
+// dawn-chorus onset analytics, which treat a day with no civil dawn as a gap) use this instead of
+// reading GetSunEventTimes().CivilDawn directly. It reuses the GetSunEventTimes cache rather than
+// recalculating, and detects the fallback by the fact that a genuine civil dawn is always strictly
+// before sunrise, while GetSunEventTimes assigns CivilDawn = Sunrise (exact equality) when civil
+// twilight cannot be computed.
+func (sc *SunCalc) GetCivilDawn(date time.Time) (time.Time, bool) {
+	times, err := sc.GetSunEventTimes(date)
+	if err != nil {
+		return time.Time{}, false
+	}
+	if !times.CivilDawn.Before(times.Sunrise) {
+		return time.Time{}, false
+	}
+	return times.CivilDawn, true
+}
