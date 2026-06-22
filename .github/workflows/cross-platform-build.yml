@@ -61,73 +61,34 @@ jobs:
           cache: true
       - run: go version
 
-      - name: Resolve tool versions from Taskfile
-        run: |
-          # Single source of truth: read TFLITE_VERSION from the Taskfile so this
-          # smoke never validates against a stale version after a Taskfile bump.
-          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
-          if [ -z "$tflite" ]; then echo "::error::could not read TFLITE_VERSION from Taskfile.yml"; exit 1; fi
-          echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
-
       - name: Install cross toolchains
         # Route through the shared composite for the continue-on-error +
         # outcome-checked reinstall fallback, so a corrupt apt cache (tar exit 2)
         # cannot hard-fail this build. execute-install-scripts: 'false' preserves
-        # the prior behavior; the symlink fix step below handles post-install.
+        # the prior behavior; the mingw symlink step and the setup-tflite-cross
+        # step below recreate the symlinks the skipped post-install would manage.
         uses: ./.github/actions/setup-apt-packages
         with:
           packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
           cache-version: '1.0'
           execute-install-scripts: 'false'
 
-      - name: Fix cross-compiler symlinks
+      - name: Fix mingw cross-compiler symlinks
+        if: matrix.goos == 'windows'
         run: |
           # cache-apt-pkgs-action restores debs but skips post-install triggers,
-          # so create the symlinks that update-alternatives would normally manage
+          # so create the mingw symlinks update-alternatives would normally
+          # manage. The aarch64 cross gcc symlink is handled by the
+          # setup-tflite-cross step below via fix-arm64-cc-symlink.
           sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc-posix /usr/bin/x86_64-w64-mingw32-gcc
           sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++-posix /usr/bin/x86_64-w64-mingw32-g++
-          # Resolve the installed aarch64 gcc version dynamically so a future
-          # runner-image gcc bump does not break the symlink.
-          aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
-          if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
-          sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
 
-      - name: Provision TensorFlow headers
-        run: |
-          # Sparse-checkout the TFLite C API headers (same as the check-tensorflow
-          # task) for CGO_CFLAGS. Scripted inline to keep this a Go-only compile
-          # smoke: `task <target>` would drag in the frontend-build (npm) chain,
-          # which is platform-independent and adds no cross-platform signal.
-          if [ ! -f .cache/tensorflow/tensorflow/lite/c/c_api.h ]; then
-            git clone --branch "${TFLITE_VERSION}" --filter=blob:none --no-checkout --depth 1 \
-              https://github.com/tensorflow/tensorflow.git .cache/tensorflow
-            git -C .cache/tensorflow sparse-checkout set --no-cone '**/*.h'
-            git -C .cache/tensorflow checkout
-          fi
-
-      - name: Provision TensorFlow Lite library
-        run: |
-          # CGO links -ltensorflowlite_c, so the target lib must exist at link
-          # time. Place it in the cross sysroot lib dir under the symlink name the
-          # linker resolves (mirrors the download-tflite task). ONNX Runtime is
-          # dlopen'd at runtime, not linked, so it is intentionally not provisioned.
-          ver="${TFLITE_VERSION#v}"
-          curl -fsSL -o tflite.archive \
-            "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_${{ matrix.tflite_asset }}"
-          sudo mkdir -p "${{ matrix.libdir }}"
-          case "${{ matrix.tflite_asset }}" in
-            *.zip)
-              unzip -o tflite.archive
-              sudo mv "tensorflowlite_c-${ver}.dll" "${{ matrix.libdir }}/"
-              (cd "${{ matrix.libdir }}" && sudo ln -sf "tensorflowlite_c-${ver}.dll" tensorflowlite_c.dll)
-              ;;
-            *)
-              tar -xzf tflite.archive
-              sudo mv "libtensorflowlite_c.so.${ver}" "${{ matrix.libdir }}/"
-              (cd "${{ matrix.libdir }}" && sudo ln -sf "libtensorflowlite_c.so.${ver}" libtensorflowlite_c.so)
-              ;;
-          esac
-          rm -f tflite.archive
+      - name: Provision TensorFlow Lite (headers + cross lib)
+        uses: ./.github/actions/setup-tflite-cross
+        with:
+          tflite-asset: ${{ matrix.tflite_asset }}
+          libdir: ${{ matrix.libdir }}
+          fix-arm64-cc-symlink: ${{ matrix.goarch == 'arm64' }}
 
       - name: Build smoke (cross-compile, non-test code)
         run: |
@@ -184,14 +145,6 @@ jobs:
           cache: true
       - run: go version
 
-      - name: Resolve tool versions from Taskfile
-        run: |
-          # Single source of truth: read TFLITE_VERSION from the Taskfile so this
-          # smoke never validates against a stale version after a Taskfile bump.
-          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
-          if [ -z "$tflite" ]; then echo "::error::could not read TFLITE_VERSION from Taskfile.yml"; exit 1; fi
-          echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
-
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
@@ -204,16 +157,6 @@ jobs:
           packages: ${{ matrix.apt_packages }}
           cache-version: '1.0'
           execute-install-scripts: 'false'
-
-      - name: Fix cross-compiler symlink
-        if: matrix.goarch == 'arm64'
-        run: |
-          # cache-apt-pkgs-action restores debs but skips post-install triggers,
-          # so resolve the installed aarch64 gcc version and create the symlink
-          # that update-alternatives would normally manage.
-          aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
-          if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
-          sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
 
       - name: Cache OpenVINO C API headers
         uses: actions/cache@v4
@@ -231,30 +174,12 @@ jobs:
           # a no-op when the cache above already holds the matching build).
           task check-openvino OPENVINO=true
 
-      - name: Provision TensorFlow headers
-        run: |
-          # Sparse-checkout the TFLite C API headers for CGO_CFLAGS (same as the
-          # cross-build job above).
-          if [ ! -f .cache/tensorflow/tensorflow/lite/c/c_api.h ]; then
-            git clone --branch "${TFLITE_VERSION}" --filter=blob:none --no-checkout --depth 1 \
-              https://github.com/tensorflow/tensorflow.git .cache/tensorflow
-            git -C .cache/tensorflow sparse-checkout set --no-cone '**/*.h'
-            git -C .cache/tensorflow checkout
-          fi
-
-      - name: Provision TensorFlow Lite library
-        run: |
-          # CGO links -ltensorflowlite_c, so the target lib must exist at link
-          # time. OpenVINO and ONNX Runtime are both dlopen'd at runtime (not
-          # linked), so they are intentionally not provisioned.
-          ver="${TFLITE_VERSION#v}"
-          curl -fsSL -o tflite.archive \
-            "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_${{ matrix.tflite_asset }}"
-          sudo mkdir -p "${{ matrix.libdir }}"
-          tar -xzf tflite.archive
-          sudo mv "libtensorflowlite_c.so.${ver}" "${{ matrix.libdir }}/"
-          (cd "${{ matrix.libdir }}" && sudo ln -sf "libtensorflowlite_c.so.${ver}" libtensorflowlite_c.so)
-          rm -f tflite.archive
+      - name: Provision TensorFlow Lite (headers + cross lib)
+        uses: ./.github/actions/setup-tflite-cross
+        with:
+          tflite-asset: ${{ matrix.tflite_asset }}
+          libdir: ${{ matrix.libdir }}
+          fix-arm64-cc-symlink: ${{ matrix.goarch == 'arm64' }}
 
       - name: Build smoke (openvino tag, non-test code)
         run: |

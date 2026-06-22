@@ -1,0 +1,112 @@
+name: 'Setup TFLite (cross-compile)'
+description: >-
+  Provision the TensorFlow Lite C API headers and the cross-target
+  libtensorflowlite_c for a CGO cross-compile, with an optional aarch64
+  cross-compiler symlink fix. Shared by the cross-build and openvino-build jobs
+  so the version resolution, header sparse-checkout, and lib download stay in
+  one place instead of drifting across near-identical job steps.
+
+inputs:
+  tflite-asset:
+    description: >-
+      tflite_c release asset suffix to download, e.g. linux_arm64.tar.gz,
+      linux_amd64.tar.gz, or windows_amd64.zip. A .zip asset is treated as the
+      Windows DLL; anything else is treated as a Linux .so tarball.
+    required: true
+  libdir:
+    description: >-
+      Target sysroot lib directory to install the tflite library into, e.g.
+      /usr/aarch64-linux-gnu/lib. This is the path the cross linker resolves
+      -ltensorflowlite_c against (pass it as -L on CGO_LDFLAGS).
+    required: true
+  tflite-version:
+    description: >-
+      TFLite version tag (e.g. v2.17.1). Defaults to reading TFLITE_VERSION from
+      Taskfile.yml so the smoke never validates against a stale version after a
+      Taskfile bump. The resolved value is always exported to GITHUB_ENV as
+      TFLITE_VERSION (including when this input is set), where the header and
+      library steps below consume it.
+    required: false
+    default: ''
+  fix-arm64-cc-symlink:
+    description: >-
+      When 'true', resolve the installed aarch64-linux-gnu-gcc-N and symlink it
+      to aarch64-linux-gnu-gcc. cache-apt-pkgs-action restores debs but skips
+      post-install triggers, so the symlink update-alternatives would normally
+      manage is missing. Leave 'false' for native or mingw targets that do not
+      use the aarch64 cross gcc.
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve TFLITE_VERSION
+      shell: bash
+      env:
+        TFLITE_VERSION_INPUT: ${{ inputs.tflite-version }}
+      run: |
+        # Single source of truth: read TFLITE_VERSION from the Taskfile so the
+        # cross-compile never validates against a stale version after a Taskfile
+        # bump. An explicit tflite-version input overrides the lookup.
+        tflite="${TFLITE_VERSION_INPUT}"
+        if [ -z "$tflite" ]; then
+          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
+        fi
+        if [ -z "$tflite" ]; then echo "::error::could not read TFLITE_VERSION from Taskfile.yml"; exit 1; fi
+        echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
+
+    - name: Fix aarch64 cross-compiler symlink
+      if: inputs.fix-arm64-cc-symlink == 'true'
+      shell: bash
+      run: |
+        # cache-apt-pkgs-action restores debs but skips post-install triggers,
+        # so create the symlink that update-alternatives would normally manage.
+        # Resolve the installed aarch64 gcc version dynamically so a future
+        # runner-image gcc bump does not break the symlink.
+        aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
+        if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
+        sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
+
+    - name: Provision TensorFlow headers
+      shell: bash
+      run: |
+        # Sparse-checkout the TFLite C API headers (same as the check-tensorflow
+        # task) for CGO_CFLAGS. Scripted inline to keep this a Go-only compile
+        # smoke: `task <target>` would drag in the frontend-build (npm) chain,
+        # which is platform-independent and adds no cross-platform signal.
+        if [ ! -f .cache/tensorflow/tensorflow/lite/c/c_api.h ]; then
+          git clone --branch "${TFLITE_VERSION}" --filter=blob:none --no-checkout --depth 1 \
+            https://github.com/tensorflow/tensorflow.git .cache/tensorflow
+          git -C .cache/tensorflow sparse-checkout set --no-cone '**/*.h'
+          git -C .cache/tensorflow checkout
+        fi
+
+    - name: Provision TensorFlow Lite library
+      shell: bash
+      env:
+        TFLITE_ASSET: ${{ inputs.tflite-asset }}
+        LIBDIR: ${{ inputs.libdir }}
+      run: |
+        # CGO links -ltensorflowlite_c, so the target lib must exist at link
+        # time. Place it in the cross sysroot lib dir under the symlink name the
+        # linker resolves (mirrors the download-tflite task). ONNX Runtime and
+        # OpenVINO are both dlopen'd at runtime, not linked, so they are
+        # intentionally not provisioned here.
+        ver="${TFLITE_VERSION#v}"
+        curl -fsSL -o tflite.archive \
+          "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_${TFLITE_ASSET}"
+        sudo mkdir -p "${LIBDIR}"
+        case "${TFLITE_ASSET}" in
+          *.zip)
+            unzip -o tflite.archive
+            sudo mv "tensorflowlite_c-${ver}.dll" "${LIBDIR}/"
+            (cd "${LIBDIR}" && sudo ln -sf "tensorflowlite_c-${ver}.dll" tensorflowlite_c.dll)
+            ;;
+          *)
+            tar -xzf tflite.archive
+            sudo mv "libtensorflowlite_c.so.${ver}" "${LIBDIR}/"
+            (cd "${LIBDIR}" && sudo ln -sf "libtensorflowlite_c.so.${ver}" libtensorflowlite_c.so)
+            ;;
+        esac
+        rm -f tflite.archive
