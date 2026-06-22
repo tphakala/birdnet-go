@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -115,11 +116,15 @@ func sortedChannelNames(m *manifest.Manifest) []string {
 			names = append(names, name)
 		}
 	}
-	// Append any channel not in the preferred order (future-proofing).
+	// Append any channel not in the preferred order (future-proofing), sorted
+	// so the output is deterministic regardless of map iteration order.
+	var extra []string
 	for name := range m.Channels {
 		if name != manifest.ChannelStable && name != manifest.ChannelBeta && name != manifest.ChannelNightly {
-			names = append(names, name)
+			extra = append(extra, name)
 		}
 	}
+	slices.Sort(extra)
+	names = append(names, extra...)
 	return names
 }
