@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "{species} részleteinek megtekintése",
       "play": "Lejátszás",
-      "playAudio": "Hang lejátszása"
+      "playAudio": "Hang lejátszása",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Felvétel és spektrogram",
@@ -4573,6 +4574,7 @@
       "spectrogramLoaded": "Spektrogram betöltve",
       "spectrogramLoadingAria": "Spektrogram betöltése",
       "spectrogramAlt": "Hang spektrogram",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Spektrogram generálása",
       "generating": "Generálás...",
       "waiting": "Waiting...",

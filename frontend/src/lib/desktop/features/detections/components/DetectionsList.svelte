@@ -56,8 +56,14 @@
     Trash2,
     XCircle,
   } from '@lucide/svelte';
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { useSelectionMode } from '../composables/useSelectionMode.svelte';
+  import { useDetectionActions } from '../composables/useDetectionActions.svelte';
+  import {
+    isExcluded as isSpeciesExcluded,
+    setExcluded,
+    hydrateExcludedSpecies,
+  } from '$lib/stores/excludedSpecies.svelte';
   import DetectionCardMobile from './DetectionCardMobile.svelte';
   import DetectionRow from './DetectionRow.svelte';
   import DetectionsCardView from './DetectionsCardView.svelte';
@@ -233,6 +239,19 @@
   // Selection mode
   let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
   const selection = useSelectionMode(() => data?.totalResults ?? 0);
+
+  // Per-detection action handlers (review/correct/false-positive/ignore/lock/
+  // delete) shared by the table rows and mobile cards, backed by the
+  // server-hydrated excludedSpecies store. Distinct from the bulk-action modal.
+  const detectionActions = useDetectionActions({
+    onRefresh: () => onRefresh?.(),
+    isSpeciesExcluded,
+    onToggleExclusion: setExcluded,
+  });
+
+  onMount(() => {
+    void hydrateExcludedSpecies();
+  });
 
   const pageIds = $derived((data?.notes ?? []).map(d => String(d.id)));
 
@@ -618,10 +637,16 @@
                   <DetectionRow
                     {detection}
                     {onDetailsClick}
-                    {onRefresh}
+                    isExcluded={isSpeciesExcluded(detection.commonName)}
                     selectionActive={selection.selectionActive}
                     selected={selection.isSelected(String(detection.id))}
                     onToggleSelect={handleToggleSelect}
+                    onReview={() => detectionActions.handleReview(detection)}
+                    onMarkCorrect={() => detectionActions.handleMarkCorrect(detection)}
+                    onMarkFalsePositive={() => detectionActions.handleMarkFalsePositive(detection)}
+                    onToggleSpecies={() => detectionActions.handleToggleSpecies(detection)}
+                    onToggleLock={() => detectionActions.handleToggleLock(detection)}
+                    onDelete={() => detectionActions.handleDelete(detection)}
                   />
                 </tr>
               {/each}
@@ -635,7 +660,17 @@
       <!-- Mobile: card layout (always mobile cards on small screens) -->
       <div class="md:hidden space-y-2">
         {#each data.notes as detection (detection.id)}
-          <DetectionCardMobile {detection} {onDetailsClick} {onRefresh} />
+          <DetectionCardMobile
+            {detection}
+            {onDetailsClick}
+            isExcluded={isSpeciesExcluded(detection.commonName)}
+            onReview={() => detectionActions.handleReview(detection)}
+            onMarkCorrect={() => detectionActions.handleMarkCorrect(detection)}
+            onMarkFalsePositive={() => detectionActions.handleMarkFalsePositive(detection)}
+            onToggleSpecies={() => detectionActions.handleToggleSpecies(detection)}
+            onToggleLock={() => detectionActions.handleToggleLock(detection)}
+            onDelete={() => detectionActions.handleDelete(detection)}
+          />
         {/each}
       </div>
     {/if}
@@ -664,6 +699,7 @@
     </div>
   {/if}
 
+  <!-- Bulk-action confirmation (select mode) -->
   <ConfirmModal
     isOpen={showBulkConfirmModal}
     title={bulkConfirmConfig.title}
@@ -675,4 +711,16 @@
       showBulkConfirmModal = false;
     }}
   />
+
+  <!-- Per-detection confirmation (review/ignore/lock/delete from a row or card) -->
+  {#if detectionActions.selectedDetection}
+    <ConfirmModal
+      isOpen={detectionActions.showConfirmModal}
+      title={detectionActions.confirmModalConfig.title}
+      message={detectionActions.confirmModalConfig.message}
+      confirmLabel={detectionActions.confirmModalConfig.confirmLabel}
+      onClose={detectionActions.closeModal}
+      onConfirm={detectionActions.confirmModal}
+    />
+  {/if}
 </div>

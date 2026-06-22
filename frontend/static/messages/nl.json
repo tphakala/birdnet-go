@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Bekijk details voor {species}",
       "play": "Afspelen",
-      "playAudio": "Geluid afspelen"
+      "playAudio": "Geluid afspelen",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Geluid opname & Spectrogram",
@@ -4573,6 +4574,7 @@
       "spectrogramLoaded": "Spectrogram geladen",
       "spectrogramLoadingAria": "Spectrogram laden",
       "spectrogramAlt": "Audiospectogram",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Spectrogram genereren",
       "generating": "Genereren...",
       "waiting": "Waiting...",

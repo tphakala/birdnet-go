@@ -755,6 +755,7 @@ export type TranslationKey =
   | 'detections.row.viewDetails' // params: species
   | 'detections.row.play'
   | 'detections.row.playAudio'
+  | 'detections.row.imageFailedToLoad'
   | 'detections.media.title'
   | 'detections.media.clipHint'
   | 'detections.tabs.overview'
@@ -3338,6 +3339,7 @@ export type TranslationKey =
   | 'components.audio.spectrogramLoaded'
   | 'components.audio.spectrogramLoadingAria'
   | 'components.audio.spectrogramAlt'
+  | 'components.audio.spectrogramForSpecies' // params: species
   | 'components.audio.spectrogramGeneratingAria'
   | 'components.audio.generating'
   | 'components.audio.waiting'
@@ -4134,6 +4136,7 @@ export type TranslationParams = {
   'media.audio.nowPlaying': { source: string | number };
   'media.audio.streamTitle': { source: string | number };
   'media.audio.playbackError': { details: string | number };
+  'components.audio.spectrogramForSpecies': { species: string | number };
   'components.audio.queuePosition': { position: string | number };
   'components.forms.numberField.adjustedToMinimum': { value: string | number };
   'components.forms.numberField.adjustedToMaximum': { value: string | number };
