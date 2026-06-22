@@ -1707,7 +1707,7 @@
         "deleteFailed": "Failed to delete note.",
         "saveFailed": "Failed to save note.",
         "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "tooLong": "Note is too long (maximum {max} bytes)."
       },
       "similar": {
         "title": "Similar species",

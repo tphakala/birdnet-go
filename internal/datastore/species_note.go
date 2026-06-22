@@ -39,6 +39,16 @@ var ErrSpeciesNoteNotFound = errors.Newf("species note not found").
 	Category(errors.CategoryNotFound).
 	Build()
 
+// ErrSpeciesNoteTooLong is returned when a note entry exceeds SpeciesNoteMaxLength
+// bytes. It is a distinct sentinel (not a generic validation error) so the API
+// layer can map specifically the too-long case to its "note too long" message and
+// not mislabel other validation failures — an empty entry or an invalid note ID —
+// as "too long".
+var ErrSpeciesNoteTooLong = errors.Newf("species note exceeds maximum length").
+	Component("datastore").
+	Category(errors.CategoryValidation).
+	Build()
+
 // SpeciesNote is a user-authored note attached to a species (by scientific name,
 // not to a single detection). A species can have many notes.
 type SpeciesNote struct {
@@ -54,7 +64,13 @@ type SpeciesNote struct {
 func NormalizeSpeciesNoteEntry(entry string) (string, error) {
 	trimmed := strings.TrimSpace(entry)
 	if len(trimmed) > SpeciesNoteMaxLength {
-		return "", validationError("entry exceeds maximum length", "entry_length", len(trimmed))
+		// Wrap the sentinel so the API layer can match it with errors.Is while the
+		// telemetry context (actual length) is preserved.
+		return "", errors.New(ErrSpeciesNoteTooLong).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("entry_length", len(trimmed)).
+			Build()
 	}
 	return trimmed, nil
 }

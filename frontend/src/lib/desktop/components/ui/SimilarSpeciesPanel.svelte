@@ -92,6 +92,11 @@
   $effect(() => {
     const names = new Set(similar.map(e => e.scientific_name));
 
+    // Everything below reads/writes `selected` and the cache maps, which must NOT
+    // become dependencies of this effect — it should react only to `similar`
+    // (the focal species / list) changing, not to the user picking a row (that is
+    // handled directly by select()). Running it all untracked keeps the effect
+    // from re-firing on every selection and avoids a read-write reactive loop.
     untrack(() => {
       for (const key of [...guides.keys()]) {
         if (!names.has(key)) guides.delete(key);
@@ -99,16 +104,16 @@
       for (const key of [...status.keys()]) {
         if (!names.has(key)) status.delete(key);
       }
-    });
 
-    if (selected === null || !names.has(selected)) {
-      const first = similar.find(e => e.has_guide);
-      if (first) {
-        select(first.scientific_name);
-      } else if (selected !== null) {
-        selected = null;
+      if (selected === null || !names.has(selected)) {
+        const first = similar.find(e => e.has_guide);
+        if (first) {
+          select(first.scientific_name);
+        } else if (selected !== null) {
+          selected = null;
+        }
       }
-    }
+    });
   });
 </script>
 

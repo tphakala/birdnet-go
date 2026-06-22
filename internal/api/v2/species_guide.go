@@ -555,14 +555,20 @@ func (c *Controller) DeleteSpeciesNote(ctx echo.Context) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
 
-// handleSpeciesNoteWriteError maps validation errors (e.g. too long) to 400 with
-// an i18n key the UI can show, and other errors to 500.
+// handleSpeciesNoteWriteError maps note write failures to responses: the
+// specific too-long case gets the localized "too long" key, other validation
+// failures (empty entry, invalid note ID) get a plain 400 so they are not
+// mislabeled as too long, and everything else is a 500.
 func (c *Controller) handleSpeciesNoteWriteError(ctx echo.Context, err error, message string) error {
-	if errors.IsCategory(err, errors.CategoryValidation) {
+	switch {
+	case errors.Is(err, datastore.ErrSpeciesNoteTooLong):
 		return c.HandleErrorWithKey(ctx, err, message, http.StatusBadRequest,
 			"analytics.species.notes.tooLong", map[string]any{"max": datastore.SpeciesNoteMaxLength})
+	case errors.IsCategory(err, errors.CategoryValidation):
+		return c.HandleError(ctx, err, message, http.StatusBadRequest)
+	default:
+		return c.HandleError(ctx, err, message, http.StatusInternalServerError)
 	}
-	return c.HandleError(ctx, err, message, http.StatusInternalServerError)
 }
 
 // --- Helpers ---

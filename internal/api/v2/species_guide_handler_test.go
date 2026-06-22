@@ -259,11 +259,11 @@ func TestCreateSpeciesNote_Returns201(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, rec.Code)
 }
 
-func TestCreateSpeciesNote_ValidationErrorReturns400WithKey(t *testing.T) {
+func TestCreateSpeciesNote_TooLongReturns400WithKey(t *testing.T) {
 	t.Parallel()
 	c, mockDS := notesController(t)
-	valErr := errors.Newf("entry too long").Component("datastore").Category(errors.CategoryValidation).Build()
-	mockDS.EXPECT().SaveSpeciesNote(mock.Anything, mock.Anything).Return(valErr).Once()
+	mockDS.EXPECT().SaveSpeciesNote(mock.Anything, mock.Anything).
+		Return(datastore.ErrSpeciesNoteTooLong).Once()
 
 	ctx, rec := notesCtx(t, http.MethodPost, "/api/v2/species/Turdus/notes", `{"entry":"too long"}`,
 		map[string]string{paramScientificName: sciEurasianBlackbird})
@@ -273,6 +273,26 @@ func TestCreateSpeciesNote_ValidationErrorReturns400WithKey(t *testing.T) {
 	var body ErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, "analytics.species.notes.tooLong", body.ErrorKey)
+}
+
+// A validation error that is NOT the too-long case (e.g. an empty entry or an
+// invalid note ID) must return 400 but must NOT be mislabeled with the "too long"
+// key — that conflation was the bug this mapping fixes.
+func TestCreateSpeciesNote_OtherValidationErrorReturns400WithoutTooLongKey(t *testing.T) {
+	t.Parallel()
+	c, mockDS := notesController(t)
+	valErr := errors.Newf("entry cannot be empty").
+		Component("datastore").Category(errors.CategoryValidation).Build()
+	mockDS.EXPECT().SaveSpeciesNote(mock.Anything, mock.Anything).Return(valErr).Once()
+
+	ctx, rec := notesCtx(t, http.MethodPost, "/api/v2/species/Turdus/notes", `{"entry":"x"}`,
+		map[string]string{paramScientificName: sciEurasianBlackbird})
+	require.NoError(t, c.CreateSpeciesNote(ctx))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var body ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.NotEqual(t, "analytics.species.notes.tooLong", body.ErrorKey)
 }
 
 func TestUpdateSpeciesNote_NotFoundReturns404(t *testing.T) {
