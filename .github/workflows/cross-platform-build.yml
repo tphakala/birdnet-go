@@ -70,10 +70,15 @@ jobs:
           echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
 
       - name: Install cross toolchains
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+        # Route through the shared composite for the continue-on-error +
+        # outcome-checked reinstall fallback, so a corrupt apt cache (tar exit 2)
+        # cannot hard-fail this build. execute-install-scripts: 'false' preserves
+        # the prior behavior; the symlink fix step below handles post-install.
+        uses: ./.github/actions/setup-apt-packages
         with:
           packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
-          version: 1.0
+          cache-version: '1.0'
+          execute-install-scripts: 'false'
 
       - name: Fix cross-compiler symlinks
         run: |
@@ -146,3 +151,129 @@ jobs:
           CGO_CFLAGS="-I${{ github.workspace }}/.cache/tensorflow" \
           CGO_LDFLAGS="-L${{ matrix.libdir }} -ltensorflowlite_c" \
           go vet -tags noembed,skipfrontend ./...
+
+  # Compile-coverage gate for the OpenVINO inference backend
+  # (internal/inference/openvino, //go:build openvino). No other workflow
+  # compiles the openvino-tagged code: cross-build above and release/nightly omit
+  # the tag, and the Docker images build with OPENVINO=false. Without this job a
+  # compile error (including an arch-specific one) in the openvino-tagged backend
+  # or its tests would not be caught pre-merge. The backend is linux-only, so this
+  # covers linux/amd64 (native) and linux/arm64 (cross).
+  openvino-build:
+    name: openvino-build (linux/${{ matrix.goarch }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: amd64
+            cc: gcc
+            libdir: /usr/lib/x86_64-linux-gnu
+            tflite_asset: linux_amd64.tar.gz
+            apt_packages: build-essential pkg-config
+          - goarch: arm64
+            cc: aarch64-linux-gnu-gcc
+            libdir: /usr/aarch64-linux-gnu/lib
+            tflite_asset: linux_arm64.tar.gz
+            apt_packages: build-essential pkg-config gcc-aarch64-linux-gnu
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - run: go version
+
+      - name: Resolve tool versions from Taskfile
+        run: |
+          # Single source of truth: read TFLITE_VERSION from the Taskfile so this
+          # smoke never validates against a stale version after a Taskfile bump.
+          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
+          if [ -z "$tflite" ]; then echo "::error::could not read TFLITE_VERSION from Taskfile.yml"; exit 1; fi
+          echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install toolchain
+        uses: ./.github/actions/setup-apt-packages
+        with:
+          packages: ${{ matrix.apt_packages }}
+          cache-version: '1.0'
+          execute-install-scripts: 'false'
+
+      - name: Fix cross-compiler symlink
+        if: matrix.goarch == 'arm64'
+        run: |
+          # cache-apt-pkgs-action restores debs but skips post-install triggers,
+          # so resolve the installed aarch64 gcc version and create the symlink
+          # that update-alternatives would normally manage.
+          aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
+          if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
+          sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
+
+      - name: Cache OpenVINO C API headers
+        uses: actions/cache@v4
+        with:
+          path: .cache/openvino
+          # Keyed on the Taskfile so an OPENVINO_BUILD bump rotates the cache; the
+          # check-openvino .build-id guard re-downloads on a mismatch regardless.
+          key: openvino-headers-${{ runner.os }}-${{ hashFiles('Taskfile.yml') }}
+
+      - name: Provision OpenVINO C API headers
+        run: |
+          # The openvino-tagged backend's cgo preamble #includes <openvino/c/...>,
+          # so the C API headers must exist at compile time. check-openvino
+          # downloads and SHA256-verifies them into .cache/openvino/include (it is
+          # a no-op when the cache above already holds the matching build).
+          task check-openvino OPENVINO=true
+
+      - name: Provision TensorFlow headers
+        run: |
+          # Sparse-checkout the TFLite C API headers for CGO_CFLAGS (same as the
+          # cross-build job above).
+          if [ ! -f .cache/tensorflow/tensorflow/lite/c/c_api.h ]; then
+            git clone --branch "${TFLITE_VERSION}" --filter=blob:none --no-checkout --depth 1 \
+              https://github.com/tensorflow/tensorflow.git .cache/tensorflow
+            git -C .cache/tensorflow sparse-checkout set --no-cone '**/*.h'
+            git -C .cache/tensorflow checkout
+          fi
+
+      - name: Provision TensorFlow Lite library
+        run: |
+          # CGO links -ltensorflowlite_c, so the target lib must exist at link
+          # time. OpenVINO and ONNX Runtime are both dlopen'd at runtime (not
+          # linked), so they are intentionally not provisioned.
+          ver="${TFLITE_VERSION#v}"
+          curl -fsSL -o tflite.archive \
+            "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_${{ matrix.tflite_asset }}"
+          sudo mkdir -p "${{ matrix.libdir }}"
+          tar -xzf tflite.archive
+          sudo mv "libtensorflowlite_c.so.${ver}" "${{ matrix.libdir }}/"
+          (cd "${{ matrix.libdir }}" && sudo ln -sf "libtensorflowlite_c.so.${ver}" libtensorflowlite_c.so)
+          rm -f tflite.archive
+
+      - name: Build smoke (openvino tag, non-test code)
+        run: |
+          # The openvino backend dlopens libopenvino_c at runtime (no link-time
+          # -lopenvino_c), but its cgo preamble #includes <openvino/c/...> at
+          # compile time, so the OpenVINO C API headers (provisioned above) are on
+          # CGO_CFLAGS alongside the TFLite headers; the TFLite C lib is linked.
+          GOOS=linux GOARCH=${{ matrix.goarch }} \
+          CGO_ENABLED=1 CC=${{ matrix.cc }} \
+          CGO_CFLAGS="-I${{ github.workspace }}/.cache/tensorflow -I${{ github.workspace }}/.cache/openvino/include" \
+          CGO_LDFLAGS="-L${{ matrix.libdir }} -ltensorflowlite_c" \
+          go build -tags noembed,skipfrontend,openvino ./...
+
+      - name: Vet (openvino tag, type-checks test files too)
+        run: |
+          # Compiles the openvino-tagged *_test.go files (which `go build` skips)
+          # for the target GOOS without linking or running.
+          GOOS=linux GOARCH=${{ matrix.goarch }} \
+          CGO_ENABLED=1 CC=${{ matrix.cc }} \
+          CGO_CFLAGS="-I${{ github.workspace }}/.cache/tensorflow -I${{ github.workspace }}/.cache/openvino/include" \
+          CGO_LDFLAGS="-L${{ matrix.libdir }} -ltensorflowlite_c" \
+          go vet -tags noembed,skipfrontend,openvino ./...

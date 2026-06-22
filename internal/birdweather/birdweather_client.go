@@ -225,15 +225,18 @@ func New(settings *conf.Settings) (*BwClient, error) {
 func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude float64) {
 	log := GetLogger()
 
-	// Create a new local random generator seeded with current Unix time
-	rnd := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))) //nolint:gosec // G404: weak randomness acceptable for upload retry jitter, not security-critical
-
 	// Calculate the degree offset using metersPerDegree approximation
 	degreeOffset := radiusMeters / metersPerDegree
 
-	// Generate random offsets within +/- degreeOffset
-	latOffset := (rnd.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
-	lonOffset := (rnd.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
+	// Generate random offsets within +/- degreeOffset. Use the top-level
+	// math/rand/v2 generator (auto-seeded at startup, goroutine-safe) instead of
+	// seeding a fresh PCG from time.Now() on every call: successive calls within
+	// the same clock tick (coarse on Windows, ~15ms) would seed identically and
+	// produce the same "random" offset, defeating the location-fuzzing privacy
+	// guarantee. math/rand/v2 is not crypto-secure, which is fine for privacy
+	// fuzzing of an already-approximate coordinate.
+	latOffset := (rand.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
+	lonOffset := (rand.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
 
 	// Apply the offsets to the original coordinates and truncate to 4 decimal places
 	latitude = math.Floor((b.Latitude+latOffset)*coordinatePrecisionFactor) / coordinatePrecisionFactor

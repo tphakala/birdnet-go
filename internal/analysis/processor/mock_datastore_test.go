@@ -291,6 +291,22 @@ func (m *ActionMockDatastore) GetSpeciesFirstDetectionInPeriod(_ context.Context
 func (m *ActionMockDatastore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
+func (m *ActionMockDatastore) GetActivityHeatmap(_ context.Context, _, _, _ string) (datastore.ActivityHeatmapData, error) {
+	return datastore.ActivityHeatmapData{}, nil
+}
+func (m *ActionMockDatastore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesHourlyDistribution, error) {
+	return []datastore.SpeciesHourlyDistribution{}, nil
+}
+func (m *ActionMockDatastore) GetDailyActivityOnset(_ context.Context, _, _, _ string) ([]datastore.DailyActivityOnset, error) {
+	return []datastore.DailyActivityOnset{}, nil
+}
+
+func (m *ActionMockDatastore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _, _ int) ([]datastore.SpeciesConfidenceHistogram, error) {
+	return []datastore.SpeciesConfidenceHistogram{}, nil
+}
+func (m *ActionMockDatastore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]datastore.SpeciesAccumulationPoint, error) {
+	return []datastore.SpeciesAccumulationPoint{}, nil
+}
 func (m *ActionMockDatastore) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil
 }
@@ -338,16 +354,16 @@ func (m *ActionMockDatastore) DeleteThresholdEvents(_ string) error {
 func (m *ActionMockDatastore) DeleteAllThresholdEvents() (int64, error) {
 	return 0, nil
 }
-func (m *ActionMockDatastore) SaveNotificationHistory(_ *datastore.NotificationHistory) error {
+func (m *ActionMockDatastore) SaveNotificationHistory(_ context.Context, _ *datastore.NotificationHistory) error {
 	return nil
 }
-func (m *ActionMockDatastore) GetNotificationHistory(_, _ string) (*datastore.NotificationHistory, error) {
+func (m *ActionMockDatastore) GetNotificationHistory(_ context.Context, _, _ string) (*datastore.NotificationHistory, error) {
 	return nil, datastore.ErrNotificationHistoryNotFound
 }
-func (m *ActionMockDatastore) GetActiveNotificationHistory(_ time.Time) ([]datastore.NotificationHistory, error) {
+func (m *ActionMockDatastore) GetActiveNotificationHistory(_ context.Context, _ time.Time) ([]datastore.NotificationHistory, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) DeleteExpiredNotificationHistory(_ time.Time) (int64, error) {
+func (m *ActionMockDatastore) DeleteExpiredNotificationHistory(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
 func (m *ActionMockDatastore) SchemaVersion() string                           { return datastore.SchemaVersionLegacy }

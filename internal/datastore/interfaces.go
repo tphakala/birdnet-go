@@ -192,6 +192,26 @@ type Interface interface {
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
 	// GetSpeciesDiversityData returns daily unique species counts within the given date range.
 	GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]DailyAnalyticsData, error)
+	// GetActivityHeatmap returns detection counts bucketed by (station-local date, intra-day slot)
+	// over the inclusive date range, as a columnar sparse payload. species is an optional filter.
+	GetActivityHeatmap(ctx context.Context, startDate, endDate, species string) (ActivityHeatmapData, error)
+	// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for
+	// the top `limit` species by detection volume over the inclusive date range (false positives
+	// excluded), ordered by descending volume. Powers the who-sings-when ridgeline.
+	GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyDistribution, error)
+	// GetDailyActivityOnset returns, per calendar day in the inclusive date range, the dawn-chorus
+	// onset relative to civil dawn (false positives excluded). species is an optional scientific-name
+	// filter. Powers the dawn-chorus onset tracker.
+	GetDailyActivityOnset(ctx context.Context, startDate, endDate, species string) ([]DailyActivityOnset, error)
+	// GetConfidenceHistogram returns the per-species confidence-score distribution over the date range,
+	// powering the confidence distribution chart. With no species filter it covers the top `limit`
+	// species by detection volume; with a species filter it covers just that species.
+	GetConfidenceHistogram(ctx context.Context, startDate, endDate, species string, bins, limit int) ([]SpeciesConfidenceHistogram, error)
+	// GetSpeciesAccumulation returns, per calendar day in the inclusive date range, the cumulative
+	// count of distinct species first detected within that range (false positives excluded). Powers
+	// the species accumulation curve in the Biodiversity tab; "first seen" is bounded to the selected
+	// window, not lifetime.
+	GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]SpeciesAccumulationPoint, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
@@ -211,16 +231,10 @@ type Interface interface {
 	DeleteThresholdEvents(speciesName string) error
 	DeleteAllThresholdEvents() (int64, error)
 	// Notification History methods
-	// TODO(BG-17): Add context.Context as first parameter for cancellation/timeout support:
-	//   SaveNotificationHistory(ctx context.Context, history *NotificationHistory) error
-	//   GetNotificationHistory(ctx context.Context, scientificName string, notificationType string) (*NotificationHistory, error)
-	//   GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]NotificationHistory, error)
-	//   DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error)
-	// This requires updating all implementations and call sites (breaking change)
-	SaveNotificationHistory(history *NotificationHistory) error
-	GetNotificationHistory(scientificName string, notificationType string) (*NotificationHistory, error)
-	GetActiveNotificationHistory(after time.Time) ([]NotificationHistory, error)
-	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
+	SaveNotificationHistory(ctx context.Context, history *NotificationHistory) error
+	GetNotificationHistory(ctx context.Context, scientificName string, notificationType string) (*NotificationHistory, error)
+	GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]NotificationHistory, error)
+	DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) // Returns count deleted
 	// Database stats method for runtime statistics
 	GetDatabaseStats(ctx context.Context) (*DatabaseStats, error)
 	// PingWithLatency executes a trivial query (SELECT 1) and returns the round-trip time.

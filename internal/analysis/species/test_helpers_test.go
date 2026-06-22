@@ -42,7 +42,7 @@ func createTestTrackerWithMocks(t *testing.T, settings *conf.SpeciesTrackingSett
 
 	// BG-17: InitFromDatabase now loads notification history
 	mockDS.EXPECT().
-		GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).
 		Maybe() // Conditional - only called if NotificationSuppressionHours > 0
 
@@ -53,12 +53,12 @@ func createTestTrackerWithMocks(t *testing.T, settings *conf.SpeciesTrackingSett
 
 	// BG-17: Notification persistence - async operations called in goroutines
 	mockDS.EXPECT().
-		SaveNotificationHistory(mock.AnythingOfType("*datastore.NotificationHistory")).
+		SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).
 		Maybe() // Called asynchronously by RecordNotificationSent
 
 	mockDS.EXPECT().
-		DeleteExpiredNotificationHistory(mock.AnythingOfType("time.Time")).
+		DeleteExpiredNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).
 		Maybe() // Called asynchronously by CleanupOldNotificationRecords
 

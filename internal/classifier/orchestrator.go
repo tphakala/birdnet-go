@@ -104,6 +104,11 @@ type Orchestrator struct {
 	runtimeBaseline  int64
 	baselineCaptured bool
 
+	// modelLoadFailures tracks how many times LoadModel has failed per registry
+	// ID. Uses sync.Map to avoid holding o.mu for reads (see LoadFailures).
+	// Values are *atomic.Int64.
+	modelLoadFailures sync.Map
+
 	// pendingWarmups queues deferred warm-ups recorded by model loaders while
 	// they hold o.mu (write lock). Drained by runPendingWarmups after o.mu is
 	// released, so the warm-up inference runs via the serialized inference path
@@ -327,6 +332,10 @@ func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 	}
 }
 
+// scheduleReasonNight is the human-readable reason ModelScheduleStatus returns
+// when a model is paused by the nighttime schedule (currently only the bat model).
+const scheduleReasonNight = "Night schedule"
+
 // IsModelActive returns whether a model should currently run inference.
 // For the bat model, this checks the nighttime scheduler. For all other
 // models, it always returns true.
@@ -339,6 +348,66 @@ func (o *Orchestrator) IsModelActive(modelID string) bool {
 		return true // no scheduler = no restriction
 	}
 	return s.isActive()
+}
+
+// ModelScheduleStatus reports whether a model is currently allowed to run and,
+// when paused, a human-readable reason. It is the reason-carrying sibling of
+// IsModelActive (which stays bool-only because it is on the hot monitor-tick
+// path). Only the bat model is schedule-gated today: it returns
+// (false, scheduleReasonNight) when the nighttime scheduler has it paused, and
+// (true, "") otherwise. Every other model returns (true, ""). The design is
+// general so a future gated model can return its own reason.
+func (o *Orchestrator) ModelScheduleStatus(modelID string) (active bool, reason string) {
+	if modelID != RegistryIDBat {
+		return true, ""
+	}
+	s := o.scheduler.Load()
+	if s == nil || s.isActive() {
+		return true, ""
+	}
+	return false, scheduleReasonNight
+}
+
+// instanceFor returns the live ModelInstance for modelID, or nil when the model
+// is not loaded or its instance has been torn down. Locking mirrors ModelInfos /
+// PredictModel: o.mu.RLock to find the entry, then entry.mu only briefly to
+// capture the instance pointer. The pointer is captured under entry.mu and the
+// lock released before the caller invokes any instance method, because those
+// methods may take their own per-model lock (BirdNET locks bn.mu), and holding
+// entry.mu across such a call would stall PredictModel, which needs entry.mu only
+// briefly on the inference hot path.
+func (o *Orchestrator) instanceFor(modelID string) ModelInstance {
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	entry.mu.Lock()
+	inst := entry.instance
+	entry.mu.Unlock()
+	return inst
+}
+
+// GetModelRuntimeInfo returns the live compute device, execution backend, and
+// effective runtime precision for the named model, resolved from the live
+// instance's RuntimeInfo() in a single instance lookup. Because RuntimeInfo()
+// returns the triplet from one consistent snapshot, the status card never
+// observes a mixed-generation triplet when a reload completes mid-read.
+//
+// device is the live execution provider ("CPU"/"GPU"), falling back to
+// deviceUnknown when the model is not loaded or its instance has been torn down.
+// backend (BackendTFLite/BackendONNX/BackendOpenVINO) and precision
+// ("INT8"/"FP16"/"FP32") come from the loaded instance, so an ONNX model executed
+// on OpenVINO reports "OpenVINO" and its effective precision; both are "" when the
+// model is not loaded, signalling callers to fall back to the static ModelInfo
+// file metadata.
+func (o *Orchestrator) GetModelRuntimeInfo(modelID string) (device, backend, precision string) {
+	inst := o.instanceFor(modelID)
+	if inst == nil {
+		return deviceUnknown, "", ""
+	}
+	return inst.RuntimeInfo()
 }
 
 // ModelSpecFor returns the ModelSpec for the given model ID.
@@ -380,8 +449,9 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 			logger.String("registry_id", registryID))
 		return "", "", ""
 	}
-	for i := range EmbeddedCatalog {
-		entry := &EmbeddedCatalog[i]
+	catalog := ActiveCatalog()
+	for i := range catalog {
+		entry := &catalog[i]
 		if entry.RegistryID != registryID {
 			continue
 		}
@@ -471,6 +541,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	duration := time.Since(start)
 
 	if err != nil {
+		globalInferenceCounters.RecordError(modelID)
 		log.Error("PredictModel inference failed",
 			logger.String("model_id", modelID),
 			logger.Error(err),
@@ -1191,9 +1262,9 @@ func secondaryTripletFor(settings *conf.Settings) secondaryBackendKey {
 	}
 }
 
-// ReloadSecondaryModels rebuilds the OV-capable secondary models (currently
-// Perch) when the BirdNET inference backend or OpenVINO device preference
-// changes at runtime, so they move to the new device without a full restart.
+// ReloadSecondaryModels rebuilds the OV-capable secondary models (Perch, and the
+// bat embedding extractor) when the BirdNET inference backend or OpenVINO device
+// preference changes at runtime, so they move to the new device without a full restart.
 // It mirrors the primary reload's transactional safety: each model is built on
 // the new backend BEFORE the old instance is closed, and a build failure leaves
 // the old instance serving (one model failing does not abort the others).
@@ -1459,10 +1530,10 @@ type secondaryModelBuilder func(o *Orchestrator, settings *conf.Settings, thread
 // whose construction honors the BirdNET inference backend / OpenVINO device
 // preference to a builder returning a fresh, unregistered instance.
 // ReloadSecondaryModels rebuilds exactly these models when the backend/device
-// changes at runtime. ORT-only secondaries (e.g. Bat, which consumes only
-// ONNXRuntimePath) are intentionally absent: rebuilding them on a device change
-// would be wasted native work. Giving a new secondary OpenVINO support is a
-// one-line entry here, paired with the OV fields on its loader config.
+// changes at runtime. For Bat, only the heavy embedding extractor honors the
+// preference; the tiny bat classifier head always runs on ORT. Giving a new
+// secondary OpenVINO support is a one-line entry here, paired with the OV fields on
+// its loader config.
 var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDPerchV2: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
@@ -1472,6 +1543,15 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 			return nil, err
 		}
 		return p, nil
+	},
+	RegistryIDBat: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		// Explicit nil-on-error return avoids the typed-nil interface trap (a
+		// nil *Bat wrapped in a non-nil ModelInstance).
+		b, err := o.buildBat(settings, threads)
+		if err != nil {
+			return nil, err
+		}
+		return b, nil
 	},
 }
 
@@ -1548,6 +1628,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			logger.Int("threads", dynamicThreads))
 
 		if err := loader(o, dynamicThreads); err != nil {
+			o.incLoadFailure(registryID)
 			return err
 		}
 
@@ -1572,6 +1653,25 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	}
 
 	return nil
+}
+
+// incLoadFailure atomically increments the load-failure counter for registryID.
+// Safe to call concurrently; does not require o.mu.
+func (o *Orchestrator) incLoadFailure(registryID string) {
+	v, _ := o.modelLoadFailures.LoadOrStore(registryID, new(atomic.Int64))
+	v.(*atomic.Int64).Add(1)
+}
+
+// LoadFailures returns a snapshot of the per-model load-failure counts accumulated
+// since this Orchestrator was created. The returned map is a copy; callers may
+// read and discard it freely. Safe to call concurrently with LoadModel.
+func (o *Orchestrator) LoadFailures() map[string]int64 {
+	result := make(map[string]int64)
+	o.modelLoadFailures.Range(func(key, value any) bool {
+		result[key.(string)] = value.(*atomic.Int64).Load()
+		return true
+	})
+	return result
 }
 
 // UnloadModel removes a model from the Orchestrator and releases its resources.
@@ -1774,6 +1874,17 @@ func (o *Orchestrator) PrimaryModelID() string {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return o.ModelInfo.ID
+}
+
+// PrimaryModelInfo returns a copy of the primary model's live ModelInfo, read
+// under o.mu so callers outside the package get a consistent value instead of
+// racing reloadModelInternal's o.mu-guarded write to o.ModelInfo. The result is
+// a snapshot copy; it does not track subsequent reloads. Returns the zero
+// ModelInfo if no primary is set.
+func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.ModelInfo
 }
 
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.

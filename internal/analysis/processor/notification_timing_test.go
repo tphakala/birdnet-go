@@ -35,13 +35,13 @@ func setupMockDatastore(t *testing.T) *mocks.MockInterface {
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	mockDS.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	mockDS.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	mockDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	mockDS.On("Save", mock.AnythingOfType("*datastore.Note"), mock.Anything).
 		Return(nil).Maybe()
-	mockDS.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+	mockDS.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
 	return mockDS
 }

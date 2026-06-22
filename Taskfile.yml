@@ -46,7 +46,25 @@ vars:
     sh: echo "${PROJECT_COMMUNITY_URL:-}"
   # Common build flags
   TENSORFLOW_HEADERS_DIR: '{{.ROOT_DIR}}/.cache/tensorflow'
-  CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I{{.TENSORFLOW_HEADERS_DIR}}"
+  # OpenVINO C API headers (used only by openvino-tagged builds). The headers are
+  # architecture-independent plain C declarations, so one download serves every
+  # target arch; the runtime library is dlopen'd at execution time (the backend
+  # links only -ldl), so no per-arch .so is needed at build time. The include
+  # path below is added to CGO_CFLAGS unconditionally: GCC silently ignores a
+  # missing -I directory, so non-openvino builds are unaffected when the cache
+  # is absent, while openvino builds populate it via the check-openvino task.
+  OPENVINO_RELEASE: '2026.2'
+  OPENVINO_BUILD: '2026.2.0.21903.52ddc073857'
+  # SHA256 of the archive below, published at <archive-url>.sha256. The download
+  # is verified against this before extraction. Bump it together with
+  # OPENVINO_BUILD on every version change.
+  OPENVINO_SHA256: '8ce45467967e22fddb83a6b72a8bd1f9bfa6f43351e1ca2eaf5251064fe17767'
+  # Archive basename, defined once so the URL and the tar member path cannot
+  # drift apart. The arm64 package is the canonical source: its runtime/include
+  # C API headers are identical across arch packages, so it serves amd64 too.
+  OPENVINO_BASENAME: 'openvino_toolkit_ubuntu22_{{.OPENVINO_BUILD}}_arm64'
+  OPENVINO_HEADERS_DIR: '{{.ROOT_DIR}}/.cache/openvino'
+  CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I{{.TENSORFLOW_HEADERS_DIR}} -I{{.OPENVINO_HEADERS_DIR}}/include"
   EXTRA_BUILD_TAGS: '{{.EXTRA_BUILD_TAGS | default ""}}'
   BUILD_TAGS_FLAG:
     sh: |
@@ -717,6 +735,59 @@ tasks:
           fi
         fi
 
+  check-openvino:
+    desc: Download OpenVINO C API headers for CGo compilation (openvino-tagged builds only)
+    # Not internal: the openvino compile-coverage CI job (cross-platform-build.yml)
+    # calls this directly with OPENVINO=true to provision headers before building
+    # the openvino-tagged backend. Still a no-op for ONNX-only/standard builds.
+    vars:
+      OPENVINO_ARCHIVE: '{{.OPENVINO_BASENAME}}.tgz'
+      OPENVINO_URL: 'https://storage.openvinotoolkit.org/repositories/openvino/packages/{{.OPENVINO_RELEASE}}/linux/{{.OPENVINO_BASENAME}}.tgz'
+    # Skip entirely unless this is an openvino build, otherwise skip when the
+    # header tree for THIS build id is already cached. Either status command
+    # succeeding marks the task up-to-date, so the download runs only when
+    # OPENVINO=true and the cached headers are missing or stale. The .build-id
+    # stamp invalidates the cache when OPENVINO_BUILD changes, so a version bump
+    # forces a re-download instead of compiling against stale headers.
+    status:
+      - '[ "{{.OPENVINO}}" != "true" ] || { [ -f "{{.OPENVINO_HEADERS_DIR}}/include/openvino/c/openvino.h" ] && [ "$(cat "{{.OPENVINO_HEADERS_DIR}}/.build-id" 2>/dev/null)" = "{{.OPENVINO_BUILD}}" ]; }'
+    cmds:
+      - |
+        set -euo pipefail
+        echo "OpenVINO C API headers not found. Downloading {{.OPENVINO_ARCHIVE}}..."
+        mkdir -p "{{.OPENVINO_HEADERS_DIR}}"
+        # Stage on the cache filesystem so publishing the headers is a same-fs
+        # rename (atomic), not a cross-fs copy that could leave a half-populated
+        # tree if interrupted.
+        ov_tmp=$(mktemp -d "{{.OPENVINO_HEADERS_DIR}}/.dl.XXXXXX")
+        trap 'rm -rf "${ov_tmp}"' EXIT
+        # wget exits non-zero on hard HTTP errors (e.g. 404); set -e then aborts.
+        wget -q --tries=3 --timeout=30 "{{.OPENVINO_URL}}" -O "${ov_tmp}/openvino.tgz"
+        # Verify archive integrity against the pinned SHA256 before extraction
+        # (TLS does not protect against a corrupted or tampered upstream artifact,
+        # and an upstream-moved archive can return an HTTP-200 HTML page). A
+        # mismatch aborts under set -e. sha256sum on Linux, shasum on macOS.
+        if command -v sha256sum >/dev/null 2>&1; then
+          echo "{{.OPENVINO_SHA256}}  ${ov_tmp}/openvino.tgz" | sha256sum -c -
+        else
+          echo "{{.OPENVINO_SHA256}}  ${ov_tmp}/openvino.tgz" | shasum -a 256 -c -
+        fi
+        # Extract only the architecture-independent C API header tree
+        # (runtime/include); the runtime .so is dlopen'd at deploy time and is
+        # never linked here.
+        tar -xzf "${ov_tmp}/openvino.tgz" -C "${ov_tmp}" --strip-components=2 \
+          "{{.OPENVINO_BASENAME}}/runtime/include"
+        # Publish: rm-then-rename avoids nesting into a pre-existing dir, and the
+        # same-fs rename keeps the swap atomic. The sentinel check turns a partial
+        # extract into a loud failure rather than a silently half-populated cache.
+        rm -rf "{{.OPENVINO_HEADERS_DIR}}/include"
+        mv "${ov_tmp}/include" "{{.OPENVINO_HEADERS_DIR}}/include"
+        test -f "{{.OPENVINO_HEADERS_DIR}}/include/openvino/c/openvino.h"
+        # Stamp the cached build id last, so an interrupted run leaves a stale or
+        # absent stamp that the status guard rejects on the next build.
+        printf '%s\n' "{{.OPENVINO_BUILD}}" > "{{.OPENVINO_HEADERS_DIR}}/.build-id"
+        echo "OpenVINO headers installed to {{.OPENVINO_HEADERS_DIR}}/include"
+
   check-tflite-lib:
     desc: Download TensorFlow Lite C library for the current platform
     internal: true
@@ -758,6 +829,17 @@ tasks:
   frontend-install:
     desc: Install frontend dependencies
     dir: frontend
+    # run: once guarantees a single execution per `task` invocation even when
+    # reached through multiple dependency paths. frontend-build depends on both
+    # frontend-install and frontend-typecheck, and frontend-typecheck also
+    # depends on frontend-install, forming a diamond. With the default
+    # run: always, go-task runs frontend-build's deps concurrently and executes
+    # frontend-install twice in parallel, so two `npm install` processes write
+    # the same node_modules at once. That race truncates large files (e.g.
+    # typescript.js), and svelte-check then fails with "Unexpected end of input".
+    # The race is timing dependent, which is why it flaked only intermittently
+    # and mostly on the arm64 runner.
+    run: once
     cmds:
       - |
         max_retries=3
@@ -952,8 +1034,20 @@ tasks:
   e2e-install:
     desc: Install E2E testing dependencies
     dir: frontend
+    # The Playwright test packages (@playwright/test, playwright,
+    # @axe-core/playwright) are declared in package.json devDependencies, so
+    # frontend-install already installs them; this task only downloads the browser
+    # binaries. `npx playwright install` writes to the Playwright browser cache,
+    # not node_modules, so it cannot race the frontend npm install/build. The old
+    # `npm install -D` here was redundant with those devDependencies and could
+    # drift their pinned versions and dirty the workspace (and was the second
+    # node_modules writer that raced frontend-install, the corruption class that
+    # truncated typescript.js; see frontend-install above). deps: [frontend-install]
+    # ensures the playwright package is present to resolve the matching browser
+    # build; run: once keeps it to a single execution per invocation.
+    deps: [frontend-install]
+    run: once
     cmds:
-      - npm install -D @playwright/test playwright @axe-core/playwright
       - npx playwright install
 
   e2e-test:
@@ -1166,10 +1260,15 @@ tasks:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     cmds:
       - task: download-tflite
-        vars: 
+        vars:
           TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}'
           TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}'
           TARGET: '{{.TARGET}}'
+      # Fetch the OpenVINO C API headers when this is an openvino build; the task
+      # no-ops for ONNX-only/standard builds (OPENVINO unset or "false").
+      - task: check-openvino
+        vars:
+          OPENVINO: '{{.OPENVINO}}'
       - mkdir -p {{.BINARY_DIR}}
       - |
         {{if .CROSS_COMPILE_CHECK}}
@@ -1183,6 +1282,13 @@ tasks:
         # notflite produces an ONNX-only binary that does not link libtensorflowlite_c.
         if [ "{{.NOTFLITE}}" = "true" ]; then
           BUILD_TAGS="${BUILD_TAGS},notflite"
+        fi
+        # openvino adds the OpenVINO inference backend (dlopen'd at runtime, ORT
+        # fallback). Headers are provided by the check-openvino task above. Only
+        # the linux noembed targets set OPENVINO; windows/darwin leave it unset
+        # by design (the OpenVINO backend is linux-only here).
+        if [ "{{.OPENVINO}}" = "true" ]; then
+          BUILD_TAGS="${BUILD_TAGS},openvino"
         fi
         if [ -n "${EXTRA_BUILD_TAGS:-}" ]; then
           BUILD_TAGS="${BUILD_TAGS},${EXTRA_BUILD_TAGS}"
@@ -1198,7 +1304,7 @@ tasks:
         echo "Note: This binary requires external model files to run"
 
   noembed_linux_amd64:
-    desc: Build Linux AMD64 without embedded models
+    desc: Build Linux AMD64 without embedded models (TFLite + ONNX + OpenVINO)
     cmds:
       - task: noembed_build
         vars:
@@ -1208,9 +1314,13 @@ tasks:
           GOOS: linux
           GOARCH: amd64
           BINARY_SUFFIX: ''
+          # amd64 includes the OpenVINO backend by default (activates on an Intel
+          # iGPU at runtime, otherwise falls back to ONNX Runtime). The standard
+          # Docker and CI images pass OPENVINO=false to stay ONNX-only.
+          OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_linux_arm64:
-    desc: Build Linux ARM64 without embedded models (ONNX-only, no TFLite)
+    desc: Build Linux ARM64 without embedded models (ONNX + OpenVINO, no TFLite)
     cmds:
       - task: noembed_build
         vars:
@@ -1225,6 +1335,10 @@ tasks:
           # arm64 ships ONNX-only: build without the TFLite backend so the binary
           # does not link libtensorflowlite_c (issue #1103).
           NOTFLITE: 'true'
+          # arm64 includes the OpenVINO backend by default (activates on A76/ARMv8.2
+          # at runtime, otherwise falls back to ONNX Runtime). The standard Docker
+          # and CI images pass OPENVINO=false to stay strictly ONNX-only.
+          OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_windows_amd64:
     desc: Build Windows AMD64 without embedded models

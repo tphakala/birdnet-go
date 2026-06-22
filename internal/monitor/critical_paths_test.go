@@ -3,12 +3,25 @@ package monitor
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// skipWindowsUnixPaths skips a test on Windows. The critical-path helpers
+// normalize paths with filepath.Clean/Abs, which rewrites Unix literals like
+// "/" and "/var/..." to OS-native form (e.g. "D:\") on Windows, so the tests'
+// hardcoded forward-slash expectations cannot match. The production code itself
+// is cross-platform and is exercised on Windows by system_monitor_test.go.
+func skipWindowsUnixPaths(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("asserts Unix path semantics; paths are normalized to OS-native form on Windows")
+	}
+}
 
 // Test constants for path testing.
 const (
@@ -18,6 +31,7 @@ const (
 
 func TestGetCriticalPaths(t *testing.T) {
 	t.Parallel()
+	skipWindowsUnixPaths(t)
 
 	tests := []struct {
 		name         string
@@ -161,6 +175,7 @@ func TestDeduplicatePaths(t *testing.T) {
 
 func TestMergePaths(t *testing.T) {
 	t.Parallel()
+	skipWindowsUnixPaths(t)
 
 	configured := []string{"/custom", "/data"}
 	critical := []string{"/", "/data", "/config"}
@@ -179,6 +194,7 @@ func TestMergePaths(t *testing.T) {
 
 func TestSystemMonitorIntegration(t *testing.T) {
 	t.Parallel()
+	skipWindowsUnixPaths(t)
 
 	// Create a test configuration
 	config := &conf.Settings{}
@@ -213,6 +229,7 @@ func TestSystemMonitorIntegration(t *testing.T) {
 
 func TestGetMonitoringPathsInfo(t *testing.T) {
 	t.Parallel()
+	skipWindowsUnixPaths(t)
 
 	settings := &conf.Settings{}
 	settings.Realtime.Monitoring.Disk.Paths = []string{"/custom", "/data"}

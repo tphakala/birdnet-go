@@ -11,9 +11,17 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// InitFromDatabase populates the tracker from historical data
-// This should be called once during initialization
+// InitFromDatabase populates the tracker from historical data.
+// This should be called once during initialization. It uses a background
+// context (no cancellation); the startup path uses InitFromDatabaseAsync, which
+// supplies a cancellable context via initFromDatabaseContext.
 func (t *SpeciesTracker) InitFromDatabase() error {
+	return t.initFromDatabaseContext(context.Background())
+}
+
+// initFromDatabaseContext performs the historical load under the given context,
+// so a shutdown during a background warm-up can abort the in-flight DB scan.
+func (t *SpeciesTracker) initFromDatabaseContext(ctx context.Context) error {
 	if t.ds == nil {
 		return errors.Newf("datastore is nil").
 			Component("new-species-tracker").
@@ -32,7 +40,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 	defer t.mu.Unlock()
 
 	// Step 1: Load lifetime tracking data (existing logic)
-	if err := t.loadLifetimeDataFromDatabase(now); err != nil {
+	if err := t.loadLifetimeDataFromDatabase(ctx, now); err != nil {
 		return errors.New(err).
 			Component("new-species-tracker").
 			Category(errors.CategoryDatabase).
@@ -41,7 +49,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 			Build()
 	}
 
-	if err := t.loadNoveltyEpisodesFromDatabase(now); err != nil {
+	if err := t.loadNoveltyEpisodesFromDatabase(ctx, now); err != nil {
 		getLog().Error("Failed to restore novelty episodes from database",
 			logger.Error(err),
 			logger.String("operation", "load_novelty_episodes"),
@@ -50,7 +58,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 
 	// Step 2: Load yearly tracking data if enabled
 	if t.yearlyEnabled {
-		if err := t.loadYearlyDataFromDatabase(now); err != nil {
+		if err := t.loadYearlyDataFromDatabase(ctx, now); err != nil {
 			return errors.New(err).
 				Component("new-species-tracker").
 				Category(errors.CategoryDatabase).
@@ -62,7 +70,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 
 	// Step 3: Load seasonal tracking data if enabled
 	if t.seasonalEnabled {
-		if err := t.loadSeasonalDataFromDatabase(now); err != nil {
+		if err := t.loadSeasonalDataFromDatabase(ctx, now); err != nil {
 			return errors.New(err).
 				Component("new-species-tracker").
 				Category(errors.CategoryDatabase).
@@ -80,7 +88,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 	// 3. Graceful degradation: New notifications will still be suppressed (just not historical ones)
 	// 4. Self-healing: As new notifications are sent, the suppression state rebuilds automatically
 	// 5. The table will be created by GORM AutoMigrate on first run
-	if err := t.loadNotificationHistoryFromDatabase(now); err != nil {
+	if err := t.loadNotificationHistoryFromDatabase(ctx, now); err != nil {
 		getLog().Error("Failed to load notification history from database",
 			logger.Error(err),
 			logger.String("operation", "load_notification_history"),
@@ -89,6 +97,13 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 	}
 
 	t.lastSyncTime = now
+
+	// Drop any cached status computed against the pre-load maps. Status entries
+	// cached during a background warm-up (or before a runtime reconfigure reload)
+	// would otherwise mask the freshly loaded history for the cache TTL.
+	if len(t.statusCache) > 0 {
+		t.statusCache = make(map[string]cachedSpeciesStatus, initialSpeciesCapacity)
+	}
 
 	getLog().Debug("Database initialization complete",
 		logger.Int("lifetime_species", len(t.speciesFirstSeen)),
@@ -101,14 +116,13 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 }
 
 // loadLifetimeDataFromDatabase loads all-time first detection data
-func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
+func (t *SpeciesTracker) loadLifetimeDataFromDatabase(ctx context.Context, now time.Time) error {
 	endDate := now.Format(time.DateOnly)
 	startDate := "1900-01-01" // Load from beginning of time to get all historical data
 
-	// TODO(graceful-shutdown): Accept context parameter to enable graceful cancellation during shutdown
-	// TODO(context-timeout): Add timeout context (e.g., 60s) for database initialization operations
+	// TODO(context-timeout): Add a timeout to ctx (e.g., 60s) for the load operations
 	// TODO(telemetry): Report initialization timeouts/failures to internal/telemetry for monitoring
-	newSpeciesData, err := t.ds.GetNewSpeciesDetections(context.Background(), startDate, endDate, defaultDBQueryLimit, 0)
+	newSpeciesData, err := t.ds.GetNewSpeciesDetections(ctx, startDate, endDate, defaultDBQueryLimit, 0)
 	if err != nil {
 		return errors.Newf("failed to load lifetime species data from database: %w", err).
 			Component("new-species-tracker").
@@ -168,13 +182,12 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 }
 
 // loadNoveltyEpisodesFromDatabase reconstructs active novelty episodes from detection dates.
-func (t *SpeciesTracker) loadNoveltyEpisodesFromDatabase(now time.Time) error {
+func (t *SpeciesTracker) loadNoveltyEpisodesFromDatabase(ctx context.Context, now time.Time) error {
 	history, ok := t.ds.(speciesDetectionHistoryDatastore)
 	if !ok {
 		return nil
 	}
 
-	ctx := context.Background()
 	endDate := trackerDateOnly(now)
 	startDate := endDate.AddDate(0, 0, -(t.windowDays + 1))
 
@@ -327,13 +340,12 @@ func sameTrackerDate(a, b time.Time) bool {
 }
 
 // loadYearlyDataFromDatabase loads first detection data for the current year
-func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
+func (t *SpeciesTracker) loadYearlyDataFromDatabase(ctx context.Context, now time.Time) error {
 	startDate, endDate := t.getYearDateRange(now)
 
 	// Use GetSpeciesFirstDetectionInPeriod for yearly tracking
-	// TODO(graceful-shutdown): Accept context parameter for graceful cancellation
 	// TODO(telemetry): Report database load failures to internal/telemetry
-	yearlyData, err := t.ds.GetSpeciesFirstDetectionInPeriod(context.Background(), startDate, endDate, defaultDBQueryLimit, 0)
+	yearlyData, err := t.ds.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, defaultDBQueryLimit, 0)
 	if err != nil {
 		return errors.Newf("failed to load yearly species data from database: %w", err).
 			Component("new-species-tracker").
@@ -383,7 +395,7 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 }
 
 // loadSingleSeasonData loads data for a single season from the database.
-func (t *SpeciesTracker) loadSingleSeasonData(seasonName string, now time.Time) (map[string]time.Time, error) {
+func (t *SpeciesTracker) loadSingleSeasonData(ctx context.Context, seasonName string, now time.Time) (map[string]time.Time, error) {
 	startDate, endDate := t.getSeasonDateRange(seasonName, now)
 
 	getLog().Debug("Loading data for season",
@@ -392,9 +404,8 @@ func (t *SpeciesTracker) loadSingleSeasonData(seasonName string, now time.Time) 
 		logger.String("end_date", endDate))
 
 	// Get first detection of each species within this season period
-	// TODO(graceful-shutdown): Accept context parameter for cancellation during shutdown
 	// TODO(telemetry): Report seasonal data load failures to internal/telemetry
-	seasonalData, err := t.ds.GetSpeciesFirstDetectionInPeriod(context.Background(), startDate, endDate, defaultDBQueryLimit, 0)
+	seasonalData, err := t.ds.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, defaultDBQueryLimit, 0)
 	if err != nil {
 		return nil, errors.Newf("failed to load seasonal species data from database for %s: %w", seasonName, err).
 			Component("new-species-tracker").
@@ -443,7 +454,7 @@ func (t *SpeciesTracker) allSeasonsEmpty() bool {
 }
 
 // loadSeasonalDataFromDatabase loads first detection data for each season in the current year
-func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
+func (t *SpeciesTracker) loadSeasonalDataFromDatabase(ctx context.Context, now time.Time) error {
 	// Preserve existing seasonal maps if we have them
 	existingSeasonData := t.speciesBySeason
 	hasExistingData := len(existingSeasonData) > 0
@@ -456,7 +467,7 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 		logger.Bool("has_existing_data", hasExistingData))
 
 	for seasonName := range t.seasons {
-		seasonMap, err := t.loadSingleSeasonData(seasonName, now)
+		seasonMap, err := t.loadSingleSeasonData(ctx, seasonName, now)
 		if err != nil {
 			return err
 		}
@@ -474,11 +485,21 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 
 // loadNotificationHistoryFromDatabase loads recent notification history from database
 // This prevents duplicate "new species" notifications after restart (BG-17 fix)
-func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) error {
+func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(ctx context.Context, now time.Time) error {
 	// Only load if notification suppression is enabled
 	if t.notificationSuppressionWindow <= 0 {
 		getLog().Debug("Notification suppression disabled, skipping history load")
 		return nil
+	}
+
+	// This is the last load step. GetActiveNotificationHistory honors ctx, but
+	// short-circuit here on an already-cancelled load (shutdown during warm-up) to
+	// skip issuing one more query. Treated as a clean skip, not an error.
+	select {
+	case <-ctx.Done():
+		getLog().Debug("Notification history load skipped: initialization cancelled")
+		return nil
+	default:
 	}
 
 	// Load notifications from past 2x suppression window to ensure coverage
@@ -490,7 +511,7 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) erro
 		logger.Duration("suppression_window", t.notificationSuppressionWindow))
 
 	// Get notification history from database
-	histories, err := t.ds.GetActiveNotificationHistory(lookbackTime)
+	histories, err := t.ds.GetActiveNotificationHistory(ctx, lookbackTime)
 	if err != nil {
 		return errors.Newf("failed to load notification history from database: %w", err).
 			Component("new-species-tracker").

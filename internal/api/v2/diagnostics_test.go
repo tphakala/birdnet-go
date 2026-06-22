@@ -17,8 +17,8 @@ import (
 func TestMapInferenceSnapshotsKeepsUnmappedModel(t *testing.T) {
 	t.Parallel()
 	snaps := map[string]inferencestats.PeekSnapshot{
-		"Perch_V2":    {InvokeCount: 4, InvokeTotalUs: 4000, InvokeMaxUs: 1500},
-		"Ghost_Model": {InvokeCount: 2, InvokeTotalUs: 2000, InvokeMaxUs: 1200},
+		"Perch_V2":    {InvokeCount: 4, InvokeTotalUs: 4000, RecentP95Us: 1500},
+		"Ghost_Model": {InvokeCount: 2, InvokeTotalUs: 2000, RecentP95Us: 1200},
 	}
 	infoMap := map[string]*classifier.ModelInfo{
 		"Perch_V2": {
@@ -45,11 +45,59 @@ func TestMapInferenceSnapshotsKeepsUnmappedModel(t *testing.T) {
 	// Mapped model uses DisplayName ("Google Perch v2 (TFLite)").
 	assert.Equal(t, "Google Perch v2 (TFLite)", byID["Perch_V2"].ModelName)
 
-	// Avg and p99 are computed correctly for the mapped model.
+	// Avg and p95 are computed correctly for the mapped model.
 	assert.InDelta(t, 1.0, byID["Perch_V2"].AvgMS, 0.001, "avg = 4000us / 4 / 1000 = 1ms")
-	assert.InDelta(t, 1.5, byID["Perch_V2"].P99MS, 0.001, "p99 = 1500us / 1000 = 1.5ms")
+	assert.InDelta(t, 1.5, byID["Perch_V2"].P95MS, 0.001, "p95 = 1500us / 1000 = 1.5ms")
 
-	// Avg and p99 computed for unmapped model too.
+	// Avg and p95 computed for unmapped model too.
 	assert.InDelta(t, 1.0, byID["Ghost_Model"].AvgMS, 0.001, "avg = 2000us / 2 / 1000 = 1ms")
-	assert.InDelta(t, 1.2, byID["Ghost_Model"].P99MS, 0.001, "p99 = 1200us / 1000 = 1.2ms")
+	assert.InDelta(t, 1.2, byID["Ghost_Model"].P95MS, 0.001, "p95 = 1200us / 1000 = 1.2ms")
+}
+
+// TestMapInferenceSnapshotsUsesP95NotLifetime guards the latency health-check
+// path against a regression where a one-time warm-up spike permanently latches
+// the check into Warning/Critical. mapInferenceSnapshots must derive P95MS from
+// the rolling-window p95 (RecentP95Us), NOT from the never-reset lifetime max
+// (InvokeMaxUsLifetime). The model card uses the lifetime max; the health check
+// must not.
+func TestMapInferenceSnapshotsUsesP95NotLifetime(t *testing.T) {
+	t.Parallel()
+	// A model whose all-time peak was a slow 2s warm-up, but whose rolling p95
+	// is a healthy 250ms.
+	snaps := map[string]inferencestats.PeekSnapshot{
+		"Perch_V2": {
+			InvokeCount:         10,
+			InvokeTotalUs:       2_500_000,
+			RecentP95Us:         250_000,   // rolling-window p95: recent steady state
+			InvokeMaxUsLifetime: 2_000_000, // lifetime: one-time warm-up spike
+		},
+	}
+
+	out := mapInferenceSnapshots(snaps, map[string]*classifier.ModelInfo{})
+	require.Len(t, out, 1)
+
+	// P95MS must reflect the rolling p95 (250ms), not the lifetime spike (2000ms),
+	// so the latency health check clears once the warm-up falls out of the window.
+	assert.InDelta(t, 250.0, out[0].P95MS, 0.001,
+		"health check must use the rolling p95, not the lifetime warm-up spike")
+}
+
+// TestMapInferenceSnapshotsDeterministicOrder verifies the output is sorted by
+// ModelID regardless of map iteration order, so the derived health results and
+// logs are stable rather than reordering randomly between runs.
+func TestMapInferenceSnapshotsDeterministicOrder(t *testing.T) {
+	t.Parallel()
+	snaps := map[string]inferencestats.PeekSnapshot{
+		"Zebra_Model": {InvokeCount: 1, InvokeTotalUs: 1000, RecentP95Us: 1000},
+		"Alpha_Model": {InvokeCount: 1, InvokeTotalUs: 1000, RecentP95Us: 1000},
+		"Mango_Model": {InvokeCount: 1, InvokeTotalUs: 1000, RecentP95Us: 1000},
+	}
+
+	out := mapInferenceSnapshots(snaps, map[string]*classifier.ModelInfo{})
+	ids := make([]string, len(out))
+	for i, r := range out {
+		ids[i] = r.ModelID
+	}
+	assert.Equal(t, []string{"Alpha_Model", "Mango_Model", "Zebra_Model"}, ids,
+		"models must be returned in sorted ModelID order")
 }

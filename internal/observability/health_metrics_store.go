@@ -35,6 +35,10 @@ const (
 	// MetricPrefixResultsQueueDrops counts detection results dropped because the
 	// classifier results queue was full.
 	MetricPrefixResultsQueueDrops = "results." + MetricTypeResultsQueueDrops + "."
+	// MetricKeyAudioQueueDepthAggregate is the MetricsStore key for the sum of all
+	// per-source audio queue depths. Recorded via RecordBatch (the metrics-store path)
+	// so the frontend sparkline series and the metrics history API can serve it.
+	MetricKeyAudioQueueDepthAggregate = "audio.queue_depth"
 )
 
 // HourlyBucket holds the aggregated event count for a single hour.

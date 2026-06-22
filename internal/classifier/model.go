@@ -9,6 +9,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// Device name strings reported by ModelInstance.RuntimeInfo(). CPU-bound backends
+// (TFLite, ONNX Runtime CPU EP) report deviceCPU; OpenVINO-backed instances
+// report the concrete OpenVINO device (inference.OVDeviceCPU/OVDeviceGPU).
+// deviceUnknown is returned by the Orchestrator when a model is not loaded.
+const (
+	deviceCPU     = "CPU"
+	deviceUnknown = "Unknown"
+)
+
 // ModelSpec describes a model's fixed audio requirements.
 // Overlap is NOT included - it comes from user configuration
 // (the false positive filter has multiple levels with specific overlap values).
@@ -78,6 +87,27 @@ type ModelInstance interface {
 
 	// Labels returns the full list of species labels.
 	Labels() []string
+
+	// RuntimeInfo returns the compute device, execution backend, and effective
+	// runtime precision the model bound to at load time, returned together as one
+	// consistent snapshot so a concurrent reload cannot be observed as a torn
+	// triplet (e.g. device from one generation, backend from another).
+	// Implementations publish the triplet as a unit (BirdNET swaps it via an atomic
+	// pointer; Bat and Perch set it once at construction), so the read takes no lock
+	// and the three values are always from the same generation.
+	//
+	// device is deviceCPU ("CPU") or, for OpenVINO-backed instances, the concrete
+	// OpenVINO device (inference.OVDeviceCPU/OVDeviceGPU). backend is the live
+	// execution provider (BackendTFLite/BackendONNX/BackendOpenVINO), which is
+	// distinct from the model file format: an ONNX model file executed through the
+	// OpenVINO runtime reports BackendOpenVINO, not BackendONNX. precision is the
+	// effective runtime precision ("INT8"/"FP16"/"FP32", matching the Quantization
+	// constants), which can differ from the weight precision stored in the file
+	// (e.g. an FP32 ONNX model executed on OpenVINO at FP16); empty when unknown.
+	//
+	// All three reflect the real chosen path, never the static ModelInfo file-type
+	// metadata.
+	RuntimeInfo() (device, backend, precision string)
 
 	// Close releases resources held by the model.
 	Close() error

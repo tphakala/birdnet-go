@@ -12,6 +12,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// init stubs ffmpeg version detection for the entire conf test binary. Many
+// tests set FfmpegPath to placeholder stubs (see fakeFFmpegPath) that must
+// never actually be executed: validateAudioSettings runs across hundreds of
+// parallel subtests, and on Windows the race detector aborts with
+// STATUS_STACK_BUFFER_OVERRUN when those subtests concurrently exec a non-PE
+// stub. The detected version is incidental to what these tests assert (export
+// type normalization), and returning ("", 0, 0) matches what executing the
+// existing no-op stub already yields on every platform, so the stub is
+// behavior-preserving aside from not spawning a subprocess. Set once here
+// before any test runs, so no parallel test races on the package variable.
+func init() {
+	ffmpegVersionDetector = func(string) (version string, major, minor int) {
+		return "", 0, 0
+	}
+}
+
 // fakeFFmpegPath writes an executable stub inside t.TempDir() and returns its
 // path. Tests need a resolvable, host-agnostic FfmpegPath because
 // validateAudioSettings invokes ValidateToolPath, which clears FfmpegPath when

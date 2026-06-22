@@ -51,7 +51,7 @@ func TestPerchOpenVINO_Functional(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = inference.DestroyOpenVINO() })
 
-	c, ok := tryPerchOpenVINO(&cfg, labels)
+	c, _, ok := tryPerchOpenVINO(&cfg, labels)
 	require.True(t, ok, "Perch OpenVINO classifier must be created for the no_dft model")
 	require.NotNil(t, c)
 	t.Cleanup(func() { c.Close() })

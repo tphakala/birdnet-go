@@ -58,7 +58,6 @@ Performance Optimizations:
     ChevronsRight,
     LineChart,
     Bird,
-    TrendingUp,
     Monitor,
     Database,
     Terminal,
@@ -170,7 +169,6 @@ Performance Optimizations:
     liveStream: actualRoute.startsWith('/ui/live-stream'),
     analytics: actualRoute.startsWith('/ui/analytics'),
     analyticsExact: actualRoute === '/ui/analytics',
-    analyticsAdvanced: actualRoute === '/ui/analytics/advanced',
     analyticsSpecies: actualRoute === '/ui/analytics/species',
     search: actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
@@ -219,7 +217,6 @@ Performance Optimizations:
     dashboard: onNavigate ? '/' : '/ui/dashboard',
     liveStream: onNavigate ? '/live-stream' : '/ui/live-stream',
     analytics: onNavigate ? '/analytics' : '/ui/analytics',
-    analyticsAdvanced: '/ui/analytics/advanced',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
@@ -255,12 +252,6 @@ Performance Optimizations:
       label: t('analytics.species.title'),
       url: navigationUrls.analyticsSpecies,
       routeKey: 'analyticsSpecies',
-    },
-    {
-      icon: TrendingUp,
-      label: t('analytics.advanced.title'),
-      url: navigationUrls.analyticsAdvanced,
-      routeKey: 'analyticsAdvanced',
     },
   ]);
 

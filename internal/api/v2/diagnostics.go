@@ -4,9 +4,11 @@ package api
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -351,12 +353,19 @@ func (c *Controller) buildPerModelInferenceProvider() func() []checks.ModelInfer
 // dropping a model from the inference chart.
 func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, infoMap map[string]*classifier.ModelInfo) []checks.ModelInferenceInfo {
 	result := make([]checks.ModelInferenceInfo, 0, len(snapshots))
-	for modelID, s := range snapshots {
-		var avgMS, p99MS, windowMS float64
+	// Iterate in sorted model-ID order so the returned slice (and the health
+	// results derived from it) is deterministic; map iteration order is random.
+	for _, modelID := range slices.Sorted(maps.Keys(snapshots)) {
+		s := snapshots[modelID]
+		var avgMS, p95MS, windowMS float64
 		if s.InvokeCount > 0 {
 			avgMS = float64(s.InvokeTotalUs) / float64(s.InvokeCount) / 1000.0
 		}
-		p99MS = float64(s.InvokeMaxUs) / 1000.0
+		// Use the rolling-window p95 latency, not the lifetime max, so a single
+		// slow warm-up inference does not permanently latch the health check into
+		// Warning/Critical, and so an occasional GC pause does not flap it. The
+		// model card uses the lifetime max instead (see buildModelStatus).
+		p95MS = float64(s.RecentP95Us) / 1000.0
 		name := modelID
 		if mi, ok := infoMap[modelID]; ok {
 			name = mi.DisplayName()
@@ -369,7 +378,7 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 			ModelID:   modelID,
 			ModelName: name,
 			AvgMS:     avgMS,
-			P99MS:     p99MS,
+			P95MS:     p95MS,
 			WindowMS:  windowMS,
 		})
 	}
@@ -440,14 +449,22 @@ func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.A
 		snaps := make([]observability.AudioRouterSnapshot, 0, len(sourceIDs))
 		for _, sid := range sourceIDs {
 			var totalDrops, totalErrors int64
+			// QueueDepth is the MAX inbox occupancy across all routes for this source.
+			// The analysis/buffer route dominates under load, and max keeps the value
+			// within one inbox capacity rather than summing unrelated consumer queues.
+			var maxQueueDepth int64
 			for _, ri := range router.Routes(sid) {
 				totalDrops += ri.Drops
 				totalErrors += ri.Errors
+				if int64(ri.QueueDepth) > maxQueueDepth {
+					maxQueueDepth = int64(ri.QueueDepth)
+				}
 			}
 			snaps = append(snaps, observability.AudioRouterSnapshot{
-				SourceID: sid,
-				Drops:    totalDrops,
-				Errors:   totalErrors,
+				SourceID:   sid,
+				Drops:      totalDrops,
+				Errors:     totalErrors,
+				QueueDepth: maxQueueDepth,
 			})
 		}
 		return snaps

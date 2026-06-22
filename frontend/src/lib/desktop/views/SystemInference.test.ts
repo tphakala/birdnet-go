@@ -71,7 +71,15 @@ function makeModel(overrides: Partial<InferenceModel> = {}): InferenceModel {
     stats: { invocations: 12034, avgMs: 47.2, maxMs: 130, rtf: 0.016 },
     memory: { approxRssBytes: 125000000, approximate: true },
     sources: [{ id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: false }],
-    metricKeys: { avgMs: 'inference.model-1.avg_ms', rtf: 'inference.model-1.rtf' },
+    metricKeys: {
+      avgMs: 'inference.model-1.avg_ms',
+      rtf: 'inference.model-1.rtf',
+      throughput: 'inference.model-1.throughput',
+      errorRate: 'inference.model-1.error_rate',
+    },
+    device: 'CPU',
+    paused: false,
+    recentDetections: [],
     ...overrides,
   };
 }
@@ -86,6 +94,12 @@ function makeSnapshot(models: InferenceModel[]): InferenceStatusResponse {
       openvino: { supported: false, active: false },
     },
     models,
+    audio: {
+      queueDepth: 0,
+      droppedChunksTotal: 0,
+      queueCapacity: 64,
+      metricKeys: { queueDepth: 'audio.queue_depth' },
+    },
     snapshotAtUnix: 1750000000,
   };
 }
@@ -146,6 +160,74 @@ describe('SystemInference', () => {
     expect(container.textContent).not.toContain('system.inference.invocations');
   });
 
+  it('renders models sorted by name regardless of snapshot order', async () => {
+    // Snapshot delivers Zebra before Alpha; the view must display Alpha first.
+    const zebra = makeModel({ id: 'z', name: 'Zebra Model' });
+    const alpha = makeModel({ id: 'a', name: 'Alpha Model' });
+    installApi(makeSnapshot([zebra, alpha]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('Alpha Model');
+    });
+    const text = container.textContent;
+    expect(text.indexOf('Alpha Model')).toBeLessThan(text.indexOf('Zebra Model'));
+  });
+
+  it('does not render an RTF sparkline label on model cards', async () => {
+    installApi(makeSnapshot([makeModel()]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.invocations');
+    });
+    // The RTF sparkline (labelled rtfChart) is removed; the RTF number stat stays.
+    expect(container.textContent).not.toContain('system.inference.rtfChart');
+    // Assert the RTF number cell specifically (its span carries the rtfHelp title),
+    // not a loose substring of textContent that rtfHelp would also satisfy.
+    expect(container.querySelector('[title="system.inference.rtfHelp"]')).not.toBeNull();
+  });
+
+  it('does not render its own page title heading', async () => {
+    installApi(makeSnapshot([makeModel()]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.invocations');
+    });
+    // Sibling system subpages render no title; System.svelte provides the region label.
+    expect(container.querySelector('h2')).toBeNull();
+  });
+
+  it('renders the audio-sources hint link in the empty state', async () => {
+    installApi(makeSnapshot([]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.noModels');
+    });
+    const link = container.querySelector('a[href="/ui/settings/audio"]');
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toContain('system.inference.noModelsHintLink');
+  });
+
+  it('exposes screen-reader help for jargon terms', async () => {
+    installApi(makeSnapshot([makeModel()]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.invocations');
+    });
+    // The stat help snippet renders sr-only spans carrying the *Help keys.
+    expect(container.textContent).toContain('system.inference.invocationsHelp');
+    expect(container.textContent).toContain('system.inference.rtfHelp');
+  });
+
   it('renders model details, backend, quantization, invocations and a source chip', async () => {
     const model = makeModel();
     installApi(makeSnapshot([model]));
@@ -194,8 +276,8 @@ describe('SystemInference', () => {
       expect(container.textContent).toContain(model.name);
     });
 
-    // The RTF cell sits in a span carrying the rtfLabel title; assert its text is "-".
-    const rtfCell = container.querySelector('[title="system.inference.rtfLabel"]');
+    // The RTF cell sits in a span carrying the rtfHelp title; assert its text is "-".
+    const rtfCell = container.querySelector('[title="system.inference.rtfHelp"]');
     expect(rtfCell).not.toBeNull();
     expect(rtfCell?.textContent).toContain('-');
     // The non-null rtf value must NOT leak through despite being present.
@@ -279,7 +361,12 @@ describe('SystemInference', () => {
     const secondModel = makeModel({
       id: 'model-2',
       name: 'PERCH SECONDARY 9K',
-      metricKeys: { avgMs: 'inference.model-2.avg_ms', rtf: 'inference.model-2.rtf' },
+      metricKeys: {
+        avgMs: 'inference.model-2.avg_ms',
+        rtf: 'inference.model-2.rtf',
+        throughput: 'inference.model-2.throughput',
+        errorRate: 'inference.model-2.error_rate',
+      },
     });
     installApi(makeSnapshot([secondModel]));
 
@@ -293,5 +380,357 @@ describe('SystemInference', () => {
       (call: unknown[]) => typeof call[0] === 'string' && call[0].includes(INFERENCE_URL)
     ).length;
     expect(snapshotCallsAfter).toBeGreaterThan(snapshotCallsBefore);
+  });
+
+  it('does not render the Audio card (intentionally hidden in Phase A)', async () => {
+    const snap = makeSnapshot([makeModel()]);
+    snap.audio = {
+      queueDepth: 7,
+      droppedChunksTotal: 42,
+      queueCapacity: 64,
+      metricKeys: { queueDepth: 'audio.queue_depth' },
+    };
+    installApi(snap);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.invocations');
+    });
+    // The Audio pipeline card is deliberately hidden pending a refactor; its
+    // section header must not appear.
+    expect(container.textContent).not.toContain('system.inference.sectionAudio');
+  });
+
+  it('does not include the audio queue-depth key in the metrics subscription', async () => {
+    // With the Audio card hidden in Phase A, metricKeysParam() must subscribe only
+    // to per-model series and must NOT include the audio queue-depth key.
+    const model = makeModel();
+    let capturedHistoryUrl = '';
+    apiGet.mockImplementation((url: string) => {
+      if (url.includes('/metrics/history')) {
+        capturedHistoryUrl = url;
+        return Promise.resolve({ metrics: {} });
+      }
+      if (url.includes(INFERENCE_URL)) {
+        return Promise.resolve(makeSnapshot([model]));
+      }
+      return Promise.resolve({ metrics: {} });
+    });
+
+    inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(capturedHistoryUrl).toContain('inference.model-1.avg_ms');
+    });
+    expect(capturedHistoryUrl).not.toContain('audio.queue_depth');
+    // Throughput must stay subscribed: the activity pulse derives from it even
+    // though its sparkline was removed. RTF and error-rate are rendered from the
+    // snapshot, not a live series, so they are intentionally NOT subscribed.
+    expect(capturedHistoryUrl).toContain('inference.model-1.throughput');
+    expect(capturedHistoryUrl).not.toContain('inference.model-1.rtf');
+    expect(capturedHistoryUrl).not.toContain('inference.model-1.error_rate');
+  });
+
+  it('renders the Last heard feed with recent detections (species and confidence)', async () => {
+    const model = makeModel({
+      recentDetections: [
+        {
+          species: 'Common Chaffinch',
+          scientificName: 'Fringilla coelebs',
+          confidence: 0.87,
+          atUnix: Math.floor(Date.now() / 1000) - 60,
+          inRange: true,
+        },
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.42,
+          atUnix: Math.floor(Date.now() / 1000) - 120,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    const text = container.textContent;
+    expect(text).toContain('system.inference.lastHeard');
+    expect(text).toContain('Common Chaffinch');
+    expect(text).toContain('87%');
+    expect(text).toContain('European Robin');
+    expect(text).toContain('42%');
+  });
+
+  it('shows the same species more than once in the throttled feed', async () => {
+    // The feed is chronological, not collapsed: a species detected again after
+    // its throttle interval appears as a separate row (no ×N counter, no range).
+    const now = Math.floor(Date.now() / 1000);
+    const model = makeModel({
+      recentDetections: [
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.81,
+          atUnix: now - 2,
+          inRange: true,
+        },
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.77,
+          atUnix: now - 12,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // Two separate rows for the same species, each with its own confidence.
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    const text = container.textContent;
+    expect(text).toContain('81%');
+    expect(text).toContain('77%');
+    expect(text).not.toContain('×');
+  });
+
+  it('lists other models that detected the same species within tolerance (Also column)', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const birdnet = makeModel({
+      id: 'model-1',
+      name: 'BirdNET GLOBAL 6K',
+      detectionName: 'BirdNET',
+      recentDetections: [
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.8,
+          atUnix: now - 5,
+          inRange: true,
+        },
+        {
+          species: 'Common Blackbird',
+          scientificName: 'Turdus merula',
+          confidence: 0.7,
+          atUnix: now - 30,
+          inRange: true,
+        },
+      ],
+    });
+    const perch = makeModel({
+      id: 'model-2',
+      name: 'Perch',
+      detectionName: 'Perch',
+      metricKeys: {
+        avgMs: 'inference.model-2.avg_ms',
+        rtf: 'inference.model-2.rtf',
+        throughput: 'inference.model-2.throughput',
+        errorRate: 'inference.model-2.error_rate',
+      },
+      // Robin 1s from BirdNET's Robin (within tolerance); no Blackbird.
+      recentDetections: [
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.75,
+          atUnix: now - 6,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([birdnet, perch]));
+
+    const { container } = inferenceTest.render({});
+    await waitFor(() => {
+      expect(container.textContent).toContain('BirdNET GLOBAL 6K');
+    });
+
+    // The "Also" column is the 4th cell of each detection row.
+    const alsoCells = Array.from(container.querySelectorAll('tbody tr td:nth-child(4)')).map(c =>
+      c.textContent.trim()
+    );
+    expect(alsoCells).toContain('Perch'); // BirdNET's Robin co-detected by Perch
+    expect(alsoCells).toContain('BirdNET'); // Perch's Robin co-detected by BirdNET
+    expect(alsoCells).toContain('-'); // Blackbird had no co-detection
+  });
+
+  it('marks out-of-range / non-avian predictions with an icon, not in-range ones', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const model = makeModel({
+      recentDetections: [
+        {
+          species: 'Engine',
+          scientificName: 'Engine',
+          confidence: 0.7,
+          atUnix: now - 2,
+          inRange: false,
+        },
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.8,
+          atUnix: now - 10,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+
+    // Exactly one out-of-range marker (Engine); the in-range Robin has none.
+    const markers = container.querySelectorAll('[aria-label="system.inference.outOfRangeHelp"]');
+    expect(markers).toHaveLength(1);
+    expect(container.textContent).toContain('Engine');
+    expect(container.textContent).toContain('European Robin');
+  });
+
+  it('shows the lastHeardNever label when there are no recent detections', async () => {
+    const model = makeModel({ recentDetections: [] });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.textContent).toContain('system.inference.lastHeardNever');
+  });
+
+  it('shows activity pulse as active when throughput series last value is > 0', async () => {
+    const model = makeModel();
+    const history = {
+      metrics: {
+        [model.metricKeys.avgMs]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 47.2 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 48.1 },
+        ],
+        [model.metricKeys.rtf]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0.016 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0.018 },
+        ],
+        [model.metricKeys.throughput]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 3.5 },
+        ],
+      },
+    };
+    installApi(makeSnapshot([model]), history);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // When the last throughput value > 0, the activity indicator shows "active"
+    const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
+    expect(activeEl).not.toBeNull();
+    // The idle indicator must NOT be rendered at the same time (regression guard)
+    const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
+    expect(idleEl).toBeNull();
+  });
+
+  it('shows activity pulse as idle when throughput series last value is 0', async () => {
+    const model = makeModel();
+    const history = {
+      metrics: {
+        [model.metricKeys.avgMs]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 47.2 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 48.1 },
+        ],
+        [model.metricKeys.rtf]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 0.016 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0.018 },
+        ],
+        [model.metricKeys.throughput]: [
+          { timestamp: '2026-06-18T00:00:00Z', value: 3.5 },
+          { timestamp: '2026-06-18T00:00:01Z', value: 0 },
+        ],
+      },
+    };
+    installApi(makeSnapshot([model]), history);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // When the last throughput value == 0, the activity indicator shows "idle"
+    const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
+    expect(idleEl).not.toBeNull();
+    // The active indicator must NOT be rendered at the same time (regression guard)
+    const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
+    expect(activeEl).toBeNull();
+  });
+
+  it('renders errorRate and loadFailures when present on the model', async () => {
+    const model = makeModel({
+      stats: {
+        invocations: 100,
+        avgMs: 45,
+        maxMs: 120,
+        rtf: 0.015,
+        errorRate: 0.05,
+        loadFailures: 3,
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    const text = container.textContent;
+    expect(text).toContain('system.inference.errorRate');
+    expect(text).toContain('5%');
+    expect(text).toContain('system.inference.loadFailures');
+    expect(text).toContain('3');
+  });
+
+  it('renders the device chip carrying the model device', async () => {
+    const model = makeModel({ device: 'GPU' });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.textContent).toContain('GPU');
+    // The device chip carries the device help as a tooltip.
+    expect(container.querySelector('[title="system.inference.deviceHelp"]')).not.toBeNull();
+  });
+
+  it('shows a Paused indicator with the schedule label when the model is paused', async () => {
+    const model = makeModel({ paused: true, scheduleLabel: 'Night schedule' });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    // The paused state replaces the idle dash and explains why inference is stopped.
+    expect(
+      container.querySelector('[aria-label="system.inference.activityPaused"]')
+    ).not.toBeNull();
+    expect(container.textContent).toContain('system.inference.paused');
+    expect(container.textContent).toContain('Night schedule');
+    // Neither active nor idle indicators render while paused.
+    expect(container.querySelector('[aria-label="system.inference.activityActive"]')).toBeNull();
+    expect(container.querySelector('[aria-label="system.inference.activityIdle"]')).toBeNull();
   });
 });

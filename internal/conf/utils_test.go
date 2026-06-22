@@ -277,6 +277,25 @@ func TestFindConfigFile_EmptyConfigPathFallsThrough(t *testing.T) {
 	}
 }
 
+func TestResolveConfigDir_ExplicitConfigPathHonoredWhenMissing(t *testing.T) {
+	// Save and restore the global ConfigPath after the test.
+	origConfigPath := ConfigPath
+	t.Cleanup(func() {
+		ConfigPath = origConfigPath
+	})
+
+	// An explicit --config path pointing at a file that does not exist yet
+	// (fresh install before the first save) must still resolve to that file's
+	// directory, so co-located artifacts (the model catalog) land next to the
+	// user-specified config rather than in a default directory.
+	tmpDir := t.TempDir()
+	ConfigPath = filepath.Join(tmpDir, "custom-config.yaml")
+
+	dir, err := ResolveConfigDir()
+	require.NoError(t, err)
+	assert.Equal(t, tmpDir, dir, "ResolveConfigDir should return the explicit --config directory even when the file is absent")
+}
+
 func TestGetSoxFormats_WithExplicitPath(t *testing.T) {
 	soxPath, err := exec.LookPath(GetSoxBinaryName())
 	if err != nil {

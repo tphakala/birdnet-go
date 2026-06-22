@@ -50,6 +50,8 @@ export interface ModelStats {
   avgMs: number;
   maxMs: number;
   rtf?: number;
+  errorRate?: number;
+  loadFailures?: number;
 }
 
 /** Approximate host RAM (RSS) attributed to a model. `approxRssBytes` is absent when unavailable. */
@@ -70,15 +72,43 @@ export interface ModelSource {
 export interface ModelMetricKeys {
   avgMs: string;
   rtf: string;
+  throughput: string;
+  errorRate: string;
+}
+
+/** A recent detection in a model's "Last heard" feed (throttled per species). */
+export interface InferenceLastDetection {
+  species: string;
+  scientificName: string;
+  confidence: number;
+  atUnix: number;
+  /**
+   * Whether the species passes the range filter. True when in range or the range
+   * filter is inactive (e.g. no location configured). When the range filter is
+   * active it is false for out-of-range birds and for non-avian and human classes,
+   * which are shown for diagnostics but are not saved as detections.
+   */
+  inRange: boolean;
 }
 
 /** A single loaded model and its current state. */
 export interface InferenceModel {
   id: string;
   name: string;
+  /**
+   * Inference execution backend the model is actually running on ("TFLite",
+   * "ONNX", or "OpenVINO"), resolved from the live instance, not the model file
+   * type. An ONNX model executed through the OpenVINO runtime reports "OpenVINO".
+   * Falls back to the static file type when the model is not loaded.
+   */
   backend: string;
   detectionName?: string;
   detectionVersion?: string;
+  /**
+   * Effective runtime precision ("INT8"/"FP16"/"FP32"), which can differ from the
+   * weight precision in the file (e.g. an FP32 ONNX model executed on OpenVINO at
+   * FP16). Absent when unknown.
+   */
   quantization?: string;
   isStock: boolean;
   spec: ModelSpec;
@@ -87,6 +117,28 @@ export interface InferenceModel {
   memory: ModelMemory;
   sources: ModelSource[];
   metricKeys: ModelMetricKeys;
+  lastDetection?: InferenceLastDetection;
+  /** Compute device the model's inference runs on ("CPU", "GPU", "NPU", or "Unknown"). */
+  device?: string;
+  /** True when the model is currently paused by a schedule (e.g. bat night schedule). */
+  paused?: boolean;
+  /** Human-readable reason the model is paused, when paused (e.g. "Night schedule"). */
+  scheduleLabel?: string;
+  /** Most recent above-threshold predictions, newest first (up to 20). */
+  recentDetections?: InferenceLastDetection[];
+}
+
+/** Ring-buffer metric keys used to look up audio pipeline time series. */
+export interface InferenceAudioMetricKeys {
+  queueDepth: string;
+}
+
+/** Audio pipeline metrics snapshot for the inference page. */
+export interface InferenceAudio {
+  queueDepth: number;
+  droppedChunksTotal: number;
+  queueCapacity: number;
+  metricKeys: InferenceAudioMetricKeys;
 }
 
 /** Full inference status snapshot. `models` is the single source of truth. */
@@ -94,6 +146,7 @@ export interface InferenceStatusResponse {
   hardware: InferenceHardware;
   backends: InferenceBackends;
   models: InferenceModel[];
+  audio?: InferenceAudio;
   runtimeBaselineBytes?: number;
   snapshotAtUnix: number;
 }

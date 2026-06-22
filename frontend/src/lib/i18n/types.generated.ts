@@ -185,7 +185,6 @@ export type TranslationKey =
   | 'pageTitle.serverError'
   | 'pageTitle.componentError'
   | 'pageTitle.speciesAnalytics'
-  | 'pageTitle.advancedAnalytics'
   | 'pageTitle.detectionDetails'
   | 'pageTitle.settingsNotAvailable'
   | 'navigation.dashboard'
@@ -1199,6 +1198,44 @@ export type TranslationKey =
   | 'system.inference.unitMs'
   | 'system.inference.unitKhz'
   | 'system.inference.unitSec'
+  | 'system.inference.sectionAudio'
+  | 'system.inference.queueDepth'
+  | 'system.inference.queueDepthChart'
+  | 'system.inference.droppedChunks'
+  | 'system.inference.queueCapacity'
+  | 'system.inference.lastSeen'
+  | 'system.inference.lastSeenNever'
+  | 'system.inference.deviceHelp'
+  | 'system.inference.paused'
+  | 'system.inference.pausedScheduleHelp'
+  | 'system.inference.activityPaused'
+  | 'system.inference.lastHeard'
+  | 'system.inference.lastHeardHint'
+  | 'system.inference.lastHeardNever'
+  | 'system.inference.confidenceColumn'
+  | 'system.inference.heardWhen'
+  | 'system.inference.coDetectedColumn'
+  | 'system.inference.coDetectedHelp' // params: seconds
+  | 'system.inference.outOfRangeHelp'
+  | 'system.inference.peak'
+  | 'system.inference.activityActive'
+  | 'system.inference.activityIdle'
+  | 'system.inference.throughput'
+  | 'system.inference.throughputUnit'
+  | 'system.inference.throughputChart'
+  | 'system.inference.errorRate'
+  | 'system.inference.loadFailures'
+  | 'system.inference.rtfHelp'
+  | 'system.inference.queueDepthHelp'
+  | 'system.inference.queueCapacityHelp'
+  | 'system.inference.droppedChunksHelp'
+  | 'system.inference.throughputHelp'
+  | 'system.inference.errorRateHelp'
+  | 'system.inference.loadFailuresHelp'
+  | 'system.inference.fp16Help'
+  | 'system.inference.invocationsHelp'
+  | 'system.inference.noModelsHint'
+  | 'system.inference.noModelsHintLink'
   | 'system.metrics.cpu'
   | 'system.metrics.memory'
   | 'system.metrics.temperature'
@@ -1246,6 +1283,23 @@ export type TranslationKey =
   | 'terminal.detached'
   | 'terminal.detachedDescription'
   | 'terminal.reattach'
+  | 'analytics.hub.tabs.overview'
+  | 'analytics.hub.tabs.patterns'
+  | 'analytics.hub.tabs.trends'
+  | 'analytics.hub.tabs.biodiversity'
+  | 'analytics.hub.tabs.quality'
+  | 'analytics.hub.aria.tabs'
+  | 'analytics.hub.controls.source'
+  | 'analytics.hub.controls.sourceAll'
+  | 'analytics.hub.controls.sourceComingSoon'
+  | 'analytics.hub.controls.speciesNotApplicable'
+  | 'analytics.hub.card.error'
+  | 'analytics.hub.card.retry'
+  | 'analytics.hub.card.notEnoughData'
+  | 'analytics.hub.card.notEnoughDataHint' // params: min
+  | 'analytics.hub.card.export'
+  | 'analytics.hub.card.exportComingSoon'
+  | 'analytics.hub.comingSoon.description'
   | 'analytics.title'
   | 'analytics.loadingError'
   | 'analytics.stats.totalDetections'
@@ -1332,7 +1386,6 @@ export type TranslationKey =
   | 'analytics.species.card.detections'
   | 'analytics.species.card.confidence'
   | 'analytics.species.card.first'
-  | 'analytics.advanced.title'
   | 'analytics.advanced.chartControls'
   | 'analytics.advanced.dateRange'
   | 'analytics.advanced.chartOptions'
@@ -1368,6 +1421,75 @@ export type TranslationKey =
   | 'analytics.advanced.charts.diversity.noDataHint'
   | 'analytics.advanced.charts.diversity.axisDate'
   | 'analytics.advanced.charts.diversity.axisUniqueSpecies'
+  | 'analytics.advanced.charts.accumulation.title'
+  | 'analytics.advanced.charts.accumulation.description'
+  | 'analytics.advanced.charts.accumulation.noData'
+  | 'analytics.advanced.charts.accumulation.noDataHint'
+  | 'analytics.advanced.charts.accumulation.ariaLabel'
+  | 'analytics.advanced.charts.accumulation.axisDate'
+  | 'analytics.advanced.charts.accumulation.axisSpecies'
+  | 'analytics.advanced.charts.accumulation.totalSpecies' // params: species
+  | 'analytics.advanced.charts.accumulation.tooltipCumulative'
+  | 'analytics.advanced.charts.accumulation.tooltipNew'
+  | 'analytics.advanced.charts.accumulation.summary' // params: days, species
+  | 'analytics.advanced.charts.heatmap.title'
+  | 'analytics.advanced.charts.heatmap.description'
+  | 'analytics.advanced.charts.heatmap.noData'
+  | 'analytics.advanced.charts.heatmap.noDataHint'
+  | 'analytics.advanced.charts.heatmap.axisDate'
+  | 'analytics.advanced.charts.heatmap.axisTime'
+  | 'analytics.advanced.charts.heatmap.tooltipTime'
+  | 'analytics.advanced.charts.heatmap.tooltipCount'
+  | 'analytics.advanced.charts.heatmap.legendLess'
+  | 'analytics.advanced.charts.heatmap.legendMore' // params: max
+  | 'analytics.advanced.charts.heatmap.ariaLabel'
+  | 'analytics.advanced.charts.heatmap.summary' // params: total, days, time, date
+  | 'analytics.advanced.charts.ridgeline.title'
+  | 'analytics.advanced.charts.ridgeline.description'
+  | 'analytics.advanced.charts.ridgeline.noData'
+  | 'analytics.advanced.charts.ridgeline.noDataHint'
+  | 'analytics.advanced.charts.ridgeline.ariaLabel'
+  | 'analytics.advanced.charts.ridgeline.axisTime'
+  | 'analytics.advanced.charts.ridgeline.note' // params: count
+  | 'analytics.advanced.charts.ridgeline.tooltipDetections'
+  | 'analytics.advanced.charts.ridgeline.tooltipPeak'
+  | 'analytics.advanced.charts.ridgeline.summary' // params: count, species, time
+  | 'analytics.advanced.charts.dawnOnset.title'
+  | 'analytics.advanced.charts.dawnOnset.description'
+  | 'analytics.advanced.charts.dawnOnset.noData'
+  | 'analytics.advanced.charts.dawnOnset.noDataHint'
+  | 'analytics.advanced.charts.dawnOnset.ariaLabel'
+  | 'analytics.advanced.charts.dawnOnset.axisDate'
+  | 'analytics.advanced.charts.dawnOnset.axisOnset'
+  | 'analytics.advanced.charts.dawnOnset.civilDawn'
+  | 'analytics.advanced.charts.dawnOnset.tooltipOnset'
+  | 'analytics.advanced.charts.dawnOnset.tooltipOnsetAfter' // params: minutes
+  | 'analytics.advanced.charts.dawnOnset.tooltipOnsetBefore' // params: minutes
+  | 'analytics.advanced.charts.dawnOnset.tooltipOnsetAt'
+  | 'analytics.advanced.charts.dawnOnset.tooltipCount'
+  | 'analytics.advanced.charts.dawnOnset.summary' // params: days, plotted
+  | 'analytics.advanced.charts.nocturnal.title'
+  | 'analytics.advanced.charts.nocturnal.description'
+  | 'analytics.advanced.charts.nocturnal.noData'
+  | 'analytics.advanced.charts.nocturnal.noDataHint'
+  | 'analytics.advanced.charts.nocturnal.ariaLabel'
+  | 'analytics.advanced.charts.nocturnal.axisHour'
+  | 'analytics.advanced.charts.nocturnal.tooltipHour' // params: start, end
+  | 'analytics.advanced.charts.nocturnal.tooltipCount'
+  | 'analytics.advanced.charts.nocturnal.summary' // params: total, peak
+  | 'analytics.advanced.charts.nocturnal.legendDay'
+  | 'analytics.advanced.charts.nocturnal.legendTwilight'
+  | 'analytics.advanced.charts.nocturnal.legendNight'
+  | 'analytics.advanced.charts.confidence.title'
+  | 'analytics.advanced.charts.confidence.description'
+  | 'analytics.advanced.charts.confidence.noData'
+  | 'analytics.advanced.charts.confidence.noDataHint'
+  | 'analytics.advanced.charts.confidence.ariaLabel'
+  | 'analytics.advanced.charts.confidence.axisLabel'
+  | 'analytics.advanced.charts.confidence.note' // params: count
+  | 'analytics.advanced.charts.confidence.tooltipCount'
+  | 'analytics.advanced.charts.confidence.tooltipPeak'
+  | 'analytics.advanced.charts.confidence.summary' // params: count, species, time
   | 'analytics.advanced.charts.tooltips.date'
   | 'analytics.advanced.charts.tooltips.percentage'
   | 'analytics.advanced.charts.tooltips.detections'
@@ -3868,8 +3990,45 @@ export type TranslationParams = {
   };
   'system.database.migration.prerequisites.criticalCount': { count: string | number };
   'system.database.migration.prerequisites.warningCount': { count: string | number };
+  'system.inference.coDetectedHelp': { seconds: string | number };
+  'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
+  'analytics.advanced.charts.accumulation.totalSpecies': { species: string | number };
+  'analytics.advanced.charts.accumulation.summary': {
+    days: string | number;
+    species: string | number;
+  };
+  'analytics.advanced.charts.heatmap.legendMore': { max: string | number };
+  'analytics.advanced.charts.heatmap.summary': {
+    total: string | number;
+    days: string | number;
+    time: string | number;
+    date: string | number;
+  };
+  'analytics.advanced.charts.ridgeline.note': { count: string | number };
+  'analytics.advanced.charts.ridgeline.summary': {
+    count: string | number;
+    species: string | number;
+    time: string | number;
+  };
+  'analytics.advanced.charts.dawnOnset.tooltipOnsetAfter': { minutes: string | number };
+  'analytics.advanced.charts.dawnOnset.tooltipOnsetBefore': { minutes: string | number };
+  'analytics.advanced.charts.dawnOnset.summary': {
+    days: string | number;
+    plotted: string | number;
+  };
+  'analytics.advanced.charts.nocturnal.tooltipHour': {
+    start: string | number;
+    end: string | number;
+  };
+  'analytics.advanced.charts.nocturnal.summary': { total: string | number; peak: string | number };
+  'analytics.advanced.charts.confidence.note': { count: string | number };
+  'analytics.advanced.charts.confidence.summary': {
+    count: string | number;
+    species: string | number;
+    time: string | number;
+  };
   'settings.notFound.message': { section: string | number };
   'settings.main.sections.falsePositiveFilter.detectionCount': {
     count: string | number;

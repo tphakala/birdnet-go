@@ -332,7 +332,7 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			// BG-17: InitFromDatabase now loads notification history
-			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 				Return([]datastore.NotificationHistory{}, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -414,7 +414,7 @@ func TestDateRangeFunctions_CriticalReliability(t *testing.T) {
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			// BG-17: InitFromDatabase now loads notification history
-			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 				Return([]datastore.NotificationHistory{}, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil).Maybe()

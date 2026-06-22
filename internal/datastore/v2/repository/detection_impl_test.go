@@ -132,6 +132,57 @@ func TestSearch_QueryAndCommonLabelIDs(t *testing.T) {
 	})
 }
 
+// TestGetSpeciesFirstDetectionInPeriod characterizes the per-species first-detection
+// query: period filtering, aggregation across multiple labels of the same scientific
+// name, MIN(detected_at) selection, and ascending order. It must hold for any
+// implementation (window function or GROUP BY+MIN).
+func TestGetSpeciesFirstDetectionInPeriod(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	// Two species with a single label, plus one species with two labels (two models)
+	// to verify aggregation across labels by scientific_name.
+	corone := createTestLabel(t, db, "Corvus corone", 1)
+	robin := createTestLabel(t, db, "Erithacus rubecula", 1)
+	merulaM1 := createTestLabel(t, db, "Turdus merula", 1)
+	merulaM2 := createTestLabel(t, db, "Turdus merula", 2)
+
+	const start, end int64 = 2000, 4000
+
+	// Corvus corone: two detections in period -> first is 2000.
+	createDetectionForLabel(t, db, corone.ID, 2000)
+	createDetectionForLabel(t, db, corone.ID, 2500)
+	// Erithacus rubecula: one BEFORE the period (excluded), one inside -> first is 3000.
+	createDetectionForLabel(t, db, robin.ID, 1000)
+	createDetectionForLabel(t, db, robin.ID, 3000)
+	// Turdus merula: detections under two different labels; first across both is 2100.
+	createDetectionForLabel(t, db, merulaM1.ID, 2200)
+	createDetectionForLabel(t, db, merulaM2.ID, 2100)
+	// A detection AFTER the period end is excluded (end is exclusive).
+	createDetectionForLabel(t, db, corone.ID, 5000)
+
+	results, err := repo.GetSpeciesFirstDetectionInPeriod(ctx, start, end, 100, 0)
+	require.NoError(t, err)
+
+	// Build a name->firstDetected map for order-independent value checks.
+	got := make(map[string]int64, len(results))
+	for _, r := range results {
+		got[r.ScientificName] = r.FirstDetected
+	}
+	assert.Equal(t, int64(2000), got["Corvus corone"], "corone first detection in period")
+	assert.Equal(t, int64(3000), got["Erithacus rubecula"], "robin first in-period detection (pre-period excluded)")
+	assert.Equal(t, int64(2100), got["Turdus merula"], "merula first across both labels")
+	assert.Len(t, results, 3, "exactly the three species detected within the period")
+
+	// Results are ordered by first_detected ascending.
+	firsts := make([]int64, len(results))
+	for i, r := range results {
+		firsts[i] = r.FirstDetected
+	}
+	assert.Equal(t, []int64{2000, 2100, 3000}, firsts, "ascending by first_detected")
+}
+
 // TestSearch_ScientificLikeNotTruncated guards against the prior 100-row cap: the scientific
 // LIKE runs in SQL and must return all matches, not a capped subset. See issue #3378.
 func TestSearch_ScientificLikeNotTruncated(t *testing.T) {

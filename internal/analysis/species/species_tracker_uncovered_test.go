@@ -169,7 +169,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 
 		tracker := NewTrackerFromSettings(ds, settings)
 		now := time.Now()
-		err := tracker.loadYearlyDataFromDatabase(now)
+		err := tracker.loadYearlyDataFromDatabase(t.Context(), now)
 		require.NoError(t, err)
 
 		// Check data was loaded
@@ -198,7 +198,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 		tracker.speciesThisYear["Existing"] = time.Now().Add(-20 * 24 * time.Hour)
 
 		now := time.Now()
-		err := tracker.loadYearlyDataFromDatabase(now)
+		err := tracker.loadYearlyDataFromDatabase(t.Context(), now)
 		require.NoError(t, err)
 
 		// Check existing data preserved
@@ -221,7 +221,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 
 		tracker := NewTrackerFromSettings(ds, settings)
 		now := time.Now()
-		err := tracker.loadYearlyDataFromDatabase(now)
+		err := tracker.loadYearlyDataFromDatabase(t.Context(), now)
 		assert.Error(t, err)
 	})
 }
@@ -269,7 +269,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 		tracker.currentSeason = testSeasonSpring
 
 		now := time.Now()
-		err := tracker.loadSeasonalDataFromDatabase(now)
+		err := tracker.loadSeasonalDataFromDatabase(t.Context(), now)
 		require.NoError(t, err)
 
 		// Check data was loaded
@@ -296,7 +296,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 		tracker.seasons = nil // No season maps
 
 		now := time.Now()
-		err := tracker.loadSeasonalDataFromDatabase(now)
+		err := tracker.loadSeasonalDataFromDatabase(t.Context(), now)
 		// Should not error but not load anything
 		require.NoError(t, err)
 		if tracker.speciesBySeason != nil {
@@ -334,7 +334,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 		tracker.speciesBySeason[testSeasonSpring]["Existing"] = time.Now().Add(-10 * 24 * time.Hour)
 
 		now := time.Now()
-		err := tracker.loadSeasonalDataFromDatabase(now)
+		err := tracker.loadSeasonalDataFromDatabase(t.Context(), now)
 		require.NoError(t, err)
 
 		// Check existing data preserved

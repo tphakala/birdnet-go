@@ -664,9 +664,9 @@ func (_c *MockInterface_DeleteExpiredDynamicThresholds_Call) RunAndReturn(run fu
 	return _c
 }
 
-// DeleteExpiredNotificationHistory provides a mock function with given fields: before
-func (_m *MockInterface) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
-	ret := _m.Called(before)
+// DeleteExpiredNotificationHistory provides a mock function with given fields: ctx, before
+func (_m *MockInterface) DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) {
+	ret := _m.Called(ctx, before)
 
 	if len(ret) == 0 {
 		panic("no return value specified for DeleteExpiredNotificationHistory")
@@ -674,17 +674,17 @@ func (_m *MockInterface) DeleteExpiredNotificationHistory(before time.Time) (int
 
 	var r0 int64
 	var r1 error
-	if rf, ok := ret.Get(0).(func(time.Time) (int64, error)); ok {
-		return rf(before)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) (int64, error)); ok {
+		return rf(ctx, before)
 	}
-	if rf, ok := ret.Get(0).(func(time.Time) int64); ok {
-		r0 = rf(before)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) int64); ok {
+		r0 = rf(ctx, before)
 	} else {
 		r0 = ret.Get(0).(int64)
 	}
 
-	if rf, ok := ret.Get(1).(func(time.Time) error); ok {
-		r1 = rf(before)
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
+		r1 = rf(ctx, before)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -698,14 +698,15 @@ type MockInterface_DeleteExpiredNotificationHistory_Call struct {
 }
 
 // DeleteExpiredNotificationHistory is a helper method to define mock.On call
+//   - ctx context.Context
 //   - before time.Time
-func (_e *MockInterface_Expecter) DeleteExpiredNotificationHistory(before interface{}) *MockInterface_DeleteExpiredNotificationHistory_Call {
-	return &MockInterface_DeleteExpiredNotificationHistory_Call{Call: _e.mock.On("DeleteExpiredNotificationHistory", before)}
+func (_e *MockInterface_Expecter) DeleteExpiredNotificationHistory(ctx interface{}, before interface{}) *MockInterface_DeleteExpiredNotificationHistory_Call {
+	return &MockInterface_DeleteExpiredNotificationHistory_Call{Call: _e.mock.On("DeleteExpiredNotificationHistory", ctx, before)}
 }
 
-func (_c *MockInterface_DeleteExpiredNotificationHistory_Call) Run(run func(before time.Time)) *MockInterface_DeleteExpiredNotificationHistory_Call {
+func (_c *MockInterface_DeleteExpiredNotificationHistory_Call) Run(run func(ctx context.Context, before time.Time)) *MockInterface_DeleteExpiredNotificationHistory_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(time.Time))
+		run(args[0].(context.Context), args[1].(time.Time))
 	})
 	return _c
 }
@@ -715,7 +716,7 @@ func (_c *MockInterface_DeleteExpiredNotificationHistory_Call) Return(_a0 int64,
 	return _c
 }
 
-func (_c *MockInterface_DeleteExpiredNotificationHistory_Call) RunAndReturn(run func(time.Time) (int64, error)) *MockInterface_DeleteExpiredNotificationHistory_Call {
+func (_c *MockInterface_DeleteExpiredNotificationHistory_Call) RunAndReturn(run func(context.Context, time.Time) (int64, error)) *MockInterface_DeleteExpiredNotificationHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -960,9 +961,9 @@ func (_c *MockInterface_Get_Call) RunAndReturn(run func(string) (datastore.Note,
 	return _c
 }
 
-// GetActiveNotificationHistory provides a mock function with given fields: after
-func (_m *MockInterface) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
-	ret := _m.Called(after)
+// GetActiveNotificationHistory provides a mock function with given fields: ctx, after
+func (_m *MockInterface) GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
+	ret := _m.Called(ctx, after)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActiveNotificationHistory")
@@ -970,19 +971,19 @@ func (_m *MockInterface) GetActiveNotificationHistory(after time.Time) ([]datast
 
 	var r0 []datastore.NotificationHistory
 	var r1 error
-	if rf, ok := ret.Get(0).(func(time.Time) ([]datastore.NotificationHistory, error)); ok {
-		return rf(after)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) ([]datastore.NotificationHistory, error)); ok {
+		return rf(ctx, after)
 	}
-	if rf, ok := ret.Get(0).(func(time.Time) []datastore.NotificationHistory); ok {
-		r0 = rf(after)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) []datastore.NotificationHistory); ok {
+		r0 = rf(ctx, after)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.NotificationHistory)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(time.Time) error); ok {
-		r1 = rf(after)
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
+		r1 = rf(ctx, after)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -996,14 +997,15 @@ type MockInterface_GetActiveNotificationHistory_Call struct {
 }
 
 // GetActiveNotificationHistory is a helper method to define mock.On call
+//   - ctx context.Context
 //   - after time.Time
-func (_e *MockInterface_Expecter) GetActiveNotificationHistory(after interface{}) *MockInterface_GetActiveNotificationHistory_Call {
-	return &MockInterface_GetActiveNotificationHistory_Call{Call: _e.mock.On("GetActiveNotificationHistory", after)}
+func (_e *MockInterface_Expecter) GetActiveNotificationHistory(ctx interface{}, after interface{}) *MockInterface_GetActiveNotificationHistory_Call {
+	return &MockInterface_GetActiveNotificationHistory_Call{Call: _e.mock.On("GetActiveNotificationHistory", ctx, after)}
 }
 
-func (_c *MockInterface_GetActiveNotificationHistory_Call) Run(run func(after time.Time)) *MockInterface_GetActiveNotificationHistory_Call {
+func (_c *MockInterface_GetActiveNotificationHistory_Call) Run(run func(ctx context.Context, after time.Time)) *MockInterface_GetActiveNotificationHistory_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(time.Time))
+		run(args[0].(context.Context), args[1].(time.Time))
 	})
 	return _c
 }
@@ -1013,7 +1015,66 @@ func (_c *MockInterface_GetActiveNotificationHistory_Call) Return(_a0 []datastor
 	return _c
 }
 
-func (_c *MockInterface_GetActiveNotificationHistory_Call) RunAndReturn(run func(time.Time) ([]datastore.NotificationHistory, error)) *MockInterface_GetActiveNotificationHistory_Call {
+func (_c *MockInterface_GetActiveNotificationHistory_Call) RunAndReturn(run func(context.Context, time.Time) ([]datastore.NotificationHistory, error)) *MockInterface_GetActiveNotificationHistory_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetActivityHeatmap provides a mock function with given fields: ctx, startDate, endDate, species
+func (_m *MockInterface) GetActivityHeatmap(ctx context.Context, startDate string, endDate string, species string) (datastore.ActivityHeatmapData, error) {
+	ret := _m.Called(ctx, startDate, endDate, species)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetActivityHeatmap")
+	}
+
+	var r0 datastore.ActivityHeatmapData
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) (datastore.ActivityHeatmapData, error)); ok {
+		return rf(ctx, startDate, endDate, species)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) datastore.ActivityHeatmapData); ok {
+		r0 = rf(ctx, startDate, endDate, species)
+	} else {
+		r0 = ret.Get(0).(datastore.ActivityHeatmapData)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = rf(ctx, startDate, endDate, species)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetActivityHeatmap_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetActivityHeatmap'
+type MockInterface_GetActivityHeatmap_Call struct {
+	*mock.Call
+}
+
+// GetActivityHeatmap is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - species string
+func (_e *MockInterface_Expecter) GetActivityHeatmap(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}) *MockInterface_GetActivityHeatmap_Call {
+	return &MockInterface_GetActivityHeatmap_Call{Call: _e.mock.On("GetActivityHeatmap", ctx, startDate, endDate, species)}
+}
+
+func (_c *MockInterface_GetActivityHeatmap_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string)) *MockInterface_GetActivityHeatmap_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetActivityHeatmap_Call) Return(_a0 datastore.ActivityHeatmapData, _a1 error) *MockInterface_GetActivityHeatmap_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetActivityHeatmap_Call) RunAndReturn(run func(context.Context, string, string, string) (datastore.ActivityHeatmapData, error)) *MockInterface_GetActivityHeatmap_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1783,6 +1844,130 @@ func (_c *MockInterface_GetCommentsBatch_Call) RunAndReturn(run func(uint, int) 
 	return _c
 }
 
+// GetConfidenceHistogram provides a mock function with given fields: ctx, startDate, endDate, species, bins, limit
+func (_m *MockInterface) GetConfidenceHistogram(ctx context.Context, startDate string, endDate string, species string, bins int, limit int) ([]datastore.SpeciesConfidenceHistogram, error) {
+	ret := _m.Called(ctx, startDate, endDate, species, bins, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetConfidenceHistogram")
+	}
+
+	var r0 []datastore.SpeciesConfidenceHistogram
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, int, int) ([]datastore.SpeciesConfidenceHistogram, error)); ok {
+		return rf(ctx, startDate, endDate, species, bins, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, int, int) []datastore.SpeciesConfidenceHistogram); ok {
+		r0 = rf(ctx, startDate, endDate, species, bins, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SpeciesConfidenceHistogram)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string, int, int) error); ok {
+		r1 = rf(ctx, startDate, endDate, species, bins, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetConfidenceHistogram_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetConfidenceHistogram'
+type MockInterface_GetConfidenceHistogram_Call struct {
+	*mock.Call
+}
+
+// GetConfidenceHistogram is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - species string
+//   - bins int
+//   - limit int
+func (_e *MockInterface_Expecter) GetConfidenceHistogram(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}, bins interface{}, limit interface{}) *MockInterface_GetConfidenceHistogram_Call {
+	return &MockInterface_GetConfidenceHistogram_Call{Call: _e.mock.On("GetConfidenceHistogram", ctx, startDate, endDate, species, bins, limit)}
+}
+
+func (_c *MockInterface_GetConfidenceHistogram_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string, bins int, limit int)) *MockInterface_GetConfidenceHistogram_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), args[4].(int), args[5].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetConfidenceHistogram_Call) Return(_a0 []datastore.SpeciesConfidenceHistogram, _a1 error) *MockInterface_GetConfidenceHistogram_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetConfidenceHistogram_Call) RunAndReturn(run func(context.Context, string, string, string, int, int) ([]datastore.SpeciesConfidenceHistogram, error)) *MockInterface_GetConfidenceHistogram_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetDailyActivityOnset provides a mock function with given fields: ctx, startDate, endDate, species
+func (_m *MockInterface) GetDailyActivityOnset(ctx context.Context, startDate string, endDate string, species string) ([]datastore.DailyActivityOnset, error) {
+	ret := _m.Called(ctx, startDate, endDate, species)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDailyActivityOnset")
+	}
+
+	var r0 []datastore.DailyActivityOnset
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) ([]datastore.DailyActivityOnset, error)); ok {
+		return rf(ctx, startDate, endDate, species)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) []datastore.DailyActivityOnset); ok {
+		r0 = rf(ctx, startDate, endDate, species)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.DailyActivityOnset)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = rf(ctx, startDate, endDate, species)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetDailyActivityOnset_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetDailyActivityOnset'
+type MockInterface_GetDailyActivityOnset_Call struct {
+	*mock.Call
+}
+
+// GetDailyActivityOnset is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - species string
+func (_e *MockInterface_Expecter) GetDailyActivityOnset(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}) *MockInterface_GetDailyActivityOnset_Call {
+	return &MockInterface_GetDailyActivityOnset_Call{Call: _e.mock.On("GetDailyActivityOnset", ctx, startDate, endDate, species)}
+}
+
+func (_c *MockInterface_GetDailyActivityOnset_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string)) *MockInterface_GetDailyActivityOnset_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetDailyActivityOnset_Call) Return(_a0 []datastore.DailyActivityOnset, _a1 error) *MockInterface_GetDailyActivityOnset_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetDailyActivityOnset_Call) RunAndReturn(run func(context.Context, string, string, string) ([]datastore.DailyActivityOnset, error)) *MockInterface_GetDailyActivityOnset_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetDailyAnalyticsData provides a mock function with given fields: ctx, startDate, endDate, species
 func (_m *MockInterface) GetDailyAnalyticsData(ctx context.Context, startDate string, endDate string, species string) ([]datastore.DailyAnalyticsData, error) {
 	ret := _m.Called(ctx, startDate, endDate, species)
@@ -2334,6 +2519,67 @@ func (_c *MockInterface_GetHourlyDistribution_Call) Return(_a0 []datastore.Hourl
 }
 
 func (_c *MockInterface_GetHourlyDistribution_Call) RunAndReturn(run func(context.Context, string, string, string) ([]datastore.HourlyDistributionData, error)) *MockInterface_GetHourlyDistribution_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetHourlyDistributionBySpecies provides a mock function with given fields: ctx, startDate, endDate, limit
+func (_m *MockInterface) GetHourlyDistributionBySpecies(ctx context.Context, startDate string, endDate string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
+	ret := _m.Called(ctx, startDate, endDate, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetHourlyDistributionBySpecies")
+	}
+
+	var r0 []datastore.SpeciesHourlyDistribution
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) ([]datastore.SpeciesHourlyDistribution, error)); ok {
+		return rf(ctx, startDate, endDate, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) []datastore.SpeciesHourlyDistribution); ok {
+		r0 = rf(ctx, startDate, endDate, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SpeciesHourlyDistribution)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = rf(ctx, startDate, endDate, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetHourlyDistributionBySpecies_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetHourlyDistributionBySpecies'
+type MockInterface_GetHourlyDistributionBySpecies_Call struct {
+	*mock.Call
+}
+
+// GetHourlyDistributionBySpecies is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - limit int
+func (_e *MockInterface_Expecter) GetHourlyDistributionBySpecies(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}) *MockInterface_GetHourlyDistributionBySpecies_Call {
+	return &MockInterface_GetHourlyDistributionBySpecies_Call{Call: _e.mock.On("GetHourlyDistributionBySpecies", ctx, startDate, endDate, limit)}
+}
+
+func (_c *MockInterface_GetHourlyDistributionBySpecies_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int)) *MockInterface_GetHourlyDistributionBySpecies_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetHourlyDistributionBySpecies_Call) Return(_a0 []datastore.SpeciesHourlyDistribution, _a1 error) *MockInterface_GetHourlyDistributionBySpecies_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetHourlyDistributionBySpecies_Call) RunAndReturn(run func(context.Context, string, string, int) ([]datastore.SpeciesHourlyDistribution, error)) *MockInterface_GetHourlyDistributionBySpecies_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3093,9 +3339,9 @@ func (_c *MockInterface_GetNoteReview_Call) RunAndReturn(run func(string) (*data
 	return _c
 }
 
-// GetNotificationHistory provides a mock function with given fields: scientificName, notificationType
-func (_m *MockInterface) GetNotificationHistory(scientificName string, notificationType string) (*datastore.NotificationHistory, error) {
-	ret := _m.Called(scientificName, notificationType)
+// GetNotificationHistory provides a mock function with given fields: ctx, scientificName, notificationType
+func (_m *MockInterface) GetNotificationHistory(ctx context.Context, scientificName string, notificationType string) (*datastore.NotificationHistory, error) {
+	ret := _m.Called(ctx, scientificName, notificationType)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetNotificationHistory")
@@ -3103,19 +3349,19 @@ func (_m *MockInterface) GetNotificationHistory(scientificName string, notificat
 
 	var r0 *datastore.NotificationHistory
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string, string) (*datastore.NotificationHistory, error)); ok {
-		return rf(scientificName, notificationType)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) (*datastore.NotificationHistory, error)); ok {
+		return rf(ctx, scientificName, notificationType)
 	}
-	if rf, ok := ret.Get(0).(func(string, string) *datastore.NotificationHistory); ok {
-		r0 = rf(scientificName, notificationType)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) *datastore.NotificationHistory); ok {
+		r0 = rf(ctx, scientificName, notificationType)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*datastore.NotificationHistory)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(string, string) error); ok {
-		r1 = rf(scientificName, notificationType)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, scientificName, notificationType)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -3129,15 +3375,16 @@ type MockInterface_GetNotificationHistory_Call struct {
 }
 
 // GetNotificationHistory is a helper method to define mock.On call
+//   - ctx context.Context
 //   - scientificName string
 //   - notificationType string
-func (_e *MockInterface_Expecter) GetNotificationHistory(scientificName interface{}, notificationType interface{}) *MockInterface_GetNotificationHistory_Call {
-	return &MockInterface_GetNotificationHistory_Call{Call: _e.mock.On("GetNotificationHistory", scientificName, notificationType)}
+func (_e *MockInterface_Expecter) GetNotificationHistory(ctx interface{}, scientificName interface{}, notificationType interface{}) *MockInterface_GetNotificationHistory_Call {
+	return &MockInterface_GetNotificationHistory_Call{Call: _e.mock.On("GetNotificationHistory", ctx, scientificName, notificationType)}
 }
 
-func (_c *MockInterface_GetNotificationHistory_Call) Run(run func(scientificName string, notificationType string)) *MockInterface_GetNotificationHistory_Call {
+func (_c *MockInterface_GetNotificationHistory_Call) Run(run func(ctx context.Context, scientificName string, notificationType string)) *MockInterface_GetNotificationHistory_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(string))
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
 	})
 	return _c
 }
@@ -3147,7 +3394,7 @@ func (_c *MockInterface_GetNotificationHistory_Call) Return(_a0 *datastore.Notif
 	return _c
 }
 
-func (_c *MockInterface_GetNotificationHistory_Call) RunAndReturn(run func(string, string) (*datastore.NotificationHistory, error)) *MockInterface_GetNotificationHistory_Call {
+func (_c *MockInterface_GetNotificationHistory_Call) RunAndReturn(run func(context.Context, string, string) (*datastore.NotificationHistory, error)) *MockInterface_GetNotificationHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3384,6 +3631,66 @@ func (_c *MockInterface_GetReviewsBatch_Call) Return(_a0 []datastore.NoteReview,
 }
 
 func (_c *MockInterface_GetReviewsBatch_Call) RunAndReturn(run func(uint, int) ([]datastore.NoteReview, error)) *MockInterface_GetReviewsBatch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetSpeciesAccumulation provides a mock function with given fields: ctx, startDate, endDate
+func (_m *MockInterface) GetSpeciesAccumulation(ctx context.Context, startDate string, endDate string) ([]datastore.SpeciesAccumulationPoint, error) {
+	ret := _m.Called(ctx, startDate, endDate)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSpeciesAccumulation")
+	}
+
+	var r0 []datastore.SpeciesAccumulationPoint
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]datastore.SpeciesAccumulationPoint, error)); ok {
+		return rf(ctx, startDate, endDate)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) []datastore.SpeciesAccumulationPoint); ok {
+		r0 = rf(ctx, startDate, endDate)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SpeciesAccumulationPoint)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, startDate, endDate)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetSpeciesAccumulation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSpeciesAccumulation'
+type MockInterface_GetSpeciesAccumulation_Call struct {
+	*mock.Call
+}
+
+// GetSpeciesAccumulation is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+func (_e *MockInterface_Expecter) GetSpeciesAccumulation(ctx interface{}, startDate interface{}, endDate interface{}) *MockInterface_GetSpeciesAccumulation_Call {
+	return &MockInterface_GetSpeciesAccumulation_Call{Call: _e.mock.On("GetSpeciesAccumulation", ctx, startDate, endDate)}
+}
+
+func (_c *MockInterface_GetSpeciesAccumulation_Call) Run(run func(ctx context.Context, startDate string, endDate string)) *MockInterface_GetSpeciesAccumulation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesAccumulation_Call) Return(_a0 []datastore.SpeciesAccumulationPoint, _a1 error) *MockInterface_GetSpeciesAccumulation_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesAccumulation_Call) RunAndReturn(run func(context.Context, string, string) ([]datastore.SpeciesAccumulationPoint, error)) *MockInterface_GetSpeciesAccumulation_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -4426,17 +4733,17 @@ func (_c *MockInterface_SaveNoteReview_Call) RunAndReturn(run func(*datastore.No
 	return _c
 }
 
-// SaveNotificationHistory provides a mock function with given fields: history
-func (_m *MockInterface) SaveNotificationHistory(history *datastore.NotificationHistory) error {
-	ret := _m.Called(history)
+// SaveNotificationHistory provides a mock function with given fields: ctx, history
+func (_m *MockInterface) SaveNotificationHistory(ctx context.Context, history *datastore.NotificationHistory) error {
+	ret := _m.Called(ctx, history)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SaveNotificationHistory")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*datastore.NotificationHistory) error); ok {
-		r0 = rf(history)
+	if rf, ok := ret.Get(0).(func(context.Context, *datastore.NotificationHistory) error); ok {
+		r0 = rf(ctx, history)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -4450,14 +4757,15 @@ type MockInterface_SaveNotificationHistory_Call struct {
 }
 
 // SaveNotificationHistory is a helper method to define mock.On call
+//   - ctx context.Context
 //   - history *datastore.NotificationHistory
-func (_e *MockInterface_Expecter) SaveNotificationHistory(history interface{}) *MockInterface_SaveNotificationHistory_Call {
-	return &MockInterface_SaveNotificationHistory_Call{Call: _e.mock.On("SaveNotificationHistory", history)}
+func (_e *MockInterface_Expecter) SaveNotificationHistory(ctx interface{}, history interface{}) *MockInterface_SaveNotificationHistory_Call {
+	return &MockInterface_SaveNotificationHistory_Call{Call: _e.mock.On("SaveNotificationHistory", ctx, history)}
 }
 
-func (_c *MockInterface_SaveNotificationHistory_Call) Run(run func(history *datastore.NotificationHistory)) *MockInterface_SaveNotificationHistory_Call {
+func (_c *MockInterface_SaveNotificationHistory_Call) Run(run func(ctx context.Context, history *datastore.NotificationHistory)) *MockInterface_SaveNotificationHistory_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*datastore.NotificationHistory))
+		run(args[0].(context.Context), args[1].(*datastore.NotificationHistory))
 	})
 	return _c
 }
@@ -4467,7 +4775,7 @@ func (_c *MockInterface_SaveNotificationHistory_Call) Return(_a0 error) *MockInt
 	return _c
 }
 
-func (_c *MockInterface_SaveNotificationHistory_Call) RunAndReturn(run func(*datastore.NotificationHistory) error) *MockInterface_SaveNotificationHistory_Call {
+func (_c *MockInterface_SaveNotificationHistory_Call) RunAndReturn(run func(context.Context, *datastore.NotificationHistory) error) *MockInterface_SaveNotificationHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -36,6 +36,12 @@ func (a *BirdNETAnalyzer) Name() string {
 // Start initializes the BirdNET interpreter and builds the species range filter.
 // Model initialization failures are non-retryable (missing files, insufficient resources).
 func (a *BirdNETAnalyzer) Start(_ context.Context) error {
+	// Load the user-editable model catalog before constructing the orchestrator
+	// so every catalog consumer (range-filter setup, the gallery API, the
+	// installed-model scan) sees the same active catalog. Non-fatal: any failure
+	// falls back to the built-in embedded catalog.
+	a.loadModelCatalog()
+
 	bn, err := classifier.NewOrchestrator(a.settings)
 	if err != nil {
 		return errors.New(err).
@@ -102,6 +108,32 @@ func (a *BirdNETAnalyzer) ModelManager() *classifier.ModelManager {
 // initModelManager creates and populates the ModelManager for the model gallery.
 // If the models directory cannot be determined or the manager fails to scan,
 // a warning is logged and the analyzer continues without gallery support.
+// loadModelCatalog loads the user-editable model catalog into the active runtime
+// catalog: seed it on first run, refresh it when a new release ships a changed
+// built-in catalog, and fall back to the embedded catalog on any error. It runs
+// before the orchestrator and model manager so every catalog consumer sees the
+// same active catalog. The catalog file co-locates with config.yaml (the
+// resolved config directory), which is independent of the model-files directory
+// (conf.Settings.ResolveModelsDir); both coincide on a default install but can
+// differ for a system (/etc) or --config install. Failure is non-fatal: the
+// built-in embedded catalog is used and startup continues.
+func (a *BirdNETAnalyzer) loadModelCatalog() {
+	log := GetLogger()
+
+	configDir, err := conf.ResolveConfigDir()
+	if err != nil {
+		log.Warn("could not resolve config directory; using built-in model catalog",
+			logger.String("service", birdNETAnalyzerName),
+			logger.Error(err))
+		return
+	}
+	if err := classifier.LoadCatalog(configDir); err != nil {
+		log.Warn("model catalog could not be fully loaded or persisted; using built-in catalog",
+			logger.String("service", birdNETAnalyzerName),
+			logger.Error(err))
+	}
+}
+
 func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator) {
 	log := GetLogger()
 

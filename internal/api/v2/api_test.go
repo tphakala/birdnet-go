@@ -77,17 +77,16 @@ func TestHealthCheck(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/health")
 
-	// Record start time to measure response time
-	startTime := time.Now()
-
 	// Test
 	require.NoError(t, controller.HealthCheck(c))
 	{
-		// Calculate response time
-		responseTime := time.Since(startTime)
-
-		// Check response time is reasonable (under 100ms for a simple health check)
-		assert.Less(t, responseTime.Milliseconds(), int64(100), "Health check should respond quickly")
+		// Note: response time is deliberately NOT asserted. HealthCheck gathers
+		// system metrics via gopsutil (mem.VirtualMemory, disk.Usage), whose
+		// syscalls are environment-dependent and can exceed 100ms on a loaded,
+		// coarse-timer CI runner under -race (notably windows-amd64). A wall-clock
+		// SLA on a directly-invoked handler measures the runner, not correctness,
+		// and was an intermittent CI flake. The response contents below are the
+		// real contract and are asserted deterministically.
 
 		// Check response code
 		assert.Equal(t, http.StatusOK, rec.Code)

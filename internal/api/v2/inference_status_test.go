@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -92,6 +93,40 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 	assert.True(t, prim[0].Fallback, "primary source must be a fallback")
 }
 
+// TestBuildSourceAttachments_MultiModelSourceAttachesAll verifies that a single
+// source assigned to several models (the real multi-model setup: one soundcard
+// feeding BirdNET + Perch + Bat) is attached to EVERY loaded model in its Models
+// list, not just the first. This mirrors the runtime fan-out in
+// resolveModelTargets, which routes the source's audio to all assigned models.
+func TestBuildSourceAttachments_MultiModelSourceAttachesAll(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+
+	// All three models loaded.
+	models := []classifier.ModelInfo{
+		{ID: primaryID},
+		{ID: classifier.RegistryIDPerchV2},
+		{ID: classifier.RegistryIDBat},
+	}
+
+	settings := &conf.Settings{}
+	// One soundcard source explicitly assigned to all three models.
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Äänikortti", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat}},
+	}
+
+	got := buildSourceAttachments(settings, models, primaryID)
+
+	// Every assigned, loaded model must show the source, none as a fallback.
+	for _, id := range []string{primaryID, classifier.RegistryIDPerchV2, classifier.RegistryIDBat} {
+		att := got[id]
+		require.Len(t, att, 1, "model %q must have the source attached", id)
+		assert.Equal(t, "Äänikortti", att[0].Name, "source name for %q", id)
+		assert.False(t, att[0].Fallback, "explicit assignment must not be a fallback for %q", id)
+	}
+}
+
 // TestBuildModelStatus verifies that buildModelStatus correctly computes
 // average latency, peak latency, RTF, and memory from a non-zero PeekSnapshot.
 func TestBuildModelStatus(t *testing.T) {
@@ -106,10 +141,11 @@ func TestBuildModelStatus(t *testing.T) {
 		NumSpecies:   6522,
 		Spec:         classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 	}
-	snap := inferencestats.PeekSnapshot{InvokeCount: 1000, InvokeTotalUs: 47_200_000, InvokeMaxUs: 130_000}
+	// MaxMs is sourced from the lifetime max (the model card uses the all-time peak).
+	snap := inferencestats.PeekSnapshot{InvokeCount: 1000, InvokeTotalUs: 47_200_000, InvokeMaxUsLifetime: 130_000}
 	rss := map[string]int64{"BirdNET_V2.4": rssVal}
 
-	got := buildModelStatus(&info, snap, rss, nil)
+	got := buildModelStatus(&info, snap, rss, nil, nil, nil)
 
 	assert.Equal(t, int64(1000), got.Stats.Invocations, "invocations")
 	assert.InDelta(t, 47.2, got.Stats.AvgMs, 0.1, "avgMs")
@@ -126,10 +162,46 @@ func TestBuildModelStatus(t *testing.T) {
 func TestBuildModelStatus_ZeroInvocations(t *testing.T) {
 	t.Parallel()
 	info := classifier.ModelInfo{ID: "X", Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}}
-	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil)
+	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil, nil, nil)
 	assert.Nil(t, got.Stats.RTF, "rtf must be nil with zero invocations (no divide-by-zero)")
 	assert.Nil(t, got.Memory.ApproxRssBytes, "approxRssBytes must be nil when RSS unavailable")
 	assert.True(t, got.Memory.Approximate, "memory.approximate must always be true")
+}
+
+// TestApplyRuntimeBackend verifies that live backend/precision values override the
+// static file metadata, while empty live values preserve the static fallback that
+// buildModelStatus set. This is the core of the runtime-sourced fix: an ONNX model
+// executed on OpenVINO must report "OpenVINO" with its FP16 compute precision, but
+// a model that is not loaded (empty live values) must keep its static metadata.
+func TestApplyRuntimeBackend(t *testing.T) {
+	t.Parallel()
+
+	t.Run("live values override static file metadata", func(t *testing.T) {
+		t.Parallel()
+		// Static metadata says ONNX/FP32 (the file), live says OpenVINO/FP16 (running).
+		status := InferenceModelStatus{Backend: classifier.BackendONNX, Quantization: string(classifier.QuantizationFP32)}
+		applyRuntimeBackend(&status, classifier.BackendOpenVINO, string(classifier.QuantizationFP16))
+		assert.Equal(t, classifier.BackendOpenVINO, status.Backend, "live backend must win over static ONNX")
+		assert.Equal(t, string(classifier.QuantizationFP16), status.Quantization, "live precision must win over static FP32")
+	})
+
+	t.Run("live precision fills an empty static quantization", func(t *testing.T) {
+		t.Parallel()
+		// Perch has no static quantization; the live INT8 (from the int8_arm filename)
+		// must surface on the card.
+		status := InferenceModelStatus{Backend: classifier.BackendONNX, Quantization: ""}
+		applyRuntimeBackend(&status, classifier.BackendONNX, string(classifier.QuantizationINT8))
+		assert.Equal(t, string(classifier.QuantizationINT8), status.Quantization, "live INT8 must surface for perch_v2_int8_arm")
+	})
+
+	t.Run("empty live values preserve the static fallback", func(t *testing.T) {
+		t.Parallel()
+		// Model not loaded: live values are empty, so the static metadata is kept.
+		status := InferenceModelStatus{Backend: classifier.BackendTFLite, Quantization: string(classifier.QuantizationFP32)}
+		applyRuntimeBackend(&status, "", "")
+		assert.Equal(t, classifier.BackendTFLite, status.Backend, "empty live backend must keep the static value")
+		assert.Equal(t, string(classifier.QuantizationFP32), status.Quantization, "empty live precision must keep the static value")
+	})
 }
 
 // TestGetInferenceStatus_HTTP200 verifies that GetInferenceStatus returns HTTP
@@ -191,4 +263,183 @@ func TestBroadcastInferenceTopologyChanged_NilSafe(t *testing.T) {
 
 	noStore := &Controller{}
 	assert.NotPanics(t, noStore.BroadcastInferenceTopologyChanged)
+}
+
+// TestGetInferenceStatus_AudioBlock verifies that GetInferenceStatus returns an
+// audio block with the expected metric key for queue depth and a non-negative
+// queue capacity matching RouteInboxCapacity.
+func TestGetInferenceStatus_AudioBlock(t *testing.T) {
+	// NOT parallel: publishTestSettings in setupTestEnvironment mutates global state.
+	e, _, controller := setupTestEnvironment(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetInferenceStatus(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp InferenceStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+	assert.Equal(t, observability.MetricKeyAudioQueueDepthAggregate, resp.Audio.MetricKeys.QueueDepth,
+		"audio.metricKeys.queueDepth must match the shared constant")
+	assert.Equal(t, audiocore.RouteInboxCapacity, resp.Audio.QueueCapacity,
+		"audio.queueCapacity must equal RouteInboxCapacity")
+	assert.GreaterOrEqual(t, resp.Audio.QueueDepth, 0, "audio.queueDepth must be non-negative")
+}
+
+// TestBuildModelStatus_MetricKeys verifies that buildModelStatus populates
+// throughput and error-rate metric keys using the inferencestats helpers.
+func TestBuildModelStatus_MetricKeys(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{
+		ID:   "BirdNET_V2.4",
+		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	snap := inferencestats.PeekSnapshot{InvokeCount: 100, InvokeErrors: 5}
+	got := buildModelStatus(&info, snap, nil, nil, nil, nil)
+
+	assert.Equal(t, inferencestats.ThroughputMetricKey("BirdNET_V2.4"), got.MetricKeys.Throughput,
+		"metricKeys.throughput must equal ThroughputMetricKey(id)")
+	assert.Equal(t, inferencestats.ErrorRateMetricKey("BirdNET_V2.4"), got.MetricKeys.ErrorRate,
+		"metricKeys.errorRate must equal ErrorRateMetricKey(id)")
+}
+
+// TestBuildModelStatus_ErrorRateAndLoadFailures verifies that buildModelStatus
+// computes error rate and populates load failures when data is available.
+func TestBuildModelStatus_ErrorRateAndLoadFailures(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{
+		ID:   "BirdNET_V2.4",
+		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	// 10 successes, 5 errors: errorRate = 5/15 ~= 0.333
+	snap := inferencestats.PeekSnapshot{InvokeCount: 10, InvokeErrors: 5}
+	loadFailures := map[string]int64{"BirdNET_V2.4": 3}
+
+	got := buildModelStatus(&info, snap, nil, nil, loadFailures, nil)
+
+	require.NotNil(t, got.Stats.ErrorRate, "errorRate must be non-nil when errors exist")
+	assert.InDelta(t, 5.0/15.0, *got.Stats.ErrorRate, 0.001, "errorRate = errors/(invocations+errors)")
+	require.NotNil(t, got.Stats.LoadFailures, "loadFailures must be non-nil when entry exists")
+	assert.Equal(t, int64(3), *got.Stats.LoadFailures, "loadFailures value")
+}
+
+// TestBuildModelStatus_ErrorRateNilWhenNoErrors verifies that error rate and
+// load failures are nil when there are no invocations and no map entry.
+func TestBuildModelStatus_ErrorRateNilWhenNoErrors(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{
+		ID:   "X",
+		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil, nil, nil)
+	assert.Nil(t, got.Stats.ErrorRate, "errorRate must be nil when total is zero")
+	assert.Nil(t, got.Stats.LoadFailures, "loadFailures must be nil when map is nil")
+}
+
+// TestBuildModelStatus_LastDetection verifies that buildModelStatus populates
+// LastDetection when the processor cache has an entry for the model.
+func TestBuildModelStatus_LastDetection(t *testing.T) {
+	t.Parallel()
+	info := classifier.ModelInfo{
+		ID:   "BirdNET_V2.4",
+		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	lastDetections := map[string]*LastDetectionInfo{
+		"BirdNET_V2.4": {
+			Species:        "European Robin",
+			ScientificName: "Erithacus rubecula",
+			Confidence:     0.92,
+			AtUnix:         1718000000,
+			InRange:        true,
+		},
+	}
+
+	got := buildModelStatus(&info, inferencestats.PeekSnapshot{}, nil, nil, nil, lastDetections)
+
+	require.NotNil(t, got.LastDetection, "lastDetection must be non-nil when cache has entry")
+	assert.Equal(t, "European Robin", got.LastDetection.Species)
+	assert.Equal(t, "Erithacus rubecula", got.LastDetection.ScientificName)
+	assert.InDelta(t, 0.92, got.LastDetection.Confidence, 0.001)
+	assert.Equal(t, int64(1718000000), got.LastDetection.AtUnix)
+	assert.True(t, got.LastDetection.InRange)
+}
+
+// TestInferenceModelStatus_JSONContract locks in the Phase A JSON field names
+// and shapes the frontend depends on: device, paused, scheduleLabel, and a
+// newest-first recentDetections array. recentDetections must serialize as an
+// array (never null) so the frontend can iterate it unconditionally, while an
+// empty scheduleLabel must be omitted.
+func TestInferenceModelStatus_JSONContract(t *testing.T) {
+	t.Parallel()
+
+	status := InferenceModelStatus{
+		ID:            "Bat",
+		Name:          "Bat",
+		Device:        deviceCPU,
+		Paused:        true,
+		ScheduleLabel: "Night schedule",
+		RecentDetections: []LastDetectionInfo{
+			{Species: "Common Pipistrelle", ScientificName: "Pipistrellus pipistrellus", Confidence: 0.81, AtUnix: 1718000200, InRange: true},
+			{Species: "Soprano Pipistrelle", ScientificName: "Pipistrellus pygmaeus", Confidence: 0.74, AtUnix: 1718000100, InRange: false},
+		},
+	}
+
+	raw, err := json.Marshal(status)
+	require.NoError(t, err)
+
+	var m map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &m))
+
+	// The Phase A keys are present under their contract names.
+	assert.JSONEq(t, `"CPU"`, string(m["device"]))
+	assert.JSONEq(t, `true`, string(m["paused"]))
+	assert.JSONEq(t, `"Night schedule"`, string(m["scheduleLabel"]))
+	require.Contains(t, m, "recentDetections", "recentDetections key must always be present")
+
+	// recentDetections is newest-first and serializes its nested fields.
+	var recent []LastDetectionInfo
+	require.NoError(t, json.Unmarshal(m["recentDetections"], &recent))
+	require.Len(t, recent, 2)
+	assert.Equal(t, "Common Pipistrelle", recent[0].Species, "recentDetections must be newest-first")
+	assert.Equal(t, int64(1718000200), recent[0].AtUnix)
+
+	// The nested field names are part of the contract: assert their JSON keys.
+	var rows []map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(m["recentDetections"], &rows))
+	require.NotEmpty(t, rows)
+	firstRow := rows[0]
+	for _, key := range []string{"species", "scientificName", "confidence", "atUnix", "inRange"} {
+		require.Contains(t, firstRow, key, "recentDetections element must carry the %q key", key)
+	}
+	assert.JSONEq(t, `true`, string(firstRow["inRange"]))
+
+	// An empty list still serializes as [] (never null) and an empty
+	// scheduleLabel is omitted from the object entirely.
+	active := InferenceModelStatus{ID: "x", Device: deviceUnknown, RecentDetections: []LastDetectionInfo{}}
+	rawActive, err := json.Marshal(active)
+	require.NoError(t, err)
+	var ma map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rawActive, &ma))
+	assert.JSONEq(t, `[]`, string(ma["recentDetections"]), "empty recentDetections must serialize as [] not null")
+	assert.NotContains(t, ma, "scheduleLabel", "empty scheduleLabel must be omitted")
+	assert.JSONEq(t, `"Unknown"`, string(ma["device"]))
+}
+
+// TestSortInferenceModelsByName verifies that model statuses are ordered by
+// display name (case-insensitive), tie-broken by ID, so the API response order
+// is deterministic regardless of the orchestrator's map iteration order.
+func TestSortInferenceModelsByName(t *testing.T) {
+	t.Parallel()
+	models := []InferenceModelStatus{
+		{ID: "b", Name: "Zebra"},
+		{ID: "a", Name: "alpha"},
+		{ID: "c", Name: "Alpha"},
+	}
+	sortInferenceModelsByName(models)
+	got := []string{models[0].ID, models[1].ID, models[2].ID}
+	// "alpha" and "Alpha" tie case-insensitively; tie broken by ID (a before c).
+	require.Equal(t, []string{"a", "c", "b"}, got)
 }

@@ -205,7 +205,6 @@
     "serverError": "500 - Erro interno do servidor",
     "componentError": "Erro ao carregar componente",
     "speciesAnalytics": "Análise de espécies",
-    "advancedAnalytics": "Análise avançada",
     "detectionDetails": "Detalhes da detecção",
     "settingsNotAvailable": "Configurações não disponíveis"
   },
@@ -1536,9 +1535,9 @@
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
-      "clipLength": "Clip length",
+      "clipLength": "Duração do segmento",
       "species": "Species",
-      "invocations": "Invocations",
+      "invocations": "Segments analysed",
       "avgLatency": "Avg latency",
       "maxLatency": "Max latency",
       "rtf": "RTF",
@@ -1553,7 +1552,45 @@
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
-      "unitSec": "s"
+      "unitSec": "s",
+      "sectionAudio": "Audio",
+      "queueDepth": "Queue depth",
+      "queueDepthChart": "Queue depth",
+      "droppedChunks": "Dropped chunks",
+      "queueCapacity": "Capacity",
+      "lastSeen": "Last seen",
+      "lastSeenNever": "No detections yet",
+      "deviceHelp": "O dispositivo de computação no qual este modelo executa a inferência (CPU, GPU ou desconhecido).",
+      "paused": "Pausado",
+      "pausedScheduleHelp": "Este modelo só funciona de acordo com um cronograma e está atualmente pausado, portanto não está processando áudio.",
+      "activityPaused": "Pausado por agendamento",
+      "lastHeard": "Ouvido pela última vez",
+      "lastHeardHint": "Previsões recentes acima do limiar, para diagnóstico. Inclui resultados não aviários e fora do alcance que não são guardados como deteções.",
+      "lastHeardNever": "Nada ouvido ainda",
+      "confidenceColumn": "Conf.",
+      "heardWhen": "Quando",
+      "coDetectedColumn": "Também",
+      "coDetectedHelp": "Outros modelos que detetaram esta espécie em {seconds}s",
+      "outOfRangeHelp": "Fora do filtro de área (mostrado para diagnóstico, não guardado como deteção)",
+      "peak": "pico",
+      "activityActive": "Inference active",
+      "activityIdle": "Idle",
+      "throughput": "Throughput",
+      "throughputUnit": "/s",
+      "throughputChart": "Throughput (/s)",
+      "errorRate": "Error rate",
+      "loadFailures": "Load failures",
+      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
+      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
+      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
+      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
+      "throughputHelp": "Segments analysed per second by this model.",
+      "errorRateHelp": "Share of analysis attempts that failed.",
+      "loadFailuresHelp": "Number of times this model failed to load.",
+      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
+      "invocationsHelp": "Total audio segments this model has analysed since startup.",
+      "noModelsHint": "No audio source configured yet?",
+      "noModelsHintLink": "Configure audio sources"
     },
     "metrics": {
       "cpu": "CPU",
@@ -1610,6 +1647,35 @@
     "reattach": "Reconectar"
   },
   "analytics": {
+    "hub": {
+      "tabs": {
+        "overview": "Visão geral",
+        "patterns": "Padrões de atividade",
+        "trends": "Tendências",
+        "biodiversity": "Biodiversidade",
+        "quality": "Revisão e precisão"
+      },
+      "aria": {
+        "tabs": "Seções de análise"
+      },
+      "controls": {
+        "source": "Fonte",
+        "sourceAll": "Todas as fontes",
+        "sourceComingSoon": "A filtragem por fonte chegará numa atualização futura.",
+        "speciesNotApplicable": "Os gráficos desta seção não filtram por espécie."
+      },
+      "card": {
+        "error": "Não foi possível carregar este gráfico",
+        "retry": "Tentar novamente",
+        "notEnoughData": "Ainda não há dados suficientes",
+        "notEnoughDataHint": "Este gráfico precisa de pelo menos {min} pontos de dados. Continue gravando e volte em breve.",
+        "export": "Exportar",
+        "exportComingSoon": "A exportação CSV chegará em breve."
+      },
+      "comingSoon": {
+        "description": "Esta seção está em construção e chegará numa atualização futura."
+      }
+    },
     "title": "Visão geral",
     "loadingError": "Falha ao carregar alguns dados analíticos. Por favor, tente novamente mais tarde.",
     "stats": {
@@ -1719,7 +1785,6 @@
       }
     },
     "advanced": {
-      "title": "Análises avançadas",
       "chartControls": "Controles do gráfico",
       "dateRange": "Intervalo de datas",
       "chartOptions": "Opções do gráfico",
@@ -1765,6 +1830,87 @@
           "noDataHint": "Selecione um intervalo de datas para visualizar tendências de diversidade de espécies",
           "axisDate": "Data",
           "axisUniqueSpecies": "Espécies únicas"
+        },
+        "accumulation": {
+          "title": "Species Accumulation Curve",
+          "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
+          "noData": "No species accumulation data available",
+          "noDataHint": "Select a wider date range to watch the species list build up over time",
+          "ariaLabel": "Species accumulation curve: cumulative distinct species detected over the period",
+          "axisDate": "Date",
+          "axisSpecies": "Cumulative species",
+          "totalSpecies": "{species} species",
+          "tooltipCumulative": "Cumulative species",
+          "tooltipNew": "New in period",
+          "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
+        },
+        "heatmap": {
+          "title": "Seasonal Activity Heatmap",
+          "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
+          "noData": "No activity data available",
+          "noDataHint": "Select a date range to view seasonal activity patterns",
+          "axisDate": "Date",
+          "axisTime": "Time of Day",
+          "tooltipTime": "Time",
+          "tooltipCount": "Detections",
+          "legendLess": "Less",
+          "legendMore": "More ({max})",
+          "ariaLabel": "Seasonal activity heatmap: detection density by date and time of day",
+          "summary": "{total} detections across {days} days. Busiest around {time} on {date}."
+        },
+        "ridgeline": {
+          "title": "Who Sings When",
+          "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
+          "noData": "No species activity data available",
+          "noDataHint": "Select a wider date range to compare species activity patterns",
+          "ariaLabel": "Who-sings-when ridgeline: hour-of-day activity distribution per species",
+          "axisTime": "Time of Day",
+          "note": "Showing the top {count} species by detection volume",
+          "tooltipDetections": "Detections",
+          "tooltipPeak": "Peak",
+          "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+        },
+        "dawnOnset": {
+          "title": "Dawn Chorus Onset",
+          "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
+          "noData": "No dawn chorus data available",
+          "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
+          "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
+          "axisDate": "Date",
+          "axisOnset": "Minutes from civil dawn",
+          "civilDawn": "Civil dawn",
+          "tooltipOnset": "Onset",
+          "tooltipOnsetAfter": "{minutes} min after civil dawn",
+          "tooltipOnsetBefore": "{minutes} min before civil dawn",
+          "tooltipOnsetAt": "At civil dawn",
+          "tooltipCount": "Detections",
+          "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
+        },
+        "nocturnal": {
+          "title": "Nocturnal Activity Clock",
+          "description": "Detections around the 24-hour clock with the daytime hours shaded, making nighttime activity stand out",
+          "noData": "No activity data available",
+          "noDataHint": "Select a wider date range or a more active period to see the daily activity pattern",
+          "ariaLabel": "Nocturnal activity clock: detections by hour of day with daytime shading",
+          "axisHour": "Hour of day",
+          "tooltipHour": "{start} to {end}",
+          "tooltipCount": "Detections",
+          "summary": "Detection activity by hour of day ({total} detections, most active around {peak}). Daytime hours are shaded.",
+          "legendDay": "Day",
+          "legendTwilight": "Twilight",
+          "legendNight": "Night"
+        },
+        "confidence": {
+          "title": "Confidence Distribution",
+          "description": "How confident the model is per species, so you can spot the birds it most often second-guesses",
+          "noData": "No confidence data available",
+          "noDataHint": "Select a wider date range to compare how confident the model is across species",
+          "ariaLabel": "Confidence distribution: per-species histogram of detection confidence scores",
+          "axisLabel": "Confidence",
+          "note": "Showing the top {count} species by detection volume",
+          "tooltipCount": "Detections",
+          "tooltipPeak": "Peak confidence",
+          "summary": "Detection-confidence distribution for {count} species. {species} clusters around {time} confidence."
         },
         "tooltips": {
           "date": "Data",

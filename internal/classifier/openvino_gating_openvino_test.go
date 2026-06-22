@@ -12,6 +12,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
+// archAMD64 is the GOARCH value for 64-bit x86, used by the explicit-CPU gate
+// assertions: the x86 OpenVINO CPU plugin is SIGILL-safe, so explicit CPU is allowed
+// there even without ARM native f16.
+const archAMD64 = "amd64"
+
 // TestShouldTryOpenVINO_Tagged_OptOut verifies Backend="onnx" opts out even when the
 // openvino backend is compiled in.
 func TestShouldTryOpenVINO_Tagged_OptOut(t *testing.T) {
@@ -61,19 +66,45 @@ func TestShouldTryOpenVINO_Tagged_HardwareGateDecides(t *testing.T) {
 // path never enumerates devices, so no libopenvino_c is required.
 func TestOpenVINOPlan_ExplicitCPU(t *testing.T) {
 	t.Parallel()
-	plan, ok := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceCPU, RegistryIDPerchV2, "", perchLogitsOutputIndex)
-	expected := cpuspec.HasNativeF16() || runtime.GOARCH == "amd64"
+	plan, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceCPU, RegistryIDPerchV2, "", perchLogitsOutputIndex)
+	expected := cpuspec.HasNativeF16() || runtime.GOARCH == archAMD64
 	assert.Equal(t, expected, ok, "explicit CPU is allowed on ARM A76 or amd64, not on ARM A72")
 	if ok {
 		assert.Equal(t, inference.OVDeviceCPU, plan.device)
 		assert.Equal(t, perchLogitsOutputIndex, plan.outputIndex)
+		assert.Empty(t, reason, "an accepted plan must not carry a decline reason")
+	} else {
+		assert.Equal(t, ovReasonCPUUnsupported, reason, "explicit CPU on an unsupported host reports the cpu reason")
+	}
+}
+
+// TestOpenVINOPlan_Bat_ForcesF32 verifies the bat embedding model's plan carries f32
+// precision on whatever device the gate selects (explicit CPU here), unlike BirdNET
+// v2.4 which is f32 only on the GPU. The explicit-CPU path never enumerates devices,
+// so no libopenvino_c is required. On a host where CPU is not allowed (ARM A72) the
+// plan is declined, which the else branch covers. This pins the bat-specific
+// "f32 everywhere" deviation at the plan level, where compilation actually reads it.
+func TestOpenVINOPlan_Bat_ForcesF32(t *testing.T) {
+	t.Parallel()
+	plan, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceCPU, RegistryIDBat, "", batEmbeddingOutputIndex)
+	expected := cpuspec.HasNativeF16() || runtime.GOARCH == archAMD64
+	assert.Equal(t, expected, ok, "explicit CPU is allowed on ARM A76 or amd64, not on ARM A72")
+	if ok {
+		assert.Equal(t, inference.OVDeviceCPU, plan.device)
+		assert.Equal(t, batEmbeddingOutputIndex, plan.outputIndex)
+		assert.Equal(t, inference.OVPrecisionF32, plan.precision,
+			"the bat embedding model must run at f32 on the CPU too (f16 overflows the embedding head)")
+		assert.Empty(t, reason, "an accepted plan must not carry a decline reason")
+	} else {
+		assert.Equal(t, ovReasonCPUUnsupported, reason)
 	}
 }
 
 // TestOpenVINOPlan_ONNXOptOut verifies Backend=onnx opts out for any model,
-// including Perch, without touching the OpenVINO library.
+// including Perch, without touching the OpenVINO library, and reports the reason.
 func TestOpenVINOPlan_ONNXOptOut(t *testing.T) {
 	t.Parallel()
-	_, ok := openVINOPlanFor(conf.BackendPrefONNX, conf.OVDeviceAuto, RegistryIDPerchV2, "", perchLogitsOutputIndex)
+	_, ok, reason := openVINOPlanFor(conf.BackendPrefONNX, conf.OVDeviceAuto, RegistryIDPerchV2, "", perchLogitsOutputIndex)
 	assert.False(t, ok, "Backend=onnx must opt out of OpenVINO for Perch too")
+	assert.Equal(t, ovReasonBackendONNX, reason)
 }

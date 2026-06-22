@@ -88,9 +88,15 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/analytics/species/summary`          | `GetSpeciesSummary`        | ❌   | Overall species statistics         |
 | GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species      |
 | GET    | `/analytics/species/thumbnails`       | `GetSpeciesThumbnails`     | ❌   | Species thumbnail images           |
+| GET    | `/analytics/species/accumulation`     | `GetSpeciesAccumulation`   | ❌   | Species accumulation curve (biodiversity collector's curve): per calendar day, the cumulative count of distinct species first detected within the range (false positives excluded; "first seen" is bounded to the window, not lifetime). All-species (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days) |
 | GET    | `/analytics/time/hourly`              | `GetHourlyAnalytics`       | ❌   | Hourly detection patterns          |
 | GET    | `/analytics/time/daily`               | `GetDailyAnalytics`        | ❌   | Daily detection patterns           |
 | GET    | `/analytics/time/distribution/hourly` | `GetTimeOfDayDistribution` | ❌   | Time-of-day detection distribution |
+| GET    | `/analytics/time/distribution/species` | `GetSpeciesHourlyDistribution` | ❌ | Who-sings-when ridgeline: per-species hour-of-day distribution for the top N species by volume. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 5, max 8) |
+| GET    | `/analytics/time/heatmap`             | `GetActivityHeatmap`       | ❌   | Seasonal density heatmap (date x intra-day slot; `?format=csv`) |
+| GET    | `/analytics/time/dawn-onset`          | `GetDawnChorusOnset`       | ❌   | Dawn-chorus onset tracker: per-day onset relative to civil dawn (minutes; negative = before civil dawn). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional |
+| GET    | `/analytics/sun`                      | `GetAnalyticsSun`          | ❌   | Sun times for the nocturnal activity clock's day/night shading: sunrise/sunset/civil-dawn/civil-dusk as minute-of-day in server-local time. `date` for a single day, or `start_date`/`end_date` for a range (collapsed to its midpoint); defaults to today. Returns `available:false` (not an error) on polar day/night or when SunCalc is unconfigured |
+| GET    | `/analytics/confidence/distribution`  | `GetConfidenceDistribution` | ❌  | Confidence distribution per species: per-species normalized histogram of detection confidence scores (Review & Accuracy tab). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (single species filter; default is the top-N species by volume); `bins` optional (default 20, clamped to 5-50); `limit` optional (default 5, max 8) |
 
 ### Control Operations (`control.go`)
 
@@ -422,7 +428,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/system/audio/sources`          | `ListAudioSources`        | ✅   | Active audio sources (all types)     |
 | GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding  |
 | GET    | `/system/models`                 | `GetActiveModels`         | ✅   | Active model metadata                |
-| GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats, RAM, and source attachment. |
+| GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats/RAM/source attachment, audio pipeline metrics, per-model error rate, load failures, last detection, and metric key names for time-series lookups. |
 
 ### Events (`events.go`, `events_aggregation.go`)
 

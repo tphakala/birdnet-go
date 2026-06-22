@@ -38,6 +38,11 @@ type CustomClassifier interface {
 	// NumClasses returns the number of output classes.
 	NumClasses() int
 
+	// InputDim returns the embedding vector length the classifier expects as
+	// input. Used to validate that an upstream embedding extractor produces a
+	// compatible embedding dimension before wiring the two together.
+	InputDim() int
+
 	// Labels returns the classification labels.
 	Labels() []string
 

@@ -38,6 +38,7 @@ type ErrorDeduplicator struct {
 	// LRU tracking
 	entries  []*lruEntry
 	entryMap map[uint64]int // Maps hash to index in entries slice
+	lruSeq   uint64         // Monotonic access counter; breaks lastUsed ties (all mutated under mu)
 
 	// Metrics
 	totalSeen       atomic.Uint64
@@ -64,6 +65,11 @@ type dedupeEntry struct {
 type lruEntry struct {
 	hash     uint64
 	lastUsed time.Time
+	// seq is a monotonic access stamp used to break lastUsed ties. Coarse system
+	// clocks (e.g. Windows' ~15ms timer) can give several entries the same
+	// lastUsed within one tick, leaving eviction order undefined; the larger seq
+	// is the more recently used entry.
+	seq uint64
 }
 
 // NewErrorDeduplicator creates a new error deduplicator
@@ -137,9 +143,11 @@ func (ed *ErrorDeduplicator) ShouldProcess(event ErrorEvent) bool {
 		ed.cache[hash] = entry
 
 		// Add to LRU tracking
+		ed.lruSeq++
 		lru := &lruEntry{
 			hash:     hash,
 			lastUsed: now,
+			seq:      ed.lruSeq,
 		}
 		ed.entries = append(ed.entries, lru)
 		ed.entryMap[hash] = len(ed.entries) - 1
@@ -226,7 +234,9 @@ func (ed *ErrorDeduplicator) calculateHash(event ErrorEvent) uint64 {
 // updateLRU updates the LRU position of an entry
 func (ed *ErrorDeduplicator) updateLRU(hash uint64, now time.Time) {
 	if idx, ok := ed.entryMap[hash]; ok {
+		ed.lruSeq++
 		ed.entries[idx].lastUsed = now
+		ed.entries[idx].seq = ed.lruSeq
 	}
 }
 
@@ -236,14 +246,22 @@ func (ed *ErrorDeduplicator) evictOldest() {
 		return
 	}
 
-	// Find oldest entry
+	// Find oldest entry. Primary key is lastUsed; seq breaks ties when several
+	// entries share an identical timestamp (the smaller seq is the least
+	// recently used). Ties are the norm on coarse clocks (Windows ~15ms) and
+	// rare but possible on a fine clock (two touches in the same nanosecond);
+	// whenever the tie branch fires it evicts the genuine LRU, which matches or
+	// improves the old lastUsed-only result, so it is never a regression.
 	oldestIdx := 0
 	oldestTime := ed.entries[0].lastUsed
+	oldestSeq := ed.entries[0].seq
 
 	for i := 1; i < len(ed.entries); i++ {
-		if ed.entries[i].lastUsed.Before(oldestTime) {
+		e := ed.entries[i]
+		if e.lastUsed.Before(oldestTime) || (e.lastUsed.Equal(oldestTime) && e.seq < oldestSeq) {
 			oldestIdx = i
-			oldestTime = ed.entries[i].lastUsed
+			oldestTime = e.lastUsed
+			oldestSeq = e.seq
 		}
 	}
 

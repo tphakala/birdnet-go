@@ -362,6 +362,7 @@ func NoteFromResult(result *detection.Result) Note {
 		Verified:   result.Verified,
 		Locked:     result.Locked,
 		Model:      result.Model,
+		RawLabel:   result.RawLabel,
 	}
 }
 
@@ -381,6 +382,7 @@ func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) [
 		dsResults[i] = Results{
 			Species:    speciesStr,
 			Confidence: float32(r.Confidence),
+			RawLabel:   r.RawLabel,
 		}
 	}
 	return dsResults

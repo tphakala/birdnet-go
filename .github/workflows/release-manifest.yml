@@ -1,0 +1,89 @@
+name: Update Release Manifest
+
+# Generates manifest.json describing the latest release on each distribution
+# channel (stable, nightly, beta) and publishes it to a dedicated, never-deleted
+# "manifest" release. The stable URL
+#   https://github.com/<owner>/<repo>/releases/download/manifest/manifest.json
+# always resolves to the current manifest, and is consumed by the in-app update
+# checker.
+#
+# Triggers:
+#   - workflow_call:  invoked as the final job of release-build.yml and
+#     nightly-build.yml, after all release assets (tarballs + checksums) exist,
+#     so the manifest never races asset uploads.
+#   - workflow_dispatch:  manual regeneration.
+#   - schedule:  daily self-heal in case a release pipeline failed to update it.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * *'
+
+permissions:
+  contents: write
+
+# Serialise manifest updates so two pipelines never clobber the asset at once.
+concurrency:
+  group: release-manifest
+  cancel-in-progress: false
+
+jobs:
+  manifest:
+    name: Generate and publish manifest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Generate manifest.json
+        id: generate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go run ./tools/release-manifest \
+            -repo "${{ github.repository }}" \
+            -output manifest.json
+          # The generator skips writing the file when no release matches a
+          # channel (e.g. a fresh fork); treat that as a no-op, not a failure.
+          if [ -f manifest.json ]; then
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            echo "No manifest generated (no matching releases); skipping publish."
+          fi
+
+      - name: Validate manifest.json
+        if: steps.generate.outputs.generated == 'true'
+        run: |
+          # Fail fast if the generated file is not the shape we expect.
+          jq -e '.schema_version and (.channels | length > 0)' manifest.json > /dev/null
+          echo "Manifest channels:"
+          jq -r '.channels | keys[]' manifest.json
+
+      - name: Publish manifest to dedicated release
+        if: steps.generate.outputs.generated == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          TAG=manifest
+          # The manifest release is marked prerelease so it never occupies the
+          # "Latest" slot or the /releases/latest endpoint, which must keep
+          # pointing at the newest stable release.
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$REPO" \
+              --title "Release Manifest" \
+              --notes "Auto-generated, machine-readable manifest of the latest BirdNET-Go release on each channel (stable, nightly, beta). Do not delete; consumed by the in-app update checker. Stable URL: https://github.com/$REPO/releases/download/manifest/manifest.json" \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
+          gh release upload "$TAG" manifest.json --repo "$REPO" --clobber
+          echo "Published manifest.json to release '$TAG'."

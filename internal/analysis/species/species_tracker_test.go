@@ -43,7 +43,7 @@ func TestSpeciesTracker_NewSpecies(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return(historicalData, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	// Create tracker with new species window
@@ -94,7 +94,7 @@ func TestSpeciesTracker_ConcurrentAccess(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -145,7 +145,7 @@ func TestSpeciesTracker_UpdateSpecies(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -196,7 +196,7 @@ func TestSpeciesTracker_EdgeCases(t *testing.T) {
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return(historicalData, nil).Maybe()
 		// BG-17: InitFromDatabase now loads notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 			Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 		settings := &conf.SpeciesTrackingSettings{
@@ -229,10 +229,10 @@ func TestSpeciesTracker_EdgeCases(t *testing.T) {
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return([]datastore.NewSpeciesData{}, nil).Maybe()
 		// BG-17: InitFromDatabase now loads notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 			Return([]datastore.NotificationHistory{}, nil).Maybe()
 		// BG-17: CleanupOldNotificationRecords deletes from database
-		ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+		ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 			Return(int64(0), nil).Maybe()
 
 		settings := &conf.SpeciesTrackingSettings{
@@ -278,10 +278,10 @@ func TestSpeciesTracker_PruneOldEntries(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return(historicalData, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: CleanupOldNotificationRecords deletes from database
-	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("DeleteExpiredNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -323,7 +323,7 @@ func BenchmarkSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -366,7 +366,7 @@ func BenchmarkSpeciesTracker_UpdateSpecies(b *testing.B) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -407,7 +407,7 @@ func BenchmarkSpeciesTracker_ConcurrentOperations(b *testing.B) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -460,7 +460,7 @@ func BenchmarkSpeciesTracker_MapMemoryUsage(b *testing.B) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -510,7 +510,7 @@ func TestNewTrackerFromSettings_BasicConfiguration(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase requires notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -584,7 +584,7 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -699,7 +699,7 @@ func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase requires notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -799,7 +799,7 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase requires notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -862,7 +862,7 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase requires notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// Mock should return empty data so the test scenario works as expected
 	// The test wants to simulate first detection in spring, then check status in summer
@@ -931,7 +931,7 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase requires notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()

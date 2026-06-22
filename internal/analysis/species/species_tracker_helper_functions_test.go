@@ -250,7 +250,7 @@ func TestLoadNotificationHistoryFromDatabase_EdgeCases(t *testing.T) {
 			tracker := createNotificationTracker(mockDS, tt.suppressionWindow, tt.notificationLastSentNil)
 
 			now := time.Date(2025, 6, 20, 10, 0, 0, 0, time.UTC)
-			err := tracker.loadNotificationHistoryFromDatabase(now)
+			err := tracker.loadNotificationHistoryFromDatabase(t.Context(), now)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -269,7 +269,7 @@ func setupNotificationMock(mockDS *mocks.MockInterface, skipCall bool, histories
 		return
 	}
 	mockDS.EXPECT().
-		GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
 		Return(histories, mockErr).
 		Once()
 }
@@ -657,7 +657,7 @@ func TestLoadSingleSeasonData_ErrorPaths(t *testing.T) {
 			}
 
 			now := time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)
-			result, err := tracker.loadSingleSeasonData(tt.seasonName, now)
+			result, err := tracker.loadSingleSeasonData(t.Context(), tt.seasonName, now)
 
 			if tt.expectError {
 				require.Error(t, err)

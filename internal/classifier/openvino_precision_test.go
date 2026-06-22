@@ -26,4 +26,23 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 		"Perch on the GPU keeps f16 (validated parity with f32)")
 	assert.Empty(t, openVINOPrecisionFor(RegistryIDPerchV2, inference.OVDeviceCPU),
 		"Perch on CPU keeps the f16 default")
+	// The bat embedding model overflows at f16 on every device, so it must be forced
+	// to f32 on BOTH GPU and CPU (unlike BirdNET v2.4, which is f32 on GPU only).
+	assert.Equal(t, inference.OVPrecisionF32, openVINOPrecisionFor(RegistryIDBat, inference.OVDeviceGPU),
+		"bat embedding model on the GPU must be forced to f32")
+	assert.Equal(t, inference.OVPrecisionF32, openVINOPrecisionFor(RegistryIDBat, inference.OVDeviceCPU),
+		"bat embedding model on CPU must be forced to f32 (f16 overflows the embedding head)")
+}
+
+// TestOpenVINOEffectivePrecision verifies the mapping from an OpenVINO
+// INFERENCE_PRECISION_HINT to the display precision shown on the inference status
+// card. The empty default hint (f16) maps to FP16, and the only explicit override
+// emitted (OVPrecisionF32, the BirdNET v2.4 GPU path) maps to FP32. Tag-agnostic
+// like openVINOEffectivePrecision itself, so it runs in the default suite.
+func TestOpenVINOEffectivePrecision(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, string(QuantizationFP16), openVINOEffectivePrecision(""),
+		"empty hint is the backend f16 default, shown as FP16")
+	assert.Equal(t, string(QuantizationFP32), openVINOEffectivePrecision(inference.OVPrecisionF32),
+		"the f32 hint (BirdNET v2.4 GPU) is shown as FP32")
 }

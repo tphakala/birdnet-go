@@ -23,7 +23,10 @@ type DetectionsMap map[string][]datastore.Results
 // Predict performs inference on a given sample using the classifier backend.
 // Implements ModelInstance.
 func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
-	span, _ := startPredictSpan(ctx, bn.ModelInfo.ID, sample)
+	// Capture the model ID once via the lock-free identity snapshot, reused below, so
+	// this hot path never reads bn.ModelInfo directly (reloadModelInternal writes it).
+	modelID := bn.ModelID()
+	span, _ := startPredictSpan(ctx, modelID, sample)
 	defer span.Finish()
 
 	settings := bn.currentSettings()
@@ -35,7 +38,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		span.markErrored(errTypeEmptySample)
 		return nil, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(settings.BirdNET.ModelPath, modelID).
 			Build()
 	}
 
@@ -48,7 +51,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		span.markErrored(errTypeClassifierNil)
 		return nil, errors.Newf("classifier backend is not initialized").
 			Category(errors.CategoryModelInit).
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(settings.BirdNET.ModelPath, modelID).
 			Build()
 	}
 
@@ -58,12 +61,12 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	if err != nil {
 		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(settings.BirdNET.ModelPath, modelID).
 			Context("sample_length", len(sample[0])).
-			Timing("prediction-invoke", time.Since(start)).
+			Timing("prediction-invoke", time.Since(invokeStart)).
 			Build()
 
-		recordPredictionFailure(span, bn.ModelInfo.ID, errTypeInvokeFailed, start, err)
+		recordPredictionFailure(span, modelID, errTypeInvokeFailed, start, err)
 		return nil, err
 	}
 
@@ -72,7 +75,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 
 	// Record model invoke timing separately
 	if m := getMetrics(); m != nil {
-		m.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
+		m.RecordModelInvoke(modelID, invokeDuration.Seconds())
 	}
 
 	// Use optimized sigmoid function with buffer reuse
@@ -88,7 +91,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 			Timing("prediction-total", time.Since(start)).
 			Build()
 
-		recordPredictionFailure(span, bn.ModelInfo.ID, errTypeLabelMismatch, start, err)
+		recordPredictionFailure(span, modelID, errTypeLabelMismatch, start, err)
 		return nil, err
 	}
 

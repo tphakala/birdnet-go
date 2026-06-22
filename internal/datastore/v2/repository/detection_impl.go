@@ -935,6 +935,56 @@ func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, lab
 	return result, nil
 }
 
+// GetBatchConfidences returns per-label-ID detection confidences for the given label IDs over
+// [start, end), false positives excluded and filtered by minConfidence. It mirrors
+// GetBatchHourlyOccurrences: one query per chunk covers many labels (grouped client-side by
+// label_id), large label sets are chunked to stay within SQL host-parameter limits, and each label
+// ID appears in exactly one chunk so no cross-chunk merge is needed. The raw values are returned
+// (not pre-binned) so the binning math stays in shared, dialect-agnostic Go.
+func (r *detectionRepository) GetBatchConfidences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][]float64, error) {
+	result := make(map[uint][]float64, len(labelIDs))
+
+	// Return empty map for empty input (no query)
+	if len(labelIDs) == 0 {
+		return result, nil
+	}
+
+	type labelConfidence struct {
+		LabelID    uint
+		Confidence float64
+	}
+
+	detTable := r.tableName()
+	revTable := r.reviewsTable()
+
+	// Chunk label IDs to avoid exceeding SQL host-parameter limits on the IN clause.
+	for i := 0; i < len(labelIDs); i += batchQuerySize {
+		// Fail fast between chunks if the caller's context was cancelled.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		chunkEnd := min(i+batchQuerySize, len(labelIDs))
+		chunk := labelIDs[i:chunkEnd]
+
+		var rows []labelConfidence
+		err := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
+			Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
+			Select("d.label_id as label_id, d.confidence as confidence").
+			Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", chunk, start, end, minConfidence).
+			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
+			Scan(&rows).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch confidences: %w", err)
+		}
+
+		for _, row := range rows {
+			result[row.LabelID] = append(result[row.LabelID], row.Confidence)
+		}
+	}
+
+	return result, nil
+}
+
 // GetDailyOccurrences returns daily detection counts for a label.
 func (r *detectionRepository) GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64, tzOffsetSeconds int) ([]DailyCount, error) {
 	var results []DailyCount
@@ -1578,6 +1628,18 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, 
 	return results, err
 }
 
+// GetDetectionTimestamps returns raw detected_at epochs for [start, end), false positives
+// excluded, in no particular order. See the interface doc for why bucketing happens in Go,
+// not SQL.
+func (r *detectionRepository) GetDetectionTimestamps(ctx context.Context, start, end int64, labelID *uint) ([]int64, error) {
+	var timestamps []int64
+	// No ORDER BY: the caller buckets timestamps into a map and sorts the resulting cells
+	// itself, so ordering (potentially millions of) rows in SQL would be wasted work.
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, nil).
+		Pluck("d.detected_at", &timestamps).Error
+	return timestamps, err
+}
+
 // GetDailyAnalytics returns daily statistics.
 func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]DailyAnalyticsData, error) {
 	var results []DailyAnalyticsData
@@ -1660,33 +1722,52 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 
 // GetSpeciesFirstDetectionInPeriod returns the first detection of each species within a date range.
 // Groups by scientific_name to aggregate across all models for the same species.
-// Uses ROW_NUMBER() window function to correctly identify the detection with the earliest timestamp
-// per species, with id as tie-breaker for deterministic results.
+//
+// It uses a plain GROUP BY + MIN(detected_at) rather than a ROW_NUMBER() window
+// function. The only consumer is the species tracker (yearly/seasonal first-seen
+// loads), which uses just scientific_name + first_detected and discards label_id
+// and detection_id; MIN(detected_at) per scientific_name is exactly that first-seen
+// date, and avoids the window function's full per-period sort (a large cost on the
+// startup load). label_id is reported as MIN(label_id) (a representative, not
+// necessarily the first row's label); detection_id is no longer selected (left zero).
 func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error) {
 	var results []SpeciesFirstSeen
 
-	// Use window function to rank detections per species (by scientific_name) by timestamp
-	// This ensures we get the actual detection_id that corresponds to the first_detected time
-	// Partitioning by scientific_name aggregates across all models for the same species
 	rawSQL := fmt.Sprintf(`
-		SELECT label_id, scientific_name, first_detected, detection_id
-		FROM (
-			SELECT
-				d.label_id,
-				l.scientific_name,
-				d.detected_at as first_detected,
-				d.id as detection_id,
-				ROW_NUMBER() OVER (PARTITION BY l.scientific_name ORDER BY d.detected_at ASC, d.id ASC) as rn
-			FROM %s d
-			JOIN %s l ON l.id = d.label_id
-			WHERE d.detected_at >= ? AND d.detected_at < ?
-		) ranked
-		WHERE rn = 1
-		ORDER BY first_detected ASC
+		SELECT
+			MIN(d.label_id) as label_id,
+			l.scientific_name,
+			MIN(d.detected_at) as first_detected
+		FROM %s d
+		JOIN %s l ON l.id = d.label_id
+		WHERE d.detected_at >= ? AND d.detected_at < ?
+		GROUP BY l.scientific_name
+		ORDER BY first_detected ASC, l.scientific_name ASC
 		LIMIT ? OFFSET ?
 	`, r.tableName(), r.labelsTable())
 
 	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, limit, offset).Scan(&results).Error
+	return results, err
+}
+
+// GetSpeciesFirstSeenInPeriod returns the in-period first detection of each species over the
+// half-open range [start, end), false positives excluded, grouped by scientific name so a species
+// with one label per model collapses to a single first-seen. Unlike GetSpeciesFirstDetectionInPeriod
+// (which omits the false-positive exclusion and is paginated for the species tracker), this goes
+// through buildAnalyticsBaseQuery so it shares the analytics false-positive filter, and returns every
+// species (no LIMIT) for the accumulation curve. GROUP BY scientific_name with MIN(detected_at) makes
+// the reviews LEFT JOIN immune to fan-out: duplicate joined rows for one detection collapse under the
+// aggregate. label_id is not selected (it is irrelevant to accumulation and stays zero).
+func (r *detectionRepository) GetSpeciesFirstSeenInPeriod(ctx context.Context, start, end int64) ([]SpeciesFirstSeen, error) {
+	var results []SpeciesFirstSeen
+
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, nil, nil).
+		Joins(fmt.Sprintf("JOIN %s l ON l.id = d.label_id", r.labelsTable())).
+		Select("l.scientific_name as scientific_name, MIN(d.detected_at) as first_detected").
+		Group("l.scientific_name").
+		Order("first_detected ASC, l.scientific_name ASC").
+		Scan(&results).Error
+
 	return results, err
 }
 

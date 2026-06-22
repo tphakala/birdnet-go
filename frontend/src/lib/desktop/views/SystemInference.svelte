@@ -1,11 +1,17 @@
 <!--
   SystemInference - AI Models & Inference subpage.
 
-  Consumes the GET /api/v2/system/inference snapshot, renders hardware,
-  inference backends, and per-model cards with latency / RTF sparklines,
-  approximate host RAM, and attached audio sources. Live updates arrive over
-  the existing metrics SSE stream (SSE first, polling fallback), and the page
-  re-fetches the snapshot when the backend broadcasts a topology change.
+  Consumes the GET /api/v2/system/inference snapshot, renders hardware and
+  inference backends, and per-model cards with a latency sparkline, compute
+  device, approximate host RAM, a schedule/paused indicator, an activity pulse,
+  a "Last heard" table of recent detections, and attached audio sources. Live
+  updates arrive over the existing metrics SSE stream (SSE first, polling
+  fallback), and the page re-fetches the snapshot when the backend broadcasts a
+  topology change. A periodic ~30s snapshot refresh keeps headline stats and
+  recent detections current without reconnecting the SSE stream.
+
+  The Audio pipeline card is intentionally hidden for now (see the template);
+  the backend still returns snapshot.audio for a future refactor.
 
   snapshot.models is the single source of truth: series for models that are
   not in the current snapshot are ignored (orphan-safe), and missing or null
@@ -20,13 +26,16 @@
   import { loggers } from '$lib/utils/logger';
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
+  import { getLocalTimeString, formatLocalDateTime } from '$lib/utils/date';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
-  import { Brain, Cpu, MemoryStick, Activity } from '@lucide/svelte';
+  import { Brain, Cpu, MemoryStick, Activity, Minus, Pause, MapPinOff } from '@lucide/svelte';
   import type {
     InferenceStatusResponse,
     InferenceModel,
+    InferenceLastDetection,
     BackendStatus,
     OpenVINOBackendStatus,
   } from '$lib/desktop/features/system/inference.types';
@@ -45,12 +54,29 @@
   const INFERENCE_ENDPOINT = '/api/v2/system/inference';
   const TOPOLOGY_EVENT = 'system.inference_topology_changed';
 
-  // Sparkline colors, chosen to match the existing system charts palette.
+  // Sparkline color, matching the existing system charts palette.
   const LATENCY_COLOR = '#3b82f6'; // blue
-  const RTF_COLOR = '#8b5cf6'; // violet
+
+  // Interval for periodic snapshot-only refreshes (does not reconnect SSE).
+  const SNAPSHOT_REFRESH_MS = 30000;
 
   // Conversions for spec display.
   const HZ_PER_KHZ = 1000;
+
+  // Flat 0 baseline shown in the latency sparkline before real samples flow (the
+  // chart needs >= 2 points to draw a line; an all-zeros series renders as a flat
+  // line at the bottom). Used until the live series has at least two points.
+  const EMPTY_SPARKLINE_BASELINE = [0, 0];
+
+  // Tolerance (seconds) for treating the same species in two models' feeds as one
+  // co-detection. Detection timestamps are per-model wall-clock at second
+  // granularity, and models analyze different segment lengths, so co-detections of
+  // one bird land a few seconds apart; this stays well under the per-species
+  // throttle so it never matches two different occurrences within a model.
+  const CO_DETECTION_TOLERANCE_SEC = 3;
+
+  // Rows per column in the two-column Last-heard layout (backend retains 2x this).
+  const LAST_HEARD_COLUMN_ROWS = 10;
 
   interface MetricPoint {
     timestamp: string;
@@ -91,28 +117,48 @@
     return next.length > MAX_HISTORY_POINTS ? next.slice(next.length - MAX_HISTORY_POINTS) : next;
   }
 
-  // Collect every avgMs and rtf metric key across the snapshot models.
+  // Collect the per-model metric keys we actually consume live: avgMs feeds the
+  // latency sparkline, and throughput feeds the activity pulse (its own sparkline
+  // was removed, but the series still drives "is inference happening"). RTF and
+  // error-rate are rendered from the 30s snapshot (model.stats.*), not a live
+  // series, so they are intentionally NOT subscribed. The audio queue-depth key
+  // is also omitted while the Audio card is hidden (see the template). When there
+  // are no models this returns '' and the caller falls through to polling.
   function metricKeysParam(): string {
-    if (!snapshot || snapshot.models.length === 0) return '';
+    if (!snapshot) return '';
     const keys: string[] = [];
     for (const m of snapshot.models) {
-      keys.push(m.metricKeys.avgMs, m.metricKeys.rtf);
+      keys.push(m.metricKeys.avgMs, m.metricKeys.throughput);
     }
     return keys.join(',');
   }
 
-  // Set of metric keys belonging to current snapshot models. Used to ignore
-  // series for models that are no longer present (orphan-safe). Derived so it is
-  // recomputed only when the snapshot changes, not on every SSE metrics message.
+  // Set of metric keys belonging to current snapshot models.
+  // Used to ignore series for models that are no longer present (orphan-safe).
+  // Mirrors metricKeysParam: only the live-consumed keys (avgMs, throughput).
+  // Derived so it is recomputed only when the snapshot changes.
   const validKeys = $derived.by(() => {
     const keys = new Set<string>();
     if (!snapshot) return keys;
     for (const m of snapshot.models) {
       keys.add(m.metricKeys.avgMs);
-      keys.add(m.metricKeys.rtf);
+      keys.add(m.metricKeys.throughput);
     }
     return keys;
   });
+
+  // Stable display order: sort by name (locale-aware), tie-broken by id, so cards
+  // do not reshuffle when the backend returns models in a different order.
+  let sortedModels = $derived(
+    snapshot
+      ? [...snapshot.models].sort((a, b) => {
+          // Case-insensitive, matching the backend's name -> id ordering so the
+          // client and API agree on order for mixed-case model names.
+          const byName = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+          return byName !== 0 ? byName : a.id.localeCompare(b.id);
+        })
+      : []
+  );
 
   // True while the page has loaded a snapshot with no models and is polling for
   // them to appear. Lets poll() hand off to the live SSE transport once models
@@ -167,8 +213,8 @@
     }
   }
 
-  // Connect to the metrics SSE stream for live latency / RTF updates and
-  // topology-change notifications. Closes any prior connection first.
+  // Connect to the metrics SSE stream for live latency / RTF / throughput updates
+  // and topology-change notifications. Closes any prior connection first.
   function connectStream(): void {
     disconnectStream();
     const keys = metricKeysParam();
@@ -250,6 +296,24 @@
     pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
   }
 
+  // Periodic snapshot-only refresh: updates snapshot values (headline stats,
+  // lastDetection, audio) WITHOUT reconnecting the SSE stream or reseeding
+  // history. Respects componentActive and currentFetchId so a superseded
+  // refresh bails without clobbering newer topology-triggered state.
+  async function refreshSnapshot(
+    active: { current: boolean },
+    activeFetchId: number
+  ): Promise<void> {
+    if (!active.current || activeFetchId !== currentFetchId) return;
+    try {
+      const data = await api.get<InferenceStatusResponse>(INFERENCE_ENDPOINT);
+      if (!active.current || activeFetchId !== currentFetchId) return;
+      snapshot = data;
+    } catch {
+      // Silently ignore refresh failures; keep showing the last snapshot.
+    }
+  }
+
   // Load the snapshot, then seed history and pick a live transport. loadHistory
   // owns the SSE-vs-poll decision (mutually exclusive), so loadSnapshot does not
   // connect the stream itself. On failure show a friendly error and poll.
@@ -277,13 +341,18 @@
     }
   }
 
-  // Lifecycle: load on mount, tear down SSE and polling on unmount.
+  // Lifecycle: load on mount, start periodic snapshot refresh, tear down on unmount.
   $effect(() => {
     componentActive.current = true;
     loadSnapshot(componentActive);
 
+    const snapshotInterval = setInterval(() => {
+      refreshSnapshot(componentActive, currentFetchId);
+    }, SNAPSHOT_REFRESH_MS);
+
     return () => {
       componentActive.current = false;
+      clearInterval(snapshotInterval);
       disconnectStream();
       stopPolling();
     };
@@ -317,7 +386,7 @@
     snapshot ? snapshot.backends.openvino : null
   );
 
-  // Spec line for a model: sample rate in kHz, clip length in seconds.
+  // Spec line for a model: sample rate in kHz, segment length in seconds.
   function sampleRateKhz(hz: number): string {
     return (hz / HZ_PER_KHZ).toFixed(hz % HZ_PER_KHZ === 0 ? 0 : 1);
   }
@@ -334,14 +403,72 @@
     if (bytes == null) return t('system.inference.notMeasured');
     return formatBytesCompact(bytes);
   }
+
+  // Throughput, avgLatency, and maxLatency are meaningless at zero invocations:
+  // show a dash placeholder matching the rtfDisplay pattern.
+  function throughputDisplay(model: InferenceModel, latestValue: number): string {
+    if (model.stats.invocations <= 0) return '-';
+    return latestValue.toFixed(1) + t('system.inference.throughputUnit');
+  }
+
+  function avgLatencyDisplay(model: InferenceModel): string {
+    if (model.stats.invocations <= 0) return '-';
+    return model.stats.avgMs.toFixed(1) + ' ' + t('system.inference.unitMs');
+  }
+
+  function maxLatencyDisplay(model: InferenceModel): string {
+    if (model.stats.invocations <= 0) return '-';
+    return model.stats.maxMs.toFixed(1) + ' ' + t('system.inference.unitMs');
+  }
+
+  // Compact, readable summary for the latency sparkline: current value and the
+  // series peak in ms (the bare line carries no scale on its own).
+  function latencySummary(series: number[]): string {
+    if (series.length === 0) return '';
+    const current = series[series.length - 1] ?? 0;
+    const peak = Math.max(...series);
+    return `${current.toFixed(1)} ${t('system.inference.unitMs')} · ${t('system.inference.peak')} ${peak.toFixed(1)}`;
+  }
+
+  // Short names of other loaded models whose feed contains the same species within
+  // CO_DETECTION_TOLERANCE_SEC of this detection, for cross-model correlation.
+  function coDetectingModels(modelId: string, d: InferenceLastDetection): string[] {
+    if (!snapshot) return [];
+    if (!d.scientificName && !d.species) return [];
+    const names: string[] = [];
+    for (const m of snapshot.models) {
+      if (m.id === modelId) continue;
+      // When both entries have a scientific name, that is the authoritative
+      // identity: compare it and do not fall back to the common name (two
+      // different species can share a common name). Only fall back to the
+      // species key when one side lacks a scientific name.
+      const hit = m.recentDetections?.some(o => {
+        const sameSpecies =
+          o.scientificName && d.scientificName
+            ? o.scientificName === d.scientificName
+            : (o.scientificName || o.species) === (d.scientificName || d.species);
+        return sameSpecies && Math.abs(o.atUnix - d.atUnix) <= CO_DETECTION_TOLERANCE_SEC;
+      });
+      if (hit) names.push(m.detectionName || m.name);
+    }
+    return names;
+  }
 </script>
 
-<div class="space-y-4">
-  <h2 class="text-xl font-semibold flex items-center gap-2">
-    <Brain class="w-5 h-5 shrink-0" aria-hidden="true" />
-    {t('system.inference.title')}
-  </h2>
+<!--
+  Renders a jargon stat as "label: value" with a plain-English explanation
+  available on hover (title) and to screen readers (sr-only + aria-describedby),
+  mirroring the existing RTF / approximate-RAM pattern. helpId must be unique.
+-->
+{#snippet stat(label: string, help: string, value: string, helpId: string)}
+  <span class="text-muted" title={help}>
+    {label}:
+    <span class="font-mono tabular-nums text-base-content" aria-describedby={helpId}>{value}</span>
+    <span id={helpId} class="sr-only">{help}</span>
+  </span>
+{/snippet}
 
+<div class="space-y-4">
   {#if loading}
     <div
       class="flex items-center gap-3 p-4 text-sm text-base-content/70"
@@ -349,7 +476,7 @@
       aria-live="polite"
     >
       <span
-        class="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"
+        class="animate-spin motion-reduce:animate-none h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"
         aria-hidden="true"
       ></span>
       <span>{t('system.inference.loading')}</span>
@@ -362,87 +489,129 @@
       {error}
     </div>
   {:else if snapshot}
-    <!-- Hardware -->
-    <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-      <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
-        {t('system.inference.sectionHardware')}
-      </h3>
-      <div class="space-y-2.5">
-        {#if snapshot.hardware.arch}
+    <!-- Top context row: hardware and inference backends as compact cards.
+         The Audio pipeline card is intentionally hidden for now (see below). -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <!-- Hardware -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
+      >
+        <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
+          {t('system.inference.sectionHardware')}
+        </h3>
+        <div class="space-y-2.5">
+          {#if snapshot.hardware.arch}
+            <div class="flex items-center gap-3">
+              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.architecture')}</span>
+              <span class="text-sm font-mono tabular-nums truncate" title={snapshot.hardware.arch}
+                >{snapshot.hardware.arch}</span
+              >
+            </div>
+          {/if}
+          {#if snapshot.hardware.cpuModel}
+            <div class="flex items-center gap-3">
+              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.cpu')}</span>
+              <span class="text-sm truncate" title={snapshot.hardware.cpuModel}
+                >{snapshot.hardware.cpuModel}</span
+              >
+            </div>
+          {/if}
+          {#if snapshot.hardware.environment}
+            <div class="flex items-center gap-3">
+              <span class="text-sm text-muted">{t('system.inference.environment')}</span>
+              <span class="text-sm truncate" title={snapshot.hardware.environment}
+                >{snapshot.hardware.environment}</span
+              >
+            </div>
+          {/if}
           <div class="flex items-center gap-3">
-            <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <span class="text-sm text-muted">{t('system.inference.architecture')}</span>
-            <span class="text-sm font-mono tabular-nums truncate">{snapshot.hardware.arch}</span>
+            <span
+              class="text-sm text-muted"
+              title={t('system.inference.fp16Help')}
+              aria-describedby="help-fp16"
+            >
+              {t('system.inference.fp16')}
+            </span>
+            <span id="help-fp16" class="sr-only">{t('system.inference.fp16Help')}</span>
+            {#if snapshot.hardware.fp16}
+              <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
+            {:else}
+              <StatusPill
+                variant="neutral"
+                label={t('system.inference.fp16Unsupported')}
+                size="xs"
+              />
+            {/if}
           </div>
-        {/if}
-        {#if snapshot.hardware.cpuModel}
-          <div class="flex items-center gap-3">
-            <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <span class="text-sm text-muted">{t('system.inference.cpu')}</span>
-            <span class="text-sm truncate">{snapshot.hardware.cpuModel}</span>
-          </div>
-        {/if}
-        {#if snapshot.hardware.environment}
-          <div class="flex items-center gap-3">
-            <span class="text-sm text-muted">{t('system.inference.environment')}</span>
-            <span class="text-sm truncate">{snapshot.hardware.environment}</span>
-          </div>
-        {/if}
-        <div class="flex items-center gap-3">
-          <span class="text-sm text-muted">{t('system.inference.fp16')}</span>
-          {#if snapshot.hardware.fp16}
-            <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
-          {:else}
-            <StatusPill variant="neutral" label={t('system.inference.fp16Unsupported')} size="xs" />
+        </div>
+      </div>
+
+      <!-- Inference backends -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
+      >
+        <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
+          {t('system.inference.sectionBackends')}
+        </h3>
+        <div class="space-y-2.5">
+          {#each simpleBackends as row (row.label)}
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-sm min-w-32">{row.label}</span>
+              <StatusPill
+                variant={backendVariant(row.status.available)}
+                label={backendLabel(row.status.available)}
+                size="xs"
+              />
+              {#if row.status.available && row.status.initialized}
+                <StatusPill variant="info" label={t('system.inference.initialized')} size="xs" />
+              {/if}
+              {#if row.status.version}
+                <span class="text-xs text-muted font-mono tabular-nums">
+                  {t('system.inference.version')}: {row.status.version}
+                </span>
+              {/if}
+            </div>
+          {/each}
+
+          {#if openvino}
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-sm min-w-32">{t('system.inference.backendOpenvino')}</span>
+              {#if !openvino.supported}
+                <StatusPill
+                  variant="neutral"
+                  label={t('system.inference.notAvailable')}
+                  size="xs"
+                />
+              {:else if openvino.active}
+                <StatusPill variant="success" label={t('system.inference.active')} size="xs" />
+              {:else}
+                <StatusPill variant="neutral" label={t('system.inference.inactive')} size="xs" />
+              {/if}
+              {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
+                <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
+                {#each openvino.devices as device (device)}
+                  <Badge variant="neutral" size="sm" text={device} />
+                {/each}
+              {/if}
+            </div>
           {/if}
         </div>
       </div>
-    </div>
 
-    <!-- Inference backends -->
-    <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-      <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
-        {t('system.inference.sectionBackends')}
-      </h3>
-      <div class="space-y-2.5">
-        {#each simpleBackends as row (row.label)}
-          <div class="flex items-center gap-3 flex-wrap">
-            <span class="text-sm min-w-32">{row.label}</span>
-            <StatusPill
-              variant={backendVariant(row.status.available)}
-              label={backendLabel(row.status.available)}
-              size="xs"
-            />
-            {#if row.status.available && row.status.initialized}
-              <StatusPill variant="info" label={t('system.inference.initialized')} size="xs" />
-            {/if}
-            {#if row.status.version}
-              <span class="text-xs text-muted font-mono tabular-nums">
-                {t('system.inference.version')}: {row.status.version}
-              </span>
-            {/if}
-          </div>
-        {/each}
+      <!--
+        Audio pipeline card: intentionally DISABLED for now.
 
-        {#if openvino}
-          <div class="flex items-center gap-3 flex-wrap">
-            <span class="text-sm min-w-32">{t('system.inference.backendOpenvino')}</span>
-            {#if !openvino.supported}
-              <StatusPill variant="neutral" label={t('system.inference.notAvailable')} size="xs" />
-            {:else if openvino.active}
-              <StatusPill variant="success" label={t('system.inference.active')} size="xs" />
-            {:else}
-              <StatusPill variant="neutral" label={t('system.inference.inactive')} size="xs" />
-            {/if}
-            {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
-              <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
-              {#each openvino.devices as device (device)}
-                <Badge variant="neutral" size="sm" text={device} />
-              {/each}
-            {/if}
-          </div>
-        {/if}
-      </div>
+        As built it was low signal (a bare queue-depth / dropped-chunks readout)
+        and it squeezed the Inference Backends card too narrow. It is hidden on
+        purpose until it can be refactored into something genuinely useful
+        (per-source pipeline health, backlog trends, drop-cause attribution).
+
+        The backend still returns `snapshot.audio` and its i18n keys are kept, so
+        re-enabling is just a matter of restoring the markup. Tracked in the
+        Phase A spec (Forgejo #1144). Do NOT delete the audio types/fields.
+      -->
     </div>
 
     <!-- Models -->
@@ -451,17 +620,26 @@
         {t('system.inference.sectionModels')}
       </h3>
 
-      {#if snapshot.models.length === 0}
+      {#if sortedModels.length === 0}
         <div
-          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-6 shadow-sm text-center text-sm text-base-content/70"
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-6 shadow-sm text-center text-sm text-muted"
         >
-          {t('system.inference.noModels')}
+          <p>{t('system.inference.noModels')}</p>
+          <p class="mt-2">
+            {t('system.inference.noModelsHint')}
+            <a href={buildAppUrl('/ui/settings/audio')} class="text-primary underline">
+              {t('system.inference.noModelsHintLink')}
+            </a>
+          </p>
         </div>
       {:else}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {#each snapshot.models as model (model.id)}
+        <div class="space-y-3">
+          {#each sortedModels as model (model.id)}
             {@const latencySeries = seriesByKey[model.metricKeys.avgMs] ?? []}
-            {@const rtfSeries = seriesByKey[model.metricKeys.rtf] ?? []}
+            {@const throughputSeries = seriesByKey[model.metricKeys.throughput] ?? []}
+            {@const throughputLatest =
+              throughputSeries.length > 0 ? throughputSeries[throughputSeries.length - 1] : 0}
+            {@const isActive = throughputSeries.length > 0 && throughputLatest > 0}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -473,11 +651,48 @@
                 {#if model.quantization}
                   <Badge variant="secondary" size="sm" text={model.quantization} />
                 {/if}
-                <Badge
-                  variant={model.isStock ? 'neutral' : 'accent'}
-                  size="sm"
-                  text={model.isStock ? t('system.inference.stock') : t('system.inference.custom')}
-                />
+                {#if model.device}
+                  <Badge
+                    variant="info"
+                    size="sm"
+                    text={model.device}
+                    title={t('system.inference.deviceHelp')}
+                  />
+                {/if}
+                {#if model.paused}
+                  <!-- Schedule-gated model that is currently off-schedule: explain the
+                       flat latency line instead of showing a bare "idle" dash. -->
+                  <span
+                    class="ml-auto flex items-center gap-1.5"
+                    role="status"
+                    aria-label={t('system.inference.activityPaused')}
+                    title={t('system.inference.pausedScheduleHelp')}
+                  >
+                    <Pause class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
+                    <span class="text-xs text-amber-600 dark:text-amber-400">
+                      {t('system.inference.paused')}{#if model.scheduleLabel}<span
+                          class="text-muted">&nbsp;({model.scheduleLabel})</span
+                        >{/if}
+                    </span>
+                  </span>
+                {:else}
+                  <span
+                    class="ml-auto flex items-center gap-1"
+                    role="status"
+                    aria-label={isActive
+                      ? t('system.inference.activityActive')
+                      : t('system.inference.activityIdle')}
+                  >
+                    {#if isActive}
+                      <Activity
+                        class="w-3 h-3 text-green-500 animate-pulse motion-reduce:animate-none"
+                        aria-hidden="true"
+                      />
+                    {:else}
+                      <Minus class="w-3 h-3 text-base-content/30" aria-hidden="true" />
+                    {/if}
+                  </span>
+                {/if}
               </div>
 
               <!-- Spec line -->
@@ -506,57 +721,201 @@
 
               <!-- Stats line -->
               <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                <span class="text-muted">
-                  {t('system.inference.invocations')}:
-                  <span class="font-mono tabular-nums text-base-content">
-                    {formatNumber(model.stats.invocations)}
-                  </span>
-                </span>
+                {@render stat(
+                  t('system.inference.invocations'),
+                  t('system.inference.invocationsHelp'),
+                  formatNumber(model.stats.invocations),
+                  `help-invocations-${model.id}`
+                )}
                 <span class="text-muted">
                   {t('system.inference.avgLatency')}:
                   <span class="font-mono tabular-nums text-base-content">
-                    {model.stats.avgMs.toFixed(1)}
-                    {t('system.inference.unitMs')}
+                    {avgLatencyDisplay(model)}
                   </span>
                 </span>
                 <span class="text-muted">
                   {t('system.inference.maxLatency')}:
                   <span class="font-mono tabular-nums text-base-content">
-                    {model.stats.maxMs.toFixed(1)}
-                    {t('system.inference.unitMs')}
+                    {maxLatencyDisplay(model)}
                   </span>
                 </span>
-                <span class="text-muted" title={t('system.inference.rtfLabel')}>
+                <span class="text-muted" title={t('system.inference.rtfHelp')}>
                   {t('system.inference.rtf')}:
                   <span
                     class="font-mono tabular-nums text-base-content"
                     aria-describedby={`rtf-help-${model.id}`}>{rtfDisplay(model)}</span
                   >
                   <span id={`rtf-help-${model.id}`} class="sr-only">
-                    {t('system.inference.rtfLabel')}
+                    {t('system.inference.rtfHelp')}
                   </span>
                 </span>
+                {@render stat(
+                  t('system.inference.throughput'),
+                  t('system.inference.throughputHelp'),
+                  throughputDisplay(model, throughputLatest),
+                  `help-throughput-${model.id}`
+                )}
+                {#if model.stats.errorRate !== undefined}
+                  {@render stat(
+                    t('system.inference.errorRate'),
+                    t('system.inference.errorRateHelp'),
+                    Math.round(model.stats.errorRate * 100) + '%',
+                    `help-error-rate-${model.id}`
+                  )}
+                {/if}
+                {#if model.stats.loadFailures !== undefined && model.stats.loadFailures > 0}
+                  {@render stat(
+                    t('system.inference.loadFailures'),
+                    t('system.inference.loadFailuresHelp'),
+                    String(model.stats.loadFailures),
+                    `help-load-failures-${model.id}`
+                  )}
+                {/if}
               </div>
 
-              <!-- Sparklines -->
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <div class="text-[11px] text-muted mb-1 flex items-center gap-1">
-                    <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
-                    {t('system.inference.latencyChart')}
-                  </div>
-                  <div class="h-10">
-                    <Sparkline data={latencySeries} color={LATENCY_COLOR} />
-                  </div>
+              <!-- Latency sparkline (full width) -->
+              <div>
+                <div class="text-xs text-muted mb-1 flex items-center gap-1">
+                  <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
+                  {t('system.inference.latencyChart')}
+                  {#if latencySeries.length > 0}
+                    <span class="ml-auto font-mono tabular-nums text-base-content">
+                      {latencySummary(latencySeries)}
+                    </span>
+                  {/if}
                 </div>
-                <div>
-                  <div class="text-[11px] text-muted mb-1 flex items-center gap-1">
-                    <Activity class="w-3 h-3 shrink-0" aria-hidden="true" />
-                    {t('system.inference.rtfChart')}
-                  </div>
-                  <div class="h-10">
-                    <Sparkline data={rtfSeries} color={RTF_COLOR} />
-                  </div>
+                <div class="h-10">
+                  <!-- Before real samples flow, draw a flat 0 baseline (the chart
+                       needs >= 2 points) instead of an empty/placeholder state. -->
+                  <Sparkline
+                    data={latencySeries.length >= 2 ? latencySeries : EMPTY_SPARKLINE_BASELINE}
+                    color={LATENCY_COLOR}
+                    decorative
+                  />
+                </div>
+              </div>
+
+              <!-- Recent detections (Last heard): a per-species-throttled feed (the
+                   same species is recorded at most once per the model's segment
+                   interval). Shown as two columns of ten (newest ten on the left,
+                   the next ten on the right) with absolute timestamps and the other
+                   models that detected the same species within the tolerance, so
+                   detections can be correlated across models. -->
+              <div>
+                <div class="text-xs text-muted">{t('system.inference.lastHeard')}</div>
+                <!-- The feed shows everything each model fires on above the base
+                     threshold, so it includes non-bird, human, and out-of-range
+                     predictions that are not saved. Explain it so they are not
+                     mistaken for saved detections. -->
+                <div class="text-[11px] text-muted mb-1 leading-snug">
+                  {t('system.inference.lastHeardHint')}
+                </div>
+
+                {#snippet feedTable(rows: InferenceLastDetection[])}
+                  <table class="w-full text-xs table-fixed">
+                    <thead class="text-muted">
+                      <tr>
+                        <th class="text-left font-normal py-0.5 pr-2">
+                          {t('system.inference.species')}
+                        </th>
+                        <th
+                          class="text-left font-normal py-0.5 w-12 whitespace-nowrap"
+                          title={t('common.labels.confidence')}
+                          aria-label={t('common.labels.confidence')}
+                        >
+                          {t('system.inference.confidenceColumn')}
+                        </th>
+                        <th class="text-left font-normal py-0.5 w-16 whitespace-nowrap">
+                          {t('system.inference.heardWhen')}
+                        </th>
+                        <th
+                          class="text-left font-normal py-0.5 pl-2 w-20 whitespace-nowrap"
+                          title={t('system.inference.coDetectedHelp', {
+                            seconds: CO_DETECTION_TOLERANCE_SEC,
+                          })}
+                          aria-label={t('system.inference.coDetectedHelp', {
+                            seconds: CO_DETECTION_TOLERANCE_SEC,
+                          })}
+                        >
+                          {t('system.inference.coDetectedColumn')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each rows as d (`${d.scientificName || d.species}-${d.atUnix}`)}
+                        {@const coNames = coDetectingModels(model.id, d)}
+                        <tr class="border-t border-[var(--border-100)]">
+                          <td class="py-0.5 pr-2 text-base-content">
+                            <div class="flex items-center gap-1 min-w-0">
+                              {#if !d.inRange}
+                                <!-- Did not pass the range filter (non-avian, human,
+                                     or out-of-range): shown for diagnostics but not
+                                     saved as a detection. -->
+                                <span
+                                  class="shrink-0 inline-flex text-muted"
+                                  role="img"
+                                  title={t('system.inference.outOfRangeHelp')}
+                                  aria-label={t('system.inference.outOfRangeHelp')}
+                                >
+                                  <MapPinOff class="w-3 h-3" aria-hidden="true" />
+                                </span>
+                              {/if}
+                              <span
+                                class="truncate"
+                                title={d.scientificName
+                                  ? `${d.species} (${d.scientificName})`
+                                  : d.species}
+                              >
+                                {d.species}
+                              </span>
+                            </div>
+                          </td>
+                          <td class="text-left py-0.5 font-mono tabular-nums text-base-content">
+                            {Math.round(d.confidence * 100)}%
+                          </td>
+                          <td
+                            class="text-left py-0.5 font-mono tabular-nums text-muted whitespace-nowrap"
+                            title={formatLocalDateTime(new Date(d.atUnix * 1000))}
+                          >
+                            {getLocalTimeString(new Date(d.atUnix * 1000))}
+                          </td>
+                          <td
+                            class="truncate py-0.5 pl-2 text-muted"
+                            title={coNames.length > 0 ? coNames.join(', ') : undefined}
+                          >
+                            {#if coNames.length > 0}
+                              {coNames.join(', ')}
+                            {:else}
+                              -
+                            {/if}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                {/snippet}
+
+                <!-- min-height sized for the full ten rows per column so the card
+                     does not resize as detections fill in after a restart. -->
+                <div class="min-h-[12rem]">
+                  {#if model.recentDetections && model.recentDetections.length > 0}
+                    {@const left = model.recentDetections.slice(0, LAST_HEARD_COLUMN_ROWS)}
+                    {@const right = model.recentDetections.slice(
+                      LAST_HEARD_COLUMN_ROWS,
+                      LAST_HEARD_COLUMN_ROWS * 2
+                    )}
+                    <!-- Two newspaper columns: newest ten on the left, next ten on
+                         the right. The left table stays half-width even before the
+                         right column fills, so the species column never hogs the card. -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-6 items-start">
+                      {@render feedTable(left)}
+                      {#if right.length > 0}
+                        {@render feedTable(right)}
+                      {/if}
+                    </div>
+                  {:else}
+                    <div class="text-xs text-muted">{t('system.inference.lastHeardNever')}</div>
+                  {/if}
                 </div>
               </div>
 
@@ -578,10 +937,9 @@
 
               <!-- Sources -->
               <div>
-                <div class="text-[11px] text-muted mb-1">{t('system.inference.sources')}</div>
+                <div class="text-xs text-muted mb-1">{t('system.inference.sources')}</div>
                 {#if model.sources.length === 0}
-                  <span class="text-xs text-base-content/70">{t('system.inference.noSources')}</span
-                  >
+                  <span class="text-xs text-muted">{t('system.inference.noSources')}</span>
                 {:else}
                   <div class="flex flex-wrap gap-1.5">
                     {#each model.sources as source (source.id)}

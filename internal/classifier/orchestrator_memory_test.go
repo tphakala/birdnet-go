@@ -36,6 +36,9 @@ func (f *fakeInstance) ModelVersion() string { return "test" }
 func (f *fakeInstance) NumSpecies() int      { return 1 }
 func (f *fakeInstance) Labels() []string     { return nil }
 func (f *fakeInstance) Close() error         { return nil }
+func (f *fakeInstance) RuntimeInfo() (device, backend, precision string) {
+	return deviceCPU, BackendONNX, ""
+}
 
 func TestWarmupAndRecordRSS_RecordsNonNegativeDelta(t *testing.T) {
 	t.Parallel()

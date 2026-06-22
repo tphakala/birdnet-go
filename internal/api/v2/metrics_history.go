@@ -260,6 +260,7 @@ func (c *Controller) initMetricsHistoryRoutes() {
 		}
 		if c.metrics != nil && c.metrics.BirdNET != nil {
 			collector.SetInferenceGaugeSetters(c.metrics.BirdNET.SetInferenceRTF, c.metrics.BirdNET.SetModelRSSBytes, c.metrics.BirdNET.DeleteInferenceMetrics)
+			collector.SetAudioGaugeSetters(c.metrics.BirdNET.SetAudioQueueDepth, c.metrics.BirdNET.SetAudioDroppedChunks)
 		}
 
 		// Wire health counter collection (drops, overruns, stream restarts)
