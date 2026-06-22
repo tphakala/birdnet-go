@@ -1419,23 +1419,21 @@ func localMinuteOfDay(t time.Time) int {
 
 // resolveSunRepresentativeDate picks the single date the nocturnal clock's sun times represent.
 // A multi-day range collapses to its calendar midpoint (the chart notes this in its tooltip); a
-// single `date` (or a lone `start_date`) is used directly; absent all three, today is used. Dates
-// are parsed in the server's local timezone and the midpoint is computed by calendar-day
-// arithmetic (AddDate), so the result is stable across DST transitions within the range and never
-// drifts onto an adjacent day. Inputs are pre-validated by the handler.
+// single `date` (or a lone `start_date`) is used directly; absent all three, today is used. The
+// range bounds are parsed in UTC so every day is exactly 24h (DST-free), making the day count
+// exact; the midpoint is then a pure calendar offset (AddDate), and only its Y-M-D is used
+// downstream. Inputs are pre-validated by the handler.
 func resolveSunRepresentativeDate(dateParam, startDate, endDate string) string {
 	switch {
 	case dateParam != "":
 		return dateParam
 	case startDate != "" && endDate != "":
-		start, errS := time.ParseInLocation(time.DateOnly, startDate, time.Local)
-		end, errE := time.ParseInLocation(time.DateOnly, endDate, time.Local)
+		start, errS := time.Parse(time.DateOnly, startDate)
+		end, errE := time.Parse(time.DateOnly, endDate)
 		if errS != nil || errE != nil {
 			return startDate // defensive: handler validated both already
 		}
-		// Round the span to whole days so a DST hour inside the range cannot shift the count, then
-		// take half the days forward from the start via calendar arithmetic.
-		days := int((end.Sub(start).Hours() + sunHoursPerDay/2) / sunHoursPerDay)
+		days := int(end.Sub(start).Hours()) / sunHoursPerDay
 		return start.AddDate(0, 0, days/2).Format(time.DateOnly)
 	case startDate != "":
 		return startDate
@@ -1470,6 +1468,21 @@ func (c *Controller) GetAnalyticsSun(ctx echo.Context) error {
 	if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, operation); err != nil {
 		return err
 	}
+	// The strict format check is a regex, so a well-formed but impossible date (e.g. 2026-02-31)
+	// slips through; reject it explicitly rather than letting it surface later as a misleading
+	// available:false. (start_date/end_date already get this via validateDateRangeWithResponse.)
+	if dateParam != "" {
+		if _, err := time.Parse(time.DateOnly, dateParam); err != nil {
+			_ = c.HandleError(ctx, err, "Invalid date parameters", http.StatusBadRequest)
+			return ErrResponseHandled
+		}
+	}
+	// A lone end_date has no start to pair with and would otherwise be silently ignored (the result
+	// would default to today), which is misleading; require start_date alongside it.
+	if dateParam == "" && startDate == "" && endDate != "" {
+		_ = c.HandleError(ctx, nil, "start_date is required when end_date is provided", http.StatusBadRequest)
+		return ErrResponseHandled
+	}
 
 	repDate := resolveSunRepresentativeDate(dateParam, startDate, endDate)
 
@@ -1495,7 +1508,9 @@ func (c *Controller) GetAnalyticsSun(ctx echo.Context) error {
 	if err != nil {
 		return ctx.JSON(http.StatusOK, resp)
 	}
-	anchor := repTime.Add(sunNoonHour * time.Hour)
+	// Construct local calendar noon directly (not midnight + 12h, which lands at 11:00/13:00 across a
+	// DST transition) so the anchor is always mid-day on the intended calendar date.
+	anchor := time.Date(repTime.Year(), repTime.Month(), repTime.Day(), sunNoonHour, 0, 0, 0, repTime.Location())
 
 	times, err := c.SunCalc.GetSunEventTimes(anchor)
 	if err != nil {

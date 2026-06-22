@@ -391,6 +391,7 @@ async function fetchDawnOnset(
 }
 
 const HOURS_IN_DAY = 24;
+const MINUTES_IN_DAY = HOURS_IN_DAY * 60;
 
 /** Coerces the hourly-distribution payload ([{hour,count}]) into a dense, bounds-checked number[24]. */
 function coerceHourly(data: unknown): number[] {
@@ -400,7 +401,10 @@ function coerceHourly(data: unknown): number[] {
     if (!raw || typeof raw !== 'object') continue;
     const item = raw as { hour?: unknown; count?: unknown };
     const hour = typeof item.hour === 'number' ? item.hour : -1;
-    const count = typeof item.count === 'number' && Number.isFinite(item.count) ? item.count : 0;
+    // Counts are detection tallies; clamp to >= 0 so a malformed negative never yields a negative
+    // (inverted) bar height.
+    const count =
+      typeof item.count === 'number' && Number.isFinite(item.count) ? Math.max(0, item.count) : 0;
     if (Number.isInteger(hour) && hour >= 0 && hour < HOURS_IN_DAY) {
       // eslint-disable-next-line security/detect-object-injection -- hour is bounds-checked above
       hourly[hour] = count;
@@ -409,9 +413,13 @@ function coerceHourly(data: unknown): number[] {
   return hourly;
 }
 
-/** A finite minute-of-day value, or null (the chart treats null as an undefined sun event). */
+/**
+ * A minute-of-day value (0..1439) or null. Out-of-domain numbers are rejected (null) so a malformed
+ * payload cannot place sun shading off the 24h canvas; the chart treats null as an undefined event.
+ */
 function coerceSunMinute(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return value >= 0 && value < MINUTES_IN_DAY ? value : null;
 }
 
 /**
@@ -464,8 +472,12 @@ async function fetchNocturnal(
       civilDusk: coerceSunMinute(body.civilDusk),
       available: body.available === true,
     };
-    // A sun failure must not break the card; fall back to no shading.
-  })().catch(() => null);
+  })().catch((err: unknown) => {
+    // Propagate cancellation so an aborted request rejects (the card ignores aborts) rather than
+    // resolving with partial data; only a genuine sun failure degrades to no shading.
+    if (err instanceof Error && err.name === 'AbortError') throw err;
+    return null;
+  });
 
   const [hourly, sun] = await Promise.all([hourlyPromise, sunPromise]);
   return { hourly, sun };

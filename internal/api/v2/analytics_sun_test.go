@@ -29,6 +29,14 @@ type sunJSON struct {
 // minutesInDay bounds a valid minute-of-day value (0..1439).
 const minutesInDay = 24 * 60
 
+// forwardMinutes is the clockwise distance from one minute-of-day to another, wrapping past
+// midnight. Sun events are emitted as server-local minute-of-day, so on a test host whose timezone
+// differs from the station coordinates an event pair can straddle midnight and invert a plain
+// a<b comparison; the forward distance is timezone-independent. >0 means "b is ahead of a".
+func forwardMinutes(from, to int) int {
+	return (to - from + minutesInDay) % minutesInDay
+}
+
 func newSunContext(e *echo.Echo, target string) (echo.Context, *httptest.ResponseRecorder) {
 	req := httptest.NewRequest(http.MethodGet, target, http.NoBody)
 	rec := httptest.NewRecorder()
@@ -59,15 +67,17 @@ func TestGetAnalyticsSun_SingleDate(t *testing.T) {
 	assert.True(t, resp.Available)
 	require.NotNil(t, resp.Sunrise)
 	require.NotNil(t, resp.Sunset)
-	// Events are minute-of-day in local time, and on a spring day sunrise precedes sunset.
+	// Events are minute-of-day in local time; assert ordering circularly so the test is independent
+	// of the host timezone (sunrise -> sunset spans the daytime, civil dawn -> sunrise the morning
+	// twilight, sunset -> civil dusk the evening twilight; each is a positive forward span).
 	assert.GreaterOrEqual(t, *resp.Sunrise, 0)
 	assert.Less(t, *resp.Sunset, minutesInDay)
-	assert.Less(t, *resp.Sunrise, *resp.Sunset)
+	assert.Positive(t, forwardMinutes(*resp.Sunrise, *resp.Sunset))
 	// A genuine civil dawn precedes sunrise; a genuine civil dusk follows sunset.
 	require.NotNil(t, resp.CivilDawn)
 	require.NotNil(t, resp.CivilDusk)
-	assert.Less(t, *resp.CivilDawn, *resp.Sunrise)
-	assert.Greater(t, *resp.CivilDusk, *resp.Sunset)
+	assert.Positive(t, forwardMinutes(*resp.CivilDawn, *resp.Sunrise))
+	assert.Positive(t, forwardMinutes(*resp.Sunset, *resp.CivilDusk))
 }
 
 func TestGetAnalyticsSun_RangeUsesMidpoint(t *testing.T) {
@@ -137,7 +147,7 @@ func TestGetAnalyticsSun_WhiteNightOmitsCivilTwilight(t *testing.T) {
 	assert.True(t, resp.Available)
 	require.NotNil(t, resp.Sunrise)
 	require.NotNil(t, resp.Sunset)
-	assert.Less(t, *resp.Sunrise, *resp.Sunset)
+	assert.Positive(t, forwardMinutes(*resp.Sunrise, *resp.Sunset))
 	assert.Nil(t, resp.CivilDawn, "civil dawn must be omitted when no genuine civil twilight occurs")
 	assert.Nil(t, resp.CivilDusk, "civil dusk must be omitted when no genuine civil twilight occurs")
 }
@@ -192,6 +202,32 @@ func TestGetAnalyticsSun_InvalidRangeOrder(t *testing.T) {
 	controller.SunCalc = suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 
 	c, rec := newSunContext(e, "/api/v2/analytics/sun?start_date=2026-03-31&end_date=2026-03-01")
+	err := controller.GetAnalyticsSun(c)
+	require.Error(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestGetAnalyticsSun_ImpossibleDateRejected(t *testing.T) {
+	t.Parallel()
+	e, _, controller := setupAnalyticsTestEnvironment(t)
+	controller.SunCalc = suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
+
+	// A well-formed but impossible date passes the regex but is rejected explicitly with 400,
+	// rather than surfacing later as a misleading available:false.
+	c, rec := newSunContext(e, "/api/v2/analytics/sun?date=2026-02-31")
+	err := controller.GetAnalyticsSun(c)
+	require.Error(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestGetAnalyticsSun_LoneEndDateRejected(t *testing.T) {
+	t.Parallel()
+	e, _, controller := setupAnalyticsTestEnvironment(t)
+	controller.SunCalc = suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
+
+	// end_date with no start_date has nothing to pair with; reject it rather than silently
+	// defaulting to today.
+	c, rec := newSunContext(e, "/api/v2/analytics/sun?end_date=2026-03-20")
 	err := controller.GetAnalyticsSun(c)
 	require.Error(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
