@@ -24,9 +24,15 @@
     species: SpeciesData | null;
     isOpen: boolean;
     onClose?: () => void;
+    /**
+     * When false, hide the detection stats grid (count / confidence / first /
+     * last). Used for live "currently hearing" pings, which have no aggregate
+     * stats — only the species name, image, and guide are meaningful there.
+     */
+    showStats?: boolean;
   }
 
-  let { species, isOpen, onClose }: Props = $props();
+  let { species, isOpen, onClose, showStats = true }: Props = $props();
 
   // Cache species data so content persists during the Modal close animation.
   // Updated when a new species is provided, retained when species becomes null
@@ -107,28 +113,30 @@
         </div>
       {/if}
 
-      <div class="grid grid-cols-2 gap-3 text-sm mt-3">
-        <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-          <span class="opacity-70">{t('analytics.species.card.detections')}</span>
-          <span class="font-semibold">{displaySpecies.count}</span>
-        </div>
-        <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-          <span class="opacity-70">{t('analytics.species.card.confidence')}</span>
-          <span class="font-semibold">{formatPercentage(displaySpecies.avg_confidence)}</span>
-        </div>
-        {#if displaySpecies.first_heard}
+      {#if showStats}
+        <div class="grid grid-cols-2 gap-3 text-sm mt-3">
           <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-            <span class="opacity-70">{t('analytics.species.headers.firstDetected')}</span>
-            <span class="font-semibold">{formatDate(displaySpecies.first_heard)}</span>
+            <span class="opacity-70">{t('analytics.species.card.detections')}</span>
+            <span class="font-semibold">{displaySpecies.count}</span>
           </div>
-        {/if}
-        {#if displaySpecies.last_heard}
           <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-            <span class="opacity-70">{t('analytics.species.headers.lastDetected')}</span>
-            <span class="font-semibold">{formatDate(displaySpecies.last_heard)}</span>
+            <span class="opacity-70">{t('analytics.species.card.confidence')}</span>
+            <span class="font-semibold">{formatPercentage(displaySpecies.avg_confidence)}</span>
           </div>
-        {/if}
-      </div>
+          {#if displaySpecies.first_heard}
+            <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
+              <span class="opacity-70">{t('analytics.species.headers.firstDetected')}</span>
+              <span class="font-semibold">{formatDate(displaySpecies.first_heard)}</span>
+            </div>
+          {/if}
+          {#if displaySpecies.last_heard}
+            <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
+              <span class="opacity-70">{t('analytics.species.headers.lastDetected')}</span>
+              <span class="font-semibold">{formatDate(displaySpecies.last_heard)}</span>
+            </div>
+          {/if}
+        </div>
+      {/if}
 
       {#if guideEnabled && (showNotes || showSimilarSpecies)}
         <div class="mt-4 space-y-4 border-t border-[var(--color-base-300)] pt-4">

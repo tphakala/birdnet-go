@@ -19,7 +19,8 @@ Props:
   import type { PendingDetection } from '$lib/types/pending.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
-  import { settingsStore } from '$lib/stores/settings';
+  import { settingsStore, dashboardSettings } from '$lib/stores/settings';
+  import SpeciesDetailModal from '$lib/desktop/features/analytics/components/modals/SpeciesDetailModal.svelte';
 
   interface Props {
     detections: PendingDetection[];
@@ -27,6 +28,46 @@ Props:
   }
 
   let { detections = [], className = '' }: Props = $props();
+
+  // Clicking a "currently hearing" species opens the species guide modal. Only
+  // wire it up when the guide feature is enabled, so the modal always has guide
+  // content to show (it would otherwise be an empty name + image card).
+  let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
+
+  // Minimal species shape the guide modal needs. A live ping has no aggregate
+  // stats, so those fields are zeroed and the modal is opened with showStats={false}.
+  interface GuideSpecies {
+    common_name: string;
+    scientific_name: string;
+    count: number;
+    avg_confidence: number;
+    max_confidence: number;
+    first_heard: string;
+    last_heard: string;
+    thumbnail_url?: string;
+  }
+
+  let guideSpecies = $state<GuideSpecies | null>(null);
+  let guideModalOpen = $state(false);
+
+  function openGuide(d: PendingDetection): void {
+    guideSpecies = {
+      common_name: d.species,
+      scientific_name: d.scientificName,
+      count: d.hitCount ?? 0,
+      avg_confidence: 0,
+      max_confidence: 0,
+      first_heard: '',
+      last_heard: '',
+      thumbnail_url: d.thumbnail ? buildAppUrl(d.thumbnail) : undefined,
+    };
+    guideModalOpen = true;
+  }
+
+  function closeGuide(): void {
+    guideModalOpen = false;
+    guideSpecies = null;
+  }
 
   // How long terminal (approved/rejected) detections remain visible (ms)
   const TERMINAL_RETENTION_MS = 3000;
@@ -169,13 +210,22 @@ Props:
              server-provided common name, then the scientific name. Keeps the
              "currently hearing" card consistent with the rest of the dashboard. -->
         {@const displayName = localizeSpeciesName(detection.scientificName, detection.species)}
-        <div
-          class="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors duration-300
+        <svelte:element
+          this={guideEnabled ? 'button' : 'div'}
+          type={guideEnabled ? 'button' : undefined}
+          class="flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors duration-300
+            {guideEnabled
+            ? 'cursor-pointer hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]'
+            : ''}
             {detection.status === 'approved'
             ? 'border border-[var(--color-success)]/30 bg-[var(--color-success)]/15'
             : detection.status === 'rejected'
               ? 'border border-[var(--color-error)]/30 bg-[var(--color-error)]/15 opacity-60'
               : 'border border-transparent bg-[var(--color-base-200)]'}"
+          onclick={guideEnabled ? () => openGuide(detection) : undefined}
+          aria-label={guideEnabled
+            ? `${t('analytics.species.guide.title')}: ${displayName}`
+            : undefined}
           transition:fade={{ duration: 200 }}
         >
           <!-- Thumbnail -->
@@ -220,7 +270,7 @@ Props:
               class="ml-1 h-4 w-4 text-[var(--color-error)]"
             />
           {/if}
-        </div>
+        </svelte:element>
       {/each}
     </div>
   {:else}
@@ -231,3 +281,12 @@ Props:
     </div>
   {/if}
 </section>
+
+<!-- Species guide for a currently-heard bird. Live pings have no aggregate
+     stats, so the stats grid is hidden (showStats={false}). -->
+<SpeciesDetailModal
+  species={guideSpecies}
+  isOpen={guideModalOpen}
+  showStats={false}
+  onClose={closeGuide}
+/>
