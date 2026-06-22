@@ -273,15 +273,20 @@ func TestCheckAndUpdateSpecies(t *testing.T) {
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
-	// Use a fixed time at noon to avoid midnight boundary flakiness
-	currentTime := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	// Pin to local calendar noon so the +1h "same day" assertion never crosses a
+	// day boundary, regardless of the runner's timezone. time.Now().Truncate(24h)
+	// snaps to UTC midnight (Truncate works on absolute time), so it still lands at
+	// 23:xx local in UTC+11, where +1h rolls into the next day. calculateDaysSince
+	// reads the local .Date(), so the fix has to anchor on local noon.
+	now := time.Now()
+	currentTime := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
 
 	// First detection
 	isNew, daysSince := tracker.CheckAndUpdateSpecies("Parus major", currentTime)
 	assert.True(t, isNew, "First detection should be new")
 	assert.Equal(t, 0, daysSince, "Days since should be 0 for new species")
 
-	// Second detection (same calendar day)
+	// Second detection
 	isNew, daysSince = tracker.CheckAndUpdateSpecies("Parus major", currentTime.Add(time.Hour))
 	assert.True(t, isNew, "Should still be new within window")
 	assert.Equal(t, 0, daysSince, "Days since should still be 0 on same day")
