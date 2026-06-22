@@ -223,6 +223,7 @@ Props:
               ? 'border border-[var(--color-error)]/30 bg-[var(--color-error)]/15 opacity-60'
               : 'border border-transparent bg-[var(--color-base-200)]'}"
           onclick={guideEnabled ? () => openGuide(detection) : undefined}
+          role={guideEnabled ? 'button' : undefined}
           aria-label={guideEnabled
             ? `${t('analytics.species.guide.title')}: ${displayName}`
             : undefined}
