@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Izskats",
           "voice": "Balss",
-          "habitat": "Biotops un izplatība"
+          "habitat": "Biotops un izplatība",
+          "behaviour": "Uzvedība"
         }
       },
       "viewGuide": "Skatīt ceļvedi sugai {species}"

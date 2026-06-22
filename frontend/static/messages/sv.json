@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Utseende",
           "voice": "Läte",
-          "habitat": "Livsmiljö och utbredning"
+          "habitat": "Livsmiljö och utbredning",
+          "behaviour": "Beteende"
         }
       },
       "viewGuide": "Visa guide för {species}"

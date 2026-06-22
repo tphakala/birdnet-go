@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Aussehen",
           "voice": "Stimme",
-          "habitat": "Lebensraum & Verbreitung"
+          "habitat": "Lebensraum & Verbreitung",
+          "behaviour": "Verhalten"
         }
       },
       "viewGuide": "Steckbrief für {species} anzeigen"

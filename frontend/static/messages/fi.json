@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Ulkonäkö",
           "voice": "Ääni",
-          "habitat": "Elinympäristö ja levinneisyys"
+          "habitat": "Elinympäristö ja levinneisyys",
+          "behaviour": "Käyttäytyminen"
         }
       },
       "viewGuide": "Näytä opas lajille {species}"

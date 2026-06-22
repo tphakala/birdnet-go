@@ -27,12 +27,12 @@
 
   let { mainName, similar, className = '' }: Props = $props();
 
-  // Canonical rows shown in the diff card, in display order. Behaviour is
-  // extracted but intentionally not surfaced here to keep the card focused.
+  // Canonical rows shown in the diff card, in display order.
   const SECTION_ROWS: { id: CanonicalSectionId; labelKey: string }[] = [
     { id: 'appearance', labelKey: 'analytics.species.similar.sections.appearance' },
     { id: 'voice', labelKey: 'analytics.species.similar.sections.voice' },
     { id: 'habitat', labelKey: 'analytics.species.similar.sections.habitat' },
+    { id: 'behaviour', labelKey: 'analytics.species.similar.sections.behaviour' },
   ];
 
   type LoadStatus = 'loading' | 'ready' | 'notfound' | 'error';

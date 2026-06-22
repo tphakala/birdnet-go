@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Aspetto",
           "voice": "Voce",
-          "habitat": "Habitat e distribuzione"
+          "habitat": "Habitat e distribuzione",
+          "behaviour": "Comportamento"
         }
       },
       "viewGuide": "Visualizza la guida di {species}"

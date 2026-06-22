@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Vzhled",
           "voice": "Hlas",
-          "habitat": "Biotop a rozšíření"
+          "habitat": "Biotop a rozšíření",
+          "behaviour": "Chování"
         }
       },
       "viewGuide": "Zobrazit průvodce pro {species}"

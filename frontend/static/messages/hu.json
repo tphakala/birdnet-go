@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Megjelenés",
           "voice": "Hang",
-          "habitat": "Élőhely és elterjedés"
+          "habitat": "Élőhely és elterjedés",
+          "behaviour": "Viselkedés"
         }
       },
       "viewGuide": "Útmutató megtekintése: {species}"

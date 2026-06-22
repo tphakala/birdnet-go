@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Wygląd",
           "voice": "Głos",
-          "habitat": "Siedlisko i zasięg"
+          "habitat": "Siedlisko i zasięg",
+          "behaviour": "Zachowanie"
         }
       },
       "viewGuide": "Zobacz przewodnik dla {species}"

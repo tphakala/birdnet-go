@@ -56,7 +56,7 @@ describe('SimilarSpeciesPanel', () => {
     vi.mocked(api.get).mockResolvedValue(
       makeGuide({
         description:
-          'A large, heavy-billed corvid.\n\n## Voice\nA deep croaking gronk.\n\n## Distribution and habitat\nMountains and coasts.',
+          'A large, heavy-billed corvid.\n\n## Voice\nA deep croaking gronk.\n\n## Distribution and habitat\nMountains and coasts.\n\n## Behaviour\nForms large roosts.',
       }) as never
     );
 
@@ -70,6 +70,8 @@ describe('SimilarSpeciesPanel', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('A deep croaking gronk.')).toBeInTheDocument();
     expect(screen.getByText('Mountains and coasts.')).toBeInTheDocument();
+    // Behaviour is surfaced as the fourth comparison row.
+    expect(screen.getByText('Forms large roosts.')).toBeInTheDocument();
     // The "vs main species" header is shown.
     expect(screen.getByText('analytics.species.similar.versus')).toBeInTheDocument();
   });

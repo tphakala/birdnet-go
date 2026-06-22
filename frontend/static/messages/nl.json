@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Uiterlijk",
           "voice": "Geluid",
-          "habitat": "Leefgebied en verspreiding"
+          "habitat": "Leefgebied en verspreiding",
+          "behaviour": "Gedrag"
         }
       },
       "viewGuide": "Gids voor {species} bekijken"

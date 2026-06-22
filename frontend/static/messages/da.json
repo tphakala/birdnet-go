@@ -1727,7 +1727,8 @@
         "sections": {
           "appearance": "Udseende",
           "voice": "Stemme",
-          "habitat": "Levested og udbredelse"
+          "habitat": "Levested og udbredelse",
+          "behaviour": "Adfærd"
         }
       },
       "viewGuide": "Vis guide for {species}"

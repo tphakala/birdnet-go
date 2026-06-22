@@ -1335,6 +1335,7 @@ export type TranslationKey =
   | 'analytics.species.similar.sections.appearance'
   | 'analytics.species.similar.sections.voice'
   | 'analytics.species.similar.sections.habitat'
+  | 'analytics.species.similar.sections.behaviour'
   | 'analytics.species.viewGuide' // params: species
   | 'analytics.advanced.title'
   | 'analytics.advanced.chartControls'
