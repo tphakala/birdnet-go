@@ -30,7 +30,7 @@ func TestCollector_AudioHealthDelta(t *testing.T) {
 		}
 	})
 
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal("audio.drops.src1"))
 
 	c.SetAudioRouter(func() []AudioRouterSnapshot {
@@ -38,7 +38,7 @@ func TestCollector_AudioHealthDelta(t *testing.T) {
 			{SourceID: "src1", Drops: 15, Errors: 5},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 	assert.Equal(t, int64(5), healthStore.LifetimeTotal("audio.drops.src1"))
 	assert.Equal(t, int64(3), healthStore.LifetimeTotal("audio.overruns.src1"))
 
@@ -57,8 +57,8 @@ func TestCollector_AudioHealthZeroDeltaSkip(t *testing.T) {
 		}
 	})
 
-	c.collectHealthCounters()
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
+	c.collectHealthCounters(time.Now())
 
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal("audio.drops.src1"))
 	assert.Empty(t, healthEvents.RecentAll(10))
@@ -73,14 +73,14 @@ func TestCollector_AudioHealthCounterReset(t *testing.T) {
 			{SourceID: "src1", Drops: 100, Errors: 0},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	c.SetAudioRouter(func() []AudioRouterSnapshot {
 		return []AudioRouterSnapshot{
 			{SourceID: "src1", Drops: 5, Errors: 0},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	assert.Equal(t, int64(5), healthStore.LifetimeTotal("audio.drops.src1"))
 }
@@ -94,14 +94,14 @@ func TestCollector_StreamHealthDelta(t *testing.T) {
 			{SourceID: "stream_abc123", RestartCount: 2},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	c.SetStreamHealth(func() []StreamHealthSnapshot {
 		return []StreamHealthSnapshot{
 			{SourceID: "stream_abc123", RestartCount: 5},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	assert.Equal(t, int64(3), healthStore.LifetimeTotal("stream.restarts.stream_abc123"))
 
@@ -120,7 +120,7 @@ func TestCollector_MultiSourceAudio(t *testing.T) {
 			{SourceID: "src2", Drops: 0},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	c.SetAudioRouter(func() []AudioRouterSnapshot {
 		return []AudioRouterSnapshot{
@@ -128,7 +128,7 @@ func TestCollector_MultiSourceAudio(t *testing.T) {
 			{SourceID: "src2", Drops: 20},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	assert.Equal(t, int64(10), healthStore.LifetimeTotal("audio.drops.src1"))
 	assert.Equal(t, int64(20), healthStore.LifetimeTotal("audio.drops.src2"))
@@ -144,14 +144,14 @@ func TestCollector_SourceRemoval(t *testing.T) {
 			{SourceID: "src2", Drops: 5},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	c.SetAudioRouter(func() []AudioRouterSnapshot {
 		return []AudioRouterSnapshot{
 			{SourceID: "src1", Drops: 15},
 		}
 	})
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	assert.Equal(t, int64(5), healthStore.LifetimeTotal("audio.drops.src1"))
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal("audio.drops.src2"))
@@ -172,7 +172,7 @@ func TestCollector_SeedsKeysOnFirstTick(t *testing.T) {
 		}
 	})
 
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 
 	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixAudioDrops),
 		MetricPrefixAudioDrops+"src1")
@@ -197,5 +197,5 @@ func TestCollector_NoHealthStoreSkips(t *testing.T) {
 		return []AudioRouterSnapshot{{SourceID: "src1", Drops: 10}}
 	})
 
-	c.collectHealthCounters()
+	c.collectHealthCounters(time.Now())
 }
