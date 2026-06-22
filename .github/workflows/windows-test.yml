@@ -153,8 +153,11 @@ jobs:
           # exit code (no gotestfmt: go can wrap non-JSON build output into JSON
           # events whose content crashes its tokenizer). Failed tests are printed
           # below and in the job summary. Longer timeout than Linux: the native
-          # runner with -race is much slower.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 600s ./... > gotest.log 2>&1
+          # runner with -race is much slower, and api/v2 (the largest package,
+          # ~2000 tests) intermittently exceeded the old 600s per-package ceiling
+          # under runner load (cumulative race-instrumented work, not a deadlock).
+          # 900s adds headroom and stays under the 25m step cap below.
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 
