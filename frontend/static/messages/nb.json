@@ -1672,51 +1672,51 @@
       },
       "guide": {
         "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "similar": "Lignende arter",
+        "noSimilar": "Ingen lignende arter funnet",
+        "loading": "Laster guide…",
+        "unavailable": "Artsguiden er midlertidig utilgjengelig. Prøv igjen senere.",
+        "noGuide": "Ingen guide tilgjengelig for denne arten.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Forventet her",
+          "uncommon": "Uvanlig her",
+          "rare": "Sjelden her",
+          "unexpected": "Uventet her"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "spring": "Vår",
+          "summer": "Sommer",
+          "autumn": "Høst",
+          "winter": "Vinter",
+          "wet1": "Regntid",
+          "dry1": "Tørketid",
+          "wet2": "Regntid",
+          "dry2": "Tørketid"
         },
-        "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "description": "Beskrivelse",
+        "songsAndCalls": "Sang og lyder",
+        "externalLinks": "Eksterne ressurser"
       },
       "notes": {
-        "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "title": "Notater",
+        "placeholder": "Legg til et notat om denne arten…",
+        "editLabel": "Rediger notat",
+        "save": "Lagre notat",
+        "empty": "Ingen notater ennå.",
+        "deleteConfirm": "Slette dette notatet?",
+        "deleteFailed": "Kunne ikke slette notatet.",
+        "saveFailed": "Kunne ikke lagre notatet.",
+        "saveDisabledReason": "Skriv inn notattekst for å aktivere Lagre.",
+        "tooLong": "Notatet er for langt (maks {max} tegn)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Lignende arter",
+        "compare": "Sammenlign",
+        "show": "Vis artssammenligning",
+        "loading": "Laster lignende arter…",
+        "empty": "Ingen lignende arter funnet.",
+        "similar": "Lignende",
+        "speciesGuide": "Artsguide",
         "versus": "vs {species}",
         "selectPrompt": "Velg en art å sammenligne med {species}.",
         "noGuideAvailable": "Ingen guide tilgjengelig",
@@ -1730,7 +1730,7 @@
           "habitat": "Leveområde og utbredelse"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Vis guide for {species}"
     },
     "advanced": {
       "title": "Avansert analyse",

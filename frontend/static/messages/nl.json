@@ -1671,52 +1671,52 @@
         "first": "Eerst:"
       },
       "guide": {
-        "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "title": "Gids",
+        "similar": "Vergelijkbare soorten",
+        "noSimilar": "Geen vergelijkbare soorten gevonden",
+        "loading": "Gids laden…",
+        "unavailable": "De soortengids is tijdelijk niet beschikbaar. Probeer het later opnieuw.",
+        "noGuide": "Geen gids beschikbaar voor deze soort.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Hier te verwachten",
+          "uncommon": "Hier ongewoon",
+          "rare": "Hier zeldzaam",
+          "unexpected": "Hier onverwacht"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
+          "spring": "Lente",
+          "summer": "Zomer",
+          "autumn": "Herfst",
           "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "wet1": "Regenseizoen",
+          "dry1": "Droog seizoen",
+          "wet2": "Regenseizoen",
+          "dry2": "Droog seizoen"
         },
-        "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "description": "Beschrijving",
+        "songsAndCalls": "Zang en roep",
+        "externalLinks": "Externe bronnen"
       },
       "notes": {
-        "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "title": "Notities",
+        "placeholder": "Voeg een notitie over deze soort toe…",
+        "editLabel": "Notitie bewerken",
+        "save": "Notitie opslaan",
+        "empty": "Nog geen notities.",
+        "deleteConfirm": "Deze notitie verwijderen?",
+        "deleteFailed": "Kan de notitie niet verwijderen.",
+        "saveFailed": "Kan de notitie niet opslaan.",
+        "saveDisabledReason": "Voer notitietekst in om Opslaan in te schakelen.",
+        "tooLong": "Notitie is te lang (maximaal {max} tekens)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Vergelijkbare soorten",
+        "compare": "Vergelijken",
+        "show": "Soortvergelijking tonen",
+        "loading": "Vergelijkbare soorten laden…",
+        "empty": "Geen vergelijkbare soorten gevonden.",
+        "similar": "Vergelijkbaar",
+        "speciesGuide": "Soortengids",
         "versus": "vs {species}",
         "selectPrompt": "Selecteer een soort om te vergelijken met {species}.",
         "noGuideAvailable": "Geen gids beschikbaar",
@@ -1730,7 +1730,7 @@
           "habitat": "Leefgebied en verspreiding"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Gids voor {species} bekijken"
     },
     "advanced": {
       "title": "Geavanceerde analyse",

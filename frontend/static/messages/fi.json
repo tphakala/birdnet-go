@@ -1671,52 +1671,52 @@
         "first": "Ensimmäinen:"
       },
       "guide": {
-        "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "title": "Opas",
+        "similar": "Samankaltaiset lajit",
+        "noSimilar": "Samankaltaisia lajeja ei löytynyt",
+        "loading": "Ladataan opasta…",
+        "unavailable": "Lajiopas on tilapäisesti pois käytöstä. Yritä myöhemmin uudelleen.",
+        "noGuide": "Tälle lajille ei ole opasta saatavilla.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Odotettavissa täällä",
+          "uncommon": "Epätavallinen täällä",
+          "rare": "Harvinainen täällä",
+          "unexpected": "Odottamaton täällä"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "spring": "Kevät",
+          "summer": "Kesä",
+          "autumn": "Syksy",
+          "winter": "Talvi",
+          "wet1": "Sadekausi",
+          "dry1": "Kuiva kausi",
+          "wet2": "Sadekausi",
+          "dry2": "Kuiva kausi"
         },
-        "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "description": "Kuvaus",
+        "songsAndCalls": "Laulu ja äänet",
+        "externalLinks": "Ulkoiset resurssit"
       },
       "notes": {
-        "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "title": "Muistiinpanot",
+        "placeholder": "Lisää muistiinpano tästä lajista…",
+        "editLabel": "Muokkaa muistiinpanoa",
+        "save": "Tallenna muistiinpano",
+        "empty": "Ei vielä muistiinpanoja.",
+        "deleteConfirm": "Poistetaanko tämä muistiinpano?",
+        "deleteFailed": "Muistiinpanon poistaminen epäonnistui.",
+        "saveFailed": "Muistiinpanon tallentaminen epäonnistui.",
+        "saveDisabledReason": "Kirjoita muistiinpanon teksti ottaaksesi tallennuksen käyttöön.",
+        "tooLong": "Muistiinpano on liian pitkä (enintään {max} merkkiä)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Samankaltaiset lajit",
+        "compare": "Vertaa",
+        "show": "Näytä lajivertailu",
+        "loading": "Ladataan samankaltaisia lajeja…",
+        "empty": "Samankaltaisia lajeja ei löytynyt.",
+        "similar": "Samankaltainen",
+        "speciesGuide": "Lajiopas",
         "versus": "vs {species}",
         "selectPrompt": "Valitse laji vertailtavaksi lajin {species} kanssa.",
         "noGuideAvailable": "Opasta ei saatavilla",
@@ -1730,7 +1730,7 @@
           "habitat": "Elinympäristö ja levinneisyys"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Näytä opas lajille {species}"
     },
     "advanced": {
       "title": "Edistynyt analytiikka",

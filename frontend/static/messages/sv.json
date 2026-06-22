@@ -1672,51 +1672,51 @@
       },
       "guide": {
         "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "similar": "Liknande arter",
+        "noSimilar": "Inga liknande arter hittades",
+        "loading": "Laddar guide…",
+        "unavailable": "Artguiden är tillfälligt otillgänglig. Försök igen senare.",
+        "noGuide": "Ingen guide tillgänglig för denna art.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Förväntad här",
+          "uncommon": "Ovanlig här",
+          "rare": "Sällsynt här",
+          "unexpected": "Oväntad här"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "spring": "Vår",
+          "summer": "Sommar",
+          "autumn": "Höst",
+          "winter": "Vinter",
+          "wet1": "Regnperiod",
+          "dry1": "Torrperiod",
+          "wet2": "Regnperiod",
+          "dry2": "Torrperiod"
         },
-        "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "description": "Beskrivning",
+        "songsAndCalls": "Sång och läten",
+        "externalLinks": "Externa resurser"
       },
       "notes": {
-        "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "title": "Anteckningar",
+        "placeholder": "Lägg till en anteckning om denna art…",
+        "editLabel": "Redigera anteckning",
+        "save": "Spara anteckning",
+        "empty": "Inga anteckningar ännu.",
+        "deleteConfirm": "Ta bort denna anteckning?",
+        "deleteFailed": "Det gick inte att ta bort anteckningen.",
+        "saveFailed": "Det gick inte att spara anteckningen.",
+        "saveDisabledReason": "Ange anteckningstext för att aktivera Spara.",
+        "tooLong": "Anteckningen är för lång (högst {max} tecken)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Liknande arter",
+        "compare": "Jämför",
+        "show": "Visa artjämförelse",
+        "loading": "Laddar liknande arter…",
+        "empty": "Inga liknande arter hittades.",
+        "similar": "Liknande",
+        "speciesGuide": "Artguide",
         "versus": "vs {species}",
         "selectPrompt": "Välj en art att jämföra med {species}.",
         "noGuideAvailable": "Ingen guide tillgänglig",
@@ -1730,7 +1730,7 @@
           "habitat": "Livsmiljö och utbredning"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Visa guide för {species}"
     },
     "advanced": {
       "title": "Avancerad analys",

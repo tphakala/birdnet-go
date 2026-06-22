@@ -1671,52 +1671,52 @@
         "first": "Poprvé:"
       },
       "guide": {
-        "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "title": "Průvodce",
+        "similar": "Podobné druhy",
+        "noSimilar": "Nebyly nalezeny žádné podobné druhy",
+        "loading": "Načítání průvodce…",
+        "unavailable": "Průvodce druhem je dočasně nedostupný. Zkuste to prosím později.",
+        "noGuide": "Pro tento druh není k dispozici průvodce.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Zde očekávaný",
+          "uncommon": "Zde neobvyklý",
+          "rare": "Zde vzácný",
+          "unexpected": "Zde nečekaný"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "spring": "Jaro",
+          "summer": "Léto",
+          "autumn": "Podzim",
+          "winter": "Zima",
+          "wet1": "Období dešťů",
+          "dry1": "Období sucha",
+          "wet2": "Období dešťů",
+          "dry2": "Období sucha"
         },
-        "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "description": "Popis",
+        "songsAndCalls": "Zpěv a volání",
+        "externalLinks": "Externí zdroje"
       },
       "notes": {
-        "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "title": "Poznámky",
+        "placeholder": "Přidat poznámku k tomuto druhu…",
+        "editLabel": "Upravit poznámku",
+        "save": "Uložit poznámku",
+        "empty": "Zatím žádné poznámky.",
+        "deleteConfirm": "Smazat tuto poznámku?",
+        "deleteFailed": "Poznámku se nepodařilo smazat.",
+        "saveFailed": "Poznámku se nepodařilo uložit.",
+        "saveDisabledReason": "Zadejte text poznámky pro povolení uložení.",
+        "tooLong": "Poznámka je příliš dlouhá (maximálně {max} znaků)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Podobné druhy",
+        "compare": "Porovnat",
+        "show": "Zobrazit porovnání druhů",
+        "loading": "Načítání podobných druhů…",
+        "empty": "Nebyly nalezeny žádné podobné druhy.",
+        "similar": "Podobné",
+        "speciesGuide": "Průvodce druhem",
         "versus": "vs {species}",
         "selectPrompt": "Vyberte druh pro porovnání s {species}.",
         "noGuideAvailable": "Průvodce není k dispozici",
@@ -1730,7 +1730,7 @@
           "habitat": "Biotop a rozšíření"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Zobrazit průvodce pro {species}"
     },
     "advanced": {
       "title": "Pokročilá analytika",

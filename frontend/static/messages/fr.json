@@ -1672,51 +1672,51 @@
       },
       "guide": {
         "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "similar": "Espèces similaires",
+        "noSimilar": "Aucune espèce similaire trouvée",
+        "loading": "Chargement du guide…",
+        "unavailable": "Le guide des espèces est temporairement indisponible. Veuillez réessayer plus tard.",
+        "noGuide": "Aucun guide disponible pour cette espèce.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Attendu ici",
+          "uncommon": "Peu commun ici",
+          "rare": "Rare ici",
+          "unexpected": "Inattendu ici"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "spring": "Printemps",
+          "summer": "Été",
+          "autumn": "Automne",
+          "winter": "Hiver",
+          "wet1": "Saison des pluies",
+          "dry1": "Saison sèche",
+          "wet2": "Saison des pluies",
+          "dry2": "Saison sèche"
         },
         "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "songsAndCalls": "Chants et cris",
+        "externalLinks": "Ressources externes"
       },
       "notes": {
         "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "placeholder": "Ajouter une note sur cette espèce…",
+        "editLabel": "Modifier la note",
+        "save": "Enregistrer la note",
+        "empty": "Aucune note pour le moment.",
+        "deleteConfirm": "Supprimer cette note ?",
+        "deleteFailed": "Échec de la suppression de la note.",
+        "saveFailed": "Échec de l’enregistrement de la note.",
+        "saveDisabledReason": "Saisissez le texte de la note pour activer l’enregistrement.",
+        "tooLong": "La note est trop longue (maximum {max} caractères)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Espèces similaires",
+        "compare": "Comparer",
+        "show": "Afficher la comparaison des espèces",
+        "loading": "Chargement des espèces similaires…",
+        "empty": "Aucune espèce similaire trouvée.",
+        "similar": "Similaire",
+        "speciesGuide": "Guide des espèces",
         "versus": "vs {species}",
         "selectPrompt": "Sélectionnez une espèce à comparer avec {species}.",
         "noGuideAvailable": "Aucun guide disponible",
@@ -1730,7 +1730,7 @@
           "habitat": "Habitat et répartition"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Voir le guide de {species}"
     },
     "advanced": {
       "title": "Analyses avancées",

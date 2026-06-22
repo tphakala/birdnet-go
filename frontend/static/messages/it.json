@@ -1671,52 +1671,52 @@
         "first": "Primo:"
       },
       "guide": {
-        "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "title": "Guida",
+        "similar": "Specie simili",
+        "noSimilar": "Nessuna specie simile trovata",
+        "loading": "Caricamento della guida…",
+        "unavailable": "La guida delle specie è temporaneamente non disponibile. Riprova più tardi.",
+        "noGuide": "Nessuna guida disponibile per questa specie.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Atteso qui",
+          "uncommon": "Poco comune qui",
+          "rare": "Raro qui",
+          "unexpected": "Inatteso qui"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "spring": "Primavera",
+          "summer": "Estate",
+          "autumn": "Autunno",
+          "winter": "Inverno",
+          "wet1": "Stagione delle piogge",
+          "dry1": "Stagione secca",
+          "wet2": "Stagione delle piogge",
+          "dry2": "Stagione secca"
         },
-        "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "description": "Descrizione",
+        "songsAndCalls": "Canti e richiami",
+        "externalLinks": "Risorse esterne"
       },
       "notes": {
-        "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "title": "Note",
+        "placeholder": "Aggiungi una nota su questa specie…",
+        "editLabel": "Modifica nota",
+        "save": "Salva nota",
+        "empty": "Ancora nessuna nota.",
+        "deleteConfirm": "Eliminare questa nota?",
+        "deleteFailed": "Impossibile eliminare la nota.",
+        "saveFailed": "Impossibile salvare la nota.",
+        "saveDisabledReason": "Inserisci il testo della nota per abilitare il salvataggio.",
+        "tooLong": "La nota è troppo lunga (massimo {max} caratteri)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Specie simili",
+        "compare": "Confronta",
+        "show": "Mostra confronto delle specie",
+        "loading": "Caricamento delle specie simili…",
+        "empty": "Nessuna specie simile trovata.",
+        "similar": "Simile",
+        "speciesGuide": "Guida delle specie",
         "versus": "vs {species}",
         "selectPrompt": "Seleziona una specie da confrontare con {species}.",
         "noGuideAvailable": "Nessuna guida disponibile",
@@ -1730,7 +1730,7 @@
           "habitat": "Habitat e distribuzione"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Visualizza la guida di {species}"
     },
     "advanced": {
       "title": "Analisi Avanzate",

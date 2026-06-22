@@ -1671,52 +1671,52 @@
         "first": "Pirmā:"
       },
       "guide": {
-        "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "title": "Ceļvedis",
+        "similar": "Līdzīgas sugas",
+        "noSimilar": "Līdzīgas sugas nav atrastas",
+        "loading": "Notiek ceļveža ielāde…",
+        "unavailable": "Sugu ceļvedis īslaicīgi nav pieejams. Lūdzu, mēģiniet vēlāk.",
+        "noGuide": "Šai sugai ceļvedis nav pieejams.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Šeit sagaidāms",
+          "uncommon": "Šeit neparasts",
+          "rare": "Šeit rets",
+          "unexpected": "Šeit negaidīts"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "spring": "Pavasaris",
+          "summer": "Vasara",
+          "autumn": "Rudens",
+          "winter": "Ziema",
+          "wet1": "Lietus sezona",
+          "dry1": "Sausā sezona",
+          "wet2": "Lietus sezona",
+          "dry2": "Sausā sezona"
         },
-        "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "description": "Apraksts",
+        "songsAndCalls": "Dziesmas un saucieni",
+        "externalLinks": "Ārējie resursi"
       },
       "notes": {
-        "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "title": "Piezīmes",
+        "placeholder": "Pievienot piezīmi par šo sugu…",
+        "editLabel": "Rediģēt piezīmi",
+        "save": "Saglabāt piezīmi",
+        "empty": "Vēl nav piezīmju.",
+        "deleteConfirm": "Dzēst šo piezīmi?",
+        "deleteFailed": "Neizdevās izdzēst piezīmi.",
+        "saveFailed": "Neizdevās saglabāt piezīmi.",
+        "saveDisabledReason": "Ievadiet piezīmes tekstu, lai iespējotu saglabāšanu.",
+        "tooLong": "Piezīme ir pārāk gara (ne vairāk kā {max} rakstzīmes)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Līdzīgas sugas",
+        "compare": "Salīdzināt",
+        "show": "Rādīt sugu salīdzinājumu",
+        "loading": "Notiek līdzīgu sugu ielāde…",
+        "empty": "Līdzīgas sugas nav atrastas.",
+        "similar": "Līdzīga",
+        "speciesGuide": "Sugu ceļvedis",
         "versus": "vs {species}",
         "selectPrompt": "Atlasiet sugu, ko salīdzināt ar {species}.",
         "noGuideAvailable": "Ceļvedis nav pieejams",
@@ -1730,7 +1730,7 @@
           "habitat": "Biotops un izplatība"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Skatīt ceļvedi sugai {species}"
     },
     "advanced": {
       "title": "Paplašinātā analītika",

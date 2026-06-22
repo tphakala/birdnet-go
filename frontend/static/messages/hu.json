@@ -1671,52 +1671,52 @@
         "first": "Első:"
       },
       "guide": {
-        "title": "Guide",
-        "similar": "Similar species",
-        "noSimilar": "No similar species found",
-        "loading": "Loading guide…",
-        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
-        "noGuide": "No guide available for this species.",
+        "title": "Útmutató",
+        "similar": "Hasonló fajok",
+        "noSimilar": "Nem találhatók hasonló fajok",
+        "loading": "Útmutató betöltése…",
+        "unavailable": "A fajútmutató átmenetileg nem érhető el. Kérjük, próbálja újra később.",
+        "noGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
         "expectedness": {
-          "expected": "Expected here",
-          "uncommon": "Uncommon here",
-          "rare": "Rare here",
-          "unexpected": "Unexpected here"
+          "expected": "Itt várható",
+          "uncommon": "Itt szokatlan",
+          "rare": "Itt ritka",
+          "unexpected": "Itt váratlan"
         },
         "season": {
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "spring": "Tavasz",
+          "summer": "Nyár",
+          "autumn": "Ősz",
+          "winter": "Tél",
+          "wet1": "Esős évszak",
+          "dry1": "Száraz évszak",
+          "wet2": "Esős évszak",
+          "dry2": "Száraz évszak"
         },
-        "description": "Description",
-        "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "description": "Leírás",
+        "songsAndCalls": "Ének és hangok",
+        "externalLinks": "Külső források"
       },
       "notes": {
-        "title": "Notes",
-        "placeholder": "Add a note about this species…",
-        "editLabel": "Edit note",
-        "save": "Save note",
-        "empty": "No notes yet.",
-        "deleteConfirm": "Delete this note?",
-        "deleteFailed": "Failed to delete note.",
-        "saveFailed": "Failed to save note.",
-        "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} characters)."
+        "title": "Jegyzetek",
+        "placeholder": "Jegyzet hozzáadása erről a fajról…",
+        "editLabel": "Jegyzet szerkesztése",
+        "save": "Jegyzet mentése",
+        "empty": "Még nincsenek jegyzetek.",
+        "deleteConfirm": "Törli ezt a jegyzetet?",
+        "deleteFailed": "A jegyzet törlése nem sikerült.",
+        "saveFailed": "A jegyzet mentése nem sikerült.",
+        "saveDisabledReason": "Adjon meg jegyzetszöveget a Mentés engedélyezéséhez.",
+        "tooLong": "A jegyzet túl hosszú (legfeljebb {max} karakter)."
       },
       "similar": {
-        "title": "Similar species",
-        "compare": "Compare",
-        "show": "Show species comparison",
-        "loading": "Loading similar species…",
-        "empty": "No similar species found.",
-        "similar": "Similar",
-        "speciesGuide": "Species guide",
+        "title": "Hasonló fajok",
+        "compare": "Összehasonlítás",
+        "show": "Fajösszehasonlítás megjelenítése",
+        "loading": "Hasonló fajok betöltése…",
+        "empty": "Nem találhatók hasonló fajok.",
+        "similar": "Hasonló",
+        "speciesGuide": "Fajútmutató",
         "versus": "vs {species}",
         "selectPrompt": "Válasszon egy fajt a(z) {species} összehasonlításához.",
         "noGuideAvailable": "Nincs elérhető útmutató",
@@ -1730,7 +1730,7 @@
           "habitat": "Élőhely és elterjedés"
         }
       },
-      "viewGuide": "View guide for {species}"
+      "viewGuide": "Útmutató megtekintése: {species}"
     },
     "advanced": {
       "title": "Speciális analitika",
