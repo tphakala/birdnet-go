@@ -1873,6 +1873,20 @@
           "tooltipCount": "Detections",
           "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
         },
+        "nocturnal": {
+          "title": "Nocturnal Activity Clock",
+          "description": "Detections around the 24-hour clock with the daytime hours shaded, making nighttime activity stand out",
+          "noData": "No activity data available",
+          "noDataHint": "Select a wider date range or a more active period to see the daily activity pattern",
+          "ariaLabel": "Nocturnal activity clock: detections by hour of day with daytime shading",
+          "axisHour": "Hour of day",
+          "tooltipHour": "{start} to {end}",
+          "tooltipCount": "Detections",
+          "summary": "Detection activity by hour of day ({total} detections, most active around {peak}). Daytime hours are shaded.",
+          "legendDay": "Day",
+          "legendTwilight": "Twilight",
+          "legendNight": "Night"
+        },
         "tooltips": {
           "date": "Datum",
           "percentage": "Andel",

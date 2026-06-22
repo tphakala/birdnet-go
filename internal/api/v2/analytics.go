@@ -192,6 +192,11 @@ func (c *Controller) initAnalyticsRoutes() {
 	timeGroup.GET("/distribution/species", c.GetSpeciesHourlyDistribution) // Who-sings-when ridgeline (top-N species hour-of-day)
 	timeGroup.GET("/heatmap", c.GetActivityHeatmap)                        // Seasonal density heatmap (date x intra-day slot)
 	timeGroup.GET("/dawn-onset", c.GetDawnChorusOnset)                     // Dawn-chorus onset tracker (daily onset vs civil dawn)
+
+	// Sun times for the nocturnal activity clock's day/night shading. Additive: the clock's counts
+	// come from the existing /time/distribution/hourly endpoint (unchanged); only this sun endpoint
+	// is new (design spec section 6.4).
+	analyticsGroup.GET("/sun", c.GetAnalyticsSun)
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -1378,6 +1383,159 @@ func (c *Controller) GetDawnChorusOnset(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, newDawnChorusOnsetResponse(data))
+}
+
+// Nocturnal activity clock sun endpoint constants (design spec section 6.4).
+const (
+	sunNoonHour       = 12 // anchor a date at local noon before a SunCalc lookup (see GetAnalyticsSun)
+	sunHoursPerDay    = 24 // for the range-midpoint day count
+	sunMinutesPerHour = 60 // minute-of-day conversion
+)
+
+// analyticsSunResponse is the sun-times payload for the nocturnal activity clock (design spec
+// section 6.4). Each event field is the minute-of-day (0..1439) in the server's local timezone,
+// the same frame the hourly-distribution endpoint buckets detections in, so the chart's daytime
+// arc aligns with its hourly bars. A nil field means the event does not occur for the date (polar
+// day/night) or SunCalc is unavailable. CivilDawn/CivilDusk are nil unless a genuine civil
+// twilight occurs (SunCalc substitutes sunrise/sunset when it cannot be computed at high
+// latitudes). Available is false when no sun calculator is configured or the sun never rises/sets
+// on the date, signalling the client to render the bars without day/night shading rather than
+// erroring the card.
+type analyticsSunResponse struct {
+	Date      string `json:"date"`
+	Sunrise   *int   `json:"sunrise"`
+	Sunset    *int   `json:"sunset"`
+	CivilDawn *int   `json:"civilDawn"`
+	CivilDusk *int   `json:"civilDusk"`
+	Available bool   `json:"available"`
+}
+
+// localMinuteOfDay expresses an absolute instant as its minute-of-day (0..1439) in the server's
+// local timezone, matching the frame the hourly-distribution endpoint buckets detections in.
+func localMinuteOfDay(t time.Time) int {
+	lt := t.In(time.Local)
+	return lt.Hour()*sunMinutesPerHour + lt.Minute()
+}
+
+// resolveSunRepresentativeDate picks the single date the nocturnal clock's sun times represent.
+// A multi-day range collapses to its calendar midpoint (the chart notes this in its tooltip); a
+// single `date` (or a lone `start_date`) is used directly; absent all three, today is used. Dates
+// are parsed in the server's local timezone and the midpoint is computed by calendar-day
+// arithmetic (AddDate), so the result is stable across DST transitions within the range and never
+// drifts onto an adjacent day. Inputs are pre-validated by the handler.
+func resolveSunRepresentativeDate(dateParam, startDate, endDate string) string {
+	switch {
+	case dateParam != "":
+		return dateParam
+	case startDate != "" && endDate != "":
+		start, errS := time.ParseInLocation(time.DateOnly, startDate, time.Local)
+		end, errE := time.ParseInLocation(time.DateOnly, endDate, time.Local)
+		if errS != nil || errE != nil {
+			return startDate // defensive: handler validated both already
+		}
+		// Round the span to whole days so a DST hour inside the range cannot shift the count, then
+		// take half the days forward from the start via calendar arithmetic.
+		days := int((end.Sub(start).Hours() + sunHoursPerDay/2) / sunHoursPerDay)
+		return start.AddDate(0, 0, days/2).Format(time.DateOnly)
+	case startDate != "":
+		return startDate
+	default:
+		return time.Now().In(time.Local).Format(time.DateOnly)
+	}
+}
+
+// GetAnalyticsSun handles GET /api/v2/analytics/sun
+// Returns the sunrise/sunset/civil-dawn/civil-dusk times (minute-of-day, server-local) for a
+// representative date, powering the nocturnal activity clock's day/night shading (design spec
+// section 6.4). Accepts ?date for a single day or ?start_date&end_date for a range (collapsed to
+// its midpoint); defaults to today. Sun data is separate from the (unchanged) hourly-distribution
+// endpoint so that endpoint's response shape stays backward compatible.
+func (c *Controller) GetAnalyticsSun(ctx echo.Context) error {
+	const operation = "analytics sun times"
+
+	dateParam := ctx.QueryParam("date")
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// All date params are optional (default is today); validate any that are present.
+	if err := c.validateDateFormatStrictWithResponse(ctx, dateParam, "date", operation); err != nil {
+		return err
+	}
+	if err := c.validateDateFormatStrictWithResponse(ctx, startDate, "start_date", operation); err != nil {
+		return err
+	}
+	if err := c.validateDateFormatStrictWithResponse(ctx, endDate, "end_date", operation); err != nil {
+		return err
+	}
+	if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, operation); err != nil {
+		return err
+	}
+
+	repDate := resolveSunRepresentativeDate(dateParam, startDate, endDate)
+
+	c.logInfoIfEnabled("Retrieving analytics sun times",
+		logger.String("date", repDate),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	resp := analyticsSunResponse{Date: repDate}
+
+	// SunCalc may be unconfigured (e.g. not started yet). Degrade gracefully so the clock still
+	// renders its hourly bars without day/night shading rather than erroring the whole card.
+	if c.SunCalc == nil {
+		return ctx.JSON(http.StatusOK, resp)
+	}
+
+	// Anchor the date at local noon before the lookup: SunCalc re-derives the calendar day in its
+	// own coordinate-derived zone, so passing midnight could land on the adjacent day. Noon keeps
+	// the intended calendar day for any real timezone offset (same approach as the dawn-onset
+	// tracker). repDate is validated/derived above, so a parse failure is treated as no sun data.
+	repTime, err := time.ParseInLocation(time.DateOnly, repDate, time.Local)
+	if err != nil {
+		return ctx.JSON(http.StatusOK, resp)
+	}
+	anchor := repTime.Add(sunNoonHour * time.Hour)
+
+	times, err := c.SunCalc.GetSunEventTimes(anchor)
+	if err != nil {
+		// Polar day/night: the sun never rises/sets, so there is no daytime arc to shade. Return
+		// available:false (not 500) so the client renders the bars without shading.
+		c.logInfoIfEnabled("Sun times unavailable for date (polar day/night)",
+			logger.String("date", repDate),
+			logger.String("ip", ctx.RealIP()),
+		)
+		return ctx.JSON(http.StatusOK, resp)
+	}
+
+	sunrise := localMinuteOfDay(times.Sunrise)
+	sunset := localMinuteOfDay(times.Sunset)
+	resp.Sunrise = &sunrise
+	resp.Sunset = &sunset
+	resp.Available = true
+
+	// Civil dawn/dusk only when a genuine civil twilight occurs. SunCalc substitutes sunrise/sunset
+	// (exact equality) when civil twilight cannot be computed at high latitudes (white nights), so a
+	// genuine dawn is strictly before sunrise and a genuine dusk strictly after sunset; the equality
+	// fallback is omitted. Both read the already-fetched times (no second SunCalc lookup), and the
+	// dawn check mirrors suncalc.GetCivilDawn's own genuine-twilight test.
+	if times.CivilDawn.Before(times.Sunrise) {
+		civilDawn := localMinuteOfDay(times.CivilDawn)
+		resp.CivilDawn = &civilDawn
+	}
+	if times.CivilDusk.After(times.Sunset) {
+		civilDusk := localMinuteOfDay(times.CivilDusk)
+		resp.CivilDusk = &civilDusk
+	}
+
+	c.logInfoIfEnabled("Analytics sun times retrieved",
+		logger.String("date", repDate),
+		logger.Bool("available", resp.Available),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	return ctx.JSON(http.StatusOK, resp)
 }
 
 // GetSpeciesHourlyDistribution handles GET /api/v2/analytics/time/distribution/species
