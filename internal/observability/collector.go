@@ -27,6 +27,14 @@ type Collector struct {
 	interval time.Duration
 	cpuFunc  CPUUsageFunc
 
+	// now is the clock used to timestamp each collection tick. A single tick
+	// timestamp is shared by every delta-based collector (disk I/O, database,
+	// inference, and health counters) so all rates and recorded timestamps in one
+	// collect() reference the same instant. Defaults to time.Now; tests inject a
+	// deterministic clock to avoid depending on wall-clock resolution (which is
+	// coarse on Windows and made TestCollector_InferenceThroughput flaky).
+	now func() time.Time
+
 	// Internal state for disk I/O delta computation
 	prevDiskIO   map[string]disk.IOCountersStat
 	prevDiskTime time.Time
@@ -66,6 +74,7 @@ func NewCollector(store MetricsStore, interval time.Duration, cpuFunc CPUUsageFu
 		store:        store,
 		interval:     interval,
 		cpuFunc:      cpuFunc,
+		now:          time.Now,
 		prevDiskIO:   make(map[string]disk.IOCountersStat),
 		loggedErrors: make(map[string]bool),
 	}
@@ -120,18 +129,25 @@ func inferenceMetricKey(modelID string) string {
 func (c *Collector) collect() {
 	points := make(map[string]float64, expectedMetricCount)
 
+	// Single authoritative timestamp for this tick. Every delta-based collector
+	// computes its delta against this instant and the previous tick's instant
+	// (a rate for disk I/O/database/inference, a recorded count for health
+	// counters), so they stay mutually consistent and the timing is fully
+	// controllable in tests.
+	tick := c.now()
+
 	c.collectCPU(points)
 	c.collectMemory(points)
 	c.collectTemperature(points)
-	c.collectDisk(points)
-	c.collectDatabase(points)
-	c.collectInference(points)
+	c.collectDisk(points, tick)
+	c.collectDatabase(points, tick)
+	c.collectInference(points, tick)
 
 	if len(points) > 0 {
 		c.store.RecordBatch(points)
 	}
 
-	c.collectHealthCounters()
+	c.collectHealthCounters(tick)
 }
 
 // collectCPU reads CPU usage from the injected function.
@@ -161,9 +177,9 @@ func (c *Collector) collectTemperature(points map[string]float64) {
 }
 
 // collectDisk reads disk usage and I/O statistics via gopsutil.
-func (c *Collector) collectDisk(points map[string]float64) {
+func (c *Collector) collectDisk(points map[string]float64, tick time.Time) {
 	c.collectDiskUsage(points)
-	c.collectDiskIO(points)
+	c.collectDiskIO(points, tick)
 }
 
 // collectDiskUsage reads disk usage percentages for each partition.
@@ -190,16 +206,15 @@ func (c *Collector) collectDiskUsage(points map[string]float64) {
 }
 
 // collectDiskIO computes disk I/O rates (bytes/sec) as deltas between ticks.
-func (c *Collector) collectDiskIO(points map[string]float64) {
+func (c *Collector) collectDiskIO(points map[string]float64, tick time.Time) {
 	counters, err := disk.IOCounters()
 	if err != nil {
 		c.logOnce("disk_io", "failed to read disk I/O counters: %v", err)
 		return
 	}
 
-	now := time.Now()
 	if !c.prevDiskTime.IsZero() {
-		elapsed := now.Sub(c.prevDiskTime).Seconds()
+		elapsed := tick.Sub(c.prevDiskTime).Seconds()
 		if elapsed > 0 {
 			for device := range counters {
 				counter := counters[device]
@@ -223,7 +238,7 @@ func (c *Collector) collectDiskIO(points map[string]float64) {
 	}
 
 	c.prevDiskIO = counters
-	c.prevDiskTime = now
+	c.prevDiskTime = tick
 }
 
 // SetDBCounters sets the database atomic counters for latency tracking.
@@ -237,12 +252,15 @@ const usToMs = 1000.0
 
 // collectDatabase computes database latency and throughput metrics from
 // atomic counter snapshots. Requires two consecutive snapshots for deltas.
-func (c *Collector) collectDatabase(points map[string]float64) {
+func (c *Collector) collectDatabase(points map[string]float64, tick time.Time) {
 	if c.dbCounters == nil {
 		return
 	}
 
 	snap := c.dbCounters.Snapshot()
+	// Use the shared tick timestamp for delta math and as the stored reference
+	// for the next tick, rather than the snapshot's own time.Now().
+	snap.CollectedAt = tick
 
 	// Max values are reset-on-read from Snapshot(), always record them
 	// (even on the first tick when prevDBSnap is nil)
@@ -316,12 +334,20 @@ func (c *Collector) SetHealthEvents(buf *HealthEventBuffer) {
 	c.healthEvents = buf
 }
 
-func (c *Collector) collectInference(points map[string]float64) {
+func (c *Collector) collectInference(points map[string]float64, tick time.Time) {
 	if c.inferenceCounters == nil {
 		return
 	}
 
 	snaps := c.inferenceCounters.SnapshotAll()
+	// Stamp every snapshot with the shared tick timestamp so throughput deltas
+	// (and the previous-snapshot references stored below) use one consistent,
+	// test-controllable clock instead of each Snapshot's own time.Now().
+	for modelID := range snaps {
+		s := snaps[modelID]
+		s.CollectedAt = tick
+		snaps[modelID] = s
+	}
 
 	if c.prevInferenceSnaps == nil {
 		c.prevInferenceSnaps = make(map[string]*inferencestats.Snapshot, len(snaps))
@@ -405,13 +431,12 @@ func skipCollectorFS(fstype string) bool {
 // collectHealthCounters samples cumulative audio and stream counters,
 // computes deltas from the previous snapshot, and records them into the
 // dedicated HealthMetricsStore. Follows the same delta pattern as collectDiskIO.
-func (c *Collector) collectHealthCounters() {
+func (c *Collector) collectHealthCounters(tick time.Time) {
 	if c.healthStore == nil {
 		return
 	}
-	now := time.Now()
-	c.collectAudioHealthCounters(now)
-	c.collectStreamHealthCounters(now)
+	c.collectAudioHealthCounters(tick)
+	c.collectStreamHealthCounters(tick)
 }
 
 // collectAudioHealthCounters computes deltas for audio drops and overruns.
