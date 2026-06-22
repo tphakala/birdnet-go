@@ -156,7 +156,7 @@ jobs:
         run: |
           # Get the latest release tag
           LATEST_TAG=$(git describe --tags --abbrev=0)
-          echo "LATEST_TAG=${LATEST_TAG}" >> ${GITHUB_ENV}
+          echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
           echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
       
       - name: Add Artifacts to GitHub Release
@@ -169,6 +169,47 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
+  checksums:
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: birdnet-go-*
+
+      - name: Generate checksums
+        run: |
+          # SHA-256 of every tarball, keyed by basename so the manifest
+          # generator can map a checksum to a release asset by file name.
+          find artifacts -name '*.tar.gz' -print0 | while IFS= read -r -d '' f; do
+            echo "$(sha256sum "$f" | cut -d' ' -f1)  $(basename "$f")"
+          done | sort > checksums.txt
+          cat checksums.txt
+
+      - name: Get latest release tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
+
+      - name: Add checksums to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: checksums.txt
+          # For release events, attach to the triggering release; for
+          # workflow_dispatch, attach to the latest release tag.
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && env.LATEST_TAG || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   get-version:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
@@ -201,3 +242,10 @@ jobs:
       cleanup-old-images: false
       keep-images-count: 14
     secrets: inherit
+
+  manifest:
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    needs: [build, checksums]
+    uses: ./.github/workflows/release-manifest.yml
+    permissions:
+      contents: write

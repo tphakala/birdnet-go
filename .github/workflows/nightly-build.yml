@@ -178,13 +178,22 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f
 
+      - name: Generate checksums
+        run: |
+          # SHA-256 of every tarball, keyed by basename so the manifest
+          # generator can map a checksum to a release asset by file name.
+          find artifacts -name '*.tar.gz' -print0 | while IFS= read -r -d '' f; do
+            echo "$(sha256sum "$f" | cut -d' ' -f1)  $(basename "$f")"
+          done | sort > checksums.txt
+          cat checksums.txt
+
       - name: Create GitHub Release
         run: |
           REPO="${{ github.repository }}"
           TAG="${{ steps.get_build_version.outputs.build_version }}"
           # If the tag is poisoned from a previous failed run, append run number
           if ! gh release create "$TAG" \
-            artifacts/**/*.tar.gz \
+            artifacts/**/*.tar.gz checksums.txt \
             --repo "$REPO" \
             --title "Nightly Build $TAG" \
             --notes "Nightly build $TAG" \
@@ -192,7 +201,7 @@ jobs:
             --target main 2>/dev/null; then
             TAG="${TAG}-${{ github.run_number }}"
             gh release create "$TAG" \
-              artifacts/**/*.tar.gz \
+              artifacts/**/*.tar.gz checksums.txt \
               --repo "$REPO" \
               --title "Nightly Build $TAG" \
               --notes "Nightly build $TAG" \
@@ -202,6 +211,13 @@ jobs:
           echo "Created release: $TAG"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  manifest:
+    name: Update release manifest
+    needs: release
+    uses: ./.github/workflows/release-manifest.yml
+    permissions:
+      contents: write
 
   get-version:
     runs-on: ubuntu-latest
