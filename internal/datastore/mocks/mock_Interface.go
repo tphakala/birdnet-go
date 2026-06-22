@@ -3817,6 +3817,67 @@ func (_c *MockInterface_GetSpeciesFirstDetectionInPeriod_Call) RunAndReturn(run 
 	return _c
 }
 
+// GetSpeciesPhenology provides a mock function with given fields: ctx, startDate, endDate, limit
+func (_m *MockInterface) GetSpeciesPhenology(ctx context.Context, startDate string, endDate string, limit int) ([]datastore.SpeciesPhenologyPoint, error) {
+	ret := _m.Called(ctx, startDate, endDate, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSpeciesPhenology")
+	}
+
+	var r0 []datastore.SpeciesPhenologyPoint
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) ([]datastore.SpeciesPhenologyPoint, error)); ok {
+		return rf(ctx, startDate, endDate, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) []datastore.SpeciesPhenologyPoint); ok {
+		r0 = rf(ctx, startDate, endDate, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SpeciesPhenologyPoint)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = rf(ctx, startDate, endDate, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetSpeciesPhenology_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSpeciesPhenology'
+type MockInterface_GetSpeciesPhenology_Call struct {
+	*mock.Call
+}
+
+// GetSpeciesPhenology is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - limit int
+func (_e *MockInterface_Expecter) GetSpeciesPhenology(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}) *MockInterface_GetSpeciesPhenology_Call {
+	return &MockInterface_GetSpeciesPhenology_Call{Call: _e.mock.On("GetSpeciesPhenology", ctx, startDate, endDate, limit)}
+}
+
+func (_c *MockInterface_GetSpeciesPhenology_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int)) *MockInterface_GetSpeciesPhenology_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesPhenology_Call) Return(_a0 []datastore.SpeciesPhenologyPoint, _a1 error) *MockInterface_GetSpeciesPhenology_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesPhenology_Call) RunAndReturn(run func(context.Context, string, string, int) ([]datastore.SpeciesPhenologyPoint, error)) *MockInterface_GetSpeciesPhenology_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetSpeciesSummaryData provides a mock function with given fields: ctx, startDate, endDate
 func (_m *MockInterface) GetSpeciesSummaryData(ctx context.Context, startDate string, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	ret := _m.Called(ctx, startDate, endDate)

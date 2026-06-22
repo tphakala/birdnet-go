@@ -309,6 +309,9 @@ func (m *mockStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _,
 func (m *mockStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]datastore.SpeciesAccumulationPoint, error) {
 	return []datastore.SpeciesAccumulationPoint{}, nil
 }
+func (m *mockStore) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesPhenologyPoint, error) {
+	return []datastore.SpeciesPhenologyPoint{}, nil
+}
 
 // BG-17 fix: Add notification history methods
 func (m *mockStore) GetActiveNotificationHistory(_ context.Context, after time.Time) ([]datastore.NotificationHistory, error) {

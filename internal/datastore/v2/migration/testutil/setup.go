@@ -773,6 +773,9 @@ func (s *testLegacyInterface) GetConfidenceHistogram(_ context.Context, _, _, _ 
 func (s *testLegacyInterface) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]datastore.SpeciesAccumulationPoint, error) {
 	return []datastore.SpeciesAccumulationPoint{}, nil
 }
+func (s *testLegacyInterface) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesPhenologyPoint, error) {
+	return []datastore.SpeciesPhenologyPoint{}, nil
+}
 func (s *testLegacyInterface) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil
 }

@@ -1844,6 +1844,20 @@
           "tooltipNew": "New in period",
           "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
         },
+        "phenology": {
+          "title": "Arrival & Departure Phenology",
+          "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",
+          "noData": "No phenology data available",
+          "noDataHint": "Select a wider date range to see when species arrive and depart",
+          "ariaLabel": "Arrival and departure phenology: residency bars showing each species' first-to-last detection span",
+          "axisDate": "Date",
+          "summary": "Arrival and departure residency spans for {species} species across the selected period.",
+          "tooltipFirst": "First detected",
+          "tooltipLast": "Last detected",
+          "tooltipResidency": "Residency",
+          "tooltipCount": "Detections",
+          "residencyDays": "{days} days"
+        },
         "heatmap": {
           "title": "Seasonal Activity Heatmap",
           "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",

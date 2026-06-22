@@ -1432,6 +1432,18 @@ export type TranslationKey =
   | 'analytics.advanced.charts.accumulation.tooltipCumulative'
   | 'analytics.advanced.charts.accumulation.tooltipNew'
   | 'analytics.advanced.charts.accumulation.summary' // params: days, species
+  | 'analytics.advanced.charts.phenology.title'
+  | 'analytics.advanced.charts.phenology.description'
+  | 'analytics.advanced.charts.phenology.noData'
+  | 'analytics.advanced.charts.phenology.noDataHint'
+  | 'analytics.advanced.charts.phenology.ariaLabel'
+  | 'analytics.advanced.charts.phenology.axisDate'
+  | 'analytics.advanced.charts.phenology.summary' // params: species
+  | 'analytics.advanced.charts.phenology.tooltipFirst'
+  | 'analytics.advanced.charts.phenology.tooltipLast'
+  | 'analytics.advanced.charts.phenology.tooltipResidency'
+  | 'analytics.advanced.charts.phenology.tooltipCount'
+  | 'analytics.advanced.charts.phenology.residencyDays' // params: days
   | 'analytics.advanced.charts.heatmap.title'
   | 'analytics.advanced.charts.heatmap.description'
   | 'analytics.advanced.charts.heatmap.noData'
@@ -3999,6 +4011,8 @@ export type TranslationParams = {
     days: string | number;
     species: string | number;
   };
+  'analytics.advanced.charts.phenology.summary': { species: string | number };
+  'analytics.advanced.charts.phenology.residencyDays': { days: string | number };
   'analytics.advanced.charts.heatmap.legendMore': { max: string | number };
   'analytics.advanced.charts.heatmap.summary': {
     total: string | number;
