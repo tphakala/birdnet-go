@@ -133,6 +133,20 @@ type SpeciesPhenologyPoint struct {
 	Count          int
 }
 
+// SpeciesHourlyCounts is one species' raw hour-of-day detection counts, behind the acoustic
+// succession streamgraph (design spec #1155; Tier-2). Counts holds the species' false-positive-
+// excluded detection count in each station-local hour bucket (index = hour 0..23). Unlike the
+// ridgeline's SpeciesHourlyDistribution (which normalizes each species to sum to 1.0 to compare
+// timing shape), the streamgraph stacks the raw counts so band width is detection volume; Total is
+// the sum of Counts, used to rank species by volume and shown in the tooltip. ScientificName is the
+// stable key; the localized common name is resolved client-side (the v2 label schema stores no
+// common name), matching the sibling species charts.
+type SpeciesHourlyCounts struct {
+	ScientificName string
+	Counts         [24]int
+	Total          int
+}
+
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
@@ -520,6 +534,14 @@ func (ds *DataStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]S
 // real method.
 func (ds *DataStore) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) ([]SpeciesPhenologyPoint, error) {
 	return []SpeciesPhenologyPoint{}, nil
+}
+
+// GetAcousticSuccession is a stub on the legacy store. The acoustic succession streamgraph is a
+// v2only feature; the legacy datastore is deprecated and being removed, so it returns an empty
+// (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only for the
+// real method.
+func (ds *DataStore) GetAcousticSuccession(_ context.Context, _, _ string, _ int) ([]SpeciesHourlyCounts, error) {
+	return []SpeciesHourlyCounts{}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time

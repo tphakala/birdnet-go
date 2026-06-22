@@ -961,6 +961,67 @@ func (_c *MockInterface_Get_Call) RunAndReturn(run func(string) (datastore.Note,
 	return _c
 }
 
+// GetAcousticSuccession provides a mock function with given fields: ctx, startDate, endDate, limit
+func (_m *MockInterface) GetAcousticSuccession(ctx context.Context, startDate string, endDate string, limit int) ([]datastore.SpeciesHourlyCounts, error) {
+	ret := _m.Called(ctx, startDate, endDate, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAcousticSuccession")
+	}
+
+	var r0 []datastore.SpeciesHourlyCounts
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) ([]datastore.SpeciesHourlyCounts, error)); ok {
+		return rf(ctx, startDate, endDate, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) []datastore.SpeciesHourlyCounts); ok {
+		r0 = rf(ctx, startDate, endDate, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SpeciesHourlyCounts)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = rf(ctx, startDate, endDate, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetAcousticSuccession_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAcousticSuccession'
+type MockInterface_GetAcousticSuccession_Call struct {
+	*mock.Call
+}
+
+// GetAcousticSuccession is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - limit int
+func (_e *MockInterface_Expecter) GetAcousticSuccession(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}) *MockInterface_GetAcousticSuccession_Call {
+	return &MockInterface_GetAcousticSuccession_Call{Call: _e.mock.On("GetAcousticSuccession", ctx, startDate, endDate, limit)}
+}
+
+func (_c *MockInterface_GetAcousticSuccession_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int)) *MockInterface_GetAcousticSuccession_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetAcousticSuccession_Call) Return(_a0 []datastore.SpeciesHourlyCounts, _a1 error) *MockInterface_GetAcousticSuccession_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetAcousticSuccession_Call) RunAndReturn(run func(context.Context, string, string, int) ([]datastore.SpeciesHourlyCounts, error)) *MockInterface_GetAcousticSuccession_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetActiveNotificationHistory provides a mock function with given fields: ctx, after
 func (_m *MockInterface) GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
 	ret := _m.Called(ctx, after)

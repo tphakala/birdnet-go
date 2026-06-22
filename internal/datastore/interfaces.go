@@ -217,6 +217,10 @@ type Interface interface {
 	// by volume over the date range. Powers the arrival/departure phenology chart in the Biodiversity
 	// tab; spans are bounded to the selected window, not lifetime.
 	GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesPhenologyPoint, error)
+	// GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded)
+	// for the top `limit` species by detection volume over the inclusive date range, ordered by
+	// descending volume. Powers the acoustic succession streamgraph in the Activity Patterns tab.
+	GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyCounts, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
