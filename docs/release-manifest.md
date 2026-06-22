@@ -31,13 +31,22 @@ See `.github/workflows/release-manifest.yml`.
 
 ## Channels
 
-| Channel   | Tag pattern                            | Moving Docker tag |
-| --------- | -------------------------------------- | ----------------- |
-| `stable`  | `vX.Y.Z`                               | `:latest`         |
-| `nightly` | `nightly-YYYYMMDD`                     | `:nightly`        |
-| `beta`    | `vX.Y.Z-beta.N` / `-rc.N` / `-alpha.N` | `:beta`           |
+| Channel   | Tag pattern                                         | Moving Docker tag |
+| --------- | --------------------------------------------------- | ----------------- |
+| `stable`  | `vX.Y.Z`                                            | `:latest`         |
+| `nightly` | `nightly-YYYYMMDD` (build/git-describe suffixes ok) | `:nightly`        |
+| `beta`    | `vX.Y.Z-` with an `alpha`/`beta`/`rc` pre-release   | `:beta`           |
 
-A channel with no releases yet is omitted from `channels`.
+The beta pattern accepts any SemVer pre-release identifier beginning with
+`alpha`, `beta`, or `rc`, with or without a numeric or dotted suffix
+(`v1.2.3-beta`, `v1.2.3-rc2`, `v1.2.3-beta.1`, `v1.2.3-rc.1.2`). A version-like
+release that matches no channel is skipped with a warning rather than silently
+dropped. A channel with no releases yet is omitted from `channels`.
+
+For the `nightly` channel only the moving `channel_tag` (`:nightly`) is
+published; no version-pinned Docker ref is advertised, because the nightly
+dated image tag can drift from the GitHub release tag on a build retry. The
+`stable` and `beta` channels carry version-pinned `ghcr`/`dockerhub` refs.
 
 ## Schema
 

@@ -48,6 +48,10 @@ const (
 	apiAcceptHeader = "application/vnd.github+json"
 	apiVersion      = "2022-11-28"
 	maxAssetBytes   = 1 << 20 // 1 MiB cap for checksum file downloads
+	maxReleasesBody = 8 << 20 // 8 MiB cap for the releases listing response
+	// userAgent is sent on every request; the GitHub REST API requires a
+	// User-Agent header and returns 403 without one.
+	userAgent = "birdnet-go-release-manifest"
 )
 
 func newGitHubClient(baseURL, token string) *githubClient {
@@ -65,12 +69,18 @@ func (c *githubClient) newRequest(ctx context.Context, url string) (*http.Reques
 	}
 	req.Header.Set("Accept", apiAcceptHeader)
 	req.Header.Set("X-GitHub-Api-Version", apiVersion)
+	req.Header.Set("User-Agent", userAgent)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	return req, nil
 }
 
+// ListReleases fetches the first page (up to 100) of releases. GitHub returns
+// releases newest-first, and the manifest only needs the latest release on each
+// channel, so a single page is sufficient as long as fewer than 100 releases
+// are newer than each channel's latest (always true while nightlies are pruned
+// to 14). Pagination is intentionally omitted.
 func (c *githubClient) ListReleases(ctx context.Context, repo string) ([]ghRelease, error) {
 	url := fmt.Sprintf("%s/repos/%s/releases?per_page=100", c.baseURL, repo)
 	req, err := c.newRequest(ctx, url)
@@ -87,7 +97,7 @@ func (c *githubClient) ListReleases(ctx context.Context, repo string) ([]ghRelea
 		return nil, fmt.Errorf("list releases: unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 	var releases []ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxReleasesBody)).Decode(&releases); err != nil {
 		return nil, fmt.Errorf("decode releases: %w", err)
 	}
 	return releases, nil

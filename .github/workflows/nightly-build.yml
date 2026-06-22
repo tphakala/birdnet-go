@@ -212,6 +212,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
+  # Regenerate the release manifest after the nightly release (with its tarballs
+  # and checksums.txt) is published. No if-guard: every successful nightly run
+  # should refresh the manifest.
   manifest:
     name: Update release manifest
     needs: release

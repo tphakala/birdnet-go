@@ -43,14 +43,24 @@ jobs:
           check-latest: true
 
       - name: Generate manifest.json
+        id: generate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           go run ./tools/release-manifest \
             -repo "${{ github.repository }}" \
             -output manifest.json
+          # The generator skips writing the file when no release matches a
+          # channel (e.g. a fresh fork); treat that as a no-op, not a failure.
+          if [ -f manifest.json ]; then
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            echo "No manifest generated (no matching releases); skipping publish."
+          fi
 
       - name: Validate manifest.json
+        if: steps.generate.outputs.generated == 'true'
         run: |
           # Fail fast if the generated file is not the shape we expect.
           jq -e '.schema_version and (.channels | length > 0)' manifest.json > /dev/null
@@ -58,6 +68,7 @@ jobs:
           jq -r '.channels | keys[]' manifest.json
 
       - name: Publish manifest to dedicated release
+        if: steps.generate.outputs.generated == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}

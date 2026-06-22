@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,6 +121,7 @@ func TestBuildManifest_AllChannels(t *testing.T) {
 	assert.Equal(t, "amd64", stable.Assets[0].Arch, "sorted: amd64 before arm64")
 	assert.Equal(t, "aaa111", stable.Assets[0].SHA256)
 	assert.Equal(t, "bbb222", stable.Assets[1].SHA256)
+	assert.False(t, stable.Prerelease)
 	require.NotNil(t, stable.Docker)
 	assert.Equal(t, "ghcr.io/tphakala/birdnet-go:latest", stable.Docker.ChannelTag)
 	assert.Equal(t, "ghcr.io/tphakala/birdnet-go:v0.6.4", stable.Docker.GHCR)
@@ -129,15 +131,81 @@ func TestBuildManifest_AllChannels(t *testing.T) {
 	beta := m.Channels[manifest.ChannelBeta]
 	require.NotNil(t, beta)
 	assert.Equal(t, "v0.7.0-beta.1", beta.Version)
+	assert.True(t, beta.Prerelease)
 	assert.Equal(t, "ghcr.io/tphakala/birdnet-go:beta", beta.Docker.ChannelTag)
 
-	// Nightly.
+	// Nightly: moving channel tag only, no version-pinned Docker ref.
 	nightly := m.Channels[manifest.ChannelNightly]
 	require.NotNil(t, nightly)
 	assert.Equal(t, "nightly-20260622", nightly.Version)
+	assert.True(t, nightly.Prerelease)
 	require.Len(t, nightly.Assets, 1)
 	assert.Equal(t, "ccc333", nightly.Assets[0].SHA256)
 	assert.Equal(t, "ghcr.io/tphakala/birdnet-go:nightly", nightly.Docker.ChannelTag)
+	assert.Empty(t, nightly.Docker.GHCR, "nightly must not advertise a version-pinned image")
+	assert.Empty(t, nightly.Docker.DockerHub)
+}
+
+func TestBuildManifest_ChecksumDownloadErrorWarns(t *testing.T) {
+	t.Parallel()
+	src := &fakeSource{
+		releases: []ghRelease{{
+			TagName:     "v0.6.4",
+			PublishedAt: time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC),
+			Assets: []ghAsset{
+				tarball("birdnet-go-linux-amd64-v0.6.4.tar.gz", "https://dl/amd", 100),
+				{Name: "checksums.txt", BrowserDownloadURL: "https://dl/missing"}, // absent from downloads -> error
+			},
+		}},
+		downloads: map[string][]byte{},
+	}
+	m, warnings, err := buildManifest(t.Context(), src, defaultOpts())
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(warnings, "|"), "download checksums.txt")
+	assert.Empty(t, m.Channels[manifest.ChannelStable].Assets[0].SHA256)
+}
+
+func TestBuildManifest_NoBinaryAssetsWarns(t *testing.T) {
+	t.Parallel()
+	src := &fakeSource{
+		releases: []ghRelease{{
+			TagName:     "v0.6.4",
+			PublishedAt: time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC),
+			Assets:      []ghAsset{{Name: "README.md", BrowserDownloadURL: "https://dl/readme"}},
+		}},
+	}
+	m, warnings, err := buildManifest(t.Context(), src, defaultOpts())
+	require.NoError(t, err)
+	stable := m.Channels[manifest.ChannelStable]
+	require.NotNil(t, stable)
+	assert.Empty(t, stable.Assets)
+	assert.Equal(t, "v0.6.4", stable.Version, "channel still populated despite no binary assets")
+	assert.Contains(t, strings.Join(warnings, "|"), "no recognised binary assets")
+}
+
+func TestBuildManifest_NoChannelsIsSoftError(t *testing.T) {
+	t.Parallel()
+	src := &fakeSource{releases: []ghRelease{
+		{TagName: "manifest"},
+		{TagName: "v1.2"}, // version-like but unclassified -> warning
+	}}
+	_, warnings, err := buildManifest(t.Context(), src, defaultOpts())
+	require.ErrorIs(t, err, errNoChannels)
+	assert.Contains(t, strings.Join(warnings, "|"), "matched no channel")
+}
+
+func TestLatestPerChannel_TieBreaksOnTag(t *testing.T) {
+	t.Parallel()
+	ts := time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC)
+	// Same instant, listed lower-then-higher and higher-then-lower; the greater
+	// tag must win either way for determinism.
+	for _, order := range [][]string{{"v0.6.4", "v0.6.5"}, {"v0.6.5", "v0.6.4"}} {
+		got := latestPerChannel([]ghRelease{
+			{TagName: order[0], PublishedAt: ts},
+			{TagName: order[1], PublishedAt: ts},
+		})
+		assert.Equal(t, "v0.6.5", got[manifest.ChannelStable].TagName, "order %v", order)
+	}
 }
 
 func TestBuildManifest_MissingChecksumsWarns(t *testing.T) {
@@ -156,14 +224,6 @@ func TestBuildManifest_MissingChecksumsWarns(t *testing.T) {
 	require.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "no checksum")
 	assert.Empty(t, m.Channels[manifest.ChannelStable].Assets[0].SHA256)
-}
-
-func TestBuildManifest_NoMatchingReleases(t *testing.T) {
-	t.Parallel()
-	src := &fakeSource{releases: []ghRelease{{TagName: "manifest"}, {TagName: "random"}}}
-	_, _, err := buildManifest(t.Context(), src, defaultOpts())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no releases matched")
 }
 
 func TestBuildManifest_DockerOmittedWhenImagesEmpty(t *testing.T) {

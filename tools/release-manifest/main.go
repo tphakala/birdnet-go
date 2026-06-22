@@ -12,20 +12,27 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/update/manifest"
 )
 
+// repoRe validates the owner/name form of -repo before it is interpolated into
+// an API URL.
+var repoRe = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$`)
+
 func main() {
 	repo := flag.String("repo", "tphakala/birdnet-go", "GitHub repository in owner/repo form")
 	output := flag.String("output", "manifest.json", "path to write the manifest JSON to")
 	apiURL := flag.String("api-url", "https://api.github.com", "GitHub REST API base URL")
-	ghcrImage := flag.String("ghcr-image", "ghcr.io/tphakala/birdnet-go", "GHCR image repository (without tag); empty to omit")
-	dockerHubImage := flag.String("dockerhub-image", "tphakala/birdnet-go", "Docker Hub image repository (without tag); empty to omit")
+	ghcrImage := flag.String("ghcr-image", "", "GHCR image repository (without tag); defaults to ghcr.io/<repo>")
+	dockerHubImage := flag.String("dockerhub-image", "", "Docker Hub image repository (without tag); defaults to <repo>")
 	maxNotesLen := flag.Int("max-notes-len", 50000, "maximum release-notes length in bytes; 0 for unbounded")
 	flag.Parse()
 
@@ -36,6 +43,18 @@ func main() {
 }
 
 func run(repo, output, apiURL, ghcrImage, dockerHubImage string, maxNotesLen int) error {
+	if !repoRe.MatchString(repo) {
+		return fmt.Errorf("invalid -repo %q: want owner/name", repo)
+	}
+	// Default the image repositories to the GitHub repo so the manifest is
+	// correct on forks and renames instead of advertising a hardcoded upstream.
+	if ghcrImage == "" {
+		ghcrImage = "ghcr.io/" + strings.ToLower(repo)
+	}
+	if dockerHubImage == "" {
+		dockerHubImage = strings.ToLower(repo)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -53,6 +72,13 @@ func run(repo, output, apiURL, ghcrImage, dockerHubImage string, maxNotesLen int
 		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
 	if err != nil {
+		// No matching releases (e.g. a fresh fork) is not a pipeline failure:
+		// log and skip publishing rather than failing an otherwise-successful
+		// release run.
+		if errors.Is(err, errNoChannels) {
+			fmt.Fprintln(os.Stderr, "release-manifest:", err, "- nothing to publish, skipping")
+			return nil
+		}
 		return err
 	}
 

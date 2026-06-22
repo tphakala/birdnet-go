@@ -157,7 +157,7 @@ jobs:
           # Get the latest release tag
           LATEST_TAG=$(git describe --tags --abbrev=0)
           echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
-          echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "latest_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
       
       - name: Add Artifacts to GitHub Release
         uses: softprops/action-gh-release@v3
@@ -243,6 +243,9 @@ jobs:
       keep-images-count: 14
     secrets: inherit
 
+  # Regenerate the release manifest after the tarballs (build) and checksums.txt
+  # (checksums) are attached, so it never races the asset uploads. The if-guard
+  # mirrors the other jobs and must stay in sync with them.
   manifest:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     needs: [build, checksums]

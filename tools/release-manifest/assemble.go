@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -14,6 +15,19 @@ import (
 // checksumsFilename is the name of the aggregated checksum asset attached to
 // every release by the build workflows.
 const checksumsFilename = "checksums.txt"
+
+// Moving Docker tags users pull to track a channel.
+const (
+	dockerTagLatest  = "latest"
+	dockerTagNightly = "nightly"
+	dockerTagBeta    = "beta"
+)
+
+// errNoChannels is returned when no published release matched any channel. The
+// CLI treats it as a soft, non-fatal condition (nothing to publish) so a
+// transient empty-release state cannot fail an otherwise-successful release
+// pipeline.
+var errNoChannels = errors.New("no releases matched a known channel")
 
 // buildOptions configures manifest generation.
 type buildOptions struct {
@@ -34,9 +48,13 @@ func buildManifest(ctx context.Context, src releaseSource, opts *buildOptions) (
 		return nil, nil, fmt.Errorf("list releases: %w", err)
 	}
 
+	// Surface version-like releases that matched no channel, so a mis-tagged
+	// release does not vanish from the manifest with zero diagnostics.
+	warnings := unclassifiedWarnings(releases)
+
 	latest := latestPerChannel(releases)
 	if len(latest) == 0 {
-		return nil, nil, fmt.Errorf("no releases matched a known channel in %s", opts.Repo)
+		return nil, warnings, fmt.Errorf("%w in %s", errNoChannels, opts.Repo)
 	}
 
 	m := &manifest.Manifest{
@@ -46,7 +64,6 @@ func buildManifest(ctx context.Context, src releaseSource, opts *buildOptions) (
 		Channels:      make(map[string]*manifest.Channel, len(latest)),
 	}
 
-	var warnings []string
 	// Iterate channels in a stable order so warnings are deterministic.
 	for _, name := range sortedKeys(latest) {
 		release := latest[name]
@@ -74,18 +91,47 @@ func latestPerChannel(releases []ghRelease) map[string]ghRelease {
 		if !ok {
 			continue
 		}
-		if cur, exists := latest[channel]; !exists || r.PublishedAt.After(cur.PublishedAt) {
+		// Deterministic selection: newest by publish time, and on an exact
+		// timestamp tie prefer the lexicographically greater tag so the result
+		// does not depend on the API's (undocumented) tie ordering.
+		cur, exists := latest[channel]
+		if !exists || r.PublishedAt.After(cur.PublishedAt) ||
+			(r.PublishedAt.Equal(cur.PublishedAt) && r.TagName > cur.TagName) {
 			latest[channel] = r
 		}
 	}
 	return latest
 }
 
+// unclassifiedWarnings reports non-draft releases whose tag looks like a version
+// (starts with "v" or "nightly-") but matched no channel, e.g. a beta tagged
+// with an unsupported pre-release form.
+func unclassifiedWarnings(releases []ghRelease) []string {
+	var warnings []string
+	for i := range releases {
+		r := releases[i]
+		if r.Draft {
+			continue
+		}
+		if _, ok := manifest.ClassifyTag(r.TagName); ok {
+			continue
+		}
+		if strings.HasPrefix(r.TagName, "v") || strings.HasPrefix(r.TagName, "nightly-") {
+			warnings = append(warnings, fmt.Sprintf("release %q matched no channel and was skipped", r.TagName))
+		}
+	}
+	return warnings
+}
+
 // buildChannel converts a single GitHub release into a manifest Channel.
 func buildChannel(ctx context.Context, src releaseSource, opts *buildOptions, channelName string, r *ghRelease) (channel *manifest.Channel, warnings []string) {
 	notes := strings.TrimSpace(r.Body)
-	if opts.MaxNotesLen > 0 && len(notes) > opts.MaxNotesLen {
-		notes = notes[:opts.MaxNotesLen]
+	// Bound the notes by rune count, not bytes, so truncation never splits a
+	// multi-byte character and produces invalid UTF-8.
+	if opts.MaxNotesLen > 0 {
+		if runes := []rune(notes); len(runes) > opts.MaxNotesLen {
+			notes = string(runes[:opts.MaxNotesLen])
+		}
 	}
 
 	channel = &manifest.Channel{
@@ -101,7 +147,7 @@ func buildChannel(ctx context.Context, src releaseSource, opts *buildOptions, ch
 		Docker:         dockerRefs(opts, channelName, r.TagName),
 	}
 
-	checksums := map[string]string{}
+	var checksums map[string]string
 	for i := range r.Assets {
 		if r.Assets[i].Name != checksumsFilename {
 			continue
@@ -146,12 +192,20 @@ func dockerRefs(opts *buildOptions, channelName, version string) *manifest.Docke
 	if opts.GHCRImage == "" && opts.DockerHubImage == "" {
 		return nil
 	}
+	// The nightly dated image tag is derived from the build version, which can
+	// drift from the GitHub release tag on a retry (the release tag gains a
+	// "-<run_number>" suffix the image never gets). Only advertise a
+	// version-pinned ref for channels whose release tag is guaranteed to match
+	// the pushed image tag; nightly installs track the moving channel tag.
+	pinned := channelName != manifest.ChannelNightly
 	d := &manifest.Docker{}
 	if opts.GHCRImage != "" {
-		d.GHCR = opts.GHCRImage + ":" + version
 		d.ChannelTag = opts.GHCRImage + ":" + channelMovingTag(channelName)
+		if pinned {
+			d.GHCR = opts.GHCRImage + ":" + version
+		}
 	}
-	if opts.DockerHubImage != "" {
+	if opts.DockerHubImage != "" && pinned {
 		d.DockerHub = opts.DockerHubImage + ":" + version
 	}
 	return d
@@ -161,11 +215,11 @@ func dockerRefs(opts *buildOptions, channelName, version string) *manifest.Docke
 func channelMovingTag(channelName string) string {
 	switch channelName {
 	case manifest.ChannelStable:
-		return "latest"
+		return dockerTagLatest
 	case manifest.ChannelNightly:
-		return "nightly"
+		return dockerTagNightly
 	case manifest.ChannelBeta:
-		return "beta"
+		return dockerTagBeta
 	default:
 		return channelName
 	}
