@@ -122,6 +122,17 @@ type SpeciesAccumulationPoint struct {
 	NewSpecies        int
 }
 
+// SpeciesPhenologyPoint is one species' residency span within the selected date range: its first and
+// last false-positive-excluded detection (as station-local YYYY-MM-DD dates) and the in-range
+// detection count. Species are the top-N by detection volume; the chart draws one residency bar per
+// species (a Gantt) to show arrival/departure timing.
+type SpeciesPhenologyPoint struct {
+	ScientificName string
+	FirstSeen      string
+	LastSeen       string
+	Count          int
+}
+
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
@@ -501,6 +512,14 @@ func (ds *DataStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _
 // slice rather than implementing the aggregation. See internal/datastore/v2only for the real method.
 func (ds *DataStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]SpeciesAccumulationPoint, error) {
 	return []SpeciesAccumulationPoint{}, nil
+}
+
+// GetSpeciesPhenology is a stub on the legacy store. The arrival/departure phenology chart is a
+// v2only feature; the legacy datastore is deprecated and being removed, so it returns an empty
+// (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only for the
+// real method.
+func (ds *DataStore) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) ([]SpeciesPhenologyPoint, error) {
+	return []SpeciesPhenologyPoint{}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time

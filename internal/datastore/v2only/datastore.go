@@ -3205,6 +3205,29 @@ func (ds *Datastore) GetSpeciesAccumulation(ctx context.Context, startDate, endD
 	return buildSpeciesAccumulation(firstSeen, ds.timezone, startDate, endDate)
 }
 
+// GetSpeciesPhenology returns the arrival/departure residency span for the top `limit` species by
+// volume over [startDate, endDate]: each species' first and last false-positive-excluded detection
+// plus the in-range count. It fetches the spans in one grouped query (GetSpeciesPhenologyInPeriod),
+// then formats the timestamps to station-local dates and orders the rows by arrival in a shared,
+// table-tested Go helper (buildSpeciesPhenology) using the station timezone.
+func (ds *Datastore) GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesPhenologyPoint, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := ds.detection.GetSpeciesPhenologyInPeriod(ctx, start, end, limit)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_phenology").
+			Build()
+	}
+
+	return buildSpeciesPhenology(rows, ds.timezone), nil
+}
+
 // civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and
 // station timezone. The closure yields civil dawn's station-local minute-of-day for a date, or
 // ok=false when no SunCalc is configured or civil dawn is undefined for the date (polar day/night).

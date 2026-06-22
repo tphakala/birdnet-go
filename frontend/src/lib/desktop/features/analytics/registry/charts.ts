@@ -31,6 +31,12 @@ import type {
   AccumulationData,
   AccumulationPoint,
 } from '../components/charts/d3/utils/accumulation';
+import SpeciesPhenologyChart from '../components/charts/d3/SpeciesPhenologyChart.svelte';
+import type {
+  PhenologyData,
+  PhenologyDatum,
+  PhenologyRow,
+} from '../components/charts/d3/utils/phenology';
 
 import { formatDateForAPI } from './analyticsParams';
 import type { AnalyticsParams, ChartDef } from './types';
@@ -597,6 +603,58 @@ async function fetchSpeciesAccumulation(
   return { points };
 }
 
+// Top-N species the phenology Gantt requests; mirrors the chart's maxSpecies cap and the server
+// default. Kept modest so the residency bars stay legible within the card's fixed height.
+const SPECIES_PHENOLOGY_LIMIT = 12;
+
+interface PhenologyResponseItem {
+  scientificName?: unknown;
+  firstSeen?: unknown;
+  lastSeen?: unknown;
+  count?: unknown;
+}
+
+/**
+ * Arrival/departure phenology: the top-N species by detection volume in range, each with its first
+ * and last in-range detection date (station-local YYYY-MM-DD) and detection count. Server-ranked and
+ * server-sorted by arrival; this defensively coerces the array payload, dropping rows missing either
+ * date. Common names are resolved later (registry mapProps) from the hub's species map.
+ */
+async function fetchSpeciesPhenology(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<PhenologyDatum[]> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+    limit: String(SPECIES_PHENOLOGY_LIMIT),
+  });
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/species/phenology?${search}`), {
+    signal,
+  });
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid species phenology response: expected an array');
+  }
+
+  return data
+    .map(raw => {
+      if (!raw || typeof raw !== 'object') return null;
+      const item = raw as PhenologyResponseItem;
+      const scientificName = typeof item.scientificName === 'string' ? item.scientificName : '';
+      const firstSeen = typeof item.firstSeen === 'string' ? item.firstSeen : '';
+      const lastSeen = typeof item.lastSeen === 'string' ? item.lastSeen : '';
+      // A residency bar needs both endpoints; a row missing either date is unrenderable, so drop it.
+      if (!scientificName || !firstSeen || !lastSeen) return null;
+      const count = typeof item.count === 'number' && Number.isFinite(item.count) ? item.count : 0;
+      return { scientificName, firstSeen, lastSeen, count };
+    })
+    .filter((d): d is PhenologyDatum => d !== null);
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
@@ -765,6 +823,34 @@ export const CHART_REGISTRY: ChartDef[] = [
     size: 'full',
     supports: { species: false, source: false },
     minDataPoints: 2,
+  },
+  {
+    id: 'species-phenology',
+    group: 'biodiversity',
+    titleKey: 'analytics.advanced.charts.phenology.title',
+    descKey: 'analytics.advanced.charts.phenology.description',
+    emptyKey: 'analytics.advanced.charts.phenology.noData',
+    emptyHintKey: 'analytics.advanced.charts.phenology.noDataHint',
+    component: SpeciesPhenologyChart,
+    fetch: fetchSpeciesPhenology,
+    // The endpoint is always top-N by volume and never filters by species, so supports.species is
+    // false; the biodiversity tab's siblings (diversity, accumulation) are also species:false, so no
+    // dead selector is shown. The fetch result is the raw row array, so the default array-length count
+    // (the species count) drives the not-enough-data gate; a one-bar Gantt is not a comparison.
+    mapProps: (data, _params, ctx) => ({
+      data: {
+        rows: (data as PhenologyDatum[]).map(
+          (d): PhenologyRow => ({
+            ...d,
+            commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+          })
+        ),
+      } as PhenologyData,
+    }),
+    size: 'full',
+    supports: { species: false, source: false },
+    minDataPoints: 2,
+    maxSpecies: SPECIES_PHENOLOGY_LIMIT,
   },
   {
     id: 'confidence-distribution',
