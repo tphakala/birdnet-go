@@ -179,8 +179,9 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// Set the primary model ID and buffer dimensions on the engine so that
 	// analysis buffers are allocated from the model's spec, not hardcoded
 	// constants. This matches the secondary model allocation path.
-	clipBytes, overlapBytes, readSize := bn.ModelInfo.Spec.BufferDimensions()
-	p.engine.SetPrimaryModel(bn.ModelInfo.ID, clipBytes, overlapBytes, readSize)
+	primaryInfo := bn.PrimaryModelInfo()
+	clipBytes, overlapBytes, readSize := primaryInfo.Spec.BufferDimensions()
+	p.engine.SetPrimaryModel(primaryInfo.ID, clipBytes, overlapBytes, readSize)
 
 	// Register all loaded models in the ai_models database table so they
 	// appear even before any detections are saved.
@@ -895,8 +896,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 	}
 
 	// Primary model fallback targets for sources with no model config.
-	primaryInfo := &p.bnAnalyzer.BirdNET().ModelInfo
-	primaryTargets := []classifier.ModelInfo{*primaryInfo}
+	primaryTargets := []classifier.ModelInfo{p.bnAnalyzer.BirdNET().PrimaryModelInfo()}
 
 	bufMgr := p.engine.BufferManager()
 	currentSettings := conf.Setting()
@@ -1115,7 +1115,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		for i := range modelInfoSlice {
 			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
 		}
-		primaryModelID = p.bnAnalyzer.BirdNET().ModelInfo.ID
+		primaryModelID = p.bnAnalyzer.BirdNET().PrimaryModelID()
 	}
 	bufMgr := p.engine.BufferManager()
 
@@ -1511,7 +1511,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 		loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
 	}
 
-	primaryInfo := p.bnAnalyzer.BirdNET().ModelInfo
+	primaryInfo := p.bnAnalyzer.BirdNET().PrimaryModelInfo()
 	result := make(map[string][]monitorConfig, len(sourceIDs))
 
 	for _, sid := range sourceIDs {
