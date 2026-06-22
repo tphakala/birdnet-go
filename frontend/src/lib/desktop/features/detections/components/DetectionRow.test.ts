@@ -83,4 +83,27 @@ describe('DetectionRow action callbacks', () => {
 
     expect(onToggleSpecies).toHaveBeenCalledTimes(1);
   });
+
+  it('invokes onMarkCorrect when the mark-correct menu item is clicked', async () => {
+    const onMarkCorrect = vi.fn();
+    render(DetectionRow, {
+      props: { detection: createMockDetection({ id: 400 }), onMarkCorrect },
+    });
+
+    // Anchored so "Correct" does not also match "Incorrect".
+    await openMenuAndClick(/^Correct$/);
+
+    expect(onMarkCorrect).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onMarkFalsePositive when the mark-false-positive menu item is clicked', async () => {
+    const onMarkFalsePositive = vi.fn();
+    render(DetectionRow, {
+      props: { detection: createMockDetection({ id: 500 }), onMarkFalsePositive },
+    });
+
+    await openMenuAndClick(/^Incorrect$/);
+
+    expect(onMarkFalsePositive).toHaveBeenCalledTimes(1);
+  });
 });
