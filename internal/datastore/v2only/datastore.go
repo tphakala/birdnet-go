@@ -3099,6 +3099,89 @@ func (ds *Datastore) GetDailyActivityOnset(ctx context.Context, startDate, endDa
 	return buildDailyActivityOnset(timestamps, ds.timezone, startDate, endDate, onsetDetectionRank, minOnsetDetections, dawn)
 }
 
+// GetConfidenceHistogram returns the per-species confidence-score distribution over the date range,
+// powering the confidence distribution chart (design spec section 6.5). With no species filter it
+// covers the top `limit` species by raw detection volume; with a species filter it covers just that
+// species (always included if it has any detections). It fetches each species' false-positive-excluded
+// confidences in one batched query (GetBatchConfidences), then bins and normalizes them in a shared,
+// table-tested Go helper (buildSpeciesConfidenceHistogram). minConfidence is 0 so every detection is
+// counted, matching the who-sings-when ridgeline and the other species analytics endpoints.
+func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endDate, species string, bins, limit int) ([]datastore.SpeciesConfidenceHistogram, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// minConfidence 0 counts every detection (no confidence floor), matching the who-sings-when
+	// ridgeline and the other time-based analytics; named to avoid a bare magic literal below.
+	const noConfidenceFloor = 0.0
+
+	// Select the species set and the per-species detection floor. An explicit species filter yields
+	// just that species (always shown if it has any detections); otherwise the top `limit` species by
+	// raw volume, with low-volume species dropped as noisy.
+	var speciesSet []repository.SpeciesCount
+	var minCount int
+	if species != "" {
+		// Use every label ID that maps to this scientific name (a species can carry one label per
+		// model), so the filtered path merges multi-model detections exactly like the top-N path below;
+		// resolving a single label ID would silently drop other models' detections for the species.
+		labelIDs, labelErr := ds.label.GetLabelIDsByScientificName(ctx, species)
+		if labelErr != nil {
+			return nil, errors.New(labelErr).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_confidence_histogram_resolve_species").
+				Build()
+		}
+		if len(labelIDs) == 0 {
+			return []datastore.SpeciesConfidenceHistogram{}, nil
+		}
+		speciesSet = make([]repository.SpeciesCount, 0, len(labelIDs))
+		for _, labelID := range labelIDs {
+			speciesSet = append(speciesSet, repository.SpeciesCount{LabelID: labelID, ScientificName: species})
+		}
+		minCount = 1
+	} else {
+		// GetTopSpecies uses an inclusive end (<= end) while GetBatchConfidences uses an exclusive end
+		// (< end); subtract one second so ranking and binned totals cover the exact same range and never
+		// disagree on a detection landing on the end boundary (mirrors GetHourlyDistributionBySpecies).
+		topEnd := end
+		if end != math.MaxInt64 {
+			topEnd--
+		}
+		top, topErr := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
+		if topErr != nil {
+			return nil, errors.New(topErr).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_confidence_histogram_top").
+				Build()
+		}
+		speciesSet = top
+		minCount = minConfidenceHistogramDetections
+	}
+
+	if len(speciesSet) == 0 {
+		return []datastore.SpeciesConfidenceHistogram{}, nil
+	}
+
+	labelIDs := make([]uint, 0, len(speciesSet))
+	for i := range speciesSet {
+		labelIDs = append(labelIDs, speciesSet[i].LabelID)
+	}
+
+	confByLabel, err := ds.detection.GetBatchConfidences(ctx, labelIDs, start, end, noConfidenceFloor)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_confidence_histogram_confidences").
+			Build()
+	}
+
+	return buildSpeciesConfidenceHistogram(speciesSet, confByLabel, bins, minCount), nil
+}
+
 // civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and
 // station timezone. The closure yields civil dawn's station-local minute-of-day for a date, or
 // ok=false when no SunCalc is configured or civil dawn is undefined for the date (polar day/night).

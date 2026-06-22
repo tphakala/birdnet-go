@@ -475,3 +475,181 @@ func TestBuildDailyActivityOnset_InvalidDates(t *testing.T) {
 	_, err := buildDailyActivityOnset(nil, time.UTC, "not-a-date", "2026-03-03", onsetDetectionRank, minOnsetDetections, dawnAt(300))
 	require.Error(t, err)
 }
+
+// --- Confidence distribution (buildSpeciesConfidenceHistogram) -------------
+//
+// These exercise the pure binning/normalization. False-positive exclusion happens upstream in the
+// repository query (GetBatchConfidences), so the confByLabel inputs here are already FP-excluded.
+
+// confidenceBinSum sums a species' normalized bins (should be ~1.0 for any non-empty species).
+func confidenceBinSum(bins []float64) float64 {
+	sum := 0.0
+	for _, v := range bins {
+		sum += v
+	}
+	return sum
+}
+
+func TestConfidenceBinIndex(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		conf float64
+		bins int
+		want int
+	}{
+		{"zero lands in the first bin", 0.0, 20, 0},
+		{"mid lands in the middle bin", 0.5, 20, 10},
+		{"just under one lands in the last bin", 0.999, 20, 19},
+		{"exactly one is clamped into the last bin", 1.0, 20, 19},
+		{"above one is clamped into the last bin", 1.5, 20, 19},
+		{"negative is clamped into the first bin", -0.2, 20, 0},
+		{"five-bin boundary", 0.4, 5, 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, confidenceBinIndex(tt.conf, tt.bins))
+		})
+	}
+}
+
+func TestBuildSpeciesConfidenceHistogram_BinsAndNormalizes(t *testing.T) {
+	t.Parallel()
+
+	// Four detections across four equal bins (width 0.25): 0.1->bin0, 0.3->bin1, 0.55->bin2,
+	// 0.9->bin3. Each is 1/4 of the total, so every normalized bin is 0.25.
+	species := []repository.SpeciesCount{{LabelID: 1, ScientificName: "Turdus merula"}}
+	confByLabel := map[uint][]float64{1: {0.1, 0.3, 0.55, 0.9}}
+
+	got := buildSpeciesConfidenceHistogram(species, confByLabel, 4, 1)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+	assert.Equal(t, 4, got[0].Total)
+	require.Len(t, got[0].Bins, 4)
+	for i, want := range []float64{0.25, 0.25, 0.25, 0.25} {
+		assert.InDelta(t, want, got[0].Bins[i], 1e-9)
+	}
+	assert.InDelta(t, 1.0, confidenceBinSum(got[0].Bins), 1e-9, "normalized bins sum to 1.0")
+}
+
+func TestBuildSpeciesConfidenceHistogram_BinBoundaries(t *testing.T) {
+	t.Parallel()
+
+	// Confidence exactly 0.0 must land in the first bin and exactly 1.0 in the last (clamped, not
+	// overflowing the slice).
+	species := []repository.SpeciesCount{{LabelID: 1, ScientificName: "Strix aluco"}}
+	confByLabel := map[uint][]float64{1: {0.0, 1.0}}
+
+	got := buildSpeciesConfidenceHistogram(species, confByLabel, 5, 1)
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Bins, 5)
+	assert.Equal(t, 2, got[0].Total)
+	assert.InDelta(t, 0.5, got[0].Bins[0], 1e-9) // 0.0 -> bin 0
+	assert.InDelta(t, 0.5, got[0].Bins[4], 1e-9) // 1.0 -> last bin
+}
+
+func TestBuildSpeciesConfidenceHistogram_BinCountParam(t *testing.T) {
+	t.Parallel()
+
+	species := []repository.SpeciesCount{{LabelID: 1, ScientificName: "Turdus merula"}}
+	confByLabel := map[uint][]float64{1: {0.2, 0.4, 0.6, 0.8}}
+
+	for _, bins := range []int{10, 20, 50} {
+		got := buildSpeciesConfidenceHistogram(species, confByLabel, bins, 1)
+		require.Len(t, got, 1)
+		assert.Len(t, got[0].Bins, bins, "bin count param is honored")
+		assert.InDelta(t, 1.0, confidenceBinSum(got[0].Bins), 1e-9)
+	}
+
+	// Non-positive bins yields an empty (non-nil) result rather than panicking.
+	empty := buildSpeciesConfidenceHistogram(species, confByLabel, 0, 1)
+	assert.Empty(t, empty)
+	assert.NotNil(t, empty)
+}
+
+func TestBuildSpeciesConfidenceHistogram_MinCountFilter(t *testing.T) {
+	t.Parallel()
+
+	// Pica pica has only 2 detections, below the floor of 5, so it is dropped as noisy.
+	species := []repository.SpeciesCount{
+		{LabelID: 1, ScientificName: "Turdus merula"},
+		{LabelID: 2, ScientificName: "Pica pica"},
+	}
+	confByLabel := map[uint][]float64{
+		1: {0.5, 0.6, 0.7, 0.8, 0.9},
+		2: {0.5, 0.6},
+	}
+
+	got := buildSpeciesConfidenceHistogram(species, confByLabel, 10, 5)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+}
+
+func TestBuildSpeciesConfidenceHistogram_MergesLabelsSharingName(t *testing.T) {
+	t.Parallel()
+
+	// The same species detected under two model label IDs collapses to one row whose confidences are
+	// the concatenation across both labels (systemic multi-model behavior), preserving order.
+	species := []repository.SpeciesCount{
+		{LabelID: 1, ScientificName: "Turdus merula"},
+		{LabelID: 2, ScientificName: "Turdus merula"},
+		{LabelID: 3, ScientificName: "Erithacus rubecula"},
+	}
+	confByLabel := map[uint][]float64{
+		1: {0.1, 0.2}, // Turdus merula via model A -> bin 0 (width 0.25)
+		2: {0.8, 0.9}, // Turdus merula via model B -> bin 3
+		3: {0.5, 0.5, 0.5},
+	}
+
+	got := buildSpeciesConfidenceHistogram(species, confByLabel, 4, 1)
+	require.Len(t, got, 2) // two distinct species, not three label rows
+
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+	assert.Equal(t, 4, got[0].Total) // 2 + 2 merged
+	assert.InDelta(t, 0.5, got[0].Bins[0], 1e-9)
+	assert.InDelta(t, 0.5, got[0].Bins[3], 1e-9)
+
+	assert.Equal(t, "Erithacus rubecula", got[1].ScientificName)
+	assert.Equal(t, 3, got[1].Total)
+}
+
+func TestBuildSpeciesConfidenceHistogram_PreservesVolumeOrder(t *testing.T) {
+	t.Parallel()
+
+	species := []repository.SpeciesCount{
+		{LabelID: 1, ScientificName: "Turdus merula"},
+		{LabelID: 2, ScientificName: "Erithacus rubecula"},
+		{LabelID: 3, ScientificName: "Strix aluco"},
+	}
+	confByLabel := map[uint][]float64{
+		1: {0.5, 0.6, 0.7},
+		2: {0.4, 0.5, 0.6},
+		3: {0.7, 0.8, 0.9},
+	}
+
+	got := buildSpeciesConfidenceHistogram(species, confByLabel, 10, 1)
+	require.Len(t, got, 3)
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+	assert.Equal(t, "Erithacus rubecula", got[1].ScientificName)
+	assert.Equal(t, "Strix aluco", got[2].ScientificName)
+}
+
+func TestBuildSpeciesConfidenceHistogram_Empty(t *testing.T) {
+	t.Parallel()
+
+	empty := buildSpeciesConfidenceHistogram(nil, nil, 20, 1)
+	assert.Empty(t, empty)
+	assert.NotNil(t, empty)
+
+	// A species ranked in by raw volume but with no FP-excluded confidences drops out, never nil.
+	got := buildSpeciesConfidenceHistogram(
+		[]repository.SpeciesCount{{LabelID: 1, ScientificName: "Turdus merula"}},
+		map[uint][]float64{},
+		20, 1,
+	)
+	assert.Empty(t, got)
+	assert.NotNil(t, got)
+}

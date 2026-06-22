@@ -32,6 +32,14 @@ const (
 	defaultNewSpeciesLimit     = 100              // Default pagination limit for new species queries
 	analyticsQueryTimeout      = 30 * time.Second // Timeout for analytics database queries
 
+	// Confidence distribution bin bounds (design spec section 6.5). The histogram bins span [0,1];
+	// the default of 20 equal bins (width 0.05) aligns with the round confidence thresholds users
+	// reason about (e.g. 0.80). The range is clamped so a malformed or extreme bins param can neither
+	// break the binning nor produce an unreadably fine or coarse histogram.
+	defaultConfidenceBins = 20
+	minConfidenceBins     = 5
+	maxConfidenceBins     = 50
+
 	// Species ridgeline (who-sings-when) top-N bounds. The default matches the chart's maxSpecies
 	// cap; the max keeps the ridgeline readable (more than ~8 overlapping ridges are unreadable).
 	defaultSpeciesRidgelineLimit = 5
@@ -192,6 +200,10 @@ func (c *Controller) initAnalyticsRoutes() {
 	timeGroup.GET("/distribution/species", c.GetSpeciesHourlyDistribution) // Who-sings-when ridgeline (top-N species hour-of-day)
 	timeGroup.GET("/heatmap", c.GetActivityHeatmap)                        // Seasonal density heatmap (date x intra-day slot)
 	timeGroup.GET("/dawn-onset", c.GetDawnChorusOnset)                     // Dawn-chorus onset tracker (daily onset vs civil dawn)
+
+	// Confidence analytics routes
+	confidenceGroup := analyticsGroup.Group("/confidence")
+	confidenceGroup.GET("/distribution", c.GetConfidenceDistribution) // Confidence distribution per species (Review & Accuracy)
 
 	// Sun times for the nocturnal activity clock's day/night shading. Additive: the clock's counts
 	// come from the existing /time/distribution/hourly endpoint (unchanged); only this sun endpoint
@@ -1620,6 +1632,135 @@ func (c *Controller) GetSpeciesHourlyDistribution(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, newSpeciesHourlyDistributionResponse(data))
+}
+
+// confidenceDistributionItem is one species' row in the confidence-distribution wire payload: its
+// scientific-name key, its normalized confidence bins (each the fraction of the species' detections
+// in that bin, summing to ~1.0), and the raw detection count. The localized common name is resolved
+// client-side (the v2 label schema stores no common name), matching the sibling species charts.
+type confidenceDistributionItem struct {
+	ScientificName string    `json:"scientificName"`
+	Bins           []float64 `json:"bins"`
+	Total          int       `json:"total"`
+}
+
+// newConfidenceDistributionResponse maps the datastore aggregation onto the wire payload as a JSON
+// array (never null), preserving the descending-volume order. Each species' Bins is emitted as a
+// non-nil array so the client can read it without a null guard.
+func newConfidenceDistributionResponse(data []datastore.SpeciesConfidenceHistogram) []confidenceDistributionItem {
+	items := make([]confidenceDistributionItem, 0, len(data))
+	for i := range data {
+		bins := data[i].Bins
+		if bins == nil {
+			bins = []float64{}
+		}
+		items = append(items, confidenceDistributionItem{
+			ScientificName: data[i].ScientificName,
+			Bins:           bins,
+			Total:          data[i].Total,
+		})
+	}
+	return items
+}
+
+// clampConfidenceBins parses the optional bins query param, falling back to the default and clamping
+// to [minConfidenceBins, maxConfidenceBins] so a malformed or extreme value can neither break the
+// binning nor produce an unreadably fine or coarse histogram.
+func clampConfidenceBins(value string) int {
+	bins, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultConfidenceBins
+	}
+	if bins < minConfidenceBins {
+		return minConfidenceBins
+	}
+	if bins > maxConfidenceBins {
+		return maxConfidenceBins
+	}
+	return bins
+}
+
+// GetConfidenceDistribution handles GET /api/v2/analytics/confidence/distribution
+// Returns the per-species confidence-score distribution, powering the confidence distribution chart
+// in the Review & Accuracy tab (design spec section 6.5). The datastore method is named
+// GetConfidenceHistogram (it computes a per-species histogram); this endpoint and the chart present
+// it as a distribution, hence the route/handler naming.
+func (c *Controller) GetConfidenceDistribution(ctx echo.Context) error {
+	const operation = "confidence distribution"
+
+	// Validate required parameter
+	if err := c.requireQueryParam(ctx, "start_date", operation); err != nil {
+		return err
+	}
+
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+	speciesParam := ctx.QueryParam("species")
+
+	// Validate date formats strictly using regex
+	if err := c.validateDateFormatStrictWithResponse(ctx, startDate, "start_date", operation); err != nil {
+		return err
+	}
+	if err := c.validateDateFormatStrictWithResponse(ctx, endDate, "end_date", operation); err != nil {
+		return err
+	}
+
+	// Validate date values and chronological order
+	if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, operation); err != nil {
+		return err
+	}
+
+	// Default the end date to a 30-day window when omitted, matching the other range endpoints.
+	if endDate == "" {
+		startTime, _ := time.Parse(time.DateOnly, startDate) // Regex ensures this parse succeeds
+		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
+	}
+
+	// Resolve a localized common name to its scientific name so the optional species filter matches
+	// the detections/search path and the sibling time endpoints; a scientific name or unresolved term
+	// passes through unchanged. Only the datastore query uses the resolved value.
+	querySpecies := speciesParam
+	if resolved, hit := c.resolveSpeciesToScientific(speciesParam); hit {
+		querySpecies = resolved
+	}
+
+	bins := clampConfidenceBins(ctx.QueryParam("bins"))
+	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultSpeciesRidgelineLimit, maxSpeciesRidgelineLimit)
+
+	c.logInfoIfEnabled("Retrieving confidence distribution",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("species", speciesParam),
+		logger.Int("bins", bins),
+		logger.Int("limit", limit),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	// Add timeout to prevent resource exhaustion
+	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+
+	data, err := c.DS.GetConfidenceHistogram(ctxWithTimeout, startDate, endDate, querySpecies, bins, limit)
+	if err != nil {
+		return c.handleAnalyticsQueryError(ctx, err, "Confidence distribution", "Failed to get confidence distribution",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("species", speciesParam),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
+		)
+	}
+
+	c.logInfoIfEnabled("Confidence distribution retrieved",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("species_count", len(data)),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	return ctx.JSON(http.StatusOK, newConfidenceDistributionResponse(data))
 }
 
 // GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution/hourly

@@ -766,6 +766,10 @@ func (s *testLegacyInterface) GetHourlyDistributionBySpecies(_ context.Context, 
 func (s *testLegacyInterface) GetDailyActivityOnset(_ context.Context, _, _, _ string) ([]datastore.DailyActivityOnset, error) {
 	return []datastore.DailyActivityOnset{}, nil
 }
+
+func (s *testLegacyInterface) GetConfidenceHistogram(_ context.Context, _, _, _ string, _, _ int) ([]datastore.SpeciesConfidenceHistogram, error) {
+	return []datastore.SpeciesConfidenceHistogram{}, nil
+}
 func (s *testLegacyInterface) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil
 }

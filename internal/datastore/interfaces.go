@@ -203,6 +203,10 @@ type Interface interface {
 	// onset relative to civil dawn (false positives excluded). species is an optional scientific-name
 	// filter. Powers the dawn-chorus onset tracker.
 	GetDailyActivityOnset(ctx context.Context, startDate, endDate, species string) ([]DailyActivityOnset, error)
+	// GetConfidenceHistogram returns the per-species confidence-score distribution over the date range,
+	// powering the confidence distribution chart. With no species filter it covers the top `limit`
+	// species by detection volume; with a species filter it covers just that species.
+	GetConfidenceHistogram(ctx context.Context, startDate, endDate, species string, bins, limit int) ([]SpeciesConfidenceHistogram, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods

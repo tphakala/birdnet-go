@@ -1469,6 +1469,16 @@ export type TranslationKey =
   | 'analytics.advanced.charts.nocturnal.legendDay'
   | 'analytics.advanced.charts.nocturnal.legendTwilight'
   | 'analytics.advanced.charts.nocturnal.legendNight'
+  | 'analytics.advanced.charts.confidence.title'
+  | 'analytics.advanced.charts.confidence.description'
+  | 'analytics.advanced.charts.confidence.noData'
+  | 'analytics.advanced.charts.confidence.noDataHint'
+  | 'analytics.advanced.charts.confidence.ariaLabel'
+  | 'analytics.advanced.charts.confidence.axisLabel'
+  | 'analytics.advanced.charts.confidence.note' // params: count
+  | 'analytics.advanced.charts.confidence.tooltipCount'
+  | 'analytics.advanced.charts.confidence.tooltipPeak'
+  | 'analytics.advanced.charts.confidence.summary' // params: count, species, time
   | 'analytics.advanced.charts.tooltips.date'
   | 'analytics.advanced.charts.tooltips.percentage'
   | 'analytics.advanced.charts.tooltips.detections'
@@ -3997,6 +4007,12 @@ export type TranslationParams = {
     end: string | number;
   };
   'analytics.advanced.charts.nocturnal.summary': { total: string | number; peak: string | number };
+  'analytics.advanced.charts.confidence.note': { count: string | number };
+  'analytics.advanced.charts.confidence.summary': {
+    count: string | number;
+    species: string | number;
+    time: string | number;
+  };
   'settings.notFound.message': { section: string | number };
   'settings.main.sections.falsePositiveFilter.detectionCount': {
     count: string | number;

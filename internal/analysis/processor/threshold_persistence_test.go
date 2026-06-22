@@ -169,6 +169,10 @@ func (m *MockDatastore) GetHourlyDistributionBySpecies(context.Context, string, 
 func (m *MockDatastore) GetDailyActivityOnset(context.Context, string, string, string) ([]datastore.DailyActivityOnset, error) {
 	return []datastore.DailyActivityOnset{}, nil
 }
+
+func (m *MockDatastore) GetConfidenceHistogram(context.Context, string, string, string, int, int) ([]datastore.SpeciesConfidenceHistogram, error) {
+	return []datastore.SpeciesConfidenceHistogram{}, nil
+}
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return make([]datastore.DetectionRecord, 0), 0, nil
 }

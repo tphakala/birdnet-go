@@ -98,6 +98,19 @@ type DailyActivityOnset struct {
 	DetectionCount  int
 }
 
+// SpeciesConfidenceHistogram is one species' confidence-score distribution, behind the confidence
+// distribution chart (design spec section 6.5). Bins holds the normalized fraction of the species'
+// detections that fall into each equal-width confidence bin over [0,1] (Bins sums to ~1.0), so the
+// distribution shape is comparable across species regardless of detection volume. Total is the
+// species' detection count over the range (false positives excluded), shown in the tooltip.
+// ScientificName is the stable key; the localized common name is resolved client-side (the v2 label
+// schema stores no common name), matching the sibling species charts.
+type SpeciesConfidenceHistogram struct {
+	ScientificName string
+	Bins           []float64
+	Total          int
+}
+
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
@@ -462,6 +475,14 @@ func (ds *DataStore) GetHourlyDistributionBySpecies(_ context.Context, _, _ stri
 // slice rather than implementing the aggregation. See internal/datastore/v2only for the real method.
 func (ds *DataStore) GetDailyActivityOnset(_ context.Context, _, _, _ string) ([]DailyActivityOnset, error) {
 	return []DailyActivityOnset{}, nil
+}
+
+// GetConfidenceHistogram is a stub on the legacy store. The confidence distribution chart is a
+// v2only feature; the legacy datastore is deprecated and being removed, so it returns an empty
+// (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only for the
+// real method.
+func (ds *DataStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _, _ int) ([]SpeciesConfidenceHistogram, error) {
+	return []SpeciesConfidenceHistogram{}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time
