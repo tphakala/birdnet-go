@@ -1500,39 +1500,47 @@ func (bn *BirdNET) publishIdentity() {
 	})
 }
 
-// identitySnapshot returns the published identity, or, before the first publish (a
-// struct-literal instance in tests that bypassed NewBirdNET), a snapshot read
-// directly from the fields. An unpublished instance is never concurrently
-// reloaded, so that direct read is race-free.
-func (bn *BirdNET) identitySnapshot() modelIdentity {
-	if id := bn.identity.Load(); id != nil {
-		return *id
-	}
-	return modelIdentity{id: bn.ModelInfo.ID, name: bn.ModelInfo.Name, version: bn.modelVersion, spec: bn.ModelInfo.Spec}
-}
+// The ModelID/ModelName/ModelVersion/Spec getters read the published identity
+// snapshot lock-free via bn.identity.Load(), reading the wanted field straight off
+// the loaded pointer (no whole-struct copy, matching RuntimeInfo's access
+// pattern). Before the first publish (a struct-literal instance in tests that
+// bypassed NewBirdNET, never concurrently reloaded) the pointer is nil and they
+// fall back to reading the fields directly, which is race-free in that case.
 
 // Spec returns the audio requirements for this BirdNET model.
 // Implements ModelInstance.
 func (bn *BirdNET) Spec() ModelSpec {
-	return bn.identitySnapshot().spec
+	if id := bn.identity.Load(); id != nil {
+		return id.spec
+	}
+	return bn.ModelInfo.Spec
 }
 
 // ModelID returns the unique model identifier.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelID() string {
-	return bn.identitySnapshot().id
+	if id := bn.identity.Load(); id != nil {
+		return id.id
+	}
+	return bn.ModelInfo.ID
 }
 
 // ModelName returns the human-readable model name.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelName() string {
-	return bn.identitySnapshot().name
+	if id := bn.identity.Load(); id != nil {
+		return id.name
+	}
+	return bn.ModelInfo.Name
 }
 
 // ModelVersion returns the model version string.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelVersion() string {
-	return bn.identitySnapshot().version
+	if id := bn.identity.Load(); id != nil {
+		return id.version
+	}
+	return bn.modelVersion
 }
 
 // NumSpecies returns the number of species this model can classify.

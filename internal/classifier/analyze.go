@@ -63,7 +63,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 			Category(errors.CategoryAudio).
 			ModelContext(settings.BirdNET.ModelPath, modelID).
 			Context("sample_length", len(sample[0])).
-			Timing("prediction-invoke", time.Since(start)).
+			Timing("prediction-invoke", time.Since(invokeStart)).
 			Build()
 
 		recordPredictionFailure(span, modelID, errTypeInvokeFailed, start, err)
