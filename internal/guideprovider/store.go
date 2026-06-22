@@ -198,6 +198,25 @@ func (s *GORMGuideStore) GetAll(ctx context.Context) ([]GuideCacheEntry, error) 
 	return entries, nil
 }
 
+// GetRecent returns up to limit entries ordered most-recently-cached first. The
+// warm load uses it instead of GetAll so startup cannot materialize an unbounded
+// result set: DB rows are bounded only by time-based retention, so a flood of
+// short-lived negative entries could otherwise load far more rows than the
+// in-memory tier can hold. A non-positive limit returns all rows (matching
+// GetAll); the warm path always passes a positive cap.
+func (s *GORMGuideStore) GetRecent(ctx context.Context, limit int) ([]GuideCacheEntry, error) {
+	q := s.db.WithContext(ctx).Order("cached_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	var entries []GuideCacheEntry
+	if err := q.Find(&entries).Error; err != nil {
+		s.recordDBError("read", "get_recent")
+		return nil, s.wrapDBError(err, "get_recent")
+	}
+	return entries, nil
+}
+
 // Delete removes the entry for the composite key.
 func (s *GORMGuideStore) Delete(ctx context.Context, scientificName, locale, provider string) error {
 	err := s.db.WithContext(ctx).

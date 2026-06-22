@@ -153,6 +153,11 @@ type GuideStore interface {
 	Get(ctx context.Context, scientificName, locale, provider string) (*GuideCacheEntry, error)
 	Save(ctx context.Context, entry *GuideCacheEntry) error
 	GetAll(ctx context.Context) ([]GuideCacheEntry, error)
+	// GetRecent returns up to limit entries, most-recently-cached first. The warm
+	// load uses it instead of GetAll to bound the startup result set (rows are
+	// capped only by time-based retention, so a flood of short-lived negative
+	// entries could otherwise materialize a very large slice at boot).
+	GetRecent(ctx context.Context, limit int) ([]GuideCacheEntry, error)
 	Delete(ctx context.Context, scientificName, locale, provider string) error
 }
 
@@ -194,6 +199,14 @@ type GuideCache struct {
 	// race the Wait (which would let a goroutine outlive Close or panic the
 	// WaitGroup).
 	lifecycleMu sync.Mutex
+
+	// providersMu guards provider use against provider teardown. fetchFromProviders
+	// holds it for reading while it calls into the providers; Close takes it for
+	// writing before releasing per-provider resources. The synchronous Tier-3 fetch
+	// runs on a singleflight-spawned goroutine that the wait group does not track,
+	// so wg.Wait alone cannot guarantee no fetch is still calling a provider when
+	// Close releases its resources — this lock closes that window.
+	providersMu sync.RWMutex
 
 	startOnce sync.Once
 	closeOnce sync.Once
@@ -313,13 +326,17 @@ func (c *GuideCache) Close() {
 		c.wg.Wait()
 		// Release per-provider resources (e.g. the eBird client's rate-limiter
 		// ticker). Without this a hot-reload that rebuilds the cache would leak
-		// the previous providers' resources. Done after wg.Wait so no background
-		// fetch is still using a provider.
+		// the previous providers' resources. Done after wg.Wait, and under the
+		// providers write lock so an untracked singleflight Tier-3 fetch (which
+		// holds the read lock around provider.Fetch) cannot still be using a
+		// provider when its resources are released.
+		c.providersMu.Lock()
 		for i := range c.providers {
 			if closer, ok := c.providers[i].provider.(interface{ Close() error }); ok {
 				_ = closer.Close()
 			}
 		}
+		c.providersMu.Unlock()
 	})
 }
 
@@ -336,7 +353,11 @@ func (c *GuideCache) loadFromDB() {
 	if c.store == nil {
 		return
 	}
-	entries, err := c.store.GetAll(c.ctx)
+	// Bound the warm load to the in-memory cap, freshest first. storeMemory
+	// discards anything beyond maxMemoryEntries anyway, so reading more is wasted
+	// work, and an unbounded read could materialize a large transient slice when
+	// many short-lived negative rows have accrued since the last retention cleanup.
+	entries, err := c.store.GetRecent(c.ctx, maxMemoryEntries)
 	if err != nil {
 		c.metrics.RecordDBError("read", "get_all")
 		GetLogger().Warn("Failed to load guide cache from DB", logger.Error(err))
@@ -452,6 +473,13 @@ func (c *GuideCache) fetchAndStore(ctx context.Context, name, locale string) (*S
 
 // fetchFromProviders runs the configured provider(s) and merges results.
 func (c *GuideCache) fetchFromProviders(ctx context.Context, name, locale string) (*SpeciesGuide, error) {
+	// Hold the read lock for the whole provider loop so Close cannot release a
+	// provider's resources mid-fetch. Concurrent fetches share the read lock;
+	// only provider teardown (Close) contends. Close cancels c.ctx first, so any
+	// in-flight provider.Fetch here observes cancellation and returns promptly
+	// rather than blocking shutdown.
+	c.providersMu.RLock()
+	defer c.providersMu.RUnlock()
 	if len(c.providers) == 0 {
 		return nil, ErrCacheUnavailable
 	}

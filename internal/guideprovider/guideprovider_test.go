@@ -2,6 +2,7 @@ package guideprovider
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -55,6 +56,21 @@ func (s *fakeStore) GetAll(_ context.Context) ([]GuideCacheEntry, error) {
 	out := make([]GuideCacheEntry, 0, len(s.entries))
 	for _, e := range s.entries {
 		out = append(out, *e)
+	}
+	return out, nil
+}
+
+func (s *fakeStore) GetRecent(_ context.Context, limit int) ([]GuideCacheEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]GuideCacheEntry, 0, len(s.entries))
+	for _, e := range s.entries {
+		out = append(out, *e)
+	}
+	// Most-recently-cached first, mirroring the GORM store's ordering.
+	sort.Slice(out, func(i, j int) bool { return out[i].CachedAt.After(out[j].CachedAt) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
 	}
 	return out, nil
 }

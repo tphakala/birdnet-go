@@ -55,6 +55,9 @@ func (emptyGuideStore) Save(_ context.Context, _ *guideprovider.GuideCacheEntry)
 func (emptyGuideStore) GetAll(_ context.Context) ([]guideprovider.GuideCacheEntry, error) {
 	return nil, nil
 }
+func (emptyGuideStore) GetRecent(_ context.Context, _ int) ([]guideprovider.GuideCacheEntry, error) {
+	return nil, nil
+}
 func (emptyGuideStore) Delete(_ context.Context, _, _, _ string) error { return nil }
 
 // stubGuideProvider returns a fixed guide, or ErrGuideNotFound when result is nil.

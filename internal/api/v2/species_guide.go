@@ -205,11 +205,17 @@ func (c *Controller) newGuideRateLimiter() echo.MiddlewareFunc {
 				ExpiresIn: 1 * time.Minute,
 			},
 		),
-		// Per-client identification uses Echo's RealIP. Behind a reverse proxy
-		// that is not configured as a trusted proxy, X-Forwarded-For is
-		// client-controlled and the per-IP limit can be bypassed by spoofing it.
-		// Deployments exposing this publicly behind a proxy should set Echo's
-		// trusted-proxy / IP-extractor configuration accordingly.
+		// Per-client identification uses Echo's RealIP, which routes through the
+		// controller's global trusted-proxy IP extractor (newTrustedProxyIPExtractor,
+		// installed as e.IPExtractor). That extractor honors forwarded client-IP
+		// headers (X-Forwarded-For, X-Real-IP, CF-Connecting-IP) ONLY when the TCP
+		// peer is a trusted proxy; from any untrusted peer those headers are ignored
+		// and the real socket address is used. So the per-IP limit is not spoofable
+		// in a default deployment. The one way to weaken it is to misconfigure
+		// Security.TrustedProxies to trust an attacker-reachable host — operators
+		// behind a real reverse proxy must add ONLY that proxy there. Note this
+		// limiter is a fairness layer; outbound provider calls are independently
+		// capped by each provider's own rate limiter and by singleflight dedup.
 		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
 		ErrorHandler: func(ctx echo.Context, _ error) error {
 			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
