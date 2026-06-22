@@ -2,8 +2,10 @@
  * useDetectionActions.svelte.ts
  *
  * Shared composable for detection card action handlers (review, delete, lock, ignore species).
- * Used by both DetectionCardGrid (dashboard) and DetectionsCardView (detections listing)
- * to eliminate duplicated modal + API logic.
+ * Used by DetectionCardGrid (dashboard), DetectionsCardView (detections card view), and
+ * DetectionsList (table rows + mobile cards) to eliminate duplicated modal + API logic.
+ * Exclusion state is delegated to the shared excludedSpecies store via the
+ * isSpeciesExcluded / onToggleExclusion options.
  *
  * Usage:
  *   const actions = useDetectionActions({ onRefresh, isSpeciesExcluded, onToggleExclusion });
@@ -29,6 +31,13 @@ interface DetectionActionOptions {
   onToggleExclusion: (_commonName: string, _exclude: boolean) => void;
 }
 
+/** Response shape of POST /api/v2/detections/ignore (IgnoreSpeciesResponse). */
+interface IgnoreSpeciesResponse {
+  common_name: string;
+  action: string;
+  is_excluded: boolean;
+}
+
 export function useDetectionActions(options: DetectionActionOptions) {
   let showConfirmModal = $state(false);
   let selectedDetection = $state<Detection | null>(null);
@@ -44,27 +53,35 @@ export function useDetectionActions(options: DetectionActionOptions) {
   }
 
   function handleToggleSpecies(detection: Detection) {
-    const isExcluded = options.isSpeciesExcluded(detection.commonName);
+    // Snapshot at modal-open so the awaited confirm uses a stable value even if
+    // the detection prop is swapped by a background refresh.
+    const commonName = detection.commonName;
+    const wasExcluded = options.isSpeciesExcluded(commonName);
     confirmModalConfig = {
-      title: isExcluded
-        ? t('dashboard.recentDetections.modals.showSpecies', { species: detection.commonName })
-        : t('dashboard.recentDetections.modals.ignoreSpecies', { species: detection.commonName }),
-      message: isExcluded
-        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', {
-            species: detection.commonName,
-          })
-        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', {
-            species: detection.commonName,
-          }),
+      title: wasExcluded
+        ? t('dashboard.recentDetections.modals.showSpecies', { species: commonName })
+        : t('dashboard.recentDetections.modals.ignoreSpecies', { species: commonName }),
+      message: wasExcluded
+        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', { species: commonName })
+        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', { species: commonName }),
       confirmLabel: t('common.buttons.confirm'),
       onConfirm: async () => {
         try {
-          await fetchWithCSRF('/api/v2/detections/ignore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ common_name: detection.commonName }),
-          });
-          options.onToggleExclusion(detection.commonName, !isExcluded);
+          const resp = await fetchWithCSRF<IgnoreSpeciesResponse | null>(
+            '/api/v2/detections/ignore',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ common_name: commonName }),
+            }
+          );
+          // Trust the server's authoritative new state, not an optimistic
+          // negation (the endpoint is a blind toggle that returns the result).
+          // Guard against an empty body so a successful toggle still refreshes
+          // the list rather than surfacing a misleading error toast.
+          if (resp) {
+            options.onToggleExclusion(resp.common_name, resp.is_excluded);
+          }
           options.onRefresh?.();
         } catch (err) {
           toastActions.error(t('dashboard.recentDetections.errors.toggleSpeciesFailed'));
@@ -77,24 +94,23 @@ export function useDetectionActions(options: DetectionActionOptions) {
   }
 
   function handleToggleLock(detection: Detection) {
+    const detectionId = detection.id;
+    const commonName = detection.commonName;
+    const wasLocked = detection.locked;
     confirmModalConfig = {
-      title: detection.locked
+      title: wasLocked
         ? t('dashboard.recentDetections.modals.unlockDetection')
         : t('dashboard.recentDetections.modals.lockDetection'),
-      message: detection.locked
-        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', {
-            species: detection.commonName,
-          })
-        : t('dashboard.recentDetections.modals.lockDetectionConfirm', {
-            species: detection.commonName,
-          }),
+      message: wasLocked
+        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', { species: commonName })
+        : t('dashboard.recentDetections.modals.lockDetectionConfirm', { species: commonName }),
       confirmLabel: t('common.buttons.confirm'),
       onConfirm: async () => {
         try {
-          await fetchWithCSRF(`/api/v2/detections/${detection.id}/lock`, {
+          await fetchWithCSRF(`/api/v2/detections/${detectionId}/lock`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ locked: !detection.locked }),
+            body: JSON.stringify({ locked: !wasLocked }),
           });
           options.onRefresh?.();
         } catch (err) {
@@ -108,17 +124,17 @@ export function useDetectionActions(options: DetectionActionOptions) {
   }
 
   function handleDelete(detection: Detection) {
+    const detectionId = detection.id;
+    const commonName = detection.commonName;
     confirmModalConfig = {
-      title: t('dashboard.recentDetections.modals.deleteDetection', {
-        species: detection.commonName,
-      }),
+      title: t('dashboard.recentDetections.modals.deleteDetection', { species: commonName }),
       message: t('dashboard.recentDetections.modals.deleteDetectionConfirm', {
-        species: detection.commonName,
+        species: commonName,
       }),
       confirmLabel: t('common.buttons.delete'),
       onConfirm: async () => {
         try {
-          await fetchWithCSRF(`/api/v2/detections/${detection.id}`, {
+          await fetchWithCSRF(`/api/v2/detections/${detectionId}`, {
             method: 'DELETE',
           });
           options.onRefresh?.();

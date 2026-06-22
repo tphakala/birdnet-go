@@ -14,16 +14,16 @@
   - Confidence circle visualization
   - Status badges (verified, false positive, etc.)
   - Weather condition display
-  - Action menu for review/delete operations
+  - Action menu wired to parent-owned handlers (review/lock/ignore/delete)
   - Thumbnail image support
-  - Modal dialogs for review and confirmation
   - Responsive design
 
   Props:
   - detection: Detection - The detection data object
-  - isExcluded?: boolean - Whether this detection is excluded
+  - isExcluded?: boolean - Whether this detection's species is excluded
   - onDetailsClick?: (id: number) => void - Handler for detail view
-  - onRefresh?: () => void - Handler for data refresh
+  - onReview / onMarkCorrect / onMarkFalsePositive / onToggleSpecies / onToggleLock / onDelete -
+    action callbacks supplied by the parent (DetectionsList) via useDetectionActions
 -->
 <script lang="ts">
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
@@ -32,14 +32,10 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
-  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
-  import { toastActions } from '$lib/stores/toast';
-  import { fetchWithCSRF } from '$lib/utils/api';
-  import { setDetectionVerification } from '$lib/utils/reviewDetection';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -48,38 +44,42 @@
 
   const logger = loggers.ui;
 
+  // Presentational row: the parent (DetectionsList) owns the action handlers
+  // and the ConfirmModal via the shared useDetectionActions composable, and
+  // passes them in as callbacks plus the server-hydrated isExcluded state.
   interface Props {
     detection: Detection;
     isExcluded?: boolean;
     onDetailsClick?: (_id: number) => void;
-    onRefresh?: () => void;
     selectionActive?: boolean;
     selected?: boolean;
     onToggleSelect?: (_id: string, _shiftKey: boolean) => void;
+    onReview?: () => void;
+    onMarkCorrect?: () => void;
+    onMarkFalsePositive?: () => void;
+    onToggleSpecies?: () => void;
+    onToggleLock?: () => void;
+    onDelete?: () => void;
   }
 
   let {
     detection,
     isExcluded = false,
     onDetailsClick,
-    onRefresh,
     selectionActive = false,
     selected = false,
     onToggleSelect,
+    onReview,
+    onMarkCorrect,
+    onMarkFalsePositive,
+    onToggleSpecies,
+    onToggleLock,
+    onDelete,
   }: Props = $props();
 
   // Localized common name for display in the visitor's UI locale. Falls back to
   // the server-provided common name, then the scientific name.
   const displayName = $derived(localizeSpeciesName(detection.scientificName, detection.commonName));
-
-  // Modal states
-  let showConfirmModal = $state(false);
-  let confirmModalConfig = $state({
-    title: '',
-    message: '',
-    confirmLabel: 'Confirm',
-    onConfirm: () => {},
-  });
 
   // Thumbnail loading with delayed spinner and URL failure tracking
   const thumbnailLoader = useImageDelayedLoading({
@@ -101,117 +101,6 @@
       // Default navigation to detection detail page
       navigation.navigate(`/ui/detections/${detection.id}`);
     }
-  }
-
-  // Action handlers
-  function handleReview() {
-    navigation.navigate(`/ui/detections/${detection.id}?tab=review`);
-  }
-
-  function handleToggleSpecies() {
-    confirmModalConfig = {
-      title: isExcluded
-        ? t('dashboard.recentDetections.modals.showSpecies', { species: detection.commonName })
-        : t('dashboard.recentDetections.modals.ignoreSpecies', { species: detection.commonName }),
-      message: isExcluded
-        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', {
-            species: detection.commonName,
-          })
-        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', {
-            species: detection.commonName,
-          }),
-      confirmLabel: t('common.confirm'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF('/api/v2/detections/ignore', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              common_name: detection.commonName,
-            }),
-          });
-          onRefresh?.();
-        } catch (error) {
-          toastActions.error(t('dashboard.recentDetections.errors.toggleSpeciesFailed'));
-          logger.error('Error toggling species exclusion:', error);
-        }
-      },
-    };
-    showConfirmModal = true;
-  }
-
-  function handleToggleLock() {
-    confirmModalConfig = {
-      title: detection.locked
-        ? t('dashboard.recentDetections.modals.unlockDetection')
-        : t('dashboard.recentDetections.modals.lockDetection'),
-      message: detection.locked
-        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', {
-            species: detection.commonName,
-          })
-        : t('dashboard.recentDetections.modals.lockDetectionConfirm', {
-            species: detection.commonName,
-          }),
-      confirmLabel: t('common.confirm'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF(`/api/v2/detections/${detection.id}/lock`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              locked: !detection.locked,
-            }),
-          });
-          onRefresh?.();
-        } catch (error) {
-          toastActions.error(t('dashboard.recentDetections.errors.toggleLockFailed'));
-          logger.error('Error toggling lock status:', error);
-        }
-      },
-    };
-    showConfirmModal = true;
-  }
-
-  async function handleMarkCorrect() {
-    if (await setDetectionVerification(detection.id, 'correct')) {
-      detection.verified = 'correct';
-      onRefresh?.();
-    }
-  }
-
-  async function handleMarkFalsePositive() {
-    if (await setDetectionVerification(detection.id, 'false_positive')) {
-      detection.verified = 'false_positive';
-      onRefresh?.();
-    }
-  }
-
-  function handleDelete() {
-    confirmModalConfig = {
-      title: t('dashboard.recentDetections.modals.deleteDetection', {
-        species: detection.commonName,
-      }),
-      message: t('dashboard.recentDetections.modals.deleteDetectionConfirm', {
-        species: detection.commonName,
-      }),
-      confirmLabel: t('common.delete'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF(`/api/v2/detections/${detection.id}`, {
-            method: 'DELETE',
-          });
-          onRefresh?.();
-        } catch (error) {
-          toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
-          logger.error('Error deleting detection:', error);
-        }
-      },
-    };
-    showConfirmModal = true;
   }
 
   // Placeholder function for thumbnail URL. buildAppUrl prepends the
@@ -341,7 +230,7 @@
                 d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
               />
             </svg>
-            <span class="sr-only">Image failed to load</span>
+            <span class="sr-only">{t('detections.row.imageFailedToLoad')}</span>
           </div>
         {:else if !thumbnailLoader.hasUrlFailed(getThumbnailUrl(detection.scientificName))}
           <!-- Only render img element if URL hasn't failed before -->
@@ -402,27 +291,14 @@
   <ActionMenu
     {detection}
     {isExcluded}
-    onMarkCorrect={handleMarkCorrect}
-    onMarkFalsePositive={handleMarkFalsePositive}
-    onReview={handleReview}
-    onToggleSpecies={handleToggleSpecies}
-    onToggleLock={handleToggleLock}
-    onDelete={handleDelete}
+    {onMarkCorrect}
+    {onMarkFalsePositive}
+    {onReview}
+    {onToggleSpecies}
+    {onToggleLock}
+    {onDelete}
   />
 </td>
-
-<!-- Modals -->
-<ConfirmModal
-  isOpen={showConfirmModal}
-  title={confirmModalConfig.title}
-  message={confirmModalConfig.message}
-  confirmLabel={confirmModalConfig.confirmLabel}
-  onClose={() => (showConfirmModal = false)}
-  onConfirm={async () => {
-    await confirmModalConfig.onConfirm();
-    showConfirmModal = false;
-  }}
-/>
 
 <style>
   /* Thumbnail wrapper - responsive width */

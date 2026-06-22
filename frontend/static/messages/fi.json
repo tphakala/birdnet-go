@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Näytä {species} tiedot",
       "play": "Toista",
-      "playAudio": "Toista ääni"
+      "playAudio": "Toista ääni",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Tallenne ja spektrogrammi",
@@ -4573,6 +4574,7 @@
       "spectrogramLoaded": "Spektrogrammi ladattu",
       "spectrogramLoadingAria": "Ladataan spektrogrammia",
       "spectrogramAlt": "Äänispektrogrammi",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Luodaan spektrogrammia",
       "generating": "Luodaan...",
       "waiting": "Waiting...",
