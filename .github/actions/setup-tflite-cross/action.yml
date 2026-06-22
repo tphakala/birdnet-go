@@ -51,7 +51,9 @@ runs:
         # bump. An explicit tflite-version input overrides the lookup.
         tflite="${TFLITE_VERSION_INPUT}"
         if [ -z "$tflite" ]; then
-          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
+          # tr also strips \r so a CRLF-checkout Taskfile does not leave a
+          # trailing carriage return that breaks the clone URL / curl downstream.
+          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"\r")
         fi
         if [ -z "$tflite" ]; then echo "::error::could not read TFLITE_VERSION from Taskfile.yml"; exit 1; fi
         echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
