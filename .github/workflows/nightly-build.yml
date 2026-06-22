@@ -56,7 +56,11 @@ jobs:
           # so create the symlinks that update-alternatives would normally manage
           sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc-posix /usr/bin/x86_64-w64-mingw32-gcc
           sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++-posix /usr/bin/x86_64-w64-mingw32-g++
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-13 /usr/bin/aarch64-linux-gnu-gcc
+          # Resolve the installed aarch64 gcc version dynamically so a future
+          # runner-image gcc bump does not break the symlink.
+          aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
+          if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
+          sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
 
       - name: Install Task
         uses: arduino/setup-task@v2
