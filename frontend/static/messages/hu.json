@@ -4561,6 +4561,7 @@
       "spectrogramAlt": "Hang spektrogram",
       "spectrogramGeneratingAria": "Spektrogram generálása",
       "generating": "Generálás...",
+      "waiting": "Waiting...",
       "queuePosition": "Sor: {position}",
       "loadError": "A hang betöltése sikertelen"
     },

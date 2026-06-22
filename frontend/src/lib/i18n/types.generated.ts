@@ -3328,6 +3328,7 @@ export type TranslationKey =
   | 'components.audio.spectrogramAlt'
   | 'components.audio.spectrogramGeneratingAria'
   | 'components.audio.generating'
+  | 'components.audio.waiting'
   | 'components.audio.queuePosition' // params: position
   | 'components.audio.loadError'
   | 'components.forms.numberField.adjustedToMinimum' // params: value

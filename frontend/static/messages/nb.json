@@ -4561,6 +4561,7 @@
       "spectrogramAlt": "Lydspektrogram",
       "spectrogramGeneratingAria": "Genererer spektrogram",
       "generating": "Genererer...",
+      "waiting": "Waiting...",
       "queuePosition": "Kø: {position}",
       "loadError": "Innlasting av lyd mislyktes"
     },

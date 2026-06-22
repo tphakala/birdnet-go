@@ -4561,6 +4561,7 @@
       "spectrogramAlt": "Zvukový spektrogram",
       "spectrogramGeneratingAria": "Generuje sa spektrogram",
       "generating": "Generuje sa...",
+      "waiting": "Waiting...",
       "queuePosition": "Poradie: {position}",
       "loadError": "Nepodarilo sa načítať zvuk"
     },

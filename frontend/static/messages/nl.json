@@ -4561,6 +4561,7 @@
       "spectrogramAlt": "Audiospectogram",
       "spectrogramGeneratingAria": "Spectrogram genereren",
       "generating": "Genereren...",
+      "waiting": "Waiting...",
       "queuePosition": "Wachtrij: {position}",
       "loadError": "Kan audio niet laden"
     },
