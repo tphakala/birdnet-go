@@ -31,6 +31,7 @@ func TestConfigFromSettings_AutoTLS(t *testing.T) {
 
 	assert.True(t, cfg.AutoTLS, "AutoTLS flag should be set")
 	assert.True(t, cfg.TLSEnabled, "TLSEnabled should be set")
+	assert.True(t, cfg.RedirectToHTTPS, "RedirectToHTTPS should default to true for AutoTLS")
 	assert.Equal(t, "8080", cfg.Port, "HTTP port preserved for ACME challenges")
 	assert.Equal(t, "8443", cfg.TLSPort, "TLS port should default to 8443")
 	assert.Equal(t, ":8443", cfg.TLSAddress(), "TLS address should use TLSPort")
@@ -98,9 +99,11 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 		slogger:  GetLogger(),
 	}
 
-	// Register cleanup before starting so shutdown runs even if assertions fail.
+	// Echo.Shutdown returns early (skipping Server.Shutdown) if TLSServer.Shutdown
+	// returns context.Canceled — which happens when ctx is already done. Use an
+	// independent context so both servers are fully shut down.
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:gocritic // t.Context() cancels on test return, preventing graceful shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // Echo.Shutdown skips Server.Shutdown if TLSServer.Shutdown returns context.Canceled
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
 		if s.httpRedirectServer != nil {
@@ -131,15 +134,16 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	assert.NotEqual(t, http.StatusNotFound, resp.StatusCode,
 		"ACME path should be handled by autocert, not return 404")
 
-	// Non-ACME GET should be served by Echo (RedirectToHTTPS is not set,
-	// so the fallback handler is the app itself, not a redirect).
+	// Non-ACME GET should redirect to HTTPS on the custom TLS port
+	// (RedirectToHTTPS defaults to true for AutoTLS).
 	resp, err = client.Get(httpBase + "/")
 	require.NoError(t, err)
 	_ = resp.Body.Close()
-	assert.NotEqual(t, http.StatusBadGateway, resp.StatusCode,
-		"HTTP listener should serve requests, not fail")
-	assert.Less(t, resp.StatusCode, 300,
-		"Non-ACME request should not redirect when RedirectToHTTPS is false")
+	assert.Equal(t, http.StatusMovedPermanently, resp.StatusCode,
+		"Non-ACME request should redirect to HTTPS")
+	location := resp.Header.Get("Location")
+	assert.Contains(t, location, ":"+tlsPort,
+		"Redirect should include custom TLS port")
 
 	// TLS listener should accept TCP connections (full TLS handshake won't
 	// complete without a real cert, but a successful TCP connect proves the

@@ -640,10 +640,22 @@ func (s *Server) startBlocking() error {
 
 		// Start HTTP server on the configured port for ACME HTTP-01 challenges.
 		// The fallback handler determines what happens to non-ACME traffic:
-		// nil = redirect to HTTPS, Echo instance = serve the app over HTTP.
+		// - RedirectToHTTPS=false: serve the app over plain HTTP
+		// - RedirectToHTTPS=true + port 443: nil lets autocert redirect (no port in URL)
+		// - RedirectToHTTPS=true + custom port: custom handler includes port in redirect
 		var httpFallback http.Handler
 		if !s.config.RedirectToHTTPS {
 			httpFallback = s.echo
+		} else if s.config.TLSPort != "443" {
+			tlsPort := s.config.TLSPort
+			httpFallback = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				host := r.Host
+				if h, _, err := net.SplitHostPort(host); err == nil {
+					host = h
+				}
+				target := "https://" + host + ":" + tlsPort + r.URL.RequestURI()
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+			})
 		}
 		s.httpRedirectServer = &http.Server{
 			Addr:         addr,

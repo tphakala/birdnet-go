@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -102,7 +103,10 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	case conf.TLSModeAutoTLS:
 		cfg.AutoTLS = true
 		cfg.TLSEnabled = true
-		cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+		cfg.RedirectToHTTPS = true
+		if viper.IsSet("security.redirecttohttps") {
+			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+		}
 		cfg.TLSPort = settings.Security.TLSPort
 		if cfg.TLSPort == "" {
 			cfg.TLSPort = "8443"
