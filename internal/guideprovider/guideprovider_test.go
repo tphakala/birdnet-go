@@ -165,6 +165,31 @@ func TestGuideCache_CloseRacesBackgroundSpawns(t *testing.T) {
 	}
 }
 
+// TestGuideCache_NilStoreGetFallsThroughToProvider verifies that a cache built
+// without a DB store does not panic on the DB tier: Get skips Tier 2 and serves
+// from the provider (Tier 3), populating the memory tier so a repeat call needs
+// no further fetch. Guards the nil-store dereference flagged at the c.store.Get
+// call in Get.
+func TestGuideCache_NilStoreGetFallsThroughToProvider(t *testing.T) {
+	t.Parallel()
+	prov := &fakeProvider{
+		name:   WikipediaProviderName,
+		result: &SpeciesGuide{CommonName: "Common Blackbird", Description: "A bird."},
+	}
+	c := newTestCache(t, nil, prov)
+
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, g)
+	assert.Equal(t, "Common Blackbird", g.CommonName)
+
+	// Second call is served from the memory tier — no extra provider fetch.
+	g2, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, g2)
+	assert.Equal(t, 1, prov.callCount())
+}
+
 func TestGuideCache_FetchAndMemoryHit(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()

@@ -403,25 +403,30 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 	}
 	c.metrics.RecordCacheMiss(tierMemory)
 
-	// Tier 2: DB.
-	providerName := c.resolveProviderName()
-	entry, err := c.store.Get(ctx, name, locale, providerName)
-	switch {
-	case err == nil && entry != nil:
-		g := entryToGuide(entry)
-		c.storeMemory(key, g)
-		c.metrics.RecordCacheHit(tierDB, entryQuality(g))
-		if c.isCacheEntryStale(g) {
-			c.triggerAsyncRefresh(name, locale)
+	// Tier 2: DB. Skipped when no store is wired — the memory and provider tiers
+	// still function, and guarding here (mirroring the nil-store checks in
+	// loadFromDB and saveGuide) prevents a nil dereference if a cache is ever
+	// constructed without a store. Production wiring always supplies one.
+	if c.store != nil {
+		providerName := c.resolveProviderName()
+		entry, err := c.store.Get(ctx, name, locale, providerName)
+		switch {
+		case err == nil && entry != nil:
+			g := entryToGuide(entry)
+			c.storeMemory(key, g)
+			c.metrics.RecordCacheHit(tierDB, entryQuality(g))
+			if c.isCacheEntryStale(g) {
+				c.triggerAsyncRefresh(name, locale)
+			}
+			return g, nil
+		case err != nil && !errors.Is(err, ErrCacheEntryNotFound):
+			// DB error (not a clean miss): fall through to a live fetch without
+			// recording a cache miss, so error and miss metrics stay distinct.
+			c.metrics.RecordDBError("read", "get")
+		default:
+			// Clean miss (no row): record and fall through to a live fetch.
+			c.metrics.RecordCacheMiss(tierDB)
 		}
-		return g, nil
-	case err != nil && !errors.Is(err, ErrCacheEntryNotFound):
-		// DB error (not a clean miss): fall through to a live fetch without
-		// recording a cache miss, so error and miss metrics stay distinct.
-		c.metrics.RecordDBError("read", "get")
-	default:
-		// Clean miss (no row): record and fall through to a live fetch.
-		c.metrics.RecordCacheMiss(tierDB)
 	}
 
 	// Tier 3: fetch from providers (singleflight collapses concurrent fetches).
