@@ -70,8 +70,11 @@
 
   function select(name: string): void {
     selected = name;
-    // Refetch on a prior error (retry); skip when cached or already loading.
-    if (guides[name] || status[name] === 'loading') return;
+    // Only fetch on first selection or to retry a prior transient error. Skip
+    // when ready, in flight, or 'notfound' — a 404 is a definitive negative
+    // result and re-selecting must not re-hit the rate-limited guide endpoint.
+    const s = status[name];
+    if (s === 'ready' || s === 'loading' || s === 'notfound') return;
     void fetchGuide(name);
   }
 
