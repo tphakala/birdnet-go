@@ -1457,6 +1457,18 @@ export type TranslationKey =
   | 'analytics.advanced.charts.dawnOnset.tooltipOnsetAt'
   | 'analytics.advanced.charts.dawnOnset.tooltipCount'
   | 'analytics.advanced.charts.dawnOnset.summary' // params: days, plotted
+  | 'analytics.advanced.charts.nocturnal.title'
+  | 'analytics.advanced.charts.nocturnal.description'
+  | 'analytics.advanced.charts.nocturnal.noData'
+  | 'analytics.advanced.charts.nocturnal.noDataHint'
+  | 'analytics.advanced.charts.nocturnal.ariaLabel'
+  | 'analytics.advanced.charts.nocturnal.axisHour'
+  | 'analytics.advanced.charts.nocturnal.tooltipHour' // params: start, end
+  | 'analytics.advanced.charts.nocturnal.tooltipCount'
+  | 'analytics.advanced.charts.nocturnal.summary' // params: total, peak
+  | 'analytics.advanced.charts.nocturnal.legendDay'
+  | 'analytics.advanced.charts.nocturnal.legendTwilight'
+  | 'analytics.advanced.charts.nocturnal.legendNight'
   | 'analytics.advanced.charts.tooltips.date'
   | 'analytics.advanced.charts.tooltips.percentage'
   | 'analytics.advanced.charts.tooltips.detections'
@@ -3980,6 +3992,11 @@ export type TranslationParams = {
     days: string | number;
     plotted: string | number;
   };
+  'analytics.advanced.charts.nocturnal.tooltipHour': {
+    start: string | number;
+    end: string | number;
+  };
+  'analytics.advanced.charts.nocturnal.summary': { total: string | number; peak: string | number };
   'settings.notFound.message': { section: string | number };
   'settings.main.sections.falsePositiveFilter.detectionCount': {
     count: string | number;
