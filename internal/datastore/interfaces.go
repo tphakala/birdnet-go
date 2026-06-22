@@ -212,6 +212,11 @@ type Interface interface {
 	// the species accumulation curve in the Biodiversity tab; "first seen" is bounded to the selected
 	// window, not lifetime.
 	GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]SpeciesAccumulationPoint, error)
+	// GetSpeciesPhenology returns the arrival/departure residency span (first and last
+	// false-positive-excluded detection, plus the in-range detection count) for the top `limit` species
+	// by volume over the date range. Powers the arrival/departure phenology chart in the Biodiversity
+	// tab; spans are bounded to the selected window, not lifetime.
+	GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesPhenologyPoint, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods

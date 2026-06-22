@@ -421,3 +421,42 @@ func buildSpeciesAccumulation(firstSeen []repository.SpeciesFirstSeen, loc *time
 	}
 	return result, nil
 }
+
+// buildSpeciesPhenology turns the per-species residency rows (Unix MIN/MAX detection timestamps plus
+// the detection count) into the wire shape for the arrival/departure phenology chart: first and last
+// detection formatted as station-local YYYY-MM-DD dates. Timestamps are projected into loc (nil ->
+// UTC) with a single time.Unix(...).In(loc).Format call per row, so there is no date-range
+// enumeration loop and therefore no DST midnight-skip pitfall.
+//
+// The input rows are top-N by volume (the query's ORDER BY count DESC); this re-sorts the returned
+// rows by arrival (FirstSeen asc, then LastSeen asc, then ScientificName asc) so the Gantt reads
+// top-to-bottom in arrival order, deterministically. The result is always non-nil.
+func buildSpeciesPhenology(rows []repository.SpeciesPhenology, loc *time.Location) []datastore.SpeciesPhenologyPoint {
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	result := make([]datastore.SpeciesPhenologyPoint, 0, len(rows))
+	for i := range rows {
+		first := time.Unix(rows[i].FirstDetected, 0).In(loc).Format(time.DateOnly)
+		last := time.Unix(rows[i].LastDetected, 0).In(loc).Format(time.DateOnly)
+		result = append(result, datastore.SpeciesPhenologyPoint{
+			ScientificName: rows[i].ScientificName,
+			FirstSeen:      first,
+			LastSeen:       last,
+			Count:          rows[i].Count,
+		})
+	}
+
+	sort.SliceStable(result, func(a, b int) bool {
+		if result[a].FirstSeen != result[b].FirstSeen {
+			return result[a].FirstSeen < result[b].FirstSeen
+		}
+		if result[a].LastSeen != result[b].LastSeen {
+			return result[a].LastSeen < result[b].LastSeen
+		}
+		return result[a].ScientificName < result[b].ScientificName
+	})
+
+	return result
+}

@@ -155,6 +155,23 @@ type SpeciesFirstSeen struct {
 	DetectionID uint
 }
 
+// SpeciesPhenology represents a species' residency span within a time period: the first and last
+// (false-positive-excluded) detection timestamps plus the in-period detection count. Multi-model
+// labels are merged by scientific name in the query, so there is no LabelID here.
+type SpeciesPhenology struct {
+	// ScientificName is the species scientific name.
+	ScientificName string
+
+	// FirstDetected is the Unix timestamp of the first detection in the period.
+	FirstDetected int64
+
+	// LastDetected is the Unix timestamp of the last detection in the period.
+	LastDetected int64
+
+	// Count is the number of (false-positive-excluded) detections in the period.
+	Count int
+}
+
 // SpeciesSummaryData contains summary statistics for a species.
 type SpeciesSummaryData struct {
 	// LabelID is the label identifier.

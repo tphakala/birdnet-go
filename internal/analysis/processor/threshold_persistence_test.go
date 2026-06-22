@@ -176,6 +176,9 @@ func (m *MockDatastore) GetConfidenceHistogram(context.Context, string, string, 
 func (m *MockDatastore) GetSpeciesAccumulation(context.Context, string, string) ([]datastore.SpeciesAccumulationPoint, error) {
 	return []datastore.SpeciesAccumulationPoint{}, nil
 }
+func (m *MockDatastore) GetSpeciesPhenology(context.Context, string, string, int) ([]datastore.SpeciesPhenologyPoint, error) {
+	return []datastore.SpeciesPhenologyPoint{}, nil
+}
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return make([]datastore.DetectionRecord, 0), 0, nil
 }
