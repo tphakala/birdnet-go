@@ -218,11 +218,13 @@ func TestBasicQueueFunctionality(t *testing.T) {
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
-	// Wait for the job to be processed
-	// The job queue processes jobs on a 1-second ticker, so we need to wait at least that long
-	ctx, cancel := context.WithTimeout(t.Context(), 1200*time.Millisecond)
-	defer cancel()
-	<-ctx.Done()
+	// Wait for the job to be processed. The processing ticker is 10ms (see
+	// setupTestQueue), but SuccessfulJobs is incremented in handleJobSuccess
+	// after the action returns, so poll the stats instead of sleeping a fixed
+	// amount that could be missed on a slow or coarse-timer CI runner.
+	require.Eventually(t, func() bool {
+		return queue.GetStats().SuccessfulJobs == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "job should be processed successfully")
 
 	// Check that the action was executed
 	assert.Equal(t, 1, action.GetExecuteCount(), "Action should have been executed once")
@@ -304,11 +306,15 @@ func TestMultipleJobs(t *testing.T) {
 		require.Fail(t, "Timed out waiting for jobs to complete")
 	}
 
-	// Wait a bit more to ensure stats are updated
-	time.Sleep(50 * time.Millisecond)
-
-	// Check that all jobs were completed
+	// completedJobs is incremented before wg.Done() in each action, so the done
+	// channel above guarantees it has reached numJobs. SuccessfulJobs, however,
+	// is incremented in handleJobSuccess after the action returns, so poll the
+	// queue stats instead of sleeping a fixed amount.
 	assert.Equal(t, int32(numJobs), completedJobs.Load(), "All jobs should have been completed")
+
+	require.Eventually(t, func() bool {
+		return queue.GetStats().SuccessfulJobs == numJobs
+	}, DefaultTestTimeout, 10*time.Millisecond, "all jobs should be recorded as successful")
 
 	// Check job stats
 	stats := queue.GetStats()
@@ -403,6 +409,13 @@ func TestRetryProcess(t *testing.T) {
 			require.Fail(t, "Timed out waiting for job to succeed", "Current attempt count: %d", attemptCount.Load())
 		}
 	}
+	// The done channel is closed inside the action, before handleJobSuccess
+	// records the success under the queue lock. Poll until the success is
+	// recorded rather than asserting immediately, which raced on loaded CI.
+	require.Eventually(t, func() bool {
+		return queue.GetStats().SuccessfulJobs == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "job should be recorded as successful")
+
 	// Check that the action was executed the expected number of times
 	expectedExecutions := failCount + 1 // Initial attempt + retries
 	actualExecutions := action.GetExecuteCount()
@@ -459,15 +472,15 @@ func TestRetryExhaustion(t *testing.T) {
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
-	// Process the job initially and for each retry
-	for i := 0; i <= maxRetries; i++ {
+	// Drive the job through its retries until it exhausts them and is recorded
+	// as failed. The 10ms processing ticker also advances retries; nudging with
+	// ProcessImmediately keeps the test fast. handleJobFailure records the
+	// terminal failure under the lock after the action returns, so poll for it
+	// rather than sleeping a fixed number of cycles that can be missed on CI.
+	require.Eventually(t, func() bool {
 		queue.ProcessImmediately(ctx)
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	// Process one more time to ensure all retries are completed
-	queue.ProcessImmediately(ctx)
-	time.Sleep(10 * time.Millisecond)
+		return queue.GetStats().FailedJobs == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "job should fail after exhausting retries")
 
 	// Check that the action was executed the expected number of times
 	// The job is executed once initially and then retried maxRetries times
@@ -562,24 +575,18 @@ func TestRetryBackoff(t *testing.T) {
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
-	// Process the job initially and for each retry
-	for i := 0; i <= maxRetries; i++ {
+	// Drive the job through its retries. The action records each execution time
+	// on the executionTimes channel; poll attemptCount until every attempt has
+	// run rather than sleeping a fixed amount per retry, which raced on slow CI
+	// when a backoff deadline had not elapsed by the time the fixed sleep ended.
+	// The backoff delays still happen (NextRetryAt gates processDueJobs); this
+	// test asserts on the execution count and final stats, not the exact gaps.
+	expectedExecutions := maxRetries + 1 // Initial attempt + retries
+	require.Eventually(t, func() bool {
 		queue.ProcessImmediately(ctx)
-
-		// Wait for appropriate time based on the retry delay
-		switch i {
-		case 0:
-			time.Sleep(30 * time.Millisecond) // A bit more than initialDelay
-		case 1:
-			time.Sleep(60 * time.Millisecond) // A bit more than initialDelay*multiplier
-		default:
-			time.Sleep(30 * time.Millisecond)
-		}
-	}
-
-	// Process one more time to ensure all retries are completed
-	queue.ProcessImmediately(ctx)
-	time.Sleep(30 * time.Millisecond)
+		return int(attemptCount.Load()) >= expectedExecutions
+	}, DefaultTestTimeout, 5*time.Millisecond,
+		"job should be executed for the initial attempt plus every retry")
 
 	// Stop the queue to ensure all goroutines complete
 	require.NoError(t, queue.Stop(), "Failed to stop queue")
@@ -592,11 +599,8 @@ func TestRetryBackoff(t *testing.T) {
 		times = append(times, execTime)
 	}
 
-	// Check that we have the expected number of execution times
-	// The job is executed once initially and then retried maxRetries times
-	// But the job queue implementation counts attempts starting from 1, not 0
-	// So the actual number of executions is maxRetries + 1
-	expectedExecutions := maxRetries + 1 // Initial attempt + retries
+	// Check that we have the expected number of execution times (already
+	// computed above as the initial attempt plus every retry).
 	assert.Len(t, times, expectedExecutions, "Should have %d execution times", expectedExecutions)
 	t.Logf("TestRetryBackoff: Recorded %d execution times", len(times))
 
@@ -643,16 +647,6 @@ func TestRetryBackoff(t *testing.T) {
 		// We're manually controlling the retry timing, so we can't make direct assertions about the delays
 		// Instead, just log them for information
 		t.Logf("Manual retry delays: %v", delays)
-	}
-}
-
-// Helper function to check if a channel is closed
-func isClosed(ch <-chan time.Time) bool {
-	select {
-	case _, ok := <-ch:
-		return !ok
-	default:
-		return false
 	}
 }
 
@@ -709,8 +703,14 @@ func TestJobExpiration(t *testing.T) {
 
 	waitForChannel(t, done, DefaultTestTimeout, "Timed out waiting for jobs to complete")
 
-	// Wait for the cleanup to happen (cleanup happens on the 1-second ticker)
-	time.Sleep(3 * time.Second)
+	// Wait for every job to finish and the cleanup tick (10ms ticker) to sweep
+	// the terminal jobs out of the active queue. StaleJobs reaching 5 is the
+	// deterministic signal that all five jobs are done and cleaned, replacing a
+	// fixed multi-second sleep that could be missed under CI load.
+	require.Eventually(t, func() bool {
+		stats := queue.GetStats()
+		return stats.StaleJobs == 5 && stats.SuccessfulJobs == 3 && stats.FailedJobs == 2
+	}, DefaultTestTimeout, 10*time.Millisecond, "all jobs should finish and be cleaned up")
 
 	// Check job stats
 	stats := queue.GetStats()
@@ -728,11 +728,10 @@ func TestJobExpiration(t *testing.T) {
 	_, err := queue.Enqueue(t.Context(), action, data, config)
 	require.NoError(t, err, "Failed to enqueue job")
 
-	// Wait for the new job to be processed
-	time.Sleep(2 * time.Second)
-
-	// Check that the new job was processed
-	assert.Equal(t, 1, action.GetExecuteCount(), "New job should have been executed")
+	// Wait for the new job to be processed instead of sleeping a fixed amount.
+	require.Eventually(t, func() bool {
+		return action.GetExecuteCount() == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "new job should have been executed")
 }
 
 // TestQueueOverflow tests that jobs are rejected when the queue is full
@@ -752,8 +751,6 @@ func TestQueueOverflow(t *testing.T) {
 	jobStarted := make(chan struct{})
 	// Create a channel to control when the blocking job should complete
 	jobBlock := make(chan struct{})
-	// Create a channel to signal when we've successfully filled the queue
-	queueFilled := make(chan struct{})
 
 	// 1. Create a blocking job that will signal when it starts and wait for our signal to complete
 	blockingAction := &MockAction{
@@ -795,31 +792,44 @@ func TestQueueOverflow(t *testing.T) {
 	}
 
 	t.Log("Queue should now be full")
-	close(queueFilled)
 
 	// Try to enqueue one more job, which should fail with ErrQueueFull
 	_, err = queue.Enqueue(t.Context(), regularAction, &TestData{ID: "overflow-job"}, RetryConfig{Enabled: false})
 	require.ErrorIs(t, err, ErrQueueFull, "Enqueue should fail with ErrQueueFull when queue is full")
 
-	// Now unblock the first job to make room
+	// Now unblock the first job so it can complete and free its slot.
 	close(jobBlock)
 
-	// Process jobs again to complete the blocked job
-	queue.ProcessImmediately(ctx)
-	time.Sleep(20 * time.Millisecond) // Allow time for job to complete
+	// The blocking job finishes asynchronously: its goroutine returns, then
+	// handleJobSuccess marks it Completed under the queue lock, and only a
+	// later cleanupStaleJobs run removes it from the active slice that gates
+	// maxJobs. A single ProcessImmediately plus a fixed sleep races that window
+	// (the root cause of the windows-amd64 CI flake), so poll instead: each
+	// iteration runs cleanup via ProcessImmediately until a slot actually
+	// frees. PendingJobs is len(q.jobs), the exact value Enqueue checks against
+	// maxJobs, and no other goroutine enqueues here, so once it drops below
+	// capacity the following Enqueue cannot race back to full.
+	require.Eventually(t, func() bool {
+		queue.ProcessImmediately(ctx)
+		return queue.GetStats().PendingJobs < queueCapacity
+	}, DefaultTestTimeout, 10*time.Millisecond,
+		"blocking job should complete and free a queue slot")
 
-	// Now we should be able to enqueue a new job
+	// Now we should be able to enqueue a new job.
 	_, err = queue.Enqueue(t.Context(), regularAction, &TestData{ID: "after-freeing-space"}, RetryConfig{Enabled: false})
 	require.NoError(t, err, "Should be able to enqueue a job after making room")
 
-	// Process remaining jobs to clean up
-	for range queueCapacity {
+	// Drive the remaining jobs to completion. Poll the queue-wide counters
+	// instead of sleeping a fixed amount: SuccessfulJobs is incremented in
+	// handleJobSuccess under the lock, and ProcessImmediately's cleanupStaleJobs
+	// drains the active slice (PendingJobs) once every job reaches a terminal
+	// state.
+	require.Eventually(t, func() bool {
 		queue.ProcessImmediately(ctx)
-		time.Sleep(20 * time.Millisecond)
-	}
-
-	// Force cleanup of stale jobs to ensure accurate stats
-	queue.cleanupStaleJobs(ctx)
+		stats := queue.GetStats()
+		return stats.SuccessfulJobs == 4 && stats.PendingJobs == 0
+	}, DefaultTestTimeout, 10*time.Millisecond,
+		"all four jobs should complete successfully and the active queue should drain")
 
 	// The active queue is now empty because cleanupStaleJobs discards
 	// completed and failed jobs. The queue-wide counters still reflect every
@@ -927,11 +937,16 @@ func TestDropOldestJob(t *testing.T) {
 	// Complete the blocking job
 	close(jobBlock)
 
-	// Process all remaining jobs
-	for range queueCapacity {
+	// Drive the remaining jobs to completion. SuccessfulJobs is incremented in
+	// handleJobSuccess under the lock after each action returns, so poll the
+	// counters instead of a fixed processing loop plus sleeps that can be missed
+	// under CI load (same flake class as TestQueueOverflow).
+	require.Eventually(t, func() bool {
 		queue.ProcessImmediately(ctx)
-		time.Sleep(20 * time.Millisecond)
-	}
+		s := queue.GetStats()
+		return s.TotalJobs == 4 && s.SuccessfulJobs == 3
+	}, DefaultTestTimeout, 10*time.Millisecond,
+		"three jobs should complete successfully and one should stay dropped")
 
 	// Verify final stats
 	stats = queue.GetStats()
@@ -979,8 +994,12 @@ func TestHangingJobTimeout(t *testing.T) {
 	// Wait for the job to be enqueued
 	waitForChannel(t, done, ShortTestTimeout, "Timed out waiting for job to be enqueued")
 
-	// Wait for the job to be picked up for processing
-	time.Sleep(2 * time.Second)
+	// Wait for the processing ticker to pick the job up and start it. The action
+	// increments its execute count before hanging, so poll for that instead of
+	// sleeping a fixed 2s that can be missed under CI load.
+	require.Eventually(t, func() bool {
+		return action.GetExecuteCount() == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "hanging job should be picked up and started")
 
 	// The job should be running at this point
 	// We can't directly check the job status, but we can check that the action was executed
@@ -994,35 +1013,48 @@ func TestHangingJobTimeout(t *testing.T) {
 }
 
 // TestContextCancellation tests that jobs are properly cancelled when the context is cancelled
+// cancelAwareAction is an Action whose Execute blocks until its execution
+// context is cancelled, then records and returns the cancellation error. Unlike
+// MockAction (whose ExecuteFunc callback does not receive a context), it lets a
+// test assert that stopping the queue actually propagates cancellation into the
+// running job, rather than only that executeJobWithTimeout's own select unblocks.
+type cancelAwareAction struct {
+	startOnce sync.Once
+	started   chan struct{}
+	result    chan error
+}
+
+func (a *cancelAwareAction) Execute(ctx context.Context, _ any) error {
+	// Guard the close with sync.Once and use a non-blocking send so a second
+	// execution (e.g. if a future test enables retries for this action) cannot
+	// panic on an already-closed channel or block on the full result buffer.
+	a.startOnce.Do(func() { close(a.started) })
+	<-ctx.Done()
+	err := ctx.Err()
+	select {
+	case a.result <- err:
+	default:
+	}
+	return err
+}
+
+func (a *cancelAwareAction) GetDescription() string { return "Cancel Aware Action" }
+
+// TestContextCancellation tests that stopping the queue cancels the execution
+// context of in-progress jobs and that the running action actually observes the
+// cancellation (not just that StopWithTimeout returns).
 func TestContextCancellation(t *testing.T) {
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, false)
+	defer teardownTestQueue(t, queue)
 
-	// Create a channel to track job execution
-	executionStarted := make(chan struct{})
-
-	// Create a mock action that blocks until cancelled
-	action := &MockAction{
-		ExecuteFunc: func(data any) error {
-			// Signal that execution has started
-			close(executionStarted)
-
-			// Create a channel that will never be closed
-			neverClosed := make(chan struct{})
-
-			// Wait for either the context to be cancelled or the channel to be closed
-			select {
-			case <-neverClosed:
-				return nil
-			case <-time.After(10 * time.Second):
-				// This should never happen, but we'll add a timeout just in case
-				return errors.New("timed out waiting for cancellation")
-			}
-		},
+	// The action blocks on its execution context and reports the cancellation
+	// error, so the test can prove the job saw ctx.Done() rather than being
+	// abandoned by the queue.
+	action := &cancelAwareAction{
+		started: make(chan struct{}),
+		result:  make(chan error, 1),
 	}
-
-	// Create test data
-	data := &TestData{ID: "cancellation-test"}
 
 	// Create retry config
 	config := RetryConfig{
@@ -1034,25 +1066,27 @@ func TestContextCancellation(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(t.Context(), action, data, config)
+	job, err := queue.Enqueue(t.Context(), action, &TestData{ID: "cancellation-test"}, config)
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
-	// Wait for the job to be picked up for processing
-	time.Sleep(2 * time.Second)
+	// Wait for the job to start executing. The action closes started at the top
+	// of Execute, so this is a precise signal and no fixed pre-sleep is needed.
+	waitForChannel(t, action.started, DefaultTestTimeout, "Timed out waiting for job execution to start")
 
-	// Wait for the job to start executing
-	waitForChannel(t, executionStarted, 3*time.Second, "Timed out waiting for job execution to start")
+	// Stop the queue. This cancels the execution context of running jobs, which
+	// the action observes via <-ctx.Done(). The stop itself should succeed
+	// within its timeout.
+	require.NoError(t, queue.StopWithTimeout(500*time.Millisecond), "Queue stop should succeed with timeout")
 
-	// Stop the queue, which should cancel all running jobs
-	err = queue.StopWithTimeout(500 * time.Millisecond)
-
-	// The stop should succeed even though the job is still running
-	// because we're using a timeout
-	require.NoError(t, err, "Queue stop should succeed with timeout")
-
-	// Check that the action was executed
-	assert.Equal(t, 1, action.GetExecuteCount(), "Action should have been executed once")
+	// The action must have observed context cancellation rather than the queue
+	// merely abandoning it. Receiving on result also proves the action ran once.
+	select {
+	case actionErr := <-action.result:
+		require.ErrorIs(t, actionErr, context.Canceled, "running action should observe context cancellation")
+	case <-time.After(DefaultTestTimeout):
+		require.Fail(t, "running action did not observe context cancellation")
+	}
 }
 
 // TestStressTest performs a stress test on the job queue with many concurrent jobs
@@ -1191,12 +1225,19 @@ func TestStressTest(t *testing.T) {
 			"Completed: %d, Failed: %d, Total: %d", completedJobs.Load(), failedJobs.Load(), numJobs)
 	}
 
-	// Wait a bit more to ensure stats are updated
-	time.Sleep(100 * time.Millisecond)
-
-	// Check that the expected number of jobs completed and failed
+	// The done channel guarantees every action finished (completedJobs +
+	// failedJobs == numJobs). The queue-level SuccessfulJobs/FailedJobs counters
+	// are updated in handleJobSuccess/handleJobFailure after each action returns,
+	// so poll until they account for every job instead of sleeping a fixed
+	// amount.
 	assert.Equal(t, int32(numJobs), completedJobs.Load()+failedJobs.Load(),
 		"All jobs should have been completed or failed")
+
+	require.Eventually(t, func() bool {
+		stats := queue.GetStats()
+		return stats.SuccessfulJobs+stats.FailedJobs == numJobs
+	}, DefaultTestTimeout, 10*time.Millisecond,
+		"all jobs should be recorded as successful or failed")
 
 	// Check job stats
 	stats := queue.GetStats()
@@ -1244,19 +1285,20 @@ func TestConcurrentJobSubmission(t *testing.T) {
 
 	wg.Wait()
 
-	// Process all jobs
-	for range 20 {
+	// Drive and wait for every job to be processed. SuccessfulJobs is updated
+	// under the queue lock after each action returns; poll until all jobs are
+	// accounted for instead of a fixed processing loop plus a 2s sleep that can
+	// be too short for 1000 jobs on a loaded CI runner.
+	totalJobs := numGoroutines * jobsPerGoroutine
+	require.Eventually(t, func() bool {
 		queue.ProcessImmediately(ctx)
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	// Wait for jobs to complete
-	time.Sleep(2 * time.Second)
+		return queue.GetStats().SuccessfulJobs == totalJobs
+	}, LongTestTimeout, 20*time.Millisecond, "all submitted jobs should be processed successfully")
 
 	// Verify all jobs were processed
 	stats := queue.GetStats()
-	assert.Equal(t, numGoroutines*jobsPerGoroutine, stats.TotalJobs, "All jobs should have been enqueued")
-	assert.Equal(t, numGoroutines*jobsPerGoroutine, stats.SuccessfulJobs, "All jobs should have been successful")
+	assert.Equal(t, totalJobs, stats.TotalJobs, "All jobs should have been enqueued")
+	assert.Equal(t, totalJobs, stats.SuccessfulJobs, "All jobs should have been successful")
 }
 
 // TestRecoveryFromPanic tests that the job queue can recover from panics in job execution
@@ -1289,14 +1331,15 @@ func TestRecoveryFromPanic(t *testing.T) {
 	_, err = queue.Enqueue(t.Context(), normalAction, &TestData{ID: "normal-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
-	// Process the jobs
-	for range 5 {
+	// Drive both jobs and wait until each reaches a terminal state. The panic is
+	// converted to a job failure in handleJobFailure and the normal job's
+	// success in handleJobSuccess, both after the action returns, so poll the
+	// counters instead of sleeping a fixed amount.
+	require.Eventually(t, func() bool {
 		queue.ProcessImmediately(ctx)
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	// Wait for jobs to complete
-	time.Sleep(500 * time.Millisecond)
+		stats := queue.GetStats()
+		return stats.SuccessfulJobs == 1 && stats.FailedJobs == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "panic job should fail and normal job should succeed")
 
 	// Verify the normal job was still processed despite the panic
 	assert.Equal(t, 1, normalAction.GetExecuteCount(), "Normal job should have been executed")
@@ -1345,10 +1388,10 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 		shutdownErr <- queue.StopWithTimeout(2 * time.Second)
 	}()
 
-	// Wait a moment to ensure shutdown has started
-	time.Sleep(200 * time.Millisecond)
-
-	// Let the job complete
+	// Let the job complete. StopWithTimeout is already in flight above and will
+	// not return until this in-progress job finishes (or its context is
+	// cancelled during shutdown), so releasing the job here exercises the
+	// shutdown-overlapping-an-in-progress-job path without a fixed sleep.
 	close(jobCompleted)
 
 	// Check if shutdown completed without error
@@ -1493,8 +1536,12 @@ func TestLongRunningJobs(t *testing.T) {
 	// Process the long job to start it
 	queue.ProcessImmediately(ctx)
 
-	// Give a small delay to ensure the long job has started
-	time.Sleep(100 * time.Millisecond)
+	// Wait until the long job is actually running before enqueueing the short
+	// jobs, so the test exercises short jobs progressing alongside a long one.
+	// The action increments its count when it starts, before its 2s delay.
+	require.Eventually(t, func() bool {
+		return longAction.GetExecuteCount() == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "long job should start running")
 
 	// Enqueue the short jobs
 	for i, action := range shortActions {
@@ -1502,14 +1549,14 @@ func TestLongRunningJobs(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Process the short jobs
-	for range 5 {
+	// Drive and wait for every job (the long one plus the five short ones) to
+	// complete. The long action sleeps 2s; poll the success counter until all
+	// six are done instead of sleeping a fixed 2.5s that can be too short under
+	// CI load.
+	require.Eventually(t, func() bool {
 		queue.ProcessImmediately(ctx)
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	// Wait for all jobs to complete
-	time.Sleep(2500 * time.Millisecond)
+		return queue.GetStats().SuccessfulJobs == 6
+	}, LongTestTimeout, 20*time.Millisecond, "all six jobs should complete successfully")
 
 	// Verify all jobs were executed
 	assert.Equal(t, 1, longAction.GetExecuteCount(), "Long job should have been executed once")
@@ -1574,13 +1621,17 @@ func TestJobTypeStatistics(t *testing.T) {
 	_, err := queue.Enqueue(t.Context(), successAction, &TestData{ID: "success-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
-	// Process the success job
-	queue.ProcessImmediately(ctx)
-	time.Sleep(50 * time.Millisecond)
-
-	// Check stats after success job
-	stats := queue.GetStats()
+	// Process the success job and poll until its success is recorded (the stat
+	// is updated in handleJobSuccess after the action returns).
 	successType := fmt.Sprintf("%T", successAction)
+	require.Eventually(t, func() bool {
+		queue.ProcessImmediately(ctx)
+		return queue.GetStats().ActionStats[successType].Successful == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "success job should be recorded as successful")
+
+	// Check stats after success job. Attempted counts one Enqueue plus one
+	// execution.
+	stats := queue.GetStats()
 	assert.Equal(t, 2, stats.ActionStats[successType].Attempted, "Success action should have 2 attempts")
 	assert.Equal(t, 1, stats.ActionStats[successType].Successful, "Success action should have 1 success")
 	assert.Equal(t, "Success Action", stats.ActionStats[successType].Description, "Description should match")
@@ -1589,13 +1640,17 @@ func TestJobTypeStatistics(t *testing.T) {
 	_, err = queue.Enqueue(t.Context(), failAction, &TestData{ID: "fail-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
-	// Process the fail job
-	queue.ProcessImmediately(ctx)
-	time.Sleep(50 * time.Millisecond)
-
-	// Check stats after fail job
-	stats = queue.GetStats()
+	// Process the fail job and poll until its failure is recorded (the error
+	// message and timestamps are set in handleJobFailure after the action
+	// returns).
 	failType := fmt.Sprintf("%T", failAction)
+	require.Eventually(t, func() bool {
+		queue.ProcessImmediately(ctx)
+		return queue.GetStats().ActionStats[failType].LastErrorMessage != ""
+	}, DefaultTestTimeout, 10*time.Millisecond, "fail job failure should be recorded")
+
+	// Check stats after fail job.
+	stats = queue.GetStats()
 	assert.Equal(t, 2, stats.ActionStats[failType].Attempted, "Fail action should have 2 attempts")
 	assert.Equal(t, 0, stats.ActionStats[failType].Successful, "Fail action should have 0 success")
 	assert.Equal(t, "Fail Action", stats.ActionStats[failType].Description, "Description should match")
@@ -1613,34 +1668,30 @@ func TestJobTypeStatistics(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Process the retry job (first attempt - will fail)
-	queue.ProcessImmediately(ctx)
-	time.Sleep(50 * time.Millisecond)
-
-	// Check stats after first attempt of retry job
-	stats = queue.GetStats()
+	// Process the retry job. It fails on the first attempt and succeeds on the
+	// retry. Drive it with ProcessImmediately and poll until the success is
+	// recorded for this action type, rather than asserting transient state after
+	// fixed sleeps (the retry runs on the 10ms ticker, so the old "first
+	// attempt" checkpoint raced the retry and flaked under CI load).
 	retryType := fmt.Sprintf("%T", retryAction)
-	assert.Equal(t, 3, stats.ActionStats[retryType].Attempted, "Retry action should have 3 attempts")
-	assert.LessOrEqual(t, stats.ActionStats[retryType].Successful, 1, "Retry action should have at most 1 success")
-	assert.Equal(t, 0, stats.ActionStats[retryType].Failed, "Retry action should have 0 failure")
-	assert.Equal(t, 1, stats.ActionStats[retryType].Retried, "Retry action should have 1 retry")
-	assert.Equal(t, "Retry Action", stats.ActionStats[retryType].Description, "Description should match")
-	// Skip error message and timestamp checks as they may be inconsistent due to timing
-	// assert.NotEmpty(t, stats.ActionStats[retryType].LastErrorMessage, "Error message should be recorded")
-	// assert.False(t, stats.ActionStats[retryType].LastFailedTime.IsZero(), "Last failed time should be set")
-	// assert.False(t, stats.ActionStats[retryType].LastExecutionTime.IsZero(), "Last execution time should be set")
+	require.Eventually(t, func() bool {
+		queue.ProcessImmediately(ctx)
+		s := queue.GetStats()
+		// Also require the active queue to drain so the final PendingJobs == 0 /
+		// QueueUtilization == 0 assertions below are taken against a swept queue
+		// (the completed retry job lingers in q.jobs until a cleanup tick).
+		return s.ActionStats[retryType].Successful == 1 && s.PendingJobs == 0
+	}, DefaultTestTimeout, 10*time.Millisecond, "retry job should succeed and the active queue should drain")
 
-	// Wait for retry delay and process again
-	time.Sleep(20 * time.Millisecond)
-	queue.ProcessImmediately(ctx)
-	time.Sleep(50 * time.Millisecond)
-
-	// Check stats after second attempt of retry job (should succeed)
+	// Check stats after the retry job has succeeded. Attempted counts one
+	// Enqueue plus two executions (initial + retry); Retried counts the single
+	// retry execution.
 	stats = queue.GetStats()
-	assert.Equal(t, 3, stats.ActionStats[retryType].Attempted, "Retry action should still have 3 attempts")
+	assert.Equal(t, 3, stats.ActionStats[retryType].Attempted, "Retry action should have 3 attempts")
 	assert.Equal(t, 1, stats.ActionStats[retryType].Successful, "Retry action should have 1 success")
 	assert.Equal(t, 0, stats.ActionStats[retryType].Failed, "Retry action should have 0 failure")
 	assert.Equal(t, 1, stats.ActionStats[retryType].Retried, "Retry action should have 1 retry")
+	assert.Equal(t, "Retry Action", stats.ActionStats[retryType].Description, "Description should match")
 	assert.False(t, stats.ActionStats[retryType].LastSuccessfulTime.IsZero(), "Last successful time should be set")
 	// Windows' coarse monotonic clock (~15ms) can measure a fast action's
 	// execution as exactly 0, so per-action duration stats are not reliably
@@ -1865,17 +1916,20 @@ func TestStatsToJSON(t *testing.T) {
 		},
 	}
 
-	// Enqueue and process the success job
+	// Enqueue the success and fail jobs
 	_, err := queue.Enqueue(t.Context(), successAction, &TestData{ID: "json-success"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
-	queue.ProcessImmediately(ctx)
-	time.Sleep(50 * time.Millisecond)
-
-	// Enqueue and process the fail job
 	_, err = queue.Enqueue(t.Context(), failAction, &TestData{ID: "json-fail"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
-	queue.ProcessImmediately(ctx)
-	time.Sleep(50 * time.Millisecond)
+
+	// Drive both jobs to a terminal state and wait until the queue records the
+	// success and the failure (each recorded after the action returns) before
+	// snapshotting stats for JSON serialization.
+	require.Eventually(t, func() bool {
+		queue.ProcessImmediately(ctx)
+		stats := queue.GetStats()
+		return stats.SuccessfulJobs == 1 && stats.FailedJobs == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "both jobs should reach a terminal state")
 
 	// Get stats and convert to JSON
 	stats := queue.GetStats()
