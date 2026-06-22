@@ -1019,15 +1019,22 @@ func TestHangingJobTimeout(t *testing.T) {
 // test assert that stopping the queue actually propagates cancellation into the
 // running job, rather than only that executeJobWithTimeout's own select unblocks.
 type cancelAwareAction struct {
-	started chan struct{}
-	result  chan error
+	startOnce sync.Once
+	started   chan struct{}
+	result    chan error
 }
 
 func (a *cancelAwareAction) Execute(ctx context.Context, _ any) error {
-	close(a.started)
+	// Guard the close with sync.Once and use a non-blocking send so a second
+	// execution (e.g. if a future test enables retries for this action) cannot
+	// panic on an already-closed channel or block on the full result buffer.
+	a.startOnce.Do(func() { close(a.started) })
 	<-ctx.Done()
 	err := ctx.Err()
-	a.result <- err
+	select {
+	case a.result <- err:
+	default:
+	}
 	return err
 }
 
