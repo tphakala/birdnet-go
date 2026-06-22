@@ -31,7 +31,7 @@ function makeParams(): AnalyticsParams {
 
 describe('species-accumulation chart def', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {

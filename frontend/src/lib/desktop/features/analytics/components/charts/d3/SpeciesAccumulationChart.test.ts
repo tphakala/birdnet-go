@@ -67,6 +67,22 @@ describe('SpeciesAccumulationChart', () => {
     expect(() => render(SpeciesAccumulationChart, { props: { data: allZero } })).not.toThrow();
   });
 
+  it('renders a single in-range day (zero-width x-domain) without NaN', async () => {
+    // One day with 2+ first-seen species passes minDataPoints (keyed on the species count) but yields
+    // a single point, so minDate === maxDate. The padded domain must keep the scale well-defined.
+    const singleDay: AccumulationData = {
+      points: [{ date: '2026-03-01', cumulativeSpecies: 3, newSpecies: 3 }],
+    };
+    const { container } = render(SpeciesAccumulationChart, {
+      props: { data: singleDay, width: 800 },
+    });
+    await Promise.resolve();
+    const line = container.querySelector('.accumulation-line');
+    expect(line).toBeTruthy();
+    // A NaN domain produces an "MNaN,..." path; assert the rendered path carries no NaN.
+    expect(line?.getAttribute('d') ?? '').not.toContain('NaN');
+  });
+
   it('renders the axes, the area, the line, and the total-species reference line', async () => {
     const { container } = render(SpeciesAccumulationChart, { props: { data: sample, width: 800 } });
     await Promise.resolve();

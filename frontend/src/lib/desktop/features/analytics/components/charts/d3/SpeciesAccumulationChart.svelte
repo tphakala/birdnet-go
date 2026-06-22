@@ -57,6 +57,8 @@
   const MAX_DOTS_DAYS = 31;
   // Top headroom so the line and the asymptote label do not sit flush against the chart's top edge.
   const Y_HEADROOM_FRAC = 0.08;
+  // One day in milliseconds, used to pad a single-point x-domain so it is never zero-width.
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
   interface PlottedPoint extends AccumulationPoint {
     dateObj: Date;
@@ -106,7 +108,15 @@
 
     const minDate = points[0].dateObj;
     const maxDate = points[points.length - 1].dateObj;
-    const xScale = createTimeScale({ domain: [minDate, maxDate], range: [0, innerWidth] });
+    // A single in-range day (one point) makes minDate === maxDate, a zero-width domain that D3 maps
+    // to NaN and renders as broken SVG. Since minDataPoints keys on the species count (not the day
+    // count), a single day with 2+ first-seen species reaches here, so pad the domain by a day on
+    // each side to keep the scale well-defined.
+    const xDomain: [Date, Date] =
+      minDate.getTime() === maxDate.getTime()
+        ? [new Date(minDate.getTime() - MS_PER_DAY), new Date(maxDate.getTime() + MS_PER_DAY)]
+        : [minDate, maxDate];
+    const xScale = createTimeScale({ domain: xDomain, range: [0, innerWidth] });
 
     // Count axis always starts at 0; add a little headroom so the asymptote line/label clears the top.
     const yTop = maxCumulative + Math.max(1, Math.ceil(maxCumulative * Y_HEADROOM_FRAC));
