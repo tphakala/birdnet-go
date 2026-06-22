@@ -189,6 +189,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
 	speciesGroup.GET("/thumbnails", c.GetSpeciesThumbnails)        // Batch thumbnail endpoint
 	speciesGroup.GET("/diversity", c.GetSpeciesDiversity)          // Species diversity over time
+	speciesGroup.GET("/accumulation", c.GetSpeciesAccumulation)    // Species accumulation curve (biodiversity collector's curve)
 
 	// Time analytics routes (can be implemented later)
 	timeGroup := analyticsGroup.Group("/time")
@@ -1761,6 +1762,95 @@ func (c *Controller) GetConfidenceDistribution(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, newConfidenceDistributionResponse(data))
+}
+
+// speciesAccumulationItem is one day on the wire payload for the species accumulation curve.
+// scientificName is intentionally absent: the curve is an all-species count, not a per-species series.
+type speciesAccumulationItem struct {
+	Date              string `json:"date"`
+	CumulativeSpecies int    `json:"cumulativeSpecies"`
+	NewSpecies        int    `json:"newSpecies"`
+}
+
+// newSpeciesAccumulationResponse maps the datastore aggregation onto the wire payload as a JSON array
+// (never null), one entry per calendar day in ascending date order.
+func newSpeciesAccumulationResponse(data []datastore.SpeciesAccumulationPoint) []speciesAccumulationItem {
+	items := make([]speciesAccumulationItem, 0, len(data))
+	for i := range data {
+		items = append(items, speciesAccumulationItem{
+			Date:              data[i].Date,
+			CumulativeSpecies: data[i].CumulativeSpecies,
+			NewSpecies:        data[i].NewSpecies,
+		})
+	}
+	return items
+}
+
+// GetSpeciesAccumulation handles GET /api/v2/analytics/species/accumulation
+// Returns the species accumulation curve (the biodiversity collector's curve): per calendar day, the
+// cumulative count of distinct species first detected within the selected range, powering the
+// accumulation chart in the Biodiversity tab. The metric is inherently all-species, so there is no
+// species filter; "first seen" is bounded to the queried window, not lifetime.
+func (c *Controller) GetSpeciesAccumulation(ctx echo.Context) error {
+	const operation = "species accumulation"
+
+	// Validate required parameter
+	if err := c.requireQueryParam(ctx, "start_date", operation); err != nil {
+		return err
+	}
+
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// Validate date formats strictly using regex
+	if err := c.validateDateFormatStrictWithResponse(ctx, startDate, "start_date", operation); err != nil {
+		return err
+	}
+	if err := c.validateDateFormatStrictWithResponse(ctx, endDate, "end_date", operation); err != nil {
+		return err
+	}
+
+	// Validate date values and chronological order
+	if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, operation); err != nil {
+		return err
+	}
+
+	// Default the end date to a 30-day window when omitted, matching the other range endpoints.
+	if endDate == "" {
+		startTime, _ := time.Parse(time.DateOnly, startDate) // Regex ensures this parse succeeds
+		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
+	}
+
+	c.logInfoIfEnabled("Retrieving species accumulation",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	// Add timeout to prevent resource exhaustion
+	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+
+	data, err := c.DS.GetSpeciesAccumulation(ctxWithTimeout, startDate, endDate)
+	if err != nil {
+		return c.handleAnalyticsQueryError(ctx, err, "Species accumulation", "Failed to get species accumulation",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
+		)
+	}
+
+	c.logInfoIfEnabled("Species accumulation retrieved",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("days", len(data)),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	return ctx.JSON(http.StatusOK, newSpeciesAccumulationResponse(data))
 }
 
 // GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution/hourly

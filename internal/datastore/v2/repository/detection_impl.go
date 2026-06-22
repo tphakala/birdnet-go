@@ -1750,6 +1750,27 @@ func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Conte
 	return results, err
 }
 
+// GetSpeciesFirstSeenInPeriod returns the in-period first detection of each species over the
+// half-open range [start, end), false positives excluded, grouped by scientific name so a species
+// with one label per model collapses to a single first-seen. Unlike GetSpeciesFirstDetectionInPeriod
+// (which omits the false-positive exclusion and is paginated for the species tracker), this goes
+// through buildAnalyticsBaseQuery so it shares the analytics false-positive filter, and returns every
+// species (no LIMIT) for the accumulation curve. GROUP BY scientific_name with MIN(detected_at) makes
+// the reviews LEFT JOIN immune to fan-out: duplicate joined rows for one detection collapse under the
+// aggregate. label_id is not selected (it is irrelevant to accumulation and stays zero).
+func (r *detectionRepository) GetSpeciesFirstSeenInPeriod(ctx context.Context, start, end int64) ([]SpeciesFirstSeen, error) {
+	var results []SpeciesFirstSeen
+
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, nil, nil).
+		Joins(fmt.Sprintf("JOIN %s l ON l.id = d.label_id", r.labelsTable())).
+		Select("l.scientific_name as scientific_name, MIN(d.detected_at) as first_detected").
+		Group("l.scientific_name").
+		Order("first_detected ASC, l.scientific_name ASC").
+		Scan(&results).Error
+
+	return results, err
+}
+
 // ============================================================================
 // Utilities
 // ============================================================================

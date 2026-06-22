@@ -1421,6 +1421,17 @@ export type TranslationKey =
   | 'analytics.advanced.charts.diversity.noDataHint'
   | 'analytics.advanced.charts.diversity.axisDate'
   | 'analytics.advanced.charts.diversity.axisUniqueSpecies'
+  | 'analytics.advanced.charts.accumulation.title'
+  | 'analytics.advanced.charts.accumulation.description'
+  | 'analytics.advanced.charts.accumulation.noData'
+  | 'analytics.advanced.charts.accumulation.noDataHint'
+  | 'analytics.advanced.charts.accumulation.ariaLabel'
+  | 'analytics.advanced.charts.accumulation.axisDate'
+  | 'analytics.advanced.charts.accumulation.axisSpecies'
+  | 'analytics.advanced.charts.accumulation.totalSpecies' // params: species
+  | 'analytics.advanced.charts.accumulation.tooltipCumulative'
+  | 'analytics.advanced.charts.accumulation.tooltipNew'
+  | 'analytics.advanced.charts.accumulation.summary' // params: days, species
   | 'analytics.advanced.charts.heatmap.title'
   | 'analytics.advanced.charts.heatmap.description'
   | 'analytics.advanced.charts.heatmap.noData'
@@ -3983,6 +3994,11 @@ export type TranslationParams = {
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
+  'analytics.advanced.charts.accumulation.totalSpecies': { species: string | number };
+  'analytics.advanced.charts.accumulation.summary': {
+    days: string | number;
+    species: string | number;
+  };
   'analytics.advanced.charts.heatmap.legendMore': { max: string | number };
   'analytics.advanced.charts.heatmap.summary': {
     total: string | number;

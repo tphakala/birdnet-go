@@ -277,6 +277,13 @@ type DetectionRepository interface {
 	// GetSpeciesFirstDetection (per-species first ever).
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error)
 
+	// GetSpeciesFirstSeenInPeriod returns the first detection (MIN detected_at) of each species
+	// within the half-open range [start, end), false positives excluded, grouped by scientific name
+	// so multi-model labels collapse to one species. Unlike GetSpeciesFirstDetectionInPeriod it
+	// excludes false positives and is not paginated (every species is returned), as required by the
+	// species accumulation analytics. Results are ordered by first-seen ascending.
+	GetSpeciesFirstSeenInPeriod(ctx context.Context, start, end int64) ([]SpeciesFirstSeen, error)
+
 	// === Utilities ===
 
 	// GetClipPath returns the clip path for a detection.
