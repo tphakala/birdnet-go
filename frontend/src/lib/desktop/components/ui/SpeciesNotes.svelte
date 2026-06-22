@@ -11,9 +11,17 @@
 
   const logger = loggers.ui;
 
-  // Mirrors datastore.SpeciesNoteMaxLength; used for the client-side soft guard.
-  const NOTE_MAX_LENGTH = 10_000;
+  // Mirrors datastore.SpeciesNoteMaxLength, which is a BYTE limit. The textarea
+  // maxlength is only a coarse character-count guard; the authoritative client
+  // gate below measures UTF-8 byte length so multi-byte notes (e.g. CJK, emoji)
+  // can't pass client validation only to be rejected by the server.
+  const NOTE_MAX_BYTES = 10_000;
   const HTTP_BAD_REQUEST = 400;
+
+  const utf8Encoder = new TextEncoder();
+  function utf8ByteLength(value: string): number {
+    return utf8Encoder.encode(value).length;
+  }
 
   interface Props {
     scientificName: string;
@@ -36,7 +44,11 @@
   let editDraft = $state('');
   let confirmingDeleteId = $state<number | null>(null);
 
-  let canSave = $derived(draft.trim().length > 0 && !saving);
+  let draftTooLong = $derived(utf8ByteLength(draft.trim()) > NOTE_MAX_BYTES);
+  let canSave = $derived(draft.trim().length > 0 && !draftTooLong && !saving);
+
+  let editTooLong = $derived(utf8ByteLength(editDraft.trim()) > NOTE_MAX_BYTES);
+  let canSaveEdit = $derived(editDraft.trim().length > 0 && !editTooLong && !saving);
 
   function notesUrl(): string {
     return `/api/v2/species/${encodeURIComponent(scientificName)}/notes`;
@@ -57,7 +69,7 @@
 
   function handleWriteError(e: unknown, fallbackKey: string): void {
     if (e instanceof ApiError && e.status === HTTP_BAD_REQUEST) {
-      toastActions.error(t('analytics.species.notes.tooLong', { max: NOTE_MAX_LENGTH }));
+      toastActions.error(t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES }));
     } else {
       toastActions.error(t(fallbackKey));
     }
@@ -66,7 +78,7 @@
 
   async function addNote(): Promise<void> {
     const entry = draft.trim();
-    if (entry.length === 0 || saving) return;
+    if (entry.length === 0 || saving || utf8ByteLength(entry) > NOTE_MAX_BYTES) return;
     saving = true;
     try {
       const created = await api.post<SpeciesNoteData>(notesUrl(), { entry });
@@ -91,7 +103,7 @@
 
   async function saveEdit(id: number): Promise<void> {
     const entry = editDraft.trim();
-    if (entry.length === 0 || saving) return;
+    if (entry.length === 0 || saving || utf8ByteLength(entry) > NOTE_MAX_BYTES) return;
     saving = true;
     try {
       await api.put(`/api/v2/species/notes/${id}`, { entry });
@@ -130,7 +142,7 @@
         id={`${uid}-draft`}
         class="textarea textarea-bordered w-full text-sm"
         rows="2"
-        maxlength={NOTE_MAX_LENGTH}
+        maxlength={NOTE_MAX_BYTES}
         placeholder={t('analytics.species.notes.placeholder')}
         bind:value={draft}></textarea>
       <div class="mt-1 flex justify-end">
@@ -138,7 +150,11 @@
           type="button"
           class="btn btn-primary btn-sm"
           disabled={!canSave}
-          title={!canSave ? t('analytics.species.notes.saveDisabledReason') : undefined}
+          title={!canSave
+            ? draftTooLong
+              ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
+              : t('analytics.species.notes.saveDisabledReason')
+            : undefined}
           aria-describedby={!canSave ? `${uid}-save-help` : undefined}
           onclick={addNote}
         >
@@ -148,7 +164,9 @@
       </div>
       {#if !canSave}
         <p id={`${uid}-save-help`} class="sr-only">
-          {t('analytics.species.notes.saveDisabledReason')}
+          {draftTooLong
+            ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
+            : t('analytics.species.notes.saveDisabledReason')}
         </p>
       {/if}
     </div>
@@ -174,7 +192,7 @@
               id={`${uid}-edit-${note.id}`}
               class="textarea textarea-bordered w-full text-sm"
               rows="2"
-              maxlength={NOTE_MAX_LENGTH}
+              maxlength={NOTE_MAX_BYTES}
               bind:value={editDraft}></textarea>
             <div class="mt-1 flex justify-end gap-2">
               <button
@@ -188,7 +206,10 @@
               <button
                 type="button"
                 class="btn btn-primary btn-sm"
-                disabled={editDraft.trim().length === 0 || saving}
+                disabled={!canSaveEdit}
+                title={editTooLong
+                  ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
+                  : undefined}
                 onclick={() => saveEdit(note.id)}
               >
                 <Save class="h-4 w-4" />
