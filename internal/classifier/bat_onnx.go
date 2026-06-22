@@ -25,14 +25,14 @@ type Bat struct {
 	// (CPU/GPU) when the heavy embedding extractor runs on OpenVINO, otherwise
 	// deviceCPU for the ONNX Runtime CPU EP. The tiny bat classifier head always runs
 	// on ORT CPU, so this reports the embedding extractor's device. Set once at
-	// construction; reported via Device().
+	// construction; reported via RuntimeInfo().
 	device string
 	// backend is the live execution backend of the embedding extractor
 	// (BackendOpenVINO when it runs on OpenVINO, else BackendONNX), and precision is
 	// the effective runtime precision (FP32 on the OpenVINO path, which the bat
 	// embedding model is forced to; the weight precision detected from the classifier
 	// model filename on the ORT path, empty when no token). Both set once at
-	// construction; reported via Backend()/Precision().
+	// construction; reported via RuntimeInfo().
 	backend   string
 	precision string
 }
@@ -359,22 +359,17 @@ func (b *Bat) Labels() []string {
 	return b.batClassifier.Labels()
 }
 
-// Device returns the compute device the bat pipeline bound to: the OpenVINO device
-// (CPU/GPU) when the embedding extractor runs on OpenVINO, else "CPU" for the ONNX
-// Runtime CPU EP. Set once at construction and never mutated, so no lock is needed.
+// RuntimeInfo returns the device, backend, and effective precision the bat
+// pipeline bound to at construction: the OpenVINO device (CPU/GPU) when the
+// embedding extractor runs on OpenVINO, else "CPU" for the ONNX Runtime CPU EP;
+// BackendOpenVINO on the OV path (else BackendONNX); FP32 on the OV path (which
+// the bat embedding model is forced to), or the weight precision detected from
+// the bat classifier model filename on the ORT path (empty when no token). All
+// three are set once at construction and never mutated, so no lock is needed.
 // Implements ModelInstance.
-func (b *Bat) Device() string { return b.device }
-
-// Backend returns the live execution backend the bat embedding extractor bound to
-// (BackendOpenVINO on the OV path, else BackendONNX). Set once at construction and
-// never mutated, so no lock is needed. Implements ModelInstance.
-func (b *Bat) Backend() string { return b.backend }
-
-// Precision returns the effective runtime precision (FP32 on the OpenVINO path, which
-// the bat embedding model is forced to; the weight precision detected from the bat
-// classifier model filename on the ORT path, empty when no token). Set once at
-// construction and never mutated, so no lock is needed. Implements ModelInstance.
-func (b *Bat) Precision() string { return b.precision }
+func (b *Bat) RuntimeInfo() (device, backend, precision string) {
+	return b.device, b.backend, b.precision
+}
 
 // Close releases resources held by the bat model.
 func (b *Bat) Close() error {

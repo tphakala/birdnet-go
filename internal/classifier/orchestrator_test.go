@@ -20,9 +20,9 @@ type mockModelInstance struct {
 	id        string
 	spec      ModelSpec
 	labels    []string // optional; when nil a single default label is returned
-	device    string   // optional; when empty Device() reports "CPU"
-	backend   string   // optional; reported verbatim by Backend()
-	precision string   // optional; reported verbatim by Precision()
+	device    string   // optional; when empty RuntimeInfo reports "CPU"
+	backend   string   // optional; reported verbatim by RuntimeInfo
+	precision string   // optional; reported verbatim by RuntimeInfo
 	predict   func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
@@ -46,14 +46,13 @@ func (m *mockModelInstance) Labels() []string {
 	}
 	return []string{"Turdus merula_Common Blackbird"}
 }
-func (m *mockModelInstance) Close() error      { return nil }
-func (m *mockModelInstance) Backend() string   { return m.backend }
-func (m *mockModelInstance) Precision() string { return m.precision }
-func (m *mockModelInstance) Device() string {
-	if m.device != "" {
-		return m.device
+func (m *mockModelInstance) Close() error { return nil }
+func (m *mockModelInstance) RuntimeInfo() (device, backend, precision string) {
+	device = m.device
+	if device == "" {
+		device = deviceCPU
 	}
-	return deviceCPU
+	return device, m.backend, m.precision
 }
 
 // newTestOrchestrator creates an Orchestrator with mock models for unit testing.
