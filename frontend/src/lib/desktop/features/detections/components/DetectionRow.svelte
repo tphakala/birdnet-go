@@ -30,9 +30,7 @@
   import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
-  import Button from '$lib/desktop/components/ui/Button.svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
-  import { Volume2 } from '@lucide/svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
@@ -55,11 +53,6 @@
     isExcluded?: boolean;
     onDetailsClick?: (_id: number) => void;
     onRefresh?: () => void;
-    onPlayMobileAudio?: (_payload: {
-      audioUrl: string;
-      speciesName: string;
-      detectionId: number;
-    }) => void;
     selectionActive?: boolean;
     selected?: boolean;
     onToggleSelect?: (_id: string, _shiftKey: boolean) => void;
@@ -70,7 +63,6 @@
     isExcluded = false,
     onDetailsClick,
     onRefresh,
-    onPlayMobileAudio,
     selectionActive = false,
     selected = false,
     onToggleSelect,
@@ -261,10 +253,6 @@
   });
 
   // Cleanup is handled automatically by useImageDelayedLoading
-  function playMobileAudio() {
-    const audioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
-    onPlayMobileAudio?.({ audioUrl, speciesName: displayName, detectionId: detection.id });
-  }
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->
@@ -385,18 +373,6 @@
           {displayName}
         </button>
         <div class="sp-species-scientific-name">{detection.scientificName}</div>
-      </div>
-      <!-- Mobile-only quick play button -->
-      <div class="mt-2 md:hidden">
-        <Button
-          variant="primary"
-          size="xs"
-          aria-label={t('detections.row.playAudio')}
-          onclick={playMobileAudio}
-        >
-          <Volume2 class="h-4 w-4" />
-          {t('detections.row.play')}
-        </Button>
       </div>
     </div>
   </div>

@@ -4561,6 +4561,7 @@
       "spectrogramAlt": "Espectrograma de áudio",
       "spectrogramGeneratingAria": "Gerando espectrograma",
       "generating": "Gerando...",
+      "waiting": "Waiting...",
       "queuePosition": "Fila: {position}",
       "loadError": "Falha ao carregar áudio"
     },
