@@ -1716,7 +1716,19 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide"
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Selecteer een soort om te vergelijken met {species}.",
+        "noGuideAvailable": "Geen gids beschikbaar",
+        "cardLoading": "Vergelijking laden…",
+        "cardNoGuide": "Geen gids beschikbaar voor deze soort.",
+        "cardError": "Kan deze soort niet laden. Probeer een andere.",
+        "cardNoSections": "Geen vergelijkingsdetails beschikbaar voor deze soort.",
+        "sections": {
+          "appearance": "Uiterlijk",
+          "voice": "Geluid",
+          "habitat": "Leefgebied en verspreiding"
+        }
       },
       "viewGuide": "View guide for {species}"
     },

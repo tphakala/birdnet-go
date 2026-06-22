@@ -123,7 +123,11 @@ type SimilarSpeciesEntry struct {
 	ScientificName string `json:"scientific_name"`
 	CommonName     string `json:"common_name"`
 	Relationship   string `json:"relationship"`
-	GuideSummary   string `json:"guide_summary,omitempty"`
+	// HasGuide reports whether a guide resolved for this candidate. The
+	// comparison panel uses it to enable selection only for species it can
+	// actually fetch a guide for, rather than letting a click 404.
+	HasGuide     bool   `json:"has_guide"`
+	GuideSummary string `json:"guide_summary,omitempty"`
 }
 
 // SimilarSpeciesResponse is the response body for GET /species/:name/similar.
@@ -440,6 +444,7 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 				}
 				entry.CommonName = g.CommonName
 				entry.GuideSummary = summarizeDescription(g.Description)
+				entry.HasGuide = true
 				return nil
 			})
 			entries[idx] = entry

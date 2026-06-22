@@ -1716,7 +1716,19 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide"
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Vælg en art for at sammenligne med {species}.",
+        "noGuideAvailable": "Ingen guide tilgængelig",
+        "cardLoading": "Indlæser sammenligning…",
+        "cardNoGuide": "Ingen guide tilgængelig for denne art.",
+        "cardError": "Kunne ikke indlæse denne art. Prøv en anden.",
+        "cardNoSections": "Ingen sammenligningsdetaljer tilgængelige for denne art.",
+        "sections": {
+          "appearance": "Udseende",
+          "voice": "Stemme",
+          "habitat": "Levested og udbredelse"
+        }
       },
       "viewGuide": "View guide for {species}"
     },

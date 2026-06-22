@@ -7,10 +7,12 @@
   import { getSeasonHighlight } from '$lib/utils/seasonHighlight';
   import {
     parseGuideDescription,
+    GUIDE_SONGS_HEADINGS,
     type SpeciesGuideData,
     type SimilarSpeciesResponse,
     type SimilarSpeciesEntry,
   } from '$lib/types/species';
+  import SimilarSpeciesPanel from './SimilarSpeciesPanel.svelte';
 
   const logger = loggers.ui;
 
@@ -54,26 +56,10 @@
     similar: true,
   });
 
-  // Localized Wikipedia heading fragments mapped to canonical section ids.
-  const SONGS_HEADINGS = [
-    'songs and calls',
-    'song',
-    'calls',
-    'voice',
-    'stimme',
-    'chant et cris',
-    'voix',
-    'voz',
-    'canto',
-    'głos',
-    'ääntelyt',
-    'läte',
-  ];
-
   function classifyHeading(heading: string): 'description' | 'songs' | 'other' {
     const h = heading.trim().toLowerCase();
     if (h === '') return 'description';
-    if (SONGS_HEADINGS.some(token => h.includes(token))) return 'songs';
+    if (GUIDE_SONGS_HEADINGS.some(token => h.includes(token))) return 'songs';
     return 'other';
   }
 
@@ -268,23 +254,7 @@
       </button>
       {#if openSections.similar}
         <div id={`${uid}-similar`} class="pb-3">
-          {#if similar.length === 0}
-            <p class="text-sm text-base-content/70">{t('analytics.species.similar.empty')}</p>
-          {:else}
-            <ul class="space-y-2">
-              {#each similar as entry (entry.scientific_name)}
-                <li class="rounded-md border border-base-300 p-2">
-                  <div class="flex items-baseline justify-between gap-2">
-                    <span class="font-medium">{entry.common_name || entry.scientific_name}</span>
-                    <span class="text-xs text-base-content/60 italic">{entry.scientific_name}</span>
-                  </div>
-                  {#if entry.guide_summary}
-                    <p class="mt-1 text-sm text-base-content/80">{entry.guide_summary}</p>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          {/if}
+          <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
         </div>
       {/if}
     </div>

@@ -1325,6 +1325,16 @@ export type TranslationKey =
   | 'analytics.species.similar.empty'
   | 'analytics.species.similar.similar'
   | 'analytics.species.similar.speciesGuide'
+  | 'analytics.species.similar.versus' // params: species
+  | 'analytics.species.similar.selectPrompt' // params: species
+  | 'analytics.species.similar.noGuideAvailable'
+  | 'analytics.species.similar.cardLoading'
+  | 'analytics.species.similar.cardNoGuide'
+  | 'analytics.species.similar.cardError'
+  | 'analytics.species.similar.cardNoSections'
+  | 'analytics.species.similar.sections.appearance'
+  | 'analytics.species.similar.sections.voice'
+  | 'analytics.species.similar.sections.habitat'
   | 'analytics.species.viewGuide' // params: species
   | 'analytics.advanced.title'
   | 'analytics.advanced.chartControls'
@@ -3888,6 +3898,8 @@ export type TranslationParams = {
   'system.database.migration.prerequisites.criticalCount': { count: string | number };
   'system.database.migration.prerequisites.warningCount': { count: string | number };
   'analytics.species.notes.tooLong': { max: string | number };
+  'analytics.species.similar.versus': { species: string | number };
+  'analytics.species.similar.selectPrompt': { species: string | number };
   'analytics.species.viewGuide': { species: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };

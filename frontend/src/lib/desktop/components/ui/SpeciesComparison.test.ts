@@ -36,7 +36,7 @@ describe('SpeciesComparison', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the guide description and similar species', async () => {
+  it('renders the guide description and the similar-species comparison panel', async () => {
     const similar: SimilarSpeciesResponse = {
       scientific_name: 'Turdus merula',
       genus: 'Turdus',
@@ -45,13 +45,24 @@ describe('SpeciesComparison', () => {
           scientific_name: 'Turdus pilaris',
           common_name: 'Fieldfare',
           relationship: 'same_genus',
+          has_guide: true,
           guide_summary: 'A large thrush.',
         },
       ],
     };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url.includes('/guide')) return Promise.resolve(makeGuide() as never);
-      return Promise.resolve(similar as never);
+      if (url.includes('/similar')) return Promise.resolve(similar as never);
+      // The first species with a guide is auto-selected, so its /guide is
+      // fetched; return a distinct description to assert the panel surfaces it.
+      if (url.includes('pilaris'))
+        return Promise.resolve(
+          makeGuide({
+            scientific_name: 'Turdus pilaris',
+            common_name: 'Fieldfare',
+            description: 'A large grey-headed thrush.\n\n## Voice\nA harsh chatter.',
+          }) as never
+        );
+      return Promise.resolve(makeGuide() as never);
     });
 
     render(SpeciesComparison, {
@@ -59,8 +70,13 @@ describe('SpeciesComparison', () => {
     });
 
     expect(await screen.findByText('An introduction.', {}, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.getByText('Fieldfare')).toBeInTheDocument();
-    expect(screen.getByText('A large thrush.')).toBeInTheDocument();
+    // The similar species appears in the picker rail (and again as the selected
+    // card header once auto-selected), so there is at least one match.
+    expect(screen.getAllByText('Fieldfare').length).toBeGreaterThan(0);
+    // ...and auto-selecting it surfaces its appearance section in the diff card.
+    expect(
+      await screen.findByText('A large grey-headed thrush.', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
   });
 
   it('renders enrichment badges and external links when enrichments are enabled', async () => {

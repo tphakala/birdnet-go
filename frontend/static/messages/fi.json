@@ -1716,7 +1716,19 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide"
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Valitse laji vertailtavaksi lajin {species} kanssa.",
+        "noGuideAvailable": "Opasta ei saatavilla",
+        "cardLoading": "Ladataan vertailua…",
+        "cardNoGuide": "Tälle lajille ei ole opasta saatavilla.",
+        "cardError": "Tämän lajin lataaminen epäonnistui. Kokeile toista.",
+        "cardNoSections": "Tälle lajille ei ole vertailutietoja saatavilla.",
+        "sections": {
+          "appearance": "Ulkonäkö",
+          "voice": "Ääni",
+          "habitat": "Elinympäristö ja levinneisyys"
+        }
       },
       "viewGuide": "View guide for {species}"
     },

@@ -1716,7 +1716,19 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide"
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Válasszon egy fajt a(z) {species} összehasonlításához.",
+        "noGuideAvailable": "Nincs elérhető útmutató",
+        "cardLoading": "Összehasonlítás betöltése…",
+        "cardNoGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
+        "cardError": "Nem sikerült betölteni ezt a fajt. Próbáljon másikat.",
+        "cardNoSections": "Ehhez a fajhoz nincsenek elérhető összehasonlítási adatok.",
+        "sections": {
+          "appearance": "Megjelenés",
+          "voice": "Hang",
+          "habitat": "Élőhely és elterjedés"
+        }
       },
       "viewGuide": "View guide for {species}"
     },

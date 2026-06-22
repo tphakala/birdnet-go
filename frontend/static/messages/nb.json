@@ -1716,7 +1716,19 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide"
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Velg en art å sammenligne med {species}.",
+        "noGuideAvailable": "Ingen guide tilgjengelig",
+        "cardLoading": "Laster sammenligning…",
+        "cardNoGuide": "Ingen guide tilgjengelig for denne arten.",
+        "cardError": "Kunne ikke laste denne arten. Prøv en annen.",
+        "cardNoSections": "Ingen sammenligningsdetaljer tilgjengelig for denne arten.",
+        "sections": {
+          "appearance": "Utseende",
+          "voice": "Stemme",
+          "habitat": "Leveområde og utbredelse"
+        }
       },
       "viewGuide": "View guide for {species}"
     },

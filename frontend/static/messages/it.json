@@ -1716,7 +1716,19 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide"
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Seleziona una specie da confrontare con {species}.",
+        "noGuideAvailable": "Nessuna guida disponibile",
+        "cardLoading": "Caricamento del confronto…",
+        "cardNoGuide": "Nessuna guida disponibile per questa specie.",
+        "cardError": "Impossibile caricare questa specie. Provane un’altra.",
+        "cardNoSections": "Nessun dettaglio di confronto disponibile per questa specie.",
+        "sections": {
+          "appearance": "Aspetto",
+          "voice": "Voce",
+          "habitat": "Habitat e distribuzione"
+        }
       },
       "viewGuide": "View guide for {species}"
     },

@@ -1716,7 +1716,19 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide"
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Atlasiet sugu, ko salīdzināt ar {species}.",
+        "noGuideAvailable": "Ceļvedis nav pieejams",
+        "cardLoading": "Notiek salīdzinājuma ielāde…",
+        "cardNoGuide": "Šai sugai ceļvedis nav pieejams.",
+        "cardError": "Neizdevās ielādēt šo sugu. Mēģiniet citu.",
+        "cardNoSections": "Šai sugai nav pieejamu salīdzināšanas datu.",
+        "sections": {
+          "appearance": "Izskats",
+          "voice": "Balss",
+          "habitat": "Biotops un izplatība"
+        }
       },
       "viewGuide": "View guide for {species}"
     },

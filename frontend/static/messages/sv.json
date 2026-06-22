@@ -1716,7 +1716,19 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide"
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Välj en art att jämföra med {species}.",
+        "noGuideAvailable": "Ingen guide tillgänglig",
+        "cardLoading": "Laddar jämförelse…",
+        "cardNoGuide": "Ingen guide tillgänglig för denna art.",
+        "cardError": "Det gick inte att ladda denna art. Prova en annan.",
+        "cardNoSections": "Inga jämförelsedetaljer tillgängliga för denna art.",
+        "sections": {
+          "appearance": "Utseende",
+          "voice": "Läte",
+          "habitat": "Livsmiljö och utbredning"
+        }
       },
       "viewGuide": "View guide for {species}"
     },

@@ -105,6 +105,12 @@ export interface SimilarSpeciesEntry {
   scientific_name: string;
   common_name: string;
   relationship: 'same_genus' | 'same_family' | 'similar';
+  /**
+   * Whether the backend could resolve a guide for this candidate. The
+   * comparison panel only enables selection for entries with a guide; others
+   * are shown disabled with a reason rather than 404-ing on click.
+   */
+  has_guide: boolean;
   guide_summary?: string;
 }
 export interface SimilarSpeciesResponse {
@@ -121,6 +127,122 @@ export interface SpeciesNoteData {
 export interface GuideSection {
   heading: string;
   body: string;
+}
+
+// ---------------------------------------------------------------------------
+// Canonical guide-section vocabulary
+//
+// Wikipedia article text arrives as `## Heading` sections (see the Go
+// guideprovider's convertWikiSections). These lowercase heading fragments map a
+// section to a canonical comparison row. Lists include common localized
+// fragments for the locales BirdNET-Go ships; unmatched headings degrade
+// gracefully (the section is simply omitted from the comparison).
+// ---------------------------------------------------------------------------
+
+/** Heading fragments that denote a "songs & calls" / voice section. */
+export const GUIDE_SONGS_HEADINGS = [
+  'songs and calls',
+  'song',
+  'calls',
+  'voice',
+  'vocalization',
+  'stimme',
+  'chant et cris',
+  'voix',
+  'voz',
+  'canto',
+  'głos',
+  'ääntelyt',
+  'läte',
+];
+
+/** Heading fragments that denote an appearance / description section. */
+export const GUIDE_APPEARANCE_HEADINGS = [
+  'description',
+  'appearance',
+  'identification',
+  'beschreibung',
+  'merkmale',
+  'aussehen',
+  'apparence',
+  'descripción',
+  'aspecto',
+  'kuvaus',
+  'utseende',
+];
+
+/** Heading fragments that denote a distribution / habitat / range section. */
+export const GUIDE_HABITAT_HEADINGS = [
+  'distribution and habitat',
+  'distribution',
+  'habitat',
+  'range',
+  'verbreitung',
+  'lebensraum',
+  'répartition',
+  'distribución',
+  'levinneisyys',
+  'utbredning',
+];
+
+/** Heading fragments that denote a behaviour / ecology section. */
+export const GUIDE_BEHAVIOUR_HEADINGS = [
+  'behaviour',
+  'behavior',
+  'ecology',
+  'verhalten',
+  'comportement',
+];
+
+export type CanonicalSectionId = 'appearance' | 'voice' | 'habitat' | 'behaviour';
+
+/** The canonical comparison rows extracted from a guide description. */
+export interface CanonicalSections {
+  appearance: string;
+  voice: string;
+  habitat: string;
+  behaviour: string;
+}
+
+function matchesHeading(heading: string, vocab: string[]): boolean {
+  const h = heading.trim().toLowerCase();
+  if (h === '') return false;
+  return vocab.some(token => h.includes(token));
+}
+
+/**
+ * Classifies a guide section heading into a canonical comparison row, or null
+ * when it matches none. An empty heading (the article lead) is not a canonical
+ * row here — callers fall back to the lead for appearance when no Description
+ * section exists.
+ */
+export function classifyCanonicalHeading(heading: string): CanonicalSectionId | null {
+  if (matchesHeading(heading, GUIDE_APPEARANCE_HEADINGS)) return 'appearance';
+  if (matchesHeading(heading, GUIDE_SONGS_HEADINGS)) return 'voice';
+  if (matchesHeading(heading, GUIDE_HABITAT_HEADINGS)) return 'habitat';
+  if (matchesHeading(heading, GUIDE_BEHAVIOUR_HEADINGS)) return 'behaviour';
+  return null;
+}
+
+/**
+ * Extracts the canonical comparison rows from a guide description. The first
+ * matching section wins for each row. When no appearance/description section is
+ * present, the article lead (text before the first `## `) is used so the
+ * comparison card is never empty for a guide that has any prose.
+ */
+export function extractCanonicalSections(description: string): CanonicalSections {
+  const out: CanonicalSections = { appearance: '', voice: '', habitat: '', behaviour: '' };
+  let lead = '';
+  for (const section of parseGuideDescription(description)) {
+    if (section.heading === '') {
+      if (!lead) lead = section.body;
+      continue;
+    }
+    const id = classifyCanonicalHeading(section.heading);
+    if (id && !out[id]) out[id] = section.body;
+  }
+  if (!out.appearance) out.appearance = lead;
+  return out;
 }
 
 /**

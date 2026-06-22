@@ -240,7 +240,7 @@ Wikipedia/eBird-backed guide enrichment, similar-species comparison, and per-spe
 | Method | Route                                | Handler             | Auth | Description                                                          |
 | ------ | ------------------------------------ | ------------------- | ---- | ------------------------------------------------------------------- |
 | GET    | `/species/:scientific_name/guide`    | `GetSpeciesGuide`   | ❌⚡ | Species guide (description, quality, expectedness, season, links)   |
-| GET    | `/species/:scientific_name/similar`  | `GetSimilarSpecies` | ❌⚡ | Same-genus / same-family / similar species with guide summaries     |
+| GET    | `/species/:scientific_name/similar`  | `GetSimilarSpecies` | ❌⚡ | Same-genus / same-family / similar species with summaries + `has_guide` |
 | GET    | `/species/:scientific_name/notes`    | `GetSpeciesNotes`   | ❌   | List user notes for a species                                       |
 | POST   | `/species/:scientific_name/notes`    | `CreateSpeciesNote` | ✅   | Create a user note for a species                                    |
 | PUT    | `/species/notes/:id`                 | `UpdateSpeciesNote` | ✅   | Update a user note                                                  |
