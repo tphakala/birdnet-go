@@ -81,6 +81,23 @@ type SpeciesHourlyDistribution struct {
 	Total          int
 }
 
+// DailyActivityOnset is one calendar day's dawn-chorus onset relative to civil dawn, behind the
+// dawn-chorus onset tracker (design spec section 6.3).
+//
+// Date is the station-local calendar day (YYYY-MM-DD). OnsetRelMinutes is the onset minute-of-day
+// (the time by which the morning chorus has clearly begun) minus civil dawn's minute-of-day, so a
+// negative value means the chorus started before civil dawn. It is nil when the day had too few
+// detections to be meaningful, or when civil dawn is undefined for the date (polar day / white
+// nights / polar night). DetectionCount is the day's false-positive-excluded detection count,
+// surfaced in the tooltip. The aggregation emits one entry per calendar day in the requested range
+// (DetectionCount is 0 on quiet days) so the chart has a continuous date axis and its trend line
+// breaks over gaps rather than interpolating across them.
+type DailyActivityOnset struct {
+	Date            string
+	OnsetRelMinutes *int
+	DetectionCount  int
+}
+
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
@@ -438,6 +455,13 @@ func (ds *DataStore) GetActivityHeatmap(_ context.Context, _, _, _ string) (Acti
 // real method.
 func (ds *DataStore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ int) ([]SpeciesHourlyDistribution, error) {
 	return []SpeciesHourlyDistribution{}, nil
+}
+
+// GetDailyActivityOnset is a stub on the legacy store. The dawn-chorus onset tracker is a v2only
+// feature; the legacy datastore is deprecated and being removed, so it returns an empty (non-nil)
+// slice rather than implementing the aggregation. See internal/datastore/v2only for the real method.
+func (ds *DataStore) GetDailyActivityOnset(_ context.Context, _, _, _ string) ([]DailyActivityOnset, error) {
+	return []DailyActivityOnset{}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time

@@ -199,6 +199,10 @@ type Interface interface {
 	// the top `limit` species by detection volume over the inclusive date range (false positives
 	// excluded), ordered by descending volume. Powers the who-sings-when ridgeline.
 	GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyDistribution, error)
+	// GetDailyActivityOnset returns, per calendar day in the inclusive date range, the dawn-chorus
+	// onset relative to civil dawn (false positives excluded). species is an optional scientific-name
+	// filter. Powers the dawn-chorus onset tracker.
+	GetDailyActivityOnset(ctx context.Context, startDate, endDate, species string) ([]DailyActivityOnset, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods

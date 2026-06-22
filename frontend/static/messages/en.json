@@ -1857,6 +1857,22 @@
           "tooltipPeak": "Peak",
           "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
         },
+        "dawnOnset": {
+          "title": "Dawn Chorus Onset",
+          "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
+          "noData": "No dawn chorus data available",
+          "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
+          "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
+          "axisDate": "Date",
+          "axisOnset": "Minutes from civil dawn",
+          "civilDawn": "Civil dawn",
+          "tooltipOnset": "Onset",
+          "tooltipOnsetAfter": "{minutes} min after civil dawn",
+          "tooltipOnsetBefore": "{minutes} min before civil dawn",
+          "tooltipOnsetAt": "At civil dawn",
+          "tooltipCount": "Detections",
+          "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
+        },
         "tooltips": {
           "date": "Date",
           "percentage": "Percentage",
