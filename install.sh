@@ -4408,8 +4408,7 @@ ${wifi_power_save_script:+${wifi_power_save_script}
     -p ${WEB_PORT_BIND_ADDR:+${WEB_PORT_BIND_ADDR}:}${WEB_PORT}:8080 \\
 ${tls_ports_line:+    ${tls_ports_line} \\
 }${metrics_port_line:+    ${metrics_port_line} \\
-}    --env BIRDNET_WEBSERVER_PORT=8080 \\
-    --env BIRDNET_SECURITY_TLSPORT=8443 \\
+}
     --env TZ="${TZ}" \\
     --env BIRDNET_UID=${HOST_UID} \\
     --env BIRDNET_GID=${HOST_GID} \\
