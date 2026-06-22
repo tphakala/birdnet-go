@@ -76,10 +76,17 @@
   }
 
   // Auto-select the first species that has a guide so the card is never empty.
+  // Also re-run when the current selection is no longer in the list (e.g. the
+  // focal species changed): otherwise a stale `selected` would suppress
+  // auto-select and could surface the previous species' cached sections.
   $effect(() => {
-    if (selected === null) {
+    if (selected === null || !similar.some(e => e.scientific_name === selected)) {
       const first = similar.find(e => e.has_guide);
-      if (first) select(first.scientific_name);
+      if (first) {
+        select(first.scientific_name);
+      } else if (selected !== null) {
+        selected = null;
+      }
     }
   });
 </script>
