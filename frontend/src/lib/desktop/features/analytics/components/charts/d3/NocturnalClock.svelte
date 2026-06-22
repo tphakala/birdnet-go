@@ -475,5 +475,7 @@
   :global(.clock-radial .hour-bar),
   :global(.clock-linear .hour-bar) {
     transition: opacity 0.12s ease;
+    /* Bars reveal their count on hover but are not clickable; the help cursor signals that. */
+    cursor: help;
   }
 </style>
