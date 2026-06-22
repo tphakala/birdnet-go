@@ -3122,16 +3122,24 @@ func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endD
 	var speciesSet []repository.SpeciesCount
 	var minCount int
 	if species != "" {
-		labelID, resolveErr := ds.resolveLabelID(ctx, species)
-		if resolveErr != nil {
-			if errors.Is(resolveErr, errNotFound) {
-				return []datastore.SpeciesConfidenceHistogram{}, nil
-			}
-			return nil, resolveErr
+		// Use every label ID that maps to this scientific name (a species can carry one label per
+		// model), so the filtered path merges multi-model detections exactly like the top-N path below;
+		// resolving a single label ID would silently drop other models' detections for the species.
+		labelIDs, labelErr := ds.label.GetLabelIDsByScientificName(ctx, species)
+		if labelErr != nil {
+			return nil, errors.New(labelErr).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_confidence_histogram_resolve_species").
+				Build()
 		}
-		// resolveLabelID returns a non-nil ID for a non-empty species that resolves (the empty-species
-		// case never reaches here).
-		speciesSet = []repository.SpeciesCount{{LabelID: *labelID, ScientificName: species}}
+		if len(labelIDs) == 0 {
+			return []datastore.SpeciesConfidenceHistogram{}, nil
+		}
+		speciesSet = make([]repository.SpeciesCount, 0, len(labelIDs))
+		for _, labelID := range labelIDs {
+			speciesSet = append(speciesSet, repository.SpeciesCount{LabelID: labelID, ScientificName: species})
+		}
 		minCount = 1
 	} else {
 		// GetTopSpecies uses an inclusive end (<= end) while GetBatchConfidences uses an exclusive end

@@ -75,6 +75,7 @@ func TestGetConfidenceDistribution_EmptyArrayNotNull(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.NotNil(t, resp)
 	assert.Empty(t, resp)
+	mockDS.AssertExpectations(t)
 }
 
 func TestGetConfidenceDistribution_DefaultsEndDate(t *testing.T) {
