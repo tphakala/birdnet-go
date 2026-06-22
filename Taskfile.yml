@@ -737,7 +737,9 @@ tasks:
 
   check-openvino:
     desc: Download OpenVINO C API headers for CGo compilation (openvino-tagged builds only)
-    internal: true
+    # Not internal: the openvino compile-coverage CI job (cross-platform-build.yml)
+    # calls this directly with OPENVINO=true to provision headers before building
+    # the openvino-tagged backend. Still a no-op for ONNX-only/standard builds.
     vars:
       OPENVINO_ARCHIVE: '{{.OPENVINO_BASENAME}}.tgz'
       OPENVINO_URL: 'https://storage.openvinotoolkit.org/repositories/openvino/packages/{{.OPENVINO_RELEASE}}/linux/{{.OPENVINO_BASENAME}}.tgz'
@@ -1032,8 +1034,20 @@ tasks:
   e2e-install:
     desc: Install E2E testing dependencies
     dir: frontend
+    # The Playwright test packages (@playwright/test, playwright,
+    # @axe-core/playwright) are declared in package.json devDependencies, so
+    # frontend-install already installs them; this task only downloads the browser
+    # binaries. `npx playwright install` writes to the Playwright browser cache,
+    # not node_modules, so it cannot race the frontend npm install/build. The old
+    # `npm install -D` here was redundant with those devDependencies and could
+    # drift their pinned versions and dirty the workspace (and was the second
+    # node_modules writer that raced frontend-install, the corruption class that
+    # truncated typescript.js; see frontend-install above). deps: [frontend-install]
+    # ensures the playwright package is present to resolve the matching browser
+    # build; run: once keeps it to a single execution per invocation.
+    deps: [frontend-install]
+    run: once
     cmds:
-      - npm install -D @playwright/test playwright @axe-core/playwright
       - npx playwright install
 
   e2e-test:

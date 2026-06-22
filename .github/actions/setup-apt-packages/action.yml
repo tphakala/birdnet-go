@@ -9,6 +9,15 @@ inputs:
     description: 'Cache key version (bump to invalidate)'
     required: false
     default: '1.1'
+  execute-install-scripts:
+    description: >-
+      Whether cache-apt-pkgs-action runs each package's post-install (dpkg)
+      maintainer scripts on a cache miss. The unit-tests job leaves this true
+      (its default). Build/release callers that manage their own post-install
+      steps (e.g. cross-compiler symlinks, qemu binfmt) pass 'false' so routing
+      them through this action keeps their original behavior unchanged.
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -23,7 +32,7 @@ runs:
       with:
         packages: ${{ inputs.packages }}
         version: ${{ inputs.cache-version }}
-        execute_install_scripts: true
+        execute_install_scripts: ${{ inputs.execute-install-scripts }}
 
     - name: Refresh shared library cache and verify
       shell: bash
