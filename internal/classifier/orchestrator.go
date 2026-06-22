@@ -1453,6 +1453,26 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 	primary.Debug(format, v...)
 }
 
+// PrimaryModelID returns the registry ID of the primary model. It reads the
+// o.mu-guarded primary identity under the read lock, so it is safe to call
+// concurrently with model reloads. Returns "" if no primary is set.
+func (o *Orchestrator) PrimaryModelID() string {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.ModelInfo.ID
+}
+
+// PrimaryModelInfo returns a copy of the primary model's live ModelInfo, read
+// under o.mu so callers outside the package get a consistent value instead of
+// racing reloadModelInternal's o.mu-guarded write to o.ModelInfo. The result is
+// a snapshot copy; it does not track subsequent reloads. Returns the zero
+// ModelInfo if no primary is set.
+func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.ModelInfo
+}
+
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
 func (o *Orchestrator) ModelInfos() []ModelInfo {

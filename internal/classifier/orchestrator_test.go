@@ -56,6 +56,22 @@ func newTestOrchestrator(t *testing.T, mocks ...*mockModelInstance) *Orchestrato
 	}
 }
 
+// TestPrimaryModelInfo covers the o.mu-guarded primary-identity accessors that
+// callers outside the package use instead of reading o.ModelInfo directly.
+func TestPrimaryModelInfo(t *testing.T) {
+	t.Parallel()
+
+	want := ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4", Spec: ModelSpec{SampleRate: 48000}}
+	o := &Orchestrator{ModelInfo: want}
+	assert.Equal(t, want, o.PrimaryModelInfo())
+	assert.Equal(t, want.ID, o.PrimaryModelID())
+
+	// Zero value when no primary is set.
+	empty := &Orchestrator{}
+	assert.Equal(t, ModelInfo{}, empty.PrimaryModelInfo())
+	assert.Empty(t, empty.PrimaryModelID())
+}
+
 func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 	t.Parallel()
 
