@@ -50,6 +50,12 @@ const (
 	// so beyond ~20 rows the bars and labels crowd).
 	defaultSpeciesPhenologyLimit = 12
 	maxSpeciesPhenologyLimit     = 20
+
+	// Acoustic succession streamgraph top-N bounds. The default matches the chart's maxSpecies cap;
+	// the max keeps the stacked streamgraph readable (beyond ~10 bands the wiggle layers crowd within
+	// the card's fixed height).
+	defaultSpeciesSuccessionLimit = 6
+	maxSpeciesSuccessionLimit     = 10
 )
 
 // msgQueryTimeout is the user-facing message returned when an analytics query
@@ -208,6 +214,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	timeGroup.GET("/distribution/species", c.GetSpeciesHourlyDistribution) // Who-sings-when ridgeline (top-N species hour-of-day)
 	timeGroup.GET("/heatmap", c.GetActivityHeatmap)                        // Seasonal density heatmap (date x intra-day slot)
 	timeGroup.GET("/dawn-onset", c.GetDawnChorusOnset)                     // Dawn-chorus onset tracker (daily onset vs civil dawn)
+	timeGroup.GET("/succession", c.GetAcousticSuccession)                  // Acoustic succession streamgraph (top-N species hour-of-day, stacked)
 
 	// Confidence analytics routes
 	confidenceGroup := analyticsGroup.Group("/confidence")
@@ -1573,12 +1580,20 @@ func (c *Controller) GetAnalyticsSun(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, resp)
 }
 
-// GetSpeciesHourlyDistribution handles GET /api/v2/analytics/time/distribution/species
-// Returns the normalized hour-of-day activity distribution for the top N species by detection
-// volume over the date range, powering the who-sings-when ridgeline (design spec section 6.2).
-func (c *Controller) GetSpeciesHourlyDistribution(ctx echo.Context) error {
-	const operation = "species hourly distribution"
-
+// serveTopNHourlyChart is the shared request flow for the top-N-by-volume hour-of-day analytics
+// endpoints (who-sings-when ridgeline, acoustic succession): require and strictly validate
+// start_date/end_date, default the end to a 30-day window, parse and clamp the limit, run the query
+// under the analytics timeout (mapping a deadline to HTTP 408), and serialize the response as a JSON
+// array. The endpoints differ only in their limit bounds, the datastore query, and the response
+// shape, which are passed in; operation names the endpoint in validation/error messages and logs.
+func serveTopNHourlyChart[T any](
+	c *Controller,
+	ctx echo.Context,
+	operation string,
+	defaultLimit, maxLimit int,
+	query func(context.Context, string, string, int) ([]T, error),
+	respond func([]T) any,
+) error {
 	// Validate required parameter
 	if err := c.requireQueryParam(ctx, "start_date", operation); err != nil {
 		return err
@@ -1606,9 +1621,9 @@ func (c *Controller) GetSpeciesHourlyDistribution(ctx echo.Context) error {
 		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
 	}
 
-	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultSpeciesRidgelineLimit, maxSpeciesRidgelineLimit)
+	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultLimit, maxLimit)
 
-	c.logInfoIfEnabled("Retrieving species hourly distribution",
+	c.logInfoIfEnabled("Retrieving "+operation,
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
 		logger.Int("limit", limit),
@@ -1620,9 +1635,9 @@ func (c *Controller) GetSpeciesHourlyDistribution(ctx echo.Context) error {
 	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
 
-	data, err := c.DS.GetHourlyDistributionBySpecies(ctxWithTimeout, startDate, endDate, limit)
+	data, err := query(ctxWithTimeout, startDate, endDate, limit)
 	if err != nil {
-		return c.handleAnalyticsQueryError(ctx, err, "Species hourly distribution", "Failed to get species hourly distribution",
+		return c.handleAnalyticsQueryError(ctx, err, operation, "Failed to get "+operation,
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
 			logger.Int("limit", limit),
@@ -1631,7 +1646,7 @@ func (c *Controller) GetSpeciesHourlyDistribution(ctx echo.Context) error {
 		)
 	}
 
-	c.logInfoIfEnabled("Species hourly distribution retrieved",
+	c.logInfoIfEnabled(operation+" retrieved",
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
 		logger.Int("species_count", len(data)),
@@ -1639,7 +1654,57 @@ func (c *Controller) GetSpeciesHourlyDistribution(ctx echo.Context) error {
 		logger.String("path", ctx.Request().URL.Path),
 	)
 
-	return ctx.JSON(http.StatusOK, newSpeciesHourlyDistributionResponse(data))
+	return ctx.JSON(http.StatusOK, respond(data))
+}
+
+// GetSpeciesHourlyDistribution handles GET /api/v2/analytics/time/distribution/species
+// Returns the normalized hour-of-day activity distribution for the top N species by detection
+// volume over the date range, powering the who-sings-when ridgeline (design spec section 6.2).
+func (c *Controller) GetSpeciesHourlyDistribution(ctx echo.Context) error {
+	return serveTopNHourlyChart(c, ctx, "species hourly distribution",
+		defaultSpeciesRidgelineLimit, maxSpeciesRidgelineLimit,
+		c.DS.GetHourlyDistributionBySpecies,
+		func(data []datastore.SpeciesHourlyDistribution) any {
+			return newSpeciesHourlyDistributionResponse(data)
+		},
+	)
+}
+
+// acousticSuccessionItem is one species' row in the acoustic-succession wire payload: the stable
+// scientific-name key, its 24 raw hour-of-day detection counts (index = station-local hour 0..23),
+// and the total detection count. The localized common name is resolved client-side (the v2 label
+// schema stores no common name), matching the sibling species charts.
+type acousticSuccessionItem struct {
+	ScientificName string  `json:"scientificName"`
+	Counts         [24]int `json:"counts"`
+	Total          int     `json:"total"`
+}
+
+// newAcousticSuccessionResponse maps the datastore aggregation onto the wire payload as a JSON array
+// (never null), preserving the descending-volume order.
+func newAcousticSuccessionResponse(data []datastore.SpeciesHourlyCounts) []acousticSuccessionItem {
+	items := make([]acousticSuccessionItem, 0, len(data))
+	for i := range data {
+		items = append(items, acousticSuccessionItem{
+			ScientificName: data[i].ScientificName,
+			Counts:         data[i].Counts,
+			Total:          data[i].Total,
+		})
+	}
+	return items
+}
+
+// GetAcousticSuccession handles GET /api/v2/analytics/time/succession
+// Returns the per-species raw hour-of-day detection counts for the top-N species by volume, powering
+// the acoustic succession streamgraph in the Activity Patterns tab (design spec #1155, Tier-2). The
+// counts are unnormalized so the frontend can stack them into a streamgraph whose band width is
+// detection volume.
+func (c *Controller) GetAcousticSuccession(ctx echo.Context) error {
+	return serveTopNHourlyChart(c, ctx, "acoustic succession",
+		defaultSpeciesSuccessionLimit, maxSpeciesSuccessionLimit,
+		c.DS.GetAcousticSuccession,
+		func(data []datastore.SpeciesHourlyCounts) any { return newAcousticSuccessionResponse(data) },
+	)
 }
 
 // confidenceDistributionItem is one species' row in the confidence-distribution wire payload: its

@@ -1466,6 +1466,16 @@ export type TranslationKey =
   | 'analytics.advanced.charts.ridgeline.tooltipDetections'
   | 'analytics.advanced.charts.ridgeline.tooltipPeak'
   | 'analytics.advanced.charts.ridgeline.summary' // params: count, species, time
+  | 'analytics.advanced.charts.succession.title'
+  | 'analytics.advanced.charts.succession.description'
+  | 'analytics.advanced.charts.succession.noData'
+  | 'analytics.advanced.charts.succession.noDataHint'
+  | 'analytics.advanced.charts.succession.ariaLabel'
+  | 'analytics.advanced.charts.succession.axisTime'
+  | 'analytics.advanced.charts.succession.note' // params: count
+  | 'analytics.advanced.charts.succession.tooltipDetections'
+  | 'analytics.advanced.charts.succession.tooltipPeak'
+  | 'analytics.advanced.charts.succession.summary' // params: count, species, time
   | 'analytics.advanced.charts.dawnOnset.title'
   | 'analytics.advanced.charts.dawnOnset.description'
   | 'analytics.advanced.charts.dawnOnset.noData'
@@ -4023,6 +4033,12 @@ export type TranslationParams = {
   };
   'analytics.advanced.charts.ridgeline.note': { count: string | number };
   'analytics.advanced.charts.ridgeline.summary': {
+    count: string | number;
+    species: string | number;
+    time: string | number;
+  };
+  'analytics.advanced.charts.succession.note': { count: string | number };
+  'analytics.advanced.charts.succession.summary': {
     count: string | number;
     species: string | number;
     time: string | number;

@@ -312,6 +312,9 @@ func (m *mockStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]da
 func (m *mockStore) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesPhenologyPoint, error) {
 	return []datastore.SpeciesPhenologyPoint{}, nil
 }
+func (m *mockStore) GetAcousticSuccession(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesHourlyCounts, error) {
+	return []datastore.SpeciesHourlyCounts{}, nil
+}
 
 // BG-17 fix: Add notification history methods
 func (m *mockStore) GetActiveNotificationHistory(_ context.Context, after time.Time) ([]datastore.NotificationHistory, error) {

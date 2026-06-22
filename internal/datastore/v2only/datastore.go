@@ -3008,16 +3008,18 @@ func (ds *Datastore) GetActivityHeatmap(ctx context.Context, startDate, endDate,
 	return buildActivityHeatmap(timestamps, ds.timezone, startDate, endDate)
 }
 
-// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for the
-// top `limit` species by detection volume over [startDate, endDate], ordered by descending volume.
-// It selects the top-N label IDs by volume (GetTopSpecies), fetches their false-positive-excluded
-// per-hour counts in a single batched (label_id, hour) group-by (GetBatchHourlyOccurrences), then
-// merges and normalizes per species in Go (buildSpeciesHourlyDistribution). minConfidence is 0 so it
-// counts every detection, matching the heatmap and the other time-based analytics endpoints.
-func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
+// selectTopSpeciesHourly is the shared selection path for the top-N-by-volume hour-of-day species
+// charts (who-sings-when ridgeline and acoustic succession). It selects the top `limit` species by
+// detection volume over [startDate, endDate] (GetTopSpecies, descending volume) and fetches their
+// false-positive-excluded per-hour counts in a single batched (label_id, hour) group-by
+// (GetBatchHourlyOccurrences). The two charts differ only in how they fold these counts, so that
+// folding stays in the caller. minConfidence is 0 so it counts every detection, matching the heatmap
+// and the other time-based analytics endpoints. Returns a nil top slice (with nil error) when no
+// species qualify, so each caller emits its own empty, non-nil result.
+func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endDate string, limit int) ([]repository.SpeciesCount, map[uint][24]int, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// minConfidence 0 counts every detection (no confidence floor), matching the heatmap and the
@@ -3034,14 +3036,14 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 	}
 	top, err := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
-			Context("operation", "get_hourly_distribution_by_species_top").
+			Context("operation", "select_top_species_hourly_top").
 			Build()
 	}
 	if len(top) == 0 {
-		return []datastore.SpeciesHourlyDistribution{}, nil
+		return nil, nil, nil
 	}
 
 	// One label ID per top row; fetch their false-positive-excluded hourly counts in a single
@@ -3053,14 +3055,47 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 
 	hourlyByLabel, err := ds.detection.GetBatchHourlyOccurrences(ctx, labelIDs, start, end, ds.zoneOffsetSeconds(start), noConfidenceFloor)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
-			Context("operation", "get_hourly_distribution_by_species_hourly").
+			Context("operation", "select_top_species_hourly_buckets").
 			Build()
 	}
 
+	return top, hourlyByLabel, nil
+}
+
+// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for the
+// top `limit` species by detection volume over [startDate, endDate], ordered by descending volume.
+// It selects the top-N species and their per-hour counts via selectTopSpeciesHourly, then merges and
+// normalizes per species in Go (buildSpeciesHourlyDistribution) so each species' timing shape is
+// comparable regardless of raw volume. Powers the who-sings-when ridgeline.
+func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
+	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(top) == 0 {
+		return []datastore.SpeciesHourlyDistribution{}, nil
+	}
 	return buildSpeciesHourlyDistribution(top, hourlyByLabel), nil
+}
+
+// GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded) for
+// the top `limit` species by detection volume over [startDate, endDate], ordered by descending
+// volume. It selects the top-N species and their per-hour counts via selectTopSpeciesHourly (the
+// same path as the ridgeline), then merges per species in Go (buildAcousticSuccession). Unlike the
+// ridgeline it does NOT normalize: the streamgraph stacks raw counts so band width is detection
+// volume. Powers the acoustic succession streamgraph.
+func (ds *Datastore) GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyCounts, error) {
+	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(top) == 0 {
+		return []datastore.SpeciesHourlyCounts{}, nil
+	}
+	return buildAcousticSuccession(top, hourlyByLabel), nil
 }
 
 // GetDailyActivityOnset returns the per-day dawn-chorus onset relative to civil dawn over the
