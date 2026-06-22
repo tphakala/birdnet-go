@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
@@ -38,29 +40,30 @@
   let selected = $state<string | null>(null);
   // Per-species fetch cache + status, keyed by scientific name, so re-selecting
   // a species is instant and we don't re-hit the rate-limited guide endpoint.
-  let guides = $state<Record<string, CanonicalSections>>({});
-  let status = $state<Record<string, LoadStatus>>({});
+  // SvelteMap keeps keyed access reactive without indexing a plain object.
+  const guides = new SvelteMap<string, CanonicalSections>();
+  const status = new SvelteMap<string, LoadStatus>();
 
   let selectedEntry = $derived(similar.find(e => e.scientific_name === selected) ?? null);
-  let selectedSections = $derived(selected ? (guides[selected] ?? null) : null);
-  let selectedStatus = $derived<LoadStatus | undefined>(selected ? status[selected] : undefined);
+  let selectedSections = $derived(selected ? (guides.get(selected) ?? null) : null);
+  let selectedStatus = $derived<LoadStatus | undefined>(selected ? status.get(selected) : undefined);
   // Non-empty canonical rows for the selected species.
   let visibleRows = $derived(
     selectedSections ? SECTION_ROWS.filter(row => selectedSections[row.id].trim() !== '') : []
   );
 
   async function fetchGuide(name: string): Promise<void> {
-    status[name] = 'loading';
+    status.set(name, 'loading');
     try {
       const enc = encodeURIComponent(name);
       const g = await api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide`);
-      guides[name] = extractCanonicalSections(g.description);
-      status[name] = 'ready';
+      guides.set(name, extractCanonicalSections(g.description));
+      status.set(name, 'ready');
     } catch (e) {
       if (e instanceof ApiError && e.status === HTTP_NOT_FOUND) {
-        status[name] = 'notfound';
+        status.set(name, 'notfound');
       } else {
-        status[name] = 'error';
+        status.set(name, 'error');
         logger.error('Failed to load similar-species guide', e, {
           component: 'SimilarSpeciesPanel',
         });
@@ -73,17 +76,32 @@
     // Only fetch on first selection or to retry a prior transient error. Skip
     // when ready, in flight, or 'notfound' — a 404 is a definitive negative
     // result and re-selecting must not re-hit the rate-limited guide endpoint.
-    const s = status[name];
+    const s = status.get(name);
     if (s === 'ready' || s === 'loading' || s === 'notfound') return;
     void fetchGuide(name);
   }
 
-  // Auto-select the first species that has a guide so the card is never empty.
-  // Also re-run when the current selection is no longer in the list (e.g. the
-  // focal species changed): otherwise a stale `selected` would suppress
-  // auto-select and could surface the previous species' cached sections.
+  // Reacts to `similar` changing (e.g. the focal species changed). Two jobs:
+  //  1. Prune cached guides/status for species no longer in the list so the
+  //     per-instance cache stays bounded (~maxSimilarSpecies) over a long
+  //     browsing session instead of growing without limit. The cache reads are
+  //     untracked so loading a guide doesn't re-run this effect.
+  //  2. (Re)auto-select the first guide-bearing species when nothing valid is
+  //     selected, so the card is never empty and a stale `selected` can't
+  //     surface the previous species' cached sections.
   $effect(() => {
-    if (selected === null || !similar.some(e => e.scientific_name === selected)) {
+    const names = new Set(similar.map(e => e.scientific_name));
+
+    untrack(() => {
+      for (const key of [...guides.keys()]) {
+        if (!names.has(key)) guides.delete(key);
+      }
+      for (const key of [...status.keys()]) {
+        if (!names.has(key)) status.delete(key);
+      }
+    });
+
+    if (selected === null || !names.has(selected)) {
       const first = similar.find(e => e.has_guide);
       if (first) {
         select(first.scientific_name);
@@ -113,10 +131,10 @@
                 ? 'bg-primary/10 text-primary font-medium'
                 : 'hover:bg-base-200'}
                 {entry.has_guide ? '' : 'cursor-not-allowed opacity-60'}"
-              disabled={!entry.has_guide}
+              aria-disabled={entry.has_guide ? undefined : true}
               title={entry.has_guide ? undefined : t('analytics.species.similar.noGuideAvailable')}
               aria-pressed={entry.scientific_name === selected}
-              onclick={() => select(entry.scientific_name)}
+              onclick={() => entry.has_guide && select(entry.scientific_name)}
             >
               <span class="block truncate">{entry.common_name || entry.scientific_name}</span>
               {#if !entry.has_guide}

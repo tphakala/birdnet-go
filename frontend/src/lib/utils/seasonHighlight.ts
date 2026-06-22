@@ -18,17 +18,21 @@ export function hemisphereForLatitude(latitude: number): Hemisphere {
   return latitude >= 0 ? 'northern' : 'southern';
 }
 
-/** Decorative emoji per season token (plain text, not an inline SVG). */
-const SEASON_EMOJI: Record<string, string> = {
-  spring: '🌱',
-  summer: '☀️',
-  autumn: '🍂',
-  winter: '❄️',
-  wet1: '🌧️',
-  wet2: '🌧️',
-  dry1: '🌵',
-  dry2: '🌵',
-};
+/**
+ * Decorative emoji per season token (plain text, not an inline SVG). A Map so
+ * the server-provided season token is looked up without indexing a plain object
+ * by external input.
+ */
+const SEASON_EMOJI = new Map<string, string>([
+  ['spring', '🌱'],
+  ['summer', '☀️'],
+  ['autumn', '🍂'],
+  ['winter', '❄️'],
+  ['wet1', '🌧️'],
+  ['wet2', '🌧️'],
+  ['dry1', '🌵'],
+  ['dry2', '🌵'],
+]);
 
 export interface SeasonHighlight {
   /** Normalized season token. */
@@ -54,7 +58,7 @@ export function getSeasonHighlight(
   return {
     token,
     i18nKey: `analytics.species.guide.season.${token}`,
-    emoji: SEASON_EMOJI[token] ?? '',
+    emoji: SEASON_EMOJI.get(token) ?? '',
     isEquatorial: token.startsWith('wet') || token.startsWith('dry'),
   };
 }

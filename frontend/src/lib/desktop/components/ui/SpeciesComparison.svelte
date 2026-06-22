@@ -116,6 +116,7 @@
   }
 
   function toggle(id: string): void {
+    // eslint-disable-next-line security/detect-object-injection -- id is a fixed internal section key (description/songs/similar), not external input
     openSections[id] = !openSections[id];
   }
 

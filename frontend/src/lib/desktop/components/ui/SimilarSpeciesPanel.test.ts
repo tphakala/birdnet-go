@@ -74,7 +74,7 @@ describe('SimilarSpeciesPanel', () => {
     expect(screen.getByText('analytics.species.similar.versus')).toBeInTheDocument();
   });
 
-  it('disables species without a guide and explains why', () => {
+  it('disables species without a guide and explains why', async () => {
     render(SimilarSpeciesPanel, {
       props: {
         mainName: 'American Crow',
@@ -82,10 +82,15 @@ describe('SimilarSpeciesPanel', () => {
       },
     });
 
+    // aria-disabled (not native disabled) so screen-reader users can still focus
+    // the control and hear why it is unavailable.
     const button = screen.getByRole('button', { name: /Mystery Bird/ });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toBeDisabled();
     // No selectable species → the card prompts the user to pick one.
     expect(screen.getByText('analytics.species.similar.selectPrompt')).toBeInTheDocument();
+    // Clicking the unavailable species must not trigger a fetch.
+    await fireEvent.click(button);
     expect(api.get).not.toHaveBeenCalled();
   });
 
@@ -205,5 +210,46 @@ describe('SimilarSpeciesPanel', () => {
     expect(
       await screen.findByText('Starling appearance text.', {}, { timeout: 5000 })
     ).toBeInTheDocument();
+  });
+
+  it('prunes cached guides when the focal species changes (bounded cache)', async () => {
+    const calls: string[] = [];
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      calls.push(url);
+      if (url.includes('corax'))
+        return Promise.resolve(makeGuide({ description: 'Raven appearance text.' }) as never);
+      return Promise.resolve(
+        makeGuide({
+          scientific_name: 'Sturnus vulgaris',
+          common_name: 'European Starling',
+          description: 'Starling appearance text.',
+        }) as never
+      );
+    });
+
+    const { rerender } = render(SimilarSpeciesPanel, {
+      props: { mainName: 'American Crow', similar: [entry()] },
+    });
+    expect(
+      await screen.findByText('Raven appearance text.', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+
+    // Switch focal species → Raven leaves the list and is pruned from the cache.
+    await rerender({
+      mainName: 'House Sparrow',
+      similar: [entry({ scientific_name: 'Sturnus vulgaris', common_name: 'European Starling' })],
+    });
+    expect(
+      await screen.findByText('Starling appearance text.', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+
+    // Switch back → because Raven was pruned (not retained in an unbounded
+    // cache), its guide is fetched again rather than served stale.
+    await rerender({ mainName: 'American Crow', similar: [entry()] });
+    expect(
+      await screen.findByText('Raven appearance text.', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+
+    expect(calls.filter(u => u.includes('corax')).length).toBe(2);
   });
 });

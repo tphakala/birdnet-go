@@ -239,6 +239,7 @@ export function extractCanonicalSections(description: string): CanonicalSections
       continue;
     }
     const id = classifyCanonicalHeading(section.heading);
+    // eslint-disable-next-line security/detect-object-injection -- id is a CanonicalSectionId union (fixed keys), not external input
     if (id && !out[id]) out[id] = section.body;
   }
   if (!out.appearance) out.appearance = lead;
