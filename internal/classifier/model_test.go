@@ -5,10 +5,53 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
 // Compile-time check that BirdNET implements ModelInstance.
 var _ ModelInstance = (*BirdNET)(nil)
+
+// Compile-time check that Bat implements ModelInstance (Perch has its own in
+// perch_onnx_test.go). Keeps the three production implementers symmetric so a
+// future edit to one of their methods (e.g. RuntimeInfo) fails fast at build.
+var _ ModelInstance = (*Bat)(nil)
+
+// TestBirdNET_RuntimeInfo_PublishAndRestore verifies the atomic runtime-triplet
+// mechanism behind RuntimeInfo(): an unpublished instance reports the not-loaded
+// triplet, setRuntimeInfo publishes a self-consistent triplet read lock-free, and
+// storing a snapshotted pointer restores it. The store-snapshot step is exactly
+// what reloadModelInternal's rollback performs on a failed reload, so this covers
+// the rollback restoration without needing a native backend to drive the full
+// reload path.
+func TestBirdNET_RuntimeInfo_PublishAndRestore(t *testing.T) {
+	t.Parallel()
+
+	bn := &BirdNET{}
+
+	// Before the first publish: not-loaded triplet (Unknown device, empty rest).
+	device, backend, precision := bn.RuntimeInfo()
+	assert.Equal(t, deviceUnknown, device)
+	assert.Empty(t, backend)
+	assert.Empty(t, precision)
+
+	// Publish an initial triplet and snapshot the pointer (as the reload does).
+	bn.setRuntimeInfo(deviceCPU, BackendTFLite, string(QuantizationFP32))
+	snapshot := bn.runtime.Load()
+
+	// Republish a new triplet (an OpenVINO/GPU/FP16 reload attempt).
+	bn.setRuntimeInfo(inference.OVDeviceGPU, BackendOpenVINO, string(QuantizationFP16))
+	device, backend, precision = bn.RuntimeInfo()
+	assert.Equal(t, inference.OVDeviceGPU, device)
+	assert.Equal(t, BackendOpenVINO, backend)
+	assert.Equal(t, string(QuantizationFP16), precision)
+
+	// Roll back to the snapshot, exactly as reloadModelInternal does on failure.
+	bn.runtime.Store(snapshot)
+	device, backend, precision = bn.RuntimeInfo()
+	assert.Equal(t, deviceCPU, device, "rollback must restore the previous device")
+	assert.Equal(t, BackendTFLite, backend, "rollback must restore the previous backend")
+	assert.Equal(t, string(QuantizationFP32), precision, "rollback must restore the previous precision")
+}
 
 func TestModelSpecDefaults(t *testing.T) {
 	t.Parallel()
