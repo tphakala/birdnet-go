@@ -13,8 +13,13 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # continue-on-error keeps a cache-restore infra failure (e.g. a corrupt
+    # cache making tar exit 2) from failing the whole job. The verify step
+    # below inspects this step's outcome and falls back to a direct install.
     - name: Install APT packages (cached)
-      uses: awalsh128/cache-apt-pkgs-action@acb598e5ddbc6f68a970c5da0688d2f3a9f04d05 # v1.6.0
+      id: apt-cache
+      continue-on-error: true
+      uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
       with:
         packages: ${{ inputs.packages }}
         version: ${{ inputs.cache-version }}
@@ -41,6 +46,16 @@ runs:
               ;;
           esac
         done
+
+        # If the cache-restore action itself did not succeed (e.g. a corrupt
+        # cache made tar exit 2), continue-on-error above kept the job alive but
+        # the packages may be missing or only half-installed. Force a clean
+        # reinstall of the full set so a cache/infra error can never fail the
+        # whole job.
+        if [ "${{ steps.apt-cache.outcome }}" != "success" ]; then
+          echo "::warning::APT cache restore did not succeed (outcome=${{ steps.apt-cache.outcome }}); reinstalling packages directly"
+          FAILED="$FAILED ${{ inputs.packages }}"
+        fi
 
         if [ -n "$FAILED" ]; then
           echo "::warning::Broken after cache restore:$FAILED. Reinstalling..."
