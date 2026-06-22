@@ -113,7 +113,13 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
 		return nil, ErrGuideNotFound
-	case resp.StatusCode >= httpStatusServerErrorMin:
+	case resp.StatusCode == http.StatusTooManyRequests,
+		resp.StatusCode == http.StatusRequestTimeout,
+		resp.StatusCode >= httpStatusServerErrorMin:
+		// 429 (rate limited), 408 (request timeout) and 5xx are transient. Returning
+		// a plain (non-transient) error would make fetchAndStore persist a 30-minute
+		// negative entry, suppressing retries for a species that was merely throttled
+		// or briefly unavailable.
 		return nil, NewTransientError(errors.Newf("wikipedia returned status %d", resp.StatusCode).
 			Component("guideprovider").
 			Category(errors.CategoryHTTP).

@@ -144,6 +144,29 @@ func TestWikipediaProvider_ServerErrorIsTransient(t *testing.T) {
 	assert.True(t, IsTransient(err), "5xx must be transient so no negative entry is cached")
 }
 
+// TestWikipediaProvider_RateLimitAndTimeoutAreTransient guards that 429 (rate
+// limited) and 408 (request timeout) are transient: a non-transient error here
+// would make the cache persist a 30-minute negative entry and stop retrying a
+// species that was merely throttled.
+func TestWikipediaProvider_RateLimitAndTimeoutAreTransient(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusRequestTimeout} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+			}))
+			t.Cleanup(srv.Close)
+
+			p := newWikipediaTestProvider(t, srv)
+			_, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{Locale: "en"})
+			require.Error(t, err)
+			assert.True(t, IsTransient(err), "status %d must be transient so no negative entry is cached", status)
+			assert.False(t, errors.Is(err, ErrGuideNotFound))
+		})
+	}
+}
+
 func TestConvertWikiSections(t *testing.T) {
 	t.Parallel()
 	in := "Intro text.\n\n== Voice ==\nSings.\n\n=== Subsong ===\nQuiet.\n\n== Habitat ==\nForests."
