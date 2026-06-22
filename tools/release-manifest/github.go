@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -57,8 +58,10 @@ const (
 func newGitHubClient(baseURL, token string) *githubClient {
 	return &githubClient{
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		baseURL:    baseURL,
-		token:      token,
+		// Trim a trailing slash so a base URL like "https://api.github.com/"
+		// does not produce a double slash when paths are appended.
+		baseURL: strings.TrimRight(baseURL, "/"),
+		token:   token,
 	}
 }
 
@@ -118,9 +121,14 @@ func (c *githubClient) Download(ctx context.Context, url string) ([]byte, error)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("download %s: unexpected status %d", url, resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxAssetBytes))
+	// Read one byte past the cap so an oversized asset is detected and errors
+	// rather than silently truncating into a partial checksum map.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxAssetBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", url, err)
+	}
+	if len(data) > maxAssetBytes {
+		return nil, fmt.Errorf("download %s: asset exceeds %d byte limit", url, maxAssetBytes)
 	}
 	return data, nil
 }

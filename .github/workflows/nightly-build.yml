@@ -212,12 +212,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-  # Regenerate the release manifest after the nightly release (with its tarballs
-  # and checksums.txt) is published. No if-guard: every successful nightly run
-  # should refresh the manifest.
+  # Regenerate the release manifest after the nightly release (its tarballs and
+  # checksums.txt) and the container images are published, so the moving
+  # :nightly tag the manifest advertises already points at this build. No
+  # if-guard: every successful nightly run should refresh the manifest.
   manifest:
     name: Update release manifest
-    needs: release
+    needs: [release, docker]
     uses: ./.github/workflows/release-manifest.yml
     permissions:
       contents: write

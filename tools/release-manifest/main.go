@@ -46,6 +46,9 @@ func run(repo, output, apiURL, ghcrImage, dockerHubImage string, maxNotesLen int
 	if !repoRe.MatchString(repo) {
 		return fmt.Errorf("invalid -repo %q: want owner/name", repo)
 	}
+	if maxNotesLen < 0 {
+		return fmt.Errorf("invalid -max-notes-len %d: must be >= 0 (0 means unbounded)", maxNotesLen)
+	}
 	// Default the image repositories to the GitHub repo so the manifest is
 	// correct on forks and renames instead of advertising a hardcoded upstream.
 	if ghcrImage == "" {
@@ -86,8 +89,15 @@ func run(repo, output, apiURL, ghcrImage, dockerHubImage string, maxNotesLen int
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(output, data, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", output, err)
+	// Write atomically: a temp file in the same directory, then rename, so a
+	// reader (or the workflow's publish step) never observes a partial file.
+	tmp := output + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, output); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("rename %s -> %s: %w", tmp, output, err)
 	}
 
 	fmt.Fprintf(os.Stderr, "wrote %s (%d channel(s), %d warning(s))\n", output, len(m.Channels), len(warnings))

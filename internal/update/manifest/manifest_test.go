@@ -220,7 +220,12 @@ func TestValidate(t *testing.T) {
 		{
 			name:    "missing schema version",
 			m:       &Manifest{Channels: map[string]*Channel{ChannelStable: {Version: "v1", Tag: "v1"}}},
-			wantErr: "schema_version is required",
+			wantErr: "is not the supported version",
+		},
+		{
+			name:    "wrong schema version",
+			m:       &Manifest{SchemaVersion: 99, Channels: map[string]*Channel{ChannelStable: {Version: "v1", Tag: "v1"}}},
+			wantErr: "is not the supported version",
 		},
 		{
 			name:    "no channels",

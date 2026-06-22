@@ -243,12 +243,13 @@ jobs:
       keep-images-count: 14
     secrets: inherit
 
-  # Regenerate the release manifest after the tarballs (build) and checksums.txt
-  # (checksums) are attached, so it never races the asset uploads. The if-guard
-  # mirrors the other jobs and must stay in sync with them.
+  # Regenerate the release manifest after the tarballs (build), checksums.txt
+  # (checksums), and container images (docker) are all published, so it never
+  # races the asset uploads or advertises image tags before they are pushed.
+  # The if-guard mirrors the other jobs and must stay in sync with them.
   manifest:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
-    needs: [build, checksums]
+    needs: [build, checksums, docker]
     uses: ./.github/workflows/release-manifest.yml
     permissions:
       contents: write

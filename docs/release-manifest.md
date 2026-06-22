@@ -9,7 +9,7 @@ and any external tooling that needs to know what the current builds are.
 The manifest is a single JSON asset on a dedicated, never-deleted `manifest`
 GitHub release. The stable URL always resolves to the current manifest:
 
-```
+```text
 https://github.com/tphakala/birdnet-go/releases/download/manifest/manifest.json
 ```
 

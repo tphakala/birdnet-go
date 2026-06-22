@@ -210,8 +210,8 @@ func ExtractMinUpgradeFrom(body string) string {
 // not require per-asset checksums so that releases predating checksum publishing
 // remain representable; the generator logs warnings for missing hashes instead.
 func (m *Manifest) Validate() error {
-	if m.SchemaVersion == 0 {
-		return errors.New("schema_version is required")
+	if m.SchemaVersion != SchemaVersion {
+		return fmt.Errorf("schema_version %d is not the supported version %d", m.SchemaVersion, SchemaVersion)
 	}
 	if len(m.Channels) == 0 {
 		return errors.New("at least one channel is required")

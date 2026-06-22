@@ -83,7 +83,7 @@ jobs:
               --title "Release Manifest" \
               --notes "Auto-generated, machine-readable manifest of the latest BirdNET-Go release on each channel (stable, nightly, beta). Do not delete; consumed by the in-app update checker. Stable URL: https://github.com/$REPO/releases/download/manifest/manifest.json" \
               --prerelease \
-              --target main
+              --target "$GITHUB_SHA"
           fi
           gh release upload "$TAG" manifest.json --repo "$REPO" --clobber
           echo "Published manifest.json to release '$TAG'."
