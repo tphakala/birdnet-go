@@ -1844,6 +1844,69 @@ func (_c *MockInterface_GetCommentsBatch_Call) RunAndReturn(run func(uint, int) 
 	return _c
 }
 
+// GetConfidenceHistogram provides a mock function with given fields: ctx, startDate, endDate, species, bins, limit
+func (_m *MockInterface) GetConfidenceHistogram(ctx context.Context, startDate string, endDate string, species string, bins int, limit int) ([]datastore.SpeciesConfidenceHistogram, error) {
+	ret := _m.Called(ctx, startDate, endDate, species, bins, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetConfidenceHistogram")
+	}
+
+	var r0 []datastore.SpeciesConfidenceHistogram
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, int, int) ([]datastore.SpeciesConfidenceHistogram, error)); ok {
+		return rf(ctx, startDate, endDate, species, bins, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, int, int) []datastore.SpeciesConfidenceHistogram); ok {
+		r0 = rf(ctx, startDate, endDate, species, bins, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SpeciesConfidenceHistogram)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string, int, int) error); ok {
+		r1 = rf(ctx, startDate, endDate, species, bins, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetConfidenceHistogram_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetConfidenceHistogram'
+type MockInterface_GetConfidenceHistogram_Call struct {
+	*mock.Call
+}
+
+// GetConfidenceHistogram is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - species string
+//   - bins int
+//   - limit int
+func (_e *MockInterface_Expecter) GetConfidenceHistogram(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}, bins interface{}, limit interface{}) *MockInterface_GetConfidenceHistogram_Call {
+	return &MockInterface_GetConfidenceHistogram_Call{Call: _e.mock.On("GetConfidenceHistogram", ctx, startDate, endDate, species, bins, limit)}
+}
+
+func (_c *MockInterface_GetConfidenceHistogram_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string, bins int, limit int)) *MockInterface_GetConfidenceHistogram_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), args[4].(int), args[5].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetConfidenceHistogram_Call) Return(_a0 []datastore.SpeciesConfidenceHistogram, _a1 error) *MockInterface_GetConfidenceHistogram_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetConfidenceHistogram_Call) RunAndReturn(run func(context.Context, string, string, string, int, int) ([]datastore.SpeciesConfidenceHistogram, error)) *MockInterface_GetConfidenceHistogram_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetDailyActivityOnset provides a mock function with given fields: ctx, startDate, endDate, species
 func (_m *MockInterface) GetDailyActivityOnset(ctx context.Context, startDate string, endDate string, species string) ([]datastore.DailyActivityOnset, error) {
 	ret := _m.Called(ctx, startDate, endDate, species)

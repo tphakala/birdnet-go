@@ -483,6 +483,70 @@ async function fetchNocturnal(
   return { hourly, sun };
 }
 
+// Top-N species the confidence histogram requests; mirrors the chart's maxSpecies cap. BINS matches
+// the server default; MAX_CONFIDENCE_BINS bounds the coerced density array defensively (the server
+// clamps bins to 50).
+const CONFIDENCE_DISTRIBUTION_LIMIT = 5;
+const CONFIDENCE_DISTRIBUTION_BINS = 20;
+const MAX_CONFIDENCE_BINS = 50;
+
+interface ConfidenceDistributionDatum {
+  scientificName: string;
+  density: number[];
+  total: number;
+}
+
+/**
+ * Confidence distribution per species: the top-N species by detection volume, each with a normalized
+ * histogram of detection confidence scores (bins over 0..1). Like the who-sings-when ridgeline
+ * (#1159) it always requests the top-N and does not honor the species filter, so the chart compares
+ * several species' confidence shapes rather than collapsing to a single ridge; the server ranks and
+ * normalizes. Defensively coerces the array payload, keeping the server's (variable) bin count.
+ */
+async function fetchConfidenceDistribution(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<ConfidenceDistributionDatum[]> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+    limit: String(CONFIDENCE_DISTRIBUTION_LIMIT),
+    bins: String(CONFIDENCE_DISTRIBUTION_BINS),
+  });
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/confidence/distribution?${search}`), {
+    signal,
+  });
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid confidence distribution response: expected an array');
+  }
+
+  return data
+    .map(raw => {
+      if (!raw || typeof raw !== 'object') return null;
+      const item = raw as { scientificName?: unknown; bins?: unknown; total?: unknown };
+      const scientificName = typeof item.scientificName === 'string' ? item.scientificName : '';
+      if (!scientificName) return null;
+      // Coerce every bin to a finite number; keep the server's bin count (variable, unlike the
+      // hourly ridgeline's fixed 24) but cap the length defensively so a malformed payload cannot
+      // allocate an unreasonable density array.
+      const rawBins = Array.isArray(item.bins) ? item.bins : [];
+      const binCount = Math.min(rawBins.length, MAX_CONFIDENCE_BINS);
+      const density: number[] = [];
+      for (let i = 0; i < binCount; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- i is a bounded loop index
+        const b = rawBins[i];
+        density.push(typeof b === 'number' && Number.isFinite(b) ? b : 0);
+      }
+      const total = typeof item.total === 'number' && Number.isFinite(item.total) ? item.total : 0;
+      return { scientificName, density, total };
+    })
+    .filter((d): d is ConfidenceDistributionDatum => d !== null);
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
@@ -632,6 +696,52 @@ export const CHART_REGISTRY: ChartDef[] = [
     }),
     size: 'full',
     supports: { species: false, source: false },
+  },
+  {
+    id: 'confidence-distribution',
+    group: 'quality',
+    titleKey: 'analytics.advanced.charts.confidence.title',
+    descKey: 'analytics.advanced.charts.confidence.description',
+    emptyKey: 'analytics.advanced.charts.confidence.noData',
+    emptyHintKey: 'analytics.advanced.charts.confidence.noDataHint',
+    component: SpeciesRidgeline,
+    fetch: fetchConfidenceDistribution,
+    // Reuses the ridgeline: each species' confidence histogram becomes a density row, with a
+    // confidence-bin x-tick formatter (label each bin's left-edge confidence as a percentage) and
+    // this chart's own i18n keys. The endpoint is always top-N by detection volume and never filters
+    // by species, so supports.species is false: this is the only chart in the quality tab, so a
+    // species selector there would be an inert control (the note states the chart shows the top N).
+    mapProps: (data, _params, ctx) => {
+      const rows = data as ConfidenceDistributionDatum[];
+      // All species share the server's bin count; fall back to the requested default for an empty
+      // result so the formatter's divisor is never zero.
+      const firstLen = rows[0]?.density.length ?? 0;
+      const binCount = firstLen > 0 ? firstLen : CONFIDENCE_DISTRIBUTION_BINS;
+      return {
+        series: rows.map(d => ({
+          scientificName: d.scientificName,
+          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+          density: d.density,
+          total: d.total,
+        })),
+        // Label bin index i by the confidence at its left edge (i / binCount) as a percentage, so a
+        // 20-bin histogram reads 0% / 25% / 50% / 75% at step binCount/4.
+        xTickFormat: (index: number) => `${Math.round((index / binCount) * 100)}%`,
+        xTickStep: Math.max(1, Math.round(binCount / 4)),
+        ariaLabelKey: 'analytics.advanced.charts.confidence.ariaLabel',
+        axisLabelKey: 'analytics.advanced.charts.confidence.axisLabel',
+        summaryKey: 'analytics.advanced.charts.confidence.summary',
+        noteKey: 'analytics.advanced.charts.confidence.note',
+        totalLabelKey: 'analytics.advanced.charts.confidence.tooltipCount',
+        peakLabelKey: 'analytics.advanced.charts.confidence.tooltipPeak',
+      };
+    },
+    size: 'full',
+    supports: { species: false, source: false },
+    // A ridgeline needs at least a couple of species to read as a comparison; one lonely ridge does
+    // not tell the user which species are shakier than others.
+    minDataPoints: 2,
+    maxSpecies: CONFIDENCE_DISTRIBUTION_LIMIT,
   },
 ];
 

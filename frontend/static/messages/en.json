@@ -1887,6 +1887,18 @@
           "legendTwilight": "Twilight",
           "legendNight": "Night"
         },
+        "confidence": {
+          "title": "Confidence Distribution",
+          "description": "How confident the model is per species, so you can spot the birds it most often second-guesses",
+          "noData": "No confidence data available",
+          "noDataHint": "Select a wider date range to compare how confident the model is across species",
+          "ariaLabel": "Confidence distribution: per-species histogram of detection confidence scores",
+          "axisLabel": "Confidence",
+          "note": "Showing the top {count} species by detection volume",
+          "tooltipCount": "Detections",
+          "tooltipPeak": "Peak confidence",
+          "summary": "Detection-confidence distribution for {count} species. {species} clusters around {time} confidence."
+        },
         "tooltips": {
           "date": "Date",
           "percentage": "Percentage",
