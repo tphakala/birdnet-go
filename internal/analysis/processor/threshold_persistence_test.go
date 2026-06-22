@@ -179,6 +179,9 @@ func (m *MockDatastore) GetSpeciesAccumulation(context.Context, string, string) 
 func (m *MockDatastore) GetSpeciesPhenology(context.Context, string, string, int) ([]datastore.SpeciesPhenologyPoint, error) {
 	return []datastore.SpeciesPhenologyPoint{}, nil
 }
+func (m *MockDatastore) GetAcousticSuccession(context.Context, string, string, int) ([]datastore.SpeciesHourlyCounts, error) {
+	return []datastore.SpeciesHourlyCounts{}, nil
+}
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return make([]datastore.DetectionRecord, 0), 0, nil
 }

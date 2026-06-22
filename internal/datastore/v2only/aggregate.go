@@ -66,6 +66,54 @@ func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel
 	return result
 }
 
+// buildAcousticSuccession turns per-label hourly counts into per-species raw hour-of-day counts for
+// the acoustic succession streamgraph.
+//
+// top is the top-N species by volume from GetTopSpecies, in descending-volume order; each row is one
+// label ID. hourlyByLabel maps a label ID to its [24]int false-positive-excluded hourly counts.
+// Label IDs that resolve to the same scientific name (one per model) are merged into a single series
+// whose buckets are the summed counts, preserving the first-seen volume order. Unlike
+// buildSpeciesHourlyDistribution the counts are NOT normalized: the streamgraph stacks raw volume,
+// so band width is detection count; Total carries the per-species sum for the tooltip.
+//
+// A species whose merged FP-excluded total is zero is dropped: GetTopSpecies ranks by raw volume
+// without excluding false positives, so an all-false-positive species can rank into the top-N yet
+// contribute no real detections; stacking an empty band would add a flat, meaningless layer. The
+// result is always non-nil.
+func buildAcousticSuccession(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int) []datastore.SpeciesHourlyCounts {
+	// Merge label rows that share a scientific name, preserving first-seen (descending-volume)
+	// order. Each distinct species accumulates the hourly counts of all its label IDs.
+	order := make([]string, 0, len(top))
+	countsByName := make(map[string]*[hoursPerDay]int, len(top))
+	for i := range top {
+		name := top[i].ScientificName
+		acc, ok := countsByName[name]
+		if !ok {
+			acc = &[hoursPerDay]int{}
+			countsByName[name] = acc
+			order = append(order, name)
+		}
+		hours := hourlyByLabel[top[i].LabelID] // zero [24]int when the label has no detections
+		for h := range hoursPerDay {
+			acc[h] += hours[h]
+		}
+	}
+
+	result := make([]datastore.SpeciesHourlyCounts, 0, len(order))
+	for _, name := range order {
+		acc := countsByName[name]
+		total := 0
+		for h := range hoursPerDay {
+			total += acc[h]
+		}
+		if total == 0 {
+			continue // ranked by raw volume but no FP-excluded detections; skip the empty band
+		}
+		result = append(result, datastore.SpeciesHourlyCounts{ScientificName: name, Counts: *acc, Total: total})
+	}
+	return result
+}
+
 // minConfidenceHistogramDetections is the per-species floor for the confidence distribution (design
 // spec section 6.5). Below this, a ~20-bin histogram averages under one detection per bin and reads
 // as noise rather than a distribution, so the species is dropped from the top-N set. A single
