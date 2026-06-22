@@ -273,7 +273,8 @@ func TestCheckAndUpdateSpecies(t *testing.T) {
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
-	currentTime := time.Now()
+	// Use a fixed time at noon to avoid flakiness when tests run near midnight.
+	currentTime := time.Now().Truncate(24 * time.Hour).Add(12 * time.Hour)
 
 	// First detection
 	isNew, daysSince := tracker.CheckAndUpdateSpecies("Parus major", currentTime)
