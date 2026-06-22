@@ -352,3 +352,72 @@ func buildDailyActivityOnset(timestamps []int64, loc *time.Location, startDate, 
 	}
 	return result, nil
 }
+
+// buildSpeciesAccumulation turns per-species in-period first-seen timestamps into the cumulative
+// species accumulation curve (the biodiversity collector's curve).
+//
+// firstSeen carries each species' first detection (Unix epoch seconds) within the queried window,
+// false positives already excluded upstream. Each timestamp is mapped to its station-local calendar
+// date in loc; the count of species whose first-seen lands on a date is that day's NewSpecies, and
+// CumulativeSpecies is the running total. One point is emitted for every calendar day in the inclusive
+// [startDate, endDate] range so the client gets a continuous date axis whose flat tail reads as the
+// curve's asymptote. First-seen dates outside the enumerated range are ignored (the SQL already bounds
+// them, but a row skewed by loc onto an out-of-range day must never inflate the curve or index past
+// the axis). startDate/endDate are inclusive YYYY-MM-DD bounds; the per-detection bucketing is done
+// in loc (nil -> UTC), while the date axis is enumerated in UTC (see below). The result is always
+// non-nil.
+func buildSpeciesAccumulation(firstSeen []repository.SpeciesFirstSeen, loc *time.Location, startDate, endDate string) ([]datastore.SpeciesAccumulationPoint, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	// Enumerate the date axis in UTC, not loc. We only need the sequence of calendar dates from
+	// startDate to endDate, and UTC has no DST, so AddDate(0,0,1) steps exactly one calendar day every
+	// iteration. Parsing the bounds in a loc whose DST transition skips midnight (clocks jump
+	// 23:59:59 -> 01:00:00, e.g. America/Havana) would normalize the skipped 00:00 forward to 01:00,
+	// drift the loop's wall-clock hour, and drop the final day at the !d.After(end) comparison. The
+	// per-detection bucketing below stays in loc, which is the only place the station timezone matters.
+	start, err := time.Parse(time.DateOnly, startDate)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_species_accumulation").
+			Context("start_date", startDate).
+			Build()
+	}
+	end, err := time.Parse(time.DateOnly, endDate)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_species_accumulation").
+			Context("end_date", endDate).
+			Build()
+	}
+
+	// Tally how many species are first seen on each station-local calendar date. Dates outside the
+	// enumerated range are never looked up below, so they are ignored without an explicit filter. The
+	// (year, month, day) key is timezone-frame-independent, so the loc-bucketed keys here line up with
+	// the UTC-enumerated lookups below for the same calendar date.
+	newByDate := make(map[dateKey]int, len(firstSeen))
+	for i := range firstSeen {
+		lt := time.Unix(firstSeen[i].FirstDetected, 0).In(loc)
+		y, m, day := lt.Date()
+		newByDate[dateKey{year: y, month: m, day: day}]++
+	}
+
+	result := make([]datastore.SpeciesAccumulationPoint, 0)
+	cumulative := 0
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		y, m, day := d.Date()
+		n := newByDate[dateKey{year: y, month: m, day: day}]
+		cumulative += n
+		result = append(result, datastore.SpeciesAccumulationPoint{
+			Date:              d.Format(time.DateOnly),
+			CumulativeSpecies: cumulative,
+			NewSpecies:        n,
+		})
+	}
+	return result, nil
+}

@@ -25,6 +25,12 @@ import NocturnalClock from '../components/charts/d3/NocturnalClock.svelte';
 import { hourlyTotal } from '../components/charts/d3/utils/nocturnal';
 import type { NocturnalClockData, SunTimes } from '../components/charts/d3/utils/nocturnal';
 import TrendChartOptions from '../components/TrendChartOptions.svelte';
+import SpeciesAccumulationChart from '../components/charts/d3/SpeciesAccumulationChart.svelte';
+import { finalCumulative } from '../components/charts/d3/utils/accumulation';
+import type {
+  AccumulationData,
+  AccumulationPoint,
+} from '../components/charts/d3/utils/accumulation';
 
 import { formatDateForAPI } from './analyticsParams';
 import type { AnalyticsParams, ChartDef } from './types';
@@ -543,6 +549,54 @@ async function fetchConfidenceDistribution(
     .filter((d): d is ConfidenceDistributionDatum => d !== null);
 }
 
+interface AccumulationResponseItem {
+  date?: unknown;
+  cumulativeSpecies?: unknown;
+  newSpecies?: unknown;
+}
+
+/**
+ * Species accumulation curve: per calendar day, the cumulative count of distinct species first seen
+ * within the range (false positives excluded; "first seen" is windowed, not lifetime). The server
+ * emits one entry per day (a monotonic non-decreasing series). All-species, so the species filter is
+ * never sent. Defensively coerces the array payload into the chart's points shape.
+ */
+async function fetchSpeciesAccumulation(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<AccumulationData> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+  });
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/species/accumulation?${search}`), {
+    signal,
+  });
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid species accumulation response: expected an array');
+  }
+
+  const points: AccumulationPoint[] = [];
+  for (const raw of data) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as AccumulationResponseItem;
+    if (typeof item.date !== 'string') continue;
+    const cumulativeSpecies =
+      typeof item.cumulativeSpecies === 'number' && Number.isFinite(item.cumulativeSpecies)
+        ? item.cumulativeSpecies
+        : 0;
+    const newSpecies =
+      typeof item.newSpecies === 'number' && Number.isFinite(item.newSpecies) ? item.newSpecies : 0;
+    points.push({ date: item.date, cumulativeSpecies, newSpecies });
+  }
+
+  return { points };
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
@@ -692,6 +746,25 @@ export const CHART_REGISTRY: ChartDef[] = [
     }),
     size: 'full',
     supports: { species: false, source: false },
+  },
+  {
+    id: 'species-accumulation',
+    group: 'biodiversity',
+    titleKey: 'analytics.advanced.charts.accumulation.title',
+    descKey: 'analytics.advanced.charts.accumulation.description',
+    emptyKey: 'analytics.advanced.charts.accumulation.noData',
+    emptyHintKey: 'analytics.advanced.charts.accumulation.noDataHint',
+    component: SpeciesAccumulationChart,
+    fetch: fetchSpeciesAccumulation,
+    // The fetch result is an object with a points array (one per day across the whole range), so the
+    // default array-length count would always look like plenty of data. The meaningful count is how
+    // many distinct species actually accumulated; below 2 the curve is a trivial flat step, so
+    // ChartCard shows the not-enough-data state. The metric is all-species, so supports.species is
+    // false (the sibling diversity chart in this tab is also species:false, so no dead selector).
+    countDataPoints: data => finalCumulative(data as AccumulationData),
+    size: 'full',
+    supports: { species: false, source: false },
+    minDataPoints: 2,
   },
   {
     id: 'confidence-distribution',

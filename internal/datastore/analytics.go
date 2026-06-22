@@ -111,6 +111,17 @@ type SpeciesConfidenceHistogram struct {
 	Total          int
 }
 
+// SpeciesAccumulationPoint is one day on the species accumulation curve (the biodiversity collector's
+// curve). Date is the station-local calendar day (YYYY-MM-DD). CumulativeSpecies is the running count
+// of distinct species first detected on or before this day within the selected range; NewSpecies is
+// how many of them first appeared on this day. "First seen" is bounded to the queried window, not
+// lifetime, so the curve answers "how fast is the species list filling up over this period".
+type SpeciesAccumulationPoint struct {
+	Date              string
+	CumulativeSpecies int
+	NewSpecies        int
+}
+
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
@@ -483,6 +494,13 @@ func (ds *DataStore) GetDailyActivityOnset(_ context.Context, _, _, _ string) ([
 // real method.
 func (ds *DataStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _, _ int) ([]SpeciesConfidenceHistogram, error) {
 	return []SpeciesConfidenceHistogram{}, nil
+}
+
+// GetSpeciesAccumulation is a stub on the legacy store. The species accumulation curve is a v2only
+// feature; the legacy datastore is deprecated and being removed, so it returns an empty (non-nil)
+// slice rather than implementing the aggregation. See internal/datastore/v2only for the real method.
+func (ds *DataStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]SpeciesAccumulationPoint, error) {
+	return []SpeciesAccumulationPoint{}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time

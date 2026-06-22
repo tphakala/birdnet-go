@@ -653,3 +653,156 @@ func TestBuildSpeciesConfidenceHistogram_Empty(t *testing.T) {
 	assert.Empty(t, got)
 	assert.NotNil(t, got)
 }
+
+// accumTestZone is a fixed UTC+2 zone for deterministic accumulation date-bucketing tests (no DST
+// jumps), so a timestamp's local calendar date is unambiguous.
+var accumTestZone = time.FixedZone("UTC+2", 2*60*60)
+
+// localUnix returns the Unix epoch (seconds) for the given wall-clock time in loc, for terse first-seen
+// fixtures.
+func localUnix(loc *time.Location, year int, month time.Month, day, hour, minute int) int64 {
+	return time.Date(year, month, day, hour, minute, 0, 0, loc).Unix()
+}
+
+func TestBuildSpeciesAccumulation_Empty(t *testing.T) {
+	t.Parallel()
+
+	// Nil input over a 3-day range: one zero point per day, never nil.
+	got, err := buildSpeciesAccumulation(nil, accumTestZone, "2026-06-01", "2026-06-03")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Len(t, got, 3)
+	for i := range got {
+		assert.Equal(t, 0, got[i].CumulativeSpecies)
+		assert.Equal(t, 0, got[i].NewSpecies)
+	}
+	assert.Equal(t, "2026-06-01", got[0].Date)
+	assert.Equal(t, "2026-06-03", got[2].Date)
+}
+
+func TestBuildSpeciesAccumulation_CumulativeMonotonic(t *testing.T) {
+	t.Parallel()
+
+	// Three species first seen on day 1, day 2, day 4 of a 5-day window; day 3 and day 5 add none.
+	firstSeen := []repository.SpeciesFirstSeen{
+		{ScientificName: "Turdus merula", FirstDetected: localUnix(accumTestZone, 2026, 6, 1, 5, 30)},
+		{ScientificName: "Erithacus rubecula", FirstDetected: localUnix(accumTestZone, 2026, 6, 2, 6, 0)},
+		{ScientificName: "Strix aluco", FirstDetected: localUnix(accumTestZone, 2026, 6, 4, 23, 0)},
+	}
+
+	got, err := buildSpeciesAccumulation(firstSeen, accumTestZone, "2026-06-01", "2026-06-05")
+	require.NoError(t, err)
+	require.Len(t, got, 5)
+
+	wantCumulative := []int{1, 2, 2, 3, 3}
+	wantNew := []int{1, 1, 0, 1, 0}
+	prev := 0
+	for i := range got {
+		assert.Equalf(t, wantCumulative[i], got[i].CumulativeSpecies, "cumulative on day %d", i+1)
+		assert.Equalf(t, wantNew[i], got[i].NewSpecies, "new on day %d", i+1)
+		assert.GreaterOrEqualf(t, got[i].CumulativeSpecies, prev, "curve must be monotonic non-decreasing")
+		prev = got[i].CumulativeSpecies
+	}
+	// The final cumulative equals the number of distinct in-period species.
+	assert.Equal(t, 3, got[len(got)-1].CumulativeSpecies)
+}
+
+func TestBuildSpeciesAccumulation_SameDayFirsts(t *testing.T) {
+	t.Parallel()
+
+	// Two species first seen on the same day jump the cumulative by two on that day.
+	firstSeen := []repository.SpeciesFirstSeen{
+		{ScientificName: "Turdus merula", FirstDetected: localUnix(accumTestZone, 2026, 6, 2, 4, 0)},
+		{ScientificName: "Erithacus rubecula", FirstDetected: localUnix(accumTestZone, 2026, 6, 2, 7, 0)},
+	}
+
+	got, err := buildSpeciesAccumulation(firstSeen, accumTestZone, "2026-06-01", "2026-06-02")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+
+	assert.Equal(t, 0, got[0].CumulativeSpecies)
+	assert.Equal(t, 0, got[0].NewSpecies)
+	assert.Equal(t, 2, got[1].CumulativeSpecies)
+	assert.Equal(t, 2, got[1].NewSpecies)
+}
+
+func TestBuildSpeciesAccumulation_OutOfRangeIgnored(t *testing.T) {
+	t.Parallel()
+
+	// First-seen dates outside the enumerated range must not be counted (defensive: SQL already
+	// bounds them, but a row skewed by loc onto an out-of-range day must never inflate the curve).
+	firstSeen := []repository.SpeciesFirstSeen{
+		{ScientificName: "Before range", FirstDetected: localUnix(accumTestZone, 2026, 5, 30, 12, 0)},
+		{ScientificName: "In range", FirstDetected: localUnix(accumTestZone, 2026, 6, 2, 12, 0)},
+		{ScientificName: "After range", FirstDetected: localUnix(accumTestZone, 2026, 6, 10, 12, 0)},
+	}
+
+	got, err := buildSpeciesAccumulation(firstSeen, accumTestZone, "2026-06-01", "2026-06-03")
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	// Only the single in-range species accumulates.
+	assert.Equal(t, 1, got[len(got)-1].CumulativeSpecies)
+	assert.Equal(t, 1, got[1].NewSpecies)
+}
+
+func TestBuildSpeciesAccumulation_TimezoneDateAssignment(t *testing.T) {
+	t.Parallel()
+
+	// A 23:30 local detection belongs to its local date, not the next UTC day. In UTC+2 this epoch
+	// is 21:30 UTC the same date; bucketing in loc keeps it on 2026-06-01.
+	firstSeen := []repository.SpeciesFirstSeen{
+		{ScientificName: "Late singer", FirstDetected: localUnix(accumTestZone, 2026, 6, 1, 23, 30)},
+	}
+
+	got, err := buildSpeciesAccumulation(firstSeen, accumTestZone, "2026-06-01", "2026-06-02")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, 1, got[0].NewSpecies, "23:30 local must land on its own local date")
+	assert.Equal(t, 1, got[0].CumulativeSpecies)
+	assert.Equal(t, 0, got[1].NewSpecies)
+}
+
+func TestBuildSpeciesAccumulation_MidnightDSTEnumeration(t *testing.T) {
+	t.Parallel()
+
+	// A timezone whose spring-forward DST transition skips midnight (clocks jump 23:59:59 -> 01:00:00)
+	// would drift a loc-based day enumeration and drop the final day. The date axis must still be the
+	// exact inclusive calendar range. Cuba sprang forward at 00:00 local on 2018-03-11. Skip when the
+	// zone is unavailable (minimal images without tzdata), like the heatmap DST test.
+	loc, err := time.LoadLocation("America/Havana")
+	if err != nil {
+		t.Skipf("tzdata unavailable: %v", err)
+	}
+
+	got, err := buildSpeciesAccumulation(nil, loc, "2018-03-09", "2018-03-13")
+	require.NoError(t, err)
+
+	wantDates := []string{"2018-03-09", "2018-03-10", "2018-03-11", "2018-03-12", "2018-03-13"}
+	require.Len(t, got, len(wantDates), "every calendar day in the range must be emitted across the DST jump")
+	for i, want := range wantDates {
+		assert.Equalf(t, want, got[i].Date, "day index %d", i)
+		assert.Equal(t, 0, got[i].CumulativeSpecies)
+	}
+}
+
+func TestBuildSpeciesAccumulation_NilLocDefaultsUTC(t *testing.T) {
+	t.Parallel()
+
+	firstSeen := []repository.SpeciesFirstSeen{
+		{ScientificName: "Turdus merula", FirstDetected: localUnix(time.UTC, 2026, 6, 1, 12, 0)},
+	}
+	got, err := buildSpeciesAccumulation(firstSeen, nil, "2026-06-01", "2026-06-01")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, 1, got[0].CumulativeSpecies)
+}
+
+func TestBuildSpeciesAccumulation_InvalidDate(t *testing.T) {
+	t.Parallel()
+
+	_, err := buildSpeciesAccumulation(nil, accumTestZone, "not-a-date", "2026-06-03")
+	require.Error(t, err)
+
+	_, err = buildSpeciesAccumulation(nil, accumTestZone, "2026-06-01", "bad")
+	require.Error(t, err)
+}

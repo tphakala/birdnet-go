@@ -207,6 +207,11 @@ type Interface interface {
 	// powering the confidence distribution chart. With no species filter it covers the top `limit`
 	// species by detection volume; with a species filter it covers just that species.
 	GetConfidenceHistogram(ctx context.Context, startDate, endDate, species string, bins, limit int) ([]SpeciesConfidenceHistogram, error)
+	// GetSpeciesAccumulation returns, per calendar day in the inclusive date range, the cumulative
+	// count of distinct species first detected within that range (false positives excluded). Powers
+	// the species accumulation curve in the Biodiversity tab; "first seen" is bounded to the selected
+	// window, not lifetime.
+	GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]SpeciesAccumulationPoint, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods

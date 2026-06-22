@@ -306,6 +306,9 @@ func (m *mockStore) GetDailyActivityOnset(_ context.Context, _, _, _ string) ([]
 func (m *mockStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _, _ int) ([]datastore.SpeciesConfidenceHistogram, error) {
 	return []datastore.SpeciesConfidenceHistogram{}, nil
 }
+func (m *mockStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]datastore.SpeciesAccumulationPoint, error) {
+	return []datastore.SpeciesAccumulationPoint{}, nil
+}
 
 // BG-17 fix: Add notification history methods
 func (m *mockStore) GetActiveNotificationHistory(_ context.Context, after time.Time) ([]datastore.NotificationHistory, error) {

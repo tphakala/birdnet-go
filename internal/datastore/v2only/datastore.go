@@ -3182,6 +3182,29 @@ func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endD
 	return buildSpeciesConfidenceHistogram(speciesSet, confByLabel, bins, minCount), nil
 }
 
+// GetSpeciesAccumulation returns the species accumulation curve over [startDate, endDate]: per
+// calendar day, the cumulative count of distinct species first detected within the range (false
+// positives excluded). It fetches each species' in-period first-seen in one grouped query
+// (GetSpeciesFirstSeenInPeriod), then builds the cumulative per-day curve in a shared, table-tested
+// Go helper (buildSpeciesAccumulation) using the station timezone for date bucketing.
+func (ds *Datastore) GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesAccumulationPoint, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	firstSeen, err := ds.detection.GetSpeciesFirstSeenInPeriod(ctx, start, end)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_accumulation").
+			Build()
+	}
+
+	return buildSpeciesAccumulation(firstSeen, ds.timezone, startDate, endDate)
+}
+
 // civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and
 // station timezone. The closure yields civil dawn's station-local minute-of-day for a date, or
 // ok=false when no SunCalc is configured or civil dawn is undefined for the date (polar day/night).
