@@ -396,16 +396,21 @@ func canonicalizeValue(configKey, envValue string) {
 	// Determine value type based on config key and canonicalize accordingly
 	switch configKey {
 	// Boolean values
-	case ConfigKeyDebug, ConfigKeyUseXNNPACK, ConfigKeyRangeFilterPassUnmappedSpecies, ConfigKeyRangeFilterDebug:
+	case ConfigKeyDebug, ConfigKeyUseXNNPACK, ConfigKeyRangeFilterPassUnmappedSpecies, ConfigKeyRangeFilterDebug,
+		ConfigKeySecurityAutoTLS, ConfigKeySecurityRedirect:
 		if parsed, err := strconv.ParseBool(strings.ToLower(trimmed)); err == nil {
 			viper.Set(configKey, parsed)
 		}
 
-	// Integer values
+	// Integer values (ports are stored as strings but trimmed)
 	case ConfigKeyThreads:
 		if parsed, err := strconv.Atoi(trimmed); err == nil {
 			viper.Set(configKey, parsed)
 		}
+
+	// Port values - trim whitespace, store as clean string
+	case ConfigKeyWebServerPort, ConfigKeySecurityTLSPort:
+		viper.Set(configKey, trimmed)
 
 	// Float64 values
 	case ConfigKeyLatitude, ConfigKeyLongitude, ConfigKeySensitivity,
@@ -418,6 +423,13 @@ func canonicalizeValue(configKey, envValue string) {
 	case ConfigKeyLocale:
 		// Canonicalize locale to lowercase
 		viper.Set(configKey, strings.ToLower(trimmed))
+
+	case ConfigKeySecurityTLSMode:
+		// TLS mode is case-insensitive; canonicalize to lowercase
+		viper.Set(configKey, strings.ToLower(trimmed))
+
+	case ConfigKeySecurityHost:
+		viper.Set(configKey, trimmed)
 
 	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath, ConfigKeyRangeFilterLabelsPath:
 		// Regular string values - just trim whitespace

@@ -98,6 +98,16 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 		slogger:  GetLogger(),
 	}
 
+	// Register cleanup before starting so shutdown runs even if assertions fail.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:gocritic // t.Context() cancels on test return, preventing graceful shutdown
+		defer cancel()
+		_ = s.echo.Shutdown(ctx)
+		if s.httpRedirectServer != nil {
+			_ = s.httpRedirectServer.Shutdown(ctx)
+		}
+	})
+
 	go func() {
 		_ = s.startBlocking()
 	}()
@@ -128,6 +138,8 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	_ = resp.Body.Close()
 	assert.NotEqual(t, http.StatusBadGateway, resp.StatusCode,
 		"HTTP listener should serve requests, not fail")
+	assert.Less(t, resp.StatusCode, 300,
+		"Non-ACME request should not redirect when RedirectToHTTPS is false")
 
 	// TLS listener should accept TCP connections (full TLS handshake won't
 	// complete without a real cert, but a successful TCP connect proves the
@@ -135,15 +147,6 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%s", tlsPort), testutil.ShortTestTimeout)
 	require.NoError(t, err, "TLS listener should be active on port %s", tlsPort)
 	_ = conn.Close()
-
-	// Clean shutdown — use a real timeout so listeners fully drain.
-	// t.Context() is cancelled immediately when the test returns, causing goroutine leaks.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:gocritic // intentional: t.Context() cancels too early
-	defer cancel()
-	_ = s.echo.Shutdown(ctx)
-	if s.httpRedirectServer != nil {
-		_ = s.httpRedirectServer.Shutdown(ctx)
-	}
 }
 
 func mustGetFreePort(t *testing.T) string {

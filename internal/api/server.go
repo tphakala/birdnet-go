@@ -651,7 +651,14 @@ func (s *Server) startBlocking() error {
 			ReadTimeout:  s.config.ReadTimeout,
 			WriteTimeout: s.config.WriteTimeout,
 		}
-		go s.serveHTTPRedirect()
+
+		// Pre-bind the HTTP listener so ACME challenges work. Fail fast if the
+		// port is unavailable rather than discovering it asynchronously.
+		httpLn, listenErr := net.Listen("tcp", addr)
+		if listenErr != nil {
+			return fmt.Errorf("AutoTLS: cannot bind HTTP listener on %s (required for ACME HTTP-01 challenges): %w", addr, listenErr)
+		}
+		go s.serveHTTPOnListener(httpLn)
 
 		// Start HTTPS server on TLS port (this blocks)
 		tlsAddr := s.config.TLSAddress()
@@ -802,6 +809,17 @@ func (s *Server) serveHTTPRedirect() {
 	)
 
 	if err := s.httpRedirectServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.slogger.Error("HTTP redirect server error", logger.Error(err))
+	}
+}
+
+// serveHTTPOnListener serves the HTTP redirect/ACME server on a pre-bound listener.
+func (s *Server) serveHTTPOnListener(ln net.Listener) {
+	s.slogger.Info("Starting HTTP->HTTPS redirect server",
+		logger.String("http_address", s.httpRedirectServer.Addr),
+	)
+
+	if err := s.httpRedirectServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.slogger.Error("HTTP redirect server error", logger.Error(err))
 	}
 }
