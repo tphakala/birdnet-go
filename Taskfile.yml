@@ -1034,32 +1034,27 @@ tasks:
   e2e-install:
     desc: Install E2E testing dependencies
     dir: frontend
-    # e2e-install runs `npm install -D` into frontend/node_modules. It depends on
-    # frontend-install (the base `npm install`) so the two npm writes are
-    # serialized and never write the same node_modules concurrently, the
-    # corruption class that truncated typescript.js (see frontend-install above);
-    # run: once does not fix that alone because the race is between two different
-    # tasks. run: once still keeps e2e-install itself to a single execution per
-    # invocation. e2e-test invokes it sequentially after frontend-build (not as a
-    # concurrent dep) so it also never writes node_modules while the build and
-    # typecheck are reading it.
+    # The Playwright test packages (@playwright/test, playwright,
+    # @axe-core/playwright) are declared in package.json devDependencies, so
+    # frontend-install already installs them; this task only downloads the browser
+    # binaries. `npx playwright install` writes to the Playwright browser cache,
+    # not node_modules, so it cannot race the frontend npm install/build. The old
+    # `npm install -D` here was redundant with those devDependencies and could
+    # drift their pinned versions and dirty the workspace (and was the second
+    # node_modules writer that raced frontend-install, the corruption class that
+    # truncated typescript.js; see frontend-install above). deps: [frontend-install]
+    # ensures the playwright package is present to resolve the matching browser
+    # build; run: once keeps it to a single execution per invocation.
     deps: [frontend-install]
     run: once
     cmds:
-      - npm install -D @playwright/test playwright @axe-core/playwright
       - npx playwright install
 
   e2e-test:
     desc: Run end-to-end tests
     dir: frontend
-    # frontend-build (and its frontend-install + frontend-typecheck chain) must
-    # finish before e2e-install runs: e2e-install's `npm install -D` mutates
-    # node_modules, so running it concurrently with the build/typecheck reads is a
-    # write/read race on the same tree. Invoking e2e-install as a sequential
-    # command rather than a concurrent dep guarantees that ordering.
-    deps: [frontend-build]
+    deps: [frontend-build, e2e-install]
     cmds:
-      - task: e2e-install
       - npx playwright test
 
   e2e-test-headed:
