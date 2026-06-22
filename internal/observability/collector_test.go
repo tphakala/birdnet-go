@@ -344,6 +344,14 @@ func TestCollector_InferenceThroughput(t *testing.T) {
 	store := NewMemoryStore(10)
 	collector := NewCollector(store, time.Second, func() float64 { return 0 })
 
+	// Deterministic clock: the collector stamps every tick from collector.now, so
+	// the elapsed interval is exactly what the test sets. This replaces the old
+	// approach of bracketing wall-clock reads, whose resolution is coarse on
+	// Windows: both collect() calls could land in the same clock quantum, yielding
+	// elapsed 0 -> throughput 0 -> a spurious failure. See Forgejo #1181.
+	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	collector.now = func() time.Time { return clock }
+
 	counters := &inferencestats.CounterMap{}
 	counters.RecordInvoke("ModelA", 10_000) // 10 ms
 	counters.RecordInvoke("ModelA", 10_000)
@@ -353,62 +361,28 @@ func TestCollector_InferenceThroughput(t *testing.T) {
 	throughputKey := inferencestats.ThroughputMetricKey("ModelA")
 
 	// First tick: seeds the previous snapshot; no throughput recorded yet.
-	// Record wall-clock time around the first collect so we can bracket
-	// the Snapshot CollectedAt that the collector stores internally.
-	tick1Before := time.Now()
 	collector.collect()
-	tick1After := time.Now()
 	pts := store.Get(throughputKey, 10)
 	assert.Nil(t, pts, "throughput must not be recorded on the seeding tick")
 
-	// Record two more invocations before the second tick.
-	const deltaInvokes = 2
+	// Advance the clock by a known interval, then record two more invocations.
+	const (
+		deltaInvokes = 2
+		interval     = 2 * time.Second
+	)
+	clock = clock.Add(interval)
 	counters.RecordInvoke("ModelA", 10_000)
 	counters.RecordInvoke("ModelA", 10_000)
 
-	// Second tick: delta = 2 invocations over elapsed time.
-	tick2Before := time.Now()
+	// Second tick: 2 invocations over a 2s interval => exactly 1.0 inv/sec.
 	collector.collect()
-	tick2After := time.Now()
 
 	pts = store.Get(throughputKey, 10)
 	require.Len(t, pts, 1, "throughput must be recorded after second tick")
 
-	// The collector computes throughput as float64(deltaInvokes) / elapsedSeconds,
-	// where elapsedSeconds = snap2.CollectedAt - snap1.CollectedAt. Both CollectedAt
-	// values are set to time.Now() inside the respective Snapshot() calls, so the
-	// actual elapsed lies in [tick2Before - tick1After, tick2After - tick1Before].
-	//
-	// Recover the actual elapsed that the collector used (collector: throughput = delta / elapsed,
-	// so elapsed = delta / throughput) and assert it falls within the bracketed range.
-	// Also verify the formula itself: throughput * elapsed_recovered = deltaInvokes.
 	got := pts[0].Value
-	require.Greater(t, got, 0.0, "throughput must be positive when invocations occurred")
-
-	// Recovered elapsed seconds used by the collector.
-	recoveredElapsed := float64(deltaInvokes) / got
-
-	// The actual Snapshot CollectedAt values fall between tick1Before..tick1After
-	// and tick2Before..tick2After respectively. The elapsed is in the range
-	// [tick2Before - tick1After, tick2After - tick1Before]. Guard against
-	// negative lower bound (can occur on very fast machines where tick2Before < tick1After).
-	lowerElapsed := tick2Before.Sub(tick1After).Seconds()
-	upperElapsed := tick2After.Sub(tick1Before).Seconds()
-	if lowerElapsed < 0 {
-		lowerElapsed = 0
-	}
-
-	// The formula throughput = deltaInvokes / elapsed must hold: recovered elapsed
-	// should be consistent with the measured wall-clock range.
-	require.GreaterOrEqual(t, recoveredElapsed, lowerElapsed,
-		"recovered elapsed must be >= lower wall-clock bound")
-	require.LessOrEqual(t, recoveredElapsed, upperElapsed+time.Millisecond.Seconds(),
-		"recovered elapsed must be <= upper wall-clock bound (with 1ms slack)")
-
-	// Also verify via InDelta: expected throughput using the recovered elapsed equals the
-	// recorded value within floating-point rounding error.
-	expectedThroughput := float64(deltaInvokes) / recoveredElapsed
-	require.InDelta(t, expectedThroughput, got, 1e-9, "throughput must equal deltaInvokes/elapsed")
+	want := float64(deltaInvokes) / interval.Seconds()
+	require.InDelta(t, want, got, 1e-9, "throughput must equal deltaInvokes/elapsedSeconds")
 }
 
 // TestCollector_InferenceThroughputZeroWhenIdle verifies that throughput is
@@ -417,6 +391,11 @@ func TestCollector_InferenceThroughputZeroWhenIdle(t *testing.T) {
 	t.Parallel()
 	store := NewMemoryStore(10)
 	collector := NewCollector(store, time.Second, func() float64 { return 0 })
+
+	// Deterministic clock with a real interval between ticks, so the idle zero
+	// comes from a zero invocation delta and not from a zero elapsed interval.
+	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	collector.now = func() time.Time { return clock }
 
 	counters := &inferencestats.CounterMap{}
 	counters.RecordInvoke("ModelB", 5_000)
@@ -427,7 +406,8 @@ func TestCollector_InferenceThroughputZeroWhenIdle(t *testing.T) {
 	// First tick: seeding.
 	collector.collect()
 
-	// Second tick: no new invocations since the first tick.
+	// Second tick: clock advances but no new invocations since the first tick.
+	clock = clock.Add(time.Second)
 	collector.collect()
 
 	pts := store.Get(throughputKey, 10)
@@ -531,6 +511,14 @@ func TestCollector_InferenceErrorRateCounterReset(t *testing.T) {
 	store := NewMemoryStore(10)
 	collector := NewCollector(store, time.Second, func() float64 { return 0 })
 
+	// Deterministic clock so the second tick always observes a positive elapsed
+	// interval. The two collect() calls otherwise run back-to-back, and on coarse
+	// monotonic-clock platforms (e.g. Windows) both snapshots could read an
+	// identical timestamp, yielding elapsed == 0 and a throughput of 0 that fails
+	// the assertion below.
+	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	collector.now = func() time.Time { return clock }
+
 	// Tick 1: seed with high absolute values (10 invocations, 3 errors).
 	counters1 := &inferencestats.CounterMap{}
 	for range 10 {
@@ -542,15 +530,8 @@ func TestCollector_InferenceErrorRateCounterReset(t *testing.T) {
 	collector.SetInferenceCounters(counters1)
 	collector.collect() // seeding tick; nothing written to store
 
-	// Backdate the seeded snapshot so the second tick observes a positive elapsed
-	// interval. The two collect() calls run back-to-back, and on platforms with
-	// coarse monotonic-clock granularity (e.g. Windows) both snapshots can read an
-	// identical timestamp, yielding elapsed == 0 and a throughput of 0 that fails
-	// the assertion below. Subtracting a full second is robust regardless of clock
-	// resolution; Add preserves the monotonic reading so the delta stays positive.
-	if prev, ok := collector.prevInferenceSnaps["ModelF"]; ok {
-		prev.CollectedAt = prev.CollectedAt.Add(-time.Second)
-	}
+	// Advance the clock so the second tick sees a one-second interval.
+	clock = clock.Add(time.Second)
 
 	// Tick 2: inject a fresh CounterMap with lower absolute values so that
 	// current < previous on both InvokeCount and InvokeErrors. This simulates
