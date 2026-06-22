@@ -21,6 +21,9 @@ import SpeciesRidgeline from '../components/charts/d3/SpeciesRidgeline.svelte';
 import DawnChorusOnset from '../components/charts/d3/DawnChorusOnset.svelte';
 import { onsetCount } from '../components/charts/d3/utils/dawnOnset';
 import type { DawnOnsetData, DawnOnsetPoint } from '../components/charts/d3/utils/dawnOnset';
+import NocturnalClock from '../components/charts/d3/NocturnalClock.svelte';
+import { hourlyTotal } from '../components/charts/d3/utils/nocturnal';
+import type { NocturnalClockData, SunTimes } from '../components/charts/d3/utils/nocturnal';
 import TrendChartOptions from '../components/TrendChartOptions.svelte';
 
 import { formatDateForAPI } from './analyticsParams';
@@ -387,6 +390,99 @@ async function fetchDawnOnset(
   return { points };
 }
 
+const HOURS_IN_DAY = 24;
+const MINUTES_IN_DAY = HOURS_IN_DAY * 60;
+
+/** Coerces the hourly-distribution payload ([{hour,count}]) into a dense, bounds-checked number[24]. */
+function coerceHourly(data: unknown): number[] {
+  const hourly = new Array<number>(HOURS_IN_DAY).fill(0);
+  if (!Array.isArray(data)) return hourly;
+  for (const raw of data) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as { hour?: unknown; count?: unknown };
+    const hour = typeof item.hour === 'number' ? item.hour : -1;
+    // Counts are detection tallies; clamp to >= 0 so a malformed negative never yields a negative
+    // (inverted) bar height.
+    const count =
+      typeof item.count === 'number' && Number.isFinite(item.count) ? Math.max(0, item.count) : 0;
+    if (Number.isInteger(hour) && hour >= 0 && hour < HOURS_IN_DAY) {
+      // eslint-disable-next-line security/detect-object-injection -- hour is bounds-checked above
+      hourly[hour] = count;
+    }
+  }
+  return hourly;
+}
+
+/**
+ * A minute-of-day value (0..1439) or null. Out-of-domain numbers are rejected (null) so a malformed
+ * payload cannot place sun shading off the 24h canvas; the chart treats null as an undefined event.
+ */
+function coerceSunMinute(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return value >= 0 && value < MINUTES_IN_DAY ? value : null;
+}
+
+/**
+ * Nocturnal activity clock: hourly detection counts (reusing the unchanged hourly-distribution
+ * endpoint) plus sun times for the day/night shading (from the separate /analytics/sun endpoint).
+ * The two are fetched in parallel; a sun-fetch failure degrades to no shading rather than failing
+ * the whole card. Honors an optional single-species filter on the counts only (sun is
+ * species-independent). The sun endpoint receives the same range and picks the representative
+ * midpoint date server-side.
+ */
+async function fetchNocturnal(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<NocturnalClockData> {
+  const start = formatDateForAPI(params.startDate);
+  const end = formatDateForAPI(params.endDate);
+
+  const hourlySearch = new URLSearchParams({ start_date: start, end_date: end });
+  // The endpoint filters by a single species; use the first selected (none = all species).
+  if (params.species.length > 0) hourlySearch.append('species', params.species[0]);
+
+  const hourlyPromise = (async (): Promise<number[]> => {
+    const response = await fetch(
+      buildAppUrl(`/api/v2/analytics/time/distribution/hourly?${hourlySearch}`),
+      { signal }
+    );
+    ensureOk(response);
+    return coerceHourly(await response.json());
+  })();
+
+  const sunSearch = new URLSearchParams({ start_date: start, end_date: end });
+  const sunPromise: Promise<SunTimes | null> = (async (): Promise<SunTimes | null> => {
+    const response = await fetch(buildAppUrl(`/api/v2/analytics/sun?${sunSearch}`), { signal });
+    ensureOk(response);
+    const raw: unknown = await response.json();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const body = raw as {
+      date?: unknown;
+      sunrise?: unknown;
+      sunset?: unknown;
+      civilDawn?: unknown;
+      civilDusk?: unknown;
+      available?: unknown;
+    };
+    return {
+      date: typeof body.date === 'string' ? body.date : '',
+      sunrise: coerceSunMinute(body.sunrise),
+      sunset: coerceSunMinute(body.sunset),
+      civilDawn: coerceSunMinute(body.civilDawn),
+      civilDusk: coerceSunMinute(body.civilDusk),
+      available: body.available === true,
+    };
+  })().catch((err: unknown) => {
+    // Propagate cancellation so an aborted request rejects (the card ignores aborts) rather than
+    // resolving with partial data; only a genuine sun failure degrades to no shading.
+    if (err instanceof Error && err.name === 'AbortError') throw err;
+    return null;
+  });
+
+  const [hourly, sun] = await Promise.all([hourlyPromise, sunPromise]);
+  return { hourly, sun };
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
@@ -449,6 +545,23 @@ export const CHART_REGISTRY: ChartDef[] = [
     supports: { species: true, source: false },
     // A handful of days with onsets is the minimum before the scatter + trend read as anything.
     minDataPoints: 3,
+  },
+  {
+    id: 'nocturnal-clock',
+    group: 'patterns',
+    titleKey: 'analytics.advanced.charts.nocturnal.title',
+    descKey: 'analytics.advanced.charts.nocturnal.description',
+    emptyKey: 'analytics.advanced.charts.nocturnal.noData',
+    emptyHintKey: 'analytics.advanced.charts.nocturnal.noDataHint',
+    component: NocturnalClock,
+    fetch: fetchNocturnal,
+    // The fetch result is an object (hourly counts + sun times), so count total detections across
+    // the day rather than relying on ChartCard's default array-length count.
+    countDataPoints: data => hourlyTotal(data as NocturnalClockData),
+    size: 'full',
+    supports: { species: true, source: false },
+    // Below this many detections the 24h dial is too sparse to read as an activity pattern.
+    minDataPoints: 10,
   },
   {
     id: 'time-of-day-species',
