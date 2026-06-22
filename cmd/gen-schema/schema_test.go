@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	// santhosh-tekuri/jsonschema is a validation library (separate from
+	// invopop/jsonschema used for generation) — we need both because
+	// invopop only generates schemas, it cannot validate documents.
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

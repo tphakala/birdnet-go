@@ -94,7 +94,8 @@ func flattenProperties(b *strings.Builder, prefix string, s, root *jsonschema.Sc
 }
 
 // resolveRefWithDesc follows a $ref to its definition. When the reference site
-// carries a description that the definition lacks, it propagates it forward.
+// carries a description that the definition lacks, it returns a shallow copy
+// with the description filled in — avoiding mutation of the shared definition.
 func resolveRefWithDesc(s, root *jsonschema.Schema) *jsonschema.Schema {
 	if s == nil {
 		return nil
@@ -108,7 +109,9 @@ func resolveRefWithDesc(s, root *jsonschema.Schema) *jsonschema.Schema {
 		return s
 	}
 	if s.Description != "" && def.Description == "" {
-		def.Description = s.Description
+		copy := *def
+		copy.Description = s.Description
+		return &copy
 	}
 	return def
 }
