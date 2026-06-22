@@ -1876,6 +1876,17 @@ func (o *Orchestrator) PrimaryModelID() string {
 	return o.ModelInfo.ID
 }
 
+// PrimaryModelInfo returns a copy of the primary model's live ModelInfo, read
+// under o.mu so callers outside the package get a consistent value instead of
+// racing reloadModelInternal's o.mu-guarded write to o.ModelInfo. The result is
+// a snapshot copy; it does not track subsequent reloads. Returns the zero
+// ModelInfo if no primary is set.
+func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.ModelInfo
+}
+
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
 // For the primary model entry, the live o.ModelInfo is returned rather than the
