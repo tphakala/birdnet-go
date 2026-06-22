@@ -30,7 +30,7 @@ const (
 // ModelInfo.Backend (the static metadata). BackendOpenVINO is an execution
 // provider, not a file type: OpenVINO executes an ONNX model file through the OV
 // runtime, so it only ever appears as a live, per-instance backend reported by
-// ModelInstance.Backend(), never as a ModelInfo.Backend file-type value.
+// ModelInstance.RuntimeInfo(), never as a ModelInfo.Backend file-type value.
 const (
 	BackendTFLite   = "TFLite"
 	BackendONNX     = "ONNX"

@@ -389,42 +389,25 @@ func (o *Orchestrator) instanceFor(modelID string) ModelInstance {
 	return inst
 }
 
-// GetModelDevice returns the compute device (execution provider) the named
-// model's inference currently runs on, resolved from the live instance's
-// Device() (e.g. "CPU" or "GPU"). It returns deviceUnknown when the model is not
-// loaded or its instance has been torn down.
-func (o *Orchestrator) GetModelDevice(modelID string) string {
+// GetModelRuntimeInfo returns the live compute device, execution backend, and
+// effective runtime precision for the named model, resolved from the live
+// instance's RuntimeInfo() in a single instance lookup. Because RuntimeInfo()
+// returns the triplet from one consistent snapshot, the status card never
+// observes a mixed-generation triplet when a reload completes mid-read.
+//
+// device is the live execution provider ("CPU"/"GPU"), falling back to
+// deviceUnknown when the model is not loaded or its instance has been torn down.
+// backend (BackendTFLite/BackendONNX/BackendOpenVINO) and precision
+// ("INT8"/"FP16"/"FP32") come from the loaded instance, so an ONNX model executed
+// on OpenVINO reports "OpenVINO" and its effective precision; both are "" when the
+// model is not loaded, signalling callers to fall back to the static ModelInfo
+// file metadata.
+func (o *Orchestrator) GetModelRuntimeInfo(modelID string) (device, backend, precision string) {
 	inst := o.instanceFor(modelID)
 	if inst == nil {
-		return deviceUnknown
+		return deviceUnknown, "", ""
 	}
-	return inst.Device()
-}
-
-// GetModelBackend returns the live inference execution backend the named model
-// loaded on (BackendTFLite/BackendONNX/BackendOpenVINO), resolved from the live
-// instance's Backend(). It returns "" when the model is not loaded or its instance
-// has been torn down, signalling callers to fall back to the static
-// ModelInfo.Backend file metadata.
-func (o *Orchestrator) GetModelBackend(modelID string) string {
-	inst := o.instanceFor(modelID)
-	if inst == nil {
-		return ""
-	}
-	return inst.Backend()
-}
-
-// GetModelPrecision returns the effective runtime precision the named model
-// executes at ("INT8"/"FP16"/"FP32"), resolved from the live instance's
-// Precision(). It returns "" when the model is not loaded, its instance has been
-// torn down, or the precision is unknown, signalling callers to fall back to the
-// static ModelInfo.Quantization file metadata.
-func (o *Orchestrator) GetModelPrecision(modelID string) string {
-	inst := o.instanceFor(modelID)
-	if inst == nil {
-		return ""
-	}
-	return inst.Precision()
+	return inst.RuntimeInfo()
 }
 
 // ModelSpecFor returns the ModelSpec for the given model ID.
