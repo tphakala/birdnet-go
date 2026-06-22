@@ -69,7 +69,12 @@ if [ "$status" != "ok" ]; then
 fi
 
 # Config must resolve under the writable /config mount, not /.
-if ! docker logs "$cid" 2>&1 | grep -Eq "config_file=/config(/|[[:space:]]|$)"; then
+# Capture logs into a variable rather than piping docker logs directly into
+# grep -q: with pipefail, grep -q exits on first match → closes the pipe →
+# docker logs receives SIGPIPE (exit 141) → pipeline returns non-zero even
+# though grep matched. Using a here-string avoids the SIGPIPE race entirely.
+final_logs=$(docker logs "$cid" 2>&1 || true)
+if ! grep -Eq "config_file=/config(/|[[:space:]]|$)" <<<"$final_logs"; then
     echo "FAIL: config_file did not resolve under /config (HOME fallback regressed?)"
     exit 1
 fi
