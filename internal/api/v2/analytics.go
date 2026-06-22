@@ -191,6 +191,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	timeGroup.GET("/distribution/hourly", c.GetTimeOfDayDistribution)      // Renamed endpoint for time-of-day distribution
 	timeGroup.GET("/distribution/species", c.GetSpeciesHourlyDistribution) // Who-sings-when ridgeline (top-N species hour-of-day)
 	timeGroup.GET("/heatmap", c.GetActivityHeatmap)                        // Seasonal density heatmap (date x intra-day slot)
+	timeGroup.GET("/dawn-onset", c.GetDawnChorusOnset)                     // Dawn-chorus onset tracker (daily onset vs civil dawn)
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -1275,6 +1276,108 @@ func newSpeciesHourlyDistributionResponse(data []datastore.SpeciesHourlyDistribu
 		})
 	}
 	return items
+}
+
+// dawnChorusOnsetItem is one calendar day's row in the dawn-chorus onset wire payload (design spec
+// section 6.3). OnsetRelMinutes is the onset minute-of-day minus civil dawn's minute-of-day
+// (negative = before civil dawn); it is null when the day had too few detections or civil dawn is
+// undefined for the date, which the client renders as a gap (its trend line breaks over nulls
+// rather than interpolating across them). DetectionCount is the day's detection count, shown in the
+// tooltip.
+type dawnChorusOnsetItem struct {
+	Date            string `json:"date"`
+	OnsetRelMinutes *int   `json:"onsetRelMinutes"`
+	DetectionCount  int    `json:"detectionCount"`
+}
+
+// newDawnChorusOnsetResponse maps the datastore aggregation onto the wire payload as a JSON array
+// (never null), preserving the ascending-date order.
+func newDawnChorusOnsetResponse(data []datastore.DailyActivityOnset) []dawnChorusOnsetItem {
+	items := make([]dawnChorusOnsetItem, 0, len(data))
+	for i := range data {
+		items = append(items, dawnChorusOnsetItem{
+			Date:            data[i].Date,
+			OnsetRelMinutes: data[i].OnsetRelMinutes,
+			DetectionCount:  data[i].DetectionCount,
+		})
+	}
+	return items
+}
+
+// GetDawnChorusOnset handles GET /api/v2/analytics/time/dawn-onset
+// Returns, per calendar day in the range, the dawn-chorus onset relative to civil dawn (in minutes;
+// negative = before civil dawn), powering the dawn-chorus onset tracker (design spec section 6.3).
+func (c *Controller) GetDawnChorusOnset(ctx echo.Context) error {
+	const operation = "dawn chorus onset"
+
+	// Validate required parameter
+	if err := c.requireQueryParam(ctx, "start_date", operation); err != nil {
+		return err
+	}
+
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+	speciesParam := ctx.QueryParam("species")
+
+	// Validate date formats strictly using regex
+	if err := c.validateDateFormatStrictWithResponse(ctx, startDate, "start_date", operation); err != nil {
+		return err
+	}
+	if err := c.validateDateFormatStrictWithResponse(ctx, endDate, "end_date", operation); err != nil {
+		return err
+	}
+
+	// Validate date values and chronological order
+	if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, operation); err != nil {
+		return err
+	}
+
+	// Default the end date to a 30-day window when omitted, matching the other range endpoints.
+	if endDate == "" {
+		startTime, _ := time.Parse(time.DateOnly, startDate) // Regex ensures this parse succeeds
+		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
+	}
+
+	// Resolve a localized common name to its scientific name so this endpoint matches the
+	// detections/search path and the sibling time endpoints; a scientific name or unresolved
+	// term passes through. Only the datastore query uses the resolved value.
+	querySpecies := speciesParam
+	if resolved, hit := c.resolveSpeciesToScientific(speciesParam); hit {
+		querySpecies = resolved
+	}
+
+	c.logInfoIfEnabled("Retrieving dawn chorus onset",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("species", speciesParam),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	// Add timeout to prevent resource exhaustion
+	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+
+	data, err := c.DS.GetDailyActivityOnset(ctxWithTimeout, startDate, endDate, querySpecies)
+	if err != nil {
+		return c.handleAnalyticsQueryError(ctx, err, "Dawn chorus onset", "Failed to get dawn chorus onset",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("species", speciesParam),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
+		)
+	}
+
+	c.logInfoIfEnabled("Dawn chorus onset retrieved",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("day_count", len(data)),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	return ctx.JSON(http.StatusOK, newDawnChorusOnsetResponse(data))
 }
 
 // GetSpeciesHourlyDistribution handles GET /api/v2/analytics/time/distribution/species

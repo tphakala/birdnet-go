@@ -3063,6 +3063,66 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 	return buildSpeciesHourlyDistribution(top, hourlyByLabel), nil
 }
 
+// GetDailyActivityOnset returns the per-day dawn-chorus onset relative to civil dawn over the
+// inclusive [startDate, endDate] range. It fetches false-positive-excluded detection timestamps
+// once (GetDetectionTimestamps), then buckets and computes the per-day onset in a shared,
+// table-tested Go helper (buildDailyActivityOnset). Civil dawn comes from the configured SunCalc,
+// expressed in the station timezone so it shares the same minute-of-day frame as the bucketed
+// detections; a day with no civil dawn (polar day / night) or too few detections gets a nil onset
+// that the client renders as a gap. species is an optional scientific-name filter; an unknown
+// species yields all-null days that still carry the full date axis (matching the heatmap).
+func (ds *Datastore) GetDailyActivityOnset(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyActivityOnset, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	dawn := ds.civilDawnMinuteLookup()
+
+	labelID, err := ds.resolveLabelID(ctx, species)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return buildDailyActivityOnset(nil, ds.timezone, startDate, endDate, onsetDetectionRank, minOnsetDetections, dawn)
+		}
+		return nil, err
+	}
+
+	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelID)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_daily_activity_onset").
+			Build()
+	}
+
+	return buildDailyActivityOnset(timestamps, ds.timezone, startDate, endDate, onsetDetectionRank, minOnsetDetections, dawn)
+}
+
+// civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and
+// station timezone. The closure yields civil dawn's station-local minute-of-day for a date, or
+// ok=false when no SunCalc is configured or civil dawn is undefined for the date (polar day/night).
+func (ds *Datastore) civilDawnMinuteLookup() civilDawnMinuteLookup {
+	return func(date time.Time) (int, bool) {
+		if ds.suncalc == nil {
+			return 0, false
+		}
+		// Anchor at local noon before the lookup: SunCalc re-derives the calendar date in its own
+		// coordinate-derived zone, so passing midnight could land on the adjacent day (and return
+		// the wrong day's civil dawn) when that zone trails the configured station timezone. Noon
+		// keeps the intended calendar day for any real timezone offset.
+		civilDawn, ok := ds.suncalc.GetCivilDawn(date.Add(12 * time.Hour))
+		if !ok {
+			return 0, false
+		}
+		// Express civil dawn in the station timezone so its minute-of-day matches the frame used to
+		// bucket detections; this stays correct even if SunCalc's coordinate-derived zone differs
+		// from the configured station timezone or across DST.
+		lt := civilDawn.In(ds.timezone)
+		return lt.Hour()*60 + lt.Minute(), true
+	}
+}
+
 // ============================================================
 // Dynamic Threshold Methods
 // ============================================================

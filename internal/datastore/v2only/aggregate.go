@@ -193,3 +193,90 @@ func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, end
 	}
 	return result, nil
 }
+
+// Dawn-chorus onset constants (design spec section 6.3).
+//
+// The onset for a day is the minute-of-day of the onsetDetectionRank-th earliest detection. An
+// absolute rank is used deliberately instead of a daily percentile: a percentile of the day's total
+// volume couples the morning onset to unrelated later-in-day activity (a busy afternoon pushes a low
+// percentile index later and fakes a later dawn), and at realistic daily counts a low percentile
+// collapses to the very first detection, giving no false-positive robustness. The Nth-earliest
+// detection is immune to later-in-day volume (adding detections after it never moves it) and rejects
+// up to (rank-1) lone pre-dawn false positives, which is the robustness the spec actually wanted.
+const (
+	onsetDetectionRank = 3 // onset = the 3rd earliest detection of the day (rejects up to 2 stray pre-dawn false positives)
+	minOnsetDetections = 5 // days with fewer detections are too sparse to read a meaningful onset (must be >= onsetDetectionRank)
+)
+
+// civilDawnMinuteLookup returns civil dawn's station-local minute-of-day (0..1439) for the given
+// calendar date and whether civil dawn is defined for it. ok is false when civil dawn cannot be
+// determined (polar day / white nights / polar night, or no sun calculator configured). It is
+// injected into buildDailyActivityOnset so the polar-null and min-count paths are unit-testable
+// without a real SunCalc.
+type civilDawnMinuteLookup func(date time.Time) (minuteOfDay int, ok bool)
+
+// buildDailyActivityOnset buckets false-positive-excluded detection timestamps (Unix epoch seconds)
+// by station-local calendar date and computes, for each date in the inclusive [startDate, endDate]
+// range, the dawn-chorus onset relative to civil dawn.
+//
+// The onset for a day is the minute-of-day of the rank-th earliest detection (see the
+// onsetDetectionRank rationale). OnsetRelMinutes is that onset minus civil dawn's minute-of-day
+// (negative = before civil dawn). It is left nil when the day has fewer than minDetections
+// detections (too sparse) or when dawn reports civil dawn undefined for the date (polar day /
+// night). Every date in the range is emitted with its DetectionCount (0 on quiet days) so the
+// client has a continuous date axis and its trend line breaks over gaps rather than interpolating
+// across them. startDate/endDate are inclusive YYYY-MM-DD bounds interpreted in loc (nil -> UTC);
+// civil dawn is resolved in the same loc frame as the bucketed detections so the subtraction is a
+// true duration. The result is always non-nil.
+func buildDailyActivityOnset(timestamps []int64, loc *time.Location, startDate, endDate string, rank, minDetections int, dawn civilDawnMinuteLookup) ([]datastore.DailyActivityOnset, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	start, err := time.ParseInLocation(time.DateOnly, startDate, loc)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_daily_activity_onset").
+			Context("start_date", startDate).
+			Build()
+	}
+	end, err := time.ParseInLocation(time.DateOnly, endDate, loc)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_daily_activity_onset").
+			Context("end_date", endDate).
+			Build()
+	}
+
+	// Group each detection's station-local minute-of-day by its local calendar date. Detections
+	// whose local date falls outside the enumerated range simply never get looked up.
+	minutesByDate := make(map[dateKey][]int)
+	for _, ts := range timestamps {
+		lt := time.Unix(ts, 0).In(loc)
+		y, m, day := lt.Date()
+		k := dateKey{year: y, month: m, day: day}
+		minutesByDate[k] = append(minutesByDate[k], lt.Hour()*60+lt.Minute())
+	}
+
+	result := make([]datastore.DailyActivityOnset, 0)
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		y, m, day := d.Date()
+		mins := minutesByDate[dateKey{year: y, month: m, day: day}]
+		item := datastore.DailyActivityOnset{Date: d.Format(time.DateOnly), DetectionCount: len(mins)}
+
+		if rank >= 1 && len(mins) >= minDetections && len(mins) >= rank {
+			slices.Sort(mins)
+			onsetMinute := mins[rank-1]
+			if dawnMinute, ok := dawn(d); ok {
+				rel := onsetMinute - dawnMinute
+				item.OnsetRelMinutes = &rel
+			}
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}

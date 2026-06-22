@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
 
@@ -283,5 +284,194 @@ func TestBuildActivityHeatmap_InvalidDates(t *testing.T) {
 	t.Parallel()
 
 	_, err := buildActivityHeatmap(nil, time.UTC, "not-a-date", "2026-03-03")
+	require.Error(t, err)
+}
+
+// --- Dawn-chorus onset (buildDailyActivityOnset) ---------------------------
+
+// dawnAt returns a civilDawnMinuteLookup that yields a constant civil dawn minute for every date.
+func dawnAt(minute int) civilDawnMinuteLookup {
+	return func(time.Time) (int, bool) { return minute, true }
+}
+
+// noCivilDawn is a civilDawnMinuteLookup that reports civil dawn undefined for every date (polar).
+func noCivilDawn(time.Time) (int, bool) { return 0, false }
+
+// onsetByDate maps the returned days by date string for clear, order-independent assertions.
+func onsetByDate(days []datastore.DailyActivityOnset) map[string]datastore.DailyActivityOnset {
+	m := make(map[string]datastore.DailyActivityOnset, len(days))
+	for _, d := range days {
+		m[d.Date] = d
+	}
+	return m
+}
+
+func TestBuildDailyActivityOnset_RankOnsetRelativeToCivilDawn(t *testing.T) {
+	t.Parallel()
+
+	utc := time.UTC
+	// Five detections at 05:00..05:40 (minutes 300..340). With rank 3 the onset is the 3rd
+	// earliest = 05:20 (320). Civil dawn is fixed at 05:00 (300), so the relative onset is +20.
+	timestamps := []int64{
+		epochAt(utc, 2026, 3, 1, 5, 0),
+		epochAt(utc, 2026, 3, 1, 5, 10),
+		epochAt(utc, 2026, 3, 1, 5, 20),
+		epochAt(utc, 2026, 3, 1, 5, 30),
+		epochAt(utc, 2026, 3, 1, 5, 40),
+	}
+
+	days, err := buildDailyActivityOnset(timestamps, utc, "2026-03-01", "2026-03-01", onsetDetectionRank, minOnsetDetections, dawnAt(300))
+	require.NoError(t, err)
+	require.Len(t, days, 1)
+	assert.Equal(t, "2026-03-01", days[0].Date)
+	assert.Equal(t, 5, days[0].DetectionCount)
+	require.NotNil(t, days[0].OnsetRelMinutes)
+	assert.Equal(t, 20, *days[0].OnsetRelMinutes)
+}
+
+func TestBuildDailyActivityOnset_TooFewDetectionsNullButCounted(t *testing.T) {
+	t.Parallel()
+
+	utc := time.UTC
+	// Four detections is below the min of 5: the day is emitted with its count but a nil onset.
+	timestamps := []int64{
+		epochAt(utc, 2026, 3, 1, 5, 0),
+		epochAt(utc, 2026, 3, 1, 5, 10),
+		epochAt(utc, 2026, 3, 1, 5, 20),
+		epochAt(utc, 2026, 3, 1, 5, 30),
+	}
+
+	days, err := buildDailyActivityOnset(timestamps, utc, "2026-03-01", "2026-03-01", onsetDetectionRank, minOnsetDetections, dawnAt(300))
+	require.NoError(t, err)
+	require.Len(t, days, 1)
+	assert.Equal(t, 4, days[0].DetectionCount)
+	assert.Nil(t, days[0].OnsetRelMinutes, "below min-count days keep their count but have no onset")
+}
+
+func TestBuildDailyActivityOnset_PolarDayNull(t *testing.T) {
+	t.Parallel()
+
+	utc := time.UTC
+	timestamps := []int64{
+		epochAt(utc, 2026, 6, 21, 2, 0),
+		epochAt(utc, 2026, 6, 21, 2, 10),
+		epochAt(utc, 2026, 6, 21, 2, 20),
+		epochAt(utc, 2026, 6, 21, 2, 30),
+		epochAt(utc, 2026, 6, 21, 2, 40),
+	}
+
+	// Civil dawn undefined (polar day): plenty of detections, but the onset is still nil.
+	days, err := buildDailyActivityOnset(timestamps, utc, "2026-06-21", "2026-06-21", onsetDetectionRank, minOnsetDetections, noCivilDawn)
+	require.NoError(t, err)
+	require.Len(t, days, 1)
+	assert.Equal(t, 5, days[0].DetectionCount)
+	assert.Nil(t, days[0].OnsetRelMinutes)
+}
+
+func TestBuildDailyActivityOnset_ImmuneToLaterInDayVolume(t *testing.T) {
+	t.Parallel()
+
+	utc := time.UTC
+	// Both days share the same five morning detections; day 2 adds a large afternoon burst.
+	// The rank-3 onset (the 3rd earliest detection) must be identical, proving the metric is not
+	// pulled later by unrelated afternoon volume the way a daily percentile would be.
+	timestamps := []int64{
+		// 2026-03-01: morning only.
+		epochAt(utc, 2026, 3, 1, 5, 0),
+		epochAt(utc, 2026, 3, 1, 5, 10),
+		epochAt(utc, 2026, 3, 1, 5, 20),
+		epochAt(utc, 2026, 3, 1, 5, 30),
+		epochAt(utc, 2026, 3, 1, 5, 40),
+		// 2026-03-02: same morning detections...
+		epochAt(utc, 2026, 3, 2, 5, 0),
+		epochAt(utc, 2026, 3, 2, 5, 10),
+		epochAt(utc, 2026, 3, 2, 5, 20),
+		epochAt(utc, 2026, 3, 2, 5, 30),
+		epochAt(utc, 2026, 3, 2, 5, 40),
+		// ...plus a big afternoon burst that must not move the onset.
+		epochAt(utc, 2026, 3, 2, 14, 0),
+		epochAt(utc, 2026, 3, 2, 14, 5),
+		epochAt(utc, 2026, 3, 2, 14, 10),
+		epochAt(utc, 2026, 3, 2, 14, 15),
+		epochAt(utc, 2026, 3, 2, 14, 20),
+		epochAt(utc, 2026, 3, 2, 14, 25),
+	}
+
+	days, err := buildDailyActivityOnset(timestamps, utc, "2026-03-01", "2026-03-02", onsetDetectionRank, minOnsetDetections, dawnAt(300))
+	require.NoError(t, err)
+	byDate := onsetByDate(days)
+
+	require.NotNil(t, byDate["2026-03-01"].OnsetRelMinutes)
+	require.NotNil(t, byDate["2026-03-02"].OnsetRelMinutes)
+	assert.Equal(t, 20, *byDate["2026-03-01"].OnsetRelMinutes)
+	assert.Equal(t, *byDate["2026-03-01"].OnsetRelMinutes, *byDate["2026-03-02"].OnsetRelMinutes,
+		"onset must not shift when later-in-day volume grows")
+	assert.Equal(t, 5, byDate["2026-03-01"].DetectionCount)
+	assert.Equal(t, 11, byDate["2026-03-02"].DetectionCount)
+}
+
+func TestBuildDailyActivityOnset_FullDateAxisWithGaps(t *testing.T) {
+	t.Parallel()
+
+	// No detections: every date in the inclusive range is still emitted (count 0, nil onset) so
+	// the client has a continuous date axis and its trend line can break over the gaps.
+	days, err := buildDailyActivityOnset(nil, time.UTC, "2026-03-01", "2026-03-03", onsetDetectionRank, minOnsetDetections, dawnAt(300))
+	require.NoError(t, err)
+	require.Len(t, days, 3)
+	assert.Equal(t, []string{"2026-03-01", "2026-03-02", "2026-03-03"},
+		[]string{days[0].Date, days[1].Date, days[2].Date})
+	for _, d := range days {
+		assert.Zero(t, d.DetectionCount)
+		assert.Nil(t, d.OnsetRelMinutes)
+	}
+}
+
+func TestBuildDailyActivityOnset_TimezoneBucketing(t *testing.T) {
+	t.Parallel()
+
+	// Fixed +02:00 zone: detections at 03:00..03:40 UTC are 05:00..05:40 local on 2026-03-01, so
+	// they bucket onto the local day and the onset is computed in local minutes (rank-3 = 05:20).
+	loc := time.FixedZone("EET", 2*60*60)
+	base := time.Date(2026, 3, 1, 3, 0, 0, 0, time.UTC)
+	timestamps := []int64{
+		base.Unix(),
+		base.Add(10 * time.Minute).Unix(),
+		base.Add(20 * time.Minute).Unix(),
+		base.Add(30 * time.Minute).Unix(),
+		base.Add(40 * time.Minute).Unix(),
+	}
+
+	days, err := buildDailyActivityOnset(timestamps, loc, "2026-03-01", "2026-03-01", onsetDetectionRank, minOnsetDetections, dawnAt(300))
+	require.NoError(t, err)
+	require.Len(t, days, 1)
+	assert.Equal(t, 5, days[0].DetectionCount)
+	require.NotNil(t, days[0].OnsetRelMinutes)
+	assert.Equal(t, 20, *days[0].OnsetRelMinutes) // local onset 05:20 minus civil dawn 05:00
+}
+
+func TestBuildDailyActivityOnset_OutOfRangeDetectionsIgnored(t *testing.T) {
+	t.Parallel()
+
+	utc := time.UTC
+	// Five detections on 2026-02-28, outside the requested [2026-03-01, 2026-03-01] range.
+	timestamps := []int64{
+		epochAt(utc, 2026, 2, 28, 5, 0),
+		epochAt(utc, 2026, 2, 28, 5, 10),
+		epochAt(utc, 2026, 2, 28, 5, 20),
+		epochAt(utc, 2026, 2, 28, 5, 30),
+		epochAt(utc, 2026, 2, 28, 5, 40),
+	}
+
+	days, err := buildDailyActivityOnset(timestamps, utc, "2026-03-01", "2026-03-01", onsetDetectionRank, minOnsetDetections, dawnAt(300))
+	require.NoError(t, err)
+	require.Len(t, days, 1)
+	assert.Zero(t, days[0].DetectionCount, "detections outside the range are not counted")
+	assert.Nil(t, days[0].OnsetRelMinutes)
+}
+
+func TestBuildDailyActivityOnset_InvalidDates(t *testing.T) {
+	t.Parallel()
+
+	_, err := buildDailyActivityOnset(nil, time.UTC, "not-a-date", "2026-03-03", onsetDetectionRank, minOnsetDetections, dawnAt(300))
 	require.Error(t, err)
 }

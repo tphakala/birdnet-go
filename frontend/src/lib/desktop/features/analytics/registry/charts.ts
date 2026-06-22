@@ -18,6 +18,9 @@ import SpeciesDiversityChart from '../components/charts/d3/SpeciesDiversityChart
 import SeasonalHeatmap from '../components/charts/d3/SeasonalHeatmap.svelte';
 import type { HeatmapData } from '../components/charts/d3/utils/heatmap';
 import SpeciesRidgeline from '../components/charts/d3/SpeciesRidgeline.svelte';
+import DawnChorusOnset from '../components/charts/d3/DawnChorusOnset.svelte';
+import { onsetCount } from '../components/charts/d3/utils/dawnOnset';
+import type { DawnOnsetData, DawnOnsetPoint } from '../components/charts/d3/utils/dawnOnset';
 import TrendChartOptions from '../components/TrendChartOptions.svelte';
 
 import { formatDateForAPI } from './analyticsParams';
@@ -330,6 +333,60 @@ async function fetchSpeciesDistribution(
     .filter((d): d is SpeciesDistributionDatum => d !== null);
 }
 
+interface DawnOnsetResponseItem {
+  date?: unknown;
+  onsetRelMinutes?: unknown;
+  detectionCount?: unknown;
+}
+
+/**
+ * Dawn-chorus onset: per-day chorus onset relative to civil dawn. The server emits one entry per
+ * calendar day in the range (negative = before civil dawn; null on days with too few detections or
+ * no civil dawn). Honors an optional single-species filter (the control bar's first selection).
+ * Defensively coerces the array, preserving nulls so the chart's trend line can break over gaps.
+ */
+async function fetchDawnOnset(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<DawnOnsetData> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+  });
+  // The endpoint filters by a single species; use the first selected (none = all species).
+  if (params.species.length > 0) search.append('species', params.species[0]);
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/time/dawn-onset?${search}`), {
+    signal,
+  });
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid dawn onset response: expected an array');
+  }
+
+  const points: DawnOnsetPoint[] = [];
+  for (const raw of data) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as DawnOnsetResponseItem;
+    if (typeof item.date !== 'string') continue;
+    // Keep null distinct from 0: a gap day must stay null so the trend line breaks rather than
+    // dipping to civil dawn.
+    const onsetRelMinutes =
+      typeof item.onsetRelMinutes === 'number' && Number.isFinite(item.onsetRelMinutes)
+        ? item.onsetRelMinutes
+        : null;
+    const detectionCount =
+      typeof item.detectionCount === 'number' && Number.isFinite(item.detectionCount)
+        ? item.detectionCount
+        : 0;
+    points.push({ date: item.date, onsetRelMinutes, detectionCount });
+  }
+
+  return { points };
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
@@ -375,6 +432,23 @@ export const CHART_REGISTRY: ChartDef[] = [
     // A ridgeline needs at least a couple of species to read as one; one lonely ridge is not useful.
     minDataPoints: 2,
     maxSpecies: SPECIES_RIDGELINE_LIMIT,
+  },
+  {
+    id: 'dawn-chorus-onset',
+    group: 'patterns',
+    titleKey: 'analytics.advanced.charts.dawnOnset.title',
+    descKey: 'analytics.advanced.charts.dawnOnset.description',
+    emptyKey: 'analytics.advanced.charts.dawnOnset.noData',
+    emptyHintKey: 'analytics.advanced.charts.dawnOnset.noDataHint',
+    component: DawnChorusOnset,
+    fetch: fetchDawnOnset,
+    // The fetch result is an object with a points array (one per day, including nulls); count only
+    // the days that have a measurable onset rather than the raw array length.
+    countDataPoints: data => onsetCount(data as DawnOnsetData),
+    size: 'full',
+    supports: { species: true, source: false },
+    // A handful of days with onsets is the minimum before the scatter + trend read as anything.
+    minDataPoints: 3,
   },
   {
     id: 'time-of-day-species',
