@@ -19,7 +19,10 @@
   import { toastActions } from '$lib/stores/toast';
   import { setDetectionVerification } from '$lib/utils/reviewDetection';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
+
+  const logger = loggers.ui;
 
   const getDefaultAudioGain = () => get(dashboardSettings)?.defaultAudioGain ?? 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
@@ -105,8 +108,9 @@
           });
           isExcluded = !currentlyExcluded;
           onRefresh?.();
-        } catch {
+        } catch (error) {
           toastActions.error(t('dashboard.recentDetections.errors.toggleSpeciesFailed'));
+          logger.error('Error toggling species exclusion:', error);
         }
       },
     };
@@ -133,8 +137,9 @@
             body: JSON.stringify({ locked: !isLocked }),
           });
           onRefresh?.();
-        } catch {
+        } catch (error) {
           toastActions.error(t('dashboard.recentDetections.errors.toggleLockFailed'));
+          logger.error('Error toggling lock status:', error);
         }
       },
     };
@@ -154,8 +159,9 @@
         try {
           await fetchWithCSRF(`/api/v2/detections/${detectionId}`, { method: 'DELETE' });
           onRefresh?.();
-        } catch {
+        } catch (error) {
           toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
+          logger.error('Error deleting detection:', error);
         }
       },
     };
@@ -224,7 +230,9 @@
           <span class="loading loading-spinner loading-md text-[var(--color-base-content)]/50"
           ></span>
           {#if loader.isQueued}
-            <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Waiting...</span>
+            <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
+              >{t('components.audio.waiting')}</span
+            >
           {:else if loader.isGenerating}
             <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
               >{t('components.audio.generating')}</span
@@ -242,7 +250,7 @@
       {:else if loader.spectrogramUrl}
         <img
           src={loader.spectrogramUrl}
-          alt="Spectrogram for {detection.commonName}"
+          alt={t('components.audio.spectrogramAlt')}
           class="spectrogram-image"
           class:opacity-0={loader.state === 'loading'}
           decoding="async"
