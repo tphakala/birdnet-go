@@ -14,15 +14,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// noopMetrics is a no-op GuideCacheMetrics for tests.
-type noopMetrics struct{}
-
-func (noopMetrics) RecordCacheHit(_, _ string)           {}
-func (noopMetrics) RecordCacheMiss(_ string)             {}
-func (noopMetrics) RecordFetch(_, _ string, _ float64)   {}
-func (noopMetrics) RecordDBError(_, _ string)            {}
-func (noopMetrics) RecordNegativeEntry()                 {}
-func (noopMetrics) UpdateCachePopulationRatio(_ float64) {}
+// noopMetrics (a no-op GuideCacheMetrics) is defined in guideprovider.go and
+// reused here and in ebird_test.go.
 
 // fakeStore is an in-memory GuideStore for tests.
 type fakeStore struct {

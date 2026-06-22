@@ -204,6 +204,9 @@ type GuideCache struct {
 // with RegisterProvider (registration order defines priority), then call Start.
 func NewGuideCache(store GuideStore, metrics GuideCacheMetrics) *GuideCache {
 	ctx, cancel := context.WithCancel(context.Background())
+	if metrics == nil {
+		metrics = noopMetrics{}
+	}
 	return &GuideCache{
 		store:          store,
 		metrics:        metrics,
@@ -212,6 +215,18 @@ func NewGuideCache(store GuideStore, metrics GuideCacheMetrics) *GuideCache {
 		cancel:         cancel,
 	}
 }
+
+// noopMetrics is a GuideCacheMetrics sink that discards everything. It is the
+// default when NewGuideCache is constructed without a metrics implementation
+// (e.g. in tests), so the cache never has to nil-check the sink on the hot path.
+type noopMetrics struct{}
+
+func (noopMetrics) RecordCacheHit(_, _ string)           {}
+func (noopMetrics) RecordCacheMiss(_ string)             {}
+func (noopMetrics) RecordFetch(_, _ string, _ float64)   {}
+func (noopMetrics) RecordDBError(_, _ string)            {}
+func (noopMetrics) RecordNegativeEntry()                 {}
+func (noopMetrics) UpdateCachePopulationRatio(_ float64) {}
 
 // RegisterProvider adds a provider. The first registered provider is the primary
 // (used as the DB composite-key provider and the merge base).
@@ -389,14 +404,24 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 	}
 
 	// Tier 3: fetch from providers (singleflight collapses concurrent fetches).
-	v, err, _ := c.sf.Do(key, func() (any, error) {
-		return c.fetchAndStore(ctx, name, locale)
+	// The shared fetch runs on the cache's background context, not the caller's,
+	// so one caller cancelling (e.g. a closed browser tab) cannot abort the fetch
+	// for the other callers sharing this singleflight execution. Each caller still
+	// honours its own deadline via the select below, and the detached fetch
+	// completes and populates the cache for everyone.
+	ch := c.sf.DoChan(key, func() (any, error) {
+		return c.fetchAndStore(c.ctx, name, locale)
 	})
-	if err != nil {
-		return nil, err
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		g, _ := res.Val.(*SpeciesGuide)
+		return g, nil
 	}
-	g, _ := v.(*SpeciesGuide)
-	return g, nil
 }
 
 // fetchAndStore fetches from providers and persists the result (including
