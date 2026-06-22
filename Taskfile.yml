@@ -737,7 +737,9 @@ tasks:
 
   check-openvino:
     desc: Download OpenVINO C API headers for CGo compilation (openvino-tagged builds only)
-    internal: true
+    # Not internal: the openvino compile-coverage CI job (cross-platform-build.yml)
+    # calls this directly with OPENVINO=true to provision headers before building
+    # the openvino-tagged backend. Still a no-op for ONNX-only/standard builds.
     vars:
       OPENVINO_ARCHIVE: '{{.OPENVINO_BASENAME}}.tgz'
       OPENVINO_URL: 'https://storage.openvinotoolkit.org/repositories/openvino/packages/{{.OPENVINO_RELEASE}}/linux/{{.OPENVINO_BASENAME}}.tgz'
@@ -1032,6 +1034,17 @@ tasks:
   e2e-install:
     desc: Install E2E testing dependencies
     dir: frontend
+    # e2e-install runs `npm install -D` into frontend/node_modules. It depends on
+    # frontend-install (the base `npm install`) so the two npm writes are
+    # serialized and never write the same node_modules concurrently, the
+    # corruption class that truncated typescript.js (see frontend-install above);
+    # run: once does not fix that alone because the race is between two different
+    # tasks. run: once still keeps e2e-install itself to a single execution per
+    # invocation. e2e-test invokes it sequentially after frontend-build (not as a
+    # concurrent dep) so it also never writes node_modules while the build and
+    # typecheck are reading it.
+    deps: [frontend-install]
+    run: once
     cmds:
       - npm install -D @playwright/test playwright @axe-core/playwright
       - npx playwright install
@@ -1039,8 +1052,14 @@ tasks:
   e2e-test:
     desc: Run end-to-end tests
     dir: frontend
-    deps: [frontend-build, e2e-install]
+    # frontend-build (and its frontend-install + frontend-typecheck chain) must
+    # finish before e2e-install runs: e2e-install's `npm install -D` mutates
+    # node_modules, so running it concurrently with the build/typecheck reads is a
+    # write/read race on the same tree. Invoking e2e-install as a sequential
+    # command rather than a concurrent dep guarantees that ordering.
+    deps: [frontend-build]
     cmds:
+      - task: e2e-install
       - npx playwright test
 
   e2e-test-headed:
