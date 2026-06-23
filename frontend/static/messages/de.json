@@ -1744,12 +1744,12 @@
       "loadFailed": "Analysedaten konnten nicht geladen werden. Bitte versuchen Sie es erneut."
     },
     "timeOfDayPeriods": {
-      "night0to4": "Night (0-4)",
-      "dawn5to8": "Dawn (5-8)",
-      "morning9to11": "Morning (9-11)",
-      "afternoon12to16": "Afternoon (12-16)",
-      "evening17to19": "Evening (17-19)",
-      "night20to23": "Night (20-23)"
+      "night0to4": "Nacht (0-4)",
+      "dawn5to8": "Morgendämmerung (5-8)",
+      "morning9to11": "Vormittag (9-11)",
+      "afternoon12to16": "Nachmittag (12-16)",
+      "evening17to19": "Abend (17-19)",
+      "night20to23": "Nacht (20-23)"
     }
   },
   "settings": {
