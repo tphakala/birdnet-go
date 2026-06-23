@@ -349,13 +349,29 @@ func TestResolveImportSourcePath_SymlinkEscape(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
 
-	// Create a symlink inside root that points to a directory outside root.
+	// t.TempDir may itself sit under a symlink (macOS /var -> /private/var), so the
+	// resolver legitimately returns the symlink-resolved root. Compare against that.
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+
+	// A legitimate non-existent file directly under root resolves without error
+	// (the handler's os.Stat reports it missing). Platform-independent, so check it
+	// before the symlink-dependent cases below.
+	resolved, err := resolveImportSourcePath(root, "legit.db")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(resolvedRoot, "legit.db"), resolved)
+
+	// The escape cases need a symlink inside root pointing outside it. Creating a
+	// symlink needs a privilege the Windows CI runner lacks, so skip them when the
+	// symlink cannot be created rather than failing the whole test.
 	escapeLink := filepath.Join(root, "escape")
-	require.NoError(t, os.Symlink(outside, escapeLink))
+	if symErr := os.Symlink(outside, escapeLink); symErr != nil {
+		t.Skipf("skipping symlink-escape cases: cannot create symlink: %v", symErr)
+	}
 
 	// A non-existent file under the symlinked parent must be rejected because
 	// its physical parent resolves outside root.
-	_, err := resolveImportSourcePath(root, filepath.Join("escape", "missing.db"))
+	_, err = resolveImportSourcePath(root, filepath.Join("escape", "missing.db"))
 	require.ErrorIs(t, err, errInvalidSourcePath)
 
 	// An existing file reached through the escaping symlink must also be rejected.
@@ -363,12 +379,6 @@ func TestResolveImportSourcePath_SymlinkEscape(t *testing.T) {
 	require.NoError(t, os.WriteFile(existing, []byte("x"), 0o600))
 	_, err = resolveImportSourcePath(root, filepath.Join("escape", "real.db"))
 	require.ErrorIs(t, err, errInvalidSourcePath)
-
-	// A legitimate non-existent file directly under root resolves without error
-	// (the handler's os.Stat reports it missing).
-	resolved, err := resolveImportSourcePath(root, "legit.db")
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(root, "legit.db"), resolved)
 
 	// Multi-level: a path under a symlinked ancestor where multiple intermediate
 	// directories do not exist yet must also be rejected.
