@@ -1860,12 +1860,12 @@
       "loadFailed": "Az analitikai adatok betöltése sikertelen. Próbálja újra."
     },
     "timeOfDayPeriods": {
-      "night0to4": "Night (0-4)",
-      "dawn5to8": "Dawn (5-8)",
-      "morning9to11": "Morning (9-11)",
-      "afternoon12to16": "Afternoon (12-16)",
-      "evening17to19": "Evening (17-19)",
-      "night20to23": "Night (20-23)"
+      "night0to4": "Éjszaka (0-4)",
+      "dawn5to8": "Hajnal (5-8)",
+      "morning9to11": "Délelőtt (9-11)",
+      "afternoon12to16": "Délután (12-16)",
+      "evening17to19": "Este (17-19)",
+      "night20to23": "Éjszaka (20-23)"
     }
   },
   "settings": {

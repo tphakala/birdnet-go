@@ -1860,12 +1860,12 @@
       "loadFailed": "Échec du chargement des données d'analyse. Veuillez réessayer."
     },
     "timeOfDayPeriods": {
-      "night0to4": "Night (0-4)",
-      "dawn5to8": "Dawn (5-8)",
-      "morning9to11": "Morning (9-11)",
-      "afternoon12to16": "Afternoon (12-16)",
-      "evening17to19": "Evening (17-19)",
-      "night20to23": "Night (20-23)"
+      "night0to4": "Nuit (0-4)",
+      "dawn5to8": "Aube (5-8)",
+      "morning9to11": "Matin (9-11)",
+      "afternoon12to16": "Après-midi (12-16)",
+      "evening17to19": "Soir (17-19)",
+      "night20to23": "Nuit (20-23)"
     }
   },
   "settings": {
