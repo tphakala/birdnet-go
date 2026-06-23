@@ -140,6 +140,7 @@
     importCancelled = false;
     importError = null;
     errorMessage = null;
+    isCancelling = false;
     currentStep = 'source';
     void loadExternalMedia();
   }
@@ -295,11 +296,14 @@
           }
         }
       }
+      // For a 'cancelling' response, keep isCancelling true: the SSE 'cancelled' event
+      // moves the wizard to the done step (which hides Cancel). Re-enabling Cancel here
+      // would let the user fire redundant cancel requests while cancellation is in flight.
     } catch (err) {
+      if (destroyed) return;
       logger.error('Cancel request failed', err);
       toastActions.error(t('system.importExport.errors.cancelFailed'));
-    } finally {
-      if (!destroyed) isCancelling = false;
+      isCancelling = false; // re-enable Cancel so the user can retry after a failed request
     }
   }
 
