@@ -1154,7 +1154,115 @@
       "overview": "Översikt",
       "database": "Databas",
       "inference": "AI Models",
-      "terminal": "Terminal"
+      "terminal": "Terminal",
+      "importExport": "Import / Export"
+    },
+    "importExport": {
+      "pageDescription": "Import data from other bird recording systems or export your detections.",
+      "available": "Available",
+      "comingSoon": "Coming soon",
+      "loading": "Loading...",
+      "runInBackground": "Close (import continues in background)",
+      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
+      "stepAnnouncement": "Step {current} of {total}: {name}",
+      "steps": {
+        "source": "Source",
+        "mode": "Mode",
+        "confirm": "Confirm",
+        "progress": "Progress",
+        "done": "Done"
+      },
+      "import": {
+        "sectionTitle": "Import"
+      },
+      "export": {
+        "sectionTitle": "Export",
+        "cardTitle": "Export detections",
+        "cardDescription": "Export your detection data to CSV, JSON, or other formats.",
+        "startButton": "Export",
+        "disabledReason": "Export is not yet available. Check back in a future release."
+      },
+      "birdnetPi": {
+        "cardTitle": "BirdNET-Pi",
+        "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
+        "startButton": "Import from BirdNET-Pi",
+        "wizardTitle": "Import from BirdNET-Pi"
+      },
+      "wizard": {
+        "stepsLabel": "Import wizard steps"
+      },
+      "sourceAccess": {
+        "pathLabel": "Path to birds.db (relative to mount root)",
+        "pathHelpText": "Enter the path relative to the external media mount root, e.g. birdnet-pi/birds.db",
+        "pathRequiredReason": "Enter the path to birds.db to continue",
+        "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
+        "mountRoot": "Mount root",
+        "nativeTitle": "External media mount required",
+        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
+        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
+        "missingTitle": "External media mount not found",
+        "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
+        "setupStepsLabel": "Setup steps",
+        "recheckButton": "Re-check",
+        "recheckHint": "After completing the setup steps, click Re-check to continue."
+      },
+      "mode": {
+        "label": "What do you want to import?",
+        "dbOnly": {
+          "label": "Database only",
+          "description": "Import detection records from birds.db. Audio clips are not imported."
+        },
+        "dbAudio": {
+          "label": "Database + audio clips",
+          "description": "Import detection records and associated audio recordings.",
+          "badge": "Not available",
+          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+        }
+      },
+      "confirm": {
+        "description": "Review your import settings before starting. Imported detections are tagged with the source birdnet-pi and duplicates are skipped automatically.",
+        "source": "Source path",
+        "mode": "Import mode",
+        "tagging": "Source tag",
+        "taggingValue": "birdnet-pi (auto-applied)",
+        "deduplicationNote": "Duplicate detections (same species, time, and date already in the database) are skipped automatically. Exact counts will be shown live during the import.",
+        "startButton": "Start import"
+      },
+      "progress": {
+        "label": "Import progress",
+        "runningLabel": "Import running",
+        "progressLabel": "{percent}% complete",
+        "cancelButton": "Cancel",
+        "cancellingLabel": "Cancelling...",
+        "cancelledMessage": "Import was cancelled.",
+        "processed": "Processed",
+        "inserted": "Inserted",
+        "skipped": "Skipped",
+        "errors": "Errors",
+        "phase": {
+          "validate": "Validating",
+          "dedup": "Deduplicating",
+          "import": "Importing"
+        }
+      },
+      "done": {
+        "successTitle": "Import complete",
+        "successDescription": "Your BirdNET-Pi detections have been imported successfully.",
+        "cancelledTitle": "Import cancelled",
+        "cancelledDescription": "The import was cancelled before completing.",
+        "errorTitle": "Import failed",
+        "viewDetectionsLink": "View imported detections",
+        "partialInserted": "{count} detections were imported before cancellation.",
+        "importAnother": "Import another"
+      },
+      "errors": {
+        "loadFailed": "Failed to load import status. Please try again.",
+        "mediaLoadFailed": "Failed to check external media. Please try again.",
+        "alreadyRunning": "An import is already in progress. Please wait for it to complete.",
+        "startFailed": "Failed to start import. Please try again.",
+        "cancelFailed": "Failed to cancel import.",
+        "importFailed": "Import failed. Please check your configuration and try again."
+      }
     },
     "database": {
       "title": "Databashantering",

@@ -184,6 +184,7 @@
     '/database': 'system.sections.database',
     '/terminal': 'system.sections.terminal',
     '/inference': 'system.sections.inference',
+    '/import-export': 'system.sections.importExport',
   };
 
   // Dynamic import helper
