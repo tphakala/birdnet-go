@@ -3,7 +3,6 @@ package api
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -42,11 +42,16 @@ const (
 	importStatusIdle       = "idle"
 )
 
-// ErrImportInProgress is returned when a second start is attempted while one is running.
-var ErrImportInProgress = fmt.Errorf("import already in progress")
+// importEnginePhaseDone matches the engine's terminal phase string.
+// Progress events with this phase are suppressed; the terminal complete/cancelled/error
+// event is the authoritative completion signal.
+const importEnginePhaseDone = "done"
 
-// ErrInvalidSourcePath is returned when the source path fails containment validation.
-var ErrInvalidSourcePath = fmt.Errorf("invalid source path")
+// errImportInProgress is returned when a second start is attempted while one is running.
+var errImportInProgress = errors.NewStd("import already in progress")
+
+// errInvalidSourcePath is returned when the source path fails containment validation.
+var errInvalidSourcePath = errors.NewStd("invalid source path")
 
 // startImportRequest is the JSON body for POST /import/birdnet-pi.
 type startImportRequest struct {
@@ -112,47 +117,48 @@ func toImportProgress(s imports.ImportStats) importProgress {
 // userPath must be a relative path. Returns the resolved absolute path on success.
 func resolveImportSourcePath(root, userPath string) (string, error) {
 	if userPath == "" {
-		return "", ErrInvalidSourcePath
+		return "", errInvalidSourcePath
 	}
 	cleaned := filepath.Clean(userPath)
 	if filepath.IsAbs(cleaned) {
-		return "", ErrInvalidSourcePath
+		return "", errInvalidSourcePath
 	}
 	full := filepath.Join(root, cleaned)
 	rel, err := filepath.Rel(root, full)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", ErrInvalidSourcePath
+		return "", errInvalidSourcePath
 	}
 	rootResolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		rootResolved = root
 	}
-	// Defense in depth: resolve symlinks and re-check physical containment.
-	resolved, err := filepath.EvalSymlinks(full)
-	if err != nil {
-		if !stderrors.Is(err, fs.ErrNotExist) {
-			return "", ErrInvalidSourcePath
+	// Find the deepest existing ancestor of full, resolving symlinks, and verify it
+	// is physically contained within root. This rejects a symlinked ancestor that
+	// escapes root even when the target (or several intermediate dirs) do not yet
+	// exist, closing the TOCTOU window at any depth.
+	ancestor := full
+	for {
+		resolved, evalErr := filepath.EvalSymlinks(ancestor)
+		if evalErr == nil {
+			if !isContained(rootResolved, resolved) {
+				return "", errInvalidSourcePath
+			}
+			suffix, relErr := filepath.Rel(ancestor, full)
+			if relErr != nil {
+				return "", errInvalidSourcePath
+			}
+			return filepath.Join(resolved, suffix), nil
 		}
-		// The target file does not exist yet. Validate the deepest existing
-		// ancestor instead so a symlinked parent that escapes root is still
-		// rejected, then let the handler's os.Stat report the missing file.
-		// This closes the TOCTOU window where an attacker creates the file
-		// after a bypassed containment check.
-		dir, base := filepath.Split(full)
-		resolvedDir, dirErr := filepath.EvalSymlinks(filepath.Clean(dir))
-		if dirErr != nil {
-			// Parent directory does not resolve either; treat as not found.
-			return full, nil //nolint:nilerr // intentional: caller's os.Stat reports the missing file
+		if !errors.Is(evalErr, fs.ErrNotExist) {
+			return "", errInvalidSourcePath
 		}
-		if !isContained(rootResolved, resolvedDir) {
-			return "", ErrInvalidSourcePath
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			// Reached the filesystem root without finding an existing ancestor.
+			return "", errInvalidSourcePath
 		}
-		return filepath.Join(resolvedDir, base), nil
+		ancestor = parent
 	}
-	if !isContained(rootResolved, resolved) {
-		return "", ErrInvalidSourcePath
-	}
-	return resolved, nil
 }
 
 // isContained reports whether target resides within root after both have been
@@ -186,7 +192,7 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		return err
 	}
 	if c.Repo == nil {
-		return c.HandleError(ctx, ErrImportInProgress, "datastore not available", http.StatusServiceUnavailable)
+		return c.HandleError(ctx, errDatastoreUnavailable, "datastore is not available", http.StatusServiceUnavailable)
 	}
 
 	// Parse and bind request body.
@@ -257,7 +263,7 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 	if !c.importMgr.start(job) {
 		jobCancel()
 		_ = src.Close()
-		return c.HandleError(ctx, ErrImportInProgress, "an import is already in progress", http.StatusConflict)
+		return c.HandleError(ctx, errImportInProgress, "an import is already in progress", http.StatusConflict)
 	}
 
 	// Run the engine in a goroutine tracked by the controller WaitGroup.
@@ -276,7 +282,10 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		// of hanging until their deadline.
 		defer func() {
 			if r := recover(); r != nil {
-				runErr = fmt.Errorf("import panicked: %v", r)
+				runErr = errors.Newf("import panicked: %v", r).Component("api").Category(errors.CategoryGeneric).Build()
+				// Preserve the last reported progress; the local stats var is still zero
+				// because the panicking eng.Run call never returned its stats.
+				stats, _, _, _, _ = job.snapshot()
 			}
 			job.finish(stats, runErr)
 		}()
@@ -312,8 +321,10 @@ func (c *Controller) StreamImportProgress(ctx echo.Context) error {
 		_ = c.sendImportTerminal(ctx, seq, stats, runErr)
 		return nil
 	}
-	if err := c.sendImportEvent(ctx, seq, importEventProgress, toImportProgress(stats)); err != nil {
-		return nil
+	if stats.Phase != importEnginePhaseDone {
+		if err := c.sendImportEvent(ctx, seq, importEventProgress, toImportProgress(stats)); err != nil {
+			return nil
+		}
 	}
 
 	hb := time.NewTicker(sseHeartbeatInterval)
@@ -347,8 +358,10 @@ func (c *Controller) StreamImportProgress(ctx echo.Context) error {
 				_ = c.sendImportTerminal(ctx, seq, stats, runErr)
 				return nil
 			}
-			if err := c.sendImportEvent(ctx, seq, importEventProgress, toImportProgress(stats)); err != nil {
-				return nil
+			if stats.Phase != importEnginePhaseDone {
+				if err := c.sendImportEvent(ctx, seq, importEventProgress, toImportProgress(stats)); err != nil {
+					return nil
+				}
 			}
 		}
 	}
@@ -444,7 +457,7 @@ func (c *Controller) sendImportTerminal(ctx echo.Context, seq uint64, stats impo
 	switch {
 	case runErr == nil:
 		return c.sendImportEvent(ctx, seq, importEventComplete, toImportProgress(stats))
-	case stderrors.Is(runErr, context.Canceled) || stderrors.Is(runErr, context.DeadlineExceeded):
+	case errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded):
 		return c.sendImportEvent(ctx, seq, importEventCancelled, toImportProgress(stats))
 	default:
 		return c.sendImportEvent(ctx, seq, importEventError, importErrorPayload{

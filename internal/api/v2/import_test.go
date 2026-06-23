@@ -313,19 +313,24 @@ func TestResolveImportSourcePath_SymlinkEscape(t *testing.T) {
 	// A non-existent file under the symlinked parent must be rejected because
 	// its physical parent resolves outside root.
 	_, err := resolveImportSourcePath(root, filepath.Join("escape", "missing.db"))
-	require.ErrorIs(t, err, ErrInvalidSourcePath)
+	require.ErrorIs(t, err, errInvalidSourcePath)
 
 	// An existing file reached through the escaping symlink must also be rejected.
 	existing := filepath.Join(outside, "real.db")
 	require.NoError(t, os.WriteFile(existing, []byte("x"), 0o600))
 	_, err = resolveImportSourcePath(root, filepath.Join("escape", "real.db"))
-	require.ErrorIs(t, err, ErrInvalidSourcePath)
+	require.ErrorIs(t, err, errInvalidSourcePath)
 
 	// A legitimate non-existent file directly under root resolves without error
 	// (the handler's os.Stat reports it missing).
 	resolved, err := resolveImportSourcePath(root, "legit.db")
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "legit.db"), resolved)
+
+	// Multi-level: a path under a symlinked ancestor where multiple intermediate
+	// directories do not exist yet must also be rejected.
+	_, err = resolveImportSourcePath(root, filepath.Join("escape", "missingA", "missingB", "x.db"))
+	require.ErrorIs(t, err, errInvalidSourcePath)
 }
 
 // TestStartBirdNETPiImport_MissingFile_Returns400 verifies missing file returns 400.
@@ -422,12 +427,13 @@ func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
 
 // TestStartBirdNETPiImport_ConflictWhileRunning_Returns409 verifies 409 on concurrent starts.
 func TestStartBirdNETPiImport_ConflictWhileRunning_Returns409(t *testing.T) {
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	)
-
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
@@ -597,12 +603,13 @@ func TestCancelImport_JobNotFound_Returns404(t *testing.T) {
 
 // TestCancelImport_RunningJob_Returns200Cancelling verifies cancel returns 200 with cancelling status.
 func TestCancelImport_RunningJob_Returns200Cancelling(t *testing.T) {
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	)
-
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
@@ -795,7 +802,347 @@ func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
 
 	assert.Equal(t, importStatusDone, finalStatus.Status, "import should reach done state")
 	assert.Empty(t, finalStatus.Error)
-	if finalStatus.Progress != nil {
-		assert.Equal(t, rowCount, finalStatus.Progress.Total)
+	require.NotNil(t, finalStatus.Progress)
+	assert.Equal(t, rowCount, finalStatus.Progress.Total)
+	assert.Equal(t, rowCount, finalStatus.Progress.Inserted)
+	assert.Equal(t, 0, finalStatus.Progress.Errors)
+	assert.Equal(t, 0, finalStatus.Progress.Skipped)
+}
+
+// panicIterateSource implements imports.Source. It processes the first panicAfter
+// batches normally (allowing the engine to report progress), then panics on the
+// next batch, simulating a mid-run engine crash.
+type panicIterateSource struct {
+	mu         sync.Mutex
+	batches    [][]imports.SourceDetection
+	panicAfter int
+}
+
+func (p *panicIterateSource) Validate(_ context.Context) error { return nil }
+func (p *panicIterateSource) Close() error                     { return nil }
+func (p *panicIterateSource) Count(_ context.Context) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for _, b := range p.batches {
+		n += len(b)
 	}
+	return n, nil
+}
+
+func (p *panicIterateSource) Iterate(_ context.Context, _ int, fn func([]imports.SourceDetection) error) error {
+	p.mu.Lock()
+	batches := p.batches
+	p.mu.Unlock()
+	for i, b := range batches {
+		if i >= p.panicAfter {
+			panic("simulated import panic after progress")
+		}
+		if err := fn(b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TestStreamImportProgress_LiveStreaming verifies that a connected SSE client receives
+// multiple strictly-increasing progress events followed by a terminal complete event.
+func TestStreamImportProgress_LiveStreaming(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
+
+	e, c := newImportController(t)
+	c.initImportRoutes()
+
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+
+	// readyCh gates the source between batches; close it after the SSE client connects.
+	readyCh := make(chan struct{})
+	det := imports.SourceDetection{
+		Date: "2024-06-01", Time: "08:00:00",
+		ScientificName: "Parus major", CommonName: "Great Tit",
+		Confidence: 0.9,
+	}
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &fakeSource{
+			batches: [][]imports.SourceDetection{
+				{det},
+				{det},
+				{det},
+			},
+			block: readyCh,
+		}, nil
+	}
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600))
+	c.importSourceRoot = dir
+
+	srv := httptest.NewServer(e)
+	t.Cleanup(srv.Close)
+
+	// Start the import.
+	startResp, err := http.Post(srv.URL+"/api/v2/import/birdnet-pi", //nolint:noctx // test uses simplified HTTP calls without context
+		"application/json", strings.NewReader(testDBOnlyBody))
+	require.NoError(t, err)
+	defer func() { _ = startResp.Body.Close() }()
+	require.Equal(t, http.StatusAccepted, startResp.StatusCode)
+
+	var startBody startImportResponse
+	require.NoError(t, json.NewDecoder(startResp.Body).Decode(&startBody))
+	jobID := startBody.JobID
+	require.NotEmpty(t, jobID)
+
+	// Connect SSE stream before unblocking so we catch intermediate events.
+	streamResp, err := http.Get(srv.URL + "/api/v2/import/jobs/" + jobID + "/progress") //nolint:noctx // test uses simplified HTTP calls without context
+	require.NoError(t, err)
+	defer func() { _ = streamResp.Body.Close() }()
+	require.Equal(t, http.StatusOK, streamResp.StatusCode)
+
+	// Unblock the import so batches flow through.
+	close(readyCh)
+
+	// Read all SSE events until the stream closes.
+	scanner := bufio.NewScanner(streamResp.Body)
+	var events []importSSEEvent
+	var cur importSSEEvent
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "id: "):
+			cur.id = strings.TrimPrefix(line, "id: ")
+		case strings.HasPrefix(line, "event: "):
+			cur.event = strings.TrimPrefix(line, "event: ")
+		case strings.HasPrefix(line, "data: "):
+			cur.data = strings.TrimPrefix(line, "data: ")
+		case line == "":
+			if cur.event != "" {
+				events = append(events, cur)
+				cur = importSSEEvent{}
+			}
+		}
+	}
+
+	require.NotEmpty(t, events, "should receive at least one SSE event")
+
+	// Validate: strictly increasing ids, snake_case keys, no phase=done in progress,
+	// stream ends with complete.
+	var prevID int64 = -1
+	var progressCount int
+	var lastEvent string
+	for _, ev := range events {
+		if ev.event == importEventHeartbeat {
+			continue
+		}
+		require.NotEmpty(t, ev.id, "event %q must have an id", ev.event)
+		id, parseErr := strconv.ParseInt(ev.id, 10, 64)
+		require.NoError(t, parseErr, "id must be numeric, got %q", ev.id)
+		assert.Greater(t, id, prevID, "ids must be strictly increasing")
+		prevID = id
+		lastEvent = ev.event
+
+		if ev.event == importEventProgress {
+			progressCount++
+			var m map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ev.data), &m))
+			for key := range m {
+				assert.Equal(t, strings.ToLower(key), key, "JSON key %q should be snake_case", key)
+			}
+			phase, _ := m["phase"].(string)
+			assert.NotEqual(t, importEnginePhaseDone, phase, "progress event must not carry phase=done")
+		}
+	}
+
+	assert.GreaterOrEqual(t, progressCount, 1, "should have received at least one progress event")
+	assert.Equal(t, importEventComplete, lastEvent, "stream must end with complete event")
+}
+
+// TestStreamImportProgress_CancelEmitsCancelledEvent verifies that cancelling a
+// running import results in a terminal cancelled SSE event on any connected stream.
+func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
+
+	e, c := newImportController(t)
+	c.initImportRoutes()
+
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+
+	blockCh := make(chan struct{})
+	det := imports.SourceDetection{
+		Date: "2024-06-01", Time: "09:00:00",
+		ScientificName: "Erithacus rubecula", CommonName: "Robin",
+		Confidence: 0.88,
+	}
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &fakeSource{
+			batches: [][]imports.SourceDetection{{det}},
+			block:   blockCh,
+		}, nil
+	}
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600))
+	c.importSourceRoot = dir
+
+	srv := httptest.NewServer(e)
+	t.Cleanup(srv.Close)
+
+	// Start the import.
+	startResp, err := http.Post(srv.URL+"/api/v2/import/birdnet-pi", //nolint:noctx // test uses simplified HTTP calls without context
+		"application/json", strings.NewReader(testDBOnlyBody))
+	require.NoError(t, err)
+	defer func() { _ = startResp.Body.Close() }()
+	require.Equal(t, http.StatusAccepted, startResp.StatusCode)
+
+	var startBody startImportResponse
+	require.NoError(t, json.NewDecoder(startResp.Body).Decode(&startBody))
+	jobID := startBody.JobID
+
+	// Connect SSE stream.
+	streamResp, err := http.Get(srv.URL + "/api/v2/import/jobs/" + jobID + "/progress") //nolint:noctx // test uses simplified HTTP calls without context
+	require.NoError(t, err)
+	defer func() { _ = streamResp.Body.Close() }()
+
+	// Cancel the import.
+	cancelResp, err := http.Post(srv.URL+"/api/v2/import/jobs/"+jobID+"/cancel", //nolint:noctx // test uses simplified HTTP calls without context
+		"application/json", http.NoBody)
+	require.NoError(t, err)
+	defer func() { _ = cancelResp.Body.Close() }()
+	assert.Equal(t, http.StatusOK, cancelResp.StatusCode)
+
+	// Unblock so the import goroutine can exit cleanly via context cancellation.
+	close(blockCh)
+
+	// Drain the SSE stream and find the terminal event.
+	scanner := bufio.NewScanner(streamResp.Body)
+	var events []importSSEEvent
+	var cur importSSEEvent
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "id: "):
+			cur.id = strings.TrimPrefix(line, "id: ")
+		case strings.HasPrefix(line, "event: "):
+			cur.event = strings.TrimPrefix(line, "event: ")
+		case strings.HasPrefix(line, "data: "):
+			cur.data = strings.TrimPrefix(line, "data: ")
+		case line == "":
+			if cur.event != "" {
+				events = append(events, cur)
+				cur = importSSEEvent{}
+			}
+		}
+	}
+
+	require.NotEmpty(t, events, "should receive at least one SSE event")
+	lastEvent := events[len(events)-1]
+	assert.Equal(t, importEventCancelled, lastEvent.event, "terminal event must be cancelled")
+}
+
+// TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats verifies that a
+// panic in the import engine is recovered, the job reaches a terminal error state,
+// and the last-reported progress is preserved (not zeroed).
+func TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
+
+	e, c := newImportController(t)
+	c.initImportRoutes()
+
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+
+	det := imports.SourceDetection{
+		Date: "2024-06-01", Time: "07:00:00",
+		ScientificName: "Cyanistes caeruleus", CommonName: "Blue Tit",
+		Confidence: 0.75,
+	}
+	// panicIterateSource: processes first batch (engine reports progress), then panics.
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &panicIterateSource{
+			batches:    [][]imports.SourceDetection{{det}, {det}},
+			panicAfter: 1,
+		}, nil
+	}
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600))
+	c.importSourceRoot = dir
+
+	srv := httptest.NewServer(e)
+	t.Cleanup(srv.Close)
+
+	// Start the import.
+	startResp, err := http.Post(srv.URL+"/api/v2/import/birdnet-pi", //nolint:noctx // test uses simplified HTTP calls without context
+		"application/json", strings.NewReader(testDBOnlyBody))
+	require.NoError(t, err)
+	defer func() { _ = startResp.Body.Close() }()
+	require.Equal(t, http.StatusAccepted, startResp.StatusCode)
+
+	var startBody startImportResponse
+	require.NoError(t, json.NewDecoder(startResp.Body).Decode(&startBody))
+	require.NotEmpty(t, startBody.JobID)
+
+	// Poll status until done.
+	deadline := time.Now().Add(10 * time.Second)
+	var finalStatus importStatusResponse
+	e2 := echo.New()
+	for time.Now().Before(deadline) {
+		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		statusRec := httptest.NewRecorder()
+		statusCtx := e2.NewContext(statusReq, statusRec)
+		require.NoError(t, c.GetImportStatus(statusCtx))
+		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
+		if !finalStatus.Running && finalStatus.Status == importStatusDone {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	assert.Equal(t, importStatusDone, finalStatus.Status, "job must reach done state after panic")
+	assert.NotEmpty(t, finalStatus.Error, "error must be set after panic")
+	require.NotNil(t, finalStatus.Progress, "progress must be preserved after panic")
+	// The engine reported stats for the first batch before panicking, so Total
+	// must be non-zero rather than the all-zeros default (regression guard for Fix A).
+	assert.Positive(t, finalStatus.Progress.Total, "Total must be non-zero (panic stats preserved)")
+
+	// The slot must be freed: a subsequent start must succeed.
+	startResp2, err := http.Post(srv.URL+"/api/v2/import/birdnet-pi", //nolint:noctx // test uses simplified HTTP calls without context
+		"application/json", strings.NewReader(testDBOnlyBody))
+	require.NoError(t, err)
+	defer func() { _ = startResp2.Body.Close() }()
+	assert.Equal(t, http.StatusAccepted, startResp2.StatusCode, "slot must be freed after panic recovery")
 }
