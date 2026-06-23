@@ -45,13 +45,22 @@ var ffmpegMajorCache sync.Map
 // `ffmpeg -version` process instead of one per stream.
 var ffmpegMajorGroup singleflight.Group
 
-// timeoutParamForSource returns the correct FFmpeg timeout flag for the given source type.
-func timeoutParamForSource(st audiocore.SourceType, ffmpegMajor int) string {
-	if st == audiocore.SourceTypeRTSP && ffmpegMajor > 0 && ffmpegMajor < ffmpegStimeoutMaxMajor {
+// rtspTimeoutParamForMajor returns the RTSP connection-timeout flag for the
+// given FFmpeg major version: -stimeout below 5 (FFmpeg 4.x), -timeout on 5.x+
+// and unknown versions. This is the single source of truth shared by the live
+// capture path (timeoutParamForSource) and the channel-energy analysis path
+// (buildAnalysisArgs), so both stay in lockstep.
+func rtspTimeoutParamForMajor(ffmpegMajor int) string {
+	if ffmpegMajor > 0 && ffmpegMajor < ffmpegStimeoutMaxMajor {
 		return ffmpegLegacyRTSPTimeoutParam
 	}
+	return ffmpegRTSPTimeoutParam
+}
+
+// timeoutParamForSource returns the correct FFmpeg timeout flag for the given source type.
+func timeoutParamForSource(st audiocore.SourceType, ffmpegMajor int) string {
 	if st == audiocore.SourceTypeRTSP {
-		return ffmpegRTSPTimeoutParam
+		return rtspTimeoutParamForMajor(ffmpegMajor)
 	}
 	return ffmpegTimeoutParam
 }
