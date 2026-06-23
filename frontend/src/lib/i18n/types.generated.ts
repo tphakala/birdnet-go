@@ -1237,6 +1237,8 @@ export type TranslationKey =
   | 'system.inference.invocationsHelp'
   | 'system.inference.noModelsHint'
   | 'system.inference.noModelsHintLink'
+  | 'system.inference.perStreamInfo'
+  | 'system.inference.perStreamInfoLink'
   | 'system.metrics.cpu'
   | 'system.metrics.memory'
   | 'system.metrics.temperature'

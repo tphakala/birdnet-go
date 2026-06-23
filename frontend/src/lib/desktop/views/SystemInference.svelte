@@ -31,7 +31,7 @@
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
-  import { Brain, Cpu, MemoryStick, Activity, Minus, Pause, MapPinOff } from '@lucide/svelte';
+  import { Brain, Cpu, MemoryStick, Activity, Minus, Pause, MapPinOff, Info } from '@lucide/svelte';
   import type {
     InferenceStatusResponse,
     InferenceModel,
@@ -489,6 +489,21 @@
       {error}
     </div>
   {:else if snapshot}
+    <!-- Per-stream model assignment is not obvious from this read-only page;
+         point the user at the audio settings where models are enabled per source. -->
+    <div
+      class="flex items-start gap-2.5 p-3 rounded-lg bg-blue-50 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300 text-sm"
+      role="note"
+    >
+      <Info class="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+      <p>
+        {t('system.inference.perStreamInfo')}
+        <a href={buildAppUrl('/ui/settings/audio')} class="font-medium underline whitespace-nowrap">
+          {t('system.inference.perStreamInfoLink')}
+        </a>
+      </p>
+    </div>
+
     <!-- Top context row: hardware and inference backends as compact cards.
          The Audio pipeline card is intentionally hidden for now (see below). -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">

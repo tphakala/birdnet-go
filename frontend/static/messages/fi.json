@@ -1591,7 +1591,9 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "noModelsHintLink": "Configure audio sources",
+      "perStreamInfo": "Models are enabled per audio stream. Choose which models run on each source on the audio settings page.",
+      "perStreamInfoLink": "Open audio settings"
     },
     "metrics": {
       "cpu": "CPU",
