@@ -9,7 +9,6 @@ If your problem isn't covered here, generate a support dump from **Settings > Su
 These come up again and again, so they are worth knowing before anything else:
 
 - **Run `install.sh` as your normal user, never with `sudo`.** Running the installer as root creates a second, separate instance under `/root/birdnet-go-app` while your real data stays under `~/birdnet-go-app`. This is the single most common cause of "an update deleted my settings/history". Nothing was deleted; you were just looking at a fresh root install. Re-run the installer as your normal user and your data is there.
-- **Use the `:nightly` image tag, not `:latest`.** The `latest` tag is no longer maintained. The install script and Docker Compose setups should pull `ghcr.io/tphakala/birdnet-go:nightly`.
 - **Use a single mono microphone (or a mono stream).** Stereo audio does not improve detection and can hurt it. A mono mic is recommended for both local capture and RTSP.
 - **Set your location (latitude/longitude).** The range filter needs coordinates. Without them, rarity is wrong (everything shows "very rare") and out-of-range species slip into your detections.
 - **Settings hot-reload.** Almost all settings now take effect immediately without a restart. If a setting change does not seem to apply, you are probably on an older build; update to the latest nightly.
