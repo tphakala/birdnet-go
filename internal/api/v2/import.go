@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
@@ -46,6 +47,9 @@ const (
 // Progress events with this phase are suppressed; the terminal complete/cancelled/error
 // event is the authoritative completion signal.
 const importEnginePhaseDone = "done"
+
+// importErrorMessage is the generic, non-leaking message reported when an import fails.
+const importErrorMessage = "import failed"
 
 // errImportInProgress is returned when a second start is attempted while one is running.
 var errImportInProgress = errors.NewStd("import already in progress")
@@ -82,14 +86,11 @@ type importProgress struct {
 }
 
 // importErrorPayload is the SSE payload for the error terminal event.
+// importProgress is embedded so the wire format is identical to the progress event
+// (flattened snake_case fields), with an additional "message" field prepended.
 type importErrorPayload struct {
-	Message   string `json:"message"`
-	Total     int    `json:"total"`
-	Processed int    `json:"processed"`
-	Inserted  int    `json:"inserted"`
-	Skipped   int    `json:"skipped"`
-	Errors    int    `json:"errors"`
-	Phase     string `json:"phase"`
+	Message string `json:"message"`
+	importProgress
 }
 
 // importStatusResponse is the JSON body for GET /import/status.
@@ -130,6 +131,9 @@ func resolveImportSourcePath(root, userPath string) (string, error) {
 	}
 	rootResolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", errInvalidSourcePath
+		}
 		rootResolved = root
 	}
 	// Find the deepest existing ancestor of full, resolving symlinks, and verify it
@@ -174,6 +178,10 @@ func isContained(root, target string) bool {
 // initImportRoutes registers all import-related API routes.
 func (c *Controller) initImportRoutes() {
 	var mw []echo.MiddlewareFunc
+	// Echo's applyMiddleware invokes every middleware entry, so a nil auth middleware
+	// would panic at registration. Append it only when present (it is nil in tests and
+	// when auth is not configured); the routes are still gated by the global private-mode
+	// middleware on c.Group in that case.
 	if c.authMiddleware != nil {
 		mw = append(mw, c.authMiddleware)
 	}
@@ -273,22 +281,21 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 	}
 	eng := imports.NewEngine(c.Repo)
 	c.wg.Go(func() {
-		defer jobCancel()
-		defer func() { _ = src.Close() }()
 		var stats imports.ImportStats
 		var runErr error
-		// Always drive the job to a terminal state, even if eng.Run panics, so
-		// the single import slot is released and any SSE streams unblock instead
-		// of hanging until their deadline.
+		// Registered first so it runs last: it recovers panics from eng.Run AND from
+		// the cleanup defers below, and always drives the job to a terminal state so the
+		// single import slot is released and SSE streams unblock.
 		defer func() {
 			if r := recover(); r != nil {
 				runErr = errors.Newf("import panicked: %v", r).Component("api").Category(errors.CategoryGeneric).Build()
-				// Preserve the last reported progress; the local stats var is still zero
-				// because the panicking eng.Run call never returned its stats.
+				// The local stats var is stale on panic; recover the last reported progress.
 				stats, _, _, _, _ = job.snapshot()
 			}
 			job.finish(stats, runErr)
 		}()
+		defer jobCancel()
+		defer func() { _ = src.Close() }()
 		stats, runErr = eng.Run(jobCtx, src, opts, job)
 	})
 
@@ -402,7 +409,7 @@ func (c *Controller) GetImportStatus(ctx echo.Context) error {
 			Progress: &prog,
 		}
 		if runErr != nil {
-			resp.Error = "import failed"
+			resp.Error = importErrorMessage
 		}
 		return ctx.JSON(http.StatusOK, resp)
 	}
@@ -422,7 +429,11 @@ func (c *Controller) sendImportEvent(ctx echo.Context, id uint64, event string, 
 	}
 	msg := fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", id, event, payload)
 	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		_ = conn.SetWriteDeadline(time.Now().Add(sseWriteDeadline))
+		if err := conn.SetWriteDeadline(time.Now().Add(sseWriteDeadline)); err != nil {
+			// Best-effort: not all response writers support deadlines; log and proceed,
+			// matching sendSSEMessage in sse.go.
+			c.logDebugIfEnabled("Failed to set write deadline for import SSE event", logger.Error(err))
+		}
 	}
 	if _, err := ctx.Response().Write([]byte(msg)); err != nil {
 		return fmt.Errorf("write import event: %w", err)
@@ -435,21 +446,7 @@ func (c *Controller) sendImportEvent(ctx echo.Context, id uint64, event string, 
 
 // sendImportHeartbeat sends a lightweight SSE event to keep the connection alive.
 func (c *Controller) sendImportHeartbeat(ctx echo.Context) error {
-	payload, err := c.safeMarshalJSON(importEventHeartbeat, map[string]int64{"ts": time.Now().Unix()})
-	if err != nil {
-		return fmt.Errorf("marshal heartbeat: %w", err)
-	}
-	msg := fmt.Sprintf("event: %s\ndata: %s\n\n", importEventHeartbeat, payload)
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		_ = conn.SetWriteDeadline(time.Now().Add(sseWriteDeadline))
-	}
-	if _, err := ctx.Response().Write([]byte(msg)); err != nil {
-		return fmt.Errorf("write heartbeat: %w", err)
-	}
-	if f, ok := ctx.Response().Writer.(http.Flusher); ok {
-		f.Flush()
-	}
-	return nil
+	return c.sendSSEMessage(ctx, importEventHeartbeat, map[string]int64{"ts": time.Now().Unix()})
 }
 
 // sendImportTerminal sends the final SSE event based on the import outcome.
@@ -461,13 +458,8 @@ func (c *Controller) sendImportTerminal(ctx echo.Context, seq uint64, stats impo
 		return c.sendImportEvent(ctx, seq, importEventCancelled, toImportProgress(stats))
 	default:
 		return c.sendImportEvent(ctx, seq, importEventError, importErrorPayload{
-			Message:   "import failed",
-			Total:     stats.Total,
-			Processed: stats.Processed,
-			Inserted:  stats.Inserted,
-			Skipped:   stats.Skipped,
-			Errors:    stats.Errors,
-			Phase:     stats.Phase,
+			Message:        importErrorMessage,
+			importProgress: toImportProgress(stats),
 		})
 	}
 }

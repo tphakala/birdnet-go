@@ -39,6 +39,11 @@ type fakeSource struct {
 	batches  [][]imports.SourceDetection
 	validate error
 	block    chan struct{} // optional: gate between batches for cancel tests
+	// gate, when non-nil, makes Iterate receive one value before producing each
+	// batch. The test sends one token per batch and reads the resulting progress
+	// event before sending the next, so progress updates cannot coalesce. This
+	// gives the live-streaming test a deterministic multi-event stream.
+	gate chan struct{}
 }
 
 func (f *fakeSource) Validate(_ context.Context) error {
@@ -59,8 +64,18 @@ func (f *fakeSource) Iterate(ctx context.Context, _ int, fn func([]imports.Sourc
 	f.mu.Lock()
 	batches := f.batches
 	block := f.block
+	gate := f.gate
 	f.mu.Unlock()
 	for _, b := range batches {
+		if gate != nil {
+			// Wait for the test to release this batch so the SSE reader can
+			// observe each progress event before the next batch is produced.
+			select {
+			case <-gate:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -141,6 +156,30 @@ type importSSEEvent struct {
 	id    string
 	event string
 	data  string
+}
+
+// readImportSSEEvent reads scanner lines until one complete SSE event (terminated
+// by a blank line) has been assembled, then returns it. It returns ok=false when
+// the stream ends before a complete event is read. Used by tests that need to read
+// events incrementally rather than draining the whole stream at once.
+func readImportSSEEvent(scanner *bufio.Scanner) (event importSSEEvent, ok bool) {
+	var cur importSSEEvent
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "id: "):
+			cur.id = strings.TrimPrefix(line, "id: ")
+		case strings.HasPrefix(line, "event: "):
+			cur.event = strings.TrimPrefix(line, "event: ")
+		case strings.HasPrefix(line, "data: "):
+			cur.data = strings.TrimPrefix(line, "data: ")
+		case line == "":
+			if cur.event != "" {
+				return cur, true
+			}
+		}
+	}
+	return importSSEEvent{}, false
 }
 
 // parseImportSSEEvents parses SSE-formatted text into a slice of import events.
@@ -287,7 +326,11 @@ func TestStartBirdNETPiImport_TraversalPath_Returns400(t *testing.T) {
 	c.importSourceRoot = t.TempDir()
 	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
 
-	for _, badPath := range []string{"../etc/passwd", "../../secret", "/etc/passwd"} {
+	// filepath.Join(t.TempDir(), ...) is drive-absolute on Windows and outside the
+	// import root on all platforms, so it covers the filepath.IsAbs rejection path
+	// on every OS (unlike "/etc/passwd" which is not absolute on Windows).
+	outsidePath := filepath.Join(t.TempDir(), "outside.db")
+	for _, badPath := range []string{"../etc/passwd", "../../secret", "/etc/passwd", outsidePath} {
 		body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, badPath)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
@@ -381,11 +424,13 @@ func TestStartBirdNETPiImport_FakeValidationFailure_Returns400(t *testing.T) {
 
 // TestStartBirdNETPiImport_GoodFakeSource_Returns202 verifies 202 on a valid request.
 func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	)
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
 
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -536,6 +581,8 @@ func TestStreamImportProgress_DoneJob_EmitsCompleteEvent(t *testing.T) {
 }
 
 // TestStreamImportProgress_EventIDsMonotonic verifies SSE event IDs are monotonically increasing.
+// This test covers the connect-after-done path (terminal-only event), complementing
+// TestStreamImportProgress_LiveStreaming which covers the live multi-event path.
 func TestStreamImportProgress_EventIDsMonotonic(t *testing.T) {
 	_, c := newImportController(t)
 
@@ -750,11 +797,13 @@ func TestImportRoutes_Registered(t *testing.T) {
 
 // TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd verifies the full pipeline with a real SQLite file.
 func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	)
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
 
 	const rowCount = 3
 
@@ -867,8 +916,11 @@ func TestStreamImportProgress_LiveStreaming(t *testing.T) {
 	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	c.Repo = mockRepo
 
-	// readyCh gates the source between batches; close it after the SSE client connects.
-	readyCh := make(chan struct{})
+	// gate releases one batch at a time. The test sends one token per batch and
+	// reads the resulting progress event before releasing the next, so progress
+	// updates cannot coalesce. This makes the multi-event assertion deterministic.
+	const batchCount = 3
+	gate := make(chan struct{})
 	det := imports.SourceDetection{
 		Date: "2024-06-01", Time: "08:00:00",
 		ScientificName: "Parus major", CommonName: "Great Tit",
@@ -881,7 +933,7 @@ func TestStreamImportProgress_LiveStreaming(t *testing.T) {
 				{det},
 				{det},
 			},
-			block: readyCh,
+			gate: gate,
 		}, nil
 	}
 
@@ -904,35 +956,44 @@ func TestStreamImportProgress_LiveStreaming(t *testing.T) {
 	jobID := startBody.JobID
 	require.NotEmpty(t, jobID)
 
-	// Connect SSE stream before unblocking so we catch intermediate events.
+	// Connect SSE stream before releasing any batch so we catch every event.
 	streamResp, err := http.Get(srv.URL + "/api/v2/import/jobs/" + jobID + "/progress") //nolint:noctx // test uses simplified HTTP calls without context
 	require.NoError(t, err)
 	defer func() { _ = streamResp.Body.Close() }()
 	require.Equal(t, http.StatusOK, streamResp.StatusCode)
 
-	// Unblock the import so batches flow through.
-	close(readyCh)
-
-	// Read all SSE events until the stream closes.
 	scanner := bufio.NewScanner(streamResp.Body)
 	var events []importSSEEvent
-	var cur importSSEEvent
-	for scanner.Scan() {
-		line := scanner.Text()
-		switch {
-		case strings.HasPrefix(line, "id: "):
-			cur.id = strings.TrimPrefix(line, "id: ")
-		case strings.HasPrefix(line, "event: "):
-			cur.event = strings.TrimPrefix(line, "event: ")
-		case strings.HasPrefix(line, "data: "):
-			cur.data = strings.TrimPrefix(line, "data: ")
-		case line == "":
-			if cur.event != "" {
-				events = append(events, cur)
-				cur = importSSEEvent{}
+
+	// Release every batch except the last, reading its progress event before
+	// releasing the next. Because the source parks on the next gate token after
+	// reporting, each of these updates is observed individually (no coalesce), so
+	// the stream is guaranteed to carry batchCount-1 distinct progress events.
+	// The final batch is released afterwards; its progress may legitimately
+	// coalesce into the terminal event (finish supersedes a pending progress),
+	// so we do not require a separate progress event for it.
+	for range batchCount - 1 {
+		gate <- struct{}{}
+		for {
+			ev, ok := readImportSSEEvent(scanner)
+			require.True(t, ok, "stream closed before a progress event arrived")
+			events = append(events, ev)
+			if ev.event == importEventProgress {
+				break
 			}
 		}
 	}
+
+	// Release the final batch and drain the remaining events through the terminal.
+	gate <- struct{}{}
+	for {
+		ev, ok := readImportSSEEvent(scanner)
+		if !ok {
+			break
+		}
+		events = append(events, ev)
+	}
+	require.NoError(t, scanner.Err(), "SSE stream must not error during read")
 
 	require.NotEmpty(t, events, "should receive at least one SSE event")
 
@@ -964,7 +1025,7 @@ func TestStreamImportProgress_LiveStreaming(t *testing.T) {
 		}
 	}
 
-	assert.GreaterOrEqual(t, progressCount, 1, "should have received at least one progress event")
+	assert.GreaterOrEqual(t, progressCount, 2, "should have received at least two progress events (3-batch source)")
 	assert.Equal(t, importEventComplete, lastEvent, "stream must end with complete event")
 }
 
@@ -1056,6 +1117,7 @@ func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
 			}
 		}
 	}
+	require.NoError(t, scanner.Err(), "SSE stream must not error during read")
 
 	require.NotEmpty(t, events, "should receive at least one SSE event")
 	lastEvent := events[len(events)-1]

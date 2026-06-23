@@ -68,21 +68,21 @@ func newImportJob(id string, cancel context.CancelFunc) *importJob {
 // Report implements imports.ProgressReporter. Called from the engine goroutine.
 func (j *importJob) Report(s imports.ImportStats) {
 	j.mu.Lock()
+	defer j.mu.Unlock()
 	j.stats = s
 	j.seq++
 	j.wakeLocked()
-	j.mu.Unlock()
 }
 
 // finish records the final state and error of a completed or cancelled import.
 func (j *importJob) finish(s imports.ImportStats, err error) {
 	j.mu.Lock()
+	defer j.mu.Unlock()
 	j.stats = s
 	j.runErr = err
 	j.done = true
 	j.seq++
 	j.wakeLocked()
-	j.mu.Unlock()
 }
 
 // wakeLocked closes the current changed channel and replaces it with a new one.
