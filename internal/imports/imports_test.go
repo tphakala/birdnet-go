@@ -110,7 +110,7 @@ func TestValidate_NoDetectionsTable(t *testing.T) {
 
 	src, err := birdnetpi.New(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
 	err = src.Validate(t.Context())
 	assert.Error(t, err, "Validate must fail when detections table is absent")
@@ -125,7 +125,7 @@ func TestCount(t *testing.T) {
 
 	src, err := birdnetpi.New(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
 	count, err := src.Count(t.Context())
 	require.NoError(t, err)
@@ -179,7 +179,7 @@ func TestImport_FieldMapping(t *testing.T) {
 
 	src, err := birdnetpi.New(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
 	store := newTestStore(t)
 	repo := datastore.NewDetectionRepository(store, time.UTC)
@@ -232,7 +232,7 @@ func TestImport_SkipsUnparseableDate(t *testing.T) {
 
 	src, err := birdnetpi.New(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
 	store := newTestStore(t)
 	repo := datastore.NewDetectionRepository(store, time.UTC)
@@ -291,7 +291,7 @@ func TestImport_WithinSourceDuplicate(t *testing.T) {
 
 	src, err := birdnetpi.New(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
 	stats, err := engine.Run(t.Context(), src, opts, nil)
 	require.NoError(t, err)
@@ -332,7 +332,7 @@ func TestImport_ContextCancellation(t *testing.T) {
 
 	src, err := birdnetpi.New(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
 	_, err = engine.Run(ctx, src, opts, nil)
 	assert.ErrorIs(t, err, context.Canceled, "cancelled import must return context error")
@@ -408,7 +408,7 @@ func TestValidate_MissingColumn(t *testing.T) {
 
 	src, err := birdnetpi.New(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
 	err = src.Validate(t.Context())
 	assert.Error(t, err, "Validate must fail when required columns are missing")
@@ -453,7 +453,7 @@ func TestImport_CancelDuringSave(t *testing.T) {
 
 	src, err := birdnetpi.New(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
 	engine := imports.NewEngine(repo)
 	opts := imports.ImportOptions{
