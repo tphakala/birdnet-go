@@ -215,6 +215,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	timeGroup.GET("/heatmap", c.GetActivityHeatmap)                        // Seasonal density heatmap (date x intra-day slot)
 	timeGroup.GET("/dawn-onset", c.GetDawnChorusOnset)                     // Dawn-chorus onset tracker (daily onset vs civil dawn)
 	timeGroup.GET("/succession", c.GetAcousticSuccession)                  // Acoustic succession streamgraph (top-N species hour-of-day, stacked)
+	timeGroup.GET("/year-over-year", c.GetYearOverYear)                    // Year-over-year tracker (this year-to-date vs same span last year, cumulative)
 
 	// Confidence analytics routes
 	confidenceGroup := analyticsGroup.Group("/confidence")
@@ -1923,6 +1924,91 @@ func (c *Controller) GetSpeciesAccumulation(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, newSpeciesAccumulationResponse(data))
+}
+
+// yearOverYearPointItem is one calendar position on the year-over-year tracker wire payload: the
+// current-year date (YYYY-MM-DD, for the x-axis), the year-independent MonthDay alignment key, the two
+// cumulative detection counts, and their delta (thisYear - lastYear).
+type yearOverYearPointItem struct {
+	Date     string `json:"date"`
+	MonthDay string `json:"monthDay"`
+	ThisYear int    `json:"thisYear"`
+	LastYear int    `json:"lastYear"`
+	Delta    int    `json:"delta"`
+}
+
+// yearOverYearResponse is the year-over-year tracker wire payload: the two compared calendar years and
+// one cumulative point per current-year day. currentYear/previousYear are at the root so the client can
+// label the legend without parsing a date. points is always a JSON array (never null).
+type yearOverYearResponse struct {
+	CurrentYear  int                     `json:"currentYear"`
+	PreviousYear int                     `json:"previousYear"`
+	Points       []yearOverYearPointItem `json:"points"`
+}
+
+// newYearOverYearResponse maps the datastore aggregation onto the wire payload, one entry per
+// current-year calendar day in ascending date order.
+func newYearOverYearResponse(data datastore.YearOverYearResult) yearOverYearResponse {
+	points := make([]yearOverYearPointItem, 0, len(data.Points))
+	for i := range data.Points {
+		points = append(points, yearOverYearPointItem{
+			Date:     data.Points[i].Date,
+			MonthDay: data.Points[i].MonthDay,
+			ThisYear: data.Points[i].ThisYear,
+			LastYear: data.Points[i].LastYear,
+			Delta:    data.Points[i].Delta,
+		})
+	}
+	return yearOverYearResponse{
+		CurrentYear:  data.CurrentYear,
+		PreviousYear: data.PreviousYear,
+		Points:       points,
+	}
+}
+
+// GetYearOverYear handles GET /api/v2/analytics/time/year-over-year
+// Returns the current year-to-date cumulative detection counts versus the same calendar span one year
+// earlier, with a per-day delta, powering the year-over-year tracker in the Trends tab. The single
+// optional `date` query param (station-local YYYY-MM-DD, default today) sets the inclusive end of both
+// windows; the metric is inherently all-species, so there is no species filter.
+func (c *Controller) GetYearOverYear(ctx echo.Context) error {
+	const operation = "year over year"
+
+	// date is optional (defaults to today in the station timezone); validate the format only, allowing
+	// an empty value through. The datastore resolves the default and derives both windows.
+	date := ctx.QueryParam("date")
+	if err := c.validateDateFormatStrictWithResponse(ctx, date, "date", operation); err != nil {
+		return err
+	}
+
+	c.logInfoIfEnabled("Retrieving year-over-year tracker",
+		logger.String("date", date),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	// Add timeout to prevent resource exhaustion
+	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+
+	data, err := c.DS.GetYearOverYear(ctxWithTimeout, date)
+	if err != nil {
+		return c.handleAnalyticsQueryError(ctx, err, "Year-over-year", "Failed to get year-over-year",
+			logger.String("date", date),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
+		)
+	}
+
+	c.logInfoIfEnabled("Year-over-year retrieved",
+		logger.String("date", date),
+		logger.Int("current_year", data.CurrentYear),
+		logger.Int("days", len(data.Points)),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	return ctx.JSON(http.StatusOK, newYearOverYearResponse(data))
 }
 
 // speciesPhenologyItem is one species' residency row in the phenology wire payload: its

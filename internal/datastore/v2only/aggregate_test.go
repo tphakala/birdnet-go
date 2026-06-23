@@ -806,3 +806,267 @@ func TestBuildSpeciesAccumulation_InvalidDate(t *testing.T) {
 	_, err = buildSpeciesAccumulation(nil, accumTestZone, "2026-06-01", "bad")
 	require.Error(t, err)
 }
+
+// ---- Year-over-year tracker (#1197) ----
+
+func TestBuildYearOverYear_Empty(t *testing.T) {
+	t.Parallel()
+
+	// Nil input over a 3-day window: one zero point per current-year day, never nil, with year labels.
+	got, err := buildYearOverYear(nil, nil, accumTestZone,
+		"2026-01-01", "2026-01-03", "2025-01-01", "2025-01-03", 2026, 2025)
+	require.NoError(t, err)
+	require.NotNil(t, got.Points)
+	require.Len(t, got.Points, 3)
+	assert.Equal(t, 2026, got.CurrentYear)
+	assert.Equal(t, 2025, got.PreviousYear)
+	for i := range got.Points {
+		assert.Equal(t, 0, got.Points[i].ThisYear)
+		assert.Equal(t, 0, got.Points[i].LastYear)
+		assert.Equal(t, 0, got.Points[i].Delta)
+	}
+	assert.Equal(t, "2026-01-01", got.Points[0].Date)
+	assert.Equal(t, "01-01", got.Points[0].MonthDay)
+	assert.Equal(t, "2026-01-03", got.Points[2].Date)
+}
+
+func TestBuildYearOverYear_CumulativeAndDelta(t *testing.T) {
+	t.Parallel()
+
+	// This year ahead: 2 detections on Jan 1, 1 on Jan 3. Last year: 1 on Jan 2.
+	thisTs := []int64{
+		localUnix(accumTestZone, 2026, 1, 1, 6, 0),
+		localUnix(accumTestZone, 2026, 1, 1, 7, 0),
+		localUnix(accumTestZone, 2026, 1, 3, 8, 0),
+	}
+	lastTs := []int64{
+		localUnix(accumTestZone, 2025, 1, 2, 6, 0),
+	}
+
+	got, err := buildYearOverYear(thisTs, lastTs, accumTestZone,
+		"2026-01-01", "2026-01-03", "2025-01-01", "2025-01-03", 2026, 2025)
+	require.NoError(t, err)
+	require.Len(t, got.Points, 3)
+
+	wantThis := []int{2, 2, 3}
+	wantLast := []int{0, 1, 1}
+	prevThis, prevLast := 0, 0
+	for i := range got.Points {
+		assert.Equalf(t, wantThis[i], got.Points[i].ThisYear, "thisYear on day %d", i)
+		assert.Equalf(t, wantLast[i], got.Points[i].LastYear, "lastYear on day %d", i)
+		assert.Equalf(t, wantThis[i]-wantLast[i], got.Points[i].Delta, "delta on day %d", i)
+		assert.GreaterOrEqual(t, got.Points[i].ThisYear, prevThis, "thisYear must be monotonic")
+		assert.GreaterOrEqual(t, got.Points[i].LastYear, prevLast, "lastYear must be monotonic")
+		prevThis, prevLast = got.Points[i].ThisYear, got.Points[i].LastYear
+	}
+}
+
+func TestBuildYearOverYear_CurrentLeapPriorNonLeap_Feb29CarryForward(t *testing.T) {
+	t.Parallel()
+
+	// Current year 2024 is a leap year; previous year 2023 is not. The previous cumulative must carry
+	// its Feb 28 value flat across the current Feb 29 (no prior counterpart), and stay monotonic.
+	thisTs := []int64{
+		localUnix(accumTestZone, 2024, 2, 28, 6, 0),
+		localUnix(accumTestZone, 2024, 2, 29, 6, 0),
+	}
+	lastTs := []int64{
+		localUnix(accumTestZone, 2023, 2, 28, 6, 0),
+	}
+
+	got, err := buildYearOverYear(thisTs, lastTs, accumTestZone,
+		"2024-02-27", "2024-03-01", "2023-02-27", "2023-03-01", 2024, 2023)
+	require.NoError(t, err)
+	require.Len(t, got.Points, 4) // Feb 27, 28, 29, Mar 1
+
+	// Index 2 is Feb 29 (only exists in the leap current year).
+	assert.Equal(t, "2024-02-29", got.Points[2].Date)
+	assert.Equal(t, "02-29", got.Points[2].MonthDay)
+	// thisYear climbs 1 -> 2 across Feb 28 -> Feb 29; lastYear holds flat at 1 (carry-forward).
+	assert.Equal(t, 2, got.Points[2].ThisYear)
+	assert.Equal(t, got.Points[1].LastYear, got.Points[2].LastYear, "lastYear carries flat across Feb 29")
+	assert.Equal(t, 1, got.Points[2].LastYear)
+	assert.Equal(t, 1, got.Points[2].Delta)
+}
+
+func TestBuildYearOverYear_PriorLeapCurrentNonLeap_Feb29FoldIn(t *testing.T) {
+	t.Parallel()
+
+	// Previous year 2024 is a leap year with a Feb 29 detection; current year 2025 is not. The current
+	// axis steps Feb 28 -> Mar 1, so the prior Feb 29 must fold into the Mar 1 previous cumulative; no
+	// prior detection may be lost.
+	thisTs := []int64{
+		localUnix(accumTestZone, 2025, 3, 1, 6, 0),
+	}
+	lastTs := []int64{
+		localUnix(accumTestZone, 2024, 2, 28, 6, 0),
+		localUnix(accumTestZone, 2024, 2, 29, 6, 0),
+		localUnix(accumTestZone, 2024, 3, 1, 6, 0),
+	}
+
+	got, err := buildYearOverYear(thisTs, lastTs, accumTestZone,
+		"2025-02-27", "2025-03-01", "2024-02-27", "2024-03-01", 2025, 2024)
+	require.NoError(t, err)
+	require.Len(t, got.Points, 3) // Feb 27, 28, Mar 1 (no Feb 29 in the non-leap current year)
+
+	last := got.Points[len(got.Points)-1]
+	assert.Equal(t, "2025-03-01", last.Date)
+	// lastYear jumps from 1 (after Feb 28) to 3 at Mar 1: +2 folds in BOTH the prior Feb 29 and Mar 1.
+	assert.Equal(t, 1, got.Points[1].LastYear)
+	assert.Equal(t, 3, last.LastYear, "prior Feb 29 must fold into Mar 1; totals preserved")
+	assert.Equal(t, 1, last.ThisYear)
+	assert.Equal(t, -2, last.Delta)
+}
+
+func TestBuildYearOverYear_PartialYearTotals(t *testing.T) {
+	t.Parallel()
+
+	// A mid-year end date emits one point per day from Jan 1 and the final cumulatives equal the totals.
+	thisTs := []int64{
+		localUnix(accumTestZone, 2026, 1, 10, 6, 0),
+		localUnix(accumTestZone, 2026, 3, 15, 6, 0),
+		localUnix(accumTestZone, 2026, 6, 23, 6, 0),
+	}
+	lastTs := []int64{
+		localUnix(accumTestZone, 2025, 2, 1, 6, 0),
+		localUnix(accumTestZone, 2025, 5, 5, 6, 0),
+	}
+
+	got, err := buildYearOverYear(thisTs, lastTs, accumTestZone,
+		"2026-01-01", "2026-06-23", "2025-01-01", "2025-06-23", 2026, 2025)
+	require.NoError(t, err)
+	require.Len(t, got.Points, 174) // Jan 1 .. Jun 23 inclusive in a non-leap year
+
+	last := got.Points[len(got.Points)-1]
+	assert.Equal(t, "2026-06-23", last.Date)
+	assert.Equal(t, 3, last.ThisYear, "final thisYear cumulative equals this-year detection total")
+	assert.Equal(t, 2, last.LastYear, "final lastYear cumulative equals last-year detection total")
+	assert.Equal(t, 1, last.Delta)
+}
+
+func TestBuildYearOverYear_EmptyThisYear(t *testing.T) {
+	t.Parallel()
+
+	lastTs := []int64{localUnix(accumTestZone, 2025, 1, 2, 6, 0)}
+	got, err := buildYearOverYear(nil, lastTs, accumTestZone,
+		"2026-01-01", "2026-01-03", "2025-01-01", "2025-01-03", 2026, 2025)
+	require.NoError(t, err)
+	require.Len(t, got.Points, 3)
+
+	last := got.Points[len(got.Points)-1]
+	assert.Equal(t, 0, last.ThisYear)
+	assert.Equal(t, 1, last.LastYear)
+	assert.Equal(t, -1, last.Delta, "behind last year reads as a negative delta")
+}
+
+func TestBuildYearOverYear_EmptyLastYear(t *testing.T) {
+	t.Parallel()
+
+	thisTs := []int64{localUnix(accumTestZone, 2026, 1, 2, 6, 0)}
+	got, err := buildYearOverYear(thisTs, nil, accumTestZone,
+		"2026-01-01", "2026-01-03", "2025-01-01", "2025-01-03", 2026, 2025)
+	require.NoError(t, err)
+	require.Len(t, got.Points, 3)
+
+	last := got.Points[len(got.Points)-1]
+	assert.Equal(t, 1, last.ThisYear)
+	assert.Equal(t, 0, last.LastYear)
+	assert.Equal(t, 1, last.Delta)
+}
+
+func TestBuildYearOverYear_MidnightDSTEnumeration(t *testing.T) {
+	t.Parallel()
+
+	// A timezone whose spring-forward DST transition skips midnight must not drift the date-axis
+	// enumeration. Cuba sprang forward at 00:00 local on 2018-03-11. Skip when tzdata is unavailable.
+	loc, err := time.LoadLocation("America/Havana")
+	if err != nil {
+		t.Skipf("tzdata unavailable: %v", err)
+	}
+
+	got, err := buildYearOverYear(nil, nil, loc,
+		"2018-03-09", "2018-03-13", "2017-03-09", "2017-03-13", 2018, 2017)
+	require.NoError(t, err)
+
+	wantDates := []string{"2018-03-09", "2018-03-10", "2018-03-11", "2018-03-12", "2018-03-13"}
+	require.Len(t, got.Points, len(wantDates), "every calendar day must be emitted across the DST jump")
+	for i, want := range wantDates {
+		assert.Equalf(t, want, got.Points[i].Date, "day index %d", i)
+	}
+}
+
+func TestBuildYearOverYear_NilLocDefaultsUTC(t *testing.T) {
+	t.Parallel()
+
+	thisTs := []int64{localUnix(time.UTC, 2026, 1, 1, 12, 0)}
+	got, err := buildYearOverYear(thisTs, nil, nil,
+		"2026-01-01", "2026-01-01", "2025-01-01", "2025-01-01", 2026, 2025)
+	require.NoError(t, err)
+	require.Len(t, got.Points, 1)
+	assert.Equal(t, 1, got.Points[0].ThisYear)
+}
+
+func TestBuildYearOverYear_InvalidDate(t *testing.T) {
+	t.Parallel()
+
+	_, err := buildYearOverYear(nil, nil, accumTestZone,
+		"bad", "2026-01-03", "2025-01-01", "2025-01-03", 2026, 2025)
+	require.Error(t, err)
+
+	_, err = buildYearOverYear(nil, nil, accumTestZone,
+		"2026-01-01", "2026-01-03", "2025-01-01", "nope", 2026, 2025)
+	require.Error(t, err)
+}
+
+func TestComputeYearOverYearWindows_Feb29PriorNonLeapClamps(t *testing.T) {
+	t.Parallel()
+
+	// Requesting Feb 29 of a leap year must clamp the previous window end to Feb 28 (the previous year
+	// is not a leap year), and the exclusive epoch end must be Mar 1 of the previous year - never Mar 2
+	// (which would happen if Feb 29 silently rolled forward before the +1-day step).
+	ref := time.Date(2024, time.February, 29, 12, 0, 0, 0, time.UTC)
+	w := computeYearOverYearWindows(ref, time.UTC)
+
+	assert.Equal(t, 2024, w.curYear)
+	assert.Equal(t, 2023, w.prevYear)
+	assert.Equal(t, "2024-01-01", w.curStart)
+	assert.Equal(t, "2024-02-29", w.curEnd)
+	assert.Equal(t, "2023-01-01", w.priorStart)
+	assert.Equal(t, "2023-02-28", w.priorEnd)
+
+	wantPriorEnd := time.Date(2023, time.March, 1, 0, 0, 0, 0, time.UTC).Unix()
+	assert.Equal(t, wantPriorEnd, w.priorEndEpoch, "exclusive prior end is Mar 1, not Mar 2")
+	wantCurEnd := time.Date(2024, time.March, 1, 0, 0, 0, 0, time.UTC).Unix()
+	assert.Equal(t, wantCurEnd, w.curEndEpoch)
+}
+
+func TestComputeYearOverYearWindows_Jan1Boundary(t *testing.T) {
+	t.Parallel()
+
+	// On Jan 1 both windows collapse to a single day, and the chart emits exactly one point. This guards
+	// the priorEnd +1-day boundary against an off-by-one that would query zero days.
+	ref := time.Date(2026, time.January, 1, 8, 0, 0, 0, time.UTC)
+	w := computeYearOverYearWindows(ref, time.UTC)
+
+	assert.Equal(t, "2026-01-01", w.curStart)
+	assert.Equal(t, "2026-01-01", w.curEnd)
+	assert.Equal(t, "2025-01-01", w.priorStart)
+	assert.Equal(t, "2025-01-01", w.priorEnd)
+
+	got, err := buildYearOverYear(nil, nil, time.UTC,
+		w.curStart, w.curEnd, w.priorStart, w.priorEnd, w.curYear, w.prevYear)
+	require.NoError(t, err)
+	require.Len(t, got.Points, 1)
+	assert.Equal(t, "2026-01-01", got.Points[0].Date)
+	assert.Equal(t, "01-01", got.Points[0].MonthDay)
+}
+
+func TestComputeYearOverYearWindows_MidYearNoClamp(t *testing.T) {
+	t.Parallel()
+
+	ref := time.Date(2026, time.June, 23, 0, 0, 0, 0, time.UTC)
+	w := computeYearOverYearWindows(ref, time.UTC)
+
+	assert.Equal(t, "2026-06-23", w.curEnd)
+	assert.Equal(t, "2025-06-23", w.priorEnd, "non-leap-edge dates map straight across years")
+}
