@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -58,7 +59,7 @@ func (c *Controller) GetExternalMedia(ctx echo.Context) error {
 	prober := c.externalMediaProbe
 	probe := sysinfo.ProbeExternalMount(sysinfo.DefaultExternalMountPath, prober)
 
-	mountPresent := containerized && probe.Exists && probe.IsMountpoint
+	mountPresent := containerized && probe.Exists && probe.IsMountpoint && probe.Readable
 
 	var guidance *ExternalMediaGuidance
 	if containerized && !mountPresent {
@@ -103,7 +104,8 @@ func buildGuidance(envType string) *ExternalMediaGuidance {
 
 	switch envType {
 	case sysinfo.EnvDocker:
-		steps := append(hostSetup,
+		steps := slices.Clone(hostSetup)
+		steps = append(steps,
 			"# Add to your docker run command:",
 			"-v "+hostDir+":"+containerDir+":rslave",
 			"# Or in docker-compose.yml under the birdnet-go service volumes:",
@@ -121,7 +123,8 @@ func buildGuidance(envType string) *ExternalMediaGuidance {
 			Steps:       steps,
 		}
 	case sysinfo.EnvPodman:
-		steps := append(hostSetup,
+		steps := slices.Clone(hostSetup)
+		steps = append(steps,
 			"# Add to your podman run command or quadlet file:",
 			"-v "+hostDir+":"+containerDir+":rslave",
 			"# If you used install.sh, simply re-run the installer to wire this automatically.",
@@ -134,7 +137,8 @@ func buildGuidance(envType string) *ExternalMediaGuidance {
 	default:
 		// Generic container guidance covers LXC, systemd-nspawn, and any
 		// other container runtime the environment detection recognises.
-		steps := append(hostSetup,
+		steps := slices.Clone(hostSetup)
+		steps = append(steps,
 			"# Mount the host directory into the container using your runtime's volume mechanism.",
 			"# Or re-run the BirdNET-Go installer (install.sh) to configure the mount automatically.",
 		)

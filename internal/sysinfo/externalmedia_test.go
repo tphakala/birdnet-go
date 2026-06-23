@@ -1,6 +1,7 @@
 package sysinfo
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,9 +18,10 @@ func fakeMountProber(result MountProbeResult) MountProber {
 // falls back to the real implementation without panicking.
 func TestProbeExternalMount_NilDefaultsDoNotPanic(t *testing.T) {
 	t.Parallel()
-	// Use a path that definitely does not exist to keep the test host-agnostic.
-	result := ProbeExternalMount("/nonexistent-path-birdnet-test", nil)
-	// The path should not exist on a test host.
+	// Use a child under TempDir that we intentionally do not create, so the
+	// path is guaranteed not to exist regardless of host.
+	missingPath := filepath.Join(t.TempDir(), "missing")
+	result := ProbeExternalMount(missingPath, nil)
 	assert.False(t, result.Exists, "nonexistent path should report Exists=false")
 }
 

@@ -34,7 +34,7 @@ func newExternalMediaController(
 
 // callExternalMediaEndpoint fires the GET /api/v2/system/external-media handler
 // and returns the parsed response.
-func callExternalMediaEndpoint(t *testing.T, ctrl *Controller) (ExternalMediaResponse, int) {
+func callExternalMediaEndpoint(t *testing.T, ctrl *Controller) (resp ExternalMediaResponse, statusCode int) {
 	t.Helper()
 	e := ctrl.Echo
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/external-media", http.NoBody)
@@ -44,7 +44,6 @@ func callExternalMediaEndpoint(t *testing.T, ctrl *Controller) (ExternalMediaRes
 	err := ctrl.GetExternalMedia(ctx)
 	require.NoError(t, err)
 
-	var resp ExternalMediaResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	return resp, rec.Code
 }
@@ -83,7 +82,7 @@ func TestGetExternalMedia_ContainerMountPresent(t *testing.T) {
 
 	_, ctrl := newExternalMediaController(
 		t,
-		func() (string, string) { return "Docker", "" },
+		func() (string, string) { return sysinfo.EnvDocker, "" },
 		func(_ string) sysinfo.MountProbeResult {
 			return sysinfo.MountProbeResult{Exists: true, IsMountpoint: true, Readable: true}
 		},
@@ -92,10 +91,34 @@ func TestGetExternalMedia_ContainerMountPresent(t *testing.T) {
 	resp, code := callExternalMediaEndpoint(t, ctrl)
 
 	assert.Equal(t, http.StatusOK, code)
-	assert.Equal(t, "Docker", resp.Environment)
+	assert.Equal(t, sysinfo.EnvDocker, resp.Environment)
 	assert.True(t, resp.Containerized)
 	assert.True(t, resp.MountPresent)
 	assert.Nil(t, resp.Guidance, "guidance should be nil when mount is present")
+}
+
+// TestGetExternalMedia_ContainerMountUnreadable verifies that a mounted but
+// unreadable path is reported as not present, with guidance populated.
+func TestGetExternalMedia_ContainerMountUnreadable(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "external-media")
+
+	_, ctrl := newExternalMediaController(
+		t,
+		func() (string, string) { return sysinfo.EnvDocker, "" },
+		func(_ string) sysinfo.MountProbeResult {
+			return sysinfo.MountProbeResult{Exists: true, IsMountpoint: true, Readable: false}
+		},
+	)
+
+	resp, code := callExternalMediaEndpoint(t, ctrl)
+
+	assert.Equal(t, http.StatusOK, code)
+	assert.True(t, resp.Containerized)
+	assert.False(t, resp.MountPresent, "an unreadable mount must not be reported as present")
+	require.NotNil(t, resp.Guidance, "guidance must be populated when the mount is not usable")
 }
 
 // TestGetExternalMedia_ContainerMountAbsent tests state 3: container without
@@ -108,7 +131,7 @@ func TestGetExternalMedia_ContainerMountAbsent(t *testing.T) {
 
 	_, ctrl := newExternalMediaController(
 		t,
-		func() (string, string) { return "Docker", "" },
+		func() (string, string) { return sysinfo.EnvDocker, "" },
 		func(_ string) sysinfo.MountProbeResult {
 			return sysinfo.MountProbeResult{Exists: false, IsMountpoint: false, Readable: false}
 		},
@@ -117,7 +140,7 @@ func TestGetExternalMedia_ContainerMountAbsent(t *testing.T) {
 	resp, code := callExternalMediaEndpoint(t, ctrl)
 
 	assert.Equal(t, http.StatusOK, code)
-	assert.Equal(t, "Docker", resp.Environment)
+	assert.Equal(t, sysinfo.EnvDocker, resp.Environment)
 	assert.True(t, resp.Containerized)
 	assert.False(t, resp.MountPresent)
 	require.NotNil(t, resp.Guidance, "guidance must be populated when mount is absent in a container")
@@ -198,7 +221,7 @@ func TestGetExternalMedia_ResponseShape(t *testing.T) {
 
 	_, ctrl := newExternalMediaController(
 		t,
-		func() (string, string) { return "Docker", "" },
+		func() (string, string) { return sysinfo.EnvDocker, "" },
 		func(_ string) sysinfo.MountProbeResult {
 			return sysinfo.MountProbeResult{Exists: true, IsMountpoint: true, Readable: true}
 		},

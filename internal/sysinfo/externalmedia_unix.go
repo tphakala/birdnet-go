@@ -32,7 +32,16 @@ func realMountProber(path string) MountProbeResult {
 		return result
 	}
 
-	parent := filepath.Dir(filepath.Clean(path))
+	// Resolve to an absolute, symlink-free path so the parent comparison is
+	// correct for relative paths and symlinked mountpoints.
+	resolved := path
+	if abs, absErr := filepath.Abs(path); absErr == nil {
+		resolved = abs
+	}
+	if linkResolved, symErr := filepath.EvalSymlinks(resolved); symErr == nil {
+		resolved = linkResolved
+	}
+	parent := filepath.Dir(resolved)
 	if err := syscall.Stat(parent, &statParent); err != nil {
 		return result
 	}
