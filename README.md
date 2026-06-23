@@ -145,6 +145,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 
 ## Documentation
 
+- [FAQ](https://github.com/tphakala/birdnet-go/wiki/faq.md) - common questions, issues, and workarounds
 - [User guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET%E2%80%90Go-Guide)
 - [Installation](https://github.com/tphakala/birdnet-go/wiki/installation.md)
 - [Hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/hardware.md)
