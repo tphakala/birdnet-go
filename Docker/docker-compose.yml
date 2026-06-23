@@ -41,6 +41,7 @@ services:
       #   sudo mkdir -p /mnt/birdnet-go/external
       #   sudo mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external
       #   sudo mount --make-rshared /mnt/birdnet-go/external
+      #   sudo chown -h 1000:1000 /mnt/birdnet-go/external
       # Note: the commands above are NOT persistent across reboots. See the external
       # media wiki page for a persistent systemd unit that runs them on every boot.
       # Then mount media under /mnt/birdnet-go/external/<label> on the host.

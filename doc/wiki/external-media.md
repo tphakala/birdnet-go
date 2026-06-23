@@ -43,6 +43,7 @@ one-time host setup below, then uncomment the bind block in `docker-compose.yml`
 sudo mkdir -p /mnt/birdnet-go/external
 sudo mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external
 sudo mount --make-rshared /mnt/birdnet-go/external
+sudo chown -h 1000:1000 /mnt/birdnet-go/external
 ```
 
 An fstab bind entry alone does NOT establish `rshared` propagation and is
@@ -68,6 +69,7 @@ RemainAfterExit=yes
 ExecStart=-/bin/mkdir -p /mnt/birdnet-go/external
 ExecStart=-/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
 ExecStart=-/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external'
+ExecStart=-/bin/chown -h 1000:1000 /mnt/birdnet-go/external
 
 [Install]
 WantedBy=multi-user.target

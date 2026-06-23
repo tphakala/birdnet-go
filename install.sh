@@ -4096,6 +4096,10 @@ ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gi
 ExecStartPre=-/bin/mkdir -p /mnt/birdnet-go/external
 ExecStartPre=-/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
 ExecStartPre=-/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external'
+# Make the mount point writable by the container user so the app and the
+# upcoming backup feature can write to external media. -h avoids dereferencing
+# a symlink. Best-effort like the steps above.
+ExecStartPre=-/bin/chown -h ${HOST_UID}:${HOST_GID} /mnt/birdnet-go/external
 ${wifi_power_save_script:+${wifi_power_save_script}
 }ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
