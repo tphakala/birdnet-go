@@ -22,7 +22,7 @@ import (
 // Import mode constants.
 const (
 	importModeDBOnly  = "db-only"
-	importModeDBaudio = "db-audio" // reserved; not yet available
+	importModeDBaudio = "db-audio"
 )
 
 // Import SSE event type constants.
@@ -222,7 +222,7 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 	case importModeDBOnly:
 		// accepted
 	case importModeDBaudio:
-		return c.HandleError(ctx, nil, "audio import is not available yet", http.StatusBadRequest)
+		// accepted; audio options configured below when building opts
 	default:
 		return c.HandleError(ctx, nil, "unsupported import mode", http.StatusBadRequest)
 	}
@@ -287,6 +287,15 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		SourceNode: imports.DefaultSourceNode,
 		Location:   loc,
 	}
+	if req.Mode == importModeDBaudio {
+		exportPath := ""
+		if settings := c.currentSettings(); settings != nil {
+			exportPath = settings.Realtime.Audio.Export.Path
+		}
+		opts.IncludeAudio = true
+		opts.AudioSourceDir = filepath.Dir(resolvedPath)
+		opts.ClipExportPath = exportPath
+	}
 	eng := imports.NewEngine(c.Repo)
 	c.wg.Go(func() {
 		var stats imports.ImportStats
@@ -304,7 +313,7 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		}()
 		defer jobCancel()
 		defer func() { _ = src.Close() }()
-		stats, runErr = eng.Run(jobCtx, src, opts, job)
+		stats, runErr = eng.Run(jobCtx, src, &opts, job)
 	})
 
 	return ctx.JSON(http.StatusAccepted, startImportResponse{

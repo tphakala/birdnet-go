@@ -413,6 +413,8 @@ func init() {
 	RegisterComponent("app", "app")
 	RegisterComponent("api", "api")
 	RegisterComponent("restart", "restart")
+	RegisterComponent("imports", "imports")
+	RegisterComponent("imports/audio", "imports.audio")
 
 	// Analysis package components - use slash-separated paths for subpackages
 	RegisterComponent("analysis", "analysis")

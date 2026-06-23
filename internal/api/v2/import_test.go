@@ -277,12 +277,33 @@ func TestStartBirdNETPiImport_BadJSON_Returns400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestStartBirdNETPiImport_ModeDBAudio_Returns400 verifies audio mode is rejected.
-func TestStartBirdNETPiImport_ModeDBAudio_Returns400(t *testing.T) {
+// TestStartBirdNETPiImport_ModeDBAudio_Returns202 verifies db-audio mode is accepted.
+func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
+
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
-	c.Repo = mocks.NewMockDetectionRepository(t)
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+
+	det := imports.SourceDetection{
+		Date: "2024-01-01", Time: "10:00:00",
+		ScientificName: "Parus major", CommonName: "Great Tit",
+		Confidence: 0.9,
+	}
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &fakeSource{batches: [][]imports.SourceDetection{{det}}}, nil
+	}
 
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
@@ -297,8 +318,12 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns400(t *testing.T) {
 
 	err := c.StartBirdNETPiImport(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.Contains(t, rec.Body.String(), "audio import is not available yet")
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+
+	var resp startImportResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.NotEmpty(t, resp.JobID)
+	assert.Equal(t, importStatusStarted, resp.Status)
 }
 
 // TestStartBirdNETPiImport_UnknownMode_Returns400 verifies unknown modes are rejected.

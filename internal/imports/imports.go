@@ -83,11 +83,24 @@ type ImportOptions struct {
 	BatchSize int
 
 	// IncludeAudio controls whether source audio files are copied alongside detection data.
-	// Not yet implemented; setting it currently has no effect.
+	// When true, audio clips are copied from AudioSourceDir into ClipExportPath alongside detection data.
 	IncludeAudio bool
+
+	// AudioSourceDir is the directory containing the BirdNET-Pi source audio tree.
+	// It must contain an "Extracted/By_Date" subtree. Used only when IncludeAudio is true.
+	AudioSourceDir string
+
+	// ClipExportPath is the root directory where audio clips are written.
+	// Used only when IncludeAudio is true.
+	ClipExportPath string
+
+	// DiskSpaceFunc is called to check available disk space before audio copying.
+	// If nil, diskmanager.GetAvailableSpace is used. Inject in tests to avoid
+	// filesystem dependencies.
+	DiskSpaceFunc func(path string) (uint64, error)
 }
 
-func (o ImportOptions) withDefaults() ImportOptions {
+func (o *ImportOptions) withDefaults() {
 	if o.SourceNode == "" {
 		o.SourceNode = DefaultSourceNode
 	}
@@ -97,7 +110,6 @@ func (o ImportOptions) withDefaults() ImportOptions {
 	if o.BatchSize <= 0 {
 		o.BatchSize = defaultBatchSize
 	}
-	return o
 }
 
 // Engine runs an import from a Source into a DetectionRepository.
@@ -127,8 +139,8 @@ func detectionKey(ts time.Time, scientificName string, confidence float64) strin
 // Run imports all detections from src that are not already present in the store.
 // It returns a final ImportStats summary. Partial results are consistent because
 // the dedup set makes a re-run safe.
-func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, reporter ProgressReporter) (ImportStats, error) {
-	opts = opts.withDefaults()
+func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, reporter ProgressReporter) (ImportStats, error) {
+	opts.withDefaults()
 
 	stats := ImportStats{Phase: "validate"}
 	e.report(reporter, stats)
@@ -173,11 +185,18 @@ func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, report
 	e.report(reporter, stats)
 
 	iterErr := src.Iterate(ctx, opts.BatchSize, func(batch []SourceDetection) error {
+		// First pass: classify rows into pending (new) vs. skipped/errored.
+		// Keys are added to seen eagerly so within-batch duplicates are caught here.
+		type pendingRow struct {
+			row *SourceDetection
+			ts  time.Time
+		}
+		pending := make([]pendingRow, 0, len(batch))
+
 		for i := range batch {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-
 			row := &batch[i]
 			ts, parseErr := parseTimestamp(row.Date, row.Time, opts.Location)
 			if parseErr != nil {
@@ -189,15 +208,53 @@ func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, report
 				stats.Processed++
 				continue
 			}
-
 			key := detectionKey(ts, row.ScientificName, row.Confidence)
 			if _, ok := seen[key]; ok {
 				stats.Skipped++
 				stats.Processed++
 				continue
 			}
+			// Mark seen eagerly to deduplicate within-batch duplicates.
+			seen[key] = struct{}{}
+			pending = append(pending, pendingRow{row: row, ts: ts})
+		}
 
-			result := mapToResult(row, ts, opts.SourceNode)
+		// Second pass: copy audio clips when requested.
+		clipNames := make([]string, len(pending))
+		if opts.IncludeAudio && opts.ClipExportPath != "" && len(pending) > 0 {
+			rows := make([]SourceDetection, len(pending))
+			tss := make([]time.Time, len(pending))
+			for i, p := range pending {
+				rows[i] = *p.row
+				tss[i] = p.ts
+			}
+
+			// Disk-space guard: ensure the export volume can hold this batch's
+			// clips before copying any of them. Sizing source clips up front and
+			// checking once per batch keeps the import single-pass over the source.
+			requiredBytes := sumSourceClipSizes(opts.AudioSourceDir, rows)
+			if requiredBytes > 0 {
+				if spaceErr := checkDiskSpace(opts.ClipExportPath, requiredBytes, opts.DiskSpaceFunc); spaceErr != nil {
+					return spaceErr
+				}
+			}
+
+			missCount := 0
+			e.copyCandidateClips(ctx, opts, rows, tss, clipNames, &missCount)
+			if missCount > 0 {
+				e.log.Info("some audio clips could not be copied",
+					logger.Int("miss_count", missCount),
+					logger.Int("batch_size", len(pending)))
+			}
+		}
+
+		// Third pass: save detections with clip names resolved above.
+		for i, p := range pending {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			result := mapToResult(p.row, p.ts, opts.SourceNode)
+			result.ClipName = clipNames[i]
 			if saveErr := e.repo.Save(ctx, result, nil); saveErr != nil {
 				if ctx.Err() != nil {
 					// Context was cancelled or timed out during Save; propagate
@@ -205,15 +262,12 @@ func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, report
 					return ctx.Err()
 				}
 				e.log.Error("failed to save detection",
-					logger.String("scientific_name", row.ScientificName),
+					logger.String("scientific_name", p.row.ScientificName),
 					logger.Error(saveErr))
 				stats.Errors++
 				stats.Processed++
 				continue
 			}
-
-			// Mark as seen so within-source duplicates are also deduplicated.
-			seen[key] = struct{}{}
 			stats.Inserted++
 			stats.Processed++
 		}
@@ -227,6 +281,12 @@ func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, report
 			e.log.Info("import cancelled",
 				logger.Int("inserted", stats.Inserted),
 				logger.Int("skipped", stats.Skipped))
+			return stats, iterErr
+		}
+		// A disk-space failure from the audio pre-check is already a fully built
+		// error with the disk-usage category. Pass it through unchanged rather than
+		// re-wrapping it as a database error, so telemetry and category stay correct.
+		if errors.IsCategory(iterErr, errors.CategoryDiskUsage) {
 			return stats, iterErr
 		}
 		return stats, errors.New(iterErr).

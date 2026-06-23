@@ -236,7 +236,7 @@ describe('BirdNetPiImportWizard', () => {
 
   // ---- Mode step ----
 
-  it('mode step shows db-only enabled and db-audio disabled with reason', async () => {
+  it('mode step shows both db-only and db-audio radios enabled', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
     // Navigate to mode step
     await waitFor(() => {
@@ -251,20 +251,20 @@ describe('BirdNetPiImportWizard', () => {
       expect(screen.getByText('system.importExport.mode.label')).toBeInTheDocument();
     });
 
-    // db-only radio should be enabled
+    // db-only radio should be enabled and selected by default
     const dbOnlyRadio = screen.getByRole('radio', {
       name: /system.importExport.mode.dbOnly.label/,
     });
     expect(dbOnlyRadio).not.toBeDisabled();
 
-    // db-audio radio should be disabled
+    // db-audio radio should also be enabled
     const dbAudioRadio = screen.getByRole('radio', {
       name: /system.importExport.mode.dbAudio.label/,
     });
-    expect(dbAudioRadio).toBeDisabled();
+    expect(dbAudioRadio).not.toBeDisabled();
   });
 
-  it('db-audio disabled reason is visible', async () => {
+  it('db-audio disabled reason is not shown', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
     await waitFor(() => {
       expect(
@@ -275,10 +275,13 @@ describe('BirdNetPiImportWizard', () => {
     await fireEvent.click(nextButton);
 
     await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.mode.dbAudio.disabledReason')
-      ).toBeInTheDocument();
+      expect(screen.getByText('system.importExport.mode.label')).toBeInTheDocument();
     });
+
+    // The disabled reason must no longer appear since db-audio is now enabled
+    expect(
+      screen.queryByText('system.importExport.mode.dbAudio.disabledReason')
+    ).not.toBeInTheDocument();
   });
 
   // ---- Confirm step ----
@@ -334,6 +337,39 @@ describe('BirdNetPiImportWizard', () => {
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith('/api/v2/import/birdnet-pi', {
         mode: 'db-only',
+        source_path: 'birdnet-pi/birds.db',
+      });
+    });
+  });
+
+  it('selecting db-audio posts mode db-audio to the API', async () => {
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await waitFor(() => {
+      expect(
+        screen.getByText('system.importExport.sourceAccess.mountDescription')
+      ).toBeInTheDocument();
+    });
+
+    // Navigate to the mode step.
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+
+    // Select the db-audio mode.
+    const dbAudioRadio = screen.getByRole('radio', {
+      name: /system.importExport.mode.dbAudio.label/,
+    });
+    await fireEvent.click(dbAudioRadio);
+
+    // Advance to confirm and start.
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith('/api/v2/import/birdnet-pi', {
+        mode: 'db-audio',
         source_path: 'birdnet-pi/birds.db',
       });
     });
