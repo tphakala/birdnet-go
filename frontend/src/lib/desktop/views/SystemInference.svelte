@@ -497,10 +497,15 @@
     >
       <Info class="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
       <p>
-        {t('system.inference.perStreamInfo')}
-        <a href={buildAppUrl('/ui/settings/audio')} class="font-medium underline whitespace-nowrap">
-          {t('system.inference.perStreamInfoLink')}
-        </a>
+        {t('system.inference.infoPrefix')}
+        <a href={buildAppUrl('/ui/settings/audio')} class="font-medium underline whitespace-nowrap"
+          >{t('system.inference.infoAudioLink')}</a
+        >{t('system.inference.infoMiddle')}
+        <a
+          href={buildAppUrl('/ui/settings/analysis')}
+          class="font-medium underline whitespace-nowrap"
+          >{t('system.inference.infoAnalysisLink')}</a
+        >{t('system.inference.infoSuffix')}
       </p>
     </div>
 

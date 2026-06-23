@@ -1592,8 +1592,11 @@
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
       "noModelsHintLink": "Configure audio sources",
-      "perStreamInfo": "Models are enabled per audio stream. Choose which models run on each source on the audio settings page.",
-      "perStreamInfoLink": "Open audio settings"
+      "infoPrefix": "Each model is enabled per audio stream. Choose which models run on each source in",
+      "infoAudioLink": "Audio settings",
+      "infoMiddle": ", and download additional models in",
+      "infoAnalysisLink": "Analysis settings",
+      "infoSuffix": "."
     },
     "metrics": {
       "cpu": "CPU",
