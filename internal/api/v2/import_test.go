@@ -805,6 +805,20 @@ func TestImportRoutes_Registered(t *testing.T) {
 	assertRoutesRegistered(t, e, expected)
 }
 
+// TestImportRoutes_FailClosedWhenNoAuth verifies the import group fails closed:
+// with no auth middleware configured it denies access with 401 rather than
+// registering the state-changing endpoints unprotected.
+func TestImportRoutes_FailClosedWhenNoAuth(t *testing.T) {
+	e, c := newImportController(t) // newImportController leaves authMiddleware nil
+	c.initImportRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/import/status", http.NoBody)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
 // TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd verifies the full pipeline with a real SQLite file.
 func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
 	t.Cleanup(func() {
