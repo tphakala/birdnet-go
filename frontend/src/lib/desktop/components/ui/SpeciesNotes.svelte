@@ -211,15 +211,25 @@
                 type="button"
                 class="btn btn-primary btn-sm"
                 disabled={!canSaveEdit}
-                title={editTooLong
-                  ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
+                title={!canSaveEdit
+                  ? editTooLong
+                    ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
+                    : t('analytics.species.notes.saveDisabledReason')
                   : undefined}
+                aria-describedby={!canSaveEdit ? `${uid}-edit-save-help` : undefined}
                 onclick={() => saveEdit(note.id)}
               >
                 <Save class="h-4 w-4" />
                 {t('analytics.species.notes.save')}
               </button>
             </div>
+            {#if !canSaveEdit}
+              <p id={`${uid}-edit-save-help`} class="sr-only">
+                {editTooLong
+                  ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
+                  : t('analytics.species.notes.saveDisabledReason')}
+              </p>
+            {/if}
           {:else}
             <p class="text-sm whitespace-pre-line">{note.entry}</p>
             <div class="mt-1 flex items-center justify-between gap-2">
