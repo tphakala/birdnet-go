@@ -9,17 +9,19 @@ vi.mock('$lib/i18n', () => ({
   t: createI18nMock(analyticsI18nTranslations),
 }));
 
-// Wrapped in reactiveState so the bound `filters.*` props are reactive proxies,
-// matching how the app passes a $state object via bind:filters (see
+// Plain fixture values. createDefaultFilters() and the variants below wrap a
+// fresh copy in reactiveState so the bound `filters.*` props are reactive
+// proxies, matching how the app passes a $state object via bind:filters (see
 // reactive-state.svelte.ts).
-const createDefaultFilters = () =>
-  reactiveState({
-    timePeriod: 'all' as const,
-    startDate: '',
-    endDate: '',
-    sortOrder: 'count_desc' as const,
-    searchTerm: '',
-  });
+const defaultFilterValues = {
+  timePeriod: 'all' as const,
+  startDate: '',
+  endDate: '',
+  sortOrder: 'count_desc' as const,
+  searchTerm: '',
+};
+
+const createDefaultFilters = () => reactiveState({ ...defaultFilterValues });
 
 describe('SpeciesFilterForm', () => {
   beforeEach(() => {
@@ -87,7 +89,7 @@ describe('SpeciesFilterForm', () => {
 
   it('shows custom date fields when custom time period is selected', () => {
     const customFilters = reactiveState({
-      ...createDefaultFilters(),
+      ...defaultFilterValues,
       timePeriod: 'custom' as const,
     });
 
@@ -256,7 +258,7 @@ describe('SpeciesFilterForm', () => {
 
   it('shows filtered indicator when search term is present', () => {
     const searchFilters = reactiveState({
-      ...createDefaultFilters(),
+      ...defaultFilterValues,
       searchTerm: 'robin',
     });
 
@@ -360,7 +362,7 @@ describe('SpeciesFilterForm', () => {
   });
 
   it('updates filter values correctly', async () => {
-    const filters = reactiveState({ ...createDefaultFilters() });
+    const filters = createDefaultFilters();
 
     render(SpeciesFilterForm, {
       props: {

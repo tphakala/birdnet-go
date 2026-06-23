@@ -9,14 +9,17 @@ vi.mock('$lib/i18n', () => ({
   t: createI18nMock(analyticsI18nTranslations),
 }));
 
-// Wrapped in reactiveState so the bound `filters.*` props are reactive proxies,
-// matching how the app passes a $state object via bind:filters (see
+// Plain fixture values. defaultFilters and the variants below wrap a fresh copy
+// in reactiveState so the bound `filters.*` props are reactive proxies, matching
+// how the app passes a $state object via bind:filters (see
 // reactive-state.svelte.ts).
-const defaultFilters = reactiveState({
+const defaultFilterValues = {
   timePeriod: 'all' as const,
   startDate: '',
   endDate: '',
-});
+};
+
+const defaultFilters = reactiveState({ ...defaultFilterValues });
 
 describe('FilterForm', () => {
   it('renders with basic props', () => {
@@ -49,7 +52,7 @@ describe('FilterForm', () => {
 
   it('shows custom date fields when custom time period is selected', () => {
     const customFilters = reactiveState({
-      ...defaultFilters,
+      ...defaultFilterValues,
       timePeriod: 'custom' as const,
     });
 
@@ -164,7 +167,7 @@ describe('FilterForm', () => {
   });
 
   it('handles time period change correctly', async () => {
-    const filters = reactiveState({ ...defaultFilters });
+    const filters = reactiveState({ ...defaultFilterValues });
 
     render(FilterForm, {
       props: {
