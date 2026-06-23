@@ -522,6 +522,9 @@ func computeYearOverYearWindows(ref time.Time, loc *time.Location) yearOverYearW
 	if loc == nil {
 		loc = time.UTC
 	}
+	// Derive the calendar date in loc, not in ref's own zone: a ref near a day boundary in a
+	// different zone (e.g. just past midnight UTC+12 while loc is UTC) must resolve to loc's date.
+	ref = ref.In(loc)
 	curYear, curMonth, curDay := ref.Date()
 	prevYear := curYear - 1
 

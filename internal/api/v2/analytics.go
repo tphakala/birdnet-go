@@ -1974,10 +1974,15 @@ func newYearOverYearResponse(data datastore.YearOverYearResult) yearOverYearResp
 func (c *Controller) GetYearOverYear(ctx echo.Context) error {
 	const operation = "year over year"
 
-	// date is optional (defaults to today in the station timezone); validate the format only, allowing
-	// an empty value through. The datastore resolves the default and derives both windows.
+	// date is optional (defaults to today in the station timezone). Validate both the YYYY-MM-DD shape
+	// and that it is a real calendar date: a regex-valid but non-existent date (e.g. 2026-13-45) would
+	// otherwise reach the datastore and surface as a 500, so reject it here with a 400, matching the
+	// sibling range endpoints. An empty value passes both checks (the datastore resolves the default).
 	date := ctx.QueryParam("date")
 	if err := c.validateDateFormatStrictWithResponse(ctx, date, "date", operation); err != nil {
+		return err
+	}
+	if err := c.validateDateFormatWithResponse(ctx, date, "date", operation); err != nil {
 		return err
 	}
 

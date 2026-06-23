@@ -132,6 +132,18 @@ func TestGetYearOverYear_InvalidDateFormat(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+func TestGetYearOverYear_InvalidCalendarDate(t *testing.T) {
+	t.Parallel()
+	e, _, controller := setupAnalyticsTestEnvironment(t)
+
+	// A regex-valid but non-existent calendar date must be rejected at the handler with a 400,
+	// not fall through to the datastore and surface as a 500.
+	c, rec := newYearOverYearContext(e, "/api/v2/analytics/time/year-over-year?date=2026-13-45")
+	err := controller.GetYearOverYear(c)
+	require.Error(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestGetYearOverYear_QueryTimeout(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)

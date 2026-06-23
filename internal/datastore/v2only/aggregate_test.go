@@ -1070,3 +1070,18 @@ func TestComputeYearOverYearWindows_MidYearNoClamp(t *testing.T) {
 	assert.Equal(t, "2026-06-23", w.curEnd)
 	assert.Equal(t, "2025-06-23", w.priorEnd, "non-leap-edge dates map straight across years")
 }
+
+func TestComputeYearOverYearWindows_ProjectsRefIntoLoc(t *testing.T) {
+	t.Parallel()
+
+	// A ref whose own zone reads Jan 1 2024 but which is Dec 31 2023 in loc must resolve to loc's
+	// calendar date, not ref's. 2024-01-01 06:00 at UTC+12 is 2023-12-31 18:00 UTC.
+	east := time.FixedZone("UTC+12", 12*60*60)
+	ref := time.Date(2024, time.January, 1, 6, 0, 0, 0, east)
+	w := computeYearOverYearWindows(ref, time.UTC)
+
+	assert.Equal(t, 2023, w.curYear, "calendar date derived in loc, not ref's zone")
+	assert.Equal(t, "2023-12-31", w.curEnd)
+	assert.Equal(t, 2022, w.prevYear)
+	assert.Equal(t, "2022-12-31", w.priorEnd)
+}
