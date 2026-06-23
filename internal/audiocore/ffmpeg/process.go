@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -37,6 +39,11 @@ const ffmpegLegacyRTSPTimeoutParam = "-stimeout"
 
 // ffmpegMajorCache stores detected FFmpeg major versions by binary path.
 var ffmpegMajorCache sync.Map
+
+// ffmpegMajorGroup coalesces concurrent first-time version probes for the same
+// binary path, so a burst of streams starting at once spawns a single
+// `ffmpeg -version` process instead of one per stream.
+var ffmpegMajorGroup singleflight.Group
 
 // timeoutParamForSource returns the correct FFmpeg timeout flag for the given source type.
 func timeoutParamForSource(st audiocore.SourceType, ffmpegMajor int) string {
@@ -65,19 +72,35 @@ func resolveFfmpegMajor(ffmpegPath string) int {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), ffmpegVersionProbeTimeout)
-	defer cancel()
+	// Coalesce concurrent cold-cache probes for the same path into one
+	// `ffmpeg -version` execution.
+	val, _, _ := ffmpegMajorGroup.Do(ffmpegPath, func() (any, error) {
+		// Re-check the cache: another caller may have populated it while this
+		// call was waiting for the singleflight slot.
+		if cached, ok := ffmpegMajorCache.Load(ffmpegPath); ok {
+			if major, ok := cached.(int); ok {
+				return major, nil
+			}
+		}
 
-	_, major, _ := conf.GetFfmpegVersionFromContext(ctx, ffmpegPath)
-	// Only cache a successful detection. Caching a failed probe (major 0) would
-	// pin the safe -timeout fallback for the process lifetime, so a transient
-	// first-probe failure on a real FFmpeg 4.x host would silently suppress
-	// -stimeout until restart. Re-probing on the next start is cheap.
-	if major > 0 {
-		ffmpegMajorCache.Store(ffmpegPath, major)
+		ctx, cancel := context.WithTimeout(context.Background(), ffmpegVersionProbeTimeout)
+		defer cancel()
+
+		_, major, _ := conf.GetFfmpegVersionFromContext(ctx, ffmpegPath)
+		// Only cache a successful detection. Caching a failed probe (major 0)
+		// would pin the safe -timeout fallback for the process lifetime, so a
+		// transient first-probe failure on a real FFmpeg 4.x host would silently
+		// suppress -stimeout until restart. Re-probing on the next start is cheap.
+		if major > 0 {
+			ffmpegMajorCache.Store(ffmpegPath, major)
+		}
+		return major, nil
+	})
+
+	if major, ok := val.(int); ok {
+		return major
 	}
-
-	return major
+	return 0
 }
 
 // stripTimeoutParams returns a copy of params with any -timeout/-stimeout key-value pairs removed.

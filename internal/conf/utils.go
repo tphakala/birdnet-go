@@ -529,6 +529,9 @@ func GetFfmpegVersionFrom(ffmpegPath string) (version string, major, minor int) 
 // binary cannot block the caller indefinitely. Returns empty string and 0,0
 // if detection fails or the context is cancelled.
 func GetFfmpegVersionFromContext(ctx context.Context, ffmpegPath string) (version string, major, minor int) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cmd := exec.CommandContext(ctx, ffmpegPath, "-version") //nolint:gosec // G204: ffmpegPath validated by ValidateToolPath before reaching here
 	output, err := cmd.CombinedOutput()
 	if err != nil {
