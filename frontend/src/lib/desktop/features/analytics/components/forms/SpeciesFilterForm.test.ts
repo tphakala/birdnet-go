@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { createI18nMock, analyticsI18nTranslations } from '../../../../../../test/render-helpers';
+import { reactiveState } from '../../../../../../test/reactive-state.svelte';
 import SpeciesFilterForm from './SpeciesFilterForm.svelte';
 
 // Mock i18n translations using shared translation constants
@@ -8,13 +9,17 @@ vi.mock('$lib/i18n', () => ({
   t: createI18nMock(analyticsI18nTranslations),
 }));
 
-const createDefaultFilters = () => ({
-  timePeriod: 'all' as const,
-  startDate: '',
-  endDate: '',
-  sortOrder: 'count_desc' as const,
-  searchTerm: '',
-});
+// Wrapped in reactiveState so the bound `filters.*` props are reactive proxies,
+// matching how the app passes a $state object via bind:filters (see
+// reactive-state.svelte.ts).
+const createDefaultFilters = () =>
+  reactiveState({
+    timePeriod: 'all' as const,
+    startDate: '',
+    endDate: '',
+    sortOrder: 'count_desc' as const,
+    searchTerm: '',
+  });
 
 describe('SpeciesFilterForm', () => {
   beforeEach(() => {
@@ -81,10 +86,10 @@ describe('SpeciesFilterForm', () => {
   });
 
   it('shows custom date fields when custom time period is selected', () => {
-    const customFilters = {
+    const customFilters = reactiveState({
       ...createDefaultFilters(),
       timePeriod: 'custom' as const,
-    };
+    });
 
     render(SpeciesFilterForm, {
       props: {
@@ -250,10 +255,10 @@ describe('SpeciesFilterForm', () => {
   });
 
   it('shows filtered indicator when search term is present', () => {
-    const searchFilters = {
+    const searchFilters = reactiveState({
       ...createDefaultFilters(),
       searchTerm: 'robin',
-    };
+    });
 
     render(SpeciesFilterForm, {
       props: {
@@ -355,7 +360,7 @@ describe('SpeciesFilterForm', () => {
   });
 
   it('updates filter values correctly', async () => {
-    const filters = { ...createDefaultFilters() };
+    const filters = reactiveState({ ...createDefaultFilters() });
 
     render(SpeciesFilterForm, {
       props: {

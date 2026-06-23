@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { createI18nMock, analyticsI18nTranslations } from '../../../../../../test/render-helpers';
+import { reactiveState } from '../../../../../../test/reactive-state.svelte';
 import FilterForm from './FilterForm.svelte';
 
 // Mock i18n translations using shared translation constants
@@ -8,11 +9,14 @@ vi.mock('$lib/i18n', () => ({
   t: createI18nMock(analyticsI18nTranslations),
 }));
 
-const defaultFilters = {
+// Wrapped in reactiveState so the bound `filters.*` props are reactive proxies,
+// matching how the app passes a $state object via bind:filters (see
+// reactive-state.svelte.ts).
+const defaultFilters = reactiveState({
   timePeriod: 'all' as const,
   startDate: '',
   endDate: '',
-};
+});
 
 describe('FilterForm', () => {
   it('renders with basic props', () => {
@@ -44,10 +48,10 @@ describe('FilterForm', () => {
   });
 
   it('shows custom date fields when custom time period is selected', () => {
-    const customFilters = {
+    const customFilters = reactiveState({
       ...defaultFilters,
       timePeriod: 'custom' as const,
-    };
+    });
 
     render(FilterForm, {
       props: {
@@ -160,7 +164,7 @@ describe('FilterForm', () => {
   });
 
   it('handles time period change correctly', async () => {
-    const filters = { ...defaultFilters };
+    const filters = reactiveState({ ...defaultFilters });
 
     render(FilterForm, {
       props: {
