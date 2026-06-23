@@ -1,0 +1,801 @@
+// Package api provides tests for the import API endpoints.
+package api
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/imports"
+)
+
+// testDBOnlyBody is the canonical valid db-only import request body used across tests.
+const testDBOnlyBody = `{"mode":"db-only","source_path":"birds.db"}`
+
+// fakeSource implements imports.Source for unit tests.
+type fakeSource struct {
+	mu       sync.Mutex
+	batches  [][]imports.SourceDetection
+	validate error
+	block    chan struct{} // optional: gate between batches for cancel tests
+}
+
+func (f *fakeSource) Validate(_ context.Context) error {
+	return f.validate
+}
+
+func (f *fakeSource) Count(_ context.Context) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, b := range f.batches {
+		n += len(b)
+	}
+	return n, nil
+}
+
+func (f *fakeSource) Iterate(ctx context.Context, _ int, fn func([]imports.SourceDetection) error) error {
+	f.mu.Lock()
+	batches := f.batches
+	block := f.block
+	f.mu.Unlock()
+	for _, b := range batches {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := fn(b); err != nil {
+			return err
+		}
+		if block != nil {
+			select {
+			case <-block:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	return nil
+}
+
+func (f *fakeSource) Close() error { return nil }
+
+// newImportController creates a lightweight Controller for import tests.
+func newImportController(t *testing.T) (*echo.Echo, *Controller) {
+	t.Helper()
+	e := echo.New()
+	ctx, cancel := context.WithCancel(t.Context())
+	c := &Controller{
+		Group:     e.Group(apiV2Prefix),
+		importMgr: newImportManager(),
+		ctx:       ctx,
+		cancel:    cancel,
+	}
+	c.Settings.Store(newValidTestSettings())
+	t.Cleanup(func() {
+		cancel()
+		c.wg.Wait()
+	})
+	return e, c
+}
+
+// makeTempDB creates a temporary BirdNET-Pi SQLite file with the given number of rows.
+func makeTempDB(t *testing.T, rows int) (dir, path string) {
+	t.Helper()
+	dir = t.TempDir()
+	path = filepath.Join(dir, "birds.db")
+
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, db.Exec(`CREATE TABLE detections (
+		Date DATE, Time TIME,
+		Sci_Name VARCHAR(100) NOT NULL, Com_Name VARCHAR(100) NOT NULL,
+		Confidence FLOAT, Lat FLOAT, Lon FLOAT, Cutoff FLOAT,
+		Week INT, Sens FLOAT, Overlap FLOAT,
+		File_Name VARCHAR(100) NOT NULL
+	)`).Error)
+
+	for i := range rows {
+		require.NoError(t, db.Exec(
+			`INSERT INTO detections (Date, Time, Sci_Name, Com_Name, Confidence, Lat, Lon, Cutoff, Week, Sens, Overlap, File_Name)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0.0, ?)`,
+			fmt.Sprintf("2024-01-0%d", (i%9)+1), "10:00:00",
+			fmt.Sprintf("Parus major%d", i), fmt.Sprintf("Great Tit%d", i),
+			0.9+float64(i)*0.001, 60.0, 25.0, 0.1, 1.0,
+			fmt.Sprintf("clip%d.wav", i),
+		).Error)
+	}
+
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+
+	return dir, path
+}
+
+// importSSEEvent holds parsed fields from a single import SSE event.
+type importSSEEvent struct {
+	id    string
+	event string
+	data  string
+}
+
+// parseImportSSEEvents parses SSE-formatted text into a slice of import events.
+func parseImportSSEEvents(body string) []importSSEEvent {
+	var events []importSSEEvent
+	var cur importSSEEvent
+	scanner := bufio.NewScanner(strings.NewReader(body))
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "id: "):
+			cur.id = strings.TrimPrefix(line, "id: ")
+		case strings.HasPrefix(line, "event: "):
+			cur.event = strings.TrimPrefix(line, "event: ")
+		case strings.HasPrefix(line, "data: "):
+			cur.data = strings.TrimPrefix(line, "data: ")
+		case line == "":
+			if cur.event != "" {
+				events = append(events, cur)
+				cur = importSSEEvent{}
+			}
+		}
+	}
+	return events
+}
+
+// TestImportManager_ConcurrencyGuard verifies the single-slot guard.
+func TestImportManager_ConcurrencyGuard(t *testing.T) {
+	t.Parallel()
+	mgr := newImportManager()
+
+	_, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	job1 := newImportJob("job1", cancel)
+	assert.True(t, mgr.start(job1), "first start should succeed")
+	assert.False(t, mgr.start(newImportJob("job2", func() {})), "second start while running should fail")
+
+	// After job1 finishes, a new start should succeed.
+	job1.finish(imports.ImportStats{Phase: "done"}, nil)
+	assert.True(t, mgr.start(newImportJob("job3", func() {})), "start after completion should succeed")
+}
+
+// TestImportManager_GetByID verifies ID-based job lookup.
+func TestImportManager_GetByID(t *testing.T) {
+	t.Parallel()
+	mgr := newImportManager()
+	job := newImportJob("abc123", func() {})
+	require.True(t, mgr.start(job))
+	assert.Equal(t, job, mgr.get("abc123"))
+	assert.Nil(t, mgr.get("wrong-id"))
+}
+
+// TestStartBirdNETPiImport_NoRepo_Returns503 verifies 503 when no datastore.
+func TestStartBirdNETPiImport_NoRepo_Returns503(t *testing.T) {
+	e := echo.New()
+	c := &Controller{
+		Group:     e.Group(apiV2Prefix),
+		importMgr: newImportManager(),
+	}
+	c.Settings.Store(newValidTestSettings())
+
+	body := testDBOnlyBody
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/birdnet-pi", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	// requireDatastore writes the 503 response and returns the sentinel error,
+	// which the handler propagates (matching the established datastore-guard pattern).
+	err := c.StartBirdNETPiImport(ctx)
+	require.ErrorIs(t, err, errDatastoreUnavailable)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+// TestStartBirdNETPiImport_BadJSON_Returns400 verifies 400 on malformed JSON.
+func TestStartBirdNETPiImport_BadJSON_Returns400(t *testing.T) {
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	c.Repo = mocks.NewMockDetectionRepository(t)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{bad json"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := c.StartBirdNETPiImport(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestStartBirdNETPiImport_ModeDBAudio_Returns400 verifies audio mode is rejected.
+func TestStartBirdNETPiImport_ModeDBAudio_Returns400(t *testing.T) {
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	c.Repo = mocks.NewMockDetectionRepository(t)
+
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
+	c.importSourceRoot = dir
+
+	body := `{"mode":"db-audio","source_path":"birds.db"}`
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := c.StartBirdNETPiImport(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "audio import is not available yet")
+}
+
+// TestStartBirdNETPiImport_UnknownMode_Returns400 verifies unknown modes are rejected.
+func TestStartBirdNETPiImport_UnknownMode_Returns400(t *testing.T) {
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	c.Repo = mocks.NewMockDetectionRepository(t)
+	c.importSourceRoot = t.TempDir()
+
+	for _, mode := range []string{"", "csv", "xml"} {
+		body := fmt.Sprintf(`{"mode":%q,"source_path":"birds.db"}`, mode)
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		ctx := e.NewContext(req, rec)
+		require.NoError(t, c.StartBirdNETPiImport(ctx))
+		assert.Equal(t, http.StatusBadRequest, rec.Code, "mode %q should be rejected", mode)
+	}
+}
+
+// TestStartBirdNETPiImport_TraversalPath_Returns400 verifies path traversal is blocked.
+func TestStartBirdNETPiImport_TraversalPath_Returns400(t *testing.T) {
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	c.Repo = mocks.NewMockDetectionRepository(t)
+	c.importSourceRoot = t.TempDir()
+	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
+
+	for _, badPath := range []string{"../etc/passwd", "../../secret", "/etc/passwd"} {
+		body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, badPath)
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		ctx := e.NewContext(req, rec)
+		require.NoError(t, c.StartBirdNETPiImport(ctx))
+		assert.Equal(t, http.StatusBadRequest, rec.Code, "path %q should be rejected", badPath)
+	}
+}
+
+// TestResolveImportSourcePath_SymlinkEscape verifies that a symlinked parent
+// directory pointing outside the root is rejected, including for files that do
+// not yet exist (the TOCTOU-resistant containment check).
+func TestResolveImportSourcePath_SymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+
+	// Create a symlink inside root that points to a directory outside root.
+	escapeLink := filepath.Join(root, "escape")
+	require.NoError(t, os.Symlink(outside, escapeLink))
+
+	// A non-existent file under the symlinked parent must be rejected because
+	// its physical parent resolves outside root.
+	_, err := resolveImportSourcePath(root, filepath.Join("escape", "missing.db"))
+	require.ErrorIs(t, err, ErrInvalidSourcePath)
+
+	// An existing file reached through the escaping symlink must also be rejected.
+	existing := filepath.Join(outside, "real.db")
+	require.NoError(t, os.WriteFile(existing, []byte("x"), 0o600))
+	_, err = resolveImportSourcePath(root, filepath.Join("escape", "real.db"))
+	require.ErrorIs(t, err, ErrInvalidSourcePath)
+
+	// A legitimate non-existent file directly under root resolves without error
+	// (the handler's os.Stat reports it missing).
+	resolved, err := resolveImportSourcePath(root, "legit.db")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "legit.db"), resolved)
+}
+
+// TestStartBirdNETPiImport_MissingFile_Returns400 verifies missing file returns 400.
+func TestStartBirdNETPiImport_MissingFile_Returns400(t *testing.T) {
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	c.Repo = mocks.NewMockDetectionRepository(t)
+	c.importSourceRoot = t.TempDir()
+	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
+
+	body := `{"mode":"db-only","source_path":"nonexistent.db"}`
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestStartBirdNETPiImport_FakeValidationFailure_Returns400 verifies validation errors return 400.
+func TestStartBirdNETPiImport_FakeValidationFailure_Returns400(t *testing.T) {
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	c.Repo = mocks.NewMockDetectionRepository(t)
+
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
+	c.importSourceRoot = dir
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &fakeSource{validate: fmt.Errorf("bad schema")}, nil
+	}
+
+	body := testDBOnlyBody
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "source validation failed")
+}
+
+// TestStartBirdNETPiImport_GoodFakeSource_Returns202 verifies 202 on a valid request.
+func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
+
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+
+	det := imports.SourceDetection{
+		Date: "2024-01-01", Time: "10:00:00",
+		ScientificName: "Parus major", CommonName: "Great Tit",
+		Confidence: 0.9,
+	}
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &fakeSource{batches: [][]imports.SourceDetection{{det}}}, nil
+	}
+
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
+	c.importSourceRoot = dir
+
+	body := testDBOnlyBody
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+
+	var resp startImportResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.NotEmpty(t, resp.JobID)
+	assert.Equal(t, importStatusStarted, resp.Status)
+}
+
+// TestStartBirdNETPiImport_ConflictWhileRunning_Returns409 verifies 409 on concurrent starts.
+func TestStartBirdNETPiImport_ConflictWhileRunning_Returns409(t *testing.T) {
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
+
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+
+	// Use a blocking source so the import stays running.
+	blockCh := make(chan struct{})
+	det := imports.SourceDetection{
+		Date: "2024-01-01", Time: "10:00:00",
+		ScientificName: "Turdus merula", CommonName: "Blackbird",
+		Confidence: 0.8,
+	}
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &fakeSource{
+			batches: [][]imports.SourceDetection{{det}},
+			block:   blockCh,
+		}, nil
+	}
+
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
+	c.importSourceRoot = dir
+
+	body := testDBOnlyBody
+
+	// First start.
+	e := echo.New()
+	req1 := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req1.Header.Set("Content-Type", "application/json")
+	rec1 := httptest.NewRecorder()
+	ctx1 := e.NewContext(req1, rec1)
+	require.NoError(t, c.StartBirdNETPiImport(ctx1))
+	assert.Equal(t, http.StatusAccepted, rec1.Code)
+
+	// Second start while first is still blocked.
+	req2 := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	ctx2 := e.NewContext(req2, rec2)
+	require.NoError(t, c.StartBirdNETPiImport(ctx2))
+	assert.Equal(t, http.StatusConflict, rec2.Code)
+
+	// Unblock and let goroutines exit.
+	close(blockCh)
+}
+
+// TestStreamImportProgress_JobNotFound_Returns404 verifies 404 for unknown job.
+func TestStreamImportProgress_JobNotFound_Returns404(t *testing.T) {
+	_, c := newImportController(t)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/import/jobs/notexist/progress", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("jobId")
+	ctx.SetParamValues("notexist")
+
+	require.NoError(t, c.StreamImportProgress(ctx))
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TestStreamImportProgress_DoneJob_EmitsCompleteEvent verifies complete event is emitted.
+func TestStreamImportProgress_DoneJob_EmitsCompleteEvent(t *testing.T) {
+	_, c := newImportController(t)
+
+	jobCtx, jobCancel := context.WithCancel(t.Context())
+	jobCancel()
+	job := newImportJob("testjob", jobCancel)
+	require.True(t, c.importMgr.start(job))
+	job.Report(imports.ImportStats{Total: 5, Processed: 5, Inserted: 5, Phase: "import"})
+	job.finish(imports.ImportStats{Total: 5, Processed: 5, Inserted: 5, Phase: "done"}, nil)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req = req.WithContext(jobCtx)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("jobId")
+	ctx.SetParamValues("testjob")
+
+	require.NoError(t, c.StreamImportProgress(ctx))
+
+	body := rec.Body.String()
+	events := parseImportSSEEvents(body)
+	require.NotEmpty(t, events, "expected at least one SSE event")
+
+	var found bool
+	for _, ev := range events {
+		if ev.event == importEventComplete {
+			found = true
+			var prog importProgress
+			require.NoError(t, json.Unmarshal([]byte(ev.data), &prog))
+			assert.Equal(t, "done", prog.Phase)
+		}
+	}
+	assert.True(t, found, "expected a complete event")
+}
+
+// TestStreamImportProgress_EventIDsMonotonic verifies SSE event IDs are monotonically increasing.
+func TestStreamImportProgress_EventIDsMonotonic(t *testing.T) {
+	_, c := newImportController(t)
+
+	_, jobCancel := context.WithCancel(t.Context())
+	defer jobCancel()
+	job := newImportJob("monotone", jobCancel)
+	require.True(t, c.importMgr.start(job))
+
+	for i := range 3 {
+		job.Report(imports.ImportStats{Total: 10, Processed: i + 1, Phase: "import"})
+	}
+	job.finish(imports.ImportStats{Total: 10, Processed: 10, Inserted: 10, Phase: "done"}, nil)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req = req.WithContext(t.Context())
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("jobId")
+	ctx.SetParamValues("monotone")
+
+	require.NoError(t, c.StreamImportProgress(ctx))
+
+	body := rec.Body.String()
+	events := parseImportSSEEvents(body)
+	require.NotEmpty(t, events)
+
+	var prevID int64 = -1
+	for _, ev := range events {
+		if ev.event == importEventHeartbeat {
+			continue
+		}
+		require.NotEmpty(t, ev.id, "event %q must have an id", ev.event)
+		id, err := strconv.ParseInt(ev.id, 10, 64)
+		require.NoError(t, err, "id must be numeric, got %q", ev.id)
+		assert.Greater(t, id, prevID, "ids must be strictly increasing")
+		prevID = id
+	}
+
+	for _, ev := range events {
+		if ev.event != importEventProgress && ev.event != importEventComplete {
+			continue
+		}
+		var m map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ev.data), &m))
+		for key := range m {
+			assert.Equal(t, strings.ToLower(key), key, "JSON key %q should be lowercase/snake_case", key)
+		}
+	}
+}
+
+// TestCancelImport_JobNotFound_Returns404 verifies 404 for unknown job.
+func TestCancelImport_JobNotFound_Returns404(t *testing.T) {
+	_, c := newImportController(t)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("jobId")
+	ctx.SetParamValues("notexist")
+
+	require.NoError(t, c.CancelImport(ctx))
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TestCancelImport_RunningJob_Returns200Cancelling verifies cancel returns 200 with cancelling status.
+func TestCancelImport_RunningJob_Returns200Cancelling(t *testing.T) {
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
+
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+
+	blockCh := make(chan struct{})
+	det := imports.SourceDetection{
+		Date: "2024-01-01", Time: "10:00:00",
+		ScientificName: "Corvus cornix", CommonName: "Hooded Crow",
+		Confidence: 0.85,
+	}
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &fakeSource{
+			batches: [][]imports.SourceDetection{{det}},
+			block:   blockCh,
+		}, nil
+	}
+
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
+	c.importSourceRoot = dir
+
+	body := testDBOnlyBody
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	startCtx := e.NewContext(req, rec)
+	require.NoError(t, c.StartBirdNETPiImport(startCtx))
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+
+	var startResp startImportResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &startResp))
+	jobID := startResp.JobID
+
+	req2 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	rec2 := httptest.NewRecorder()
+	cancelCtx := e.NewContext(req2, rec2)
+	cancelCtx.SetParamNames("jobId")
+	cancelCtx.SetParamValues(jobID)
+	require.NoError(t, c.CancelImport(cancelCtx))
+	assert.Equal(t, http.StatusOK, rec2.Code)
+
+	var cancelResp cancelImportResponse
+	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &cancelResp))
+	assert.Contains(t, []string{importStatusCancelling, importStatusDone}, cancelResp.Status)
+
+	close(blockCh)
+}
+
+// TestGetImportStatus_NoJob_ReturnsIdle verifies idle status when no job exists.
+func TestGetImportStatus_NoJob_ReturnsIdle(t *testing.T) {
+	_, c := newImportController(t)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.GetImportStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp importStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.False(t, resp.Running)
+	assert.Equal(t, importStatusIdle, resp.Status)
+}
+
+// TestGetImportStatus_RunningJob verifies running status with progress.
+func TestGetImportStatus_RunningJob(t *testing.T) {
+	_, c := newImportController(t)
+
+	_, jobCancel := context.WithCancel(t.Context())
+	defer jobCancel()
+	job := newImportJob("running1", jobCancel)
+	require.True(t, c.importMgr.start(job))
+	job.Report(imports.ImportStats{Total: 100, Processed: 50, Phase: "import"})
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.GetImportStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp importStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.True(t, resp.Running)
+	assert.Equal(t, importStatusRunning, resp.Status)
+	assert.Equal(t, "running1", resp.JobID)
+	require.NotNil(t, resp.Progress)
+	assert.Equal(t, 100, resp.Progress.Total)
+	assert.Equal(t, 50, resp.Progress.Processed)
+}
+
+// TestGetImportStatus_DoneJob verifies done status after completion.
+func TestGetImportStatus_DoneJob(t *testing.T) {
+	_, c := newImportController(t)
+
+	_, jobCancel := context.WithCancel(t.Context())
+	jobCancel()
+	job := newImportJob("done1", jobCancel)
+	require.True(t, c.importMgr.start(job))
+	job.finish(imports.ImportStats{Total: 10, Processed: 10, Inserted: 8, Skipped: 2, Phase: "done"}, nil)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.GetImportStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp importStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.False(t, resp.Running)
+	assert.Equal(t, importStatusDone, resp.Status)
+	assert.Empty(t, resp.Error)
+}
+
+// TestImportRoutes_Registered verifies all import routes are registered.
+func TestImportRoutes_Registered(t *testing.T) {
+	e, c := newImportController(t)
+	c.initImportRoutes()
+
+	expected := []string{
+		"POST " + apiV2Prefix + "/import/birdnet-pi",
+		"GET " + apiV2Prefix + "/import/jobs/:jobId/progress",
+		"POST " + apiV2Prefix + "/import/jobs/:jobId/cancel",
+		"GET " + apiV2Prefix + "/import/status",
+	}
+	assertRoutesRegistered(t, e, expected)
+}
+
+// TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd verifies the full pipeline with a real SQLite file.
+func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
+
+	const rowCount = 3
+
+	dir, _ := makeTempDB(t, rowCount)
+
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+	c.importSourceRoot = dir
+
+	body := testDBOnlyBody
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	startCtx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(startCtx))
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+
+	var startResp startImportResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &startResp))
+	jobID := startResp.JobID
+	assert.NotEmpty(t, jobID)
+
+	// Poll status until done.
+	deadline := time.Now().Add(10 * time.Second)
+	var finalStatus importStatusResponse
+	for time.Now().Before(deadline) {
+		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		statusRec := httptest.NewRecorder()
+		statusCtx := e.NewContext(statusReq, statusRec)
+		require.NoError(t, c.GetImportStatus(statusCtx))
+		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
+		if !finalStatus.Running && finalStatus.Status == importStatusDone {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	assert.Equal(t, importStatusDone, finalStatus.Status, "import should reach done state")
+	assert.Empty(t, finalStatus.Error)
+	if finalStatus.Progress != nil {
+		assert.Equal(t, rowCount, finalStatus.Progress.Total)
+	}
+}

@@ -563,6 +563,15 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | GET    | `/system/diagnostics/report/:id` | `GetDiagnosticsReport`   | ✅   | Retrieve completed report      |
 | GET    | `/system/diagnostics/errors`     | `GetRecentErrors`        | ✅   | Recent error log entries       |
 
+### Import (`import.go`)
+
+| Method | Route                          | Handler              | Auth | Description                              |
+| ------ | ------------------------------ | -------------------- | ---- | ---------------------------------------- |
+| POST   | `/import/birdnet-pi`           | `StartBirdNETPiImport` | ✅   | Start a BirdNET-Pi DB-only import       |
+| GET    | `/import/jobs/:jobId/progress` | `StreamImportProgress` | ✅   | SSE progress stream for import job      |
+| POST   | `/import/jobs/:jobId/cancel`   | `CancelImport`         | ✅   | Cancel a running import                 |
+| GET    | `/import/status`               | `GetImportStatus`      | ✅   | Get current import status (polling)     |
+
 **GET /api/v2/system/diagnostics/status** - Returns the overall health status and per-category breakdown from the most recent diagnostic run. Returns `{"status": "unknown"}` if no diagnostics have been run yet.
 
 **POST /api/v2/system/diagnostics/run** - Executes all registered health checks in parallel (31 checks across 8 categories: system, audio, analysis, streams, database, network, config, logs). Returns a full `DiagnosticsReport` with per-check results, timing, and summary.
