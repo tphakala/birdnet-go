@@ -359,7 +359,7 @@ func (c *GuideCache) loadFromDB() {
 	// many short-lived negative rows have accrued since the last retention cleanup.
 	entries, err := c.store.GetRecent(c.ctx, maxMemoryEntries)
 	if err != nil {
-		c.metrics.RecordDBError("read", "get_all")
+		c.metrics.RecordDBError("read", "get_recent")
 		GetLogger().Warn("Failed to load guide cache from DB", logger.Error(err))
 		return
 	}

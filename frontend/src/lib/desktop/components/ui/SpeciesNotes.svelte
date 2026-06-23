@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { Pencil, Trash2, Save, X } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
@@ -54,11 +53,13 @@
     return `/api/v2/species/${encodeURIComponent(scientificName)}/notes`;
   }
 
-  async function load(): Promise<void> {
+  async function load(name: string): Promise<void> {
     loading = true;
     error = null;
     try {
-      notes = (await api.get<SpeciesNoteData[]>(notesUrl())) ?? [];
+      notes =
+        (await api.get<SpeciesNoteData[]>(`/api/v2/species/${encodeURIComponent(name)}/notes`)) ??
+        [];
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       logger.error('Failed to load species notes', e, { component: 'SpeciesNotes' });
@@ -133,7 +134,23 @@
     }
   }
 
-  onMount(load);
+  // Reload notes and reset all per-species edit state whenever the species
+  // changes. The component instance is reused across species (e.g. when the
+  // detail modal switches species), so loading only on mount would leave stale
+  // notes and edit state pointing at the previous species.
+  $effect(() => {
+    const name = scientificName.trim();
+    cancelEdit();
+    confirmingDeleteId = null;
+    draft = '';
+    if (!name) {
+      notes = [];
+      loading = false;
+      error = null;
+      return;
+    }
+    void load(name);
+  });
 </script>
 
 <section class={`species-notes ${className}`} aria-label={t('analytics.species.notes.title')}>
@@ -167,7 +184,10 @@
         </button>
       </div>
       {#if !canSave}
-        <p id={`${uid}-save-help`} class="sr-only">
+        <!-- Show the "too long" reason visibly (tooltips are invisible on touch
+             devices); the empty-draft reason stays screen-reader-only since the
+             empty textarea already makes it self-evident. -->
+        <p id={`${uid}-save-help`} class={draftTooLong ? 'text-xs text-error mt-1' : 'sr-only'}>
           {draftTooLong
             ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
             : t('analytics.species.notes.saveDisabledReason')}
@@ -224,7 +244,10 @@
               </button>
             </div>
             {#if !canSaveEdit}
-              <p id={`${uid}-edit-save-help`} class="sr-only">
+              <p
+                id={`${uid}-edit-save-help`}
+                class={editTooLong ? 'text-xs text-error mt-1' : 'sr-only'}
+              >
                 {editTooLong
                   ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
                   : t('analytics.species.notes.saveDisabledReason')}

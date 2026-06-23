@@ -69,6 +69,12 @@ func (p *WikipediaGuideProvider) Name() string { return WikipediaProviderName }
 
 // wikiQueryResponse models the action=query TextExtracts response shape.
 type wikiQueryResponse struct {
+	// Error is populated when the API rejects the request: MediaWiki returns
+	// these with a 200 OK status and an error object instead of a query result.
+	Error *struct {
+		Code string `json:"code"`
+		Info string `json:"info"`
+	} `json:"error"`
 	Query struct {
 		Pages map[string]struct {
 			PageID  int       `json:"pageid"`
@@ -125,10 +131,14 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 			Category(errors.CategoryHTTP).
 			Build())
 	case resp.StatusCode != http.StatusOK:
-		return nil, errors.Newf("wikipedia returned status %d", resp.StatusCode).
+		// Any other non-OK status is non-definitive: wrap it transient so an
+		// unexpected upstream response doesn't get persisted as a 30-minute
+		// negative entry that suppresses retries for a valid species.
+		return nil, NewTransientError(errors.Newf("wikipedia returned status %d", resp.StatusCode).
 			Component("guideprovider").
 			Category(errors.CategoryHTTP).
-			Build()
+			Context("operation", "wikipedia_status").
+			Build())
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, wikipediaMaxResponseBytes))
@@ -138,11 +148,24 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 
 	var parsed wikiQueryResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, errors.New(err).
+		// A decode failure is a transport/API-shape problem, not "species not
+		// found"; keep it out of the negative cache.
+		return nil, NewTransientError(errors.New(err).
 			Component("guideprovider").
 			Category(errors.CategoryHTTP).
 			Context("operation", "wikipedia_decode").
-			Build()
+			Build())
+	}
+
+	// MediaWiki signals request-level errors (e.g. maxlag, bad params) with a
+	// 200 OK body carrying an error object. Treat these as transient rather than
+	// letting an empty Pages map fall through to a cached ErrGuideNotFound.
+	if parsed.Error != nil {
+		return nil, NewTransientError(errors.Newf("wikipedia api error: %s - %s", parsed.Error.Code, parsed.Error.Info).
+			Component("guideprovider").
+			Category(errors.CategoryHTTP).
+			Context("operation", "wikipedia_api_error").
+			Build())
 	}
 
 	for _, page := range parsed.Query.Pages {

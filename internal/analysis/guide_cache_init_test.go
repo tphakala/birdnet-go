@@ -118,9 +118,12 @@ func TestWarmGuideCacheWithTopSpecies_NilCacheIsNoOp(t *testing.T) {
 
 func TestWarmGuideCacheWithTopSpecies_ZeroTopNIsNoOp(t *testing.T) {
 	t.Parallel()
+	cache := newUnstartedCache(t)
 	ds := &warmSpyDatastore{}
 
-	warmGuideCacheWithTopSpecies(nil, ds, 0, GetLogger())
+	// Pass a real cache so this exercises the topN <= 0 guard independently of
+	// the nil-cache short-circuit covered by TestWarmGuideCacheWithTopSpecies_NilCacheIsNoOp.
+	warmGuideCacheWithTopSpecies(cache, ds, 0, GetLogger())
 	assert.False(t, ds.called, "warming is disabled when topN <= 0")
 }
 

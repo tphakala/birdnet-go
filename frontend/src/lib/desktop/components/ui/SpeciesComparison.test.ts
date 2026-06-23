@@ -8,9 +8,11 @@ vi.mock('$lib/utils/api', () => ({
   api: { get: vi.fn() },
   ApiError: class ApiError extends Error {
     status: number;
-    constructor(message: string, status: number) {
+    response?: Response;
+    constructor(message: string, status: number, response?: Response) {
       super(message);
       this.status = status;
+      this.response = response;
     }
   },
 }));

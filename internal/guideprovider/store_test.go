@@ -16,6 +16,12 @@ func newTestStore(t *testing.T) *GORMGuideStore {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	// Pin the pool to a single connection. A default pool can open several
+	// connections to ":memory:", and each one is a separate in-memory database,
+	// which causes intermittent "no such table" failures under parallel tests.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	store, err := NewGORMGuideStoreWithMetrics(db, nil)
 	require.NoError(t, err)
 	return store

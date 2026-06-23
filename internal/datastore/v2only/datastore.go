@@ -1716,7 +1716,9 @@ func (ds *Datastore) GetSpeciesNotes(ctx context.Context, scientificName string)
 		Limit(datastore.SpeciesNotesMaxResults).
 		Find(&notes).Error; err != nil {
 		return nil, errors.New(err).Component("datastore").
-			Context("operation", "get_species_notes").Build()
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_notes").
+			Context("table", "species_notes").Build()
 	}
 	return notes, nil
 }
@@ -1729,7 +1731,9 @@ func (ds *Datastore) GetSpeciesNoteByID(ctx context.Context, id uint) (*datastor
 			return nil, datastore.ErrSpeciesNoteNotFound
 		}
 		return nil, errors.New(err).Component("datastore").
-			Context("operation", "get_species_note_by_id").Build()
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_note_by_id").
+			Context("table", "species_notes").Build()
 	}
 	return &note, nil
 }
@@ -1757,7 +1761,9 @@ func (ds *Datastore) SaveSpeciesNote(ctx context.Context, note *datastore.Specie
 	return datastore.RetryOnLock(ctx, "save_species_note", func() error {
 		if createErr := ds.manager.DB().WithContext(ctx).Create(note).Error; createErr != nil {
 			return errors.New(createErr).Component("datastore").
+				Category(errors.CategoryDatabase).
 				Context("operation", "save_species_note").
+				Context("table", "species_notes").
 				Context("scientific_name", note.ScientificName).Build()
 		}
 		return nil
@@ -1785,7 +1791,9 @@ func (ds *Datastore) UpdateSpeciesNote(ctx context.Context, noteID, entry string
 			Update("entry", normalized)
 		if result.Error != nil {
 			return errors.New(result.Error).Component("datastore").
-				Context("operation", "update_species_note").Build()
+				Category(errors.CategoryDatabase).
+				Context("operation", "update_species_note").
+				Context("table", "species_notes").Build()
 		}
 		if result.RowsAffected == 0 {
 			return datastore.ErrSpeciesNoteNotFound
@@ -1804,7 +1812,9 @@ func (ds *Datastore) DeleteSpeciesNote(ctx context.Context, noteID string) error
 		result := ds.manager.DB().WithContext(ctx).Delete(&datastore.SpeciesNote{}, id)
 		if result.Error != nil {
 			return errors.New(result.Error).Component("datastore").
-				Context("operation", "delete_species_note").Build()
+				Category(errors.CategoryDatabase).
+				Context("operation", "delete_species_note").
+				Context("table", "species_notes").Build()
 		}
 		if result.RowsAffected == 0 {
 			return datastore.ErrSpeciesNoteNotFound

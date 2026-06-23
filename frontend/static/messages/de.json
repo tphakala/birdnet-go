@@ -1675,7 +1675,7 @@
         "similar": "Ähnliche Arten",
         "noSimilar": "Keine ähnlichen Arten gefunden",
         "loading": "Steckbrief wird geladen…",
-        "unavailable": "Der Steckbrief ist vorübergehend nicht verfügbar. Bitte versuche es später erneut.",
+        "unavailable": "Der Steckbrief ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.",
         "noGuide": "Für diese Art ist kein Steckbrief verfügbar.",
         "expectedness": {
           "expected": "Hier zu erwarten",
@@ -1706,7 +1706,7 @@
         "deleteConfirm": "Diese Notiz löschen?",
         "deleteFailed": "Notiz konnte nicht gelöscht werden.",
         "saveFailed": "Notiz konnte nicht gespeichert werden.",
-        "saveDisabledReason": "Gib einen Notiztext ein, um Speichern zu aktivieren.",
+        "saveDisabledReason": "Geben Sie einen Notiztext ein, um Speichern zu aktivieren.",
         "tooLong": "Notiz ist zu lang (maximal {max} Zeichen)."
       },
       "similar": {
@@ -1718,7 +1718,7 @@
         "similar": "Ähnlich",
         "speciesGuide": "Steckbrief",
         "versus": "vs. {species}",
-        "selectPrompt": "Wähle eine Art zum Vergleich mit {species}.",
+        "selectPrompt": "Wählen Sie eine Art zum Vergleich mit {species}.",
         "noGuideAvailable": "Kein Steckbrief verfügbar",
         "cardLoading": "Vergleich wird geladen…",
         "cardNoGuide": "Für diese Art ist kein Steckbrief verfügbar.",

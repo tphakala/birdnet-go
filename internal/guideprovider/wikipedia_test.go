@@ -128,6 +128,7 @@ func TestWikipediaProvider_MissingPage(t *testing.T) {
 
 	p := newWikipediaTestProvider(t, srv)
 	_, err := p.Fetch(t.Context(), "Nope", FetchOptions{Locale: "en"})
+	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrGuideNotFound))
 }
 

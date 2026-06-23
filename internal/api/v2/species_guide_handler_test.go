@@ -393,8 +393,10 @@ func TestSpeciesGuideRoutes_WritesAreAuthGated(t *testing.T) {
 	}
 
 	// The public read endpoint must NOT be auth-gated (no DS wired -> 503, not 401).
+	// Assert the concrete status so the test also fails if the route is missing
+	// (404) or otherwise unreachable, not just when it's auth-gated.
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/Turdus/notes", http.NoBody)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
-	assert.NotEqual(t, http.StatusUnauthorized, rec.Code, "notes read must be public")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code, "notes read must be public and reachable")
 }

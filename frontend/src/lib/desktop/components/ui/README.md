@@ -530,7 +530,7 @@ interface Props {
 
 ### SimilarSpeciesPanel
 
-Selectable similar-species comparison. Renders a picker rail of the focal species' similar species; selecting one fetches that species' guide (`/api/v2/species/:name/guide`) and shows its canonical sections (Appearance, Voice, Habitat & range) under a "vs {focal}" header, so the user can tell the two apart attribute by attribute. Rendered inside `SpeciesComparison`'s "Similar species" section.
+Selectable similar-species comparison. Renders a picker rail of the focal species' similar species; selecting one fetches that species' guide (`/api/v2/species/:scientific_name/guide`) and shows its canonical sections (Appearance, Voice, Habitat & range) under a "vs {focal}" header, so the user can tell the two apart attribute by attribute. Rendered inside `SpeciesComparison`'s "Similar species" section.
 
 **Props:**
 
@@ -576,9 +576,9 @@ interface Props {
 
 **Features:**
 
-- Fetches focal guide (`/api/v2/species/:name/guide`) and similar species (`/api/v2/species/:name/similar`)
+- Fetches focal guide (`/api/v2/species/:scientific_name/guide`) and similar species (`/api/v2/species/:scientific_name/similar`)
 - Collapsible Description, Songs & Calls, and Similar species sections
-- Localized heading mapping (de/fr/es/it/cs/pl/fi/et) to canonical section IDs
+- Best-effort localized heading mapping (en/de/fr/es/pl/fi/sv Wikipedia section names) to canonical section IDs; other locales fall back to the raw heading
 - Instance-scoped ARIA ids via `$props.id()` so multiple instances on one page do not collide
 - Loading and empty states
 
