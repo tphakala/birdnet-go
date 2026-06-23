@@ -21,7 +21,7 @@ requiring a container restart. For example, a USB drive the host mounts at
 The installer-generated systemd service handles this automatically on every
 container start:
 
-1. Creates `/mnt/birdnet-go/external` (mode 0755) if it does not exist.
+1. Creates `/mnt/birdnet-go/external` if it does not exist.
 2. Bind-mounts it to itself if it is not already a mount point.
 3. Marks it as a shared mount (`--make-rshared`) so sub-mounts propagate into
    the container.
@@ -31,7 +31,11 @@ upgrading regenerates the service unit and picks up these steps.
 
 ### Docker Compose installations
 
-Docker Compose users need a one-time host setup before starting the container:
+The external media volume is commented out in `docker-compose.yml` by default.
+`docker compose up` works without any host setup. To enable it, perform the
+one-time host setup below, then uncomment the bind block in `docker-compose.yml`.
+
+#### One-time manual setup
 
 ```bash
 sudo mkdir -p /mnt/birdnet-go/external
@@ -39,17 +43,44 @@ sudo mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external
 sudo mount --make-rshared /mnt/birdnet-go/external
 ```
 
-To make this persistent across reboots, add the following to `/etc/fstab`:
+An fstab bind entry alone does NOT establish `rshared` propagation and is
+therefore not sufficient for hot-plug to work. Both the self-bind and the
+`make-rshared` step are required.
 
-```
-/mnt/birdnet-go/external /mnt/birdnet-go/external none bind,x-systemd.after=local-fs.target 0 0
+#### Making the setup persistent across reboots
+
+Create a one-shot systemd service that runs both steps in the correct order and
+is guaranteed to complete before the container service starts:
+
+```ini
+# /etc/systemd/system/birdnet-external-media.service
+[Unit]
+Description=Prepare BirdNET-Go external media mount point
+DefaultDependencies=no
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/mkdir -p /mnt/birdnet-go/external
+ExecStart=/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
+ExecStart=/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external'
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=docker.service
 ```
 
-Then add a systemd `ExecStartPre` step or use a one-shot service to run
-`mount --make-rshared /mnt/birdnet-go/external` before the container starts.
+Enable it with:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now birdnet-external-media.service
+```
 
 Note: if the host root filesystem is already `rshared` (common on modern systemd
-distributions), the bind step may not be strictly required, but doing it
+distributions), the bind step may not be strictly required, but running it
 idempotently does no harm.
 
 ## Mounting media on the host
@@ -78,8 +109,8 @@ The mounted media will appear inside the container at `/external/usb1`,
 ## Notes
 
 - Hot-plug propagation requires the host shared-mount setup described above.
-  It has been verified in configuration but needs testing on a real Docker host
-  with physical media.
+  The wiring is in place, but hot-plug propagation has NOT been tested end to end
+  with physical media and must be validated before relying on it.
 - The `/external` path is read-write inside the container.
 - Writes from the container go to the mounted media on the host. Ensure the
   media filesystem and mount permissions allow writes by the container user

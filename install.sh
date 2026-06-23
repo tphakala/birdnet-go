@@ -4088,10 +4088,9 @@ ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
 # Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
 ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls || true'
 # Prepare external media mount point and ensure shared propagation for hot-plug
-ExecStartPre=/bin/mkdir -p /mnt/birdnet-go/external
-ExecStartPre=/bin/chmod 755 /mnt/birdnet-go/external
-ExecStartPre=/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
-ExecStartPre=/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external || true'
+ExecStartPre=-/bin/mkdir -p /mnt/birdnet-go/external
+ExecStartPre=-/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
+ExecStartPre=-/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external'
 ${wifi_power_save_script:+${wifi_power_save_script}
 }ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
