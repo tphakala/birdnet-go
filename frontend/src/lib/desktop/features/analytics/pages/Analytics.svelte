@@ -40,7 +40,7 @@
     resolveDateRange,
     serializeAnalyticsParams,
   } from '../registry/analyticsParams';
-  import type { AnalyticsParams, ChartGroup } from '../registry/types';
+  import type { AnalyticsParams, AudioSourceOption, ChartGroup } from '../registry/types';
 
   const logger = getLogger('analytics-hub');
 
@@ -84,9 +84,18 @@
     new Map(availableSpecies.map(s => [s.scientificName ?? s.id, s.commonName]))
   );
 
+  // Audio sources for the source/mic filter. Loaded lazily the first time a tab whose charts consume
+  // the source dimension becomes active (see the effect below), so tabs that never filter by source
+  // (the whole hub until the per-mic chart lands) make no request.
+  let availableSources = $state<AudioSourceOption[]>([]);
+  let loadingSources = $state(false);
+  let sourcesRequested = false;
+  let sourcesController: AbortController | null = null;
+
   const activeCharts = $derived(chartsForGroup(params.tab));
   const isOverview = $derived(params.tab === 'overview');
   const speciesApplicable = $derived(activeCharts.some(c => c.supports.species));
+  const sourceApplicable = $derived(activeCharts.some(c => c.supports.source));
   const activeTabLabelKey = $derived(
     TABS.find(tab => tab.group === params.tab)?.labelKey ?? 'analytics.hub.tabs.overview'
   );
@@ -125,7 +134,10 @@
       params = readParams();
     };
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      sourcesController?.abort();
+    };
   });
 
   // --- Available species ----------------------------------------------------
@@ -230,6 +242,66 @@
     untrack(() => maybeAutoSelectSpecies());
   });
 
+  // --- Available audio sources ---------------------------------------------
+
+  interface SourcesResponse {
+    sources?: unknown;
+  }
+
+  // Coerce the /analytics/sources payload ({ sources: [{ id, name, count }] }) defensively into the
+  // control bar's option shape, dropping rows without a usable id and falling back name -> id.
+  function coerceSources(data: unknown): AudioSourceOption[] {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
+    const raw = (data as SourcesResponse).sources;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map(item => {
+        if (!item || typeof item !== 'object') return null;
+        const s = item as { id?: unknown; name?: unknown; count?: unknown };
+        const id = typeof s.id === 'string' ? s.id : '';
+        if (!id) return null;
+        const name = typeof s.name === 'string' && s.name ? s.name : id;
+        const count = typeof s.count === 'number' && Number.isFinite(s.count) ? s.count : 0;
+        return { id, name, count };
+      })
+      .filter((s): s is AudioSourceOption => s !== null);
+  }
+
+  async function fetchAvailableSources(): Promise<void> {
+    sourcesController?.abort();
+    const ac = new AbortController();
+    sourcesController = ac;
+    loadingSources = true;
+
+    try {
+      // The list is all-history (not range-scoped) so the dropdown stays stable as the date range
+      // changes; the per-source charts still re-fetch their own data per range.
+      const response = await fetch(buildAppUrl('/api/v2/analytics/sources'), { signal: ac.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      availableSources = coerceSources(await response.json());
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      logger.error('Failed to fetch available sources', err);
+      availableSources = [];
+      // Clear the latch so the next time a source-aware tab becomes active the list is retried
+      // rather than staying empty for the rest of the session after a transient failure.
+      sourcesRequested = false;
+    } finally {
+      if (!ac.signal.aborted) loadingSources = false;
+    }
+  }
+
+  // Lazily load the source list the first time a tab whose charts consume the source dimension becomes
+  // active. Until then (e.g. while no chart sets supports.source) no request is made, so the disabled
+  // source control costs nothing. `sourcesRequested` is a plain (non-reactive) latch: the list is
+  // all-history, so one successful fetch suffices for the session; a failed fetch clears the latch so a
+  // later activation retries.
+  $effect(() => {
+    if (!sourceApplicable || sourcesRequested) return;
+    sourcesRequested = true;
+    untrack(() => fetchAvailableSources());
+  });
+
   // Roving-tabindex keyboard navigation for the tab bar. Focus moves by id so we
   // avoid holding element refs (and the array-index access that comes with them).
   function handleTabKeydown(event: KeyboardEvent): void {
@@ -299,6 +371,9 @@
       {availableSpecies}
       {loadingSpecies}
       {speciesApplicable}
+      {availableSources}
+      {loadingSources}
+      {sourceApplicable}
       onParamsChange={partial => applyParams(partial, 'push')}
     />
   </div>

@@ -5,9 +5,14 @@ import AnalyticsControlBar from './AnalyticsControlBar.svelte';
 import { parseAnalyticsParams } from '../registry/analyticsParams';
 import { createSpeciesId } from '$lib/types/species';
 import type { Species } from '$lib/types/species';
-import type { AnalyticsParams } from '../registry/types';
+import type { AnalyticsParams, AudioSourceOption } from '../registry/types';
 
 afterEach(() => cleanup());
+
+const sources: AudioSourceOption[] = [
+  { id: '7', name: 'camera-7', count: 42 },
+  { id: '3', name: 'audio-source-3', count: 9 },
+];
 
 const NOW = new Date(2026, 5, 19, 12, 0, 0);
 
@@ -34,15 +39,80 @@ function makeParams(overrides: Partial<AnalyticsParams> = {}): AnalyticsParams {
 }
 
 describe('AnalyticsControlBar', () => {
-  it('renders the source filter as inert with an explanation', () => {
+  it('disables the source filter with a reason when no chart on the tab uses source', () => {
     const onParamsChange = vi.fn();
     render(AnalyticsControlBar, {
-      props: { params: makeParams(), availableSpecies: species, onParamsChange },
+      // sourceApplicable defaults to false: the control is disabled with the not-applicable reason.
+      props: {
+        params: makeParams(),
+        availableSpecies: species,
+        availableSources: sources,
+        onParamsChange,
+      },
     });
 
     expect(screen.getByText('analytics.hub.controls.source')).toBeInTheDocument();
-    // The "coming soon" reason is a hover tooltip on the source control wrapper.
-    expect(screen.getByTitle('analytics.hub.controls.sourceComingSoon')).toBeInTheDocument();
+    // The reason is surfaced as visible help text (wired to the control via aria-describedby).
+    expect(screen.getByText('analytics.hub.controls.sourceNotApplicable')).toBeInTheDocument();
+  });
+
+  it('disables the source filter with a distinct reason when applicable but no sources exist', () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      props: {
+        params: makeParams(),
+        availableSpecies: species,
+        availableSources: [],
+        sourceApplicable: true,
+        onParamsChange,
+      },
+    });
+
+    expect(screen.getByText('analytics.hub.controls.sourceNone')).toBeInTheDocument();
+  });
+
+  it('disables the source filter with a loading reason while sources load', () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      props: {
+        params: makeParams(),
+        availableSpecies: species,
+        availableSources: [],
+        sourceApplicable: true,
+        loadingSources: true,
+        onParamsChange,
+      },
+    });
+
+    expect(screen.getByText('analytics.hub.controls.sourceLoading')).toBeInTheDocument();
+  });
+
+  it('enables the source filter and reports a selection when a chart on the tab uses source', async () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      props: {
+        params: makeParams(),
+        availableSpecies: species,
+        availableSources: sources,
+        sourceApplicable: true,
+        onParamsChange,
+      },
+    });
+
+    // Enabled: no disabled-reason help text is present.
+    expect(
+      screen.queryByText('analytics.hub.controls.sourceNotApplicable')
+    ).not.toBeInTheDocument();
+
+    // Open the source dropdown (its trigger shows the "All sources" label) and pick a source.
+    const trigger = screen.getByText('analytics.hub.controls.sourceAll').closest('button');
+    expect(trigger).not.toBeNull();
+    await fireEvent.click(trigger as HTMLButtonElement);
+
+    const option = await screen.findByText('camera-7');
+    await fireEvent.click(option);
+
+    expect(onParamsChange).toHaveBeenCalledWith({ source: '7' });
   });
 
   it('explains when species filtering does not apply to the active tab', () => {

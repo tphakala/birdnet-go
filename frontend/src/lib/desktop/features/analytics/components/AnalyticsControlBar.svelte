@@ -11,7 +11,10 @@
   toggle (the date range stays visible) to keep the toolbar compact. Each
   control honors the active tab's chart `supports` flags: when no chart in the
   active tab filters by species (e.g. Biodiversity), the species toggle is
-  disabled with an explanation. The source filter is present but inert in PR0.
+  disabled with an explanation. The source/mic filter follows the same rule via
+  `sourceApplicable`: it is enabled only when a chart in the active tab consumes
+  the source dimension and sources exist, and otherwise carries a specific
+  disabled reason rather than being a silent dead end.
 -->
 <script lang="ts">
   import { ChevronDown, ChevronRight } from '@lucide/svelte';
@@ -21,7 +24,7 @@
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { Species } from '$lib/types/species';
   import { formatDateForAPI } from '../registry/analyticsParams';
-  import type { AnalyticsParams, DateRangePreset } from '../registry/types';
+  import type { AnalyticsParams, AudioSourceOption, DateRangePreset } from '../registry/types';
 
   interface Props {
     params: AnalyticsParams;
@@ -29,6 +32,11 @@
     loadingSpecies?: boolean;
     /** Whether any chart in the active tab filters by species. */
     speciesApplicable?: boolean;
+    /** Audio sources for the source/mic filter (empty until a source-aware tab loads them). */
+    availableSources?: AudioSourceOption[];
+    loadingSources?: boolean;
+    /** Whether any chart in the active tab filters by source. */
+    sourceApplicable?: boolean;
     onParamsChange: (_partial: Partial<AnalyticsParams>) => void;
   }
 
@@ -37,6 +45,9 @@
     availableSpecies,
     loadingSpecies = false,
     speciesApplicable = true,
+    availableSources = [],
+    loadingSources = false,
+    sourceApplicable = false,
     onParamsChange,
   }: Props = $props();
 
@@ -55,8 +66,32 @@
     { value: 'custom', label: t('analytics.advanced.dateRangeOptions.custom') },
   ]);
 
-  // Source filter is inert in PR0: a single "All sources" option, disabled.
-  const sourceOptions = $derived([{ value: '', label: t('analytics.hub.controls.sourceAll') }]);
+  // Source/mic filter options: "All sources" plus the live source list (id -> opaque value, name ->
+  // already anonymized server-side for unauthenticated clients).
+  const sourceOptions = $derived([
+    { value: '', label: t('analytics.hub.controls.sourceAll') },
+    ...availableSources.map(s => ({ value: s.id, label: s.name })),
+  ]);
+
+  // The source filter is enabled only when a chart in the active tab consumes the source dimension and
+  // there is at least one source to choose from. Otherwise it is disabled with a specific reason, so
+  // the control is never a silent dead end (no chart in PR's wiring tab sets supports.source, so this
+  // stays disabled until the per-mic chart lands and turns it on).
+  const sourceEnabled = $derived(
+    sourceApplicable && !loadingSources && availableSources.length > 0
+  );
+
+  const sourceDisabledReason = $derived.by(() => {
+    if (sourceEnabled) return undefined;
+    if (!sourceApplicable) return t('analytics.hub.controls.sourceNotApplicable');
+    if (loadingSources) return t('analytics.hub.controls.sourceLoading');
+    return t('analytics.hub.controls.sourceNone');
+  });
+
+  function handleSourceChange(value: string | string[]): void {
+    const source = Array.isArray(value) ? (value[0] ?? '') : value;
+    onParamsChange({ source });
+  }
 
   // Custom date inputs reflect the resolved range so switching to "custom"
   // starts from whatever was showing, and reloads restore the typed dates.
@@ -150,20 +185,25 @@
       </div>
     {/if}
 
-    <!-- Source / mic filter (present but inert in PR0). The reason is a hover
-         tooltip (keeps the toolbar row aligned/compact) plus a visually-hidden
-         line so screen-reader users in reading order also get the explanation. -->
-    <div class="w-44 max-w-full space-y-1" title={t('analytics.hub.controls.sourceComingSoon')}>
+    <!-- Source / mic filter. Enabled only when a chart in the active tab consumes the source
+         dimension and sources exist; otherwise disabled with a specific reason surfaced as visible
+         help text (SelectDropdown wires it to the control via aria-describedby), so the reason is
+         discoverable on touch/tablet and to screen readers, matching the species control rather than
+         relying on a hover-only tooltip. -->
+    <div class="w-44 max-w-full space-y-1">
       <SelectDropdown
         value={params.source}
         options={sourceOptions}
-        disabled={true}
+        disabled={!sourceEnabled}
+        onChange={handleSourceChange}
+        id="analyticsSourceFilter"
         label={t('analytics.hub.controls.source')}
+        placeholder={t('analytics.hub.controls.sourceAll')}
+        helpText={sourceDisabledReason}
         variant="select"
         size="sm"
         menuSize="sm"
       />
-      <span class="sr-only">{t('analytics.hub.controls.sourceComingSoon')}</span>
     </div>
 
     <div class="grow"></div>

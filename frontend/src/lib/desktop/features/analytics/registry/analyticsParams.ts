@@ -10,7 +10,7 @@
  *   start   YYYY-MM-DD, only meaningful (and serialised) when range=custom
  *   end     YYYY-MM-DD, only meaningful (and serialised) when range=custom
  *   species comma-separated scientific names (omitted when none selected)
- *   source  audio source/mic id (omitted when all; inert in PR0)
+ *   source  audio source/mic id (omitted when all sources)
  */
 import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
 

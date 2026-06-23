@@ -122,6 +122,24 @@ type SpeciesAccumulationPoint struct {
 	NewSpecies        int
 }
 
+// AudioSourceSummary describes one audio source for the analytics source/mic filter: a stable opaque
+// ID, the source's display metadata, and how many (false-positive-excluded) detections it has in the
+// queried range. The API layer turns DisplayName/NodeName into a user-facing label (anonymized for
+// unauthenticated clients) and serialises ID as a string. The metric is v2only; the legacy datastore
+// does not persist a detection's source, so it returns an empty result.
+type AudioSourceSummary struct {
+	// ID is the audio source's stable, opaque identifier (the v2 audio_sources primary key).
+	ID uint
+	// DisplayName is the user-configured source name, empty when unset.
+	DisplayName string
+	// NodeName is the capture node name, used as a fallback label when DisplayName is empty.
+	NodeName string
+	// SourceType is the source kind (e.g. "rtsp", "alsa", "file"), used for anonymized labelling.
+	SourceType string
+	// Count is the number of (false-positive-excluded) detections from this source in the range.
+	Count int
+}
+
 // YearOverYearPoint is one calendar position on the year-over-year tracker. Date is the current-year
 // station-local calendar day (YYYY-MM-DD) used for the x-axis; MonthDay ("MM-DD") is the year-
 // independent alignment key shared by both years. ThisYear and LastYear are the cumulative detection
@@ -548,6 +566,14 @@ func (ds *DataStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _
 // slice rather than implementing the aggregation. See internal/datastore/v2only for the real method.
 func (ds *DataStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]SpeciesAccumulationPoint, error) {
 	return []SpeciesAccumulationPoint{}, nil
+}
+
+// GetAudioSources is a stub on the legacy store. The analytics source/mic filter is a v2only feature:
+// the legacy schema does not persist a detection's audio source, so there is nothing to group by. It
+// returns an empty (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only
+// for the real method.
+func (ds *DataStore) GetAudioSources(_ context.Context, _, _ string) ([]AudioSourceSummary, error) {
+	return []AudioSourceSummary{}, nil
 }
 
 // GetYearOverYear is a stub on the legacy store. The year-over-year tracker is a v2only feature; the

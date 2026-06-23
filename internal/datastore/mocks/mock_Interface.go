@@ -1785,6 +1785,66 @@ func (_c *MockInterface_GetAppEventsSince_Call) RunAndReturn(run func(context.Co
 	return _c
 }
 
+// GetAudioSources provides a mock function with given fields: ctx, startDate, endDate
+func (_m *MockInterface) GetAudioSources(ctx context.Context, startDate string, endDate string) ([]datastore.AudioSourceSummary, error) {
+	ret := _m.Called(ctx, startDate, endDate)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAudioSources")
+	}
+
+	var r0 []datastore.AudioSourceSummary
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]datastore.AudioSourceSummary, error)); ok {
+		return rf(ctx, startDate, endDate)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) []datastore.AudioSourceSummary); ok {
+		r0 = rf(ctx, startDate, endDate)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.AudioSourceSummary)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, startDate, endDate)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetAudioSources_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAudioSources'
+type MockInterface_GetAudioSources_Call struct {
+	*mock.Call
+}
+
+// GetAudioSources is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+func (_e *MockInterface_Expecter) GetAudioSources(ctx interface{}, startDate interface{}, endDate interface{}) *MockInterface_GetAudioSources_Call {
+	return &MockInterface_GetAudioSources_Call{Call: _e.mock.On("GetAudioSources", ctx, startDate, endDate)}
+}
+
+func (_c *MockInterface_GetAudioSources_Call) Run(run func(ctx context.Context, startDate string, endDate string)) *MockInterface_GetAudioSources_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetAudioSources_Call) Return(_a0 []datastore.AudioSourceSummary, _a1 error) *MockInterface_GetAudioSources_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetAudioSources_Call) RunAndReturn(run func(context.Context, string, string) ([]datastore.AudioSourceSummary, error)) *MockInterface_GetAudioSources_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetBatchHourlyOccurrences provides a mock function with given fields: ctx, date, species, minConfidence
 func (_m *MockInterface) GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error) {
 	ret := _m.Called(ctx, date, species, minConfidence)

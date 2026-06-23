@@ -1662,7 +1662,9 @@
       "controls": {
         "source": "Sorgente",
         "sourceAll": "Tutte le sorgenti",
-        "sourceComingSoon": "Il filtro per sorgente arriverà in un prossimo aggiornamento.",
+        "sourceLoading": "Loading audio sources…",
+        "sourceNone": "No audio sources with detections yet.",
+        "sourceNotApplicable": "The charts in this section do not filter by source.",
         "speciesNotApplicable": "I grafici in questa sezione non filtrano per specie."
       },
       "card": {

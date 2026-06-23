@@ -1662,7 +1662,9 @@
       "controls": {
         "source": "Kilde",
         "sourceAll": "Alle kilder",
-        "sourceComingSoon": "Filtrering etter kilde kommer i en senere oppdatering.",
+        "sourceLoading": "Loading audio sources…",
+        "sourceNone": "No audio sources with detections yet.",
+        "sourceNotApplicable": "The charts in this section do not filter by source.",
         "speciesNotApplicable": "Diagrammene i denne seksjonen filtrerer ikke etter art."
       },
       "card": {
