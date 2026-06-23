@@ -21,7 +21,9 @@ type Source struct {
 // New opens the BirdNET-Pi database at path read-only.
 // Call Close when done.
 func New(path string) (*Source, error) {
-	dsn := "file:" + url.PathEscape(path) + "?mode=ro"
+	// Build a SQLite file URI that preserves path slashes but escapes URI-special
+	// characters (?, #, %, space). OmitHost keeps the "file:/abs/path" form.
+	dsn := (&url.URL{Scheme: "file", OmitHost: true, Path: path, RawQuery: "mode=ro"}).String()
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
