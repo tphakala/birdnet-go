@@ -202,6 +202,23 @@ func TestBuildFFmpegArgs_RTSP_LegacyFFmpeg4(t *testing.T) {
 	}
 }
 
+func TestResolveFfmpegMajor_DoesNotCacheFailedProbe(t *testing.T) {
+	// A path that cannot be executed yields major 0 and must NOT be cached, so a
+	// later start re-probes instead of permanently pinning the -timeout fallback
+	// (which would suppress -stimeout on a real FFmpeg 4.x host after a transient
+	// first-probe failure).
+	const badPath = "/nonexistent/ffmpeg-resolve-probe-test"
+	ffmpegMajorCache.Delete(badPath)
+	t.Cleanup(func() {
+		ffmpegMajorCache.Delete(badPath)
+	})
+
+	require.Equal(t, 0, resolveFfmpegMajor(badPath), "unresolvable binary must report unknown version")
+
+	_, cached := ffmpegMajorCache.Load(badPath)
+	assert.False(t, cached, "a failed probe must not be cached")
+}
+
 func TestStripTimeoutParams(t *testing.T) {
 	t.Parallel()
 

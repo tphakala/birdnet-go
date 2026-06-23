@@ -49,6 +49,11 @@ func timeoutParamForSource(st audiocore.SourceType, ffmpegMajor int) string {
 	return ffmpegTimeoutParam
 }
 
+// ffmpegVersionProbeTimeout bounds the one-time `ffmpeg -version` probe so a
+// hung or wrapped binary cannot stall stream startup. On timeout the probe
+// yields major 0, which falls back to the safe -timeout default.
+const ffmpegVersionProbeTimeout = 5 * time.Second
+
 // resolveFfmpegMajor returns the cached or detected FFmpeg major version for a binary path.
 func resolveFfmpegMajor(ffmpegPath string) int {
 	if ffmpegPath == "" {
@@ -60,8 +65,17 @@ func resolveFfmpegMajor(ffmpegPath string) int {
 		}
 	}
 
-	_, major, _ := conf.GetFfmpegVersionFrom(ffmpegPath)
-	ffmpegMajorCache.Store(ffmpegPath, major)
+	ctx, cancel := context.WithTimeout(context.Background(), ffmpegVersionProbeTimeout)
+	defer cancel()
+
+	_, major, _ := conf.GetFfmpegVersionFromContext(ctx, ffmpegPath)
+	// Only cache a successful detection. Caching a failed probe (major 0) would
+	// pin the safe -timeout fallback for the process lifetime, so a transient
+	// first-probe failure on a real FFmpeg 4.x host would silently suppress
+	// -stimeout until restart. Re-probing on the next start is cheap.
+	if major > 0 {
+		ffmpegMajorCache.Store(ffmpegPath, major)
+	}
 
 	return major
 }
