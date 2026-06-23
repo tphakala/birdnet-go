@@ -41,6 +41,10 @@ sudo rm -rf /root/birdnet-go-app
 
 No. DietPi packaging is maintained by the DietPi project, not here.
 
+### Why are my times shown in UTC (or the wrong timezone)?
+
+BirdNET-Go displays times in the timezone of the server/container it runs in, not your browser's. The `install.sh` setup sets this for you; for manual Docker or Docker Compose deployments you need to set `TZ` yourself (e.g. `TZ=America/New_York` in the container environment). On a native/systemd install, set the host timezone with `sudo timedatectl set-timezone Area/City`. There is no per-viewer browser conversion, so a UTC container shows UTC to everyone.
+
 ## Microphones and sound cards
 
 ### My USB sound card stops working after a reboot (I have to reselect it every time)
@@ -89,6 +93,10 @@ This was a regression affecting streams below 48 kHz and stereo streams. Update 
 
 Percent-encode reserved characters in the password: `#` becomes `%23`, `@` becomes `%40`, `:` becomes `%3A`, `/` becomes `%2F`, `%` becomes `%25`. Example: `rtsp://user:pa%23ss@host:554/stream`.
 
+### My RTSP stream won't connect on an older system (FFmpeg 4.x)
+
+If a stream that works elsewhere fails with errors like "Unable to open RTSP for listening" or "Cannot assign requested address", you're likely on FFmpeg 4.x (common on a native install on Debian 12 / older distros). FFmpeg 4.x needs `-stimeout` where 5.x uses `-timeout`. The simplest fix is to use the **Docker install**, which ships a current FFmpeg; on a native install, upgrade FFmpeg to 5.x or newer (and check you don't have a stale FFmpeg left over from an old custom repo).
+
 ### How do I stream audio from a Raspberry Pi (or ESP32) into BirdNET-Go?
 
 The canonical recipe is FFmpeg plus MediaMTX on the Pi. Install FFmpeg, download the correct-architecture MediaMTX, and add a path that runs FFmpeg from your sound card to a local RTSP endpoint:
@@ -124,6 +132,20 @@ Two common causes:
 ### Perch or bat models won't load on a native (non-Docker) install
 
 These extra models run on the ONNX Runtime. The simplest and recommended path is the **Docker install** (`install.sh`), which bundles everything the ONNX models need, and the container images are moving to an ONNX-only runtime. If a model won't load, the startup logs show a model-loading warning, and the range filter silently falls back (species counts then look wrong). Switching to the Docker install is the cleanest fix.
+
+### My "Active Species" list is empty after switching models back to BirdNET 2.4
+
+If you installed Perch (or v3) and later reverted to BirdNET 2.4, the range-filter config can still point at a geomodel that 2.4 can't use, so the Active Species list comes up empty and filtering effectively stops. Clear the three range-filter values in `config.yaml` and restart:
+
+```yaml
+birdnet:
+  rangefilter:
+    model: ""
+    modelpath: ""
+    labelspath: ""
+```
+
+2.4 then falls back to its built-in range filter and the list repopulates within a day. Your stored detections are not affected.
 
 ### How do I do bat detection?
 
@@ -191,6 +213,13 @@ Use the [Database Doctor](https://github.com/tphakala/birdnet-go/wiki/Database-D
 ### What's the recommended way to expose BirdNET-Go to the internet?
 
 Put it behind a reverse proxy (or a [Cloudflare Tunnel](cloudflare_tunnel_guide.md)) that terminates TLS, and point the proxy at BirdNET-Go's plain HTTP port. Don't have BirdNET-Go handle certificates itself when it is behind a proxy.
+
+### Behind my own reverse proxy, audio won't play or the live spectrogram is blank
+
+Two proxy settings cause this:
+
+- **Audio playback / clip seeking** needs HTTP Range requests, which don't survive gzip. **Disable gzip for the audio endpoints** (`/api/v2/audio/...`) in your proxy (nginx/Caddy/Cloudflare).
+- **The live spectrogram and live feed** use Server-Sent Events, which must not be buffered. In nginx set `proxy_buffering off;` and `X-Accel-Buffering: no` for those routes. Cloudflare's proxy can also interfere with long-lived SSE connections.
 
 ### I log in but get bounced back to the login page (over plain HTTP)
 
