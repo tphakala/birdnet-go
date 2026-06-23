@@ -307,6 +307,9 @@ func (m *ActionMockDatastore) GetConfidenceHistogram(_ context.Context, _, _, _ 
 func (m *ActionMockDatastore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]datastore.SpeciesAccumulationPoint, error) {
 	return []datastore.SpeciesAccumulationPoint{}, nil
 }
+func (m *ActionMockDatastore) GetYearOverYear(_ context.Context, _ string) (datastore.YearOverYearResult, error) {
+	return datastore.YearOverYearResult{Points: []datastore.YearOverYearPoint{}}, nil
+}
 func (m *ActionMockDatastore) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesPhenologyPoint, error) {
 	return []datastore.SpeciesPhenologyPoint{}, nil
 }

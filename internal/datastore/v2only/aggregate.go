@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"sort"
@@ -468,6 +469,178 @@ func buildSpeciesAccumulation(firstSeen []repository.SpeciesFirstSeen, loc *time
 		})
 	}
 	return result, nil
+}
+
+// isLeapYear reports whether year is a Gregorian leap year.
+func isLeapYear(year int) bool {
+	return year%4 == 0 && (year%100 != 0 || year%400 == 0)
+}
+
+// parseAnalyticsDate parses an inclusive YYYY-MM-DD axis bound in UTC (the date axis is enumerated in
+// UTC to avoid the DST midnight-skip drift; see buildSpeciesAccumulation). It wraps a parse failure as
+// a validation error tagged with the operation and field for diagnostics.
+func parseAnalyticsDate(value, operation, field string) (time.Time, error) {
+	t, err := time.Parse(time.DateOnly, value)
+	if err != nil {
+		return time.Time{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", operation).
+			Context(field, value).
+			Build()
+	}
+	return t, nil
+}
+
+// monthDay is the year-independent calendar alignment key (month, day) for the year-over-year tracker,
+// so the current-year axis and the previous-year axis line up by calendar date across a leap boundary.
+type monthDay struct {
+	month time.Month
+	day   int
+}
+
+// yearOverYearWindow describes the two comparison windows for the year-over-year tracker: the current
+// year-to-date span and the same calendar span one year earlier. The date bounds (inclusive
+// YYYY-MM-DD) drive the helper's UTC axis enumeration; the epoch bounds are half-open [start, end) in
+// the station timezone for the SQL queries.
+type yearOverYearWindow struct {
+	curStart, curEnd     string
+	priorStart, priorEnd string
+	curStartEpoch        int64
+	curEndEpoch          int64
+	priorStartEpoch      int64
+	priorEndEpoch        int64
+	curYear, prevYear    int
+}
+
+// computeYearOverYearWindows derives both comparison windows from ref (the requested date) projected
+// into loc. The previous window ends on the same calendar (month, day) one year earlier, clamping
+// Feb 29 -> Feb 28 when the previous year is not a leap year (otherwise time.Date would roll Feb 29
+// forward to Mar 1 and the +1-day exclusive end would pull an extra prior day into the window). Epoch
+// ends are the start of the day after the inclusive end date, matching the parseDateRange convention.
+func computeYearOverYearWindows(ref time.Time, loc *time.Location) yearOverYearWindow {
+	if loc == nil {
+		loc = time.UTC
+	}
+	// Derive the calendar date in loc, not in ref's own zone: a ref near a day boundary in a
+	// different zone (e.g. just past midnight UTC+12 while loc is UTC) must resolve to loc's date.
+	ref = ref.In(loc)
+	curYear, curMonth, curDay := ref.Date()
+	prevYear := curYear - 1
+
+	prevMonth, prevDay := curMonth, curDay
+	if curMonth == time.February && curDay == 29 && !isLeapYear(prevYear) {
+		prevDay = 28
+	}
+
+	return yearOverYearWindow{
+		curYear:         curYear,
+		prevYear:        prevYear,
+		curStart:        fmt.Sprintf("%04d-01-01", curYear),
+		curEnd:          fmt.Sprintf("%04d-%02d-%02d", curYear, curMonth, curDay),
+		priorStart:      fmt.Sprintf("%04d-01-01", prevYear),
+		priorEnd:        fmt.Sprintf("%04d-%02d-%02d", prevYear, prevMonth, prevDay),
+		curStartEpoch:   time.Date(curYear, time.January, 1, 0, 0, 0, 0, loc).Unix(),
+		curEndEpoch:     time.Date(curYear, curMonth, curDay, 0, 0, 0, 0, loc).AddDate(0, 0, 1).Unix(),
+		priorStartEpoch: time.Date(prevYear, time.January, 1, 0, 0, 0, 0, loc).Unix(),
+		priorEndEpoch:   time.Date(prevYear, prevMonth, prevDay, 0, 0, 0, 0, loc).AddDate(0, 0, 1).Unix(),
+	}
+}
+
+// buildYearOverYear aligns the current year-to-date cumulative detection counts against the same
+// calendar span one year earlier and emits one point per current-year calendar day.
+//
+// thisTs/lastTs are raw detection epochs (Unix seconds, false positives already excluded) for the
+// current and previous windows respectively. Each timestamp is bucketed to its station-local calendar
+// day in loc (nil -> UTC), so per-day counts respect the station timezone including DST. Both date
+// axes are enumerated in UTC (curStart..curEnd and priorStart..priorEnd are inclusive YYYY-MM-DD
+// bounds): UTC has no DST, so AddDate(0,0,1) steps exactly one calendar day, avoiding the midnight-skip
+// drift that parsing the bounds in a DST-transitioning loc (e.g. America/Havana) would cause.
+//
+// Years are aligned by calendar (month, day), not day-of-year ordinal, so seasonality lines up across
+// a leap boundary. Feb 29 is handled in both directions: when the current year is a leap year but the
+// previous is not, the previous cumulative carries forward its Feb 28 value across the current Feb 29
+// (the previous series stays flat for that one day); when the previous year is a leap year but the
+// current is not, the current axis steps Feb 28 -> Mar 1 and the previous Feb 29 detections are folded
+// into the Mar 1 previous-cumulative sample, since the previous cumulative is a running sum over the
+// previous calendar. Cumulatives stay monotonic and no detections are lost or double-counted either
+// way. The returned result and its Points slice are always non-nil.
+func buildYearOverYear(thisTs, lastTs []int64, loc *time.Location, curStart, curEnd, priorStart, priorEnd string, curYear, prevYear int) (datastore.YearOverYearResult, error) {
+	const operation = "build_year_over_year"
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	result := datastore.YearOverYearResult{
+		CurrentYear:  curYear,
+		PreviousYear: prevYear,
+		Points:       make([]datastore.YearOverYearPoint, 0),
+	}
+
+	thisDaily := bucketByMonthDay(thisTs, loc)
+	lastDaily := bucketByMonthDay(lastTs, loc)
+
+	// Running cumulative of the previous year, sampled by calendar (month, day). Enumerating the prior
+	// axis in UTC and summing in order means priorCumByMonthDay[{m,d}] is the previous-year cumulative
+	// through that calendar date, with any previous Feb 29 already folded into the running total.
+	pStart, err := parseAnalyticsDate(priorStart, operation, "prior_start")
+	if err != nil {
+		return datastore.YearOverYearResult{}, err
+	}
+	pEnd, err := parseAnalyticsDate(priorEnd, operation, "prior_end")
+	if err != nil {
+		return datastore.YearOverYearResult{}, err
+	}
+	priorCumByMonthDay := make(map[monthDay]int)
+	priorCum := 0
+	for d := pStart; !d.After(pEnd); d = d.AddDate(0, 0, 1) {
+		_, mo, dy := d.Date()
+		priorCum += lastDaily[monthDay{month: mo, day: dy}]
+		priorCumByMonthDay[monthDay{month: mo, day: dy}] = priorCum
+	}
+
+	// Walk the current axis (UTC-enumerated) and build aligned cumulative points. When the current
+	// calendar date has no counterpart in the previous year (current Feb 29 vs a non-leap previous
+	// year), carry forward the last known previous cumulative so the previous series stays flat and
+	// monotonic for that day.
+	cStart, err := parseAnalyticsDate(curStart, operation, "cur_start")
+	if err != nil {
+		return datastore.YearOverYearResult{}, err
+	}
+	cEnd, err := parseAnalyticsDate(curEnd, operation, "cur_end")
+	if err != nil {
+		return datastore.YearOverYearResult{}, err
+	}
+	thisCum := 0
+	lastKnownPriorCum := 0
+	for d := cStart; !d.After(cEnd); d = d.AddDate(0, 0, 1) {
+		_, mo, dy := d.Date()
+		key := monthDay{month: mo, day: dy}
+		thisCum += thisDaily[key]
+		if pc, ok := priorCumByMonthDay[key]; ok {
+			lastKnownPriorCum = pc
+		}
+		result.Points = append(result.Points, datastore.YearOverYearPoint{
+			Date:     d.Format(time.DateOnly),
+			MonthDay: d.Format("01-02"),
+			ThisYear: thisCum,
+			LastYear: lastKnownPriorCum,
+			Delta:    thisCum - lastKnownPriorCum,
+		})
+	}
+	return result, nil
+}
+
+// bucketByMonthDay tallies raw detection epochs (Unix seconds) into per-(month, day) counts, projecting
+// each timestamp into loc so the calendar day respects the station timezone (including DST).
+func bucketByMonthDay(ts []int64, loc *time.Location) map[monthDay]int {
+	counts := make(map[monthDay]int)
+	for i := range ts {
+		lt := time.Unix(ts[i], 0).In(loc)
+		_, mo, dy := lt.Date()
+		counts[monthDay{month: mo, day: dy}]++
+	}
+	return counts
 }
 
 // buildSpeciesPhenology turns the per-species residency rows (Unix MIN/MAX detection timestamps plus

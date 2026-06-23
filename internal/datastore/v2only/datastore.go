@@ -3240,6 +3240,56 @@ func (ds *Datastore) GetSpeciesAccumulation(ctx context.Context, startDate, endD
 	return buildSpeciesAccumulation(firstSeen, ds.timezone, startDate, endDate)
 }
 
+// GetYearOverYear returns the year-over-year tracker: the current year-to-date cumulative detection
+// count versus the same calendar span one year earlier, per current-year calendar day from Jan 1
+// through date (false positives excluded). date is a station-local YYYY-MM-DD bound; empty defaults to
+// today in the station timezone. It fetches raw detection timestamps for each window in two separate
+// grouped queries (GetDetectionTimestamps) - which skips scanning the multi-month gap between the
+// windows - then aligns and cumulates them in a shared, table-tested Go helper (buildYearOverYear).
+// Bucketing uses the station timezone while the date axis is enumerated in UTC for DST safety.
+func (ds *Datastore) GetYearOverYear(ctx context.Context, date string) (datastore.YearOverYearResult, error) {
+	loc := ds.timezone
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	// Resolve the requested date (default: today in the station timezone). Only ref's calendar date
+	// (year/month/day) is used downstream by computeYearOverYearWindows; the intraday clock is ignored.
+	ref := time.Now().In(loc)
+	if date != "" {
+		t, parseErr := time.ParseInLocation(time.DateOnly, date, loc)
+		if parseErr != nil {
+			return datastore.YearOverYearResult{}, errors.New(parseErr).
+				Component("datastore").
+				Category(errors.CategoryValidation).
+				Context("operation", "get_year_over_year").
+				Context("date", date).
+				Build()
+		}
+		ref = t
+	}
+	w := computeYearOverYearWindows(ref, loc)
+
+	thisTs, err := ds.detection.GetDetectionTimestamps(ctx, w.curStartEpoch, w.curEndEpoch, nil)
+	if err != nil {
+		return datastore.YearOverYearResult{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_year_over_year_current").
+			Build()
+	}
+	lastTs, err := ds.detection.GetDetectionTimestamps(ctx, w.priorStartEpoch, w.priorEndEpoch, nil)
+	if err != nil {
+		return datastore.YearOverYearResult{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_year_over_year_previous").
+			Build()
+	}
+
+	return buildYearOverYear(thisTs, lastTs, loc, w.curStart, w.curEnd, w.priorStart, w.priorEnd, w.curYear, w.prevYear)
+}
+
 // GetSpeciesPhenology returns the arrival/departure residency span for the top `limit` species by
 // volume over [startDate, endDate]: each species' first and last false-positive-excluded detection
 // plus the in-range count. It fetches the spans in one grouped query (GetSpeciesPhenologyInPeriod),
