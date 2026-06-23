@@ -3,6 +3,7 @@ package conf
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -520,7 +521,18 @@ func GetFfprobeBinaryName() string {
 // GetFfmpegVersionFrom detects the ffmpeg version by executing the binary at
 // the given path. Returns empty string and 0,0 if detection fails.
 func GetFfmpegVersionFrom(ffmpegPath string) (version string, major, minor int) {
-	cmd := exec.Command(ffmpegPath, "-version") //nolint:gosec // G204: ffmpegPath validated by ValidateToolPath before reaching here
+	return GetFfmpegVersionFromContext(context.Background(), ffmpegPath)
+}
+
+// GetFfmpegVersionFromContext is like GetFfmpegVersionFrom but bounds the
+// `ffmpeg -version` probe with the supplied context, so a hung or wrapped
+// binary cannot block the caller indefinitely. Returns empty string and 0,0
+// if detection fails or the context is cancelled.
+func GetFfmpegVersionFromContext(ctx context.Context, ffmpegPath string) (version string, major, minor int) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cmd := exec.CommandContext(ctx, ffmpegPath, "-version") //nolint:gosec // G204: ffmpegPath validated by ValidateToolPath before reaching here
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", 0, 0
