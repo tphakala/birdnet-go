@@ -12,7 +12,9 @@ Any media the host mounts under that directory after the container is already
 running will appear inside the container at the corresponding path without
 requiring a container restart. For example, a USB drive the host mounts at
 `/mnt/birdnet-go/external/usb1` becomes visible inside the container at
-`/external/usb1` automatically.
+`/external/usb1` automatically. The host directory is made a shared mount
+(`--make-rshared`) and the container bind uses `rslave`, so sub-mounts
+propagate one way: host into container, not the other way around.
 
 ## Host setup
 
@@ -69,8 +71,12 @@ ExecStart=/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external'
 
 [Install]
 WantedBy=multi-user.target
-RequiredBy=docker.service
 ```
+
+Note: this unit intentionally does NOT use `RequiredBy=docker.service`. It is
+best-effort: if the mount setup fails, docker.service still starts normally.
+Only hot-plug propagation is lost; a hard dependency would take down all
+containers if the mount step failed.
 
 Enable it with:
 
@@ -97,10 +103,14 @@ sudo mount /dev/sdb1 /mnt/birdnet-go/external/usb1
 sudo mkdir -p /mnt/birdnet-go/external/nfs-backup
 sudo mount -t nfs 192.168.1.10:/exports/birdnet /mnt/birdnet-go/external/nfs-backup
 
-# SMB/CIFS share example
+# SMB/CIFS share example (store credentials in a file, not on the command line)
+# A cleartext password= option in the mount command is visible in /proc/mounts,
+# ps output, and the journal. Use a credentials file instead:
+#   sudo sh -c 'printf "username=user\npassword=pass\n" > /etc/birdnet-go-smb.cred'
+#   sudo chmod 600 /etc/birdnet-go-smb.cred
 sudo mkdir -p /mnt/birdnet-go/external/smb-share
 sudo mount -t cifs //192.168.1.10/share /mnt/birdnet-go/external/smb-share \
-    -o username=user,password=pass,uid=1000,gid=1000
+    -o credentials=/etc/birdnet-go-smb.cred,uid=1000,gid=1000
 ```
 
 The mounted media will appear inside the container at `/external/usb1`,
@@ -109,8 +119,9 @@ The mounted media will appear inside the container at `/external/usb1`,
 ## Notes
 
 - Hot-plug propagation requires the host shared-mount setup described above.
-  The wiring is in place, but hot-plug propagation has NOT been tested end to end
-  with physical media and must be validated before relying on it.
+  The wiring has been validated end to end on Docker 29.5 (arm64), but behavior
+  may vary on older Docker versions, so validate on your specific platform before
+  relying on it.
 - The `/external` path is read-write inside the container.
 - Writes from the container go to the mounted media on the host. Ensure the
   media filesystem and mount permissions allow writes by the container user

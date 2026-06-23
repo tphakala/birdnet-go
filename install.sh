@@ -4060,7 +4060,8 @@ generate_systemd_service_content() {
         thermal_volume_line="-v /sys/class/thermal:/sys/class/thermal"
     fi
 
-    # External media mount: host /mnt/birdnet-go/external -> container /external (rslave, rw)
+    # External media mount: host /mnt/birdnet-go/external -> container /external
+    # Uses rslave propagation; read-write is the Docker default and not specified explicitly.
     # Enables hot-plug of USB/SD/fileshare media mounted under the host directory.
     local external_media_line="-v /mnt/birdnet-go/external:/external:rslave"
 
@@ -4087,7 +4088,11 @@ ExecStartPre=-/usr/bin/docker rm -f birdnet-go
 ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
 # Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
 ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls || true'
-# Prepare external media mount point and ensure shared propagation for hot-plug
+# Prepare external media mount point and ensure shared propagation for hot-plug.
+# These steps are best-effort (prefixed with '-'): the service still starts if
+# they fail; only hot-plug sub-mount propagation is affected.
+# The external mount is always added to the docker run command so the app can
+# detect and guide the user when external media is present or absent.
 ExecStartPre=-/bin/mkdir -p /mnt/birdnet-go/external
 ExecStartPre=-/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
 ExecStartPre=-/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external'
