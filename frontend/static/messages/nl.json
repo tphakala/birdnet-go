@@ -1662,7 +1662,9 @@
       "controls": {
         "source": "Bron",
         "sourceAll": "Alle bronnen",
-        "sourceComingSoon": "Filteren op bron komt in een latere update.",
+        "sourceLoading": "Loading audio sources…",
+        "sourceNone": "No audio sources with detections yet.",
+        "sourceNotApplicable": "The charts in this section do not filter by source.",
         "speciesNotApplicable": "De grafieken in deze sectie filteren niet op soort."
       },
       "card": {

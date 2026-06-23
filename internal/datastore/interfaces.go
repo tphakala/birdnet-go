@@ -227,6 +227,12 @@ type Interface interface {
 	// for the top `limit` species by detection volume over the inclusive date range, ordered by
 	// descending volume. Powers the acoustic succession streamgraph in the Activity Patterns tab.
 	GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyCounts, error)
+	// GetAudioSources returns each audio source that has at least one (false-positive-excluded)
+	// detection in the date range, with its in-range detection count, ordered by count descending. When
+	// both dates are empty it covers all history. Powers the analytics source/mic filter's option list;
+	// the metric is v2only (the legacy schema does not persist a detection's source), so the legacy
+	// datastore returns an empty result.
+	GetAudioSources(ctx context.Context, startDate, endDate string) ([]AudioSourceSummary, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods

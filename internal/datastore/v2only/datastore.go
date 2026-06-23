@@ -3240,6 +3240,44 @@ func (ds *Datastore) GetSpeciesAccumulation(ctx context.Context, startDate, endD
 	return buildSpeciesAccumulation(firstSeen, ds.timezone, startDate, endDate)
 }
 
+// GetAudioSources returns each audio source with at least one (false-positive-excluded) detection in
+// [startDate, endDate] (all history when both dates are empty), with its in-range detection count,
+// ordered by count descending. It fetches the grouped summaries in one query
+// (GetSourceActivitySummaries) and maps the repository rows onto the datastore result shape; the metric
+// needs no date bucketing, so there is no shared Go helper. Powers the analytics source/mic filter's
+// option list (the source dimension that the per-mic comparison chart consumes).
+func (ds *Datastore) GetAudioSources(ctx context.Context, startDate, endDate string) ([]datastore.AudioSourceSummary, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := ds.detection.GetSourceActivitySummaries(ctx, start, end)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_audio_sources").
+			Build()
+	}
+
+	summaries := make([]datastore.AudioSourceSummary, 0, len(rows))
+	for i := range rows {
+		displayName := ""
+		if rows[i].DisplayName != nil {
+			displayName = *rows[i].DisplayName
+		}
+		summaries = append(summaries, datastore.AudioSourceSummary{
+			ID:          rows[i].SourceID,
+			DisplayName: displayName,
+			NodeName:    rows[i].NodeName,
+			SourceType:  rows[i].SourceType,
+			Count:       rows[i].Count,
+		})
+	}
+	return summaries, nil
+}
+
 // GetYearOverYear returns the year-over-year tracker: the current year-to-date cumulative detection
 // count versus the same calendar span one year earlier, per current-year calendar day from Jan 1
 // through date (false positives excluded). date is a station-local YYYY-MM-DD bound; empty defaults to
