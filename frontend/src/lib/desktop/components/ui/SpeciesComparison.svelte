@@ -1,10 +1,34 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { X, ChevronDown, ChevronRight } from '@lucide/svelte';
+  import type { Component } from 'svelte';
+  import {
+    X,
+    ChevronDown,
+    ChevronRight,
+    ExternalLink,
+    Sprout,
+    Sun,
+    Leaf,
+    Snowflake,
+    CloudRain,
+    SunDim,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
-  import { getSeasonHighlight } from '$lib/utils/seasonHighlight';
+  import { getSeasonHighlight, type SeasonIcon } from '$lib/utils/seasonHighlight';
+
+  // Maps the season's stable icon id to its lucide component. A Map (not a plain
+  // object) avoids indexing by a dynamic key and keeps the season badge on the
+  // same icon system as the rest of the UI.
+  const SEASON_ICON_COMPONENT = new Map<SeasonIcon, Component>([
+    ['sprout', Sprout],
+    ['sun', Sun],
+    ['leaf', Leaf],
+    ['snowflake', Snowflake],
+    ['cloud-rain', CloudRain],
+    ['sun-dim', SunDim],
+  ]);
   import {
     parseGuideDescription,
     GUIDE_SONGS_HEADINGS,
@@ -168,8 +192,9 @@
           </span>
         {/if}
         {#if season}
-          <span class="badge badge-sm badge-outline">
-            {#if season.emoji}<span aria-hidden="true">{season.emoji}</span>{/if}
+          {@const SeasonIcon = season.icon ? SEASON_ICON_COMPONENT.get(season.icon) : undefined}
+          <span class="badge badge-sm badge-outline gap-1">
+            {#if SeasonIcon}<SeasonIcon class="h-3 w-3" aria-hidden="true" />{/if}
             {t(season.i18nKey)}
           </span>
         {/if}
@@ -180,9 +205,10 @@
               href={link.url}
               target="_blank"
               rel="noopener noreferrer"
-              class="badge badge-sm badge-ghost"
+              class="badge badge-sm badge-ghost gap-1"
             >
               {link.name}
+              <ExternalLink class="h-3 w-3" aria-hidden="true" />
             </a>
           {/each}
         {/if}

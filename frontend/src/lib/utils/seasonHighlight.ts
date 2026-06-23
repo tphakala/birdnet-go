@@ -19,19 +19,23 @@ export function hemisphereForLatitude(latitude: number): Hemisphere {
 }
 
 /**
- * Decorative emoji per season token (plain text, not an inline SVG). A Map so
- * the server-provided season token is looked up without indexing a plain object
- * by external input.
+ * Stable lucide icon identifier per season token. The badge renders the matching
+ * `@lucide/svelte` icon, keeping the season badge consistent with the rest of the
+ * UI's icon system (and avoiding cross-platform emoji-font rendering differences).
+ * A Map so the server-provided season token is looked up without indexing a plain
+ * object by external input.
  */
-const SEASON_EMOJI = new Map<string, string>([
-  ['spring', '🌱'],
-  ['summer', '☀️'],
-  ['autumn', '🍂'],
-  ['winter', '❄️'],
-  ['wet1', '🌧️'],
-  ['wet2', '🌧️'],
-  ['dry1', '🌵'],
-  ['dry2', '🌵'],
+export type SeasonIcon = 'sprout' | 'sun' | 'leaf' | 'snowflake' | 'cloud-rain' | 'sun-dim';
+
+const SEASON_ICON = new Map<string, SeasonIcon>([
+  ['spring', 'sprout'],
+  ['summer', 'sun'],
+  ['autumn', 'leaf'],
+  ['winter', 'snowflake'],
+  ['wet1', 'cloud-rain'],
+  ['wet2', 'cloud-rain'],
+  ['dry1', 'sun-dim'],
+  ['dry2', 'sun-dim'],
 ]);
 
 export interface SeasonHighlight {
@@ -39,8 +43,8 @@ export interface SeasonHighlight {
   token: string;
   /** i18n key for the localized season label. */
   i18nKey: string;
-  /** Decorative emoji, or '' when the token is unknown. */
-  emoji: string;
+  /** Lucide icon identifier, or null when the token is unknown. */
+  icon: SeasonIcon | null;
   /** Whether this is an equatorial wet/dry season token. */
   isEquatorial: boolean;
 }
@@ -58,7 +62,7 @@ export function getSeasonHighlight(
   return {
     token,
     i18nKey: `analytics.species.guide.season.${token}`,
-    emoji: SEASON_EMOJI.get(token) ?? '',
+    icon: SEASON_ICON.get(token) ?? null,
     isEquatorial: token.startsWith('wet') || token.startsWith('dry'),
   };
 }

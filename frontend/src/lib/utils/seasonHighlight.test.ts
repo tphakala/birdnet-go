@@ -26,7 +26,7 @@ describe('getSeasonHighlight', () => {
     expect(h).not.toBeNull();
     expect(h?.token).toBe('summer');
     expect(h?.i18nKey).toBe('analytics.species.guide.season.summer');
-    expect(h?.emoji).toBe('☀️');
+    expect(h?.icon).toBe('sun');
     expect(h?.isEquatorial).toBe(false);
   });
 
@@ -41,9 +41,9 @@ describe('getSeasonHighlight', () => {
     expect(h?.i18nKey).toBe('analytics.species.guide.season.winter');
   });
 
-  it('returns empty emoji for unknown tokens', () => {
+  it('returns a null icon for unknown tokens', () => {
     const h = getSeasonHighlight('monsoon');
     expect(h?.token).toBe('monsoon');
-    expect(h?.emoji).toBe('');
+    expect(h?.icon).toBeNull();
   });
 });
