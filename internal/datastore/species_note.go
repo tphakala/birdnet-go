@@ -90,7 +90,7 @@ func (ds *DataStore) GetSpeciesNotes(ctx context.Context, scientificName string)
 	var notes []SpeciesNote
 	if err := ds.DB.WithContext(ctx).
 		Where("scientific_name = ?", name).
-		Order("created_at DESC").
+		Order("created_at DESC, id DESC").
 		Limit(SpeciesNotesMaxResults).
 		Find(&notes).Error; err != nil {
 		return nil, dbError(err, "get_species_notes", errors.PriorityLow,

@@ -1712,7 +1712,7 @@ func (ds *Datastore) GetSpeciesNotes(ctx context.Context, scientificName string)
 	var notes []datastore.SpeciesNote
 	if err := ds.manager.DB().WithContext(ctx).
 		Where("scientific_name = ?", name).
-		Order("created_at DESC").
+		Order("created_at DESC, id DESC").
 		Limit(datastore.SpeciesNotesMaxResults).
 		Find(&notes).Error; err != nil {
 		return nil, errors.New(err).Component("datastore").
