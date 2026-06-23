@@ -626,6 +626,7 @@ func TestGetDetection(t *testing.T) {
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				require.NoError(t, err)
 				assert.Equal(t, uint(1), response.ID)
+				assert.Equal(t, "bird", response.ModelType)
 				assert.Equal(t, "Corvus brachyrhynchos", response.ScientificName)
 				assert.Equal(t, "American Crow", response.CommonName)
 				assert.InDelta(t, 0.95, response.Confidence, 0.01)
@@ -755,6 +756,7 @@ func TestGetDetectionCommentFormat(t *testing.T) {
 	// Verify comment structure - this is the key fix for issue #1728
 	// Frontend expects Comment objects with {id, entry, createdAt, updatedAt}
 	// NOT string arrays which would cause "NaN-NaN-NaN NaN:NaN:NaN" display
+	assert.Equal(t, "bird", response.ModelType)
 	require.Len(t, response.Comments, 2, "Expected 2 comments")
 
 	// Verify first comment has all required fields
@@ -822,6 +824,7 @@ func TestGetDetectionEmptyComments(t *testing.T) {
 	require.NoError(t, err)
 
 	// Comments should be nil/empty, not cause any NaN issues
+	assert.Equal(t, "bird", response.ModelType)
 	assert.Empty(t, response.Comments, "Detection with no comments should have empty comments array")
 
 	mockDS.AssertExpectations(t)
@@ -1063,6 +1066,7 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		// Non-default visual style / dynamic-range / combined suffixes must also be
 		// removed (regression test for orphaned styled spectrograms on delete).
 		baseName + "_1026px-scientific_dark.png",
+		baseName + "_1026px-dr80.png",
 		baseName + "_1026px-high_contrast_dark-bat-legend.png",
 	}
 	for _, sf := range spectrogramFiles {

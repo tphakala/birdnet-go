@@ -3028,7 +3028,7 @@ func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPat
 	if freqSuffix != "" {
 		if _, _, _, birdRelPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, ""); birdRelPath != relSpectrogramPath {
 			absBirdPath := filepath.Join(c.SFS.BaseDir(), birdRelPath)
-			if rmErr := os.Remove(absBirdPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			if rmErr := c.SFS.Remove(absBirdPath); rmErr != nil && !os.IsNotExist(rmErr) {
 				getSpectrogramLogger().Debug("Failed to remove stale default-profile spectrogram",
 					logger.String("path", birdRelPath),
 					logger.Error(rmErr))

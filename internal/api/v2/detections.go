@@ -1232,6 +1232,10 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 	// (single-detection) to avoid a per-row lookup on list endpoints.
 	if modelType, mtErr := c.DS.GetNoteModelType(id); mtErr == nil {
 		detection.ModelType = modelType
+	} else {
+		c.logWarnIfEnabled("GetNoteModelType failed, omitting detection model type",
+			logger.String("note_id", id),
+			logger.Error(mtErr))
 	}
 	if !c.isClientAuthenticated(ctx) {
 		detection.Source = nil
@@ -1357,7 +1361,7 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 	clipDir := filepath.Dir(absClipPath)
 
 	removed := 0
-	entries, readErr := os.ReadDir(clipDir)
+	entries, readErr := c.SFS.ReadDirRel(filepath.Dir(normalized))
 	if readErr != nil && !os.IsNotExist(readErr) {
 		log.Warn("Failed to scan directory for spectrogram files",
 			logger.String("dir", clipDir),
@@ -1368,7 +1372,7 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 			continue
 		}
 		path := filepath.Join(clipDir, entry.Name())
-		if err := os.Remove(path); err == nil {
+		if err := c.SFS.Remove(path); err == nil {
 			removed++
 		} else if !os.IsNotExist(err) {
 			log.Warn("Failed to remove spectrogram file",
