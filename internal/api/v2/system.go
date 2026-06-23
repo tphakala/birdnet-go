@@ -405,6 +405,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/restart-status", c.GetRestartStatus)
 	protectedGroup.GET("/models", c.GetActiveModels)
 	protectedGroup.GET("/inference", c.GetInferenceStatus)
+	protectedGroup.GET("/external-media", c.GetExternalMedia)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")

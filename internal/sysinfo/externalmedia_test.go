@@ -1,0 +1,125 @@
+package sysinfo
+
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// fakeMountProber returns a MountProber that always returns the supplied result.
+func fakeMountProber(result MountProbeResult) MountProber {
+	return func(_ string) MountProbeResult {
+		return result
+	}
+}
+
+// TestProbeExternalMount_NilDefaultsDoNotPanic ensures that nil prober
+// falls back to the real implementation without panicking.
+func TestProbeExternalMount_NilDefaultsDoNotPanic(t *testing.T) {
+	t.Parallel()
+	// Use a child under TempDir that we intentionally do not create, so the
+	// path is guaranteed not to exist regardless of host.
+	missingPath := filepath.Join(t.TempDir(), "missing")
+	result := ProbeExternalMount(missingPath, nil)
+	assert.False(t, result.Exists, "nonexistent path should report Exists=false")
+}
+
+// TestProbeExternalMount_NativeNotContainerized tests the native (non-container) state.
+// In native mode the mount prober still runs; the endpoint handler decides how to
+// interpret the result based on environment. Here we verify the probe result
+// is returned faithfully.
+func TestProbeExternalMount_NativeNotContainerized(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		envType string
+		probe   MountProbeResult
+		want    MountProbeResult
+	}{
+		{
+			name:    "native, path absent",
+			envType: "Bare Metal",
+			probe:   MountProbeResult{Exists: false, IsMountpoint: false, Readable: false},
+			want:    MountProbeResult{Exists: false, IsMountpoint: false, Readable: false},
+		},
+		{
+			name:    "native, path present but not mountpoint",
+			envType: "Bare Metal",
+			probe:   MountProbeResult{Exists: true, IsMountpoint: false, Readable: true},
+			want:    MountProbeResult{Exists: true, IsMountpoint: false, Readable: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := ProbeExternalMount(
+				DefaultExternalMountPath,
+				fakeMountProber(tt.probe),
+			)
+			assert.Equal(t, tt.want, result)
+		})
+	}
+}
+
+// TestProbeExternalMount_ContainerMountPresent tests the container + mount-present state.
+func TestProbeExternalMount_ContainerMountPresent(t *testing.T) {
+	t.Parallel()
+
+	probe := MountProbeResult{Exists: true, IsMountpoint: true, Readable: true}
+	result := ProbeExternalMount(
+		DefaultExternalMountPath,
+		fakeMountProber(probe),
+	)
+
+	assert.True(t, result.Exists, "mount should exist")
+	assert.True(t, result.IsMountpoint, "should be a mountpoint")
+	assert.True(t, result.Readable, "should be readable")
+}
+
+// TestProbeExternalMount_ContainerMountAbsent tests the container + mount-absent state.
+func TestProbeExternalMount_ContainerMountAbsent(t *testing.T) {
+	t.Parallel()
+
+	probe := MountProbeResult{Exists: false, IsMountpoint: false, Readable: false}
+	result := ProbeExternalMount(
+		DefaultExternalMountPath,
+		fakeMountProber(probe),
+	)
+
+	assert.False(t, result.Exists, "mount should not exist")
+	assert.False(t, result.IsMountpoint, "should not be a mountpoint")
+	assert.False(t, result.Readable, "should not be readable")
+}
+
+// TestProbeExternalMount_PodmanMountAbsent tests the Podman container + mount-absent state.
+func TestProbeExternalMount_PodmanMountAbsent(t *testing.T) {
+	t.Parallel()
+
+	probe := MountProbeResult{Exists: true, IsMountpoint: false, Readable: false}
+	result := ProbeExternalMount(
+		DefaultExternalMountPath,
+		fakeMountProber(probe),
+	)
+
+	// Path exists but is not a proper mountpoint.
+	assert.True(t, result.Exists, "path exists")
+	assert.False(t, result.IsMountpoint, "should not be a mountpoint")
+}
+
+// TestProbeExternalMount_CustomPath tests that the path argument is forwarded.
+func TestProbeExternalMount_CustomPath(t *testing.T) {
+	t.Parallel()
+
+	var capturedPath string
+	prober := func(path string) MountProbeResult {
+		capturedPath = path
+		return MountProbeResult{Exists: true, IsMountpoint: true, Readable: true}
+	}
+
+	customPath := "/custom/media"
+	ProbeExternalMount(customPath, prober)
+	assert.Equal(t, customPath, capturedPath, "prober should receive the custom path")
+}

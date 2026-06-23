@@ -40,6 +40,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 // Tunnel provider constant for unknown providers
@@ -178,6 +179,12 @@ type Controller struct {
 	// sourceRestarter restarts a single audio source by ID. Set during
 	// pipeline Start() and called by the restart-source control endpoint.
 	sourceRestarter atomic.Pointer[SourceRestarterFunc]
+
+	// externalMediaEnv and externalMediaProbe are injectable dependencies for
+	// the GET /api/v2/system/external-media endpoint. Both default to the real
+	// sysinfo implementations at request time when nil.
+	externalMediaEnv   sysinfo.EnvGetter
+	externalMediaProbe sysinfo.MountProber
 }
 
 // SourceRestarterFunc restarts a single audio source identified by sourceID.
