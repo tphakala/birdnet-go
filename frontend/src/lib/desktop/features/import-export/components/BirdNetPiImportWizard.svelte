@@ -68,8 +68,18 @@
   );
 
   let progressPercent = $derived.by(() => {
-    if (!importProgress || importProgress.total === 0) return 0;
-    return Math.min(100, Math.round((importProgress.processed / importProgress.total) * 100));
+    if (
+      !importProgress ||
+      typeof importProgress.total !== 'number' ||
+      typeof importProgress.processed !== 'number' ||
+      importProgress.total <= 0
+    ) {
+      return 0;
+    }
+    return Math.max(
+      0,
+      Math.min(100, Math.round((importProgress.processed / importProgress.total) * 100))
+    );
   });
 
   // On mount: check for in-progress import and discover external media
@@ -99,6 +109,7 @@
       await loadExternalMedia();
       if (destroyed) return;
     } catch (err) {
+      if (destroyed) return;
       if (err instanceof ApiError) {
         errorMessage = err.userMessage;
       } else {
@@ -113,9 +124,11 @@
     mediaLoadError = null;
     try {
       const resp = await api.get<ExternalMediaResponse>('/api/v2/system/external-media');
+      if (destroyed) return;
       mediaResponse = resp;
       sourceAccessState = deriveSourceAccessState(resp);
     } catch (err) {
+      if (destroyed) return;
       if (err instanceof ApiError) {
         mediaLoadError = err.userMessage;
       } else {
@@ -225,6 +238,7 @@
       currentStep = 'progress';
       connectEventSource(resp.job_id);
     } catch (err) {
+      if (destroyed) return;
       if (err instanceof ApiError) {
         if (err.status === 409) {
           errorMessage = t('system.importExport.errors.alreadyRunning');

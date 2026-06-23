@@ -354,7 +354,6 @@
     [uiPath('help', 'report-bug')]: findRouteConfig('report-bug'),
     [uiPath('system')]: findRouteConfig('system'),
     [uiPath('system', 'health')]: findRouteConfig('system-health'),
-    [uiPath('system', 'import-export')]: findRouteConfig('system'),
     [uiPath('settings')]: findRouteConfig('settings'),
   });
 
