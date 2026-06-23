@@ -308,6 +308,13 @@
           </div>
         {/each}
       </div>
+      <span class="sr-only" aria-live="polite"
+        >{t('system.importExport.stepAnnouncement', {
+          current: String(currentStepIndex + 1),
+          total: String(stepLabels.length),
+          name: t(`system.importExport.steps.${currentStep}`),
+        })}</span
+      >
     </div>
   {/snippet}
 
@@ -325,18 +332,19 @@
           <div class="space-y-3">
             <ErrorAlert message={mediaLoadError} type="error" />
             <div>
-              <Button variant="default" onclick={recheckMedia} disabled={isLoading}>
+              <Button
+                variant="default"
+                onclick={recheckMedia}
+                disabled={isLoading}
+                title={isLoading ? t('system.importExport.loading') : undefined}
+              >
                 {t('system.importExport.sourceAccess.recheckButton')}
               </Button>
             </div>
           </div>
         {:else if sourceAccessState === 'native'}
           <!-- Native state: informational panel only -->
-          <div
-            class="space-y-3"
-            role="region"
-            aria-label={t('system.importExport.sourceAccess.nativeTitle')}
-          >
+          <div class="space-y-3">
             <div
               class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]"
             >
@@ -394,9 +402,14 @@
             {/if}
 
             <div class="flex items-center gap-2 pt-2">
-              <Button variant="default" onclick={recheckMedia} disabled={isLoading}>
+              <Button
+                variant="default"
+                onclick={recheckMedia}
+                disabled={isLoading}
+                title={isLoading ? t('system.importExport.loading') : undefined}
+              >
                 {#if isLoading}
-                  <LoadingSpinner size="xs" />
+                  <LoadingSpinner size="xs" aria-hidden="true" />
                 {/if}
                 {t('system.importExport.sourceAccess.recheckButton')}
               </Button>
@@ -474,7 +487,6 @@
           <!-- db-audio option (disabled) -->
           <label
             class="flex items-start gap-3 p-4 rounded-lg border border-[var(--color-base-300)] opacity-60 cursor-not-allowed"
-            aria-disabled="true"
           >
             <input
               type="radio"
@@ -544,9 +556,11 @@
             {t('system.importExport.confirm.deduplicationNote')}
           </div>
 
-          {#if errorMessage}
-            <ErrorAlert message={errorMessage} type="error" />
-          {/if}
+          <div role="alert" aria-live="assertive" aria-atomic="true">
+            {#if errorMessage}
+              <ErrorAlert message={errorMessage} type="error" />
+            {/if}
+          </div>
         </div>
       {:else if currentStep === 'progress'}
         <!-- Progress/run step -->
@@ -683,6 +697,7 @@
               <div class="mt-2">
                 <a
                   href={buildDetectionsFilterUrl()}
+                  onclick={() => onClose()}
                   class="inline-flex items-center gap-1.5 text-sm text-[var(--color-primary)] hover:underline"
                 >
                   {t('system.importExport.done.viewDetectionsLink')}
@@ -783,13 +798,21 @@
               : undefined}
           >
             {#if isLoading}
-              <LoadingSpinner size="xs" color="text-[var(--color-primary-content)]" />
+              <LoadingSpinner
+                size="xs"
+                color="text-[var(--color-primary-content)]"
+                aria-hidden="true"
+              />
             {/if}
             {t('system.importExport.confirm.startButton')}
           </Button>
         {:else if currentStep === 'progress'}
           {#if !importComplete && !importCancelled && !importError}
-            <Button variant="ghost" onclick={onClose}>
+            <Button
+              variant="ghost"
+              onclick={onClose}
+              title={t('system.importExport.runInBackgroundTitle')}
+            >
               {t('system.importExport.runInBackground')}
             </Button>
             <Button
@@ -799,7 +822,7 @@
               title={isCancelling ? t('system.importExport.progress.cancellingLabel') : undefined}
             >
               {#if isCancelling}
-                <LoadingSpinner size="xs" />
+                <LoadingSpinner size="xs" aria-hidden="true" />
               {/if}
               {isCancelling
                 ? t('system.importExport.progress.cancellingLabel')

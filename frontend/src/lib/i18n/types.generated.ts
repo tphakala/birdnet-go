@@ -902,6 +902,8 @@ export type TranslationKey =
   | 'system.importExport.comingSoon'
   | 'system.importExport.loading'
   | 'system.importExport.runInBackground'
+  | 'system.importExport.runInBackgroundTitle'
+  | 'system.importExport.stepAnnouncement' // params: current, total, name
   | 'system.importExport.steps.source'
   | 'system.importExport.steps.mode'
   | 'system.importExport.steps.confirm'
@@ -4064,6 +4066,11 @@ export type TranslationParams = {
   'system.errors.memoryUsage': { error: string | number };
   'system.errors.temperature': { error: string | number };
   'system.errors.processes': { error: string | number };
+  'system.importExport.stepAnnouncement': {
+    current: string | number;
+    total: string | number;
+    name: string | number;
+  };
   'system.importExport.progress.progressLabel': { percent: string | number };
   'system.importExport.done.partialInserted': { count: string | number };
   'system.database.legacy.cleanup.success': { size: string | number };

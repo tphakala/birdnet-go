@@ -59,9 +59,9 @@ describe('ImportExportPage', () => {
 
   it('export disabled button has a visible reason', () => {
     render(ImportExportPage);
-    // The disabled reason text should appear in the DOM
+    // The disabled reason text should appear exactly once in the DOM
     const reasons = screen.getAllByText('system.importExport.export.disabledReason');
-    expect(reasons.length).toBeGreaterThan(0);
+    expect(reasons).toHaveLength(1);
   });
 
   it('export disabled button has aria-describedby pointing to the reason', () => {
@@ -72,10 +72,11 @@ describe('ImportExportPage', () => {
     expect(exportButton).toHaveAttribute('aria-describedby', 'export-disabled-reason');
   });
 
-  it('wizard is not shown initially', () => {
+  it('wizard is not shown initially', async () => {
+    const { default: WizardMock } = await import('../components/BirdNetPiImportWizard.svelte');
     render(ImportExportPage);
-    // The wizard mock component should not be rendered yet
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // The wizard mock component should not have been called before clicking start
+    expect(vi.mocked(WizardMock)).not.toHaveBeenCalled();
   });
 
   it('clicking start import button opens the wizard', async () => {

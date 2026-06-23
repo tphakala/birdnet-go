@@ -427,6 +427,9 @@ describe('BirdNetPiImportWizard', () => {
       // The inserted count (490) should be visible
       expect(screen.getByText('490')).toBeInTheDocument();
     });
+    // Progress bar aria-valuenow should reflect the percent (500/1000 = 50)
+    const progressbar = screen.getByRole('progressbar');
+    expect(progressbar).toHaveAttribute('aria-valuenow', '50');
   });
 
   it('complete event transitions to done step with success state', async () => {
@@ -463,6 +466,12 @@ describe('BirdNetPiImportWizard', () => {
     await waitFor(() => {
       expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
     });
+    // Summary counts should be visible
+    expect(screen.getByText('990')).toBeInTheDocument(); // inserted
+    expect(screen.getByText('10')).toBeInTheDocument(); // skipped
+    // View detections link must be present
+    const link = screen.getByRole('link', { name: /system.importExport.done.viewDetectionsLink/ });
+    expect(link).toHaveAttribute('href', expect.stringContaining('source=birdnet-pi'));
   });
 
   it('error event transitions to done step with error state', async () => {
@@ -530,6 +539,8 @@ describe('BirdNetPiImportWizard', () => {
     expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
     // The EventSource should NOT have been closed
     expect(mockEsInstance?.close).not.toHaveBeenCalled();
+    // The done/error UI must NOT be shown
+    expect(screen.queryByText('system.importExport.done.errorTitle')).not.toBeInTheDocument();
   });
 
   it('server error event with JSON data transitions to done with localized error', async () => {
@@ -565,6 +576,8 @@ describe('BirdNetPiImportWizard', () => {
     });
     // The localized error message should be shown (not the raw backend string)
     expect(screen.getByText('system.importExport.errors.importFailed')).toBeInTheDocument();
+    // The SSE source must have been closed on server error
+    expect(mockEsInstance?.close).toHaveBeenCalledOnce();
   });
 
   it('cancelled event transitions to done step with cancelled state', async () => {
@@ -636,6 +649,44 @@ describe('BirdNetPiImportWizard', () => {
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith('/api/v2/import/jobs/test-job-123/cancel');
     });
+
+    // Simulate the SSE cancelled event that the server sends after cancel
+    flushSync(() => {
+      dispatchMockEvent('cancelled', { ...defaultProgress, processed: 300 });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
+    });
+  });
+
+  it('run in background calls onClose without posting to cancel endpoint', async () => {
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await waitFor(() => {
+      expect(
+        screen.getByText('system.importExport.sourceAccess.mountDescription')
+      ).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    });
+
+    const runInBgButton = screen.getByRole('button', {
+      name: /system.importExport.runInBackground/,
+    });
+    await fireEvent.click(runInBgButton);
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining('/cancel'));
   });
 
   // ---- Resume on load ----

@@ -1163,6 +1163,8 @@
       "comingSoon": "Coming soon",
       "loading": "Loading...",
       "runInBackground": "Close (import continues in background)",
+      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
+      "stepAnnouncement": "Step {current} of {total}: {name}",
       "steps": {
         "source": "Source",
         "mode": "Mode",
