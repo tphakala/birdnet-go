@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,4 +110,35 @@ func TestComputeRmsDbfs_KnownValue(t *testing.T) {
 	got := computeRmsDbfs(samples)
 	expected := 20 * math.Log10(100.0/32768.0)
 	assert.InDelta(t, expected, got, 0.01)
+}
+
+func TestBuildAnalysisArgs_TimeoutFlag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		url           string
+		ffmpegMajor   int
+		wantTransport bool
+		wantFlag      string
+		forbiddenFlag string
+	}{
+		{"rtsp_ffmpeg4_uses_stimeout", "rtsp://cam.example.com/live", 4, true, "-stimeout", "-timeout"},
+		{"rtsps_ffmpeg4_uses_stimeout", "rtsps://cam.example.com/live", 4, true, "-stimeout", "-timeout"},
+		{"rtsp_ffmpeg7_uses_timeout", "rtsp://cam.example.com/live", 7, true, "-timeout", "-stimeout"},
+		{"rtsp_unknown_uses_timeout", "rtsp://cam.example.com/live", 0, true, "-timeout", "-stimeout"},
+		{"http_ffmpeg4_uses_timeout", "http://host.example.com/stream", 4, false, "-timeout", "-stimeout"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			args := buildAnalysisArgs(tt.url, tt.ffmpegMajor)
+
+			assert.Equal(t, tt.wantTransport, slices.Contains(args, "-rtsp_transport"), "rtsp_transport presence mismatch")
+			assert.Contains(t, args, tt.wantFlag, "expected timeout flag missing")
+			assert.NotContains(t, args, tt.forbiddenFlag, "forbidden timeout flag present")
+		})
+	}
 }
