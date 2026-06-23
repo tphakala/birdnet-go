@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -93,7 +94,6 @@ func TestGetExternalMedia_ContainerMountPresent(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code)
 	assert.Equal(t, "Docker", resp.Environment)
 	assert.True(t, resp.Containerized)
-	assert.True(t, resp.MountConfigured)
 	assert.True(t, resp.MountPresent)
 	assert.Nil(t, resp.Guidance, "guidance should be nil when mount is present")
 }
@@ -123,6 +123,13 @@ func TestGetExternalMedia_ContainerMountAbsent(t *testing.T) {
 	require.NotNil(t, resp.Guidance, "guidance must be populated when mount is absent in a container")
 	assert.NotEmpty(t, resp.Guidance.Environment, "guidance.environment should identify the runtime")
 	assert.NotEmpty(t, resp.Guidance.Steps, "guidance.steps should contain setup instructions")
+	// Verify the guidance steps contain required setup commands.
+	steps := strings.Join(resp.Guidance.Steps, "\n")
+	assert.Contains(t, steps, "mkdir -p /mnt/birdnet-go/external", "guidance must include mkdir step")
+	assert.Contains(t, steps, "mount --bind", "guidance must include bind mount step")
+	assert.Contains(t, steps, "make-rshared", "guidance must include make-rshared step")
+	assert.Contains(t, steps, `chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}"`, "guidance must include chown step with env vars")
+	assert.Contains(t, steps, "-v /mnt/birdnet-go/external:/external:rslave", "guidance must include volume flag")
 }
 
 // TestGetExternalMedia_PodmanMountAbsent tests the Podman-specific guidance path.
@@ -177,8 +184,7 @@ func TestGetExternalMedia_ResponseShape(t *testing.T) {
 
 	assert.Contains(t, raw, "environment")
 	assert.Contains(t, raw, "containerized")
-	assert.Contains(t, raw, "mountPath")
-	assert.Contains(t, raw, "mountConfigured")
-	assert.Contains(t, raw, "mountPresent")
+	assert.Contains(t, raw, "mount_path")
+	assert.Contains(t, raw, "mount_present")
 	assert.Contains(t, raw, "guidance")
 }

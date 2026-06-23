@@ -13,19 +13,12 @@ func fakeMountProber(result MountProbeResult) MountProber {
 	}
 }
 
-// fakeEnvGetter returns an EnvGetter that always returns the supplied values.
-func fakeEnvGetter(envType, detail string) EnvGetter {
-	return func() (string, string) {
-		return envType, detail
-	}
-}
-
-// TestProbeExternalMount_NilDefaultsDoNotPanic ensures that nil dependencies
-// fall back to the real implementations without panicking.
+// TestProbeExternalMount_NilDefaultsDoNotPanic ensures that nil prober
+// falls back to the real implementation without panicking.
 func TestProbeExternalMount_NilDefaultsDoNotPanic(t *testing.T) {
 	t.Parallel()
 	// Use a path that definitely does not exist to keep the test host-agnostic.
-	result := ProbeExternalMount("/nonexistent-path-birdnet-test", nil, nil)
+	result := ProbeExternalMount("/nonexistent-path-birdnet-test", nil)
 	// The path should not exist on a test host.
 	assert.False(t, result.Exists, "nonexistent path should report Exists=false")
 }
@@ -62,7 +55,6 @@ func TestProbeExternalMount_NativeNotContainerized(t *testing.T) {
 			t.Parallel()
 			result := ProbeExternalMount(
 				DefaultExternalMountPath,
-				fakeEnvGetter(tt.envType, ""),
 				fakeMountProber(tt.probe),
 			)
 			assert.Equal(t, tt.want, result)
@@ -77,7 +69,6 @@ func TestProbeExternalMount_ContainerMountPresent(t *testing.T) {
 	probe := MountProbeResult{Exists: true, IsMountpoint: true, Readable: true}
 	result := ProbeExternalMount(
 		DefaultExternalMountPath,
-		fakeEnvGetter("Docker", ""),
 		fakeMountProber(probe),
 	)
 
@@ -93,7 +84,6 @@ func TestProbeExternalMount_ContainerMountAbsent(t *testing.T) {
 	probe := MountProbeResult{Exists: false, IsMountpoint: false, Readable: false}
 	result := ProbeExternalMount(
 		DefaultExternalMountPath,
-		fakeEnvGetter("Docker", ""),
 		fakeMountProber(probe),
 	)
 
@@ -109,7 +99,6 @@ func TestProbeExternalMount_PodmanMountAbsent(t *testing.T) {
 	probe := MountProbeResult{Exists: true, IsMountpoint: false, Readable: false}
 	result := ProbeExternalMount(
 		DefaultExternalMountPath,
-		fakeEnvGetter("Podman", ""),
 		fakeMountProber(probe),
 	)
 
@@ -129,6 +118,6 @@ func TestProbeExternalMount_CustomPath(t *testing.T) {
 	}
 
 	customPath := "/custom/media"
-	ProbeExternalMount(customPath, fakeEnvGetter("Docker", ""), prober)
+	ProbeExternalMount(customPath, prober)
 	assert.Equal(t, customPath, capturedPath, "prober should receive the custom path")
 }

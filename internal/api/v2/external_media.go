@@ -28,14 +28,12 @@ type ExternalMediaResponse struct {
 	// Containerized is true when the app is running inside a known container runtime.
 	Containerized bool `json:"containerized"`
 	// MountPath is the path inside the container that should be bind-mounted from the host.
-	MountPath string `json:"mountPath"`
-	// MountConfigured is true when the mount path exists and is a real mountpoint.
-	MountConfigured bool `json:"mountConfigured"`
+	MountPath string `json:"mount_path"`
 	// MountPresent is true when the mount path exists and is a real mountpoint.
 	// It is always false for native (non-containerized) environments because
 	// there is no bind-mount concept; the frontend should use Containerized to
 	// decide whether to show mount-related UI.
-	MountPresent bool `json:"mountPresent"`
+	MountPresent bool `json:"mount_present"`
 	// Guidance is populated only when Containerized is true and MountPresent is
 	// false. It provides copy-pasteable setup steps keyed to the detected runtime.
 	// null when no setup action is needed.
@@ -53,19 +51,14 @@ func (c *Controller) GetExternalMedia(ctx echo.Context) error {
 	if envGetter == nil {
 		envGetter = sysinfo.GetEnvironment
 	}
-	prober := c.externalMediaProbe
-	if prober == nil {
-		prober = func(path string) sysinfo.MountProbeResult {
-			return sysinfo.ProbeExternalMount(path, envGetter, nil)
-		}
-	}
 
 	envType, _ := envGetter()
 	containerized := sysinfo.IsContainerEnv(envType)
-	probe := prober(sysinfo.DefaultExternalMountPath)
+
+	prober := c.externalMediaProbe
+	probe := sysinfo.ProbeExternalMount(sysinfo.DefaultExternalMountPath, prober)
 
 	mountPresent := containerized && probe.Exists && probe.IsMountpoint
-	mountConfigured := mountPresent
 
 	var guidance *ExternalMediaGuidance
 	if containerized && !mountPresent {
@@ -73,12 +66,11 @@ func (c *Controller) GetExternalMedia(ctx echo.Context) error {
 	}
 
 	resp := ExternalMediaResponse{
-		Environment:     envType,
-		Containerized:   containerized,
-		MountPath:       sysinfo.DefaultExternalMountPath,
-		MountConfigured: mountConfigured,
-		MountPresent:    mountPresent,
-		Guidance:        guidance,
+		Environment:   envType,
+		Containerized: containerized,
+		MountPath:     sysinfo.DefaultExternalMountPath,
+		MountPresent:  mountPresent,
+		Guidance:      guidance,
 	}
 
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "External media status retrieved",
@@ -98,46 +90,56 @@ func buildGuidance(envType string) *ExternalMediaGuidance {
 	const (
 		hostDir      = "/mnt/birdnet-go/external"
 		containerDir = "/external"
-		containerUID = "1000"
 	)
+
+	// Common host-side setup steps required for all container runtimes.
+	hostSetup := []string{
+		"sudo mkdir -p " + hostDir,
+		"sudo mount --bind " + hostDir + " " + hostDir,
+		"sudo mount --make-rshared " + hostDir,
+		`sudo chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}" ` + hostDir,
+	}
 
 	switch envType {
 	case "Docker":
+		steps := append(hostSetup,
+			"# Add to your docker run command:",
+			"-v "+hostDir+":"+containerDir+":rslave",
+			"# Or in docker-compose.yml under the birdnet-go service volumes:",
+			"volumes:",
+			"  - type: bind",
+			"    source: "+hostDir,
+			"    target: "+containerDir,
+			"    bind:",
+			"      propagation: rslave",
+			"# If you used install.sh, simply re-run the installer to wire this automatically.",
+			"# Then restart the container.",
+		)
 		return &ExternalMediaGuidance{
 			Environment: envType,
-			Steps: []string{
-				"sudo mkdir -p " + hostDir,
-				"sudo chown " + containerUID + ":" + containerUID + " " + hostDir,
-				"# Add the following volume to your docker run command or compose file:",
-				"-v " + hostDir + ":" + containerDir + ":rslave",
-				"# Or in docker-compose.yml under the birdnet-go service volumes:",
-				"- " + hostDir + ":" + containerDir + ":rslave",
-				"# Then restart the container.",
-			},
+			Steps:       steps,
 		}
 	case "Podman":
+		steps := append(hostSetup,
+			"# Add to your podman run command or quadlet file:",
+			"-v "+hostDir+":"+containerDir+":rslave",
+			"# If you used install.sh, simply re-run the installer to wire this automatically.",
+			"# Then restart the container.",
+		)
 		return &ExternalMediaGuidance{
 			Environment: envType,
-			Steps: []string{
-				"sudo mkdir -p " + hostDir,
-				"sudo chown " + containerUID + ":" + containerUID + " " + hostDir,
-				"# Add the following volume to your podman run command or quadlet file:",
-				"-v " + hostDir + ":" + containerDir + ":rslave",
-				"# Then restart the container.",
-			},
+			Steps:       steps,
 		}
 	default:
 		// Generic container guidance covers LXC, systemd-nspawn, and any
 		// other container runtime the environment detection recognises.
+		steps := append(hostSetup,
+			"# Mount the host directory into the container using your runtime's volume mechanism.",
+			"# Or re-run the BirdNET-Go installer (install.sh) to configure the mount automatically.",
+		)
 		return &ExternalMediaGuidance{
 			Environment: envType,
-			Steps: []string{
-				"sudo mkdir -p " + hostDir,
-				"sudo chown " + containerUID + ":" + containerUID + " " + hostDir,
-				"sudo mount --bind " + hostDir + " " + containerDir,
-				"sudo mount --make-rshared " + containerDir,
-				"# Or re-run the BirdNET-Go installer (install.sh) to configure the mount automatically.",
-			},
+			Steps:       steps,
 		}
 	}
 }
