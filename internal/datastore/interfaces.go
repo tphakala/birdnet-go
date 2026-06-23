@@ -212,6 +212,27 @@ type Interface interface {
 	// the species accumulation curve in the Biodiversity tab; "first seen" is bounded to the selected
 	// window, not lifetime.
 	GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]SpeciesAccumulationPoint, error)
+	// GetYearOverYear returns the current year-to-date cumulative detection counts versus the same
+	// calendar span one year earlier (false positives excluded): one point per current-year calendar
+	// day from Jan 1 through date (station-local YYYY-MM-DD; empty -> today in the station timezone).
+	// Counts are aligned by calendar (month, day) with leap-day Feb 29 handled, and the delta is current
+	// minus previous. Powers the year-over-year tracker in the Trends tab.
+	GetYearOverYear(ctx context.Context, date string) (YearOverYearResult, error)
+	// GetSpeciesPhenology returns the arrival/departure residency span (first and last
+	// false-positive-excluded detection, plus the in-range detection count) for the top `limit` species
+	// by volume over the date range. Powers the arrival/departure phenology chart in the Biodiversity
+	// tab; spans are bounded to the selected window, not lifetime.
+	GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesPhenologyPoint, error)
+	// GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded)
+	// for the top `limit` species by detection volume over the inclusive date range, ordered by
+	// descending volume. Powers the acoustic succession streamgraph in the Activity Patterns tab.
+	GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyCounts, error)
+	// GetAudioSources returns each audio source that has at least one (false-positive-excluded)
+	// detection in the date range, with its in-range detection count, ordered by count descending. When
+	// both dates are empty it covers all history. Powers the analytics source/mic filter's option list;
+	// the metric is v2only (the legacy schema does not persist a detection's source), so the legacy
+	// datastore returns an empty result.
+	GetAudioSources(ctx context.Context, startDate, endDate string) ([]AudioSourceSummary, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods

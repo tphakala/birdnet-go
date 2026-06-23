@@ -284,6 +284,19 @@ type DetectionRepository interface {
 	// species accumulation analytics. Results are ordered by first-seen ascending.
 	GetSpeciesFirstSeenInPeriod(ctx context.Context, start, end int64) ([]SpeciesFirstSeen, error)
 
+	// GetSpeciesPhenologyInPeriod returns each species' residency span within the half-open range
+	// [start, end): MIN/MAX detected_at and the detection COUNT, false positives excluded, grouped by
+	// scientific name so multi-model labels collapse to one species. Results are the top `limit` species
+	// by detection volume (ORDER BY count DESC), as required by the arrival/departure phenology chart.
+	GetSpeciesPhenologyInPeriod(ctx context.Context, start, end int64, limit int) ([]SpeciesPhenology, error)
+
+	// GetSourceActivitySummaries returns each audio source with at least one (false-positive-excluded)
+	// detection in the half-open range [start, end): the source's identity columns and its in-period
+	// detection count, ordered by count descending. Sources are INNER JOINed on audio_sources, so
+	// detections with a NULL source_id (legacy-migrated, source-less) are excluded. Powers the analytics
+	// source/mic filter's option list. COUNT is fan-out-immune because reviews are 1:1 with detections.
+	GetSourceActivitySummaries(ctx context.Context, start, end int64) ([]SourceActivitySummary, error)
+
 	// === Utilities ===
 
 	// GetClipPath returns the clip path for a detection.

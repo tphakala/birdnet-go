@@ -18,6 +18,7 @@ import SpeciesDiversityChart from '../components/charts/d3/SpeciesDiversityChart
 import SeasonalHeatmap from '../components/charts/d3/SeasonalHeatmap.svelte';
 import type { HeatmapData } from '../components/charts/d3/utils/heatmap';
 import SpeciesRidgeline from '../components/charts/d3/SpeciesRidgeline.svelte';
+import AcousticSuccessionChart from '../components/charts/d3/AcousticSuccessionChart.svelte';
 import DawnChorusOnset from '../components/charts/d3/DawnChorusOnset.svelte';
 import { onsetCount } from '../components/charts/d3/utils/dawnOnset';
 import type { DawnOnsetData, DawnOnsetPoint } from '../components/charts/d3/utils/dawnOnset';
@@ -31,6 +32,18 @@ import type {
   AccumulationData,
   AccumulationPoint,
 } from '../components/charts/d3/utils/accumulation';
+import SpeciesPhenologyChart from '../components/charts/d3/SpeciesPhenologyChart.svelte';
+import type {
+  PhenologyData,
+  PhenologyDatum,
+  PhenologyRow,
+} from '../components/charts/d3/utils/phenology';
+import YearOverYearChart from '../components/charts/d3/YearOverYearChart.svelte';
+import { peakCumulative } from '../components/charts/d3/utils/yearOverYear';
+import type {
+  YearOverYearData,
+  YearOverYearPoint,
+} from '../components/charts/d3/utils/yearOverYear';
 
 import { formatDateForAPI } from './analyticsParams';
 import type { AnalyticsParams, ChartDef } from './types';
@@ -342,6 +355,66 @@ async function fetchSpeciesDistribution(
     .filter((d): d is SpeciesDistributionDatum => d !== null);
 }
 
+// Top-N species the succession streamgraph requests; mirrors the chart's maxSpecies cap and the
+// server default. Kept modest so the stacked wiggle bands stay legible within the card's fixed height.
+const SUCCESSION_LIMIT = 6;
+const SUCCESSION_BUCKETS = 24;
+
+interface SuccessionDatum {
+  scientificName: string;
+  counts: number[];
+  total: number;
+}
+
+/**
+ * Acoustic succession streamgraph: the top-N species by detection volume in range, each with their
+ * raw 24-bucket hour-of-day detection counts. Like the who-sings-when ridgeline (#1159) it always
+ * requests the top-N and does not honor the species filter, so the chart shows the diel acoustic
+ * handover among the dominant species rather than a single species; the server ranks. Defensively
+ * coerces the array payload, padding/truncating counts to 24 so the chart's hour axis stays
+ * well-defined even on a malformed payload.
+ */
+async function fetchAcousticSuccession(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<SuccessionDatum[]> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+    limit: String(SUCCESSION_LIMIT),
+  });
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/time/succession?${search}`), {
+    signal,
+  });
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid acoustic succession response: expected an array');
+  }
+
+  return data
+    .map(raw => {
+      if (!raw || typeof raw !== 'object') return null;
+      const item = raw as { scientificName?: unknown; counts?: unknown; total?: unknown };
+      const scientificName = typeof item.scientificName === 'string' ? item.scientificName : '';
+      if (!scientificName) return null;
+      // Coerce every count to a finite, non-negative number; pad/truncate to 24 so the hour axis
+      // stays well-defined (a negative count would invert a stacked band).
+      const rawCounts = Array.isArray(item.counts) ? item.counts : [];
+      const counts: number[] = [];
+      for (let i = 0; i < SUCCESSION_BUCKETS; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- i is a bounded loop index
+        const c = rawCounts[i];
+        counts.push(typeof c === 'number' && Number.isFinite(c) ? Math.max(0, c) : 0);
+      }
+      const total = typeof item.total === 'number' && Number.isFinite(item.total) ? item.total : 0;
+      return { scientificName, counts, total };
+    })
+    .filter((d): d is SuccessionDatum => d !== null);
+}
+
 interface DawnOnsetResponseItem {
   date?: unknown;
   onsetRelMinutes?: unknown;
@@ -597,6 +670,126 @@ async function fetchSpeciesAccumulation(
   return { points };
 }
 
+interface YearOverYearResponseItem {
+  date?: unknown;
+  monthDay?: unknown;
+  thisYear?: unknown;
+  lastYear?: unknown;
+  delta?: unknown;
+}
+
+interface YearOverYearResponseShape {
+  currentYear?: unknown;
+  previousYear?: unknown;
+  points?: unknown;
+}
+
+/**
+ * Year-over-year tracker: current year-to-date cumulative detections versus the same calendar span one
+ * year earlier (false positives excluded). The server returns an object with year labels and a points
+ * array (one entry per current-year day). All-species, so the species filter is never sent; the
+ * control bar's end date is the as-of date. Defensively coerces the payload into the chart's shape.
+ */
+async function fetchYearOverYear(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<YearOverYearData> {
+  const search = new URLSearchParams({
+    date: formatDateForAPI(params.endDate),
+  });
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/time/year-over-year?${search}`), {
+    signal,
+  });
+  ensureOk(response);
+
+  const raw: unknown = await response.json();
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Invalid year-over-year response: expected an object');
+  }
+  const body = raw as YearOverYearResponseShape;
+  const currentYear =
+    typeof body.currentYear === 'number' && Number.isFinite(body.currentYear)
+      ? body.currentYear
+      : 0;
+  const previousYear =
+    typeof body.previousYear === 'number' && Number.isFinite(body.previousYear)
+      ? body.previousYear
+      : 0;
+  const rawPoints = Array.isArray(body.points) ? body.points : [];
+
+  const points: YearOverYearPoint[] = [];
+  for (const r of rawPoints) {
+    if (!r || typeof r !== 'object') continue;
+    const item = r as YearOverYearResponseItem;
+    if (typeof item.date !== 'string') continue;
+    const monthDay = typeof item.monthDay === 'string' ? item.monthDay : '';
+    const thisYear =
+      typeof item.thisYear === 'number' && Number.isFinite(item.thisYear) ? item.thisYear : 0;
+    const lastYear =
+      typeof item.lastYear === 'number' && Number.isFinite(item.lastYear) ? item.lastYear : 0;
+    const delta =
+      typeof item.delta === 'number' && Number.isFinite(item.delta)
+        ? item.delta
+        : thisYear - lastYear;
+    points.push({ date: item.date, monthDay, thisYear, lastYear, delta });
+  }
+
+  return { currentYear, previousYear, points };
+}
+
+// Top-N species the phenology Gantt requests; mirrors the chart's maxSpecies cap and the server
+// default. Kept modest so the residency bars stay legible within the card's fixed height.
+const SPECIES_PHENOLOGY_LIMIT = 12;
+
+interface PhenologyResponseItem {
+  scientificName?: unknown;
+  firstSeen?: unknown;
+  lastSeen?: unknown;
+  count?: unknown;
+}
+
+/**
+ * Arrival/departure phenology: the top-N species by detection volume in range, each with its first
+ * and last in-range detection date (station-local YYYY-MM-DD) and detection count. Server-ranked and
+ * server-sorted by arrival; this defensively coerces the array payload, dropping rows missing either
+ * date. Common names are resolved later (registry mapProps) from the hub's species map.
+ */
+async function fetchSpeciesPhenology(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<PhenologyDatum[]> {
+  const search = new URLSearchParams({
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
+    limit: String(SPECIES_PHENOLOGY_LIMIT),
+  });
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/species/phenology?${search}`), {
+    signal,
+  });
+  ensureOk(response);
+
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid species phenology response: expected an array');
+  }
+
+  return data
+    .map(raw => {
+      if (!raw || typeof raw !== 'object') return null;
+      const item = raw as PhenologyResponseItem;
+      const scientificName = typeof item.scientificName === 'string' ? item.scientificName : '';
+      const firstSeen = typeof item.firstSeen === 'string' ? item.firstSeen : '';
+      const lastSeen = typeof item.lastSeen === 'string' ? item.lastSeen : '';
+      // A residency bar needs both endpoints; a row missing either date is unrenderable, so drop it.
+      if (!scientificName || !firstSeen || !lastSeen) return null;
+      const count = typeof item.count === 'number' && Number.isFinite(item.count) ? item.count : 0;
+      return { scientificName, firstSeen, lastSeen, count };
+    })
+    .filter((d): d is PhenologyDatum => d !== null);
+}
+
 // --- Registry --------------------------------------------------------------
 
 export const CHART_REGISTRY: ChartDef[] = [
@@ -642,6 +835,35 @@ export const CHART_REGISTRY: ChartDef[] = [
     // A ridgeline needs at least a couple of species to read as one; one lonely ridge is not useful.
     minDataPoints: 2,
     maxSpecies: SPECIES_RIDGELINE_LIMIT,
+  },
+  {
+    id: 'acoustic-succession',
+    group: 'patterns',
+    titleKey: 'analytics.advanced.charts.succession.title',
+    descKey: 'analytics.advanced.charts.succession.description',
+    emptyKey: 'analytics.advanced.charts.succession.noData',
+    emptyHintKey: 'analytics.advanced.charts.succession.noDataHint',
+    component: AcousticSuccessionChart,
+    fetch: fetchAcousticSuccession,
+    // The endpoint is always top-N by volume; like the sibling ridgeline, supports.species lets the
+    // patterns tab's species auto-select run, and the chart's note states it shows the top N
+    // regardless of selection. The fetch result is the raw row array, so the default array-length
+    // count (the band count) drives the not-enough-data gate.
+    mapProps: (data, _params, ctx) => ({
+      series: (data as SuccessionDatum[]).map(d => ({
+        scientificName: d.scientificName,
+        commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+        counts: d.counts,
+        total: d.total,
+      })),
+      noteKey: 'analytics.advanced.charts.succession.note',
+    }),
+    size: 'full',
+    supports: { species: true, source: false },
+    // A streamgraph needs at least a few bands to weave into a visible handover; one or two bands is
+    // just a worm, not a succession.
+    minDataPoints: 3,
+    maxSpecies: SUCCESSION_LIMIT,
   },
   {
     id: 'dawn-chorus-onset',
@@ -732,6 +954,24 @@ export const CHART_REGISTRY: ChartDef[] = [
     supports: { species: true, source: false },
   },
   {
+    id: 'year-over-year',
+    group: 'trends',
+    titleKey: 'analytics.advanced.charts.yearOverYear.title',
+    descKey: 'analytics.advanced.charts.yearOverYear.description',
+    emptyKey: 'analytics.advanced.charts.yearOverYear.noData',
+    emptyHintKey: 'analytics.advanced.charts.yearOverYear.noDataHint',
+    component: YearOverYearChart,
+    fetch: fetchYearOverYear,
+    // Object payload (year labels + a points array spanning the whole year-to-date), so the default
+    // array-length count would always look like plenty of data. The meaningful count is how many
+    // detections actually accumulated in either year; below 2 the chart is a trivial flat step, so
+    // ChartCard shows the not-enough-data state. All-species, so neither filter applies.
+    countDataPoints: data => peakCumulative(data as YearOverYearData),
+    size: 'full',
+    supports: { species: false, source: false },
+    minDataPoints: 2,
+  },
+  {
     id: 'species-diversity',
     group: 'biodiversity',
     titleKey: 'analytics.advanced.charts.diversity.title',
@@ -765,6 +1005,34 @@ export const CHART_REGISTRY: ChartDef[] = [
     size: 'full',
     supports: { species: false, source: false },
     minDataPoints: 2,
+  },
+  {
+    id: 'species-phenology',
+    group: 'biodiversity',
+    titleKey: 'analytics.advanced.charts.phenology.title',
+    descKey: 'analytics.advanced.charts.phenology.description',
+    emptyKey: 'analytics.advanced.charts.phenology.noData',
+    emptyHintKey: 'analytics.advanced.charts.phenology.noDataHint',
+    component: SpeciesPhenologyChart,
+    fetch: fetchSpeciesPhenology,
+    // The endpoint is always top-N by volume and never filters by species, so supports.species is
+    // false; the biodiversity tab's siblings (diversity, accumulation) are also species:false, so no
+    // dead selector is shown. The fetch result is the raw row array, so the default array-length count
+    // (the species count) drives the not-enough-data gate; a one-bar Gantt is not a comparison.
+    mapProps: (data, _params, ctx) => ({
+      data: {
+        rows: (data as PhenologyDatum[]).map(
+          (d): PhenologyRow => ({
+            ...d,
+            commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+          })
+        ),
+      } as PhenologyData,
+    }),
+    size: 'full',
+    supports: { species: false, source: false },
+    minDataPoints: 2,
+    maxSpecies: SPECIES_PHENOLOGY_LIMIT,
   },
   {
     id: 'confidence-distribution',

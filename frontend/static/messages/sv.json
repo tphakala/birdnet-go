@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Visa detaljer för {species}",
       "play": "Spela upp",
-      "playAudio": "Spela upp ljud"
+      "playAudio": "Spela upp ljud",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Inspelning och spektrogram",
@@ -1661,7 +1662,9 @@
       "controls": {
         "source": "Källa",
         "sourceAll": "Alla källor",
-        "sourceComingSoon": "Filtrering efter källa kommer i en senare uppdatering.",
+        "sourceLoading": "Loading audio sources…",
+        "sourceNone": "No audio sources with detections yet.",
+        "sourceNotApplicable": "The charts in this section do not filter by source.",
         "speciesNotApplicable": "Diagrammen i det här avsnittet filtrerar inte efter art."
       },
       "card": {
@@ -1844,6 +1847,33 @@
           "tooltipNew": "New in period",
           "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
         },
+        "yearOverYear": {
+          "title": "Year-over-Year Tracker",
+          "description": "Cumulative detections so far this year versus the same calendar dates last year. The shaded band is the running gap between the two; this year's line sitting above last year's means you are ahead of last year's pace.",
+          "noData": "No year-over-year data available",
+          "noDataHint": "Detections from this year and last year build up here as the year progresses",
+          "ariaLabel": "Year-over-year tracker: cumulative detections this year versus the same span last year",
+          "axisDate": "Date",
+          "axisCount": "Cumulative detections",
+          "legendThis": "{year} (this year)",
+          "legendLast": "{year} (last year)",
+          "tooltipDelta": "Difference",
+          "summary": "Year over year: by {monthDay}, {currentYear} has {thisYear} cumulative detections versus {lastYear} for {previousYear} (a difference of {delta})."
+        },
+        "phenology": {
+          "title": "Arrival & Departure Phenology",
+          "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",
+          "noData": "No phenology data available",
+          "noDataHint": "Select a wider date range to see when species arrive and depart",
+          "ariaLabel": "Arrival and departure phenology: residency bars showing each species' first-to-last detection span",
+          "axisDate": "Date",
+          "summary": "Arrival and departure residency spans for {species} species across the selected period.",
+          "tooltipFirst": "First detected",
+          "tooltipLast": "Last detected",
+          "tooltipResidency": "Residency",
+          "tooltipCount": "Detections",
+          "residencyDays": "{days} days"
+        },
         "heatmap": {
           "title": "Seasonal Activity Heatmap",
           "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
@@ -1869,6 +1899,18 @@
           "tooltipDetections": "Detections",
           "tooltipPeak": "Peak",
           "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+        },
+        "succession": {
+          "title": "Acoustic Succession",
+          "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
+          "noData": "No acoustic succession data available",
+          "noDataHint": "Select a wider date range to see how species hand off through the day",
+          "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
+          "axisTime": "Time of Day",
+          "note": "Combined hourly activity of the top {count} species by detection volume",
+          "tooltipDetections": "Detections",
+          "tooltipPeak": "Peak",
+          "summary": "Hour-of-day succession for {count} species. Most active: {species} around {time}."
         },
         "dawnOnset": {
           "title": "Dawn Chorus Onset",
@@ -1939,12 +1981,12 @@
       "loadFailed": "Kunde inte ladda analysdata. Försök igen."
     },
     "timeOfDayPeriods": {
-      "night0to4": "Night (0-4)",
-      "dawn5to8": "Dawn (5-8)",
-      "morning9to11": "Morning (9-11)",
-      "afternoon12to16": "Afternoon (12-16)",
-      "evening17to19": "Evening (17-19)",
-      "night20to23": "Night (20-23)"
+      "night0to4": "Natt (0-4)",
+      "dawn5to8": "Gryning (5-8)",
+      "morning9to11": "Morgon (9-11)",
+      "afternoon12to16": "Eftermiddag (12-16)",
+      "evening17to19": "Kväll (17-19)",
+      "night20to23": "Natt (20-23)"
     }
   },
   "settings": {
@@ -4559,8 +4601,10 @@
       "spectrogramLoaded": "Spektrogram laddat",
       "spectrogramLoadingAria": "Laddar spektrogram",
       "spectrogramAlt": "Ljudspektrogram",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Genererar spektrogram",
       "generating": "Genererar...",
+      "waiting": "Waiting...",
       "queuePosition": "Kö: {position}",
       "loadError": "Kunde inte ladda ljud"
     },

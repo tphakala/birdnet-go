@@ -122,6 +122,71 @@ type SpeciesAccumulationPoint struct {
 	NewSpecies        int
 }
 
+// AudioSourceSummary describes one audio source for the analytics source/mic filter: a stable opaque
+// ID, the source's display metadata, and how many (false-positive-excluded) detections it has in the
+// queried range. The API layer turns DisplayName/NodeName into a user-facing label (anonymized for
+// unauthenticated clients) and serialises ID as a string. The metric is v2only; the legacy datastore
+// does not persist a detection's source, so it returns an empty result.
+type AudioSourceSummary struct {
+	// ID is the audio source's stable, opaque identifier (the v2 audio_sources primary key).
+	ID uint
+	// DisplayName is the user-configured source name, empty when unset.
+	DisplayName string
+	// NodeName is the capture node name, used as a fallback label when DisplayName is empty.
+	NodeName string
+	// SourceType is the source kind (e.g. "rtsp", "alsa", "file"), used for anonymized labelling.
+	SourceType string
+	// Count is the number of (false-positive-excluded) detections from this source in the range.
+	Count int
+}
+
+// YearOverYearPoint is one calendar position on the year-over-year tracker. Date is the current-year
+// station-local calendar day (YYYY-MM-DD) used for the x-axis; MonthDay ("MM-DD") is the year-
+// independent alignment key shared by both years. ThisYear and LastYear are the cumulative detection
+// counts through this calendar position in the current and previous year respectively (false positives
+// excluded); Delta is ThisYear - LastYear (positive means the current year is running ahead of last).
+type YearOverYearPoint struct {
+	Date     string
+	MonthDay string
+	ThisYear int
+	LastYear int
+	Delta    int
+}
+
+// YearOverYearResult is the year-over-year tracker aggregation: the two calendar years being compared
+// and one cumulative point per current-year calendar day from Jan 1 through the requested date. Points
+// is always non-nil. It answers "are we ahead of or behind last year's detection activity so far?".
+type YearOverYearResult struct {
+	CurrentYear  int
+	PreviousYear int
+	Points       []YearOverYearPoint
+}
+
+// SpeciesPhenologyPoint is one species' residency span within the selected date range: its first and
+// last false-positive-excluded detection (as station-local YYYY-MM-DD dates) and the in-range
+// detection count. Species are the top-N by detection volume; the chart draws one residency bar per
+// species (a Gantt) to show arrival/departure timing.
+type SpeciesPhenologyPoint struct {
+	ScientificName string
+	FirstSeen      string
+	LastSeen       string
+	Count          int
+}
+
+// SpeciesHourlyCounts is one species' raw hour-of-day detection counts, behind the acoustic
+// succession streamgraph (design spec #1155; Tier-2). Counts holds the species' false-positive-
+// excluded detection count in each station-local hour bucket (index = hour 0..23). Unlike the
+// ridgeline's SpeciesHourlyDistribution (which normalizes each species to sum to 1.0 to compare
+// timing shape), the streamgraph stacks the raw counts so band width is detection volume; Total is
+// the sum of Counts, used to rank species by volume and shown in the tooltip. ScientificName is the
+// stable key; the localized common name is resolved client-side (the v2 label schema stores no
+// common name), matching the sibling species charts.
+type SpeciesHourlyCounts struct {
+	ScientificName string
+	Counts         [24]int
+	Total          int
+}
+
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
@@ -501,6 +566,37 @@ func (ds *DataStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _
 // slice rather than implementing the aggregation. See internal/datastore/v2only for the real method.
 func (ds *DataStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]SpeciesAccumulationPoint, error) {
 	return []SpeciesAccumulationPoint{}, nil
+}
+
+// GetAudioSources is a stub on the legacy store. The analytics source/mic filter is a v2only feature:
+// the legacy schema does not persist a detection's audio source, so there is nothing to group by. It
+// returns an empty (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only
+// for the real method.
+func (ds *DataStore) GetAudioSources(_ context.Context, _, _ string) ([]AudioSourceSummary, error) {
+	return []AudioSourceSummary{}, nil
+}
+
+// GetYearOverYear is a stub on the legacy store. The year-over-year tracker is a v2only feature; the
+// legacy datastore is deprecated and being removed, so it returns an empty (non-nil) result rather
+// than implementing the aggregation. See internal/datastore/v2only for the real method.
+func (ds *DataStore) GetYearOverYear(_ context.Context, _ string) (YearOverYearResult, error) {
+	return YearOverYearResult{Points: []YearOverYearPoint{}}, nil
+}
+
+// GetSpeciesPhenology is a stub on the legacy store. The arrival/departure phenology chart is a
+// v2only feature; the legacy datastore is deprecated and being removed, so it returns an empty
+// (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only for the
+// real method.
+func (ds *DataStore) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) ([]SpeciesPhenologyPoint, error) {
+	return []SpeciesPhenologyPoint{}, nil
+}
+
+// GetAcousticSuccession is a stub on the legacy store. The acoustic succession streamgraph is a
+// v2only feature; the legacy datastore is deprecated and being removed, so it returns an empty
+// (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only for the
+// real method.
+func (ds *DataStore) GetAcousticSuccession(_ context.Context, _, _ string, _ int) ([]SpeciesHourlyCounts, error) {
+	return []SpeciesHourlyCounts{}, nil
 }
 
 // GetDetectionTrends calculates the trend in detections over time

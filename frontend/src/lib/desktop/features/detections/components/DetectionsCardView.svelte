@@ -12,7 +12,7 @@
   import DetectionCard from '$lib/desktop/features/dashboard/components/DetectionCard.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import type { Detection } from '$lib/types/detection.types';
-  import { SvelteSet } from 'svelte/reactivity';
+  import { isExcluded as isSpeciesExcluded, setExcluded } from '$lib/stores/excludedSpecies.svelte';
   import { useDetectionActions } from '../composables/useDetectionActions.svelte';
 
   interface Props {
@@ -22,19 +22,12 @@
 
   let { detections, onRefresh }: Props = $props();
 
-  // Track excluded species locally (session state)
-  let excludedSpecies = new SvelteSet<string>();
-
+  // Exclusion state is the shared, server-hydrated excludedSpecies store
+  // (hydrated by the parent DetectionsList).
   const actions = useDetectionActions({
     onRefresh: () => onRefresh?.(),
-    isSpeciesExcluded: name => excludedSpecies.has(name),
-    onToggleExclusion: (name, exclude) => {
-      if (exclude) {
-        excludedSpecies.add(name);
-      } else {
-        excludedSpecies.delete(name);
-      }
-    },
+    isSpeciesExcluded,
+    onToggleExclusion: setExcluded,
   });
 </script>
 
@@ -42,7 +35,7 @@
   {#each detections as detection (detection.id)}
     <DetectionCard
       {detection}
-      isExcluded={excludedSpecies.has(detection.commonName)}
+      isExcluded={isSpeciesExcluded(detection.commonName)}
       onMarkCorrect={() => actions.handleMarkCorrect(detection)}
       onMarkFalsePositive={() => actions.handleMarkFalsePositive(detection)}
       onReview={() => actions.handleReview(detection)}

@@ -755,6 +755,7 @@ export type TranslationKey =
   | 'detections.row.viewDetails' // params: species
   | 'detections.row.play'
   | 'detections.row.playAudio'
+  | 'detections.row.imageFailedToLoad'
   | 'detections.media.title'
   | 'detections.media.clipHint'
   | 'detections.tabs.overview'
@@ -1291,7 +1292,9 @@ export type TranslationKey =
   | 'analytics.hub.aria.tabs'
   | 'analytics.hub.controls.source'
   | 'analytics.hub.controls.sourceAll'
-  | 'analytics.hub.controls.sourceComingSoon'
+  | 'analytics.hub.controls.sourceLoading'
+  | 'analytics.hub.controls.sourceNone'
+  | 'analytics.hub.controls.sourceNotApplicable'
   | 'analytics.hub.controls.speciesNotApplicable'
   | 'analytics.hub.card.error'
   | 'analytics.hub.card.retry'
@@ -1432,6 +1435,29 @@ export type TranslationKey =
   | 'analytics.advanced.charts.accumulation.tooltipCumulative'
   | 'analytics.advanced.charts.accumulation.tooltipNew'
   | 'analytics.advanced.charts.accumulation.summary' // params: days, species
+  | 'analytics.advanced.charts.yearOverYear.title'
+  | 'analytics.advanced.charts.yearOverYear.description'
+  | 'analytics.advanced.charts.yearOverYear.noData'
+  | 'analytics.advanced.charts.yearOverYear.noDataHint'
+  | 'analytics.advanced.charts.yearOverYear.ariaLabel'
+  | 'analytics.advanced.charts.yearOverYear.axisDate'
+  | 'analytics.advanced.charts.yearOverYear.axisCount'
+  | 'analytics.advanced.charts.yearOverYear.legendThis' // params: year
+  | 'analytics.advanced.charts.yearOverYear.legendLast' // params: year
+  | 'analytics.advanced.charts.yearOverYear.tooltipDelta'
+  | 'analytics.advanced.charts.yearOverYear.summary' // params: monthDay, currentYear, thisYear, lastYear, previousYear, delta
+  | 'analytics.advanced.charts.phenology.title'
+  | 'analytics.advanced.charts.phenology.description'
+  | 'analytics.advanced.charts.phenology.noData'
+  | 'analytics.advanced.charts.phenology.noDataHint'
+  | 'analytics.advanced.charts.phenology.ariaLabel'
+  | 'analytics.advanced.charts.phenology.axisDate'
+  | 'analytics.advanced.charts.phenology.summary' // params: species
+  | 'analytics.advanced.charts.phenology.tooltipFirst'
+  | 'analytics.advanced.charts.phenology.tooltipLast'
+  | 'analytics.advanced.charts.phenology.tooltipResidency'
+  | 'analytics.advanced.charts.phenology.tooltipCount'
+  | 'analytics.advanced.charts.phenology.residencyDays' // params: days
   | 'analytics.advanced.charts.heatmap.title'
   | 'analytics.advanced.charts.heatmap.description'
   | 'analytics.advanced.charts.heatmap.noData'
@@ -1454,6 +1480,16 @@ export type TranslationKey =
   | 'analytics.advanced.charts.ridgeline.tooltipDetections'
   | 'analytics.advanced.charts.ridgeline.tooltipPeak'
   | 'analytics.advanced.charts.ridgeline.summary' // params: count, species, time
+  | 'analytics.advanced.charts.succession.title'
+  | 'analytics.advanced.charts.succession.description'
+  | 'analytics.advanced.charts.succession.noData'
+  | 'analytics.advanced.charts.succession.noDataHint'
+  | 'analytics.advanced.charts.succession.ariaLabel'
+  | 'analytics.advanced.charts.succession.axisTime'
+  | 'analytics.advanced.charts.succession.note' // params: count
+  | 'analytics.advanced.charts.succession.tooltipDetections'
+  | 'analytics.advanced.charts.succession.tooltipPeak'
+  | 'analytics.advanced.charts.succession.summary' // params: count, species, time
   | 'analytics.advanced.charts.dawnOnset.title'
   | 'analytics.advanced.charts.dawnOnset.description'
   | 'analytics.advanced.charts.dawnOnset.noData'
@@ -3326,8 +3362,10 @@ export type TranslationKey =
   | 'components.audio.spectrogramLoaded'
   | 'components.audio.spectrogramLoadingAria'
   | 'components.audio.spectrogramAlt'
+  | 'components.audio.spectrogramForSpecies' // params: species
   | 'components.audio.spectrogramGeneratingAria'
   | 'components.audio.generating'
+  | 'components.audio.waiting'
   | 'components.audio.queuePosition' // params: position
   | 'components.audio.loadError'
   | 'components.forms.numberField.adjustedToMinimum' // params: value
@@ -3999,6 +4037,18 @@ export type TranslationParams = {
     days: string | number;
     species: string | number;
   };
+  'analytics.advanced.charts.yearOverYear.legendThis': { year: string | number };
+  'analytics.advanced.charts.yearOverYear.legendLast': { year: string | number };
+  'analytics.advanced.charts.yearOverYear.summary': {
+    monthDay: string | number;
+    currentYear: string | number;
+    thisYear: string | number;
+    lastYear: string | number;
+    previousYear: string | number;
+    delta: string | number;
+  };
+  'analytics.advanced.charts.phenology.summary': { species: string | number };
+  'analytics.advanced.charts.phenology.residencyDays': { days: string | number };
   'analytics.advanced.charts.heatmap.legendMore': { max: string | number };
   'analytics.advanced.charts.heatmap.summary': {
     total: string | number;
@@ -4008,6 +4058,12 @@ export type TranslationParams = {
   };
   'analytics.advanced.charts.ridgeline.note': { count: string | number };
   'analytics.advanced.charts.ridgeline.summary': {
+    count: string | number;
+    species: string | number;
+    time: string | number;
+  };
+  'analytics.advanced.charts.succession.note': { count: string | number };
+  'analytics.advanced.charts.succession.summary': {
     count: string | number;
     species: string | number;
     time: string | number;
@@ -4119,6 +4175,7 @@ export type TranslationParams = {
   'media.audio.nowPlaying': { source: string | number };
   'media.audio.streamTitle': { source: string | number };
   'media.audio.playbackError': { details: string | number };
+  'components.audio.spectrogramForSpecies': { species: string | number };
   'components.audio.queuePosition': { position: string | number };
   'components.forms.numberField.adjustedToMinimum': { value: string | number };
   'components.forms.numberField.adjustedToMaximum': { value: string | number };

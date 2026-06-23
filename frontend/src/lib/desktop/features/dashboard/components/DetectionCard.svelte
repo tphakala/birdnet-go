@@ -26,18 +26,17 @@
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import AudioSettingsButton from './AudioSettingsButton.svelte';
   import { cn } from '$lib/utils/cn';
-  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { downloadDetectionAudio } from '$lib/utils/audioDownload';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
+  import { t } from '$lib/i18n';
 
   // Configuration constants - use helper to read current default gain at call time
   // (cards are recycled via keyed {#each}, so a one-time const would go stale)
   const getDefaultAudioGain = () => get(dashboardSettings)?.defaultAudioGain ?? 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
-  const DEFAULT_DOWNLOAD_NAME = 'detection';
-  const AUDIO_FILE_EXTENSION = '.wav';
 
   interface Props {
     detection: Detection;
@@ -127,26 +126,6 @@
     onFreezeEnd?.();
   }
 
-  function handleDownload() {
-    // Create a temporary anchor element to trigger download
-    const link = document.createElement('a');
-    link.href = buildAppUrl(`/api/v2/audio/${detection.id}`);
-    // Use species name and date/time for filename
-    // Sanitize commonName to prevent path traversal (remove characters that aren't alphanumeric, space, dot, underscore, or hyphen)
-    const safeCommonName = (detection.commonName || DEFAULT_DOWNLOAD_NAME).replace(
-      /[^a-zA-Z0-9 ._-]/g,
-      '_'
-    );
-    const dateTime =
-      detection.date && detection.time
-        ? `${detection.date}_${detection.time.replace(/:/g, '-')}`
-        : String(detection.id);
-    link.download = `${safeCommonName}_${dateTime}${AUDIO_FILE_EXTENSION}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
   // eslint-disable-next-line no-undef -- browser global
   let observer: IntersectionObserver | undefined;
 
@@ -188,21 +167,27 @@
           <span class="loading loading-spinner loading-md text-[var(--color-base-content)]/50"
           ></span>
           {#if loader.isQueued}
-            <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Waiting...</span>
+            <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
+              >{t('components.audio.waiting')}</span
+            >
           {:else if loader.isGenerating}
-            <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Generating...</span>
+            <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
+              >{t('components.audio.generating')}</span
+            >
           {/if}
         </div>
       {/if}
 
       {#if loader.error}
         <div class="spectrogram-error">
-          <span class="text-sm text-[var(--color-base-content)]/50">Spectrogram unavailable</span>
+          <span class="text-sm text-[var(--color-base-content)]/50"
+            >{t('components.audio.spectrogramUnavailable')}</span
+          >
         </div>
       {:else if loader.spectrogramUrl}
         <img
           src={loader.spectrogramUrl}
-          alt="Spectrogram for {detection.commonName}"
+          alt={t('components.audio.spectrogramForSpecies', { species: detection.commonName })}
           class="spectrogram-image"
           class:opacity-0={loader.state === 'loading'}
           decoding="async"
@@ -269,7 +254,7 @@
       {onToggleSpecies}
       {onToggleLock}
       {onDelete}
-      onDownload={handleDownload}
+      onDownload={() => downloadDetectionAudio(detection)}
       onMenuOpen={handleMenuOpen}
       onMenuClose={handleMenuClose}
     />
