@@ -36,6 +36,17 @@ services:
     volumes:
       - ./config:/config
       - ./data:/data
+      # External media (import / backup), optional.
+      # The host directory must exist and be a shared mount for hot-plug to work.
+      # One-time host setup: mkdir -p /mnt/birdnet-go/external &&
+      #   mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external &&
+      #   mount --make-rshared /mnt/birdnet-go/external
+      # Then mount USB/SD/fileshares under /mnt/birdnet-go/external/<label> on the host.
+      - type: bind
+        source: /mnt/birdnet-go/external
+        target: /external
+        bind:
+          propagation: rslave
     # Mount HLS stream segment files directory as tmpfs (RAM disk)
     tmpfs:
       - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755

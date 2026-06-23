@@ -4060,6 +4060,10 @@ generate_systemd_service_content() {
         thermal_volume_line="-v /sys/class/thermal:/sys/class/thermal"
     fi
 
+    # External media mount: host /mnt/birdnet-go/external -> container /external (rslave, rw)
+    # Enables hot-plug of USB/SD/fileshare media mounted under the host directory.
+    local external_media_line="-v /mnt/birdnet-go/external:/external:rslave"
+
     # Check if running on Raspberry Pi and add WiFi power save disable script
     local wifi_power_save_script=""
     if is_raspberry_pi; then
@@ -4083,6 +4087,11 @@ ExecStartPre=-/usr/bin/docker rm -f birdnet-go
 ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
 # Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
 ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls || true'
+# Prepare external media mount point and ensure shared propagation for hot-plug
+ExecStartPre=/bin/mkdir -p /mnt/birdnet-go/external
+ExecStartPre=/bin/chmod 755 /mnt/birdnet-go/external
+ExecStartPre=/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
+ExecStartPre=/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external || true'
 ${wifi_power_save_script:+${wifi_power_save_script}
 }ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
@@ -4097,7 +4106,8 @@ ${audio_env_line:+    ${audio_env_line} \\
 }    -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
 ${thermal_volume_line:+    ${thermal_volume_line} \\
-}    ${BIRDNET_GO_IMAGE}
+}    ${external_media_line} \\
+    ${BIRDNET_GO_IMAGE}
 # Cleanup tasks on stop
 ExecStopPost=/bin/sh -c 'umount -f ${CONFIG_DIR}/hls || true'
 ExecStopPost=-/usr/bin/docker rm -f birdnet-go
