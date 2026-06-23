@@ -274,6 +274,7 @@ func TestImport_Idempotent(t *testing.T) {
 	require.NoError(t, src2.Close())
 	assert.Equal(t, 0, stats2.Inserted, "re-run must insert zero rows")
 	assert.Equal(t, 1, stats2.Skipped, "re-run must skip the already-imported row")
+	assert.Equal(t, 0, stats2.Errors, "re-run must not produce any errors")
 }
 
 func TestImport_WithinSourceDuplicate(t *testing.T) {
@@ -381,6 +382,7 @@ func TestImport_Idempotent_TimezoneMismatch(t *testing.T) {
 	require.NoError(t, src2.Close())
 	assert.Equal(t, 0, stats2.Inserted, "re-run must insert zero rows even with non-UTC import location")
 	assert.Equal(t, 1, stats2.Skipped, "re-run must skip the already-imported row")
+	assert.Equal(t, 0, stats2.Errors, "re-run must not produce any errors")
 }
 
 // TestValidate_MissingColumn verifies that Validate rejects a database whose
@@ -412,11 +414,26 @@ func TestValidate_MissingColumn(t *testing.T) {
 	assert.Error(t, err, "Validate must fail when required columns are missing")
 }
 
-// TestImport_CancelDuringSave verifies that a context cancellation that occurs after
-// at least one row has been processed causes Run to return a context error without
-// miscounting the cancelled row as a save failure.
+// cancelOnFirstReport is a ProgressReporter that cancels a context on its first
+// report call with stats.Inserted > 0, ensuring cancellation happens after the
+// engine has inserted at least one row.
+type cancelOnFirstReport struct {
+	cancel context.CancelFunc
+	once   bool
+}
+
+func (r *cancelOnFirstReport) Report(stats imports.ImportStats) {
+	if !r.once && stats.Inserted > 0 {
+		r.once = true
+		r.cancel()
+	}
+}
+
+// TestImport_CancelDuringSave verifies that a context cancellation after at least
+// one batch has been saved causes Run to return context.Canceled without
+// miscounting the cancelled row as a save failure (stats.Errors must stay 0).
 func TestImport_CancelDuringSave(t *testing.T) {
-	// 500 rows, batch size 10, so the context can be cancelled partway through.
+	// Use enough rows that the import cannot complete in one batch.
 	rows := make([]birdnetPiRow, 0, 500)
 	for i := range 500 {
 		rows = append(rows, birdnetPiRow{
@@ -448,12 +465,13 @@ func TestImport_CancelDuringSave(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	// Cancel after a short delay so at least one row is processed.
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		cancel()
-	}()
+	// reporter cancels the context on its first Report call, which the engine issues
+	// at the end of the first batch. This guarantees at least one batch has been
+	// processed before cancellation - no timing dependency.
+	reporter := &cancelOnFirstReport{cancel: cancel}
 
-	_, err = engine.Run(ctx, src, opts, nil)
-	assert.ErrorIs(t, err, context.Canceled, "mid-import cancel must return context error, not a save error")
+	stats, err := engine.Run(ctx, src, opts, reporter)
+	require.ErrorIs(t, err, context.Canceled, "mid-import cancel must return context.Canceled")
+	assert.GreaterOrEqual(t, stats.Inserted, 1, "at least one row must have been inserted before cancel")
+	assert.Equal(t, 0, stats.Errors, "cancelled row must not be counted as a save error")
 }

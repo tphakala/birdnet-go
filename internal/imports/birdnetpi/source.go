@@ -3,7 +3,6 @@ package birdnetpi
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -37,6 +36,9 @@ func New(path string) (*Source, error) {
 
 	sqlDB, err := db.DB()
 	if err != nil {
+		// db.DB() failing means the internal connection pool is unavailable.
+		// We cannot retrieve the underlying sql.DB to close it, so the gorm
+		// instance is abandoned. This path is not reachable under normal operation.
 		return nil, errors.New(err).
 			Component("imports/birdnetpi").
 			Category(errors.CategoryDatabase).
@@ -120,7 +122,7 @@ func (s *Source) Iterate(ctx context.Context, batchSize int, fn func([]imports.S
 				Component("imports/birdnetpi").
 				Category(errors.CategoryDatabase).
 				Context("operation", "iterate").
-				Context("last_row_id", fmt.Sprintf("%d", lastRowID)).
+				Context("last_row_id", lastRowID).
 				Build()
 		}
 
@@ -165,7 +167,18 @@ func (s *Source) Iterate(ctx context.Context, batchSize int, fn func([]imports.S
 func (s *Source) Close() error {
 	sqlDB, err := s.db.DB()
 	if err != nil {
-		return err
+		return errors.New(err).
+			Component("imports/birdnetpi").
+			Category(errors.CategoryDatabase).
+			Context("operation", "close").
+			Build()
 	}
-	return sqlDB.Close()
+	if err := sqlDB.Close(); err != nil {
+		return errors.New(err).
+			Component("imports/birdnetpi").
+			Category(errors.CategoryDatabase).
+			Context("operation", "close").
+			Build()
+	}
+	return nil
 }

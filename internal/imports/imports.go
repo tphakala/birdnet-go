@@ -44,7 +44,7 @@ type Source interface {
 	// Count returns the total number of rows in the source.
 	Count(ctx context.Context) (int, error)
 
-	// Iterate streams rows in batches ordered by Date, Time.
+	// Iterate streams rows in batches ordered by the source's internal row order.
 	// fn is called once per batch; returning an error from fn stops iteration.
 	Iterate(ctx context.Context, batchSize int, fn func([]SourceDetection) error) error
 
@@ -82,7 +82,8 @@ type ImportOptions struct {
 	// Defaults to defaultBatchSize.
 	BatchSize int
 
-	// IncludeAudio is reserved for B2 (audio copy). Ignored in B1.
+	// IncludeAudio controls whether source audio files are copied alongside detection data.
+	// Not yet implemented; setting it currently has no effect.
 	IncludeAudio bool
 }
 
@@ -190,7 +191,7 @@ func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, report
 			}
 
 			key := detectionKey(ts, row.ScientificName, row.Confidence)
-			if seen[key] {
+			if _, ok := seen[key]; ok {
 				stats.Skipped++
 				stats.Processed++
 				continue
@@ -212,7 +213,7 @@ func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, report
 			}
 
 			// Mark as seen so within-source duplicates are also deduplicated.
-			seen[key] = true
+			seen[key] = struct{}{}
 			stats.Inserted++
 			stats.Processed++
 		}
@@ -249,9 +250,9 @@ func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, report
 
 // loadExistingKeys pages through all detections attributed to sourceNode
 // and returns their dedup keys in a set.
-func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[string]bool, error) {
+func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[string]struct{}, error) {
 	const pageSize = 1000
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var minID uint
 
 	for {
@@ -260,18 +261,22 @@ func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[s
 		}
 
 		filters := datastore.NewDetectionFilters().
-			WithMinID(minID)
+			WithMinID(minID).
+			WithLimit(pageSize)
 		filters.Location = []string{sourceNode}
-		filters.Limit = pageSize
 
 		results, _, err := e.repo.Search(ctx, filters)
 		if err != nil {
-			return nil, fmt.Errorf("querying existing detections: %w", err)
+			return nil, errors.New(err).
+				Component("imports").
+				Category(errors.CategoryDatabase).
+				Context("operation", "load_existing_keys").
+				Build()
 		}
 
 		for _, r := range results {
 			key := detectionKey(r.Timestamp, r.Species.ScientificName, r.Confidence)
-			seen[key] = true
+			seen[key] = struct{}{}
 			if r.ID > minID {
 				minID = r.ID
 			}
@@ -295,8 +300,8 @@ func parseTimestamp(date, timeStr string, loc *time.Location) (time.Time, error)
 // Field mapping decisions:
 //   - BeginTime and EndTime are left as zero values: BirdNET-Pi stores detections
 //     as point-in-time events without clip offsets, so there is no timing data to map.
-//   - ClipName is left empty in DB-only mode (B1); B2 will set it when audio is copied.
-//     An empty ClipName avoids broken "audio not available" links.
+//   - ClipName is left empty in DB-only mode; it will be set once audio copying is
+//     implemented. An empty ClipName avoids broken "audio not available" links.
 //   - Model is set to a synthetic marker so imported rows are distinguishable from
 //     live detections in queries or analytics.
 //   - Provenance is carried solely by SourceNode (a persisted column). AudioSource is
