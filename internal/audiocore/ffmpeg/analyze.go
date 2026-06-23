@@ -53,7 +53,7 @@ func AnalyzeChannelEnergy(ctx context.Context, url, ffmpegPath string) (*Channel
 	analysisCtx, cancel := context.WithTimeout(ctx, analysisTimeout)
 	defer cancel()
 
-	args := buildAnalysisArgs(url)
+	args := buildAnalysisArgs(url, resolveFfmpegMajor(ffmpegBinary))
 
 	cmd := exec.CommandContext(analysisCtx, ffmpegBinary, args...) //nolint:gosec // G204: ffmpegBinary validated by exec.LookPath, URL from user config
 	var stdout, stderr bytes.Buffer
@@ -98,17 +98,22 @@ func AnalyzeChannelEnergy(ctx context.Context, url, ffmpegPath string) (*Channel
 	}, nil
 }
 
-func buildAnalysisArgs(url string) []string {
+func buildAnalysisArgs(url string, ffmpegMajor int) []string {
 	args := make([]string, 0, 16)
 
 	lower := strings.ToLower(url)
 	isRTSP := strings.HasPrefix(lower, "rtsp://") || strings.HasPrefix(lower, "rtsps://")
+	// Default to -timeout; RTSP on FFmpeg 4.x needs -stimeout instead, since 4.x
+	// treats -timeout on the RTSP demuxer as a listen timeout and fails to
+	// connect. Mirror the live capture path's flag selection.
+	timeoutFlag := ffmpegTimeoutParam
 	if isRTSP {
 		args = append(args, "-rtsp_transport", "tcp")
+		timeoutFlag = rtspTimeoutParamForMajor(ffmpegMajor)
 	}
 
 	args = append(args,
-		ffmpegTimeoutParam, strconv.FormatInt(defaultTimeoutMicroseconds, 10),
+		timeoutFlag, strconv.FormatInt(defaultTimeoutMicroseconds, 10),
 		"-i", url,
 		"-t", strconv.Itoa(analysisCaptureDuration),
 		"-loglevel", "error",
