@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/guideprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Guide quality classifications.
@@ -298,13 +299,23 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, errGuideCacheUnavailable) {
+		switch {
+		case errors.Is(err, context.Canceled):
+			// Client disconnected mid-fetch (navigated away / closed the tab): an
+			// expected lifecycle event, not a server or upstream error. Log at info
+			// and return the client-closed status instead of a misleading 502.
+			c.logInfoIfEnabled("species guide request canceled by client",
+				logger.String("species", name), logger.Error(err))
+			return c.HandleError(ctx, err, "Request canceled by client", StatusClientClosedRequest)
+		case errors.Is(err, context.DeadlineExceeded):
+			return c.HandleError(ctx, err, "Species guide request timed out", http.StatusRequestTimeout)
+		case errors.Is(err, errGuideCacheUnavailable):
 			return c.HandleError(ctx, err, "Species guide is temporarily unavailable", http.StatusServiceUnavailable)
-		}
-		if errors.Is(err, guideprovider.ErrGuideNotFound) {
+		case errors.Is(err, guideprovider.ErrGuideNotFound):
 			return c.HandleError(ctx, err, "No guide found for species", http.StatusNotFound)
+		default:
+			return c.HandleError(ctx, err, "Failed to fetch species guide", http.StatusBadGateway)
 		}
-		return c.HandleError(ctx, err, "Failed to fetch species guide", http.StatusBadGateway)
 	}
 	if guide == nil || guide.IsNegativeEntry() {
 		return c.HandleError(ctx, errors.Newf("no guide content").

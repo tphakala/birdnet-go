@@ -68,8 +68,12 @@
   }
 
   function handleWriteError(e: unknown, fallbackKey: string): void {
+    // On a 400 the server reports the specific reason (too long, empty, invalid id)
+    // via error_key, which api.ts surfaces as the already-localized ApiError
+    // message. Show that rather than assuming every 400 is "too long"; other
+    // failures use the action-specific fallback.
     if (e instanceof ApiError && e.status === HTTP_BAD_REQUEST) {
-      toastActions.error(t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES }));
+      toastActions.error(e.message);
     } else {
       toastActions.error(t(fallbackKey));
     }

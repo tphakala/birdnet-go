@@ -75,6 +75,19 @@ func (p stubGuideProvider) Fetch(_ context.Context, _ string, _ guideprovider.Fe
 	return &g, nil
 }
 
+// blockingGuideProvider blocks in Fetch until its (background) context is
+// canceled. The detached Tier-3 fetch therefore never completes during a request,
+// so a caller whose own request context is already canceled deterministically
+// wins the select in GuideCache.Get and surfaces context.Canceled.
+type blockingGuideProvider struct{}
+
+func (blockingGuideProvider) Name() string { return guideprovider.WikipediaProviderName }
+
+func (blockingGuideProvider) Fetch(ctx context.Context, _ string, _ guideprovider.FetchOptions) (*guideprovider.SpeciesGuide, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 // newStubGuideCache builds a real GuideCache wired to a stub provider. It runs no
 // background loop (Start is not called) and is closed on cleanup.
 func newStubGuideCache(t *testing.T, result *guideprovider.SpeciesGuide) *guideprovider.GuideCache {
@@ -155,6 +168,28 @@ func TestGetSpeciesGuide_SuccessReturns200(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &data))
 	assert.Equal(t, sciEurasianBlackbird, data.ScientificName)
 	assert.Equal(t, commonBlackbird, data.CommonName)
+}
+
+// A client that disconnects mid-fetch (canceled request context) must get the
+// client-closed status, not a misleading 502 Bad Gateway.
+func TestGetSpeciesGuide_ClientCanceledReturns499(t *testing.T) {
+	c := guideTestController(t, guideEnabledSettings())
+	gc := guideprovider.NewGuideCache(emptyGuideStore{}, noopGuideMetrics{})
+	gc.RegisterProvider(guideprovider.WikipediaProviderName, blockingGuideProvider{})
+	t.Cleanup(gc.Close)
+	c.SetGuideCache(gc)
+
+	e := echo.New()
+	reqCtx, cancel := context.WithCancel(context.Background())
+	cancel() // client already gone before the handler runs
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/x/guide", http.NoBody).WithContext(reqCtx)
+	rec := httptest.NewRecorder()
+	ec := e.NewContext(req, rec)
+	ec.SetParamNames(paramScientificName)
+	ec.SetParamValues(sciEurasianBlackbird)
+
+	require.NoError(t, c.GetSpeciesGuide(ec))
+	assert.Equal(t, StatusClientClosedRequest, rec.Code)
 }
 
 func TestGetSpeciesGuide_EmptyNameReturns400(t *testing.T) {
