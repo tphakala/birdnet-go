@@ -176,16 +176,24 @@ func isContained(root, target string) bool {
 }
 
 // initImportRoutes registers all import-related API routes.
+//
+// These endpoints start, cancel, and inspect a database import, so the group
+// must fail closed. c.authMiddleware is non-nil in every real deployment: the
+// server always injects it via WithAuthMiddleware, and that middleware itself
+// enforces or passes through based on the auth configuration. It can only be nil
+// in unit tests or a misconfiguration; in that case install a middleware that
+// denies access with 401 rather than registering the routes unprotected (Echo's
+// applyMiddleware would also panic on a literal nil entry).
 func (c *Controller) initImportRoutes() {
-	var mw []echo.MiddlewareFunc
-	// Echo's applyMiddleware invokes every middleware entry, so a nil auth middleware
-	// would panic at registration. Append it only when present (it is nil in tests and
-	// when auth is not configured); the routes are still gated by the global private-mode
-	// middleware on c.Group in that case.
-	if c.authMiddleware != nil {
-		mw = append(mw, c.authMiddleware)
+	authMiddleware := c.authMiddleware
+	if authMiddleware == nil {
+		authMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
+			return func(ctx echo.Context) error {
+				return c.HandleError(ctx, nil, "authentication is not configured", http.StatusUnauthorized)
+			}
+		}
 	}
-	g := c.Group.Group("/import", mw...)
+	g := c.Group.Group("/import", authMiddleware)
 	g.POST("/birdnet-pi", c.StartBirdNETPiImport)
 	g.GET("/jobs/:jobId/progress", c.StreamImportProgress)
 	g.POST("/jobs/:jobId/cancel", c.CancelImport)

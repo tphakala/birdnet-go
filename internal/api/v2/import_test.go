@@ -105,6 +105,10 @@ func newImportController(t *testing.T) (*echo.Echo, *Controller) {
 		importMgr: newImportManager(),
 		ctx:       ctx,
 		cancel:    cancel,
+		// Pass-through auth middleware, mirroring production where the server always
+		// injects a non-nil middleware (it enforces or passes based on auth config).
+		// Tests that exercise the fail-closed nil case set authMiddleware to nil.
+		authMiddleware: func(next echo.HandlerFunc) echo.HandlerFunc { return next },
 	}
 	c.Settings.Store(newValidTestSettings())
 	t.Cleanup(func() {
@@ -803,6 +807,21 @@ func TestImportRoutes_Registered(t *testing.T) {
 		"GET " + apiV2Prefix + "/import/status",
 	}
 	assertRoutesRegistered(t, e, expected)
+}
+
+// TestImportRoutes_FailClosedWhenNoAuth verifies the import group fails closed:
+// with no auth middleware configured it denies access with 401 rather than
+// registering the state-changing endpoints unprotected.
+func TestImportRoutes_FailClosedWhenNoAuth(t *testing.T) {
+	e, c := newImportController(t)
+	c.authMiddleware = nil // exercise the fail-closed path: no auth middleware configured
+	c.initImportRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/import/status", http.NoBody)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
 // TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd verifies the full pipeline with a real SQLite file.
