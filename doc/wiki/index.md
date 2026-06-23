@@ -20,6 +20,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 ## Advanced Features
 
+- [External Media (USB, SD, File Shares)](external-media.md) - Mounting removable and network storage for import and backup
 - [Detection Pipeline Architecture](detection-pipeline.md) - How audio flows through multi-model inference, filtering, and action dispatch
 - [BirdNET Detection Pipeline](BirdNET‐Go-Guide#birdnet-detection-pipeline) - Understanding how settings affect detections
 - [BirdNET Range Filter](BirdNET‐Go-Guide#birdnet-range-filter) - Location and time-based species filtering
