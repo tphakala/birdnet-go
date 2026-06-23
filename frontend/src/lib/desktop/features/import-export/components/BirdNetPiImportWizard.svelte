@@ -82,6 +82,14 @@
     );
   });
 
+  function applyFinalStatus(s: ImportStatusResponse) {
+    if (s.progress) importProgress = s.progress;
+    importError = s.error ? t('system.importExport.errors.importFailed') : null;
+    importComplete = !s.error;
+    importCancelled = false;
+    currentStep = 'done';
+  }
+
   // On mount: check for in-progress import and discover external media
   onMount(() => {
     void loadInitialData();
@@ -95,11 +103,7 @@
       const statusResp = await api.get<ImportStatusResponse>('/api/v2/import/status');
       if (destroyed) return;
       if (statusResp.status === 'done') {
-        if (statusResp.progress) importProgress = statusResp.progress;
-        importError = statusResp.error ? t('system.importExport.errors.importFailed') : null;
-        importComplete = !statusResp.error;
-        importCancelled = false;
-        currentStep = 'done';
+        applyFinalStatus(statusResp);
         isLoading = false;
         return;
       }
@@ -280,17 +284,22 @@
       const resp = await api.post<CancelResponse>(`/api/v2/import/jobs/${jobId}/cancel`);
       if (destroyed) return;
       if (resp.status === 'done') {
-        importCancelled = true;
-        importComplete = false;
-        importError = null;
-        currentStep = 'done';
         closeEventSource();
+        if (currentStep === 'progress') {
+          try {
+            const s = await api.get<ImportStatusResponse>('/api/v2/import/status');
+            if (destroyed) return;
+            applyFinalStatus(s);
+          } catch (err) {
+            logger.error('Failed to load final import status after cancel', err);
+          }
+        }
       }
     } catch (err) {
       logger.error('Cancel request failed', err);
       toastActions.error(t('system.importExport.errors.cancelFailed'));
     } finally {
-      isCancelling = false;
+      if (!destroyed) isCancelling = false;
     }
   }
 

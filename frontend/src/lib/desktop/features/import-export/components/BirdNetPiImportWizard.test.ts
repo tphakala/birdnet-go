@@ -812,9 +812,18 @@ describe('BirdNetPiImportWizard', () => {
     expect(screen.queryByText('system.importExport.done.successTitle')).not.toBeInTheDocument();
   });
 
-  // ---- CR-2: honor synchronous terminal cancel response ----
+  // ---- CR-2: rehydrate true outcome on terminal cancel response ----
 
-  it('cancel returns {status: done} transitions wizard to cancelled done state', async () => {
+  it('cancel returns {status: done} for a completed job shows SUCCESS state (not cancelled)', async () => {
+    const completedProgress = {
+      ...defaultProgress,
+      processed: 1000,
+      inserted: 950,
+      skipped: 50,
+      errors: 0,
+      phase: 'done' as const,
+    };
+
     vi.mocked(api.post).mockImplementation((url: string) => {
       if (url === '/api/v2/import/birdnet-pi') {
         return Promise.resolve({ job_id: 'test-job-123', status: 'started' });
@@ -823,6 +832,28 @@ describe('BirdNetPiImportWizard', () => {
         return Promise.resolve({ status: 'done' });
       }
       return Promise.reject(new Error(`Unmocked POST: ${url}`));
+    });
+
+    // Initial mount: /status returns idle so wizard starts at source step.
+    // After cancel: /status returns done with completed progress.
+    let statusCallCount = 0;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        statusCallCount++;
+        if (statusCallCount === 1) {
+          return Promise.resolve({ running: false, status: 'idle' });
+        }
+        return Promise.resolve({
+          running: false,
+          status: 'done',
+          progress: completedProgress,
+          error: undefined,
+        });
+      }
+      if (url === '/api/v2/system/external-media') {
+        return Promise.resolve(defaultExternalMedia);
+      }
+      return Promise.reject(new Error(`Unmocked GET: ${url}`));
     });
 
     render(BirdNetPiImportWizard, { props: { onClose } });
@@ -849,11 +880,99 @@ describe('BirdNetPiImportWizard', () => {
     });
     await fireEvent.click(cancelButton);
 
-    // The cancel response is {status: 'done'} - no SSE event needed
+    // Should show SUCCESS state because /status returned a completed job (no error)
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+    // Must NOT show cancelled
+    expect(screen.queryByText('system.importExport.done.cancelledTitle')).not.toBeInTheDocument();
+    // The EventSource should have been closed
+    expect(mockEsInstance?.close).toHaveBeenCalled();
+  });
+
+  it('cancel returns {status: done} after SSE already set cancelled done state does not fetch /status', async () => {
+    // The cancel POST is delayed so the SSE cancelled event fires first,
+    // moving the wizard to currentStep='done'. When the cancel POST then
+    // resolves with {status:'done'}, the guard (currentStep !== 'progress')
+    // must prevent a /status fetch that would overwrite the cancelled state.
+    let resolveCancelPost!: (v: { status: string }) => void;
+    const cancelPostPromise = new Promise<{ status: string }>(resolve => {
+      resolveCancelPost = resolve;
+    });
+
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/birdnet-pi') {
+        return Promise.resolve({ job_id: 'test-job-123', status: 'started' });
+      }
+      if (url === '/api/v2/import/jobs/test-job-123/cancel') {
+        return cancelPostPromise;
+      }
+      return Promise.reject(new Error(`Unmocked POST: ${url}`));
+    });
+
+    const statusGetCalls: string[] = [];
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        statusGetCalls.push(url);
+        return Promise.resolve({ running: false, status: 'idle' });
+      }
+      if (url === '/api/v2/system/external-media') {
+        return Promise.resolve(defaultExternalMedia);
+      }
+      return Promise.reject(new Error(`Unmocked GET: ${url}`));
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await waitFor(() => {
+      expect(
+        screen.getByText('system.importExport.sourceAccess.mountDescription')
+      ).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    });
+
+    // Click cancel - POST is pending (delayed)
+    const cancelButton = screen.getByRole('button', {
+      name: /system.importExport.progress.cancelButton/,
+    });
+    await fireEvent.click(cancelButton);
+
+    // SSE delivers cancelled event BEFORE the cancel POST resolves
+    flushSync(() => {
+      dispatchMockEvent('cancelled', { ...defaultProgress, processed: 300 });
+    });
+
     await waitFor(() => {
       expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
     });
-    // The EventSource should have been closed
-    expect(mockEsInstance?.close).toHaveBeenCalled();
+
+    // Clear the initial mount /status call count
+    statusGetCalls.length = 0;
+
+    // Now resolve the cancel POST with {status:'done'} - wizard is already at 'done'
+    flushSync(() => {
+      resolveCancelPost({ status: 'done' });
+    });
+
+    // Give async handlers time to run
+    await waitFor(() => {
+      // Wizard should remain at cancelled done state
+      expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
+    });
+
+    // /status must NOT have been fetched (currentStep was already 'done')
+    expect(statusGetCalls).toHaveLength(0);
+    // Must NOT show success
+    expect(screen.queryByText('system.importExport.done.successTitle')).not.toBeInTheDocument();
   });
 });
