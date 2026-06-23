@@ -78,12 +78,14 @@ describe('ImportExportPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('clicking start import button triggers wizard open (no error thrown)', async () => {
+  it('clicking start import button opens the wizard', async () => {
+    const { default: WizardMock } = await import('../components/BirdNetPiImportWizard.svelte');
     render(ImportExportPage);
     const startButton = screen.getByRole('button', {
       name: /system.importExport.birdnetPi.startButton/,
     });
-    // Should not throw when clicked
-    await expect(fireEvent.click(startButton)).resolves.not.toThrow();
+    await fireEvent.click(startButton);
+    // The wizard component should have been mounted after clicking start
+    expect(vi.mocked(WizardMock)).toHaveBeenCalled();
   });
 });

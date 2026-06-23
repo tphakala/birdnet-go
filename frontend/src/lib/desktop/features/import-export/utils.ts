@@ -11,8 +11,3 @@ export function deriveSourceAccessState(media: ExternalMediaResponse): SourceAcc
 export function buildDetectionsFilterUrl(): string {
   return '/ui/detections?source=birdnet-pi';
 }
-
-/** Generate a simple unique id without crypto.randomUUID (plain HTTP fallback). */
-export function generateId(): string {
-  return Math.random().toString(36).slice(2, 10);
-}

@@ -497,6 +497,76 @@ describe('BirdNetPiImportWizard', () => {
     });
   });
 
+  it('native error event (no data) does not terminate the import', async () => {
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await waitFor(() => {
+      expect(
+        screen.getByText('system.importExport.sourceAccess.mountDescription')
+      ).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    });
+
+    // Dispatch a native transport error (plain Event, no data) - must NOT terminate
+    flushSync(() => {
+      const nativeError = new Event('error');
+      const handlers = mockEsListeners.get('error') ?? [];
+      for (const handler of handlers) {
+        handler(nativeError);
+      }
+    });
+
+    // Wizard should still be on the progress step
+    expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    // The EventSource should NOT have been closed
+    expect(mockEsInstance?.close).not.toHaveBeenCalled();
+  });
+
+  it('server error event with JSON data transitions to done with localized error', async () => {
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await waitFor(() => {
+      expect(
+        screen.getByText('system.importExport.sourceAccess.mountDescription')
+      ).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    });
+
+    // Dispatch a server error event with valid JSON data - MUST terminate
+    flushSync(() => {
+      dispatchMockEvent('error', {
+        message: 'server-side import error',
+        ...defaultProgress,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.errorTitle')).toBeInTheDocument();
+    });
+    // The localized error message should be shown (not the raw backend string)
+    expect(screen.getByText('system.importExport.errors.importFailed')).toBeInTheDocument();
+  });
+
   it('cancelled event transitions to done step with cancelled state', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
     await waitFor(() => {

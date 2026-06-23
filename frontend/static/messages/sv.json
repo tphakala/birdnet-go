@@ -1162,6 +1162,14 @@
       "available": "Available",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
+      "runInBackground": "Close (import continues in background)",
+      "steps": {
+        "source": "Source",
+        "mode": "Mode",
+        "confirm": "Confirm",
+        "progress": "Progress",
+        "done": "Done"
+      },
       "import": {
         "sectionTitle": "Import"
       },

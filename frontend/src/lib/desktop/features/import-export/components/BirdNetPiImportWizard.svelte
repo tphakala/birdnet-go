@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
@@ -25,6 +25,7 @@
     WizardStep,
   } from '../types';
   import { deriveSourceAccessState, buildDetectionsFilterUrl } from '../utils';
+  import { formatNumber } from '$lib/utils/formatters';
 
   const logger = loggers.ui;
 
@@ -54,7 +55,8 @@
   let importCancelled = $state(false);
   let importError = $state<string | null>(null);
   let isCancelling = $state(false);
-  let eventSource = $state<ReconnectingEventSource | null>(null);
+  let eventSource: ReconnectingEventSource | null = null;
+  let destroyed = false;
 
   // Step labels for the indicator
   const stepLabels: WizardStep[] = ['source', 'mode', 'confirm', 'progress', 'done'];
@@ -67,15 +69,12 @@
 
   let progressPercent = $derived.by(() => {
     if (!importProgress || importProgress.total === 0) return 0;
-    return Math.round((importProgress.processed / importProgress.total) * 100);
+    return Math.min(100, Math.round((importProgress.processed / importProgress.total) * 100));
   });
 
   // On mount: check for in-progress import and discover external media
-  $effect(() => {
-    loadInitialData();
-    return () => {
-      closeEventSource();
-    };
+  onMount(() => {
+    void loadInitialData();
   });
 
   async function loadInitialData() {
@@ -84,6 +83,7 @@
     try {
       // Check for already-running import
       const statusResp = await api.get<ImportStatusResponse>('/api/v2/import/status');
+      if (destroyed) return;
       if (statusResp.running && statusResp.job_id) {
         jobId = statusResp.job_id;
         if (statusResp.progress) {
@@ -97,6 +97,7 @@
 
       // Discover external media
       await loadExternalMedia();
+      if (destroyed) return;
     } catch (err) {
       if (err instanceof ApiError) {
         errorMessage = err.userMessage;
@@ -125,8 +126,11 @@
 
   async function recheckMedia() {
     isLoading = true;
-    await loadExternalMedia();
-    isLoading = false;
+    try {
+      await loadExternalMedia();
+    } finally {
+      isLoading = false;
+    }
   }
 
   function connectEventSource(id: string) {
@@ -167,9 +171,13 @@
     });
 
     es.addEventListener('error', (event: Event) => {
+      // EventSource also fires 'error' for native transport drops (no .data);
+      // ReconnectingEventSource reconnects those, so do not terminate the job on them.
+      if (!(event instanceof MessageEvent) || typeof event.data !== 'string') {
+        return;
+      }
       try {
-        const data = JSON.parse((event as MessageEvent).data) as ImportErrorEvent;
-        importError = data.message;
+        const data = JSON.parse(event.data) as ImportErrorEvent;
         importProgress = {
           total: data.total,
           processed: data.processed,
@@ -178,9 +186,11 @@
           errors: data.errors,
           phase: data.phase,
         };
-      } catch {
-        importError = t('system.importExport.errors.importFailed');
+      } catch (e) {
+        logger.error('Failed to parse import error event', e);
       }
+      // Always show the localized message, never the raw backend string.
+      importError = t('system.importExport.errors.importFailed');
       currentStep = 'done';
       closeEventSource();
     });
@@ -210,6 +220,7 @@
 
     try {
       const resp = await api.post<StartImportResponse>('/api/v2/import/birdnet-pi', body);
+      if (destroyed) return;
       jobId = resp.job_id;
       currentStep = 'progress';
       connectEventSource(resp.job_id);
@@ -247,6 +258,7 @@
   }
 
   onDestroy(() => {
+    destroyed = true;
     closeEventSource();
   });
 </script>
@@ -254,6 +266,7 @@
 <Modal
   isOpen={true}
   size="2xl"
+  title={t('system.importExport.birdnetPi.wizardTitle')}
   {onClose}
   closeOnBackdrop={currentStep !== 'progress'}
   closeOnEsc={currentStep !== 'progress'}
@@ -261,7 +274,7 @@
 >
   {#snippet header()}
     <div class="flex flex-col gap-3">
-      <h3 class="font-bold text-lg text-[var(--color-base-content)]">
+      <h3 id="modal-title" class="font-bold text-lg text-[var(--color-base-content)]">
         {t('system.importExport.birdnetPi.wizardTitle')}
       </h3>
 
@@ -280,6 +293,7 @@
                 : i === currentStepIndex
                   ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)] ring-2 ring-[var(--color-primary)]/30'
                   : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/60'}"
+              aria-label={t(`system.importExport.steps.${step}`)}
               aria-current={i === currentStepIndex ? 'step' : undefined}
             >
               {i + 1}
@@ -572,7 +586,7 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
                 <div class="text-lg font-semibold text-[var(--color-base-content)]">
-                  {importProgress.processed}
+                  {formatNumber(importProgress.processed)}
                 </div>
                 <div class="text-xs text-[var(--color-base-content)]/60">
                   {t('system.importExport.progress.processed')}
@@ -580,7 +594,7 @@
               </div>
               <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
                 <div class="text-lg font-semibold text-[var(--color-success)]">
-                  {importProgress.inserted}
+                  {formatNumber(importProgress.inserted)}
                 </div>
                 <div class="text-xs text-[var(--color-base-content)]/60">
                   {t('system.importExport.progress.inserted')}
@@ -588,7 +602,7 @@
               </div>
               <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
                 <div class="text-lg font-semibold text-[var(--color-base-content)]/60">
-                  {importProgress.skipped}
+                  {formatNumber(importProgress.skipped)}
                 </div>
                 <div class="text-xs text-[var(--color-base-content)]/60">
                   {t('system.importExport.progress.skipped')}
@@ -600,7 +614,7 @@
                     ? 'text-[var(--color-error)]'
                     : 'text-[var(--color-base-content)]/60'}"
                 >
-                  {importProgress.errors}
+                  {formatNumber(importProgress.errors)}
                 </div>
                 <div class="text-xs text-[var(--color-base-content)]/60">
                   {t('system.importExport.progress.errors')}
@@ -639,7 +653,7 @@
               <div class="grid grid-cols-3 gap-3 text-left">
                 <div class="p-3 rounded-lg bg-[var(--color-base-200)] text-center">
                   <div class="text-xl font-bold text-[var(--color-success)]">
-                    {importProgress.inserted}
+                    {formatNumber(importProgress.inserted)}
                   </div>
                   <div class="text-xs text-[var(--color-base-content)]/60">
                     {t('system.importExport.progress.inserted')}
@@ -647,7 +661,7 @@
                 </div>
                 <div class="p-3 rounded-lg bg-[var(--color-base-200)] text-center">
                   <div class="text-xl font-bold text-[var(--color-base-content)]/60">
-                    {importProgress.skipped}
+                    {formatNumber(importProgress.skipped)}
                   </div>
                   <div class="text-xs text-[var(--color-base-content)]/60">
                     {t('system.importExport.progress.skipped')}
@@ -659,7 +673,7 @@
                       ? 'text-[var(--color-error)]'
                       : 'text-[var(--color-base-content)]/60'}"
                   >
-                    {importProgress.errors}
+                    {formatNumber(importProgress.errors)}
                   </div>
                   <div class="text-xs text-[var(--color-base-content)]/60">
                     {t('system.importExport.progress.errors')}
@@ -775,6 +789,9 @@
           </Button>
         {:else if currentStep === 'progress'}
           {#if !importComplete && !importCancelled && !importError}
+            <Button variant="ghost" onclick={onClose}>
+              {t('system.importExport.runInBackground')}
+            </Button>
             <Button
               variant="error"
               onclick={cancelImport}
