@@ -65,9 +65,9 @@ Before=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/mkdir -p /mnt/birdnet-go/external
-ExecStart=/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
-ExecStart=/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external'
+ExecStart=-/bin/mkdir -p /mnt/birdnet-go/external
+ExecStart=-/bin/sh -c 'mountpoint -q /mnt/birdnet-go/external || mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external'
+ExecStart=-/bin/sh -c 'mount --make-rshared /mnt/birdnet-go/external'
 
 [Install]
 WantedBy=multi-user.target
@@ -106,8 +106,11 @@ sudo mount -t nfs 192.168.1.10:/exports/birdnet /mnt/birdnet-go/external/nfs-bac
 # SMB/CIFS share example (store credentials in a file, not on the command line)
 # A cleartext password= option in the mount command is visible in /proc/mounts,
 # ps output, and the journal. Use a credentials file instead:
-#   sudo sh -c 'printf "username=user\npassword=pass\n" > /etc/birdnet-go-smb.cred'
-#   sudo chmod 600 /etc/birdnet-go-smb.cred
+#   sudo install -m 600 /dev/null /etc/birdnet-go-smb.cred
+#   sudoedit /etc/birdnet-go-smb.cred
+#   # then add these two lines to the file:
+#   #   username=YOUR_USERNAME
+#   #   password=YOUR_PASSWORD
 sudo mkdir -p /mnt/birdnet-go/external/smb-share
 sudo mount -t cifs //192.168.1.10/share /mnt/birdnet-go/external/smb-share \
     -o credentials=/etc/birdnet-go-smb.cred,uid=1000,gid=1000
