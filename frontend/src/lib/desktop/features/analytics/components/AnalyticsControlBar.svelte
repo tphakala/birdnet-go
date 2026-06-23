@@ -73,12 +73,13 @@
     ...availableSources.map(s => ({ value: s.id, label: s.name })),
   ]);
 
-  // The source filter is enabled only when a chart in the active tab consumes the source dimension and
-  // there is at least one source to choose from. Otherwise it is disabled with a specific reason, so
-  // the control is never a silent dead end (no chart in PR's wiring tab sets supports.source, so this
-  // stays disabled until the per-mic chart lands and turns it on).
+  // The source filter is enabled when a chart in the active tab consumes the source dimension and
+  // either there are sources to choose from or a source is already selected. The selected-source case
+  // keeps a stale filter from a URL/bookmark clearable back to "All sources" even when the live list
+  // came back empty. Otherwise it is disabled with a specific reason, so the control is never a silent
+  // dead end (no chart sets supports.source yet, so this stays disabled until the per-mic chart lands).
   const sourceEnabled = $derived(
-    sourceApplicable && !loadingSources && availableSources.length > 0
+    sourceApplicable && !loadingSources && (availableSources.length > 0 || params.source !== '')
   );
 
   const sourceDisabledReason = $derived.by(() => {

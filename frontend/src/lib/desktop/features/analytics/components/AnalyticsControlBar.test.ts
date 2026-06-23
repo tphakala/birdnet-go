@@ -115,6 +115,26 @@ describe('AnalyticsControlBar', () => {
     expect(onParamsChange).toHaveBeenCalledWith({ source: '7' });
   });
 
+  it('keeps the source filter enabled to clear a stale selection even when no sources are returned', () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      props: {
+        // A source is set (e.g. from a URL/bookmark) but the live list came back empty.
+        params: makeParams({ source: '7' }),
+        availableSpecies: species,
+        availableSources: [],
+        sourceApplicable: true,
+        onParamsChange,
+      },
+    });
+
+    // Enabled (no disabled reason) so the user can reset back to "All sources" and recover.
+    expect(screen.queryByText('analytics.hub.controls.sourceNone')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('analytics.hub.controls.sourceNotApplicable')
+    ).not.toBeInTheDocument();
+  });
+
   it('explains when species filtering does not apply to the active tab', () => {
     const onParamsChange = vi.fn();
     render(AnalyticsControlBar, {

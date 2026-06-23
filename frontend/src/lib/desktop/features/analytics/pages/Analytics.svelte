@@ -258,7 +258,11 @@
       .map(item => {
         if (!item || typeof item !== 'object') return null;
         const s = item as { id?: unknown; name?: unknown; count?: unknown };
-        const id = typeof s.id === 'string' ? s.id : '';
+        // The backend serialises id as a string; also accept a finite number defensively so a future
+        // numeric-id payload does not silently drop sources.
+        let id = '';
+        if (typeof s.id === 'string') id = s.id;
+        else if (typeof s.id === 'number' && Number.isFinite(s.id)) id = String(s.id);
         if (!id) return null;
         const name = typeof s.name === 'string' && s.name ? s.name : id;
         const count = typeof s.count === 'number' && Number.isFinite(s.count) ? s.count : 0;

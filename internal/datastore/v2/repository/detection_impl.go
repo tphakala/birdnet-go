@@ -1806,7 +1806,9 @@ func (r *detectionRepository) GetSourceActivitySummaries(ctx context.Context, st
 
 	err := r.buildAnalyticsBaseQuery(ctx, start, end, nil, nil).
 		Joins(fmt.Sprintf("JOIN %s s ON s.id = d.source_id", r.sourcesTable())).
-		Select("s.id as source_id, s.display_name as display_name, s.node_name as node_name, s.source_type as source_type, COUNT(d.id) as count").
+		// COUNT(DISTINCT d.id): the reviews LEFT JOIN is 1:1 so plain COUNT is already fan-out-immune
+		// today, but DISTINCT keeps the count correct if a future join introduces row multiplication.
+		Select("s.id as source_id, s.display_name as display_name, s.node_name as node_name, s.source_type as source_type, COUNT(DISTINCT d.id) as count").
 		Group("s.id, s.display_name, s.node_name, s.source_type").
 		Order("count DESC, s.id ASC").
 		Scan(&results).Error
