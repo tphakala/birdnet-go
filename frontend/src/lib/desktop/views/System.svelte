@@ -7,6 +7,7 @@
   import { DatabaseDashboard } from '$lib/desktop/components/database';
   import TerminalPage from '$lib/desktop/features/system/TerminalPage.svelte';
   import SystemInference from '$lib/desktop/views/SystemInference.svelte';
+  import ImportExportPage from '$lib/desktop/features/import-export/pages/ImportExportPage.svelte';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -29,6 +30,7 @@
     if (path === '/ui/system/database') return 'database';
     if (path === '/ui/system/terminal') return 'terminal';
     if (path === '/ui/system/inference') return 'inference';
+    if (path === '/ui/system/import-export') return 'import-export';
     return 'overview';
   });
 
@@ -323,7 +325,6 @@
 
     metricsSSE.addEventListener('metrics', (event: Event) => {
       try {
-        // eslint-disable-next-line no-undef
         const messageEvent = event as MessageEvent;
         const metrics = JSON.parse(messageEvent.data) as Record<string, MetricPoint>;
 
@@ -541,6 +542,11 @@
   <!-- AI Models & Inference Page -->
   <div class="col-span-12 space-y-4" role="region" aria-label={t('system.sections.inference')}>
     <SystemInference />
+  </div>
+{:else if currentSubpage === 'import-export'}
+  <!-- Import / Export Page -->
+  <div class="col-span-12 space-y-4" role="region" aria-label={t('system.sections.importExport')}>
+    <ImportExportPage />
   </div>
 {:else}
   <!-- System Overview Page -->

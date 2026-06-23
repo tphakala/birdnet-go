@@ -227,7 +227,6 @@
 
     metricsSSE.addEventListener('metrics', (event: Event) => {
       try {
-        // eslint-disable-next-line no-undef
         const messageEvent = event as MessageEvent;
         const metrics = JSON.parse(messageEvent.data) as Record<string, { value: number }>;
         const next: Record<string, number[]> = { ...seriesByKey };
