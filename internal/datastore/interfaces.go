@@ -212,6 +212,12 @@ type Interface interface {
 	// the species accumulation curve in the Biodiversity tab; "first seen" is bounded to the selected
 	// window, not lifetime.
 	GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]SpeciesAccumulationPoint, error)
+	// GetYearOverYear returns the current year-to-date cumulative detection counts versus the same
+	// calendar span one year earlier (false positives excluded): one point per current-year calendar
+	// day from Jan 1 through date (station-local YYYY-MM-DD; empty -> today in the station timezone).
+	// Counts are aligned by calendar (month, day) with leap-day Feb 29 handled, and the delta is current
+	// minus previous. Powers the year-over-year tracker in the Trends tab.
+	GetYearOverYear(ctx context.Context, date string) (YearOverYearResult, error)
 	// GetSpeciesPhenology returns the arrival/departure residency span (first and last
 	// false-positive-excluded detection, plus the in-range detection count) for the top `limit` species
 	// by volume over the date range. Powers the arrival/departure phenology chart in the Biodiversity

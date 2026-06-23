@@ -122,6 +122,28 @@ type SpeciesAccumulationPoint struct {
 	NewSpecies        int
 }
 
+// YearOverYearPoint is one calendar position on the year-over-year tracker. Date is the current-year
+// station-local calendar day (YYYY-MM-DD) used for the x-axis; MonthDay ("MM-DD") is the year-
+// independent alignment key shared by both years. ThisYear and LastYear are the cumulative detection
+// counts through this calendar position in the current and previous year respectively (false positives
+// excluded); Delta is ThisYear - LastYear (positive means the current year is running ahead of last).
+type YearOverYearPoint struct {
+	Date     string
+	MonthDay string
+	ThisYear int
+	LastYear int
+	Delta    int
+}
+
+// YearOverYearResult is the year-over-year tracker aggregation: the two calendar years being compared
+// and one cumulative point per current-year calendar day from Jan 1 through the requested date. Points
+// is always non-nil. It answers "are we ahead of or behind last year's detection activity so far?".
+type YearOverYearResult struct {
+	CurrentYear  int
+	PreviousYear int
+	Points       []YearOverYearPoint
+}
+
 // SpeciesPhenologyPoint is one species' residency span within the selected date range: its first and
 // last false-positive-excluded detection (as station-local YYYY-MM-DD dates) and the in-range
 // detection count. Species are the top-N by detection volume; the chart draws one residency bar per
@@ -526,6 +548,13 @@ func (ds *DataStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _
 // slice rather than implementing the aggregation. See internal/datastore/v2only for the real method.
 func (ds *DataStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]SpeciesAccumulationPoint, error) {
 	return []SpeciesAccumulationPoint{}, nil
+}
+
+// GetYearOverYear is a stub on the legacy store. The year-over-year tracker is a v2only feature; the
+// legacy datastore is deprecated and being removed, so it returns an empty (non-nil) result rather
+// than implementing the aggregation. See internal/datastore/v2only for the real method.
+func (ds *DataStore) GetYearOverYear(_ context.Context, _ string) (YearOverYearResult, error) {
+	return YearOverYearResult{Points: []YearOverYearPoint{}}, nil
 }
 
 // GetSpeciesPhenology is a stub on the legacy store. The arrival/departure phenology chart is a

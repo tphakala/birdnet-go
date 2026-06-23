@@ -1845,6 +1845,19 @@
           "tooltipNew": "New in period",
           "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
         },
+        "yearOverYear": {
+          "title": "Year-over-Year Tracker",
+          "description": "Cumulative detections so far this year versus the same calendar dates last year. The shaded band is the running gap between the two; this year's line sitting above last year's means you are ahead of last year's pace.",
+          "noData": "No year-over-year data available",
+          "noDataHint": "Detections from this year and last year build up here as the year progresses",
+          "ariaLabel": "Year-over-year tracker: cumulative detections this year versus the same span last year",
+          "axisDate": "Date",
+          "axisCount": "Cumulative detections",
+          "legendThis": "{year} (this year)",
+          "legendLast": "{year} (last year)",
+          "tooltipDelta": "Difference",
+          "summary": "Year over year: by {monthDay}, {currentYear} has {thisYear} cumulative detections versus {lastYear} for {previousYear} (a difference of {delta})."
+        },
         "phenology": {
           "title": "Arrival & Departure Phenology",
           "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",

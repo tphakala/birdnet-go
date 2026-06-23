@@ -38,6 +38,12 @@ import type {
   PhenologyDatum,
   PhenologyRow,
 } from '../components/charts/d3/utils/phenology';
+import YearOverYearChart from '../components/charts/d3/YearOverYearChart.svelte';
+import { peakCumulative } from '../components/charts/d3/utils/yearOverYear';
+import type {
+  YearOverYearData,
+  YearOverYearPoint,
+} from '../components/charts/d3/utils/yearOverYear';
 
 import { formatDateForAPI } from './analyticsParams';
 import type { AnalyticsParams, ChartDef } from './types';
@@ -664,6 +670,74 @@ async function fetchSpeciesAccumulation(
   return { points };
 }
 
+interface YearOverYearResponseItem {
+  date?: unknown;
+  monthDay?: unknown;
+  thisYear?: unknown;
+  lastYear?: unknown;
+  delta?: unknown;
+}
+
+interface YearOverYearResponseShape {
+  currentYear?: unknown;
+  previousYear?: unknown;
+  points?: unknown;
+}
+
+/**
+ * Year-over-year tracker: current year-to-date cumulative detections versus the same calendar span one
+ * year earlier (false positives excluded). The server returns an object with year labels and a points
+ * array (one entry per current-year day). All-species, so the species filter is never sent; the
+ * control bar's end date is the as-of date. Defensively coerces the payload into the chart's shape.
+ */
+async function fetchYearOverYear(
+  params: AnalyticsParams,
+  signal?: AbortSignal
+): Promise<YearOverYearData> {
+  const search = new URLSearchParams({
+    date: formatDateForAPI(params.endDate),
+  });
+
+  const response = await fetch(buildAppUrl(`/api/v2/analytics/time/year-over-year?${search}`), {
+    signal,
+  });
+  ensureOk(response);
+
+  const raw: unknown = await response.json();
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Invalid year-over-year response: expected an object');
+  }
+  const body = raw as YearOverYearResponseShape;
+  const currentYear =
+    typeof body.currentYear === 'number' && Number.isFinite(body.currentYear)
+      ? body.currentYear
+      : 0;
+  const previousYear =
+    typeof body.previousYear === 'number' && Number.isFinite(body.previousYear)
+      ? body.previousYear
+      : 0;
+  const rawPoints = Array.isArray(body.points) ? body.points : [];
+
+  const points: YearOverYearPoint[] = [];
+  for (const r of rawPoints) {
+    if (!r || typeof r !== 'object') continue;
+    const item = r as YearOverYearResponseItem;
+    if (typeof item.date !== 'string') continue;
+    const monthDay = typeof item.monthDay === 'string' ? item.monthDay : '';
+    const thisYear =
+      typeof item.thisYear === 'number' && Number.isFinite(item.thisYear) ? item.thisYear : 0;
+    const lastYear =
+      typeof item.lastYear === 'number' && Number.isFinite(item.lastYear) ? item.lastYear : 0;
+    const delta =
+      typeof item.delta === 'number' && Number.isFinite(item.delta)
+        ? item.delta
+        : thisYear - lastYear;
+    points.push({ date: item.date, monthDay, thisYear, lastYear, delta });
+  }
+
+  return { currentYear, previousYear, points };
+}
+
 // Top-N species the phenology Gantt requests; mirrors the chart's maxSpecies cap and the server
 // default. Kept modest so the residency bars stay legible within the card's fixed height.
 const SPECIES_PHENOLOGY_LIMIT = 12;
@@ -878,6 +952,24 @@ export const CHART_REGISTRY: ChartDef[] = [
     }),
     size: 'full',
     supports: { species: true, source: false },
+  },
+  {
+    id: 'year-over-year',
+    group: 'trends',
+    titleKey: 'analytics.advanced.charts.yearOverYear.title',
+    descKey: 'analytics.advanced.charts.yearOverYear.description',
+    emptyKey: 'analytics.advanced.charts.yearOverYear.noData',
+    emptyHintKey: 'analytics.advanced.charts.yearOverYear.noDataHint',
+    component: YearOverYearChart,
+    fetch: fetchYearOverYear,
+    // Object payload (year labels + a points array spanning the whole year-to-date), so the default
+    // array-length count would always look like plenty of data. The meaningful count is how many
+    // detections actually accumulated in either year; below 2 the chart is a trivial flat step, so
+    // ChartCard shows the not-enough-data state. All-species, so neither filter applies.
+    countDataPoints: data => peakCumulative(data as YearOverYearData),
+    size: 'full',
+    supports: { species: false, source: false },
+    minDataPoints: 2,
   },
   {
     id: 'species-diversity',
