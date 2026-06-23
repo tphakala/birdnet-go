@@ -16,11 +16,11 @@ import (
 // Common string constants to avoid repetition.
 const (
 	armFallback     = "arm"
-	envDocker       = "Docker"
-	envPodman       = "Podman"
-	envLXC          = "LXC"
-	envNspawn       = "systemd-nspawn"
-	envContainerGen = "Container"
+	EnvDocker       = "Docker"
+	EnvPodman       = "Podman"
+	EnvLXC          = "LXC"
+	EnvNspawn       = "systemd-nspawn"
+	EnvContainerGen = "Container"
 )
 
 // Cached detection results — environment never changes at runtime.
@@ -120,12 +120,7 @@ func DetectEnvironment(rootPath string) (envType, detail string) {
 // (Docker, Podman, LXC, systemd-nspawn, or generic container).
 func IsContainer() bool {
 	envType, _ := GetEnvironment()
-	switch envType {
-	case envDocker, envPodman, envLXC, envNspawn, envContainerGen:
-		return true
-	default:
-		return false
-	}
+	return IsContainerEnv(envType)
 }
 
 // GetEnvironment returns the cached environment detection result.
@@ -142,10 +137,10 @@ func GetEnvironment() (envType, detail string) {
 func detectLinuxEnvironment(root string) (envType, detail string) {
 	// 1. Container detection — sentinel files
 	if fileExists(filepath.Join(root, ".dockerenv")) {
-		return envDocker, ""
+		return EnvDocker, ""
 	}
 	if fileExists(filepath.Join(root, "run", ".containerenv")) {
-		return envPodman, ""
+		return EnvPodman, ""
 	}
 
 	// 2. Container detection — environment variable (only in production mode,
@@ -188,15 +183,15 @@ func detectLinuxEnvironment(root string) (envType, detail string) {
 func mapContainerEnvVar(value string) (envType, detail string) {
 	switch strings.ToLower(value) {
 	case "docker":
-		return envDocker, ""
+		return EnvDocker, ""
 	case "podman":
-		return envPodman, ""
+		return EnvPodman, ""
 	case "lxc":
-		return envLXC, ""
-	case envNspawn:
-		return envNspawn, ""
+		return EnvLXC, ""
+	case EnvNspawn:
+		return EnvNspawn, ""
 	default:
-		return envContainerGen, value
+		return EnvContainerGen, value
 	}
 }
 
@@ -212,13 +207,13 @@ func detectFromCgroup(path string) string {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "docker") {
-			return envDocker
+			return EnvDocker
 		}
 		if strings.Contains(line, "podman") {
-			return envPodman
+			return EnvPodman
 		}
 		if strings.Contains(line, "lxc") {
-			return envLXC
+			return EnvLXC
 		}
 	}
 	return ""

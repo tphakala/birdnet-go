@@ -83,9 +83,10 @@ func (c *Controller) GetExternalMedia(ctx echo.Context) error {
 }
 
 // buildGuidance returns copy-pasteable setup instructions for the given
-// container runtime. Commands match the A1 contract: host dir
-// /mnt/birdnet-go/external, rslave bind-mount, chown to container UID, and
-// runtime-specific volume flags.
+// container runtime. The commands set up the host mount: host dir
+// /mnt/birdnet-go/external, a self bind-mount made rshared so sub-mounts
+// propagate into the container, a chown to the container UID, and the
+// runtime-specific volume flag.
 func buildGuidance(envType string) *ExternalMediaGuidance {
 	const (
 		hostDir      = "/mnt/birdnet-go/external"
@@ -101,7 +102,7 @@ func buildGuidance(envType string) *ExternalMediaGuidance {
 	}
 
 	switch envType {
-	case "Docker":
+	case sysinfo.EnvDocker:
 		steps := append(hostSetup,
 			"# Add to your docker run command:",
 			"-v "+hostDir+":"+containerDir+":rslave",
@@ -119,7 +120,7 @@ func buildGuidance(envType string) *ExternalMediaGuidance {
 			Environment: envType,
 			Steps:       steps,
 		}
-	case "Podman":
+	case sysinfo.EnvPodman:
 		steps := append(hostSetup,
 			"# Add to your podman run command or quadlet file:",
 			"-v "+hostDir+":"+containerDir+":rslave",

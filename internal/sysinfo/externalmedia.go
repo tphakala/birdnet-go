@@ -41,7 +41,7 @@ func ProbeExternalMount(path string, prober MountProber) MountProbeResult {
 // live call to the cached singleton.
 func IsContainerEnv(envType string) bool {
 	switch envType {
-	case envDocker, envPodman, envLXC, envNspawn, envContainerGen:
+	case EnvDocker, EnvPodman, EnvLXC, EnvNspawn, EnvContainerGen:
 		return true
 	default:
 		return false

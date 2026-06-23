@@ -157,6 +157,38 @@ func TestGetExternalMedia_PodmanMountAbsent(t *testing.T) {
 	assert.NotEmpty(t, resp.Guidance.Steps)
 }
 
+// TestGetExternalMedia_GenericContainerMountAbsent tests the default (generic)
+// guidance branch for container runtimes other than Docker/Podman (e.g. LXC,
+// systemd-nspawn).
+func TestGetExternalMedia_GenericContainerMountAbsent(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "external-media")
+
+	_, ctrl := newExternalMediaController(
+		t,
+		func() (string, string) { return "LXC", "" },
+		func(_ string) sysinfo.MountProbeResult {
+			return sysinfo.MountProbeResult{Exists: false, IsMountpoint: false, Readable: false}
+		},
+	)
+
+	resp, code := callExternalMediaEndpoint(t, ctrl)
+
+	assert.Equal(t, http.StatusOK, code)
+	assert.True(t, resp.Containerized)
+	assert.False(t, resp.MountPresent)
+	require.NotNil(t, resp.Guidance, "generic container must still receive guidance")
+	assert.Equal(t, "LXC", resp.Guidance.Environment)
+	// The generic branch still includes the common host setup commands.
+	steps := strings.Join(resp.Guidance.Steps, "\n")
+	assert.Contains(t, steps, "mkdir -p /mnt/birdnet-go/external")
+	assert.Contains(t, steps, "mount --bind")
+	assert.Contains(t, steps, "make-rshared")
+	assert.Contains(t, steps, `chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}"`)
+}
+
 // TestGetExternalMedia_ResponseShape verifies the JSON field names.
 func TestGetExternalMedia_ResponseShape(t *testing.T) {
 	t.Parallel()
