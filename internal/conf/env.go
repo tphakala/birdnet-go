@@ -44,12 +44,12 @@ const (
 	ConfigKeyWebServerPort = "webserver.port"
 
 	// Security Configuration
-	ConfigKeyBaseURL            = "security.baseurl"
-	ConfigKeySecurityHost       = "security.host"
-	ConfigKeySecurityAutoTLS    = "security.autotls"
-	ConfigKeySecurityTLSMode    = "security.tlsmode"
-	ConfigKeySecurityTLSPort    = "security.tlsport"
-	ConfigKeySecurityRedirect   = "security.redirecttohttps"
+	ConfigKeyBaseURL          = "security.baseurl"
+	ConfigKeySecurityHost     = "security.host"
+	ConfigKeySecurityAutoTLS  = "security.autotls"
+	ConfigKeySecurityTLSMode  = "security.tlsmode"
+	ConfigKeySecurityTLSPort  = "security.tlsport"
+	ConfigKeySecurityRedirect = "security.redirecttohttps"
 )
 
 // Environment variable names that map to configuration keys.
@@ -81,12 +81,12 @@ const (
 	EnvVarWebServerPort = "BIRDNET_WEBSERVER_PORT"
 
 	// Security Configuration
-	EnvVarBaseURL            = "BIRDNET_URL"
-	EnvVarSecurityHost       = "BIRDNET_SECURITY_HOST"
-	EnvVarSecurityAutoTLS    = "BIRDNET_SECURITY_AUTOTLS"
-	EnvVarSecurityTLSMode    = "BIRDNET_SECURITY_TLSMODE"
-	EnvVarSecurityTLSPort    = "BIRDNET_SECURITY_TLSPORT"
-	EnvVarSecurityRedirect   = "BIRDNET_SECURITY_REDIRECTTOHTTPS"
+	EnvVarBaseURL          = "BIRDNET_URL"
+	EnvVarSecurityHost     = "BIRDNET_SECURITY_HOST"
+	EnvVarSecurityAutoTLS  = "BIRDNET_SECURITY_AUTOTLS"
+	EnvVarSecurityTLSMode  = "BIRDNET_SECURITY_TLSMODE"
+	EnvVarSecurityTLSPort  = "BIRDNET_SECURITY_TLSPORT"
+	EnvVarSecurityRedirect = "BIRDNET_SECURITY_REDIRECTTOHTTPS"
 )
 
 // Validation constraint constants for environment variable ranges.

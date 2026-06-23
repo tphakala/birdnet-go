@@ -104,7 +104,7 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 		cfg.AutoTLS = true
 		cfg.TLSEnabled = true
 		cfg.RedirectToHTTPS = true
-		if viper.IsSet("security.redirecttohttps") {
+		if viper.IsSet("security.redirecttohttps") { // override only if user explicitly set it (struct defaults don't trigger IsSet)
 			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
 		}
 		cfg.TLSPort = settings.Security.TLSPort

@@ -653,8 +653,9 @@ func (s *Server) startBlocking() error {
 				if h, _, err := net.SplitHostPort(host); err == nil {
 					host = h
 				}
-				target := "https://" + host + ":" + tlsPort + r.URL.RequestURI()
-				http.Redirect(w, r, target, http.StatusMovedPermanently)
+				host = strings.TrimRight(strings.TrimLeft(host, "["), "]")
+				target := "https://" + net.JoinHostPort(host, tlsPort) + r.URL.RequestURI()
+				http.Redirect(w, r, target, http.StatusPermanentRedirect)
 			})
 		}
 		s.httpRedirectServer = &http.Server{
@@ -792,16 +793,21 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 	}
 
 	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract hostname, stripping any port from the Host header
 		host := r.Host
 		if h, _, err := net.SplitHostPort(r.Host); err == nil {
 			host = h
 		}
-		target := "https://" + host
-		if tlsPort != "443" {
-			target += ":" + tlsPort
+		host = strings.TrimRight(strings.TrimLeft(host, "["), "]")
+		var hostPort string
+		if tlsPort == "443" {
+			hostPort = host
+			if strings.Contains(host, ":") {
+				hostPort = "[" + host + "]"
+			}
+		} else {
+			hostPort = net.JoinHostPort(host, tlsPort)
 		}
-		target += r.URL.RequestURI()
+		target := "https://" + hostPort + r.URL.RequestURI()
 		http.Redirect(w, r, target, http.StatusPermanentRedirect)
 	})
 
