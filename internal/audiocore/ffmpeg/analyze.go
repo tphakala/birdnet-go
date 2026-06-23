@@ -50,10 +50,15 @@ func AnalyzeChannelEnergy(ctx context.Context, url, ffmpegPath string) (*Channel
 		}
 	}
 
+	// Resolve the FFmpeg major version before starting the analysis timeout
+	// window, so a cold-cache `ffmpeg -version` probe does not eat into the
+	// time budget for the actual analysis run.
+	ffmpegMajor := resolveFfmpegMajor(ffmpegBinary)
+
 	analysisCtx, cancel := context.WithTimeout(ctx, analysisTimeout)
 	defer cancel()
 
-	args := buildAnalysisArgs(url, resolveFfmpegMajor(ffmpegBinary))
+	args := buildAnalysisArgs(url, ffmpegMajor)
 
 	cmd := exec.CommandContext(analysisCtx, ffmpegBinary, args...) //nolint:gosec // G204: ffmpegBinary validated by exec.LookPath, URL from user config
 	var stdout, stderr bytes.Buffer
