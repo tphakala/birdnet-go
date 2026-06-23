@@ -9,23 +9,23 @@ vi.mock('$lib/i18n', () => ({
   t: createI18nMock(analyticsI18nTranslations),
 }));
 
-// Plain fixture values. defaultFilters and the variants below wrap a fresh copy
-// in reactiveState so the bound `filters.*` props are reactive proxies, matching
-// how the app passes a $state object via bind:filters (see
-// reactive-state.svelte.ts).
+// Plain fixture values. createDefaultFilters() and the variants below wrap a
+// fresh copy in reactiveState so the bound `filters.*` props are reactive
+// proxies, matching how the app passes a $state object via bind:filters (see
+// reactive-state.svelte.ts). A fresh copy per render keeps test state isolated.
 const defaultFilterValues = {
   timePeriod: 'all' as const,
   startDate: '',
   endDate: '',
 };
 
-const defaultFilters = reactiveState({ ...defaultFilterValues });
+const createDefaultFilters = () => reactiveState({ ...defaultFilterValues });
 
 describe('FilterForm', () => {
   it('renders with basic props', () => {
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         onSubmit: vi.fn(),
         onReset: vi.fn(),
       },
@@ -39,7 +39,7 @@ describe('FilterForm', () => {
   it('displays time period options', () => {
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         onSubmit: vi.fn(),
         onReset: vi.fn(),
       },
@@ -71,7 +71,7 @@ describe('FilterForm', () => {
   it('hides custom date fields when other time period is selected', () => {
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         onSubmit: vi.fn(),
         onReset: vi.fn(),
       },
@@ -86,7 +86,7 @@ describe('FilterForm', () => {
 
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         onSubmit,
         onReset: vi.fn(),
       },
@@ -104,7 +104,7 @@ describe('FilterForm', () => {
 
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         onSubmit: vi.fn(),
         onReset,
       },
@@ -119,7 +119,7 @@ describe('FilterForm', () => {
   it('disables buttons when loading', () => {
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         isLoading: true,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -133,7 +133,7 @@ describe('FilterForm', () => {
   it('shows loading spinner when loading', () => {
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         isLoading: true,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -150,7 +150,7 @@ describe('FilterForm', () => {
 
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         onSubmit,
         onReset: vi.fn(),
       },
@@ -167,7 +167,7 @@ describe('FilterForm', () => {
   });
 
   it('handles time period change correctly', async () => {
-    const filters = reactiveState({ ...defaultFilterValues });
+    const filters = createDefaultFilters();
 
     render(FilterForm, {
       props: {
@@ -188,7 +188,7 @@ describe('FilterForm', () => {
   it('renders with proper form structure', () => {
     render(FilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         onSubmit: vi.fn(),
         onReset: vi.fn(),
       },
