@@ -4,6 +4,7 @@ package birdnetpi
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imports"
@@ -21,7 +22,7 @@ type Source struct {
 // New opens the BirdNET-Pi database at path read-only.
 // Call Close when done.
 func New(path string) (*Source, error) {
-	dsn := fmt.Sprintf("file:%s?mode=ro", path)
+	dsn := "file:" + url.PathEscape(path) + "?mode=ro"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
@@ -48,10 +49,13 @@ func New(path string) (*Source, error) {
 	return &Source{path: path, db: db}, nil
 }
 
-// Validate confirms the detections table exists and is readable.
+// Validate confirms the detections table exists and has the expected schema.
+// It issues a LIMIT 0 query selecting all columns that the adapter reads,
+// so a missing column causes a clear error before any data is processed.
 func (s *Source) Validate(ctx context.Context) error {
-	var count int64
-	err := s.db.WithContext(ctx).Table("detections").Count(&count).Error
+	err := s.db.WithContext(ctx).
+		Raw("SELECT Sci_Name, Com_Name, Confidence, Lat, Lon, Cutoff, Sens, Time, Date, File_Name FROM detections LIMIT 0").
+		Scan(nil).Error
 	if err != nil {
 		return errors.New(err).
 			Component("imports/birdnetpi").
@@ -77,21 +81,25 @@ func (s *Source) Count(ctx context.Context) (int, error) {
 	return int(count), nil
 }
 
-// Iterate streams rows in batches ordered by Date, Time.
+// Iterate streams rows in batches using rowid cursor pagination.
+// Cursor pagination on the implicit rowid is O(N) total and avoids the skip/duplicate
+// hazard of offset-based paging on non-unique (Date, Time) ordering.
 // fn is called once per batch; returning an error stops iteration.
 func (s *Source) Iterate(ctx context.Context, batchSize int, fn func([]imports.SourceDetection) error) error {
 	if batchSize <= 0 {
 		batchSize = 500
 	}
 
-	offset := 0
+	var lastRowID int64
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		// Use raw SQL to get Date/Time as text, avoiding GORM's automatic time.Time conversion
+		// Use raw SQL to get Date/Time as text, avoiding GORM's automatic time.Time conversion.
+		// Cursor on rowid ensures O(N) total scan with no duplicates or skips.
 		var rows []struct {
+			RowID      int64 `gorm:"column:row_id"`
 			Date       string
 			Time       string
 			SciName    string `gorm:"column:Sci_Name"`
@@ -105,18 +113,14 @@ func (s *Source) Iterate(ctx context.Context, batchSize int, fn func([]imports.S
 		}
 
 		err := s.db.WithContext(ctx).
-			Select("CAST(Date AS TEXT) as Date, CAST(Time AS TEXT) as Time, Sci_Name, Com_Name, Confidence, Lat, Lon, Cutoff, Sens, File_Name").
-			Table("detections").
-			Order("Date, Time").
-			Limit(batchSize).
-			Offset(offset).
+			Raw("SELECT rowid AS row_id, CAST(Date AS TEXT) AS Date, CAST(Time AS TEXT) AS Time, Sci_Name, Com_Name, Confidence, Lat, Lon, Cutoff, Sens, File_Name FROM detections WHERE rowid > ? ORDER BY rowid LIMIT ?", lastRowID, batchSize).
 			Scan(&rows).Error
 		if err != nil {
 			return errors.New(err).
 				Component("imports/birdnetpi").
 				Category(errors.CategoryDatabase).
 				Context("operation", "iterate").
-				Context("offset", fmt.Sprintf("%d", offset)).
+				Context("last_row_id", fmt.Sprintf("%d", lastRowID)).
 				Build()
 		}
 
@@ -125,7 +129,8 @@ func (s *Source) Iterate(ctx context.Context, batchSize int, fn func([]imports.S
 		}
 
 		batch := make([]imports.SourceDetection, len(rows))
-		for i, r := range rows {
+		for i := range rows {
+			r := &rows[i]
 			batch[i] = imports.SourceDetection{
 				Date:           r.Date,
 				Time:           r.Time,
@@ -138,6 +143,9 @@ func (s *Source) Iterate(ctx context.Context, batchSize int, fn func([]imports.S
 				Sensitivity:    r.Sens,
 				FileName:       r.FileName,
 			}
+			if r.RowID > lastRowID {
+				lastRowID = r.RowID
+			}
 		}
 
 		fnErr := fn(batch)
@@ -145,7 +153,6 @@ func (s *Source) Iterate(ctx context.Context, batchSize int, fn func([]imports.S
 			return fnErr
 		}
 
-		offset += len(rows)
 		if len(rows) < batchSize {
 			break
 		}

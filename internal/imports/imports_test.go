@@ -2,6 +2,7 @@ package imports_test
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -139,11 +140,6 @@ func TestSimpleSave(t *testing.T) {
 	result := &detection.Result{
 		Timestamp:  now,
 		SourceNode: "birdnet-pi",
-		AudioSource: detection.AudioSource{
-			ID:          "birdnet-pi",
-			SafeString:  "birdnet-pi",
-			DisplayName: "birdnet-pi",
-		},
 		Species: detection.Species{
 			ScientificName: "Dendrocopos major",
 			CommonName:     "Great Spotted Woodpecker",
@@ -339,4 +335,125 @@ func TestImport_ContextCancellation(t *testing.T) {
 
 	_, err = engine.Run(ctx, src, opts, nil)
 	assert.ErrorIs(t, err, context.Canceled, "cancelled import must return context error")
+}
+
+// TestImport_Idempotent_TimezoneMismatch verifies that idempotency holds even when
+// opts.Location differs from the repository's timezone. The datastore reconstructs
+// Timestamp from stored Date/Time wall-clock strings in its own timezone (UTC here),
+// so a detectionKey based on ts.Unix() would differ when opts.Location is non-UTC.
+// The wall-clock key (ts.Format) is timezone-independent and must deduplicate correctly.
+func TestImport_Idempotent_TimezoneMismatch(t *testing.T) {
+	rows := []birdnetPiRow{
+		{
+			Date: "2025-06-01", Time: "12:00:00",
+			SciName: "Sylvia atricapilla", ComName: "Eurasian Blackcap",
+			Confidence: 0.8800, Lat: 60.0, Lon: 24.0, Cutoff: 0.5, Sens: 1.0,
+			FileName: "blackcap.mp3",
+		},
+	}
+	path := newFixtureDB(t, rows)
+
+	// Repository built with UTC (simulates the repo's read-back timezone).
+	store := newTestStore(t)
+	repo := datastore.NewDetectionRepository(store, time.UTC)
+
+	// First run: import with a non-UTC location.
+	nonUTCLoc := time.FixedZone("test", 3*3600)
+	opts := imports.ImportOptions{
+		SourceNode: imports.DefaultSourceNode,
+		Location:   nonUTCLoc,
+	}
+
+	src1, err := birdnetpi.New(path)
+	require.NoError(t, err)
+	engine1 := imports.NewEngine(repo)
+	stats1, err := engine1.Run(t.Context(), src1, opts, nil)
+	require.NoError(t, err)
+	require.NoError(t, src1.Close())
+	require.Equal(t, 1, stats1.Inserted, "first run must insert the row")
+
+	// Second run: same non-UTC location. Must skip the already-imported row.
+	src2, err := birdnetpi.New(path)
+	require.NoError(t, err)
+	engine2 := imports.NewEngine(repo)
+	stats2, err := engine2.Run(t.Context(), src2, opts, nil)
+	require.NoError(t, err)
+	require.NoError(t, src2.Close())
+	assert.Equal(t, 0, stats2.Inserted, "re-run must insert zero rows even with non-UTC import location")
+	assert.Equal(t, 1, stats2.Skipped, "re-run must skip the already-imported row")
+}
+
+// TestValidate_MissingColumn verifies that Validate rejects a database whose
+// detections table is missing a required column.
+func TestValidate_MissingColumn(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad_schema.db")
+
+	// Create a detections table that is missing Sci_Name and several other columns.
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE detections (
+		Date DATE,
+		Time TIME,
+		Com_Name VARCHAR(100) NOT NULL,
+		Confidence FLOAT
+	)`).Error)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+
+	src, err := birdnetpi.New(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = src.Close() })
+
+	err = src.Validate(t.Context())
+	assert.Error(t, err, "Validate must fail when required columns are missing")
+}
+
+// TestImport_CancelDuringSave verifies that a context cancellation that occurs after
+// at least one row has been processed causes Run to return a context error without
+// miscounting the cancelled row as a save failure.
+func TestImport_CancelDuringSave(t *testing.T) {
+	// 500 rows, batch size 10, so the context can be cancelled partway through.
+	rows := make([]birdnetPiRow, 0, 500)
+	for i := range 500 {
+		rows = append(rows, birdnetPiRow{
+			Date:       "2025-06-10",
+			Time:       fmt.Sprintf("%02d:00:00", i%24),
+			SciName:    "Phylloscopus trochilus",
+			ComName:    "Willow Warbler",
+			Confidence: float64(i+1) * 0.001,
+			Lat:        60.0, Lon: 24.0, Cutoff: 0.5, Sens: 1.0,
+			FileName: fmt.Sprintf("warbler_%d.mp3", i),
+		})
+	}
+	path := newFixtureDB(t, rows)
+
+	store := newTestStore(t)
+	repo := datastore.NewDetectionRepository(store, time.UTC)
+
+	src, err := birdnetpi.New(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = src.Close() })
+
+	engine := imports.NewEngine(repo)
+	opts := imports.ImportOptions{
+		SourceNode: imports.DefaultSourceNode,
+		Location:   time.UTC,
+		BatchSize:  10,
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	// Cancel after a short delay so at least one row is processed.
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err = engine.Run(ctx, src, opts, nil)
+	assert.ErrorIs(t, err, context.Canceled, "mid-import cancel must return context error, not a save error")
 }

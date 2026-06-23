@@ -115,9 +115,12 @@ func NewEngine(repo datastore.DetectionRepository) *Engine {
 }
 
 // detectionKey returns a stable composite key for duplicate detection.
-// Components: unix second timestamp, scientific name, confidence rounded to 4 decimal places.
+// Components: wall-clock timestamp (timezone-independent), scientific name, confidence rounded to 4 decimal places.
+// Using the wall-clock representation ensures idempotency even when opts.Location differs
+// from the timezone used during read-back (the datastore reconstructs Timestamp from
+// the stored Date/Time strings in its own timezone).
 func detectionKey(ts time.Time, scientificName string, confidence float64) string {
-	return fmt.Sprintf("%d|%s|%.4f", ts.Unix(), scientificName, confidence)
+	return fmt.Sprintf("%s|%s|%.4f", ts.Format(time.DateTime), scientificName, confidence)
 }
 
 // Run imports all detections from src that are not already present in the store.
@@ -195,6 +198,11 @@ func (e *Engine) Run(ctx context.Context, src Source, opts ImportOptions, report
 
 			result := mapToResult(row, ts, opts.SourceNode)
 			if saveErr := e.repo.Save(ctx, result, nil); saveErr != nil {
+				if ctx.Err() != nil {
+					// Context was cancelled or timed out during Save; propagate
+					// the context error so the caller gets a clean abort signal.
+					return ctx.Err()
+				}
 				e.log.Error("failed to save detection",
 					logger.String("scientific_name", row.ScientificName),
 					logger.Error(saveErr))
@@ -251,12 +259,10 @@ func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[s
 			return nil, err
 		}
 
-		filters := &datastore.DetectionFilters{
-			Location:         []string{sourceNode},
-			Limit:            pageSize,
-			MinID:            minID,
-			CursorPagination: true,
-		}
+		filters := datastore.NewDetectionFilters().
+			WithMinID(minID)
+		filters.Location = []string{sourceNode}
+		filters.Limit = pageSize
 
 		results, _, err := e.repo.Search(ctx, filters)
 		if err != nil {
