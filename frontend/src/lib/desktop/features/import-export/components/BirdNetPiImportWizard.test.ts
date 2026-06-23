@@ -715,4 +715,145 @@ describe('BirdNetPiImportWizard', () => {
       '/api/v2/import/jobs/resume-job-456/progress'
     );
   });
+
+  // ---- CR-1: rehydrate finished import on reopen ----
+
+  it('shows done step with success state when status is done and no error on mount', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        return Promise.resolve({
+          running: false,
+          status: 'done',
+          progress: {
+            ...defaultProgress,
+            processed: 1000,
+            inserted: 990,
+            skipped: 10,
+            errors: 0,
+            phase: 'done' as const,
+          },
+          error: undefined,
+        });
+      }
+      return Promise.reject(new Error(`Unmocked: ${url}`));
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+    // Progress counters should be visible
+    expect(screen.getByText('990')).toBeInTheDocument();
+    // Should NOT have connected an event source (no running job)
+    expect(MockReconnectingEventSource).not.toHaveBeenCalled();
+    // Should NOT fall through to source discovery
+    expect(
+      screen.queryByText('system.importExport.sourceAccess.mountDescription')
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows done step with error state when status is done with error on mount', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        return Promise.resolve({
+          running: false,
+          status: 'done',
+          progress: defaultProgress,
+          error: 'database error',
+        });
+      }
+      return Promise.reject(new Error(`Unmocked: ${url}`));
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.errorTitle')).toBeInTheDocument();
+    });
+    expect(screen.getByText('system.importExport.errors.importFailed')).toBeInTheDocument();
+    // Should NOT show success
+    expect(screen.queryByText('system.importExport.done.successTitle')).not.toBeInTheDocument();
+  });
+
+  it('Import another resets to source step from done step', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        return Promise.resolve({
+          running: false,
+          status: 'done',
+          progress: defaultProgress,
+          error: undefined,
+        });
+      }
+      if (url === '/api/v2/system/external-media') {
+        return Promise.resolve(defaultExternalMedia);
+      }
+      return Promise.reject(new Error(`Unmocked: ${url}`));
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+
+    const importAnotherButton = screen.getByRole('button', {
+      name: /system.importExport.done.importAnother/,
+    });
+    await fireEvent.click(importAnotherButton);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('system.importExport.sourceAccess.mountDescription')
+      ).toBeInTheDocument();
+    });
+    // Done step should no longer be visible
+    expect(screen.queryByText('system.importExport.done.successTitle')).not.toBeInTheDocument();
+  });
+
+  // ---- CR-2: honor synchronous terminal cancel response ----
+
+  it('cancel returns {status: done} transitions wizard to cancelled done state', async () => {
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/birdnet-pi') {
+        return Promise.resolve({ job_id: 'test-job-123', status: 'started' });
+      }
+      if (url === '/api/v2/import/jobs/test-job-123/cancel') {
+        return Promise.resolve({ status: 'done' });
+      }
+      return Promise.reject(new Error(`Unmocked POST: ${url}`));
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await waitFor(() => {
+      expect(
+        screen.getByText('system.importExport.sourceAccess.mountDescription')
+      ).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    });
+
+    const cancelButton = screen.getByRole('button', {
+      name: /system.importExport.progress.cancelButton/,
+    });
+    await fireEvent.click(cancelButton);
+
+    // The cancel response is {status: 'done'} - no SSE event needed
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
+    });
+    // The EventSource should have been closed
+    expect(mockEsInstance?.close).toHaveBeenCalled();
+  });
 });

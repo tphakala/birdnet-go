@@ -94,6 +94,15 @@
       // Check for already-running import
       const statusResp = await api.get<ImportStatusResponse>('/api/v2/import/status');
       if (destroyed) return;
+      if (statusResp.status === 'done') {
+        if (statusResp.progress) importProgress = statusResp.progress;
+        importError = statusResp.error ? t('system.importExport.errors.importFailed') : null;
+        importComplete = !statusResp.error;
+        importCancelled = false;
+        currentStep = 'done';
+        isLoading = false;
+        return;
+      }
       if (statusResp.running && statusResp.job_id) {
         jobId = statusResp.job_id;
         if (statusResp.progress) {
@@ -118,6 +127,17 @@
     } finally {
       isLoading = false;
     }
+  }
+
+  function startAnotherImport() {
+    jobId = null;
+    importProgress = null;
+    importComplete = false;
+    importCancelled = false;
+    importError = null;
+    errorMessage = null;
+    currentStep = 'source';
+    void loadExternalMedia();
   }
 
   async function loadExternalMedia() {
@@ -257,7 +277,15 @@
     if (!jobId || isCancelling) return;
     isCancelling = true;
     try {
-      await api.post<CancelResponse>(`/api/v2/import/jobs/${jobId}/cancel`);
+      const resp = await api.post<CancelResponse>(`/api/v2/import/jobs/${jobId}/cancel`);
+      if (destroyed) return;
+      if (resp.status === 'done') {
+        importCancelled = true;
+        importComplete = false;
+        importError = null;
+        currentStep = 'done';
+        closeEventSource();
+      }
     } catch (err) {
       logger.error('Cancel request failed', err);
       toastActions.error(t('system.importExport.errors.cancelFailed'));
@@ -807,9 +835,12 @@
             variant="primary"
             onclick={startImport}
             disabled={isLoading || !sourcePath.trim()}
-            title={!sourcePath.trim()
-              ? t('system.importExport.sourceAccess.pathRequiredReason')
-              : undefined}
+            title={isLoading
+              ? t('system.importExport.loading')
+              : !sourcePath.trim()
+                ? t('system.importExport.sourceAccess.pathRequiredReason')
+                : undefined}
+            aria-busy={isLoading}
           >
             {#if isLoading}
               <LoadingSpinner
@@ -848,6 +879,9 @@
             </Button>
           {/if}
         {:else if currentStep === 'done'}
+          <Button variant="ghost" type="button" onclick={startAnotherImport}>
+            {t('system.importExport.done.importAnother')}
+          </Button>
           <Button variant="primary" onclick={onClose}>
             {t('common.buttons.close')}
           </Button>

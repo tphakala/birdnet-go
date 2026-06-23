@@ -967,6 +967,7 @@ export type TranslationKey =
   | 'system.importExport.done.errorTitle'
   | 'system.importExport.done.viewDetectionsLink'
   | 'system.importExport.done.partialInserted' // params: count
+  | 'system.importExport.done.importAnother'
   | 'system.importExport.errors.loadFailed'
   | 'system.importExport.errors.mediaLoadFailed'
   | 'system.importExport.errors.alreadyRunning'

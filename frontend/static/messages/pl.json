@@ -1198,8 +1198,8 @@
         "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
         "mountRoot": "Mount root",
         "nativeTitle": "External media mount required",
-        "nativeDescription": "BirdNET-Pi import uses files from an external media mount. On native (non-containerized) installations, configure an external media path in Settings to enable this feature.",
-        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as external media.",
+        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
+        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
         "missingTitle": "External media mount not found",
         "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
         "setupStepsLabel": "Setup steps",
@@ -1252,7 +1252,8 @@
         "cancelledDescription": "The import was cancelled before completing.",
         "errorTitle": "Import failed",
         "viewDetectionsLink": "View imported detections",
-        "partialInserted": "{count} detections were imported before cancellation."
+        "partialInserted": "{count} detections were imported before cancellation.",
+        "importAnother": "Import another"
       },
       "errors": {
         "loadFailed": "Failed to load import status. Please try again.",

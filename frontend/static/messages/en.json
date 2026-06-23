@@ -1252,7 +1252,8 @@
         "cancelledDescription": "The import was cancelled before completing.",
         "errorTitle": "Import failed",
         "viewDetectionsLink": "View imported detections",
-        "partialInserted": "{count} detections were imported before cancellation."
+        "partialInserted": "{count} detections were imported before cancellation.",
+        "importAnother": "Import another"
       },
       "errors": {
         "loadFailed": "Failed to load import status. Please try again.",
