@@ -728,7 +728,7 @@ check_prerequisites() {
 
     # Check port availability for rootless Podman (ports < 1024 need special handling)
     print_message "🔌 Checking required port availability..." "$YELLOW"
-    local ports_to_check=("80" "443" "${WEB_PORT:-8888}" "8090")
+    local ports_to_check=("80" "443" "${WEB_PORT:-8080}" "8090")
     local unique_ports=()
     local failed_ports=()
     local port_processes=()
@@ -776,7 +776,7 @@ check_prerequisites() {
         print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
         print_message "  • Port 80   - HTTP web interface" "$YELLOW"
         print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
-        local web_port_display="${WEB_PORT:-8888}"
+        local web_port_display="${WEB_PORT:-8080}"
         if [ "$web_port_display" != "80" ] && [ "$web_port_display" != "443" ]; then
             print_message "  • Port $web_port_display - Primary web interface" "$YELLOW"
         fi
@@ -1790,7 +1790,7 @@ PublishPort=${WEB_PORT}:8080
 Environment=TZ=${CONFIGURED_TZ:-UTC}
 Environment=BIRDNET_UID=%U
 Environment=BIRDNET_GID=%G
-AddDevice=/dev/null:/dev/snd
+AddDevice=-/dev/snd:/dev/snd
 Network=birdnet-bridge
 Tmpfs=/config/hls:exec,size=50M,mode=0755
 
@@ -1881,7 +1881,7 @@ create_default_config() {
 # Web interface settings
 webserver:
   host: "0.0.0.0"
-  port: 8888
+  port: 8080
   autotls: false
   
 # Audio input settings  
@@ -1982,15 +1982,15 @@ show_success_message() {
     print_message "" "$GREEN"
     
     if [ -n "$ip_address" ]; then
-        print_message "🔗 Web Interface: http://$ip_address:${WEB_PORT:-8888}" "$YELLOW"
+        print_message "🔗 Web Interface: http://$ip_address:${WEB_PORT:-8080}" "$YELLOW"
     else
-        print_message "🔗 Web Interface: http://localhost:${WEB_PORT:-8888}" "$YELLOW"
+        print_message "🔗 Web Interface: http://localhost:${WEB_PORT:-8080}" "$YELLOW"
     fi
     
     if check_mdns; then
         local hostname
         hostname=$(hostname -s)
-        print_message "🔗 mDNS Address: http://$hostname.local:${WEB_PORT:-8888}" "$YELLOW"
+        print_message "🔗 mDNS Address: http://$hostname.local:${WEB_PORT:-8080}" "$YELLOW"
     fi
     
     print_message "" "$GREEN"
@@ -2159,14 +2159,14 @@ show_current_status() {
         
         print_message "🔗 Web Interface URLs:" "$YELLOW"
         if [ -n "$ip_address" ]; then
-            print_message "  • http://$ip_address:${WEB_PORT:-8888}" "$NC"
+            print_message "  • http://$ip_address:${WEB_PORT:-8080}" "$NC"
         fi
-        print_message "  • http://localhost:${WEB_PORT:-8888}" "$NC"
+        print_message "  • http://localhost:${WEB_PORT:-8080}" "$NC"
         
         if check_mdns; then
             local hostname
             hostname=$(hostname -s)
-            print_message "  • http://$hostname.local:${WEB_PORT:-8888}" "$NC"
+            print_message "  • http://$hostname.local:${WEB_PORT:-8080}" "$NC"
         fi
         
         print_message "" "$NC"
