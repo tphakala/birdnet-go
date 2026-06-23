@@ -184,6 +184,7 @@
     '/database': 'system.sections.database',
     '/terminal': 'system.sections.terminal',
     '/inference': 'system.sections.inference',
+    '/import-export': 'system.sections.importExport',
   };
 
   // Dynamic import helper
@@ -353,6 +354,7 @@
     [uiPath('help', 'report-bug')]: findRouteConfig('report-bug'),
     [uiPath('system')]: findRouteConfig('system'),
     [uiPath('system', 'health')]: findRouteConfig('system-health'),
+    [uiPath('system', 'import-export')]: findRouteConfig('system'),
     [uiPath('settings')]: findRouteConfig('settings'),
   });
 
