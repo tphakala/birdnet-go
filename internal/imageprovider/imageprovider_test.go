@@ -309,6 +309,9 @@ func (m *mockStore) GetConfidenceHistogram(_ context.Context, _, _, _ string, _,
 func (m *mockStore) GetSpeciesAccumulation(_ context.Context, _, _ string) ([]datastore.SpeciesAccumulationPoint, error) {
 	return []datastore.SpeciesAccumulationPoint{}, nil
 }
+func (m *mockStore) GetAudioSources(_ context.Context, _, _ string) ([]datastore.AudioSourceSummary, error) {
+	return []datastore.AudioSourceSummary{}, nil
+}
 func (m *mockStore) GetYearOverYear(_ context.Context, _ string) (datastore.YearOverYearResult, error) {
 	return datastore.YearOverYearResult{Points: []datastore.YearOverYearPoint{}}, nil
 }

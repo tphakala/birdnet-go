@@ -1662,7 +1662,9 @@
       "controls": {
         "source": "Source",
         "sourceAll": "All sources",
-        "sourceComingSoon": "Filtering by source arrives in a later update.",
+        "sourceLoading": "Loading audio sources…",
+        "sourceNone": "No audio sources with detections yet.",
+        "sourceNotApplicable": "The charts in this section do not filter by source.",
         "speciesNotApplicable": "The charts in this section do not filter by species."
       },
       "card": {

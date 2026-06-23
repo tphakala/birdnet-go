@@ -1662,7 +1662,9 @@
       "controls": {
         "source": "Zdroj",
         "sourceAll": "Všetky zdroje",
-        "sourceComingSoon": "Filtrovanie podľa zdroja príde v neskoršej aktualizácii.",
+        "sourceLoading": "Loading audio sources…",
+        "sourceNone": "No audio sources with detections yet.",
+        "sourceNotApplicable": "The charts in this section do not filter by source.",
         "speciesNotApplicable": "Grafy v tejto sekcii nefiltrujú podľa druhu."
       },
       "card": {

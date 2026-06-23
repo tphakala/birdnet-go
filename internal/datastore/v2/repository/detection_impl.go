@@ -1793,6 +1793,29 @@ func (r *detectionRepository) GetSpeciesPhenologyInPeriod(ctx context.Context, s
 	return results, err
 }
 
+// GetSourceActivitySummaries returns each audio source with at least one (false-positive-excluded)
+// detection in the half-open range [start, end): the source identity columns and its in-period
+// detection count, ordered by count descending. It shares the analytics false-positive filter via
+// buildAnalyticsBaseQuery and INNER JOINs audio_sources on d.source_id, so detections with a NULL
+// source_id (legacy-migrated, source-less) are excluded. GROUP BY every selected source column keeps
+// MySQL's ONLY_FULL_GROUP_BY happy, and because DetectionReview is 1:1 with detections the reviews
+// LEFT JOIN never multiplies rows, so COUNT(d.id) counts each detection once (the same basis as
+// GetSpeciesPhenologyInPeriod). Powers the analytics source/mic filter's option list.
+func (r *detectionRepository) GetSourceActivitySummaries(ctx context.Context, start, end int64) ([]SourceActivitySummary, error) {
+	var results []SourceActivitySummary
+
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, nil, nil).
+		Joins(fmt.Sprintf("JOIN %s s ON s.id = d.source_id", r.sourcesTable())).
+		// COUNT(DISTINCT d.id): the reviews LEFT JOIN is 1:1 so plain COUNT is already fan-out-immune
+		// today, but DISTINCT keeps the count correct if a future join introduces row multiplication.
+		Select("s.id as source_id, s.display_name as display_name, s.node_name as node_name, s.source_type as source_type, COUNT(DISTINCT d.id) as count").
+		Group("s.id, s.display_name, s.node_name, s.source_type").
+		Order("count DESC, s.id ASC").
+		Scan(&results).Error
+
+	return results, err
+}
+
 // ============================================================================
 // Utilities
 // ============================================================================

@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -225,6 +226,10 @@ func (c *Controller) initAnalyticsRoutes() {
 	// come from the existing /time/distribution/hourly endpoint (unchanged); only this sun endpoint
 	// is new (design spec section 6.4).
 	analyticsGroup.GET("/sun", c.GetAnalyticsSun)
+
+	// Audio sources that have detections in range, powering the analytics hub's source/mic filter.
+	// Additive and read-only; names are anonymized for unauthenticated clients (the page is public).
+	analyticsGroup.GET("/sources", c.GetAnalyticsSources)
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -1924,6 +1929,131 @@ func (c *Controller) GetSpeciesAccumulation(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, newSpeciesAccumulationResponse(data))
+}
+
+// analyticsSourceItem is one audio source on the analytics source/mic filter wire payload: a stable
+// opaque id (string form of the numeric source id), a display label (anonymized for unauthenticated
+// clients), and the source's in-range detection count.
+type analyticsSourceItem struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// analyticsSourceListResponse is the analytics source/mic filter's wire payload: the audio sources that
+// have detections in the range, most active first. Never null.
+type analyticsSourceListResponse struct {
+	Sources []analyticsSourceItem `json:"sources"`
+}
+
+// anonymizeHistoricalSourceName builds a non-identifying label for a historical audio source from its
+// type and opaque id, mirroring the vocabulary of getAnonymizedSourceName / getAnonymizedSourceNameFallback
+// used by the audio-level stream and /streams/sources: sound cards become "audio-source-N", network
+// streams "camera-N", file inputs "file-source-N", and anything else "source-N". The id suffix keeps
+// multiple sources of the same type distinguishable without revealing configured names, URIs, or node
+// identity.
+func anonymizeHistoricalSourceName(sourceType string, id uint) string {
+	switch entities.SourceType(sourceType) {
+	case entities.SourceTypeALSA, entities.SourceTypePulseAudio:
+		return fmt.Sprintf("audio-source-%d", id)
+	case entities.SourceTypeRTSP:
+		return fmt.Sprintf("camera-%d", id)
+	case entities.SourceTypeFile:
+		return fmt.Sprintf("file-source-%d", id)
+	default:
+		// SourceTypeUnknown and any future/unrecognized type get a generic, non-identifying label.
+		return fmt.Sprintf("source-%d", id)
+	}
+}
+
+// analyticsSourceLabel returns the user-facing label for an audio source in the analytics source/mic
+// filter. Authenticated clients see the configured display name (falling back to the node name, then a
+// generic id-suffixed label). Unauthenticated clients get a type-based anonymized label so the public
+// analytics page never leaks a source's configured name, URI, or node identity. The numeric id is
+// exposed in both cases (it is opaque and carries no PII), matching the anonymization contract of the
+// audio-level stream and /streams/sources.
+func analyticsSourceLabel(src *datastore.AudioSourceSummary, authenticated bool) string {
+	if authenticated {
+		switch {
+		case src.DisplayName != "":
+			return src.DisplayName
+		case src.NodeName != "":
+			return src.NodeName
+		default:
+			return fmt.Sprintf("source-%d", src.ID)
+		}
+	}
+	return anonymizeHistoricalSourceName(src.SourceType, src.ID)
+}
+
+// GetAnalyticsSources handles GET /api/v2/analytics/sources
+// Returns the audio sources that have at least one (false-positive-excluded) detection in the date
+// range, with per-source detection counts, most active first. When start_date/end_date are omitted it
+// covers all history. Powers the analytics hub's source/mic filter option list. The metric is v2only
+// (the legacy schema does not persist a detection's source); the legacy datastore returns an empty
+// list. Source names are anonymized for unauthenticated clients (the analytics page is public); the
+// opaque numeric id is safe to expose and is what the source filter round-trips in the URL.
+func (c *Controller) GetAnalyticsSources(ctx echo.Context) error {
+	const operation = "analytics sources"
+
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// Dates are optional (omitted = all history); validate only what is supplied.
+	if startDate != "" {
+		if err := c.validateDateFormatStrictWithResponse(ctx, startDate, "start_date", operation); err != nil {
+			return err
+		}
+	}
+	if endDate != "" {
+		if err := c.validateDateFormatStrictWithResponse(ctx, endDate, "end_date", operation); err != nil {
+			return err
+		}
+	}
+	if startDate != "" && endDate != "" {
+		if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, operation); err != nil {
+			return err
+		}
+	}
+
+	c.logInfoIfEnabled("Retrieving analytics audio sources",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	// Add timeout to prevent resource exhaustion
+	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+
+	sources, err := c.DS.GetAudioSources(ctxWithTimeout, startDate, endDate)
+	if err != nil {
+		return c.handleAnalyticsQueryError(ctx, err, "Analytics sources", "Failed to get audio sources",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
+		)
+	}
+
+	authenticated := c.isClientAuthenticated(ctx)
+	resp := analyticsSourceListResponse{Sources: make([]analyticsSourceItem, 0, len(sources))}
+	for i := range sources {
+		resp.Sources = append(resp.Sources, analyticsSourceItem{
+			ID:    strconv.FormatUint(uint64(sources[i].ID), 10),
+			Name:  analyticsSourceLabel(&sources[i], authenticated),
+			Count: sources[i].Count,
+		})
+	}
+
+	c.logInfoIfEnabled("Analytics audio sources retrieved",
+		logger.Int("count", len(resp.Sources)),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	return ctx.JSON(http.StatusOK, resp)
 }
 
 // yearOverYearPointItem is one calendar position on the year-over-year tracker wire payload: the

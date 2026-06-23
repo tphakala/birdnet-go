@@ -1662,7 +1662,9 @@
       "controls": {
         "source": "Avots",
         "sourceAll": "Visi avoti",
-        "sourceComingSoon": "Filtrēšana pēc avota būs pieejama vēlākā atjauninājumā.",
+        "sourceLoading": "Loading audio sources…",
+        "sourceNone": "No audio sources with detections yet.",
+        "sourceNotApplicable": "The charts in this section do not filter by source.",
         "speciesNotApplicable": "Šīs sadaļas diagrammas nefiltrē pēc sugas."
       },
       "card": {
