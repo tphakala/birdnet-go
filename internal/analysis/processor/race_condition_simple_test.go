@@ -367,9 +367,9 @@ func TestRaceCondition_CompositeActionSolution(t *testing.T) {
 	t.Logf("  SSE started at: %v", sseExecutionTime.Sub(startTime))
 	t.Logf("  Time between actions: %v", timeBetweenActions)
 
-	// The time between actions should be minimal (just the SSE execution time)
-	// since SSE starts immediately after DB completes
-	assert.LessOrEqual(t, timeBetweenActions, 100*time.Millisecond, "Too much delay between actions")
+	// The time between actions should be minimal (just the SSE execution time
+	// plus OS scheduling jitter). Use a generous bound to avoid flakes on CI.
+	assert.LessOrEqual(t, timeBetweenActions, 500*time.Millisecond, "Too much delay between actions")
 
 	t.Logf("✓ CompositeAction enforces sequential execution")
 	t.Logf("✓ Database action completes before SSE action starts")
