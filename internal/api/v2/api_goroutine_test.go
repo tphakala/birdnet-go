@@ -23,8 +23,8 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	// Snapshot existing goroutines now (test start) and verify no leaks at the
 	// end. Captured here so a leftover transport-dial goroutine from a
 	// previously-run test (shuffle order) is ignored, not attributed to this
-	// test; see deferNoLeaks for the full rationale.
-	deferNoLeaks(t,
+	// test; see verifyNoLeaks for the full rationale.
+	verifyNoLeaks(t,
 		// Ignore goroutines from testing framework and other standard libraries
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
@@ -139,10 +139,10 @@ func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
 // TestGoroutineCleanupWithoutRoutes verifies that creating a controller without
 // routes doesn't start unnecessary goroutines
 func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
-	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	deferNoLeaks(t,
+	verifyNoLeaks(t,
 		// Ignore goroutines from testing framework and other standard libraries
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),

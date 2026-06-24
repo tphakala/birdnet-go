@@ -8,7 +8,7 @@ import (
 	"go.uber.org/goleak"
 )
 
-// deferNoLeaks registers a goroutine-leak check that runs when the test ends.
+// verifyNoLeaks registers a goroutine-leak check that runs when the test ends.
 //
 // It snapshots the goroutines alive at the moment it is called (via
 // goleak.IgnoreCurrent) and ignores them, so a leftover goroutine from a
@@ -19,11 +19,14 @@ import (
 // checks flake under `go test -race -shuffle=on` depending on which test ran
 // first.
 //
-// Because the snapshot is taken when deferNoLeaks is called, callers must call
-// it at the START of the test, before constructing the component under test or
-// doing any work that starts goroutines. Goroutines spawned afterwards are not
-// in the snapshot, so a real leak (a goroutine started during the test and
-// never stopped) still fails the check.
+// Because the snapshot is taken when verifyNoLeaks is called, callers must call
+// it directly (NOT with defer) at the START of the test, before constructing
+// the component under test or doing any work that starts goroutines. Calling it
+// with defer would take the snapshot at the end of the test and silently mask
+// every leak it is meant to catch. The VerifyNone itself is scheduled via
+// t.Cleanup, so no defer is needed at the callsite. Goroutines spawned after
+// the snapshot are not in it, so a real leak (a goroutine started during the
+// test and never stopped) still fails the check.
 //
 // extra options are appended after the snapshot, for per-test ignores such as
 // goleak.IgnoreTopFunction for known process-lifetime workers.
@@ -33,9 +36,9 @@ import (
 // it runs once after all tests, when no other test's goroutines are in flight.
 //
 // These tests run sequentially; do not add t.Parallel() to a test that calls
-// deferNoLeaks, as a process-wide leak check cannot coexist with goroutines
+// verifyNoLeaks, as a process-wide leak check cannot coexist with goroutines
 // from other tests running concurrently.
-func deferNoLeaks(t *testing.T, extra ...goleak.Option) {
+func verifyNoLeaks(t *testing.T, extra ...goleak.Option) {
 	t.Helper()
 	opts := make([]goleak.Option, 0, len(extra)+1)
 	opts = append(opts, goleak.IgnoreCurrent())
