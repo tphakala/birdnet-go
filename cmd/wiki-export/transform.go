@@ -76,6 +76,7 @@ var imageExts = []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
 // (always "doc/wiki"); idx is the page index from buildPageIndex. Links inside
 // fenced code blocks are left untouched.
 func rewriteLinks(content, sourceDir string, idx map[string]string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n") // normalize to LF for consistent output
 	lines := strings.Split(content, "\n")
 	fenced := fenceMask(lines)
 	for i, line := range lines {
@@ -201,6 +202,9 @@ func resolveWikiURL(rest string, idx map[string]string) string {
 	slug = decodePercent(slug)
 	slug = strings.ReplaceAll(slug, unicodeHyphen, "-")
 	slug = strings.TrimSuffix(path.Base(slug), ".md")
+	if slug == "" || slug == "." {
+		slug = "Home" // a bare /wiki/ URL points at the wiki home page
+	}
 	if name, ok := idx[strings.ToLower(slug)]; ok {
 		return name + anchorSuffix(anchor)
 	}
@@ -245,10 +249,14 @@ func resolveRelative(u, sourceDir string, idx map[string]string) string {
 }
 
 func isExternalURL(u string) bool {
-	return strings.Contains(u, "://") ||
-		strings.HasPrefix(u, "//") || // protocol-relative
-		strings.HasPrefix(u, "mailto:") ||
-		strings.HasPrefix(u, "tel:")
+	if strings.HasPrefix(u, "//") { // protocol-relative
+		return true
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return false
+	}
+	return parsed.IsAbs() // any explicit scheme (http(s), mailto, tel, ...)
 }
 
 func isImagePath(p string) bool {
@@ -258,7 +266,7 @@ func isImagePath(p string) bool {
 			return true
 		}
 	}
-	return strings.HasPrefix(p, "images/")
+	return strings.HasPrefix(lower, "images/")
 }
 
 func splitAnchor(s string) (link, anchor string) {

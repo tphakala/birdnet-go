@@ -167,6 +167,26 @@ func TestRewriteLinks(t *testing.T) {
 			in:   "Weird [x](../../../../etc/passwd).",
 			want: "Weird [x](../../../../etc/passwd).",
 		},
+		{
+			name: "carriage returns are normalized to LF",
+			in:   "Intro [a](installation.md)\r\nNext line\r\n",
+			want: "Intro [a](installation)\nNext line\n",
+		},
+		{
+			name: "absolute self-wiki root URL resolves to Home",
+			in:   "[home](https://github.com/tphakala/birdnet-go/wiki/)",
+			want: "[home](Home)",
+		},
+		{
+			name: "mailto link is left untouched",
+			in:   "Contact [us](mailto:dev@example.com).",
+			want: "Contact [us](mailto:dev@example.com).",
+		},
+		{
+			name: "image directory prefix match is case-insensitive",
+			in:   "[banner](Images/banner)",
+			want: "[banner](Images/banner)",
+		},
 	}
 
 	for _, tc := range cases {
