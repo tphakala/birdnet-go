@@ -6,12 +6,13 @@ import "net/http"
 // that need to customize transport settings without losing proxy support, dial
 // timeouts, and other production defaults (per golang/go#26013).
 //
-// If DefaultTransport has been replaced by a non-*http.Transport RoundTripper
-// (e.g. by APM or tracing middleware), this falls back to a plain
-// &http.Transport{} to avoid a runtime panic.
+// Panics if DefaultTransport has been replaced by a non-*http.Transport
+// RoundTripper — this indicates a fundamental change to process HTTP setup
+// that callers need to handle explicitly rather than silently degrade.
 func CloneDefaultTransport() *http.Transport {
-	if t, ok := http.DefaultTransport.(*http.Transport); ok {
-		return t.Clone()
+	t, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		panic("httpclient: http.DefaultTransport is not *http.Transport; cannot clone")
 	}
-	return &http.Transport{}
+	return t.Clone()
 }
