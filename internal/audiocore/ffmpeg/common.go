@@ -7,20 +7,14 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
-
-// rePathContamination matches URL-like path segments that indicate the FFmpeg
-// path has been contaminated by a reverse proxy or ingress prefix (e.g.,
-// "/api/", "/ingress/", "/proxy/", "/hassio/"). A valid FFmpeg binary path
-// should never contain these segments.
-var rePathContamination = regexp.MustCompile(`(?i)/(?:api|ingress|proxy|hassio)/`)
 
 // ValidateFFmpegPath checks if the FFmpeg path is valid for execution.
 // It rejects empty paths, relative paths, and paths that appear to be
@@ -46,8 +40,8 @@ func ValidateFFmpegPath(ffmpegPath string) error {
 	// Reject paths contaminated by HTTP proxy/ingress prefixes.
 	// A valid FFmpeg binary path should be a clean filesystem path,
 	// not contain URL-like segments such as "/api/", "/ingress/", "/proxy/",
-	// or "/hassio/". Uses a case-insensitive regex for broader detection.
-	if rePathContamination.MatchString(ffmpegPath) {
+	// or "/hassio/". Shares the canonical check with config-time validation.
+	if conf.IsContaminatedToolPath(ffmpegPath) {
 		return errors.Newf("FFmpeg path appears contaminated by proxy/ingress prefix: %s", ffmpegPath).
 			Component("audiocore").
 			Category(errors.CategoryValidation).
@@ -83,8 +77,8 @@ func ValidateSoxPath(soxPath string) error {
 	// Reject paths contaminated by HTTP proxy/ingress prefixes.
 	// A valid Sox binary path should be a clean filesystem path,
 	// not contain URL-like segments such as "/api/", "/ingress/", "/proxy/",
-	// or "/hassio/". Uses a case-insensitive regex for broader detection.
-	if rePathContamination.MatchString(soxPath) {
+	// or "/hassio/". Shares the canonical check with config-time validation.
+	if conf.IsContaminatedToolPath(soxPath) {
 		return errors.Newf("Sox path appears contaminated by proxy/ingress prefix: %s", soxPath).
 			Component("audiocore").
 			Category(errors.CategoryValidation).

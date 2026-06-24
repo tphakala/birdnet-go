@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -708,21 +709,54 @@ func GetSoxFormats(soxPath string) []string {
 	return nil
 }
 
+// rePathContamination matches URL-like segments (e.g. "/api/", "/ingress/",
+// "/proxy/", "/hassio/") that indicate an external tool path has been
+// contaminated by a reverse-proxy or ingress prefix rather than being a clean
+// filesystem path. A real binary path on disk never contains these. Home
+// Assistant add-ons in particular can resolve a tool path to
+// "/api/hassio_ingress/<token>/usr/bin/ffmpeg", which is not a usable
+// executable and fails every invocation.
+var rePathContamination = regexp.MustCompile(`(?i)/(?:api|ingress|proxy|hassio)/`)
+
+// IsContaminatedToolPath reports whether an external tool path looks like it was
+// contaminated by a reverse-proxy or ingress URL prefix. It is the single source
+// of truth for this check, shared by configuration-time validation here and by
+// execution-time validation in the audiocore/ffmpeg package.
+func IsContaminatedToolPath(path string) bool {
+	return rePathContamination.MatchString(path)
+}
+
+// isExecutableFile reports whether path exists and is a regular (non-directory) file.
+func isExecutableFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 // ValidateToolPath checks if a tool is available, either at an explicit path or in the system PATH.
 // It returns the validated path to the tool if found, or an empty string and an error otherwise.
 func ValidateToolPath(configuredPath, toolName string) (string, error) {
 	if configuredPath != "" {
-		// Check if the explicitly configured path exists and is a file
-		if info, err := os.Stat(configuredPath); err == nil && !info.IsDir() {
+		switch {
+		case IsContaminatedToolPath(configuredPath):
+			// Reject contaminated paths BEFORE the os.Stat check: on Home
+			// Assistant add-ons the supervisor can make a path like
+			// "/api/hassio_ingress/<token>/usr/bin/ffmpeg" stat-succeed even
+			// though it is not a usable executable, so the bad path would
+			// otherwise be stored in settings and fail on every invocation.
+			GetLogger().Warn("Configured tool path appears contaminated by a proxy/ingress prefix; ignoring it and checking system PATH",
+				logger.String("configured_path", configuredPath),
+				logger.String("tool", toolName))
+		case isExecutableFile(configuredPath):
 			// Ideally, we'd check execute permissions here, but os.Stat doesn't provide a cross-platform way.
 			// We assume if it exists and isn't a directory, it's likely the executable.
 			// The actual execution will fail later if it's not executable.
 			return configuredPath, nil
+		default:
+			// If configured path is invalid, log a warning but still check PATH as a fallback
+			GetLogger().Warn("Configured tool path invalid or not found, checking system PATH",
+				logger.String("configured_path", configuredPath),
+				logger.String("tool", toolName))
 		}
-		// If configured path is invalid, log a warning but still check PATH as a fallback
-		GetLogger().Warn("Configured tool path invalid or not found, checking system PATH",
-			logger.String("configured_path", configuredPath),
-			logger.String("tool", toolName))
 	}
 
 	// If no configured path or the configured path was invalid, check the system PATH
