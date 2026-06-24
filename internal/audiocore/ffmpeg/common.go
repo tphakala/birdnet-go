@@ -28,12 +28,16 @@ func ValidateFFmpegPath(ffmpegPath string) error {
 			Build()
 	}
 
+	// Redact the path in errors/telemetry: a contaminated tool path can embed an
+	// ingress credential token and these errors reach Sentry and support dumps.
+	safeFFmpegPath := conf.RedactToolPath(ffmpegPath)
+
 	if !filepath.IsAbs(ffmpegPath) {
-		return errors.Newf("FFmpeg path must be absolute, got: %s", ffmpegPath).
+		return errors.Newf("FFmpeg path must be absolute, got: %s", safeFFmpegPath).
 			Component("audiocore").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_ffmpeg_path").
-			Context("path", ffmpegPath).
+			Context("path", safeFFmpegPath).
 			Build()
 	}
 
@@ -42,11 +46,11 @@ func ValidateFFmpegPath(ffmpegPath string) error {
 	// not contain URL-like segments such as "/api/", "/ingress/", "/proxy/",
 	// or "/hassio/". Shares the canonical check with config-time validation.
 	if conf.IsContaminatedToolPath(ffmpegPath) {
-		return errors.Newf("FFmpeg path appears contaminated by proxy/ingress prefix: %s", ffmpegPath).
+		return errors.Newf("FFmpeg path appears contaminated by proxy/ingress prefix: %s", safeFFmpegPath).
 			Component("audiocore").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_ffmpeg_path").
-			Context("path", ffmpegPath).
+			Context("path", safeFFmpegPath).
 			Build()
 	}
 
@@ -65,12 +69,14 @@ func ValidateSoxPath(soxPath string) error {
 			Build()
 	}
 
+	safeSoxPath := conf.RedactToolPath(soxPath)
+
 	if !filepath.IsAbs(soxPath) {
-		return errors.Newf("Sox path must be absolute, got: %s", soxPath).
+		return errors.Newf("Sox path must be absolute, got: %s", safeSoxPath).
 			Component("audiocore").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_sox_path").
-			Context("path", soxPath).
+			Context("path", safeSoxPath).
 			Build()
 	}
 
@@ -79,11 +85,11 @@ func ValidateSoxPath(soxPath string) error {
 	// not contain URL-like segments such as "/api/", "/ingress/", "/proxy/",
 	// or "/hassio/". Shares the canonical check with config-time validation.
 	if conf.IsContaminatedToolPath(soxPath) {
-		return errors.Newf("Sox path appears contaminated by proxy/ingress prefix: %s", soxPath).
+		return errors.Newf("Sox path appears contaminated by proxy/ingress prefix: %s", safeSoxPath).
 			Component("audiocore").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_sox_path").
-			Context("path", soxPath).
+			Context("path", safeSoxPath).
 			Build()
 	}
 

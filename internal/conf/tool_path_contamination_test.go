@@ -76,3 +76,17 @@ func TestValidateToolPath_RejectsContaminatedConfiguredPath(t *testing.T) {
 	assert.NotContains(t, err.Error(), "hassio_ingress", "error message must not leak the contaminated ingress path/token")
 	assert.Contains(t, err.Error(), redactedToolPath, "error should reference the redacted-path placeholder")
 }
+
+// TestRedactToolPath verifies clean paths pass through unchanged while a
+// contaminated path (carrying a credential token) is replaced wholesale.
+func TestRedactToolPath(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "/usr/bin/ffmpeg", RedactToolPath("/usr/bin/ffmpeg"))
+	assert.Empty(t, RedactToolPath(""))
+
+	got := RedactToolPath("/api/hassio_ingress/secret-token-value/usr/bin/ffmpeg")
+	assert.NotContains(t, got, "secret-token-value")
+	assert.NotContains(t, got, "hassio_ingress")
+	assert.Equal(t, redactedToolPath, got)
+}

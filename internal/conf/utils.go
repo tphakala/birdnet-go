@@ -733,6 +733,18 @@ func IsContaminatedToolPath(path string) bool {
 	return rePathContamination.MatchString(path)
 }
 
+// RedactToolPath returns a representation of an external tool path that is safe to
+// put in logs, errors, or telemetry. A contaminated path (e.g. a Home Assistant
+// ingress path embedding a credential token) is replaced with a placeholder; a
+// clean path is returned unchanged. Use this anywhere a configured tool path is
+// surfaced to a sink that may reach Sentry or a support dump.
+func RedactToolPath(path string) string {
+	if IsContaminatedToolPath(path) {
+		return redactedToolPath
+	}
+	return path
+}
+
 // isExecutableFile reports whether path exists and is a regular (non-directory) file.
 func isExecutableFile(path string) bool {
 	info, err := os.Stat(path)
@@ -742,10 +754,9 @@ func isExecutableFile(path string) bool {
 // ValidateToolPath checks if a tool is available, either at an explicit path or in the system PATH.
 // It returns the validated path to the tool if found, or an empty string and an error otherwise.
 func ValidateToolPath(configuredPath, toolName string) (string, error) {
-	// pathForMessage is what we surface in logs and errors. It mirrors
-	// configuredPath except for a contaminated path, which is redacted because it
-	// can embed an ingress credential token.
-	pathForMessage := configuredPath
+	// pathForMessage is what we surface in logs and errors: the configured path,
+	// redacted if it is contaminated (it can embed an ingress credential token).
+	pathForMessage := RedactToolPath(configuredPath)
 	if configuredPath != "" {
 		switch {
 		case IsContaminatedToolPath(configuredPath):
@@ -753,9 +764,8 @@ func ValidateToolPath(configuredPath, toolName string) (string, error) {
 			// Assistant add-ons the supervisor can make a path like
 			// "/api/hassio_ingress/<token>/usr/bin/ffmpeg" stat-succeed even
 			// though it is not a usable executable, so the bad path would
-			// otherwise be stored in settings and fail on every invocation. Do
-			// not log the path itself; it embeds a credential token.
-			pathForMessage = redactedToolPath
+			// otherwise be stored in settings and fail on every invocation. The
+			// path itself is omitted here; it embeds a credential token.
 			GetLogger().Warn("Configured tool path appears contaminated by a proxy/ingress prefix; ignoring it and checking system PATH",
 				logger.String("tool", toolName))
 		case isExecutableFile(configuredPath):
@@ -766,7 +776,7 @@ func ValidateToolPath(configuredPath, toolName string) (string, error) {
 		default:
 			// If configured path is invalid, log a warning but still check PATH as a fallback
 			GetLogger().Warn("Configured tool path invalid or not found, checking system PATH",
-				logger.String("configured_path", configuredPath),
+				logger.String("configured_path", pathForMessage),
 				logger.String("tool", toolName))
 		}
 	}
