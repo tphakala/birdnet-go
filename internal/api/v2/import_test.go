@@ -326,6 +326,139 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
 	assert.Equal(t, importStatusStarted, resp.Status)
 }
 
+// makeTempDBWithRow creates a temporary BirdNET-Pi SQLite file in dir with a single
+// detection row using the supplied date, common name, and clip file name. It returns the
+// directory holding the database. Used by the db-audio test so the row's audio path
+// components are known and a matching source clip tree can be created.
+func makeTempDBWithRow(t *testing.T, date, comName, fileName string) (dir string) {
+	t.Helper()
+	dir = t.TempDir()
+	path := filepath.Join(dir, "birds.db")
+
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, db.Exec(`CREATE TABLE detections (
+		Date DATE, Time TIME,
+		Sci_Name VARCHAR(100) NOT NULL, Com_Name VARCHAR(100) NOT NULL,
+		Confidence FLOAT, Lat FLOAT, Lon FLOAT, Cutoff FLOAT,
+		Week INT, Sens FLOAT, Overlap FLOAT,
+		File_Name VARCHAR(100) NOT NULL
+	)`).Error)
+
+	require.NoError(t, db.Exec(
+		`INSERT INTO detections (Date, Time, Sci_Name, Com_Name, Confidence, Lat, Lon, Cutoff, Week, Sens, Overlap, File_Name)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0.0, ?)`,
+		date, "10:00:00", "Dendrocopos major", comName,
+		0.74, 60.0, 25.0, 0.7, 1.25, fileName,
+	).Error)
+
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+
+	return dir
+}
+
+// TestStartBirdNETPiImport_ModeDBAudio_CopiesClip verifies that db-audio mode actually
+// exercises the audio copy path end to end: it sets Realtime.Audio.Export.Path so the
+// engine receives a non-empty ClipExportPath, provides a matching source clip in the
+// BirdNET-Pi Extracted/By_Date tree alongside the database, and asserts the clip is
+// copied into the export directory. The previous db-audio test left the export path
+// empty, so the engine skipped audio entirely (IncludeAudio && ClipExportPath != "" was
+// false) and the new path was never covered.
+func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
+
+	const (
+		date     = "2024-01-01"
+		comName  = "Great Spotted Woodpecker"
+		fileName = "woodpecker.mp3"
+	)
+	clipContent := []byte("fake source audio content")
+
+	e, c := newImportController(t)
+	c.initImportRoutes()
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+
+	// Database directory doubles as the BirdNET-Pi audio source root: the handler sets
+	// AudioSourceDir to filepath.Dir(resolvedPath), so the Extracted/By_Date tree must
+	// live next to birds.db.
+	sourceRoot := makeTempDBWithRow(t, date, comName, fileName)
+	c.importSourceRoot = sourceRoot
+
+	clipDir := filepath.Join(sourceRoot, "Extracted", "By_Date", date, comName)
+	require.NoError(t, os.MkdirAll(clipDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(clipDir, fileName), clipContent, 0o644))
+
+	// Configure a real export directory so the engine receives a non-empty
+	// ClipExportPath and the audio path is exercised.
+	exportDir := t.TempDir()
+	settings := newValidTestSettings()
+	settings.Realtime.Audio.Export.Path = exportDir
+	c.Settings.Store(settings)
+
+	// Use the default source factory (birdnetpi.New) by leaving importSourceFactory unset
+	// so the real adapter reads the database created above.
+
+	srv := httptest.NewServer(e)
+	t.Cleanup(srv.Close)
+
+	startResp, err := http.Post(srv.URL+"/api/v2/import/birdnet-pi", //nolint:noctx // test uses simplified HTTP calls without context
+		"application/json", strings.NewReader(`{"mode":"db-audio","source_path":"birds.db"}`))
+	require.NoError(t, err)
+	defer func() { _ = startResp.Body.Close() }()
+	require.Equal(t, http.StatusAccepted, startResp.StatusCode)
+
+	var startBody startImportResponse
+	require.NoError(t, json.NewDecoder(startResp.Body).Decode(&startBody))
+	require.NotEmpty(t, startBody.JobID)
+
+	// Poll status until the import reaches a terminal done state.
+	deadline := time.Now().Add(10 * time.Second)
+	var finalStatus importStatusResponse
+	e2 := echo.New()
+	for time.Now().Before(deadline) {
+		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		statusRec := httptest.NewRecorder()
+		statusCtx := e2.NewContext(statusReq, statusRec)
+		require.NoError(t, c.GetImportStatus(statusCtx))
+		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
+		if !finalStatus.Running && finalStatus.Status == importStatusDone {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	require.Equal(t, importStatusDone, finalStatus.Status, "db-audio import must reach done state")
+	assert.Empty(t, finalStatus.Error)
+	require.NotNil(t, finalStatus.Progress)
+	assert.Equal(t, 1, finalStatus.Progress.Inserted)
+
+	// The source clip must have been copied into the export tree. The relative layout
+	// mirrors buildClipPath: YYYY/MM/<sci>_<conf>p_<timestamp>.<ext>. The engine parses
+	// the wall-clock "10:00:00" and formats it directly (no UTC conversion), so the
+	// timestamp segment is 20240101T100000Z regardless of the host timezone.
+	destAbs := filepath.Join(exportDir, "2024", "01", "dendrocopos_major_74p_20240101T100000Z.mp3")
+	copied, readErr := os.ReadFile(destAbs)
+	require.NoError(t, readErr, "db-audio import must copy the source clip to %s", destAbs)
+	assert.Equal(t, clipContent, copied, "copied clip content must match the source")
+}
+
 // TestStartBirdNETPiImport_UnknownMode_Returns400 verifies unknown modes are rejected.
 func TestStartBirdNETPiImport_UnknownMode_Returns400(t *testing.T) {
 	_, c := newImportController(t)
