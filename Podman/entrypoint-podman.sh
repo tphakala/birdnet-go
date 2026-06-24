@@ -88,11 +88,13 @@ fi
 
 # Set read permissions for model files (only when running as root)
 if [ "$RUNNING_AS_ROOT" = true ]; then
-    find /data/models -type f \( -iname '*.tflite' -o -iname '*.onnx' -o -iname '*.csv' -o -iname '*.txt' -o -iname '*.bin' \) -exec chmod a+r {} + 2>/dev/null || true
+    # Only chmod entries that actually lack the bits (the ! -perm guards), so a
+    # restart does not rewrite every model file on slow/NFS/read-only mounts.
+    find /data/models -type f \( -iname '*.tflite' -o -iname '*.onnx' -o -iname '*.csv' -o -iname '*.txt' -o -iname '*.bin' \) ! -perm -a+r -exec chmod a+r {} + 2>/dev/null || true
     # Ensure directories are browsable. Models live in per-model and shared/
     # subdirectories, so make every directory (not just the top level)
     # traversable, otherwise a non-root user cannot reach files in subdirs.
-    find /data/models -type d -exec chmod a+rx {} + 2>/dev/null || true
+    find /data/models -type d ! -perm -a+rx -exec chmod a+rx {} + 2>/dev/null || true
 fi
 
 # Check if user has custom model path configured via environment variable
