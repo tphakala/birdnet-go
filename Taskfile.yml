@@ -80,7 +80,7 @@ vars:
 
 tasks:
   default:
-    deps: [native-target, generate-schema]
+    deps: [native-target]
 
   # Task for running tests
   test:
@@ -164,10 +164,22 @@ tasks:
     generates:
       - internal/speciesdict/data/*.json.gz
 
+  # Not wired into the default build: invopop/jsonschema's AddGoComments is not
+  # reproducible across platforms (it produces description-less output on
+  # Windows), so running it on every build would dirty the tree or commit a
+  # degraded schema. Run it explicitly when conf/logger structs change; the
+  # TestSchemaUpToDate test enforces the committed files stay in sync in CI.
   generate-schema:
     desc: Regenerate config.schema.json and configuration-reference.md from the Settings struct
     cmds:
       - go run ./cmd/gen-schema/
+    sources:
+      - cmd/gen-schema/*.go
+      - internal/conf/*.go
+      - internal/logger/*.go
+    generates:
+      - config.schema.json
+      - doc/wiki/configuration-reference.md
 
   native-target:
     cmds:
