@@ -11,6 +11,10 @@
   @component
 -->
 <script lang="ts">
+  // Tests query the rendered control by `data-testid={SELECT_TESTID_PREFIX + label}`.
+  // Keep this in sync with the prefix in soundCardProbeTest.ts.
+  const SELECT_TESTID_PREFIX = 'select-';
+
   interface Option {
     value: string;
     label: string;
@@ -34,7 +38,7 @@
 </script>
 
 <select
-  data-testid={`select-${label}`}
+  data-testid={`${SELECT_TESTID_PREFIX}${label}`}
   value={selected}
   {disabled}
   onchange={e => onChange?.((e.currentTarget as HTMLSelectElement).value)}

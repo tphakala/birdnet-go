@@ -261,6 +261,10 @@
     const controller = new AbortController();
     newFetchController = controller;
     newSampleRateLoading = true;
+    // Drop the previous device's probed rates so a slower probe cannot leave
+    // stale, unverified options on screen while the new one is in flight.
+    newSampleRateOptions = [{ value: '48000', label: '48 kHz' }];
+    newSampleRateVerified = true;
     try {
       const result = await fetchCapabilities(deviceId, controller.signal);
       // Ignore a superseded probe: a newer device selection has replaced this
@@ -269,6 +273,11 @@
       if (newFetchController !== controller) return;
       newSampleRateOptions = result.options;
       newSampleRateVerified = result.verified;
+      // Drop a selection the new device cannot honor so an unsupported rate is
+      // never persisted.
+      if (!result.options.some(opt => Number(opt.value) === newSampleRate)) {
+        newSampleRate = 48000;
+      }
     } catch {
       // Only AbortError reaches here (utility handles all other failures internally)
     } finally {
