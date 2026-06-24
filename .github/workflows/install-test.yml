@@ -1,0 +1,44 @@
+name: Install Script Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'install.sh'
+      - 'scripts/install_test.sh'
+      - 'internal/conf/config.yaml'
+      - '.github/workflows/install-test.yml'
+  pull_request:
+    paths:
+      - 'install.sh'
+      - 'scripts/install_test.sh'
+      - 'internal/conf/config.yaml'
+      - '.github/workflows/install-test.yml'
+
+concurrency:
+  group: install-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  install-script-tests:
+    name: install.sh helpers (shellcheck + unit tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: ShellCheck install.sh and the test harness
+        # ubuntu-24.04 ships shellcheck preinstalled. Gate on errors only; the existing
+        # SC2155 style warnings in install.sh are tracked separately and not part of this PR.
+        run: |
+          shellcheck --version
+          shellcheck -S error install.sh
+          shellcheck -S warning scripts/install_test.sh
+
+      - name: Run install.sh helper unit tests
+        run: bash scripts/install_test.sh
