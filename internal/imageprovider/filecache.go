@@ -43,9 +43,17 @@ func isSafeIP(ip net.IP) bool {
 // imageHTTPClient is a shared HTTP client for downloading images with SSRF protection.
 // The custom DialContext resolves hostnames and dials validated IPs directly (not hostnames),
 // preventing SSRF via DNS rebinding, localhost, or IP-literal redirects.
-// Clones DefaultTransport (per golang/go#26013) to inherit proxy support and defaults.
+// Clones DefaultTransport (per golang/go#26013) for sane dial/timeout defaults, but
+// disables proxy support: this client's security model requires DialContext to dial
+// validated IPs directly.
 var imageHTTPClient = func() *http.Client {
 	transport := httpclient.CloneDefaultTransport()
+	// Disable proxy support. CloneDefaultTransport inherits Proxy=ProxyFromEnvironment,
+	// but a proxy would defeat the SSRF guard below: the transport would dial the proxy
+	// and let it resolve the target, so the target IP never passes through isSafeIP. With
+	// a loopback/private proxy (e.g. HTTPS_PROXY=http://127.0.0.1:8080) DialContext would
+	// also reject the proxy address itself and break all image downloads.
+	transport.Proxy = nil
 	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
