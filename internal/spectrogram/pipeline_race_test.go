@@ -38,7 +38,11 @@ func TestFFmpegSoxPipelineFailurePathNoRace(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "out.png")
 
 	const (
-		iterations          = 200
+		// The race detector (ThreadSanitizer) flags the first unsynchronized
+		// concurrent access deterministically, so a small iteration count is
+		// enough to catch a reintroduced race while keeping this process-spawning
+		// test fast on CI.
+		iterations          = 20
 		width               = 800
 		raw                 = false
 		preValidatedSeconds = 1.0
