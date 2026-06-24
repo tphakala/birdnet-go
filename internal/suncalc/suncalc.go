@@ -34,6 +34,11 @@ type cacheEntry struct {
 // organically from live traffic.
 const maxCacheEntries = 400
 
+// sunEventsOperation is the operation label used for all GetSunEventTimes
+// metrics. Using a single constant keeps the Prometheus series consistent; a
+// typo in any one call site would otherwise split the series.
+const sunEventsOperation = "get_sun_events"
+
 // SunCalc handles caching and calculation of sun event times
 type SunCalc struct {
 	cache    map[string]cacheEntry   // Cache of sun event times for dates
@@ -69,75 +74,94 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	localDate := date.In(sc.location)
 	dateKey := localDate.Format(time.DateOnly)
 
-	// Acquire a read lock and check if the date is in the cache
+	// Acquire a read lock and check if the date is in the cache.
+	// Snapshot the metrics pointer under the same lock into a local so every
+	// metrics access below operates on a stable value. SetMetrics writes
+	// sc.metrics under the write lock, so reading it here (under RLock) is the
+	// only synchronized read of the field; capturing it once also closes the
+	// nil-panic window where a concurrent SetMetrics(nil) could land between a
+	// "!= nil" check and the subsequent method call.
 	sc.lock.RLock()
 	entry, exists := sc.cache[dateKey]
+	m := sc.metrics
 	// Update cache size metric while holding the lock to avoid race condition
-	if sc.metrics != nil {
-		sc.metrics.UpdateCacheSize(float64(len(sc.cache)))
+	if m != nil {
+		m.UpdateCacheSize(float64(len(sc.cache)))
 	}
 	sc.lock.RUnlock()
 
 	// If the date exists in the cache, return the cached times
 	if exists {
-		if sc.metrics != nil {
-			sc.metrics.RecordSunCalcCacheHit("get_sun_events")
-			sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
-			sc.metrics.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+		if m != nil {
+			m.RecordSunCalcCacheHit(sunEventsOperation)
+			m.RecordSunCalcOperation(sunEventsOperation, "success")
+			m.RecordSunCalcDuration(sunEventsOperation, time.Since(start).Seconds())
 		}
 		return entry.times, nil
 	}
 
-	// Double-check under write lock: another goroutine may have populated
-	// the cache between the RLock check and now. This reduces (but does
+	// Double-check under a read lock: another goroutine may have populated
+	// the cache between the first RLock check and now. This reduces (but does
 	// not fully eliminate) redundant calculations under high concurrency,
-	// which is acceptable since calculateSunEventTimes is pure math.
-	sc.lock.Lock()
+	// which is acceptable since calculateSunEventTimes is pure math. A read
+	// lock suffices here because this branch only reads; the authoritative
+	// insert double-check in the store path below runs under the write lock.
+	sc.lock.RLock()
 	if entry, ok := sc.cache[dateKey]; ok {
-		sc.lock.Unlock()
-		if sc.metrics != nil {
-			sc.metrics.RecordSunCalcCacheHit("get_sun_events")
-			sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
-			sc.metrics.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+		sc.lock.RUnlock()
+		if m != nil {
+			m.RecordSunCalcCacheHit(sunEventsOperation)
+			m.RecordSunCalcOperation(sunEventsOperation, "success")
+			m.RecordSunCalcDuration(sunEventsOperation, time.Since(start).Seconds())
 		}
 		return entry.times, nil
 	}
-	sc.lock.Unlock()
+	sc.lock.RUnlock()
 
 	// Record cache miss only after the double-check confirms it
-	if sc.metrics != nil {
-		sc.metrics.RecordSunCalcCacheMiss("get_sun_events")
+	if m != nil {
+		m.RecordSunCalcCacheMiss(sunEventsOperation)
 	}
 
 	// Calculate outside the lock to avoid blocking readers.
 	times, err := sc.calculateSunEventTimes(localDate)
 	if err != nil {
-		if sc.metrics != nil {
-			sc.metrics.RecordSunCalcOperation("get_sun_events", "error")
-			sc.metrics.RecordSunCalcError("get_sun_events", "calculation_error")
+		if m != nil {
+			m.RecordSunCalcOperation(sunEventsOperation, "error")
+			m.RecordSunCalcError(sunEventsOperation, "calculation_error")
 		}
 		return SunEventTimes{}, err
 	}
 
-	// Store result and enforce cache size limit.
+	// Store result and enforce cache size limit. Double-check for an existing
+	// entry first: when several goroutines compute the same missing date
+	// concurrently, a later one must not clear() the cache and wipe the entry
+	// an earlier one just inserted. Mirroring the read double-check above, if
+	// another goroutine already populated dateKey we reuse its value and skip
+	// the clear/insert entirely. All callers for the date then return the same
+	// cached times.
 	sc.lock.Lock()
-	if len(sc.cache) >= maxCacheEntries {
-		clear(sc.cache)
+	if existing, ok := sc.cache[dateKey]; ok {
+		times = existing.times
+	} else {
+		if len(sc.cache) >= maxCacheEntries {
+			clear(sc.cache)
+		}
+		sc.cache[dateKey] = cacheEntry{times: times}
 	}
-	sc.cache[dateKey] = cacheEntry{times: times}
-	if sc.metrics != nil {
-		sc.metrics.UpdateCacheSize(float64(len(sc.cache)))
+	if m != nil {
+		m.UpdateCacheSize(float64(len(sc.cache)))
 	}
 	sc.lock.Unlock()
 
 	// Record successful operation and update sun time gauges
-	if sc.metrics != nil {
-		sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
-		sc.metrics.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+	if m != nil {
+		m.RecordSunCalcOperation(sunEventsOperation, "success")
+		m.RecordSunCalcDuration(sunEventsOperation, time.Since(start).Seconds())
 
 		// Update sun time gauges for current day
 		if dateKey == time.Now().In(sc.location).Format(time.DateOnly) {
-			sc.metrics.UpdateSunTimes(
+			m.UpdateSunTimes(
 				float64(times.Sunrise.Unix()),
 				float64(times.Sunset.Unix()),
 				float64(times.CivilDawn.Unix()),
