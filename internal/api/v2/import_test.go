@@ -279,13 +279,14 @@ func TestStartBirdNETPiImport_BadJSON_Returns400(t *testing.T) {
 
 // TestStartBirdNETPiImport_ModeDBAudio_Returns202 verifies db-audio mode is accepted.
 func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -337,13 +338,14 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
 // import would start, copy no audio (the engine skips audio when ClipExportPath is empty),
 // and silently produce detections with no clips, masking a misconfiguration.
 func TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -431,13 +433,14 @@ func makeTempDBWithRow(t *testing.T, date, comName, fileName string) (dir string
 // empty, so the engine skipped audio entirely (IncludeAudio && ClipExportPath != "" was
 // false) and the new path was never covered.
 func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	const (
 		date     = "2024-01-01"
@@ -657,13 +660,14 @@ func TestStartBirdNETPiImport_FakeValidationFailure_Returns400(t *testing.T) {
 
 // TestStartBirdNETPiImport_GoodFakeSource_Returns202 verifies 202 on a valid request.
 func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -705,13 +709,14 @@ func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
 
 // TestStartBirdNETPiImport_ConflictWhileRunning_Returns409 verifies 409 on concurrent starts.
 func TestStartBirdNETPiImport_ConflictWhileRunning_Returns409(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
@@ -883,13 +888,14 @@ func TestCancelImport_JobNotFound_Returns404(t *testing.T) {
 
 // TestCancelImport_RunningJob_Returns200Cancelling verifies cancel returns 200 with cancelling status.
 func TestCancelImport_RunningJob_Returns200Cancelling(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 	_, c := newImportController(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
@@ -1045,13 +1051,14 @@ func TestImportRoutes_FailClosedWhenNoAuth(t *testing.T) {
 
 // TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd verifies the full pipeline with a real SQLite file.
 func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	const rowCount = 3
 
@@ -1145,13 +1152,14 @@ func (p *panicIterateSource) Iterate(_ context.Context, _ int, fn func([]imports
 // TestStreamImportProgress_LiveStreaming verifies that a connected SSE client receives
 // multiple strictly-increasing progress events followed by a terminal complete event.
 func TestStreamImportProgress_LiveStreaming(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	e, c := newImportController(t)
 	c.initImportRoutes()
@@ -1280,13 +1288,14 @@ func TestStreamImportProgress_LiveStreaming(t *testing.T) {
 // TestStreamImportProgress_CancelEmitsCancelledEvent verifies that cancelling a
 // running import results in a terminal cancelled SSE event on any connected stream.
 func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	e, c := newImportController(t)
 	c.initImportRoutes()
@@ -1376,13 +1385,14 @@ func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
 // panic in the import engine is recovered, the job reaches a terminal error state,
 // and the last-reported progress is preserved (not zeroed).
 func TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats(t *testing.T) {
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see deferNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	deferNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	e, c := newImportController(t)
 	c.initImportRoutes()
