@@ -198,13 +198,36 @@ set_first_audio_source() {
     if ! sed -n '/^[[:space:]]\{4\}sources:/,/^[[:space:]]\{4\}[A-Za-z]/p' "$file" | grep -qE '^[[:space:]]+device:[[:space:]]'; then
         return 1
     fi
-    local esc_device esc_name
-    esc_device=$(sed_escape_replacement "$device")
-    esc_name=$(sed_escape_replacement "$name")
-    sed -i -E \
-        -e "/^[[:space:]]{4}sources:/,/^[[:space:]]{4}[A-Za-z]/ s|^([[:space:]]*device:[[:space:]]*).*|\\1\"${esc_device}\"|" \
-        -e "/^[[:space:]]{4}sources:/,/^[[:space:]]{4}[A-Za-z]/ s|^([[:space:]]*- name:[[:space:]]*).*|\\1\"${esc_name}\"|" \
-        -- "$file"
+    # Edit ONLY the first source item, not every entry in the sources block, so a
+    # multi-source config (e.g. extra sources added via the web UI) is not clobbered.
+    # device/name are passed as literal awk variables, so sed/regex metacharacters in a
+    # device name need no escaping here. Write to a temp file then copy back over the
+    # original so its ownership and permissions are preserved.
+    if awk -v device="$device" -v name="$name" '
+        /^    sources:/ { in_sources=1; print; next }
+        in_sources && /^    [A-Za-z]/ { in_sources=0 }
+        in_sources && /^[[:space:]]*- name:/ {
+            item++
+            if (item == 1) {
+                match($0, /^[[:space:]]*- name:[[:space:]]*/)
+                print substr($0, 1, RLENGTH) "\"" name "\""
+                next
+            }
+        }
+        in_sources && item == 1 && !device_done && /^[[:space:]]*device:/ {
+            match($0, /^[[:space:]]*device:[[:space:]]*/)
+            print substr($0, 1, RLENGTH) "\"" device "\""
+            device_done = 1
+            next
+        }
+        { print }
+    ' "$file" > "${file}.tmp"; then
+        cat "${file}.tmp" > "$file"
+        rm -f "${file}.tmp"
+    else
+        rm -f "${file}.tmp"
+        return 1
+    fi
 }
 
 # Prevent sed injection from user-supplied lat/lon and port values.
@@ -4097,6 +4120,7 @@ configure_tls_access() {
                 log_message "WARN" "Silent mode: BIRDNET_ENABLE_AUTOTLS=true but BIRDNET_HOST is unset/invalid; AutoTLS not enabled"
                 print_message "⚠️ Silent mode: AutoTLS requires a valid BIRDNET_HOST; continuing without AutoTLS" "$YELLOW"
                 BIND_TLS_PORTS="false"
+                apply_tls_settings "direct" "" ""
             else
                 BIND_TLS_PORTS="true"
                 CONFIGURED_HOST="$silent_host"
@@ -4111,6 +4135,7 @@ configure_tls_access() {
             print_message "🔇 Silent mode: external host set to $CONFIGURED_HOST (no AutoTLS)" "$YELLOW"
         else
             BIND_TLS_PORTS="false"
+            apply_tls_settings "direct" "" ""
         fi
         return 0
     fi
@@ -4128,6 +4153,8 @@ configure_tls_access() {
         case "$tls_choice" in
             1)
                 BIND_TLS_PORTS="false"
+                CONFIGURED_HOST=""
+                apply_tls_settings "direct" "" ""
                 print_message "✅ Direct access on port $WEB_PORT" "$GREEN"
                 break
                 ;;
@@ -4138,6 +4165,8 @@ configure_tls_access() {
                 if [ -z "$host_input" ]; then
                     print_message "⚠️ A domain is required for Let's Encrypt; falling back to direct access" "$YELLOW"
                     BIND_TLS_PORTS="false"
+                    CONFIGURED_HOST=""
+                    apply_tls_settings "direct" "" ""
                     break
                 fi
                 BIND_TLS_PORTS="true"
@@ -4205,15 +4234,40 @@ apply_tls_settings() {
     local mode="$1"
     local host="$2"
     local url="$3"
-    [ -n "$host" ] && set_config_value security host "$host"
-    [ -n "$url" ] && set_config_value security baseurl "$url"
+    # Each mode writes a complete, consistent set of security keys so switching modes never
+    # leaves a stale value behind (a stale security.host breaks OAuth redirects and
+    # notification URLs even when baseurl is set, and a stale autoTls regenerates a unit out
+    # of sync with the app config).
     case "$mode" in
         autotls)
+            set_config_value security host "$host"
+            set_config_value security baseurl ""
             set_config_value security autoTls "true"
             set_config_value security redirecttohttps "true"
+            set_config_value security tlsMode ""
             ;;
-        proxy|direct)
+        proxy)
+            # Behind a reverse proxy: no AutoTLS. When only a full URL was given, derive the
+            # host from it so security.host (used independently of baseurl for OAuth and
+            # notification URLs) is set rather than left stale.
+            if [ -z "$host" ] && [ -n "$url" ]; then
+                host="${url#*://}"
+                host="${host%%/*}"
+                host="${host%%:*}"
+            fi
+            set_config_value security host "$host"
+            set_config_value security baseurl "$url"
             set_config_value security autoTls "false"
+            set_config_value security redirecttohttps "false"
+            set_config_value security tlsMode ""
+            ;;
+        direct)
+            # Direct access: clear any stale AutoTLS / reverse-proxy settings so the app
+            # config matches a unit that publishes only the web port.
+            set_config_value security host ""
+            set_config_value security baseurl ""
+            set_config_value security autoTls "false"
+            set_config_value security redirecttohttps "false"
             set_config_value security tlsMode ""
             ;;
     esac
@@ -4294,14 +4348,16 @@ generate_systemd_service_content() {
     # only for the Prometheus metrics endpoint; both are opt-in so a fresh install does not
     # collide with an existing web server. Existing installs keep whatever they already had
     # because load_existing_service_config() restores these flags from the current unit.
+    # Any restored host bind address is reapplied so a localhost-only mapping survives a
+    # regenerate (default is no address: published on all interfaces).
     local tls_ports_line=""
     if [ "$BIND_TLS_PORTS" = "true" ]; then
-        tls_ports_line="-p 80:80 \\
-    -p 443:443"
+        tls_ports_line="-p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}80:80 \\
+    -p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}443:443"
     fi
     local metrics_port_line=""
     if [ "$BIND_METRICS_PORT" = "true" ]; then
-        metrics_port_line="-p 8090:8090"
+        metrics_port_line="-p ${METRICS_BIND_ADDR:+${METRICS_BIND_ADDR}:}8090:8090"
     fi
 
     # Check if running on Raspberry Pi and add WiFi power save disable script
@@ -4363,6 +4419,17 @@ WantedBy=multi-user.target
 EOF
 }
 
+# Extract the optional host bind address from a "-p [addr:]PORT:PORT" docker mapping (as
+# produced by grep -oE). Echoes the address (e.g. 127.0.0.1 or [::1]) or an empty string.
+_extract_bind_addr() {
+    local map="$1"
+    local portpair="$2"   # e.g. "443:443"
+    local spec="${map#-p }"
+    spec="${spec%"$portpair"}"
+    spec="${spec%:}"
+    printf '%s' "$spec"
+}
+
 # Restore the web port, AutoTLS/metrics port bindings, and timezone from an existing
 # systemd unit so updates and reconfiguration preserve the user's prior choices instead of
 # resetting to fresh-install defaults. This is the backward-compatibility guarantee: an
@@ -4412,13 +4479,21 @@ load_existing_service_config() {
     fi
 
     # Preserve the AutoTLS (80/443) and Prometheus metrics (8090) bindings if the existing
-    # unit currently maps them. NOTE: this is binding preservation, not feature detection,
-    # so an unchanged update keeps exactly what the user already ran.
-    if grep -qE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:443' "$service_file" 2>/dev/null; then
+    # unit currently maps them, including any host bind address (e.g. 127.0.0.1) so a
+    # localhost-only mapping is not silently re-exposed on all interfaces after an update.
+    # NOTE: this is binding preservation, not feature detection, so an unchanged update keeps
+    # exactly what the user already ran.
+    local tls_map
+    tls_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:443' "$service_file" 2>/dev/null | head -1)
+    if [ -n "$tls_map" ]; then
         BIND_TLS_PORTS="true"
+        TLS_BIND_ADDR=$(_extract_bind_addr "$tls_map" "443:443")
     fi
-    if grep -qE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?8090:8090' "$service_file" 2>/dev/null; then
+    local metrics_map
+    metrics_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?8090:8090' "$service_file" 2>/dev/null | head -1)
+    if [ -n "$metrics_map" ]; then
         BIND_METRICS_PORT="true"
+        METRICS_BIND_ADDR=$(_extract_bind_addr "$metrics_map" "8090:8090")
     fi
 
     # Timezone, only if not already chosen this run.
@@ -5811,6 +5886,10 @@ BIND_METRICS_PORT="false"
 # The installer never sets this itself, but it is preserved from a hand-edited unit across
 # updates so a localhost-only binding is not silently re-exposed to all interfaces.
 WEB_PORT_BIND_ADDR=""
+# Same idea for the AutoTLS (80/443) and metrics (8090) port bindings: preserve any host
+# bind address found on the existing unit so a localhost-only mapping is not re-exposed.
+TLS_BIND_ADDR=""
+METRICS_BIND_ADDR=""
 # Public hostname for AutoTLS / reverse-proxy setups (written to security.host).
 CONFIGURED_HOST=""
 
@@ -5845,7 +5924,29 @@ log_enhanced_session_info "$INSTALLATION_TYPE" "$PRESERVED_DATA" "$FRESH_INSTALL
 # Apply pending reconfiguration: regenerate the systemd unit from the current globals
 # (web port, AutoTLS/metrics bindings, timezone), restart the service, and verify. Used by
 # reconfigure_menu after the user chooses "Apply".
+# Restore the config and systemd unit backed up at the start of reconfiguration, then
+# restart the service so BirdNET-Go returns to its previous working state. The port, TLS,
+# and metrics settings live in the unit, so restoring only config.yaml is not enough.
+# Args: config_backup, service_backup, has_service_backup.
+_reconfigure_rollback() {
+    local cfg_backup="$1"
+    local svc_backup="$2"
+    local has_svc="$3"
+    cp "$cfg_backup" "$CONFIG_FILE" 2>/dev/null
+    if [ "$has_svc" = "true" ] && [ -f "$svc_backup" ]; then
+        sudo cp "$svc_backup" "/etc/systemd/system/birdnet-go.service" 2>/dev/null
+        sudo systemctl daemon-reload
+    fi
+    sudo systemctl start birdnet-go.service 2>/dev/null
+}
+
+# Apply pending reconfiguration: regenerate the unit from the current globals, restart, and
+# verify. On restart failure, automatically roll back to the backed-up config AND unit and
+# restart the previous working state. Args: config_backup, service_backup, has_service_backup.
 apply_reconfiguration() {
+    local cfg_backup="$1"
+    local svc_backup="$2"
+    local has_svc="$3"
     print_message "\n💾 Applying configuration and restarting BirdNET-Go..." "$YELLOW"
     ensure_internal_port_8080
     add_systemd_config
@@ -5855,8 +5956,14 @@ apply_reconfiguration() {
         verify_post_start
         return 0
     fi
-    print_message "❌ Failed to restart BirdNET-Go after reconfiguration" "$RED"
-    show_service_diagnostics
+    print_message "❌ Failed to start with the new configuration; rolling back to the previous working setup..." "$RED"
+    _reconfigure_rollback "$cfg_backup" "$svc_backup" "$has_svc"
+    if sudo systemctl is-active --quiet birdnet-go.service; then
+        print_message "↩️ Restored the previous configuration; BirdNET-Go is running again." "$GREEN"
+    else
+        print_message "⚠️ Rollback restart did not come up; check: sudo journalctl -u birdnet-go.service -n 50" "$RED"
+        show_service_diagnostics
+    fi
     return 1
 }
 
@@ -5892,12 +5999,20 @@ reconfigure_menu() {
         print_message "❌ Could not create a configuration backup; aborting reconfiguration to avoid risking your config." "$RED"
         return 1
     fi
+    # Back up the systemd unit too: the port, TLS, and metrics settings live there, so a
+    # rollback that restores only config.yaml would leave a broken unit. Best-effort (the
+    # unit is usually world-readable); if it cannot be copied, rollback restores config only.
+    local service_backup="${CONFIG_FILE}.service.reconfigure.bak"
+    local has_service_backup="false"
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] && cp "/etc/systemd/system/birdnet-go.service" "$service_backup" 2>/dev/null; then
+        has_service_backup="true"
+    fi
     stop_birdnet_service
 
     # If the user aborts (Ctrl-C / TERM) while the service is stopped, restore the previous
-    # config and bring the service back up so reconfiguration never leaves BirdNET-Go down.
-    # The global EXIT trap (cleanup_temp_files) still runs after this exits.
-    trap 'print_message "\n↩️ Aborted; restoring previous configuration and restarting..." "$YELLOW"; cp "$rc_backup" "$CONFIG_FILE" 2>/dev/null; rm -f "$rc_backup"; sudo systemctl start birdnet-go.service 2>/dev/null; exit 130' INT TERM
+    # config and unit and bring the service back up so reconfiguration never leaves
+    # BirdNET-Go down. The global EXIT trap (cleanup_temp_files) still runs after this exits.
+    trap '_reconfigure_rollback "$rc_backup" "$service_backup" "$has_service_backup"; rm -f "$rc_backup" "$service_backup"; exit 130' INT TERM
 
     local changed="false"
     while true; do
@@ -5915,11 +6030,10 @@ reconfigure_menu() {
         print_message "❓ Select an option (1-8): " "$YELLOW" "nonewline"
         local rc_choice
         if ! read -r rc_choice; then
-            print_message "\n↩️ No input; restoring previous configuration and restarting..." "$YELLOW"
-            cp "$rc_backup" "$CONFIG_FILE" 2>/dev/null
-            rm -f "$rc_backup"
-            sudo systemctl start birdnet-go.service
             trap - INT TERM
+            print_message "\n↩️ No input; restoring previous configuration and restarting..." "$YELLOW"
+            _reconfigure_rollback "$rc_backup" "$service_backup" "$has_service_backup"
+            rm -f "$rc_backup" "$service_backup"
             return 1
         fi
         case "$rc_choice" in
@@ -5933,28 +6047,21 @@ reconfigure_menu() {
                 trap - INT TERM
                 if [ "$changed" != "true" ]; then
                     print_message "ℹ️ No changes made; restarting with the existing configuration." "$YELLOW"
-                    rm -f "$rc_backup"
+                    rm -f "$rc_backup" "$service_backup"
                     sudo systemctl start birdnet-go.service
                     verify_post_start
                     return 1
                 fi
-                if apply_reconfiguration; then
-                    rm -f "$rc_backup"
-                else
-                    print_message "⚠️ Your previous configuration was preserved at:" "$YELLOW"
-                    print_message "   $rc_backup" "$NC"
-                    print_message "   To roll back: cp \"$rc_backup\" \"$CONFIG_FILE\" && sudo systemctl restart birdnet-go" "$YELLOW"
-                fi
+                # apply_reconfiguration rolls back to the backed-up config + unit on failure.
+                apply_reconfiguration "$rc_backup" "$service_backup" "$has_service_backup"
+                rm -f "$rc_backup" "$service_backup"
                 return 1
                 ;;
             8)
                 trap - INT TERM
                 print_message "↩️ Discarding changes and restarting with the previous configuration..." "$YELLOW"
-                if ! cp "$rc_backup" "$CONFIG_FILE"; then
-                    print_message "⚠️ Could not restore the backup automatically. Your backup is at: $rc_backup" "$RED"
-                fi
-                rm -f "$rc_backup"
-                sudo systemctl start birdnet-go.service
+                _reconfigure_rollback "$rc_backup" "$service_backup" "$has_service_backup"
+                rm -f "$rc_backup" "$service_backup"
                 verify_post_start
                 return 1
                 ;;
