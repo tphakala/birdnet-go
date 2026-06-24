@@ -998,13 +998,16 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Locked:         locked,
 	}
 
-	// Populate model info from preloaded Model entity
+	// Populate model info from preloaded Model entity. ModelType is carried here
+	// (from the batch-loaded ai_models relation) so API handlers can read it
+	// directly instead of issuing a per-detection lookup (avoids N+1 on lists).
 	if det.Model != nil {
 		note.Model = detection.ModelInfo{
 			Name:           det.Model.Name,
 			Version:        det.Model.Version,
 			Variant:        det.Model.Variant,
 			ClassifierPath: det.Model.ClassifierPath,
+			ModelType:      string(det.Model.ModelType),
 		}
 	}
 

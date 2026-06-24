@@ -50,6 +50,11 @@ const (
 
 	// Default sort order for non-hourly query types
 	sortByDateDesc = "date_desc"
+
+	// defaultModelType is returned when a detection's model type is unknown
+	// (e.g. the legacy datastore does not track it). The UI maps this to the
+	// default bird spectrogram frequency range.
+	defaultModelType = "bird"
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -749,8 +754,14 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 	detection.Verified = c.mapVerificationStatus(note.Verified)
 	detection.Comments = extractNoteComments(note.Comments)
 
-	if modelType, mtErr := c.DS.GetNoteModelType(fmt.Sprintf("%d", note.ID)); mtErr == nil {
-		detection.ModelType = modelType
+	// Model type drives the UI spectrogram frequency range (bat detections span a
+	// much wider band than birds). It is carried on note.Model from the datastore's
+	// batch-loaded ai_models relation, so reading it here adds no extra query.
+	// Fall back to the default bird range when the model type is unknown (e.g. the
+	// legacy datastore does not track it).
+	detection.ModelType = note.Model.ModelType
+	if detection.ModelType == "" {
+		detection.ModelType = defaultModelType
 	}
 
 	if includeWeather {

@@ -617,7 +617,6 @@ func TestGetDetection(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(mockNote, nil)
 				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
-				m.On("GetNoteModelType", "1").Return("bird", nil)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -734,7 +733,6 @@ func TestGetDetectionCommentFormat(t *testing.T) {
 	// Setup mock expectations
 	mockDS.On("Get", "42").Return(mockNote, nil)
 	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
-	mockDS.On("GetNoteModelType", "42").Return("bird", nil)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/42", http.NoBody)
@@ -807,7 +805,6 @@ func TestGetDetectionEmptyComments(t *testing.T) {
 
 	mockDS.On("Get", "99").Return(mockNote, nil)
 	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
-	mockDS.On("GetNoteModelType", "99").Return("bird", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/99", http.NoBody)
 	rec := httptest.NewRecorder()
