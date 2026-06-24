@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 )
 
 // Test MQTT topic constant
@@ -137,19 +138,17 @@ func assertControllerError(t *testing.T, err error, rec *httptest.ResponseRecord
 	}
 }
 
-// createTestHTTPClient creates an HTTP client optimized for tests to prevent goroutine leaks
+// createTestHTTPClient creates an HTTP client optimized for tests to prevent goroutine leaks.
+// Clones DefaultTransport (per golang/go#26013) to inherit proxy support and bounded dials,
+// then disables keep-alives, pooling, and HTTP/2.
 func createTestHTTPClient(timeout time.Duration) *http.Client {
-	// Create custom transport that disables keep-alive to prevent persistent connection goroutines
-	transport := &http.Transport{
-		DisableKeepAlives:     true, // This prevents persistent connections and their goroutines
-		IdleConnTimeout:       1 * time.Second,
-		MaxIdleConns:          0, // Disable connection pooling
-		MaxIdleConnsPerHost:   0,
-		DisableCompression:    false, // Keep compression for realistic testing
-		ForceAttemptHTTP2:     false, // Disable HTTP/2 for simplicity in tests
-		ResponseHeaderTimeout: timeout,
-	}
-
+	transport := httpclient.CloneDefaultTransport()
+	transport.DisableKeepAlives = true // Prevents persistent connection goroutines
+	transport.IdleConnTimeout = 1 * time.Second
+	transport.MaxIdleConns = 0 // Disable connection pooling
+	transport.MaxIdleConnsPerHost = 0
+	transport.ForceAttemptHTTP2 = false // Disable HTTP/2 for simplicity in tests
+	transport.ResponseHeaderTimeout = timeout
 	return &http.Client{
 		Timeout:   timeout,
 		Transport: transport,
@@ -157,16 +156,16 @@ func createTestHTTPClient(timeout time.Duration) *http.Client {
 }
 
 // DisableHTTPKeepAlivesForTesting configures the default HTTP client transport
-// to prevent goroutine leaks from persistent connections during testing
+// to prevent goroutine leaks from persistent connections during testing.
+// Clones DefaultTransport to preserve proxy and dial timeout defaults.
 func DisableHTTPKeepAlivesForTesting() {
 	// Override the default transport to prevent goroutine leaks in ALL HTTP clients
-	http.DefaultTransport = &http.Transport{
-		DisableKeepAlives:     true,
-		IdleConnTimeout:       1 * time.Second,
-		MaxIdleConns:          0,
-		MaxIdleConnsPerHost:   0,
-		DisableCompression:    false,
-		ForceAttemptHTTP2:     false,
-		ResponseHeaderTimeout: testResponseHeaderTimeout,
-	}
+	transport := httpclient.CloneDefaultTransport()
+	transport.DisableKeepAlives = true
+	transport.IdleConnTimeout = 1 * time.Second
+	transport.MaxIdleConns = 0
+	transport.MaxIdleConnsPerHost = 0
+	transport.ForceAttemptHTTP2 = false
+	transport.ResponseHeaderTimeout = testResponseHeaderTimeout
+	http.DefaultTransport = transport
 }

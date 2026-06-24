@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sync/singleflight"
 )
@@ -42,48 +43,59 @@ func isSafeIP(ip net.IP) bool {
 // imageHTTPClient is a shared HTTP client for downloading images with SSRF protection.
 // The custom DialContext resolves hostnames and dials validated IPs directly (not hostnames),
 // preventing SSRF via DNS rebinding, localhost, or IP-literal redirects.
-var imageHTTPClient = &http.Client{
-	Timeout: 10 * time.Second,
-	Transport: &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(addr)
-			if err != nil {
-				return nil, fmt.Errorf("invalid address %q: %w", addr, err)
-			}
-
-			// Resolve the hostname to IPs and validate them.
-			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-			if err != nil {
-				return nil, fmt.Errorf("DNS lookup failed for %q: %w", host, err)
-			}
-
-			// Dial the first safe resolved IP directly to prevent TOCTOU/DNS rebinding.
-			dialer := &net.Dialer{Timeout: 5 * time.Second}
-			var lastErr error
-			for _, ipAddr := range ips {
-				if !isSafeIP(ipAddr.IP) {
-					continue
-				}
-				conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ipAddr.IP.String(), port))
-				if dialErr != nil {
-					lastErr = dialErr
-					continue
-				}
-				return conn, nil
-			}
-			if lastErr != nil {
-				return nil, fmt.Errorf("failed to connect to %q: %w", host, lastErr)
-			}
-			return nil, fmt.Errorf("no safe IP addresses for host %q", host)
-		},
-	},
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 3 {
-			return fmt.Errorf("too many redirects")
+// Clones DefaultTransport (per golang/go#26013) for sane dial/timeout defaults, but
+// disables proxy support: this client's security model requires DialContext to dial
+// validated IPs directly.
+var imageHTTPClient = func() *http.Client {
+	transport := httpclient.CloneDefaultTransport()
+	// Disable proxy support. CloneDefaultTransport inherits Proxy=ProxyFromEnvironment,
+	// but a proxy would defeat the SSRF guard below: the transport would dial the proxy
+	// and let it resolve the target, so the target IP never passes through isSafeIP. With
+	// a loopback/private proxy (e.g. HTTPS_PROXY=http://127.0.0.1:8080) DialContext would
+	// also reject the proxy address itself and break all image downloads.
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid address %q: %w", addr, err)
 		}
-		return nil
-	},
-}
+
+		// Resolve the hostname to IPs and validate them.
+		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, fmt.Errorf("DNS lookup failed for %q: %w", host, err)
+		}
+
+		// Dial the first safe resolved IP directly to prevent TOCTOU/DNS rebinding.
+		dialer := &net.Dialer{Timeout: 5 * time.Second}
+		var lastErr error
+		for _, ipAddr := range ips {
+			if !isSafeIP(ipAddr.IP) {
+				continue
+			}
+			conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ipAddr.IP.String(), port))
+			if dialErr != nil {
+				lastErr = dialErr
+				continue
+			}
+			return conn, nil
+		}
+		if lastErr != nil {
+			return nil, fmt.Errorf("failed to connect to %q: %w", host, lastErr)
+		}
+		return nil, fmt.Errorf("no safe IP addresses for host %q", host)
+	}
+	return &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+}()
 
 // ImageFileCache manages disk-based image caching organized by provider.
 type ImageFileCache struct {
