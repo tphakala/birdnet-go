@@ -12,6 +12,7 @@ require (
 	github.com/go-audio/wav v1.1.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/uuid v1.6.0
+	github.com/invopop/jsonschema v0.14.0
 	github.com/jarcoal/httpmock v1.4.1
 	github.com/jlaffaye/ftp v0.2.1
 	github.com/klauspost/cpuid/v2 v2.3.0
@@ -23,6 +24,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	github.com/ringsaturn/tzf v1.2.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sj14/astral v0.2.2
 	github.com/smallnest/ringbuffer v0.1.1
@@ -55,6 +57,8 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
@@ -92,6 +96,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/paulmach/orb v0.13.0 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/ringsaturn/tzf-dist v0.0.2026-b-fix1 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.5 // indirect
@@ -105,6 +110,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/grpc v1.81.1 // indirect

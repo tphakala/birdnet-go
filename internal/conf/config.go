@@ -427,7 +427,7 @@ type PushProviderConfig struct {
 	// Script-specific
 	Command     string            `yaml:"command" json:"command"`
 	Args        []string          `yaml:"args" json:"args"`
-	Environment map[string]string `yaml:"environment" json:"environment"`
+	Environment map[string]string `yaml:"environment" json:"environment" jsonschema:"nullable"`
 	InputFormat string            `yaml:"input_format" json:"input_format" mapstructure:"input_format"`
 	// Webhook-specific
 	Endpoints []WebhookEndpointConfig `yaml:"endpoints" json:"endpoints"`
@@ -438,7 +438,7 @@ type PushProviderConfig struct {
 type WebhookEndpointConfig struct {
 	URL     string            `yaml:"url" json:"url"`
 	Method  string            `yaml:"method" json:"method"`                          // POST, PUT, PATCH (default: POST)
-	Headers map[string]string `yaml:"headers" json:"headers"`                        // Custom HTTP headers
+	Headers map[string]string `yaml:"headers" json:"headers" jsonschema:"nullable"`   // Custom HTTP headers
 	Timeout Duration          `yaml:"timeout" json:"timeout" mapstructure:"timeout"` // Per-endpoint timeout (default: use provider timeout)
 	Auth    WebhookAuthConfig `yaml:"auth" json:"auth"`                              // Authentication configuration
 }
@@ -474,7 +474,7 @@ type PushFilterConfig struct {
 	Types           []string       `yaml:"types" json:"types" mapstructure:"types"`
 	Priorities      []string       `yaml:"priorities" json:"priorities" mapstructure:"priorities"`
 	Components      []string       `yaml:"components" json:"components" mapstructure:"components"`
-	MetadataFilters map[string]any `yaml:"metadata_filters" json:"metadata_filters" mapstructure:"metadata_filters"`
+	MetadataFilters map[string]any `yaml:"metadata_filters" json:"metadata_filters" mapstructure:"metadata_filters" jsonschema:"nullable"`
 }
 
 // WundergroundSettings contains settings for WeatherUnderground integration.
@@ -863,7 +863,7 @@ type SpeciesConfig struct {
 type SpeciesSettings struct {
 	Include []string                 `yaml:"include" json:"include"` // Always include these species
 	Exclude []string                 `yaml:"exclude" json:"exclude"` // Always exclude these species
-	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration (keys normalized to lowercase)
+	Config  map[string]SpeciesConfig `yaml:"config" json:"config" jsonschema:"nullable"` // Per-species configuration (keys normalized to lowercase)
 }
 
 // LogDeduplicationSettings contains settings for log deduplication
@@ -894,7 +894,7 @@ type YearlyTrackingSettings struct {
 type SeasonalTrackingSettings struct {
 	Enabled    bool              `yaml:"enabled" json:"enabled"`       // true to enable seasonal tracking
 	WindowDays int               `yaml:"windowdays" json:"windowDays"` // Days to show "new this season" indicator (default: 21)
-	Seasons    map[string]Season `yaml:"seasons" json:"seasons"`       // Season definitions
+	Seasons    map[string]Season `yaml:"seasons" json:"seasons" jsonschema:"nullable"` // Season definitions
 }
 
 // Season defines the start date for a season
@@ -1619,7 +1619,7 @@ func (s *GoogleDriveBackupSettings) Validate() error {
 type BackupTarget struct {
 	Type     string         `yaml:"type" json:"type"`         // Specifies the type of the backup target (e.g., "local", "s3", "ftp", "sftp"). This determines the storage mechanism.
 	Enabled  bool           `yaml:"enabled" json:"enabled"`   // If true, this backup target will be used for storing backups. At least one target should be enabled for backups to be stored.
-	Settings map[string]any `yaml:"settings" json:"settings"` // A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling.
+	Settings map[string]any `yaml:"settings" json:"settings" jsonschema:"nullable"` // A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling.
 }
 
 // BackupScheduleConfig defines a single backup schedule
@@ -1677,7 +1677,7 @@ type Settings struct {
 
 	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 
-	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
+	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms" jsonschema:"nullable"` // Optional scientific-name synonym overrides merged with built-ins
 
 	Input InputConfig `yaml:"-" json:"-"` // Input configuration for file and directory analysis
 

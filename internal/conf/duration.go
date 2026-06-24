@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/invopop/jsonschema"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,6 +18,16 @@ import (
 // (where time.Duration serializes as raw nanoseconds that frontends
 // misinterpret as human-scale numbers).
 type Duration time.Duration
+
+// JSONSchema tells the schema generator that Duration is a string (e.g. "30s"),
+// not the underlying int64 nanoseconds.
+func (Duration) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type:        "string",
+		Description: "Duration string (e.g. \"30s\", \"5m\", \"1h30m\")",
+		Examples:    []any{"10s", "5m", "1h"},
+	}
+}
 
 // Std converts Duration to a standard time.Duration.
 func (d Duration) Std() time.Duration {
