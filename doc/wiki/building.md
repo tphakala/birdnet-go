@@ -126,3 +126,17 @@ If you prefer local development with automatic rebuilding and restarting on chan
     air
     ```
     `air` will use the configuration in [`.air.toml`](.air.toml) to watch files, recompile Tailwind CSS, rebuild the Go binary, and restart the server on changes.
+
+### 6. Regenerating Generated Documentation
+
+Some files are generated from source and must be regenerated when the underlying code changes:
+
+- `config.schema.json` (repo root) and [`configuration-reference.md`](configuration-reference.md) are generated from the `conf.Settings` struct by `task generate-schema`.
+
+After changing any struct field, `yaml` tag, or doc comment in `internal/conf` or `internal/logger`, run:
+
+```bash
+task generate-schema
+```
+
+and commit the regenerated files. This task is intentionally not part of the default `task build`, so it does not run automatically. The `TestSchemaUpToDate` test fails CI when the committed files are stale. It is skipped on Windows because the upstream comment parser is not reproducible there, so regenerate on Linux or macOS.

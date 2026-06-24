@@ -58,6 +58,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 ## Reference
 
+- [Configuration Reference](configuration-reference.md) - Complete reference of every `config.yaml` setting with types and descriptions (auto-generated from source)
 - [Command Line Interface](BirdNET‐Go-Guide#command-line-interface) - Available commands and options
 - [Detection Pipeline Flow](BirdNET‐Go-Guide#birdnet-detection-pipeline) - How settings interact and affect detection results
 - [Range Filter Commands](BirdNET‐Go-Guide#inspection-and-debugging) - CLI commands for inspecting range filter results
