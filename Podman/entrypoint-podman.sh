@@ -88,9 +88,11 @@ fi
 
 # Set read permissions for model files (only when running as root)
 if [ "$RUNNING_AS_ROOT" = true ]; then
-    find /data/models -type f \( -name '*.tflite' -o -name '*.onnx' -o -name '*.csv' \) -exec chmod a+r {} + 2>/dev/null || true
-    # Ensure directory is executable (browsable)
-    chmod a+x /data/models 2>/dev/null || true
+    find /data/models -type f \( -iname '*.tflite' -o -iname '*.onnx' -o -iname '*.csv' -o -iname '*.txt' -o -iname '*.bin' \) -exec chmod a+r {} + 2>/dev/null || true
+    # Ensure directories are browsable. Models live in per-model and shared/
+    # subdirectories, so make every directory (not just the top level)
+    # traversable, otherwise a non-root user cannot reach files in subdirs.
+    find /data/models -type d -exec chmod a+rx {} + 2>/dev/null || true
 fi
 
 # Check if user has custom model path configured via environment variable
