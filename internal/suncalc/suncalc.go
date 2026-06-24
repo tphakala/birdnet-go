@@ -34,6 +34,11 @@ type cacheEntry struct {
 // organically from live traffic.
 const maxCacheEntries = 400
 
+// sunEventsOperation is the operation label used for all GetSunEventTimes
+// metrics. Using a single constant keeps the Prometheus series consistent; a
+// typo in any one call site would otherwise split the series.
+const sunEventsOperation = "get_sun_events"
+
 // SunCalc handles caching and calculation of sun event times
 type SunCalc struct {
 	cache    map[string]cacheEntry   // Cache of sun event times for dates
@@ -88,9 +93,9 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	// If the date exists in the cache, return the cached times
 	if exists {
 		if m != nil {
-			m.RecordSunCalcCacheHit("get_sun_events")
-			m.RecordSunCalcOperation("get_sun_events", "success")
-			m.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+			m.RecordSunCalcCacheHit(sunEventsOperation)
+			m.RecordSunCalcOperation(sunEventsOperation, "success")
+			m.RecordSunCalcDuration(sunEventsOperation, time.Since(start).Seconds())
 		}
 		return entry.times, nil
 	}
@@ -105,9 +110,9 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	if entry, ok := sc.cache[dateKey]; ok {
 		sc.lock.RUnlock()
 		if m != nil {
-			m.RecordSunCalcCacheHit("get_sun_events")
-			m.RecordSunCalcOperation("get_sun_events", "success")
-			m.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+			m.RecordSunCalcCacheHit(sunEventsOperation)
+			m.RecordSunCalcOperation(sunEventsOperation, "success")
+			m.RecordSunCalcDuration(sunEventsOperation, time.Since(start).Seconds())
 		}
 		return entry.times, nil
 	}
@@ -115,15 +120,15 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 
 	// Record cache miss only after the double-check confirms it
 	if m != nil {
-		m.RecordSunCalcCacheMiss("get_sun_events")
+		m.RecordSunCalcCacheMiss(sunEventsOperation)
 	}
 
 	// Calculate outside the lock to avoid blocking readers.
 	times, err := sc.calculateSunEventTimes(localDate)
 	if err != nil {
 		if m != nil {
-			m.RecordSunCalcOperation("get_sun_events", "error")
-			m.RecordSunCalcError("get_sun_events", "calculation_error")
+			m.RecordSunCalcOperation(sunEventsOperation, "error")
+			m.RecordSunCalcError(sunEventsOperation, "calculation_error")
 		}
 		return SunEventTimes{}, err
 	}
@@ -151,8 +156,8 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 
 	// Record successful operation and update sun time gauges
 	if m != nil {
-		m.RecordSunCalcOperation("get_sun_events", "success")
-		m.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+		m.RecordSunCalcOperation(sunEventsOperation, "success")
+		m.RecordSunCalcDuration(sunEventsOperation, time.Since(start).Seconds())
 
 		// Update sun time gauges for current day
 		if dateKey == time.Now().In(sc.location).Format(time.DateOnly) {
