@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/net/html"
 	"golang.org/x/time/rate"
@@ -958,15 +959,15 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 		logger.String("user_agent", userAgent),
 		logger.String("app_version", settings.Version))
 
-	// Create HTTP client with reasonable timeouts
+	// Clone DefaultTransport (per golang/go#26013) to inherit proxy support and
+	// dial timeouts, then override pool/timeout settings for Wikipedia API usage.
+	transport := httpclient.CloneDefaultTransport()
+	transport.MaxIdleConns = httpClientMaxIdleConns
+	transport.IdleConnTimeout = httpClientIdleConnTimeout
+	transport.TLSHandshakeTimeout = httpClientTLSTimeout
 	httpClient := &http.Client{
-		Timeout: httpClientTimeout,
-		Transport: &http.Transport{
-			MaxIdleConns:        httpClientMaxIdleConns,
-			IdleConnTimeout:     httpClientIdleConnTimeout,
-			DisableCompression:  false, // Allow gzip compression
-			TLSHandshakeTimeout: httpClientTLSTimeout,
-		},
+		Timeout:   httpClientTimeout,
+		Transport: transport,
 	}
 
 	// Global rate limiting for ALL Wikipedia requests to respect their API limits

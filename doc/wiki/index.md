@@ -4,6 +4,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 ## Getting Started
 
+- [Frequently Asked Questions](faq.md) - Common questions, problems, and quick fixes
 - [BirdNET‐Go Guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET%E2%80%90Go-Guide) - Overview and basic concepts
 - [Installation Guide](installation.md) - Comprehensive installation instructions for all methods
 - [Recommended Hardware](hardware.md) - Hardware recommendations for optimal performance
@@ -19,6 +20,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 ## Advanced Features
 
+- [External Media (USB, SD, File Shares)](external-media.md) - Mounting removable and network storage for import and backup
 - [Detection Pipeline Architecture](detection-pipeline.md) - How audio flows through multi-model inference, filtering, and action dispatch
 - [BirdNET Detection Pipeline](BirdNET‐Go-Guide#birdnet-detection-pipeline) - Understanding how settings affect detections
 - [BirdNET Range Filter](BirdNET‐Go-Guide#birdnet-range-filter) - Location and time-based species filtering
@@ -48,6 +50,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 ## Troubleshooting & Support
 
+- [Frequently Asked Questions](faq.md) - Common questions, problems, and quick fixes
 - [RTSP Troubleshooting](rtsp-troubleshooting.md) - Comprehensive guide for RTSP camera issues and configuration
 - [Docker Troubleshooting](BirdNET‐Go-Guide#docker-installation-troubleshooting) - Resolving common Docker issues
 - [Support Script](BirdNET‐Go-Guide#support-script) - Generating diagnostic information

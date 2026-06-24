@@ -3008,16 +3008,18 @@ func (ds *Datastore) GetActivityHeatmap(ctx context.Context, startDate, endDate,
 	return buildActivityHeatmap(timestamps, ds.timezone, startDate, endDate)
 }
 
-// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for the
-// top `limit` species by detection volume over [startDate, endDate], ordered by descending volume.
-// It selects the top-N label IDs by volume (GetTopSpecies), fetches their false-positive-excluded
-// per-hour counts in a single batched (label_id, hour) group-by (GetBatchHourlyOccurrences), then
-// merges and normalizes per species in Go (buildSpeciesHourlyDistribution). minConfidence is 0 so it
-// counts every detection, matching the heatmap and the other time-based analytics endpoints.
-func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
+// selectTopSpeciesHourly is the shared selection path for the top-N-by-volume hour-of-day species
+// charts (who-sings-when ridgeline and acoustic succession). It selects the top `limit` species by
+// detection volume over [startDate, endDate] (GetTopSpecies, descending volume) and fetches their
+// false-positive-excluded per-hour counts in a single batched (label_id, hour) group-by
+// (GetBatchHourlyOccurrences). The two charts differ only in how they fold these counts, so that
+// folding stays in the caller. minConfidence is 0 so it counts every detection, matching the heatmap
+// and the other time-based analytics endpoints. Returns a nil top slice (with nil error) when no
+// species qualify, so each caller emits its own empty, non-nil result.
+func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endDate string, limit int) ([]repository.SpeciesCount, map[uint][24]int, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// minConfidence 0 counts every detection (no confidence floor), matching the heatmap and the
@@ -3034,14 +3036,14 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 	}
 	top, err := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
-			Context("operation", "get_hourly_distribution_by_species_top").
+			Context("operation", "select_top_species_hourly_top").
 			Build()
 	}
 	if len(top) == 0 {
-		return []datastore.SpeciesHourlyDistribution{}, nil
+		return nil, nil, nil
 	}
 
 	// One label ID per top row; fetch their false-positive-excluded hourly counts in a single
@@ -3053,14 +3055,324 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 
 	hourlyByLabel, err := ds.detection.GetBatchHourlyOccurrences(ctx, labelIDs, start, end, ds.zoneOffsetSeconds(start), noConfidenceFloor)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
-			Context("operation", "get_hourly_distribution_by_species_hourly").
+			Context("operation", "select_top_species_hourly_buckets").
 			Build()
 	}
 
+	return top, hourlyByLabel, nil
+}
+
+// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for the
+// top `limit` species by detection volume over [startDate, endDate], ordered by descending volume.
+// It selects the top-N species and their per-hour counts via selectTopSpeciesHourly, then merges and
+// normalizes per species in Go (buildSpeciesHourlyDistribution) so each species' timing shape is
+// comparable regardless of raw volume. Powers the who-sings-when ridgeline.
+func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
+	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(top) == 0 {
+		return []datastore.SpeciesHourlyDistribution{}, nil
+	}
 	return buildSpeciesHourlyDistribution(top, hourlyByLabel), nil
+}
+
+// GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded) for
+// the top `limit` species by detection volume over [startDate, endDate], ordered by descending
+// volume. It selects the top-N species and their per-hour counts via selectTopSpeciesHourly (the
+// same path as the ridgeline), then merges per species in Go (buildAcousticSuccession). Unlike the
+// ridgeline it does NOT normalize: the streamgraph stacks raw counts so band width is detection
+// volume. Powers the acoustic succession streamgraph.
+func (ds *Datastore) GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyCounts, error) {
+	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(top) == 0 {
+		return []datastore.SpeciesHourlyCounts{}, nil
+	}
+	return buildAcousticSuccession(top, hourlyByLabel), nil
+}
+
+// GetDailyActivityOnset returns the per-day dawn-chorus onset relative to civil dawn over the
+// inclusive [startDate, endDate] range. It fetches false-positive-excluded detection timestamps
+// once (GetDetectionTimestamps), then buckets and computes the per-day onset in a shared,
+// table-tested Go helper (buildDailyActivityOnset). Civil dawn comes from the configured SunCalc,
+// expressed in the station timezone so it shares the same minute-of-day frame as the bucketed
+// detections; a day with no civil dawn (polar day / night) or too few detections gets a nil onset
+// that the client renders as a gap. species is an optional scientific-name filter; an unknown
+// species yields all-null days that still carry the full date axis (matching the heatmap).
+func (ds *Datastore) GetDailyActivityOnset(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyActivityOnset, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	dawn := ds.civilDawnMinuteLookup()
+
+	labelID, err := ds.resolveLabelID(ctx, species)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return buildDailyActivityOnset(nil, ds.timezone, startDate, endDate, onsetDetectionRank, minOnsetDetections, dawn)
+		}
+		return nil, err
+	}
+
+	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelID)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_daily_activity_onset").
+			Build()
+	}
+
+	return buildDailyActivityOnset(timestamps, ds.timezone, startDate, endDate, onsetDetectionRank, minOnsetDetections, dawn)
+}
+
+// GetConfidenceHistogram returns the per-species confidence-score distribution over the date range,
+// powering the confidence distribution chart (design spec section 6.5). With no species filter it
+// covers the top `limit` species by raw detection volume; with a species filter it covers just that
+// species (always included if it has any detections). It fetches each species' false-positive-excluded
+// confidences in one batched query (GetBatchConfidences), then bins and normalizes them in a shared,
+// table-tested Go helper (buildSpeciesConfidenceHistogram). minConfidence is 0 so every detection is
+// counted, matching the who-sings-when ridgeline and the other species analytics endpoints.
+func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endDate, species string, bins, limit int) ([]datastore.SpeciesConfidenceHistogram, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// minConfidence 0 counts every detection (no confidence floor), matching the who-sings-when
+	// ridgeline and the other time-based analytics; named to avoid a bare magic literal below.
+	const noConfidenceFloor = 0.0
+
+	// Select the species set and the per-species detection floor. An explicit species filter yields
+	// just that species (always shown if it has any detections); otherwise the top `limit` species by
+	// raw volume, with low-volume species dropped as noisy.
+	var speciesSet []repository.SpeciesCount
+	var minCount int
+	if species != "" {
+		// Use every label ID that maps to this scientific name (a species can carry one label per
+		// model), so the filtered path merges multi-model detections exactly like the top-N path below;
+		// resolving a single label ID would silently drop other models' detections for the species.
+		labelIDs, labelErr := ds.label.GetLabelIDsByScientificName(ctx, species)
+		if labelErr != nil {
+			return nil, errors.New(labelErr).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_confidence_histogram_resolve_species").
+				Build()
+		}
+		if len(labelIDs) == 0 {
+			return []datastore.SpeciesConfidenceHistogram{}, nil
+		}
+		speciesSet = make([]repository.SpeciesCount, 0, len(labelIDs))
+		for _, labelID := range labelIDs {
+			speciesSet = append(speciesSet, repository.SpeciesCount{LabelID: labelID, ScientificName: species})
+		}
+		minCount = 1
+	} else {
+		// GetTopSpecies uses an inclusive end (<= end) while GetBatchConfidences uses an exclusive end
+		// (< end); subtract one second so ranking and binned totals cover the exact same range and never
+		// disagree on a detection landing on the end boundary (mirrors GetHourlyDistributionBySpecies).
+		topEnd := end
+		if end != math.MaxInt64 {
+			topEnd--
+		}
+		top, topErr := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
+		if topErr != nil {
+			return nil, errors.New(topErr).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_confidence_histogram_top").
+				Build()
+		}
+		speciesSet = top
+		minCount = minConfidenceHistogramDetections
+	}
+
+	if len(speciesSet) == 0 {
+		return []datastore.SpeciesConfidenceHistogram{}, nil
+	}
+
+	labelIDs := make([]uint, 0, len(speciesSet))
+	for i := range speciesSet {
+		labelIDs = append(labelIDs, speciesSet[i].LabelID)
+	}
+
+	confByLabel, err := ds.detection.GetBatchConfidences(ctx, labelIDs, start, end, noConfidenceFloor)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_confidence_histogram_confidences").
+			Build()
+	}
+
+	return buildSpeciesConfidenceHistogram(speciesSet, confByLabel, bins, minCount), nil
+}
+
+// GetSpeciesAccumulation returns the species accumulation curve over [startDate, endDate]: per
+// calendar day, the cumulative count of distinct species first detected within the range (false
+// positives excluded). It fetches each species' in-period first-seen in one grouped query
+// (GetSpeciesFirstSeenInPeriod), then builds the cumulative per-day curve in a shared, table-tested
+// Go helper (buildSpeciesAccumulation) using the station timezone for date bucketing.
+func (ds *Datastore) GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesAccumulationPoint, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	firstSeen, err := ds.detection.GetSpeciesFirstSeenInPeriod(ctx, start, end)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_accumulation").
+			Build()
+	}
+
+	return buildSpeciesAccumulation(firstSeen, ds.timezone, startDate, endDate)
+}
+
+// GetAudioSources returns each audio source with at least one (false-positive-excluded) detection in
+// [startDate, endDate] (all history when both dates are empty), with its in-range detection count,
+// ordered by count descending. It fetches the grouped summaries in one query
+// (GetSourceActivitySummaries) and maps the repository rows onto the datastore result shape; the metric
+// needs no date bucketing, so there is no shared Go helper. Powers the analytics source/mic filter's
+// option list (the source dimension that the per-mic comparison chart consumes).
+func (ds *Datastore) GetAudioSources(ctx context.Context, startDate, endDate string) ([]datastore.AudioSourceSummary, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := ds.detection.GetSourceActivitySummaries(ctx, start, end)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_audio_sources").
+			Build()
+	}
+
+	summaries := make([]datastore.AudioSourceSummary, 0, len(rows))
+	for i := range rows {
+		displayName := ""
+		if rows[i].DisplayName != nil {
+			displayName = *rows[i].DisplayName
+		}
+		summaries = append(summaries, datastore.AudioSourceSummary{
+			ID:          rows[i].SourceID,
+			DisplayName: displayName,
+			NodeName:    rows[i].NodeName,
+			SourceType:  rows[i].SourceType,
+			Count:       rows[i].Count,
+		})
+	}
+	return summaries, nil
+}
+
+// GetYearOverYear returns the year-over-year tracker: the current year-to-date cumulative detection
+// count versus the same calendar span one year earlier, per current-year calendar day from Jan 1
+// through date (false positives excluded). date is a station-local YYYY-MM-DD bound; empty defaults to
+// today in the station timezone. It fetches raw detection timestamps for each window in two separate
+// grouped queries (GetDetectionTimestamps) - which skips scanning the multi-month gap between the
+// windows - then aligns and cumulates them in a shared, table-tested Go helper (buildYearOverYear).
+// Bucketing uses the station timezone while the date axis is enumerated in UTC for DST safety.
+func (ds *Datastore) GetYearOverYear(ctx context.Context, date string) (datastore.YearOverYearResult, error) {
+	loc := ds.timezone
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	// Resolve the requested date (default: today in the station timezone). Only ref's calendar date
+	// (year/month/day) is used downstream by computeYearOverYearWindows; the intraday clock is ignored.
+	ref := time.Now().In(loc)
+	if date != "" {
+		t, parseErr := time.ParseInLocation(time.DateOnly, date, loc)
+		if parseErr != nil {
+			return datastore.YearOverYearResult{}, errors.New(parseErr).
+				Component("datastore").
+				Category(errors.CategoryValidation).
+				Context("operation", "get_year_over_year").
+				Context("date", date).
+				Build()
+		}
+		ref = t
+	}
+	w := computeYearOverYearWindows(ref, loc)
+
+	thisTs, err := ds.detection.GetDetectionTimestamps(ctx, w.curStartEpoch, w.curEndEpoch, nil)
+	if err != nil {
+		return datastore.YearOverYearResult{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_year_over_year_current").
+			Build()
+	}
+	lastTs, err := ds.detection.GetDetectionTimestamps(ctx, w.priorStartEpoch, w.priorEndEpoch, nil)
+	if err != nil {
+		return datastore.YearOverYearResult{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_year_over_year_previous").
+			Build()
+	}
+
+	return buildYearOverYear(thisTs, lastTs, loc, w.curStart, w.curEnd, w.priorStart, w.priorEnd, w.curYear, w.prevYear)
+}
+
+// GetSpeciesPhenology returns the arrival/departure residency span for the top `limit` species by
+// volume over [startDate, endDate]: each species' first and last false-positive-excluded detection
+// plus the in-range count. It fetches the spans in one grouped query (GetSpeciesPhenologyInPeriod),
+// then formats the timestamps to station-local dates and orders the rows by arrival in a shared,
+// table-tested Go helper (buildSpeciesPhenology) using the station timezone.
+func (ds *Datastore) GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesPhenologyPoint, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := ds.detection.GetSpeciesPhenologyInPeriod(ctx, start, end, limit)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_phenology").
+			Build()
+	}
+
+	return buildSpeciesPhenology(rows, ds.timezone), nil
+}
+
+// civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and
+// station timezone. The closure yields civil dawn's station-local minute-of-day for a date, or
+// ok=false when no SunCalc is configured or civil dawn is undefined for the date (polar day/night).
+func (ds *Datastore) civilDawnMinuteLookup() civilDawnMinuteLookup {
+	return func(date time.Time) (int, bool) {
+		if ds.suncalc == nil {
+			return 0, false
+		}
+		// Anchor at local noon before the lookup: SunCalc re-derives the calendar date in its own
+		// coordinate-derived zone, so passing midnight could land on the adjacent day (and return
+		// the wrong day's civil dawn) when that zone trails the configured station timezone. Noon
+		// keeps the intended calendar day for any real timezone offset.
+		civilDawn, ok := ds.suncalc.GetCivilDawn(date.Add(12 * time.Hour))
+		if !ok {
+			return 0, false
+		}
+		// Express civil dawn in the station timezone so its minute-of-day matches the frame used to
+		// bucket detections; this stays correct even if SunCalc's coordinate-derived zone differs
+		// from the configured station timezone or across DST.
+		lt := civilDawn.In(ds.timezone)
+		return lt.Hour()*60 + lt.Minute(), true
+	}
 }
 
 // ============================================================

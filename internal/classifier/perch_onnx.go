@@ -36,13 +36,13 @@ type Perch struct {
 	mu         sync.Mutex
 	// device is the compute device the classifier bound to: the OpenVINO device
 	// (CPU/GPU) when the OV path succeeds, otherwise deviceCPU for the ONNX
-	// Runtime CPU EP. Set once at construction; reported via Device().
+	// Runtime CPU EP. Set once at construction; reported via RuntimeInfo().
 	device string
 	// backend is the live execution backend (BackendOpenVINO on the OV path, else
 	// BackendONNX), and precision is the effective runtime precision (FP16 on the
 	// OV path; the weight precision detected from the model filename on the ORT
 	// path, e.g. INT8 for perch_v2_int8_arm.onnx). Both set once at construction;
-	// reported via Backend()/Precision().
+	// reported via RuntimeInfo().
 	backend   string
 	precision string
 }
@@ -290,21 +290,15 @@ func (p *Perch) Labels() []string {
 	return out
 }
 
-// Device returns the compute device the classifier bound to at construction
-// (the OpenVINO device on the OV path, else "CPU"). Set once and never mutated,
-// so no lock is needed. Implements ModelInstance.
-func (p *Perch) Device() string { return p.device }
-
-// Backend returns the live execution backend the classifier bound to at
-// construction (BackendOpenVINO on the OV path, else BackendONNX). Set once and
-// never mutated, so no lock is needed. Implements ModelInstance.
-func (p *Perch) Backend() string { return p.backend }
-
-// Precision returns the effective runtime precision (FP16 on the OpenVINO path;
-// the weight precision detected from the model filename on the ORT path, e.g.
-// INT8 for perch_v2_int8_arm.onnx, empty when no token). Set once and never
-// mutated, so no lock is needed. Implements ModelInstance.
-func (p *Perch) Precision() string { return p.precision }
+// RuntimeInfo returns the device, backend, and effective precision the Perch
+// classifier bound to at construction: the OpenVINO device on the OV path (else
+// "CPU"); BackendOpenVINO on the OV path (else BackendONNX); FP16 on the OV path
+// or the weight precision detected from the model filename on the ORT path (e.g.
+// INT8 for perch_v2_int8_arm.onnx, empty when no token). All three are set once
+// and never mutated, so no lock is needed. Implements ModelInstance.
+func (p *Perch) RuntimeInfo() (device, backend, precision string) {
+	return p.device, p.backend, p.precision
+}
 
 // Close releases resources held by the Perch model.
 func (p *Perch) Close() error {

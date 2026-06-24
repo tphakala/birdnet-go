@@ -248,6 +248,13 @@ type DetectionRepository interface {
 	// which keeps the slot/date math out of dialect SQL and correct across DST.
 	GetDetectionTimestamps(ctx context.Context, start, end int64, labelID *uint) ([]int64, error)
 
+	// GetBatchConfidences returns the per-label-ID detection confidences for the given label IDs over
+	// the half-open range [start, end), false positives excluded and filtered by minConfidence. Results
+	// group by label_id so a single query (per chunk) covers many labels; callers that map one species
+	// to multiple model label IDs concatenate the per-label slices themselves. Order within a label is
+	// unspecified (callers bin the values); the confidence distribution chart buckets them in Go.
+	GetBatchConfidences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][]float64, error)
+
 	// GetDailyAnalytics returns daily statistics.
 	// tzOffsetSeconds is the configured timezone's UTC offset, applied so detections bucket by
 	// wall-clock date in that zone rather than the database/OS-local zone.
@@ -269,6 +276,26 @@ type DetectionRepository interface {
 	// This is distinct from GetNewSpecies (lifetime firsts) and
 	// GetSpeciesFirstDetection (per-species first ever).
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error)
+
+	// GetSpeciesFirstSeenInPeriod returns the first detection (MIN detected_at) of each species
+	// within the half-open range [start, end), false positives excluded, grouped by scientific name
+	// so multi-model labels collapse to one species. Unlike GetSpeciesFirstDetectionInPeriod it
+	// excludes false positives and is not paginated (every species is returned), as required by the
+	// species accumulation analytics. Results are ordered by first-seen ascending.
+	GetSpeciesFirstSeenInPeriod(ctx context.Context, start, end int64) ([]SpeciesFirstSeen, error)
+
+	// GetSpeciesPhenologyInPeriod returns each species' residency span within the half-open range
+	// [start, end): MIN/MAX detected_at and the detection COUNT, false positives excluded, grouped by
+	// scientific name so multi-model labels collapse to one species. Results are the top `limit` species
+	// by detection volume (ORDER BY count DESC), as required by the arrival/departure phenology chart.
+	GetSpeciesPhenologyInPeriod(ctx context.Context, start, end int64, limit int) ([]SpeciesPhenology, error)
+
+	// GetSourceActivitySummaries returns each audio source with at least one (false-positive-excluded)
+	// detection in the half-open range [start, end): the source's identity columns and its in-period
+	// detection count, ordered by count descending. Sources are INNER JOINed on audio_sources, so
+	// detections with a NULL source_id (legacy-migrated, source-less) are excluded. Powers the analytics
+	// source/mic filter's option list. COUNT is fan-out-immune because reviews are 1:1 with detections.
+	GetSourceActivitySummaries(ctx context.Context, start, end int64) ([]SourceActivitySummary, error)
 
 	// === Utilities ===
 

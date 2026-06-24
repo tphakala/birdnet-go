@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"sort"
@@ -64,6 +65,126 @@ func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel
 		result = append(result, dist)
 	}
 	return result
+}
+
+// buildAcousticSuccession turns per-label hourly counts into per-species raw hour-of-day counts for
+// the acoustic succession streamgraph.
+//
+// top is the top-N species by volume from GetTopSpecies, in descending-volume order; each row is one
+// label ID. hourlyByLabel maps a label ID to its [24]int false-positive-excluded hourly counts.
+// Label IDs that resolve to the same scientific name (one per model) are merged into a single series
+// whose buckets are the summed counts, preserving the first-seen volume order. Unlike
+// buildSpeciesHourlyDistribution the counts are NOT normalized: the streamgraph stacks raw volume,
+// so band width is detection count; Total carries the per-species sum for the tooltip.
+//
+// A species whose merged FP-excluded total is zero is dropped: GetTopSpecies ranks by raw volume
+// without excluding false positives, so an all-false-positive species can rank into the top-N yet
+// contribute no real detections; stacking an empty band would add a flat, meaningless layer. The
+// result is always non-nil.
+func buildAcousticSuccession(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int) []datastore.SpeciesHourlyCounts {
+	// Merge label rows that share a scientific name, preserving first-seen (descending-volume)
+	// order. Each distinct species accumulates the hourly counts of all its label IDs.
+	order := make([]string, 0, len(top))
+	countsByName := make(map[string]*[hoursPerDay]int, len(top))
+	for i := range top {
+		name := top[i].ScientificName
+		acc, ok := countsByName[name]
+		if !ok {
+			acc = &[hoursPerDay]int{}
+			countsByName[name] = acc
+			order = append(order, name)
+		}
+		hours := hourlyByLabel[top[i].LabelID] // zero [24]int when the label has no detections
+		for h := range hoursPerDay {
+			acc[h] += hours[h]
+		}
+	}
+
+	result := make([]datastore.SpeciesHourlyCounts, 0, len(order))
+	for _, name := range order {
+		acc := countsByName[name]
+		total := 0
+		for h := range hoursPerDay {
+			total += acc[h]
+		}
+		if total == 0 {
+			continue // ranked by raw volume but no FP-excluded detections; skip the empty band
+		}
+		result = append(result, datastore.SpeciesHourlyCounts{ScientificName: name, Counts: *acc, Total: total})
+	}
+	return result
+}
+
+// minConfidenceHistogramDetections is the per-species floor for the confidence distribution (design
+// spec section 6.5). Below this, a ~20-bin histogram averages under one detection per bin and reads
+// as noise rather than a distribution, so the species is dropped from the top-N set. A single
+// explicitly selected species bypasses this (the caller passes a floor of 1) so a requested species
+// is never silently empty.
+const minConfidenceHistogramDetections = 20
+
+// buildSpeciesConfidenceHistogram bins each species' detection confidences into `bins` equal-width
+// bins over [0,1], then normalizes each species so its bins sum to ~1.0 (the distribution shape is
+// comparable across species regardless of detection volume). Label rows sharing a scientific name
+// (multi-model) merge into one species, preserving the input (descending-volume) order. Species with
+// fewer than minCount detections are dropped as noisy. Total is the species' detection count (false
+// positives already excluded upstream), surfaced in the tooltip. Returns a non-nil empty slice when
+// no species qualifies, or when bins is non-positive.
+func buildSpeciesConfidenceHistogram(species []repository.SpeciesCount, confByLabel map[uint][]float64, bins, minCount int) []datastore.SpeciesConfidenceHistogram {
+	if bins <= 0 {
+		return []datastore.SpeciesConfidenceHistogram{}
+	}
+
+	// Merge label rows sharing a scientific name, preserving first-seen (descending-volume) order.
+	// Each distinct species accumulates the confidences of all its label IDs.
+	order := make([]string, 0, len(species))
+	confByName := make(map[string][]float64, len(species))
+	for i := range species {
+		name := species[i].ScientificName
+		if _, ok := confByName[name]; !ok {
+			order = append(order, name)
+		}
+		confByName[name] = append(confByName[name], confByLabel[species[i].LabelID]...)
+	}
+
+	result := make([]datastore.SpeciesConfidenceHistogram, 0, len(order))
+	for _, name := range order {
+		confs := confByName[name]
+		total := len(confs)
+		// Drop low-volume species (and guard the division below). minCount is always >= 1 from the
+		// caller, so total == 0 is covered too.
+		if total < minCount || total == 0 {
+			continue
+		}
+		counts := make([]int, bins)
+		for _, conf := range confs {
+			counts[confidenceBinIndex(conf, bins)]++
+		}
+		dist := datastore.SpeciesConfidenceHistogram{
+			ScientificName: name,
+			Bins:           make([]float64, bins),
+			Total:          total,
+		}
+		for b, count := range counts {
+			dist.Bins[b] = float64(count) / float64(total)
+		}
+		result = append(result, dist)
+	}
+	return result
+}
+
+// confidenceBinIndex maps a confidence score to its bin index in [0, bins-1] for `bins` equal-width
+// bins over [0,1]. Scores are assumed to be in [0,1]; values are clamped so a confidence of exactly
+// 1.0 lands in the last bin and any out-of-range value is pinned to the nearest edge bin rather than
+// indexing out of bounds. Callers guarantee bins > 0.
+func confidenceBinIndex(conf float64, bins int) int {
+	idx := int(conf * float64(bins))
+	if idx < 0 {
+		return 0
+	}
+	if idx >= bins {
+		return bins - 1
+	}
+	return idx
 }
 
 // Slot resolution constants for the seasonal density heatmap. The intra-day slot width is
@@ -192,4 +313,371 @@ func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, end
 		result.CellCount = append(result.CellCount, counts[k])
 	}
 	return result, nil
+}
+
+// Dawn-chorus onset constants (design spec section 6.3).
+//
+// The onset for a day is the minute-of-day of the onsetDetectionRank-th earliest detection. An
+// absolute rank is used deliberately instead of a daily percentile: a percentile of the day's total
+// volume couples the morning onset to unrelated later-in-day activity (a busy afternoon pushes a low
+// percentile index later and fakes a later dawn), and at realistic daily counts a low percentile
+// collapses to the very first detection, giving no false-positive robustness. The Nth-earliest
+// detection is immune to later-in-day volume (adding detections after it never moves it) and rejects
+// up to (rank-1) lone pre-dawn false positives, which is the robustness the spec actually wanted.
+const (
+	onsetDetectionRank = 3 // onset = the 3rd earliest detection of the day (rejects up to 2 stray pre-dawn false positives)
+	minOnsetDetections = 5 // days with fewer detections are too sparse to read a meaningful onset (must be >= onsetDetectionRank)
+)
+
+// civilDawnMinuteLookup returns civil dawn's station-local minute-of-day (0..1439) for the given
+// calendar date and whether civil dawn is defined for it. ok is false when civil dawn cannot be
+// determined (polar day / white nights / polar night, or no sun calculator configured). It is
+// injected into buildDailyActivityOnset so the polar-null and min-count paths are unit-testable
+// without a real SunCalc.
+type civilDawnMinuteLookup func(date time.Time) (minuteOfDay int, ok bool)
+
+// buildDailyActivityOnset buckets false-positive-excluded detection timestamps (Unix epoch seconds)
+// by station-local calendar date and computes, for each date in the inclusive [startDate, endDate]
+// range, the dawn-chorus onset relative to civil dawn.
+//
+// The onset for a day is the minute-of-day of the rank-th earliest detection (see the
+// onsetDetectionRank rationale). OnsetRelMinutes is that onset minus civil dawn's minute-of-day
+// (negative = before civil dawn). It is left nil when the day has fewer than minDetections
+// detections (too sparse) or when dawn reports civil dawn undefined for the date (polar day /
+// night). Every date in the range is emitted with its DetectionCount (0 on quiet days) so the
+// client has a continuous date axis and its trend line breaks over gaps rather than interpolating
+// across them. startDate/endDate are inclusive YYYY-MM-DD bounds interpreted in loc (nil -> UTC);
+// civil dawn is resolved in the same loc frame as the bucketed detections so the subtraction is a
+// true duration. The result is always non-nil.
+func buildDailyActivityOnset(timestamps []int64, loc *time.Location, startDate, endDate string, rank, minDetections int, dawn civilDawnMinuteLookup) ([]datastore.DailyActivityOnset, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	start, err := time.ParseInLocation(time.DateOnly, startDate, loc)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_daily_activity_onset").
+			Context("start_date", startDate).
+			Build()
+	}
+	end, err := time.ParseInLocation(time.DateOnly, endDate, loc)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_daily_activity_onset").
+			Context("end_date", endDate).
+			Build()
+	}
+
+	// Group each detection's station-local minute-of-day by its local calendar date. Detections
+	// whose local date falls outside the enumerated range simply never get looked up.
+	minutesByDate := make(map[dateKey][]int)
+	for _, ts := range timestamps {
+		lt := time.Unix(ts, 0).In(loc)
+		y, m, day := lt.Date()
+		k := dateKey{year: y, month: m, day: day}
+		minutesByDate[k] = append(minutesByDate[k], lt.Hour()*60+lt.Minute())
+	}
+
+	result := make([]datastore.DailyActivityOnset, 0)
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		y, m, day := d.Date()
+		mins := minutesByDate[dateKey{year: y, month: m, day: day}]
+		item := datastore.DailyActivityOnset{Date: d.Format(time.DateOnly), DetectionCount: len(mins)}
+
+		if rank >= 1 && len(mins) >= minDetections && len(mins) >= rank {
+			slices.Sort(mins)
+			onsetMinute := mins[rank-1]
+			if dawnMinute, ok := dawn(d); ok {
+				rel := onsetMinute - dawnMinute
+				item.OnsetRelMinutes = &rel
+			}
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// buildSpeciesAccumulation turns per-species in-period first-seen timestamps into the cumulative
+// species accumulation curve (the biodiversity collector's curve).
+//
+// firstSeen carries each species' first detection (Unix epoch seconds) within the queried window,
+// false positives already excluded upstream. Each timestamp is mapped to its station-local calendar
+// date in loc; the count of species whose first-seen lands on a date is that day's NewSpecies, and
+// CumulativeSpecies is the running total. One point is emitted for every calendar day in the inclusive
+// [startDate, endDate] range so the client gets a continuous date axis whose flat tail reads as the
+// curve's asymptote. First-seen dates outside the enumerated range are ignored (the SQL already bounds
+// them, but a row skewed by loc onto an out-of-range day must never inflate the curve or index past
+// the axis). startDate/endDate are inclusive YYYY-MM-DD bounds; the per-detection bucketing is done
+// in loc (nil -> UTC), while the date axis is enumerated in UTC (see below). The result is always
+// non-nil.
+func buildSpeciesAccumulation(firstSeen []repository.SpeciesFirstSeen, loc *time.Location, startDate, endDate string) ([]datastore.SpeciesAccumulationPoint, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	// Enumerate the date axis in UTC, not loc. We only need the sequence of calendar dates from
+	// startDate to endDate, and UTC has no DST, so AddDate(0,0,1) steps exactly one calendar day every
+	// iteration. Parsing the bounds in a loc whose DST transition skips midnight (clocks jump
+	// 23:59:59 -> 01:00:00, e.g. America/Havana) would normalize the skipped 00:00 forward to 01:00,
+	// drift the loop's wall-clock hour, and drop the final day at the !d.After(end) comparison. The
+	// per-detection bucketing below stays in loc, which is the only place the station timezone matters.
+	start, err := time.Parse(time.DateOnly, startDate)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_species_accumulation").
+			Context("start_date", startDate).
+			Build()
+	}
+	end, err := time.Parse(time.DateOnly, endDate)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_species_accumulation").
+			Context("end_date", endDate).
+			Build()
+	}
+
+	// Tally how many species are first seen on each station-local calendar date. Dates outside the
+	// enumerated range are never looked up below, so they are ignored without an explicit filter. The
+	// (year, month, day) key is timezone-frame-independent, so the loc-bucketed keys here line up with
+	// the UTC-enumerated lookups below for the same calendar date.
+	newByDate := make(map[dateKey]int, len(firstSeen))
+	for i := range firstSeen {
+		lt := time.Unix(firstSeen[i].FirstDetected, 0).In(loc)
+		y, m, day := lt.Date()
+		newByDate[dateKey{year: y, month: m, day: day}]++
+	}
+
+	result := make([]datastore.SpeciesAccumulationPoint, 0)
+	cumulative := 0
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		y, m, day := d.Date()
+		n := newByDate[dateKey{year: y, month: m, day: day}]
+		cumulative += n
+		result = append(result, datastore.SpeciesAccumulationPoint{
+			Date:              d.Format(time.DateOnly),
+			CumulativeSpecies: cumulative,
+			NewSpecies:        n,
+		})
+	}
+	return result, nil
+}
+
+// isLeapYear reports whether year is a Gregorian leap year.
+func isLeapYear(year int) bool {
+	return year%4 == 0 && (year%100 != 0 || year%400 == 0)
+}
+
+// parseAnalyticsDate parses an inclusive YYYY-MM-DD axis bound in UTC (the date axis is enumerated in
+// UTC to avoid the DST midnight-skip drift; see buildSpeciesAccumulation). It wraps a parse failure as
+// a validation error tagged with the operation and field for diagnostics.
+func parseAnalyticsDate(value, operation, field string) (time.Time, error) {
+	t, err := time.Parse(time.DateOnly, value)
+	if err != nil {
+		return time.Time{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", operation).
+			Context(field, value).
+			Build()
+	}
+	return t, nil
+}
+
+// monthDay is the year-independent calendar alignment key (month, day) for the year-over-year tracker,
+// so the current-year axis and the previous-year axis line up by calendar date across a leap boundary.
+type monthDay struct {
+	month time.Month
+	day   int
+}
+
+// yearOverYearWindow describes the two comparison windows for the year-over-year tracker: the current
+// year-to-date span and the same calendar span one year earlier. The date bounds (inclusive
+// YYYY-MM-DD) drive the helper's UTC axis enumeration; the epoch bounds are half-open [start, end) in
+// the station timezone for the SQL queries.
+type yearOverYearWindow struct {
+	curStart, curEnd     string
+	priorStart, priorEnd string
+	curStartEpoch        int64
+	curEndEpoch          int64
+	priorStartEpoch      int64
+	priorEndEpoch        int64
+	curYear, prevYear    int
+}
+
+// computeYearOverYearWindows derives both comparison windows from ref (the requested date) projected
+// into loc. The previous window ends on the same calendar (month, day) one year earlier, clamping
+// Feb 29 -> Feb 28 when the previous year is not a leap year (otherwise time.Date would roll Feb 29
+// forward to Mar 1 and the +1-day exclusive end would pull an extra prior day into the window). Epoch
+// ends are the start of the day after the inclusive end date, matching the parseDateRange convention.
+func computeYearOverYearWindows(ref time.Time, loc *time.Location) yearOverYearWindow {
+	if loc == nil {
+		loc = time.UTC
+	}
+	// Derive the calendar date in loc, not in ref's own zone: a ref near a day boundary in a
+	// different zone (e.g. just past midnight UTC+12 while loc is UTC) must resolve to loc's date.
+	ref = ref.In(loc)
+	curYear, curMonth, curDay := ref.Date()
+	prevYear := curYear - 1
+
+	prevMonth, prevDay := curMonth, curDay
+	if curMonth == time.February && curDay == 29 && !isLeapYear(prevYear) {
+		prevDay = 28
+	}
+
+	return yearOverYearWindow{
+		curYear:         curYear,
+		prevYear:        prevYear,
+		curStart:        fmt.Sprintf("%04d-01-01", curYear),
+		curEnd:          fmt.Sprintf("%04d-%02d-%02d", curYear, curMonth, curDay),
+		priorStart:      fmt.Sprintf("%04d-01-01", prevYear),
+		priorEnd:        fmt.Sprintf("%04d-%02d-%02d", prevYear, prevMonth, prevDay),
+		curStartEpoch:   time.Date(curYear, time.January, 1, 0, 0, 0, 0, loc).Unix(),
+		curEndEpoch:     time.Date(curYear, curMonth, curDay, 0, 0, 0, 0, loc).AddDate(0, 0, 1).Unix(),
+		priorStartEpoch: time.Date(prevYear, time.January, 1, 0, 0, 0, 0, loc).Unix(),
+		priorEndEpoch:   time.Date(prevYear, prevMonth, prevDay, 0, 0, 0, 0, loc).AddDate(0, 0, 1).Unix(),
+	}
+}
+
+// buildYearOverYear aligns the current year-to-date cumulative detection counts against the same
+// calendar span one year earlier and emits one point per current-year calendar day.
+//
+// thisTs/lastTs are raw detection epochs (Unix seconds, false positives already excluded) for the
+// current and previous windows respectively. Each timestamp is bucketed to its station-local calendar
+// day in loc (nil -> UTC), so per-day counts respect the station timezone including DST. Both date
+// axes are enumerated in UTC (curStart..curEnd and priorStart..priorEnd are inclusive YYYY-MM-DD
+// bounds): UTC has no DST, so AddDate(0,0,1) steps exactly one calendar day, avoiding the midnight-skip
+// drift that parsing the bounds in a DST-transitioning loc (e.g. America/Havana) would cause.
+//
+// Years are aligned by calendar (month, day), not day-of-year ordinal, so seasonality lines up across
+// a leap boundary. Feb 29 is handled in both directions: when the current year is a leap year but the
+// previous is not, the previous cumulative carries forward its Feb 28 value across the current Feb 29
+// (the previous series stays flat for that one day); when the previous year is a leap year but the
+// current is not, the current axis steps Feb 28 -> Mar 1 and the previous Feb 29 detections are folded
+// into the Mar 1 previous-cumulative sample, since the previous cumulative is a running sum over the
+// previous calendar. Cumulatives stay monotonic and no detections are lost or double-counted either
+// way. The returned result and its Points slice are always non-nil.
+func buildYearOverYear(thisTs, lastTs []int64, loc *time.Location, curStart, curEnd, priorStart, priorEnd string, curYear, prevYear int) (datastore.YearOverYearResult, error) {
+	const operation = "build_year_over_year"
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	result := datastore.YearOverYearResult{
+		CurrentYear:  curYear,
+		PreviousYear: prevYear,
+		Points:       make([]datastore.YearOverYearPoint, 0),
+	}
+
+	thisDaily := bucketByMonthDay(thisTs, loc)
+	lastDaily := bucketByMonthDay(lastTs, loc)
+
+	// Running cumulative of the previous year, sampled by calendar (month, day). Enumerating the prior
+	// axis in UTC and summing in order means priorCumByMonthDay[{m,d}] is the previous-year cumulative
+	// through that calendar date, with any previous Feb 29 already folded into the running total.
+	pStart, err := parseAnalyticsDate(priorStart, operation, "prior_start")
+	if err != nil {
+		return datastore.YearOverYearResult{}, err
+	}
+	pEnd, err := parseAnalyticsDate(priorEnd, operation, "prior_end")
+	if err != nil {
+		return datastore.YearOverYearResult{}, err
+	}
+	priorCumByMonthDay := make(map[monthDay]int)
+	priorCum := 0
+	for d := pStart; !d.After(pEnd); d = d.AddDate(0, 0, 1) {
+		_, mo, dy := d.Date()
+		priorCum += lastDaily[monthDay{month: mo, day: dy}]
+		priorCumByMonthDay[monthDay{month: mo, day: dy}] = priorCum
+	}
+
+	// Walk the current axis (UTC-enumerated) and build aligned cumulative points. When the current
+	// calendar date has no counterpart in the previous year (current Feb 29 vs a non-leap previous
+	// year), carry forward the last known previous cumulative so the previous series stays flat and
+	// monotonic for that day.
+	cStart, err := parseAnalyticsDate(curStart, operation, "cur_start")
+	if err != nil {
+		return datastore.YearOverYearResult{}, err
+	}
+	cEnd, err := parseAnalyticsDate(curEnd, operation, "cur_end")
+	if err != nil {
+		return datastore.YearOverYearResult{}, err
+	}
+	thisCum := 0
+	lastKnownPriorCum := 0
+	for d := cStart; !d.After(cEnd); d = d.AddDate(0, 0, 1) {
+		_, mo, dy := d.Date()
+		key := monthDay{month: mo, day: dy}
+		thisCum += thisDaily[key]
+		if pc, ok := priorCumByMonthDay[key]; ok {
+			lastKnownPriorCum = pc
+		}
+		result.Points = append(result.Points, datastore.YearOverYearPoint{
+			Date:     d.Format(time.DateOnly),
+			MonthDay: d.Format("01-02"),
+			ThisYear: thisCum,
+			LastYear: lastKnownPriorCum,
+			Delta:    thisCum - lastKnownPriorCum,
+		})
+	}
+	return result, nil
+}
+
+// bucketByMonthDay tallies raw detection epochs (Unix seconds) into per-(month, day) counts, projecting
+// each timestamp into loc so the calendar day respects the station timezone (including DST).
+func bucketByMonthDay(ts []int64, loc *time.Location) map[monthDay]int {
+	counts := make(map[monthDay]int)
+	for i := range ts {
+		lt := time.Unix(ts[i], 0).In(loc)
+		_, mo, dy := lt.Date()
+		counts[monthDay{month: mo, day: dy}]++
+	}
+	return counts
+}
+
+// buildSpeciesPhenology turns the per-species residency rows (Unix MIN/MAX detection timestamps plus
+// the detection count) into the wire shape for the arrival/departure phenology chart: first and last
+// detection formatted as station-local YYYY-MM-DD dates. Timestamps are projected into loc (nil ->
+// UTC) with a single time.Unix(...).In(loc).Format call per row, so there is no date-range
+// enumeration loop and therefore no DST midnight-skip pitfall.
+//
+// The input rows are top-N by volume (the query's ORDER BY count DESC); this re-sorts the returned
+// rows by arrival (FirstSeen asc, then LastSeen asc, then ScientificName asc) so the Gantt reads
+// top-to-bottom in arrival order, deterministically. The result is always non-nil.
+func buildSpeciesPhenology(rows []repository.SpeciesPhenology, loc *time.Location) []datastore.SpeciesPhenologyPoint {
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	result := make([]datastore.SpeciesPhenologyPoint, 0, len(rows))
+	for i := range rows {
+		first := time.Unix(rows[i].FirstDetected, 0).In(loc).Format(time.DateOnly)
+		last := time.Unix(rows[i].LastDetected, 0).In(loc).Format(time.DateOnly)
+		result = append(result, datastore.SpeciesPhenologyPoint{
+			ScientificName: rows[i].ScientificName,
+			FirstSeen:      first,
+			LastSeen:       last,
+			Count:          rows[i].Count,
+		})
+	}
+
+	sort.SliceStable(result, func(a, b int) bool {
+		if result[a].FirstSeen != result[b].FirstSeen {
+			return result[a].FirstSeen < result[b].FirstSeen
+		}
+		if result[a].LastSeen != result[b].LastSeen {
+			return result[a].LastSeen < result[b].LastSeen
+		}
+		return result[a].ScientificName < result[b].ScientificName
+	})
+
+	return result
 }

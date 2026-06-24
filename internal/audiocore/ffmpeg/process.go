@@ -13,33 +13,103 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // ffmpegTimeoutParam is the FFmpeg flag name for the connection timeout parameter.
 const ffmpegTimeoutParam = "-timeout"
 
-// ffmpegRTSPTimeoutParam is the RTSP-specific stream timeout flag.
-// Older FFmpeg used -stimeout for RTSP, but it was removed in FFmpeg 5.x+.
-// Using -timeout works across all supported versions.
+// ffmpegStimeoutMaxMajor is the first FFmpeg major version that removed -stimeout.
+// FFmpeg < 5 needs -stimeout for RTSP; 5.x+ uses -timeout.
+const ffmpegStimeoutMaxMajor = 5
+
+// ffmpegRTSPTimeoutParam is the RTSP timeout flag for FFmpeg 5.x+ and unknown versions.
 const ffmpegRTSPTimeoutParam = "-timeout"
 
-// ffmpegLegacyRTSPTimeoutParam is the deprecated -stimeout flag that older FFmpeg
-// used for RTSP. We no longer emit it, but we still recognise it in user-supplied
-// parameters so a carried-over value is honoured and the unsupported flag is
-// stripped before reaching FFmpeg.
+// ffmpegLegacyRTSPTimeoutParam is the RTSP timeout flag required by FFmpeg 4.x.
 const ffmpegLegacyRTSPTimeoutParam = "-stimeout"
 
+// ffmpegMajorCache stores detected FFmpeg major versions by binary path.
+var ffmpegMajorCache sync.Map
+
+// ffmpegMajorGroup coalesces concurrent first-time version probes for the same
+// binary path, so a burst of streams starting at once spawns a single
+// `ffmpeg -version` process instead of one per stream.
+var ffmpegMajorGroup singleflight.Group
+
+// rtspTimeoutParamForMajor returns the RTSP connection-timeout flag for the
+// given FFmpeg major version: -stimeout below 5 (FFmpeg 4.x), -timeout on 5.x+
+// and unknown versions. This is the single source of truth shared by the live
+// capture path (timeoutParamForSource) and the channel-energy analysis path
+// (buildAnalysisArgs), so both stay in lockstep.
+func rtspTimeoutParamForMajor(ffmpegMajor int) string {
+	if ffmpegMajor > 0 && ffmpegMajor < ffmpegStimeoutMaxMajor {
+		return ffmpegLegacyRTSPTimeoutParam
+	}
+	return ffmpegRTSPTimeoutParam
+}
+
 // timeoutParamForSource returns the correct FFmpeg timeout flag for the given source type.
-func timeoutParamForSource(st audiocore.SourceType) string {
+func timeoutParamForSource(st audiocore.SourceType, ffmpegMajor int) string {
 	if st == audiocore.SourceTypeRTSP {
-		return ffmpegRTSPTimeoutParam
+		return rtspTimeoutParamForMajor(ffmpegMajor)
 	}
 	return ffmpegTimeoutParam
+}
+
+// ffmpegVersionProbeTimeout bounds the one-time `ffmpeg -version` probe so a
+// hung or wrapped binary cannot stall stream startup. On timeout the probe
+// yields major 0, which falls back to the safe -timeout default.
+const ffmpegVersionProbeTimeout = 5 * time.Second
+
+// resolveFfmpegMajor returns the cached or detected FFmpeg major version for a binary path.
+func resolveFfmpegMajor(ffmpegPath string) int {
+	if ffmpegPath == "" {
+		return 0
+	}
+	if cached, ok := ffmpegMajorCache.Load(ffmpegPath); ok {
+		if major, ok := cached.(int); ok {
+			return major
+		}
+	}
+
+	// Coalesce concurrent cold-cache probes for the same path into one
+	// `ffmpeg -version` execution.
+	val, _, _ := ffmpegMajorGroup.Do(ffmpegPath, func() (any, error) {
+		// Re-check the cache: another caller may have populated it while this
+		// call was waiting for the singleflight slot.
+		if cached, ok := ffmpegMajorCache.Load(ffmpegPath); ok {
+			if major, ok := cached.(int); ok {
+				return major, nil
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), ffmpegVersionProbeTimeout)
+		defer cancel()
+
+		_, major, _ := conf.GetFfmpegVersionFromContext(ctx, ffmpegPath)
+		// Only cache a successful detection. Caching a failed probe (major 0)
+		// would pin the safe -timeout fallback for the process lifetime, so a
+		// transient first-probe failure on a real FFmpeg 4.x host would silently
+		// suppress -stimeout until restart. Re-probing on the next start is cheap.
+		if major > 0 {
+			ffmpegMajorCache.Store(ffmpegPath, major)
+		}
+		return major, nil
+	})
+
+	if major, ok := val.(int); ok {
+		return major
+	}
+	return 0
 }
 
 // stripTimeoutParams returns a copy of params with any -timeout/-stimeout key-value pairs removed.
@@ -453,10 +523,11 @@ func appendChannelArgs(args []string, channelMode string, sourceChannels int, nu
 
 // buildInputArgs constructs the pre-input FFmpeg flags (transport, timeout, extra parameters).
 // This mirrors the logic in Stream.buildFFmpegInputArgs but accepts explicit parameters.
-// RTSP streams use -timeout for connection timeout.
+// RTSP streams use the timeout flag supported by the configured FFmpeg major version.
 func buildInputArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 	args := make([]string, 0, 8+len(ffmpegParameters))
-	timeoutFlag := timeoutParamForSource(cfg.sourceType())
+	ffmpegMajor := resolveFfmpegMajor(cfg.FFmpegPath)
+	timeoutFlag := timeoutParamForSource(cfg.sourceType(), ffmpegMajor)
 
 	if cfg.sourceType() == audiocore.SourceTypeRTSP {
 		args = append(args, "-rtsp_transport", cfg.Transport)

@@ -34,12 +34,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 // Tunnel provider constant for unknown providers
@@ -178,6 +180,23 @@ type Controller struct {
 	// sourceRestarter restarts a single audio source by ID. Set during
 	// pipeline Start() and called by the restart-source control endpoint.
 	sourceRestarter atomic.Pointer[SourceRestarterFunc]
+
+	// externalMediaEnv and externalMediaProbe are injectable dependencies for
+	// the GET /api/v2/system/external-media endpoint. Both default to the real
+	// sysinfo implementations at request time when nil.
+	externalMediaEnv   sysinfo.EnvGetter
+	externalMediaProbe sysinfo.MountProber
+
+	// importMgr manages the one-at-a-time import lifecycle.
+	importMgr *importManager
+
+	// importSourceRoot is the directory under which import source paths must resolve.
+	// Defaults to sysinfo.DefaultExternalMountPath when empty.
+	importSourceRoot string
+
+	// importSourceFactory builds an import Source from a resolved path.
+	// Defaults to a BirdNET-Pi adapter when nil. Overridable in tests.
+	importSourceFactory func(path string) (imports.Source, error)
 }
 
 // SourceRestarterFunc restarts a single audio source identified by sourceID.
@@ -462,6 +481,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		cancel:               cancel,
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()),
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
+		importMgr:            newImportManager(),
 	}
 	// Publish the initial settings snapshot so controllerSettings() reads it
 	// lock-free. Every save republishes via Settings.Store; see the Settings
@@ -717,6 +737,7 @@ func (c *Controller) initRoutes() {
 		{"model routes", c.initModelRoutes},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", c.initTLSRoutes},
+		{"import routes", c.initImportRoutes},
 	}
 
 	for _, initializer := range routeInitializers {

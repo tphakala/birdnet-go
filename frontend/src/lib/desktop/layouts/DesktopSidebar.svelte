@@ -75,6 +75,7 @@ Performance Optimizations:
     MessageCircleQuestion,
     ExternalLink,
     Activity,
+    ArrowDownToLine,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import CollapsibleNavSection from './CollapsibleNavSection.svelte';
@@ -178,6 +179,7 @@ Performance Optimizations:
     systemInference: actualRoute === '/ui/system/inference',
     systemTerminal: actualRoute === '/ui/system/terminal',
     systemHealth: actualRoute === '/ui/system/health',
+    systemImportExport: actualRoute === '/ui/system/import-export',
     help: actualRoute.startsWith('/ui/help'),
     helpExact: actualRoute === '/ui/help',
     helpReportBug: actualRoute === '/ui/help/report-bug',
@@ -227,6 +229,7 @@ Performance Optimizations:
     systemInference: onNavigate ? '/system/inference' : '/ui/system/inference',
     systemTerminal: onNavigate ? '/system/terminal' : '/ui/system/terminal',
     systemHealth: onNavigate ? '/system/health' : '/ui/system/health',
+    systemImportExport: onNavigate ? '/system/import-export' : '/ui/system/import-export',
     settingsAnalysis: onNavigate ? '/settings/analysis' : '/ui/settings/analysis',
     settingsMain: onNavigate ? '/settings/main' : '/ui/settings/main',
     settingsAudio: onNavigate ? '/settings/audio' : '/ui/settings/audio',
@@ -285,6 +288,12 @@ Performance Optimizations:
       label: t('navigation.health'),
       url: navigationUrls.systemHealth,
       routeKey: 'systemHealth',
+    },
+    {
+      icon: ArrowDownToLine,
+      label: t('system.sections.importExport'),
+      url: navigationUrls.systemImportExport,
+      routeKey: 'systemImportExport',
     },
   ]);
 

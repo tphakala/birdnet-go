@@ -22,6 +22,7 @@ const browserGlobals = {
   FormData: 'readonly',
   navigator: 'readonly',
   Event: 'readonly',
+  MessageEvent: 'readonly',
   KeyboardEvent: 'readonly',
   MouseEvent: 'readonly',
   DragEvent: 'readonly',

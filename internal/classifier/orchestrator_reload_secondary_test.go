@@ -50,9 +50,9 @@ func (m *reloadFakeModel) Close() error {
 	}
 	return nil
 }
-func (m *reloadFakeModel) Device() string    { return deviceCPU }
-func (m *reloadFakeModel) Backend() string   { return BackendONNX }
-func (m *reloadFakeModel) Precision() string { return "" }
+func (m *reloadFakeModel) RuntimeInfo() (device, backend, precision string) {
+	return deviceCPU, BackendONNX, ""
+}
 
 // registerTestSecondaryBuilder adds a builder under id for the duration of the
 // test, restoring the global map on cleanup. The map is a package global, so the

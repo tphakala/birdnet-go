@@ -145,6 +145,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 
 ## Documentation
 
+- [FAQ](https://github.com/tphakala/birdnet-go/wiki/FAQ) - common questions, issues, and workarounds
 - [User guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET%E2%80%90Go-Guide)
 - [Installation](https://github.com/tphakala/birdnet-go/wiki/installation.md)
 - [Hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/hardware.md)
@@ -197,7 +198,7 @@ Join the [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 
 ### Migration tools
 
-- [BirdNET-Pi2Go](https://github.com/tphakala/birdnet-pi2go): database converter for migrating from BirdNET-Pi
+- [BirdNET-Pi2Go](https://github.com/tphakala/birdnet-pi2go): database converter for migrating from BirdNET-Pi (deprecated, not compatible with the current BirdNET-Go database schema; a native import is planned)
 
 ### Hardware solutions
 

@@ -39,10 +39,15 @@ jobs:
 
       - name: Install Linux system dependencies
         if: matrix.os == 'ubuntu-24.04'
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+        # Route through the shared composite for the continue-on-error +
+        # outcome-checked reinstall fallback, so a corrupt apt cache (tar exit 2)
+        # cannot hard-fail this build. execute-install-scripts: 'false' preserves
+        # the prior behavior; the symlink fix step below handles post-install.
+        uses: ./.github/actions/setup-apt-packages
         with:
           packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
-          version: 1.0
+          cache-version: '1.0'
+          execute-install-scripts: 'false'
 
       - name: Fix cross-compiler symlinks
         if: matrix.os == 'ubuntu-24.04'
@@ -51,7 +56,11 @@ jobs:
           # so create the symlinks that update-alternatives would normally manage
           sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc-posix /usr/bin/x86_64-w64-mingw32-gcc
           sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++-posix /usr/bin/x86_64-w64-mingw32-g++
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-13 /usr/bin/aarch64-linux-gnu-gcc
+          # Resolve the installed aarch64 gcc version dynamically so a future
+          # runner-image gcc bump does not break the symlink.
+          aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
+          if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
+          sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
 
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -178,13 +187,22 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f
 
+      - name: Generate checksums
+        run: |
+          # SHA-256 of every tarball, keyed by basename so the manifest
+          # generator can map a checksum to a release asset by file name.
+          find artifacts -name '*.tar.gz' -print0 | while IFS= read -r -d '' f; do
+            echo "$(sha256sum "$f" | cut -d' ' -f1)  $(basename "$f")"
+          done | sort > checksums.txt
+          cat checksums.txt
+
       - name: Create GitHub Release
         run: |
           REPO="${{ github.repository }}"
           TAG="${{ steps.get_build_version.outputs.build_version }}"
           # If the tag is poisoned from a previous failed run, append run number
           if ! gh release create "$TAG" \
-            artifacts/**/*.tar.gz \
+            artifacts/**/*.tar.gz checksums.txt \
             --repo "$REPO" \
             --title "Nightly Build $TAG" \
             --notes "Nightly build $TAG" \
@@ -192,7 +210,7 @@ jobs:
             --target main 2>/dev/null; then
             TAG="${TAG}-${{ github.run_number }}"
             gh release create "$TAG" \
-              artifacts/**/*.tar.gz \
+              artifacts/**/*.tar.gz checksums.txt \
               --repo "$REPO" \
               --title "Nightly Build $TAG" \
               --notes "Nightly build $TAG" \
@@ -202,6 +220,17 @@ jobs:
           echo "Created release: $TAG"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  # Regenerate the release manifest after the nightly release (its tarballs and
+  # checksums.txt) and the container images are published, so the moving
+  # :nightly tag the manifest advertises already points at this build. No
+  # if-guard: every successful nightly run should refresh the manifest.
+  manifest:
+    name: Update release manifest
+    needs: [release, docker]
+    uses: ./.github/workflows/release-manifest.yml
+    permissions:
+      contents: write
 
   get-version:
     runs-on: ubuntu-latest

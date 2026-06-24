@@ -935,6 +935,56 @@ func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, lab
 	return result, nil
 }
 
+// GetBatchConfidences returns per-label-ID detection confidences for the given label IDs over
+// [start, end), false positives excluded and filtered by minConfidence. It mirrors
+// GetBatchHourlyOccurrences: one query per chunk covers many labels (grouped client-side by
+// label_id), large label sets are chunked to stay within SQL host-parameter limits, and each label
+// ID appears in exactly one chunk so no cross-chunk merge is needed. The raw values are returned
+// (not pre-binned) so the binning math stays in shared, dialect-agnostic Go.
+func (r *detectionRepository) GetBatchConfidences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][]float64, error) {
+	result := make(map[uint][]float64, len(labelIDs))
+
+	// Return empty map for empty input (no query)
+	if len(labelIDs) == 0 {
+		return result, nil
+	}
+
+	type labelConfidence struct {
+		LabelID    uint
+		Confidence float64
+	}
+
+	detTable := r.tableName()
+	revTable := r.reviewsTable()
+
+	// Chunk label IDs to avoid exceeding SQL host-parameter limits on the IN clause.
+	for i := 0; i < len(labelIDs); i += batchQuerySize {
+		// Fail fast between chunks if the caller's context was cancelled.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		chunkEnd := min(i+batchQuerySize, len(labelIDs))
+		chunk := labelIDs[i:chunkEnd]
+
+		var rows []labelConfidence
+		err := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
+			Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
+			Select("d.label_id as label_id, d.confidence as confidence").
+			Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", chunk, start, end, minConfidence).
+			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
+			Scan(&rows).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch confidences: %w", err)
+		}
+
+		for _, row := range rows {
+			result[row.LabelID] = append(result[row.LabelID], row.Confidence)
+		}
+	}
+
+	return result, nil
+}
+
 // GetDailyOccurrences returns daily detection counts for a label.
 func (r *detectionRepository) GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64, tzOffsetSeconds int) ([]DailyCount, error) {
 	var results []DailyCount
@@ -1697,6 +1747,72 @@ func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Conte
 	`, r.tableName(), r.labelsTable())
 
 	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, limit, offset).Scan(&results).Error
+	return results, err
+}
+
+// GetSpeciesFirstSeenInPeriod returns the in-period first detection of each species over the
+// half-open range [start, end), false positives excluded, grouped by scientific name so a species
+// with one label per model collapses to a single first-seen. Unlike GetSpeciesFirstDetectionInPeriod
+// (which omits the false-positive exclusion and is paginated for the species tracker), this goes
+// through buildAnalyticsBaseQuery so it shares the analytics false-positive filter, and returns every
+// species (no LIMIT) for the accumulation curve. GROUP BY scientific_name with MIN(detected_at) makes
+// the reviews LEFT JOIN immune to fan-out: duplicate joined rows for one detection collapse under the
+// aggregate. label_id is not selected (it is irrelevant to accumulation and stays zero).
+func (r *detectionRepository) GetSpeciesFirstSeenInPeriod(ctx context.Context, start, end int64) ([]SpeciesFirstSeen, error) {
+	var results []SpeciesFirstSeen
+
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, nil, nil).
+		Joins(fmt.Sprintf("JOIN %s l ON l.id = d.label_id", r.labelsTable())).
+		Select("l.scientific_name as scientific_name, MIN(d.detected_at) as first_detected").
+		Group("l.scientific_name").
+		Order("first_detected ASC, l.scientific_name ASC").
+		Scan(&results).Error
+
+	return results, err
+}
+
+// GetSpeciesPhenologyInPeriod returns each species' residency span (MIN/MAX detected_at and the
+// detection COUNT) over the half-open range [start, end), false positives excluded, grouped by
+// scientific name so a species with one label per model collapses to a single span. It shares the
+// analytics false-positive filter via buildAnalyticsBaseQuery and returns the top `limit` species by
+// volume (ORDER BY count DESC) for the arrival/departure phenology chart. GROUP BY scientific_name
+// makes the reviews LEFT JOIN immune to fan-out under MIN/MAX, and because DetectionReview has a
+// unique index on detection_id (reviews are 1:1 with detections) the LEFT JOIN never multiplies rows,
+// so COUNT(*) counts each detection once (the same basis as GetHourlyDistribution).
+func (r *detectionRepository) GetSpeciesPhenologyInPeriod(ctx context.Context, start, end int64, limit int) ([]SpeciesPhenology, error) {
+	var results []SpeciesPhenology
+
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, nil, nil).
+		Joins(fmt.Sprintf("JOIN %s l ON l.id = d.label_id", r.labelsTable())).
+		Select("l.scientific_name as scientific_name, MIN(d.detected_at) as first_detected, MAX(d.detected_at) as last_detected, COUNT(*) as count").
+		Group("l.scientific_name").
+		Order("count DESC, l.scientific_name ASC").
+		Limit(limit).
+		Scan(&results).Error
+
+	return results, err
+}
+
+// GetSourceActivitySummaries returns each audio source with at least one (false-positive-excluded)
+// detection in the half-open range [start, end): the source identity columns and its in-period
+// detection count, ordered by count descending. It shares the analytics false-positive filter via
+// buildAnalyticsBaseQuery and INNER JOINs audio_sources on d.source_id, so detections with a NULL
+// source_id (legacy-migrated, source-less) are excluded. GROUP BY every selected source column keeps
+// MySQL's ONLY_FULL_GROUP_BY happy, and because DetectionReview is 1:1 with detections the reviews
+// LEFT JOIN never multiplies rows, so COUNT(d.id) counts each detection once (the same basis as
+// GetSpeciesPhenologyInPeriod). Powers the analytics source/mic filter's option list.
+func (r *detectionRepository) GetSourceActivitySummaries(ctx context.Context, start, end int64) ([]SourceActivitySummary, error) {
+	var results []SourceActivitySummary
+
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, nil, nil).
+		Joins(fmt.Sprintf("JOIN %s s ON s.id = d.source_id", r.sourcesTable())).
+		// COUNT(DISTINCT d.id): the reviews LEFT JOIN is 1:1 so plain COUNT is already fan-out-immune
+		// today, but DISTINCT keeps the count correct if a future join introduces row multiplication.
+		Select("s.id as source_id, s.display_name as display_name, s.node_name as node_name, s.source_type as source_type, COUNT(DISTINCT d.id) as count").
+		Group("s.id, s.display_name, s.node_name, s.source_type").
+		Order("count DESC, s.id ASC").
+		Scan(&results).Error
+
 	return results, err
 }
 

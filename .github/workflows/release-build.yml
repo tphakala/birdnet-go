@@ -44,10 +44,16 @@ jobs:
 
       - name: Install Linux system dependencies
         if: matrix.os == 'ubuntu-24.04'
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+        # Route through the shared composite for the continue-on-error +
+        # outcome-checked reinstall fallback, so a corrupt apt cache (tar exit 2)
+        # cannot hard-fail the release build. execute-install-scripts: 'false'
+        # preserves the prior behavior; the symlink fix step below handles
+        # post-install.
+        uses: ./.github/actions/setup-apt-packages
         with:
           packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
-          version: 1.0
+          cache-version: '1.0'
+          execute-install-scripts: 'false'
 
       - name: Fix cross-compiler symlinks
         if: matrix.os == 'ubuntu-24.04'
@@ -56,7 +62,11 @@ jobs:
           # so create the symlinks that update-alternatives would normally manage
           sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc-posix /usr/bin/x86_64-w64-mingw32-gcc
           sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++-posix /usr/bin/x86_64-w64-mingw32-g++
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-13 /usr/bin/aarch64-linux-gnu-gcc
+          # Resolve the installed aarch64 gcc version dynamically so a future
+          # runner-image gcc bump does not break the symlink.
+          aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
+          if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
+          sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
 
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -156,8 +166,8 @@ jobs:
         run: |
           # Get the latest release tag
           LATEST_TAG=$(git describe --tags --abbrev=0)
-          echo "LATEST_TAG=${LATEST_TAG}" >> ${GITHUB_ENV}
-          echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
+          echo "latest_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
       
       - name: Add Artifacts to GitHub Release
         uses: softprops/action-gh-release@v3
@@ -169,6 +179,47 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
+  checksums:
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: birdnet-go-*
+
+      - name: Generate checksums
+        run: |
+          # SHA-256 of every tarball, keyed by basename so the manifest
+          # generator can map a checksum to a release asset by file name.
+          find artifacts -name '*.tar.gz' -print0 | while IFS= read -r -d '' f; do
+            echo "$(sha256sum "$f" | cut -d' ' -f1)  $(basename "$f")"
+          done | sort > checksums.txt
+          cat checksums.txt
+
+      - name: Get latest release tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
+
+      - name: Add checksums to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: checksums.txt
+          # For release events, attach to the triggering release; for
+          # workflow_dispatch, attach to the latest release tag.
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && env.LATEST_TAG || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   get-version:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
@@ -201,3 +252,14 @@ jobs:
       cleanup-old-images: false
       keep-images-count: 14
     secrets: inherit
+
+  # Regenerate the release manifest after the tarballs (build), checksums.txt
+  # (checksums), and container images (docker) are all published, so it never
+  # races the asset uploads or advertises image tags before they are pushed.
+  # The if-guard mirrors the other jobs and must stay in sync with them.
+  manifest:
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    needs: [build, checksums, docker]
+    uses: ./.github/workflows/release-manifest.yml
+    permissions:
+      contents: write

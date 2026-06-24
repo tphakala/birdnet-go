@@ -42,6 +42,31 @@ type speciesCacheEntry struct {
 	scores map[string]float64 // Species occurrence scores keyed by scientific name
 }
 
+// runtimeInfo is the immutable device/backend/precision triplet describing how a
+// loaded classifier actually executes. It is published as a single value behind
+// an atomic pointer so all three are always read from the same generation (no
+// torn read) without taking bn.mu. device is "CPU" for TFLite/ONNX or the
+// concrete OpenVINO device for the OV path; backend is BackendTFLite/BackendONNX/
+// BackendOpenVINO; precision is "INT8"/"FP16"/"FP32" (empty when unknown).
+type runtimeInfo struct {
+	device    string
+	backend   string
+	precision string
+}
+
+// modelIdentity is the immutable identity snapshot the ModelInstance getters and
+// the inference span expose: model ID, human-readable name, version string, and
+// audio spec. Like runtimeInfo it is published behind an atomic pointer so those
+// reads are lock-free and never race reloadModelInternal's writes to bn.ModelInfo
+// / bn.modelVersion, nor block on bn.mu (held by inference for the full native
+// call, issue #3336).
+type modelIdentity struct {
+	id      string
+	name    string
+	version string
+	spec    ModelSpec
+}
+
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
 	// classifier and rangeFilter are the native inference backends (TFLite/ONNX).
@@ -63,26 +88,27 @@ type BirdNET struct {
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	modelVersion        string              // Human-readable model version string (per-instance to avoid shared global state)
 	modelsDir           string              // base directory for gallery-installed models (set by Orchestrator)
-	// device is the compute device the classifier backend bound to at load time
-	// ("CPU" for TFLite/ONNX, or the OpenVINO device for the OV path). It is set
-	// by each initialize*Model path and defaults to deviceCPU in NewBirdNET so a
-	// path that forgets to set it still reports a sane value. Reported via Device().
-	device string
-	// backend is the inference execution backend bound to at load time
-	// (BackendTFLite/BackendONNX/BackendOpenVINO), and precision is the effective
-	// runtime precision the model executes at ("INT8"/"FP16"/"FP32"). Both mirror
-	// device: set by each initialize*Model path so the inference status card reports
-	// what is really running rather than the static ModelInfo file metadata.
-	// Reported via Backend()/Precision(); guarded by mu like device.
-	backend   string
-	precision string
+	// runtime holds the live device/backend/precision triplet (see runtimeInfo),
+	// published by each initialize*Model path via setRuntimeInfo and restored by the
+	// reload rollback. It is deliberately kept OFF bn.mu: inference holds bn.mu for
+	// the full native call (issue #3336), and routing the read-only status card's
+	// RuntimeInfo() through bn.mu would block the card on an in-flight inference.
+	// The atomic pointer gives a lock-free, always-consistent triplet read instead.
+	runtime atomic.Pointer[runtimeInfo]
+	// identity holds the getter-visible model identity snapshot (ID/Name/Spec and
+	// the version string); see modelIdentity. Like runtime it is published behind an
+	// atomic pointer and kept OFF bn.mu so the ModelInstance getters (ModelID,
+	// ModelName, ModelVersion, Spec) and the inference span read it lock-free without
+	// blocking on an in-flight native call holding bn.mu (issue #3336).
+	identity atomic.Pointer[modelIdentity]
 	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack).
 	// Inference holds mu for the full duration of the native call, not just the field
 	// read: the backends are not goroutine-safe and reload/Delete Close() them under
 	// mu, so dropping mu before the native call would reintroduce the issue #3336
-	// use-after-free segfault. (mu is not a complete guard for ModelInfo, which
-	// reloadModelInternal writes under mu but the Spec/ModelID/ModelName getters read
-	// without it.)
+	// use-after-free segfault. (ModelInfo is written under mu by reloadModelInternal;
+	// the identity fields the getters expose are mirrored into the lock-free identity
+	// snapshot above, and the remaining ModelInfo reads run under mu or before the
+	// instance is shared.)
 	mu               sync.Mutex
 	resultsBuffer    []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations
@@ -116,9 +142,6 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 		TaxonomyPath: "", // Default to embedded taxonomy
 		modelVersion: defaultModelVersionString,
 		speciesCache: make(map[string]*speciesCacheEntry),
-		// Default to CPU; the OpenVINO init path overrides this with the real
-		// device (CPU/GPU) it bound to. TFLite and ONNX paths set it explicitly too.
-		device: deviceCPU,
 	}
 	bn.settingsAtomic.Store(settings)
 
@@ -163,12 +186,11 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 	// ONNX entry so existing arm64 configs keep starting without a TFLite backend.
 	bn.ModelInfo = remapV24ForONNXOnly(&bn.ModelInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
 
-	// Seed backend/precision from the resolved static metadata so a model that
-	// somehow loads without an initialize*Model path still reports a sane value
-	// (mirrors the device default). Each init path overrides these with the real
-	// load-time backend and effective runtime precision.
-	bn.backend = bn.ModelInfo.Backend
-	bn.precision = string(bn.ModelInfo.Quantization)
+	// Seed the runtime triplet from the resolved static metadata so a model that
+	// somehow loads without an initialize*Model path still reports a sane value.
+	// Device defaults to CPU; each init path republishes the real load-time device
+	// (the OV path may bind GPU), backend, and effective runtime precision.
+	bn.setRuntimeInfo(deviceCPU, bn.ModelInfo.Backend, string(bn.ModelInfo.Quantization))
 
 	// Load taxonomy data
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
@@ -246,6 +268,10 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Build()
 	}
 
+	// Publish the getter-visible identity now that ModelInfo and modelVersion are
+	// finalized, so ModelID/ModelName/ModelVersion/Spec read it lock-free.
+	bn.publishIdentity()
+
 	constructed = true
 	return bn, nil
 }
@@ -322,12 +348,10 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 	}
 
 	bn.classifier = classifier
-	// TFLite runs on CPU (the optional XNNPACK delegate is still CPU execution).
-	bn.device = deviceCPU
-	// TFLite executes the model file as-is, so the runtime precision is the weight
-	// precision recorded in ModelInfo.Quantization (FP32 for the stock v2.4 model).
-	bn.backend = BackendTFLite
-	bn.precision = string(bn.ModelInfo.Quantization)
+	// TFLite runs on CPU (the optional XNNPACK delegate is still CPU execution) and
+	// executes the model file as-is, so the runtime precision is the weight precision
+	// recorded in ModelInfo.Quantization (FP32 for the stock v2.4 model).
+	bn.setRuntimeInfo(deviceCPU, BackendTFLite, string(bn.ModelInfo.Quantization))
 
 	// Update the human-readable model version string for display when a custom
 	// model path is provided. Model identity (ModelInfo.ID) is never modified
@@ -1196,6 +1220,13 @@ func (bn *BirdNET) reloadModelInternal() error {
 	oldModelInfo := bn.ModelInfo
 	oldTaxonomyMap := bn.TaxonomyMap
 	oldScientificIndex := bn.ScientificIndex
+	// initializeModel republishes the runtime triplet (and modelVersion on the
+	// TFLite custom-path branch) before the later reload steps (meta model,
+	// validation) that can still fail, so snapshot them too; otherwise a
+	// rolled-back reload leaves the status card and ModelVersion() describing the
+	// failed attempt instead of the previous (still-serving) model.
+	oldRuntime := bn.runtime.Load()
+	oldModelVersion := bn.modelVersion
 
 	rollback := func() {
 		if bn.classifier != nil && bn.classifier != oldClassifier {
@@ -1212,6 +1243,14 @@ func (bn *BirdNET) reloadModelInternal() error {
 		bn.ModelInfo = oldModelInfo
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
+		// Restore the runtime triplet and model-version string alongside the
+		// classifier so RuntimeInfo / ModelVersion describe the restored model
+		// rather than the failed attempt.
+		bn.runtime.Store(oldRuntime)
+		bn.modelVersion = oldModelVersion
+		// Republish the getter-visible identity from the restored ModelInfo /
+		// modelVersion so ModelID/ModelName/ModelVersion/Spec revert too.
+		bn.publishIdentity()
 		bn.updateSettings(oldSettings)
 		// Degraded-but-recovered: make it explicit in the log that the previous
 		// model was restored, so a failed reload is not mistaken for a dead
@@ -1352,6 +1391,10 @@ func (bn *BirdNET) reloadModelInternal() error {
 	// Clear species cache as model/labels have changed
 	bn.clearSpeciesCache()
 
+	// Republish the getter-visible identity for the new model now that the reload
+	// has committed (ModelInfo and modelVersion are final).
+	bn.publishIdentity()
+
 	bn.Debug("Model reload completed successfully")
 	return nil
 }
@@ -1442,27 +1485,61 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	return 0.0
 }
 
+// publishIdentity snapshots the current ModelInfo identity and modelVersion into
+// the atomic identity pointer. Call it after every commit point that finalizes
+// those fields: the end of NewBirdNET, a successful reload, and the reload
+// rollback. The caller either holds bn.mu (reload) or runs before the instance is
+// shared (construction), so the bn.ModelInfo / bn.modelVersion reads here are
+// consistent.
+func (bn *BirdNET) publishIdentity() {
+	bn.identity.Store(&modelIdentity{
+		id:      bn.ModelInfo.ID,
+		name:    bn.ModelInfo.Name,
+		version: bn.modelVersion,
+		spec:    bn.ModelInfo.Spec,
+	})
+}
+
+// The ModelID/ModelName/ModelVersion/Spec getters read the published identity
+// snapshot lock-free via bn.identity.Load(), reading the wanted field straight off
+// the loaded pointer (no whole-struct copy, matching RuntimeInfo's access
+// pattern). Before the first publish (a struct-literal instance in tests that
+// bypassed NewBirdNET, never concurrently reloaded) the pointer is nil and they
+// fall back to reading the fields directly, which is race-free in that case.
+
 // Spec returns the audio requirements for this BirdNET model.
 // Implements ModelInstance.
 func (bn *BirdNET) Spec() ModelSpec {
+	if id := bn.identity.Load(); id != nil {
+		return id.spec
+	}
 	return bn.ModelInfo.Spec
 }
 
 // ModelID returns the unique model identifier.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelID() string {
+	if id := bn.identity.Load(); id != nil {
+		return id.id
+	}
 	return bn.ModelInfo.ID
 }
 
 // ModelName returns the human-readable model name.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelName() string {
+	if id := bn.identity.Load(); id != nil {
+		return id.name
+	}
 	return bn.ModelInfo.Name
 }
 
 // ModelVersion returns the model version string.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelVersion() string {
+	if id := bn.identity.Load(); id != nil {
+		return id.version
+	}
 	return bn.modelVersion
 }
 
@@ -1483,35 +1560,31 @@ func (bn *BirdNET) Labels() []string {
 	return slices.Clone(bn.Settings.BirdNET.Labels)
 }
 
-// Device returns the compute device this model's classifier backend bound to
-// at load time ("CPU" for TFLite/ONNX, or the OpenVINO device for the OV path).
-// Guarded by bn.mu because reloadModelInternal rewrites bn.device under the same
-// lock when re-initializing the backend. Implements ModelInstance.
-func (bn *BirdNET) Device() string {
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	return bn.device
+// setRuntimeInfo atomically publishes the live runtime triplet. Called by each
+// initialize*Model path with the real load-time values, by NewBirdNET to seed
+// them, and by the reload rollback to republish the previous (still-serving)
+// triplet. Reload-path writers already hold bn.mu and construction-path writers
+// run before the instance is shared; either way the atomic store is what lets
+// RuntimeInfo() read lock-free.
+func (bn *BirdNET) setRuntimeInfo(device, backend, precision string) {
+	bn.runtime.Store(&runtimeInfo{device: device, backend: backend, precision: precision})
 }
 
-// Backend returns the inference execution backend this model loaded on
-// (BackendTFLite/BackendONNX/BackendOpenVINO). Guarded by bn.mu because
-// reloadModelInternal rewrites bn.backend under the same lock when re-initializing
-// the backend. Implements ModelInstance.
-func (bn *BirdNET) Backend() string {
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	return bn.backend
-}
-
-// Precision returns the effective runtime precision this model executes at
-// ("INT8"/"FP16"/"FP32"), which can differ from the weight precision stored in
-// the file (BirdNET v2.4 runs the FP32 ONNX model at FP16 on OpenVINO CPU).
-// Guarded by bn.mu because reloadModelInternal rewrites bn.precision under the
-// same lock. Implements ModelInstance.
-func (bn *BirdNET) Precision() string {
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	return bn.precision
+// RuntimeInfo returns this model's device, backend, and effective precision from
+// a single atomic load, so the triplet is always internally consistent (never a
+// torn read mixing two reload generations) and the read never blocks on bn.mu,
+// which inference holds for the full native call (issue #3336). device is "CPU"
+// for TFLite/ONNX or the OpenVINO device for the OV path; backend is
+// BackendTFLite/BackendONNX/BackendOpenVINO; precision is "INT8"/"FP16"/"FP32"
+// (an FP32 ONNX model runs at FP16 on OpenVINO CPU). Returns deviceUnknown with
+// empty backend/precision before the first triplet is published. Implements
+// ModelInstance.
+func (bn *BirdNET) RuntimeInfo() (device, backend, precision string) {
+	ri := bn.runtime.Load()
+	if ri == nil {
+		return deviceUnknown, "", ""
+	}
+	return ri.device, ri.backend, ri.precision
 }
 
 // ReloadSnapshot returns a copy of the model metadata and taxonomy maps safely under bn.mu.

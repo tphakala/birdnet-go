@@ -939,7 +939,8 @@
     "row": {
       "viewDetails": "Voir les détails pour {species}",
       "play": "Lire",
-      "playAudio": "Lire l'audio"
+      "playAudio": "Lire l'audio",
+      "imageFailedToLoad": "Image failed to load"
     },
     "media": {
       "title": "Enregistrement et spectrogramme",
@@ -1153,7 +1154,115 @@
       "overview": "Vue d'ensemble",
       "database": "Base de données",
       "inference": "AI Models",
-      "terminal": "Terminal"
+      "terminal": "Terminal",
+      "importExport": "Import / Export"
+    },
+    "importExport": {
+      "pageDescription": "Import data from other bird recording systems or export your detections.",
+      "available": "Available",
+      "comingSoon": "Coming soon",
+      "loading": "Loading...",
+      "runInBackground": "Close (import continues in background)",
+      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
+      "stepAnnouncement": "Step {current} of {total}: {name}",
+      "steps": {
+        "source": "Source",
+        "mode": "Mode",
+        "confirm": "Confirm",
+        "progress": "Progress",
+        "done": "Done"
+      },
+      "import": {
+        "sectionTitle": "Import"
+      },
+      "export": {
+        "sectionTitle": "Export",
+        "cardTitle": "Export detections",
+        "cardDescription": "Export your detection data to CSV, JSON, or other formats.",
+        "startButton": "Export",
+        "disabledReason": "Export is not yet available. Check back in a future release."
+      },
+      "birdnetPi": {
+        "cardTitle": "BirdNET-Pi",
+        "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
+        "startButton": "Import from BirdNET-Pi",
+        "wizardTitle": "Import from BirdNET-Pi"
+      },
+      "wizard": {
+        "stepsLabel": "Import wizard steps"
+      },
+      "sourceAccess": {
+        "pathLabel": "Path to birds.db (relative to mount root)",
+        "pathHelpText": "Enter the path relative to the external media mount root, e.g. birdnet-pi/birds.db",
+        "pathRequiredReason": "Enter the path to birds.db to continue",
+        "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
+        "mountRoot": "Mount root",
+        "nativeTitle": "External media mount required",
+        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
+        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
+        "missingTitle": "External media mount not found",
+        "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
+        "setupStepsLabel": "Setup steps",
+        "recheckButton": "Re-check",
+        "recheckHint": "After completing the setup steps, click Re-check to continue."
+      },
+      "mode": {
+        "label": "What do you want to import?",
+        "dbOnly": {
+          "label": "Database only",
+          "description": "Import detection records from birds.db. Audio clips are not imported."
+        },
+        "dbAudio": {
+          "label": "Database + audio clips",
+          "description": "Import detection records and associated audio recordings.",
+          "badge": "Not available",
+          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+        }
+      },
+      "confirm": {
+        "description": "Review your import settings before starting. Imported detections are tagged with the source birdnet-pi and duplicates are skipped automatically.",
+        "source": "Source path",
+        "mode": "Import mode",
+        "tagging": "Source tag",
+        "taggingValue": "birdnet-pi (auto-applied)",
+        "deduplicationNote": "Duplicate detections (same species, time, and date already in the database) are skipped automatically. Exact counts will be shown live during the import.",
+        "startButton": "Start import"
+      },
+      "progress": {
+        "label": "Import progress",
+        "runningLabel": "Import running",
+        "progressLabel": "{percent}% complete",
+        "cancelButton": "Cancel",
+        "cancellingLabel": "Cancelling...",
+        "cancelledMessage": "Import was cancelled.",
+        "processed": "Processed",
+        "inserted": "Inserted",
+        "skipped": "Skipped",
+        "errors": "Errors",
+        "phase": {
+          "validate": "Validating",
+          "dedup": "Deduplicating",
+          "import": "Importing"
+        }
+      },
+      "done": {
+        "successTitle": "Import complete",
+        "successDescription": "Your BirdNET-Pi detections have been imported successfully.",
+        "cancelledTitle": "Import cancelled",
+        "cancelledDescription": "The import was cancelled before completing.",
+        "errorTitle": "Import failed",
+        "viewDetectionsLink": "View imported detections",
+        "partialInserted": "{count} detections were imported before cancellation.",
+        "importAnother": "Import another"
+      },
+      "errors": {
+        "loadFailed": "Failed to load import status. Please try again.",
+        "mediaLoadFailed": "Failed to check external media. Please try again.",
+        "alreadyRunning": "An import is already in progress. Please wait for it to complete.",
+        "startFailed": "Failed to start import. Please try again.",
+        "cancelFailed": "Failed to cancel import.",
+        "importFailed": "Import failed. Please check your configuration and try again."
+      }
     },
     "database": {
       "title": "Gestion de la base de données",
@@ -1661,7 +1770,9 @@
       "controls": {
         "source": "Source",
         "sourceAll": "Toutes les sources",
-        "sourceComingSoon": "Le filtrage par source arrivera dans une prochaine mise à jour.",
+        "sourceLoading": "Loading audio sources…",
+        "sourceNone": "No audio sources with detections yet.",
+        "sourceNotApplicable": "The charts in this section do not filter by source.",
         "speciesNotApplicable": "Les graphiques de cette section ne filtrent pas par espèce."
       },
       "card": {
@@ -1831,6 +1942,46 @@
           "axisDate": "Date",
           "axisUniqueSpecies": "Espèces uniques"
         },
+        "accumulation": {
+          "title": "Species Accumulation Curve",
+          "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
+          "noData": "No species accumulation data available",
+          "noDataHint": "Select a wider date range to watch the species list build up over time",
+          "ariaLabel": "Species accumulation curve: cumulative distinct species detected over the period",
+          "axisDate": "Date",
+          "axisSpecies": "Cumulative species",
+          "totalSpecies": "{species} species",
+          "tooltipCumulative": "Cumulative species",
+          "tooltipNew": "New in period",
+          "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
+        },
+        "yearOverYear": {
+          "title": "Year-over-Year Tracker",
+          "description": "Cumulative detections so far this year versus the same calendar dates last year. The shaded band is the running gap between the two; this year's line sitting above last year's means you are ahead of last year's pace.",
+          "noData": "No year-over-year data available",
+          "noDataHint": "Detections from this year and last year build up here as the year progresses",
+          "ariaLabel": "Year-over-year tracker: cumulative detections this year versus the same span last year",
+          "axisDate": "Date",
+          "axisCount": "Cumulative detections",
+          "legendThis": "{year} (this year)",
+          "legendLast": "{year} (last year)",
+          "tooltipDelta": "Difference",
+          "summary": "Year over year: by {monthDay}, {currentYear} has {thisYear} cumulative detections versus {lastYear} for {previousYear} (a difference of {delta})."
+        },
+        "phenology": {
+          "title": "Arrival & Departure Phenology",
+          "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",
+          "noData": "No phenology data available",
+          "noDataHint": "Select a wider date range to see when species arrive and depart",
+          "ariaLabel": "Arrival and departure phenology: residency bars showing each species' first-to-last detection span",
+          "axisDate": "Date",
+          "summary": "Arrival and departure residency spans for {species} species across the selected period.",
+          "tooltipFirst": "First detected",
+          "tooltipLast": "Last detected",
+          "tooltipResidency": "Residency",
+          "tooltipCount": "Detections",
+          "residencyDays": "{days} days"
+        },
         "heatmap": {
           "title": "Seasonal Activity Heatmap",
           "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
@@ -1856,6 +2007,60 @@
           "tooltipDetections": "Detections",
           "tooltipPeak": "Peak",
           "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+        },
+        "succession": {
+          "title": "Acoustic Succession",
+          "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
+          "noData": "No acoustic succession data available",
+          "noDataHint": "Select a wider date range to see how species hand off through the day",
+          "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
+          "axisTime": "Time of Day",
+          "note": "Combined hourly activity of the top {count} species by detection volume",
+          "tooltipDetections": "Detections",
+          "tooltipPeak": "Peak",
+          "summary": "Hour-of-day succession for {count} species. Most active: {species} around {time}."
+        },
+        "dawnOnset": {
+          "title": "Dawn Chorus Onset",
+          "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
+          "noData": "No dawn chorus data available",
+          "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
+          "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
+          "axisDate": "Date",
+          "axisOnset": "Minutes from civil dawn",
+          "civilDawn": "Civil dawn",
+          "tooltipOnset": "Onset",
+          "tooltipOnsetAfter": "{minutes} min after civil dawn",
+          "tooltipOnsetBefore": "{minutes} min before civil dawn",
+          "tooltipOnsetAt": "At civil dawn",
+          "tooltipCount": "Detections",
+          "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
+        },
+        "nocturnal": {
+          "title": "Nocturnal Activity Clock",
+          "description": "Detections around the 24-hour clock with the daytime hours shaded, making nighttime activity stand out",
+          "noData": "No activity data available",
+          "noDataHint": "Select a wider date range or a more active period to see the daily activity pattern",
+          "ariaLabel": "Nocturnal activity clock: detections by hour of day with daytime shading",
+          "axisHour": "Hour of day",
+          "tooltipHour": "{start} to {end}",
+          "tooltipCount": "Detections",
+          "summary": "Detection activity by hour of day ({total} detections, most active around {peak}). Daytime hours are shaded.",
+          "legendDay": "Day",
+          "legendTwilight": "Twilight",
+          "legendNight": "Night"
+        },
+        "confidence": {
+          "title": "Confidence Distribution",
+          "description": "How confident the model is per species, so you can spot the birds it most often second-guesses",
+          "noData": "No confidence data available",
+          "noDataHint": "Select a wider date range to compare how confident the model is across species",
+          "ariaLabel": "Confidence distribution: per-species histogram of detection confidence scores",
+          "axisLabel": "Confidence",
+          "note": "Showing the top {count} species by detection volume",
+          "tooltipCount": "Detections",
+          "tooltipPeak": "Peak confidence",
+          "summary": "Detection-confidence distribution for {count} species. {species} clusters around {time} confidence."
         },
         "tooltips": {
           "date": "Date",
@@ -1884,12 +2089,12 @@
       "loadFailed": "Échec du chargement des données d'analyse. Veuillez réessayer."
     },
     "timeOfDayPeriods": {
-      "night0to4": "Night (0-4)",
-      "dawn5to8": "Dawn (5-8)",
-      "morning9to11": "Morning (9-11)",
-      "afternoon12to16": "Afternoon (12-16)",
-      "evening17to19": "Evening (17-19)",
-      "night20to23": "Night (20-23)"
+      "night0to4": "Nuit (0-4)",
+      "dawn5to8": "Aube (5-8)",
+      "morning9to11": "Matin (9-11)",
+      "afternoon12to16": "Après-midi (12-16)",
+      "evening17to19": "Soir (17-19)",
+      "night20to23": "Nuit (20-23)"
     }
   },
   "settings": {
@@ -4504,8 +4709,10 @@
       "spectrogramLoaded": "Spectrogramme chargé",
       "spectrogramLoadingAria": "Chargement du spectrogramme",
       "spectrogramAlt": "Spectrogramme audio",
+      "spectrogramForSpecies": "Spectrogram for {species}",
       "spectrogramGeneratingAria": "Génération du spectrogramme",
       "generating": "Génération...",
+      "waiting": "Waiting...",
       "queuePosition": "File d'attente: {position}",
       "loadError": "Échec du chargement audio"
     },

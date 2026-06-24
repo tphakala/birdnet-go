@@ -20,9 +20,9 @@ type mockModelInstance struct {
 	id        string
 	spec      ModelSpec
 	labels    []string // optional; when nil a single default label is returned
-	device    string   // optional; when empty Device() reports "CPU"
-	backend   string   // optional; reported verbatim by Backend()
-	precision string   // optional; reported verbatim by Precision()
+	device    string   // optional; when empty RuntimeInfo reports "CPU"
+	backend   string   // optional; reported verbatim by RuntimeInfo
+	precision string   // optional; reported verbatim by RuntimeInfo
 	predict   func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
@@ -46,14 +46,13 @@ func (m *mockModelInstance) Labels() []string {
 	}
 	return []string{"Turdus merula_Common Blackbird"}
 }
-func (m *mockModelInstance) Close() error      { return nil }
-func (m *mockModelInstance) Backend() string   { return m.backend }
-func (m *mockModelInstance) Precision() string { return m.precision }
-func (m *mockModelInstance) Device() string {
-	if m.device != "" {
-		return m.device
+func (m *mockModelInstance) Close() error { return nil }
+func (m *mockModelInstance) RuntimeInfo() (device, backend, precision string) {
+	device = m.device
+	if device == "" {
+		device = deviceCPU
 	}
-	return deviceCPU
+	return device, m.backend, m.precision
 }
 
 // newTestOrchestrator creates an Orchestrator with mock models for unit testing.
@@ -68,6 +67,22 @@ func newTestOrchestrator(t *testing.T, mocks ...*mockModelInstance) *Orchestrato
 		models:   models,
 		modelRSS: make(map[string]int64),
 	}
+}
+
+// TestPrimaryModelInfo covers the o.mu-guarded primary-identity accessors that
+// callers outside the package use instead of reading o.ModelInfo directly.
+func TestPrimaryModelInfo(t *testing.T) {
+	t.Parallel()
+
+	want := ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4", Spec: ModelSpec{SampleRate: 48000}}
+	o := &Orchestrator{ModelInfo: want}
+	assert.Equal(t, want, o.PrimaryModelInfo())
+	assert.Equal(t, want.ID, o.PrimaryModelID())
+
+	// Zero value when no primary is set.
+	empty := &Orchestrator{}
+	assert.Equal(t, ModelInfo{}, empty.PrimaryModelInfo())
+	assert.Empty(t, empty.PrimaryModelID())
 }
 
 func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
