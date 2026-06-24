@@ -567,7 +567,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 | Method | Route                          | Handler              | Auth | Description                              |
 | ------ | ------------------------------ | -------------------- | ---- | ---------------------------------------- |
-| POST   | `/import/birdnet-pi`           | `StartBirdNETPiImport` | ✅   | Start a BirdNET-Pi DB-only import       |
+| POST   | `/import/birdnet-pi`           | `StartBirdNETPiImport` | ✅   | Start a BirdNET-Pi import (`db-only`, or `db-audio` to also copy clips) |
 | GET    | `/import/jobs/:jobId/progress` | `StreamImportProgress` | ✅   | SSE progress stream for import job      |
 | POST   | `/import/jobs/:jobId/cancel`   | `CancelImport`         | ✅   | Cancel a running import                 |
 | GET    | `/import/status`               | `GetImportStatus`      | ✅   | Get current import status (polling)     |

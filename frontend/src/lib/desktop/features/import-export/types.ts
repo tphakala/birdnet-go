@@ -17,7 +17,7 @@ export interface ExternalMediaGuidance {
 export type SourceAccessState = 'native' | 'container-mount' | 'container-missing';
 
 export interface StartImportRequest {
-  mode: 'db-only';
+  mode: 'db-only' | 'db-audio';
   source_path: string;
   location?: string;
 }

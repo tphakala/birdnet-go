@@ -22,7 +22,7 @@ import (
 // Import mode constants.
 const (
 	importModeDBOnly  = "db-only"
-	importModeDBaudio = "db-audio" // reserved; not yet available
+	importModeDBaudio = "db-audio"
 )
 
 // Import SSE event type constants.
@@ -59,7 +59,7 @@ var errInvalidSourcePath = errors.NewStd("invalid source path")
 
 // startImportRequest is the JSON body for POST /import/birdnet-pi.
 type startImportRequest struct {
-	Mode       string `json:"mode"`        // must be "db-only"
+	Mode       string `json:"mode"`        // accepted values: "db-only", "db-audio"
 	SourcePath string `json:"source_path"` // path relative to the external mount root
 	Location   string `json:"location"`    // optional IANA timezone name e.g. "Europe/Helsinki"
 }
@@ -222,7 +222,7 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 	case importModeDBOnly:
 		// accepted
 	case importModeDBaudio:
-		return c.HandleError(ctx, nil, "audio import is not available yet", http.StatusBadRequest)
+		// accepted; audio options configured below when building opts
 	default:
 		return c.HandleError(ctx, nil, "unsupported import mode", http.StatusBadRequest)
 	}
@@ -268,6 +268,19 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "source validation failed", http.StatusBadRequest)
 	}
 
+	// For db-audio mode, resolve the export path before reserving the import slot
+	// so an unconfigured path returns 400 without occupying the slot.
+	var clipExportPath string
+	if req.Mode == importModeDBaudio {
+		if settings := c.currentSettings(); settings != nil {
+			clipExportPath = settings.Realtime.Audio.Export.Path
+		}
+		if clipExportPath == "" {
+			_ = src.Close()
+			return c.HandleError(ctx, nil, "audio export path is not configured; set the audio export path to import audio", http.StatusBadRequest)
+		}
+	}
+
 	// Reserve the single import slot.
 	id := generateCorrelationID()
 	parent := c.ctx
@@ -287,6 +300,11 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		SourceNode: imports.DefaultSourceNode,
 		Location:   loc,
 	}
+	if req.Mode == importModeDBaudio {
+		opts.IncludeAudio = true
+		opts.AudioSourceDir = filepath.Dir(resolvedPath)
+		opts.ClipExportPath = clipExportPath
+	}
 	eng := imports.NewEngine(c.Repo)
 	c.wg.Go(func() {
 		var stats imports.ImportStats
@@ -304,7 +322,7 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		}()
 		defer jobCancel()
 		defer func() { _ = src.Close() }()
-		stats, runErr = eng.Run(jobCtx, src, opts, job)
+		stats, runErr = eng.Run(jobCtx, src, &opts, job)
 	})
 
 	return ctx.JSON(http.StatusAccepted, startImportResponse{

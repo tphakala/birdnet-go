@@ -93,6 +93,23 @@ func newTestStore(t *testing.T) datastore.Interface {
 	return store
 }
 
+// newDetectionRepo wraps a datastore in a DetectionRepository for test use.
+func newDetectionRepo(t *testing.T, store datastore.Interface) datastore.DetectionRepository {
+	t.Helper()
+	return datastore.NewDetectionRepository(store, time.UTC)
+}
+
+// newBirdNetPiSource opens a birdnetpi source from path and registers cleanup.
+func newBirdNetPiSource(t *testing.T, path string) (imports.Source, error) {
+	t.Helper()
+	src, err := birdnetpi.New(path)
+	if err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() { assert.NoError(t, src.Close()) })
+	return src, nil
+}
+
 // --- tests ---
 
 func TestValidate_NoDetectionsTable(t *testing.T) {
@@ -191,7 +208,7 @@ func TestImport_FieldMapping(t *testing.T) {
 		BatchSize:  100,
 	}
 
-	stats, err := engine.Run(t.Context(), src, opts, nil)
+	stats, err := engine.Run(t.Context(), src, &opts, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.Inserted)
 	assert.Equal(t, 0, stats.Errors)
@@ -239,7 +256,7 @@ func TestImport_SkipsUnparseableDate(t *testing.T) {
 	engine := imports.NewEngine(repo)
 	opts := imports.ImportOptions{SourceNode: imports.DefaultSourceNode, Location: time.UTC}
 
-	stats, err := engine.Run(t.Context(), src, opts, nil)
+	stats, err := engine.Run(t.Context(), src, &opts, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, stats.Inserted, "only the row with valid date should be inserted")
@@ -260,7 +277,7 @@ func TestImport_Idempotent(t *testing.T) {
 	src1, err := birdnetpi.New(path)
 	require.NoError(t, err)
 	engine1 := imports.NewEngine(repo)
-	stats1, err := engine1.Run(t.Context(), src1, opts, nil)
+	stats1, err := engine1.Run(t.Context(), src1, &opts, nil)
 	require.NoError(t, err)
 	require.NoError(t, src1.Close())
 	assert.Equal(t, 1, stats1.Inserted)
@@ -269,7 +286,7 @@ func TestImport_Idempotent(t *testing.T) {
 	src2, err := birdnetpi.New(path)
 	require.NoError(t, err)
 	engine2 := imports.NewEngine(repo)
-	stats2, err := engine2.Run(t.Context(), src2, opts, nil)
+	stats2, err := engine2.Run(t.Context(), src2, &opts, nil)
 	require.NoError(t, err)
 	require.NoError(t, src2.Close())
 	assert.Equal(t, 0, stats2.Inserted, "re-run must insert zero rows")
@@ -293,7 +310,7 @@ func TestImport_WithinSourceDuplicate(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
-	stats, err := engine.Run(t.Context(), src, opts, nil)
+	stats, err := engine.Run(t.Context(), src, &opts, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, stats.Inserted, "within-source duplicate must be inserted only once")
@@ -334,7 +351,7 @@ func TestImport_ContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, src.Close()) })
 
-	_, err = engine.Run(ctx, src, opts, nil)
+	_, err = engine.Run(ctx, src, &opts, nil)
 	assert.ErrorIs(t, err, context.Canceled, "cancelled import must return context error")
 }
 
@@ -368,7 +385,7 @@ func TestImport_Idempotent_TimezoneMismatch(t *testing.T) {
 	src1, err := birdnetpi.New(path)
 	require.NoError(t, err)
 	engine1 := imports.NewEngine(repo)
-	stats1, err := engine1.Run(t.Context(), src1, opts, nil)
+	stats1, err := engine1.Run(t.Context(), src1, &opts, nil)
 	require.NoError(t, err)
 	require.NoError(t, src1.Close())
 	require.Equal(t, 1, stats1.Inserted, "first run must insert the row")
@@ -377,7 +394,7 @@ func TestImport_Idempotent_TimezoneMismatch(t *testing.T) {
 	src2, err := birdnetpi.New(path)
 	require.NoError(t, err)
 	engine2 := imports.NewEngine(repo)
-	stats2, err := engine2.Run(t.Context(), src2, opts, nil)
+	stats2, err := engine2.Run(t.Context(), src2, &opts, nil)
 	require.NoError(t, err)
 	require.NoError(t, src2.Close())
 	assert.Equal(t, 0, stats2.Inserted, "re-run must insert zero rows even with non-UTC import location")
@@ -470,7 +487,7 @@ func TestImport_CancelDuringSave(t *testing.T) {
 	// processed before cancellation - no timing dependency.
 	reporter := &cancelOnFirstReport{cancel: cancel}
 
-	stats, err := engine.Run(ctx, src, opts, reporter)
+	stats, err := engine.Run(ctx, src, &opts, reporter)
 	require.ErrorIs(t, err, context.Canceled, "mid-import cancel must return context.Canceled")
 	assert.GreaterOrEqual(t, stats.Inserted, 1, "at least one row must have been inserted before cancel")
 	assert.Equal(t, 0, stats.Errors, "cancelled row must not be counted as a save error")

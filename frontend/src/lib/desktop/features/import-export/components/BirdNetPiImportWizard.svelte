@@ -10,7 +10,6 @@
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import ProgressBar from '$lib/desktop/components/ui/ProgressBar.svelte';
-  import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import { CheckCircle2, XCircle, AlertTriangle, ArrowLeft, ArrowRight } from '@lucide/svelte';
   import type {
@@ -47,6 +46,9 @@
 
   // Path input (relative to mount root)
   let sourcePath = $state('birdnet-pi/birds.db');
+
+  // Selected import mode
+  let selectedMode = $state<'db-only' | 'db-audio'>('db-only');
 
   // Progress / run state
   let jobId = $state<string | null>(null);
@@ -252,7 +254,7 @@
     errorMessage = null;
 
     const body: StartImportRequest = {
-      mode: 'db-only',
+      mode: selectedMode,
       source_path: sourcePath.trim(),
     };
 
@@ -528,7 +530,14 @@
           <label
             class="flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors border-[var(--color-primary)] bg-[color-mix(in_srgb,var(--color-primary)_5%,transparent)]"
           >
-            <input type="radio" name="import-mode" value="db-only" checked={true} class="mt-1" />
+            <input
+              type="radio"
+              name="import-mode"
+              value="db-only"
+              checked={selectedMode === 'db-only'}
+              onchange={() => (selectedMode = 'db-only')}
+              class="mt-1"
+            />
             <div>
               <span class="font-medium text-[var(--color-base-content)]"
                 >{t('system.importExport.mode.dbOnly.label')}</span
@@ -539,34 +548,26 @@
             </div>
           </label>
 
-          <!-- db-audio option (disabled) -->
+          <!-- db-audio option -->
           <label
-            class="flex items-start gap-3 p-4 rounded-lg border border-[var(--color-base-300)] opacity-60 cursor-not-allowed"
+            class="flex items-start gap-3 p-4 rounded-lg border border-[var(--color-base-300)] cursor-pointer hover:border-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_4%,transparent)] transition-colors"
           >
             <input
               type="radio"
               name="import-mode"
               value="db-audio"
-              disabled={true}
-              aria-describedby="db-audio-disabled-reason"
+              checked={selectedMode === 'db-audio'}
+              onchange={() => (selectedMode = 'db-audio')}
               class="mt-1"
             />
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-medium text-[var(--color-base-content)]/70"
+                <span class="font-medium text-[var(--color-base-content)]"
                   >{t('system.importExport.mode.dbAudio.label')}</span
                 >
-                <Badge
-                  variant="warning"
-                  size="xs"
-                  text={t('system.importExport.mode.dbAudio.badge')}
-                />
               </div>
-              <p class="text-sm text-[var(--color-base-content)]/50 mt-0.5">
+              <p class="text-sm text-[var(--color-base-content)]/70 mt-0.5">
                 {t('system.importExport.mode.dbAudio.description')}
-              </p>
-              <p id="db-audio-disabled-reason" class="text-xs text-[var(--color-warning)] mt-1">
-                {t('system.importExport.mode.dbAudio.disabledReason')}
               </p>
             </div>
           </label>
@@ -592,7 +593,9 @@
                 {t('system.importExport.confirm.mode')}:
               </dt>
               <dd class="text-sm text-[var(--color-base-content)]">
-                {t('system.importExport.mode.dbOnly.label')}
+                {selectedMode === 'db-audio'
+                  ? t('system.importExport.mode.dbAudio.label')
+                  : t('system.importExport.mode.dbOnly.label')}
               </dd>
             </div>
             <div class="flex gap-3">
