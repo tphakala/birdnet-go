@@ -519,6 +519,16 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid weather test request", http.StatusBadRequest)
 	}
 
+	// Restore redacted API keys before validation so the test runs against the
+	// real saved secret. The settings UI returns secrets as a redacted
+	// placeholder (redactedValue); if the user clicks Test without re-entering
+	// the key, the request carries that placeholder instead of the real key.
+	// Restoring here (and not only in the save flow) prevents the test from
+	// failing with a bogus "authentication failed".
+	current := c.currentSettings()
+	restoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
+	restoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
+
 	// Validate provider
 	if request.Provider == "" || request.Provider == "none" {
 		return c.HandleErrorWithKey(ctx, nil, "No weather provider selected", http.StatusBadRequest, notification.MsgErrIntegNoWeatherProvider, nil)
@@ -536,7 +546,7 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 	ctx.Response().WriteHeader(http.StatusOK)
 
 	// Clone current settings and override only Weather fields from the request
-	testSettings := conf.CloneSettings(c.currentSettings())
+	testSettings := conf.CloneSettings(current)
 	testSettings.Realtime.Weather = conf.WeatherSettings{
 		Provider:     request.Provider,
 		Debug:        request.Debug,
@@ -814,6 +824,13 @@ func (c *Controller) TestEBirdConnection(ctx echo.Context) error {
 	if err := ctx.Bind(&request); err != nil {
 		return c.HandleError(ctx, err, "Invalid eBird test request", http.StatusBadRequest)
 	}
+
+	// Restore the redacted API key before validation so the test runs against
+	// the real saved secret. The settings UI returns the key as a redacted
+	// placeholder (redactedValue); if the user clicks Test without re-entering
+	// it, the request carries that placeholder instead of the real key, which
+	// would otherwise fail authentication.
+	restoreRedactedSecret(c.currentSettings().Realtime.EBird.APIKey, &request.APIKey)
 
 	if !request.Enabled {
 		return ctx.JSON(http.StatusOK, map[string]any{

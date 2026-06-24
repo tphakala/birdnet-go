@@ -1816,6 +1816,21 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 	s.Notification.Push.Providers = providersCopy
 }
 
+// restoreRedactedSecret replaces a single incoming secret value with the
+// current (real) value when the incoming value is the redacted placeholder.
+// It is the canonical single-field restore primitive shared by the settings
+// save flow (restoreRedactedSecrets) and the integration test-connection
+// handlers, so both paths match the same sentinel against the same private
+// redactedValue constant and cannot drift apart.
+func restoreRedactedSecret(current string, incoming *string) {
+	if incoming == nil {
+		return
+	}
+	if *incoming == redactedValue {
+		*incoming = current
+	}
+}
+
 // restoreRedactedSecrets replaces redacted placeholder values in the incoming
 // settings with the current (real) values so that an update round-trip
 // (GET → modify → PUT) does not overwrite real secrets with the placeholder.
@@ -1828,9 +1843,7 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 // error is returned listing all affected fields.
 func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	restore := func(cur, inc *string) {
-		if *inc == redactedValue {
-			*inc = *cur
-		}
+		restoreRedactedSecret(*cur, inc)
 	}
 
 	// Security — defense-in-depth: restore even though SessionSecret is

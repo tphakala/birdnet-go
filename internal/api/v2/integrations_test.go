@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // Test constants for integration tests
@@ -743,5 +745,195 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		assert.False(t, result.Connected, "Connected should be false when MQTT connection fails")
 		assert.NotEmpty(t, result.LastError, "LastError should not be empty when connection fails")
 		assert.Contains(t, result.LastError, "error:connection:mqtt_broker", "Error should be properly formatted")
+	})
+}
+
+// redactedSecretPlaceholder is the sentinel the settings UI returns in place of
+// stored secrets; it aliases the production redactedValue constant so the tests
+// and the handlers agree on the exact value a client sends when the user has not
+// re-entered a secret.
+const redactedSecretPlaceholder = redactedValue
+
+// TestRestoreRedactedSecret verifies the canonical single-field restore
+// primitive shared by the settings save flow and the integration
+// test-connection handlers.
+func TestRestoreRedactedSecret(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		current  string
+		incoming string
+		want     string
+	}{
+		{
+			name:     "placeholder is restored to current real secret",
+			current:  "real-saved-key",
+			incoming: redactedSecretPlaceholder,
+			want:     "real-saved-key",
+		},
+		{
+			name:     "real incoming value is left untouched",
+			current:  "real-saved-key",
+			incoming: "user-typed-new-key",
+			want:     "user-typed-new-key",
+		},
+		{
+			name:     "empty incoming stays empty (not a placeholder)",
+			current:  "real-saved-key",
+			incoming: "",
+			want:     "",
+		},
+		{
+			name:     "placeholder with empty current resolves to empty",
+			current:  "",
+			incoming: redactedSecretPlaceholder,
+			want:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			incoming := tt.incoming
+			restoreRedactedSecret(tt.current, &incoming)
+			assert.Equal(t, tt.want, incoming)
+		})
+	}
+}
+
+// publishWeatherTestSettings sets the saved weather provider config the handler
+// reads via currentSettings() and returns the controller. It re-publishes the
+// settings so currentSettings() (which reads the global snapshot first) observes
+// the saved keys/endpoint.
+func publishWeatherTestSettings(t *testing.T, mutate func(*conf.Settings)) (*echo.Echo, *Controller) {
+	t.Helper()
+	e, _, controller := setupTestEnvironment(t)
+	settings := controller.Settings.Load()
+	mutate(settings)
+	publishTestSettings(t, settings)
+	return e, controller
+}
+
+// TestTestWeatherConnection_RestoresRedactedAPIKey verifies the weather
+// test-connection handler restores redacted API-key placeholders from the saved
+// settings before running the test, fixing the bug where clicking "Test" after
+// saving (without re-entering the key) failed with a bogus authentication error.
+func TestTestWeatherConnection_RestoresRedactedAPIKey(t *testing.T) {
+	// Negative path: a redacted placeholder with NO saved key must restore to
+	// the empty string and fail validation with "API key is required". On the
+	// buggy code (no restore) the non-empty placeholder slips past validation
+	// and the handler proceeds to stream, so this case fails on main.
+	t.Run("placeholder without saved key fails validation", func(t *testing.T) {
+		e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
+			s.Realtime.Weather.OpenWeather.APIKey = "" // nothing saved
+		})
+
+		body := fmt.Sprintf(`{"provider":%q,"openWeather":{"apiKey":%q}}`,
+			WeatherProviderOpenWeather, redactedSecretPlaceholder)
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/weather/test",
+			strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.TestWeatherConnection(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code,
+			"placeholder restored to empty key must fail the required-key validation")
+		assert.Contains(t, rec.Body.String(), "API key is required")
+	})
+
+	// Positive path (hermetic): with a real saved key, the handler's restore
+	// sequence must make the OpenWeather authentication stage send the REAL key
+	// (not the placeholder) to the API endpoint. We exercise the exact restore
+	// the handler runs and the production auth stage against a local server.
+	t.Run("placeholder is restored to real saved key at auth stage", func(t *testing.T) {
+		const realKey = "real-openweather-key-123"
+
+		var gotAppID string
+		var gotAppIDOnce sync.Once
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotAppIDOnce.Do(func() { gotAppID = r.URL.Query().Get("appid") })
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(server.Close)
+
+		_, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
+			s.Realtime.Weather.OpenWeather.APIKey = realKey
+			s.Realtime.Weather.OpenWeather.Endpoint = server.URL
+		})
+
+		// The client echoes back the saved provider config (endpoint included) but
+		// with the API key as the redacted placeholder, because the user did not
+		// re-type the key on the settings page.
+		request := WeatherTestRequest{
+			Provider: WeatherProviderOpenWeather,
+			OpenWeather: conf.OpenWeatherSettings{
+				APIKey:   redactedSecretPlaceholder,
+				Endpoint: server.URL,
+			},
+		}
+
+		// Reproduce the handler's restore sequence using the production helper.
+		current := controller.currentSettings()
+		restoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
+		restoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
+
+		testSettings := conf.CloneSettings(current)
+		testSettings.Realtime.Weather = conf.WeatherSettings{
+			Provider:     request.Provider,
+			OpenWeather:  request.OpenWeather,
+			Wunderground: request.Wunderground,
+		}
+
+		msg, err := controller.testWeatherAuthentication(t.Context(), testSettings)
+		require.NoError(t, err)
+		assert.Contains(t, msg, "Successfully authenticated")
+		assert.Equal(t, realKey, gotAppID,
+			"auth stage must use the real saved key, not the redacted placeholder")
+		assert.NotEqual(t, redactedSecretPlaceholder, gotAppID)
+	})
+}
+
+// TestTestEBirdConnection_RestoresRedactedAPIKey verifies the eBird
+// test-connection handler restores the redacted API-key placeholder from the
+// saved settings before running the test.
+func TestTestEBirdConnection_RestoresRedactedAPIKey(t *testing.T) {
+	// Negative path: placeholder with NO saved key restores to empty and fails
+	// the required-key validation. On the buggy code the non-empty placeholder
+	// passes validation, so this case fails on main.
+	t.Run("placeholder without saved key fails validation", func(t *testing.T) {
+		e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
+			s.Realtime.EBird.APIKey = "" // nothing saved
+		})
+
+		body := fmt.Sprintf(`{"enabled":true,"apiKey":%q,"locale":"en"}`, redactedSecretPlaceholder)
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/ebird/test",
+			strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.TestEBirdConnection(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code,
+			"placeholder restored to empty key must fail the required-key validation")
+		assert.Contains(t, rec.Body.String(), "API key is required")
+	})
+
+	// Positive path: with a real saved key, a placeholder request restores to the
+	// real key so the value handed to the auth stage is the real key.
+	t.Run("placeholder is restored to real saved key", func(t *testing.T) {
+		const realKey = "real-ebird-key-456"
+
+		_, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
+			s.Realtime.EBird.APIKey = realKey
+		})
+
+		apiKey := redactedSecretPlaceholder
+		restoreRedactedSecret(controller.currentSettings().Realtime.EBird.APIKey, &apiKey)
+		assert.Equal(t, realKey, apiKey,
+			"eBird test must use the real saved key, not the redacted placeholder")
 	})
 }
