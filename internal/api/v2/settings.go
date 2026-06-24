@@ -1828,6 +1828,9 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 // handlers, so both paths match the same sentinel against the same private
 // redactedValue constant and cannot drift apart.
 func restoreRedactedSecret(current string, incoming *string) {
+	if incoming == nil {
+		return
+	}
 	if *incoming == redactedValue {
 		*incoming = current
 	}
