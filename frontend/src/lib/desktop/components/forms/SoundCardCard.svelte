@@ -34,7 +34,10 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
-  import { fetchDeviceCapabilities as fetchCapabilities } from '$lib/utils/audio/sampleRate';
+  import {
+    fetchDeviceCapabilities as fetchCapabilities,
+    coerceSupportedRate,
+  } from '$lib/utils/audio/sampleRate';
   import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
@@ -117,7 +120,12 @@
   ]);
   let sampleRateVerified = $state(true);
   let sampleRateLoading = $state(false);
-  let fetchController: AbortController | null = $state(null);
+  // Plain (non-reactive) ref: the probe effect both reads (abort) and writes this
+  // controller in its synchronous prefix. As $state that read/write would register
+  // the controller as a dependency of the effect and immediately re-run it, whose
+  // cleanup then aborts the brand-new in-flight probe (issue #3593). It is only
+  // used imperatively for abort(), never in markup, so it must not be reactive.
+  let fetchController: AbortController | null = null;
 
   // Device display name lookup
   let deviceDisplayName = $derived(
@@ -236,16 +244,30 @@
   async function fetchDeviceCapabilities(deviceId: string) {
     if (!deviceId) return;
     fetchController?.abort();
-    fetchController = new AbortController();
+    const controller = new AbortController();
+    fetchController = controller;
     sampleRateLoading = true;
+    // Drop the previous device's probed rates so a slower probe cannot leave
+    // stale, unverified options on screen while the new one is in flight.
+    sampleRateOptions = [{ value: '48000', label: '48 kHz' }];
+    sampleRateVerified = true;
     try {
-      const result = await fetchCapabilities(deviceId, fetchController.signal);
+      const result = await fetchCapabilities(deviceId, controller.signal);
+      // Ignore a superseded probe: a newer device selection has replaced this
+      // controller, so applying these results (or clearing the loading flag)
+      // would clobber the newer probe's state.
+      if (fetchController !== controller) return;
       sampleRateOptions = result.options;
       sampleRateVerified = result.verified;
+      // Coerce the selection to a rate the new device actually supports so an
+      // unsupported rate is never persisted.
+      editSampleRate = coerceSupportedRate(result.options, editSampleRate);
     } catch {
       // Only AbortError reaches here (utility handles all other failures internally)
     } finally {
-      sampleRateLoading = false;
+      if (fetchController === controller) {
+        sampleRateLoading = false;
+      }
     }
   }
 
@@ -255,8 +277,13 @@
       prevEditDevice = editDevice;
       fetchDeviceCapabilities(editDevice);
     }
+    // Capture the controller this run started so the cleanup only aborts that
+    // probe. startEdit() starts a probe directly and then flips isEditing, which
+    // re-runs this effect; without the capture the cleanup would abort that
+    // just-started probe and the edit form would open stuck at 48 kHz (issue #3593).
+    const controllerToAbort = fetchController;
     return () => {
-      fetchController?.abort();
+      controllerToAbort?.abort();
     };
   });
 </script>
