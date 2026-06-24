@@ -68,7 +68,7 @@ This script streamlines the installation process on compatible Linux systems (De
   - Restart service: `sudo systemctl restart birdnet-go.service`
   - View logs: `journalctl -u birdnet-go.service -f`
 
-_(See [Systemd Service Details](#systemd-service-details) below for more information on the service configuration)_.
+_(See [Systemd Service Details](#systemd-service-details-installsh-method) below for more information on the service configuration)_.
 
 **Updating an `install.sh` Installation:**
 
@@ -166,7 +166,7 @@ This method does not use Docker but requires manual dependency installation.
 
 1.  **Download Binary:** Go to the [BirdNET-Go Releases page](https://github.com/tphakala/birdnet-go/releases) and download the pre-compiled binary suitable for your operating system (Linux, macOS, Windows) and architecture.
 2.  **Download TFLite Library:** Download the corresponding TensorFlow Lite C library from [tphakala/tflite_c Releases](https://github.com/tphakala/tflite_c/releases). Follow the installation instructions there (copying the `.so`, `.dylib`, or `.dll` file to the correct system path or the BirdNET-Go executable directory). Version `v2.17.1` or newer is recommended for best performance (XNNPACK support).
-3.  **(Optional) Install ONNX Runtime:** Required for BirdNET v3.0 models (currently in development preview). The release tarballs bundle the library. See the [ONNX Runtime Installation Guide](../ONNX-Runtime-Installation.md) for platform-specific instructions.
+3.  **(Optional) Install ONNX Runtime:** Required for BirdNET v3.0 models (currently in development preview). The release tarballs bundle the library. See the [ONNX Runtime Installation Guide](onnx-runtime-installation.md) for platform-specific instructions.
 4.  **Install Dependencies:**
     - **FFmpeg:** Required for RTSP stream capture, audio export to formats other than WAV (MP3, AAC, FLAC, Opus), and the [Live Audio Streaming](guide.md#live-audio-streaming) feature. Install using your system's package manager (e.g., `sudo apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS).
     - **SoX:** Required for rendering spectrograms in the web interface. Install using your system's package manager (e.g., `sudo apt install sox` on Debian/Ubuntu, `brew install sox` on macOS).

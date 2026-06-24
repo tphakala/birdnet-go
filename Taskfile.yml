@@ -181,6 +181,16 @@ tasks:
       - config.schema.json
       - doc/wiki/configuration-reference.md
 
+  # Preview the published wiki locally. The wiki-sync.yml workflow runs the same
+  # tool in CI and pushes the result to the GitHub wiki; this task only writes a
+  # local staging directory so you can inspect page names and rewritten links.
+  wiki-export:
+    desc: Render doc/wiki into a wiki-ready staging directory (default .wiki-staging)
+    cmds:
+      # Clean first so renamed or deleted pages do not leave stale output behind.
+      - rm -rf {{.OUT | default ".wiki-staging"}}
+      - go run ./cmd/wiki-export doc/wiki {{.OUT | default ".wiki-staging"}}
+
   native-target:
     cmds:
       - |

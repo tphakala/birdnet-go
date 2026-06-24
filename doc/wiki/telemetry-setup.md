@@ -250,7 +250,7 @@ You can test the system by temporarily causing a harmless error:
 
 ## Troubleshooting
 
-For telemetry-specific issues, see the [Troubleshooting Guide](telemetry-troubleshooting.md).
+For telemetry-specific issues, see the [telemetry FAQ](telemetry.md#frequently-asked-questions) or the general [FAQ](faq.md).
 
 ---
 
