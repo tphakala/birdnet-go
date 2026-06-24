@@ -73,19 +73,29 @@ func newFakeProvider(name string, enabled bool, types ...Type) *fakeProvider {
 }
 
 // installIsolatedService installs svc as the process-global notification service
-// for the duration of the test and restores the previous instance on cleanup.
-// Tests that exercise the dispatcher end to end need their own service because
-// dispatcher.start subscribes to the global singleton (via GetService), yet
-// SetServiceForTesting only sets that singleton when it is nil and never resets
-// it. Without isolation such tests share one service, cross-deliver each other's
+// for the duration of the test, then restores the previous instance and stops svc
+// on cleanup. Tests that exercise the dispatcher end to end need their own service
+// because dispatcher.start subscribes to the global singleton (via GetService).
+// Without isolation such tests share one service, cross-deliver each other's
 // notifications, and accumulate rate-limiter state across runs. Callers must not
 // run in parallel: they mutate the global singleton.
+//
+// Cleanups run in LIFO order, so the pointer is restored before svc is stopped:
+// this closes any window where a concurrent GetService caller could observe a
+// service that is shutting down. The caller owns svc's lifecycle, which is why
+// the previous instance is only swapped back (never stopped) on restore.
 func installIsolatedService(t *testing.T, svc *Service) {
 	t.Helper()
+	// Register svc.Stop first so it runs last (after the pointer is restored),
+	// and so the dispatcher goroutines this test created are torn down rather
+	// than relying on the package goleak gate to tolerate them.
+	t.Cleanup(svc.Stop)
+
 	mu.Lock()
 	prev := instance
 	instance = svc
 	mu.Unlock()
+	// Registered after svc.Stop, so this restore runs first (LIFO).
 	t.Cleanup(func() {
 		mu.Lock()
 		instance = prev

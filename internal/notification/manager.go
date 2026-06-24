@@ -3,8 +3,6 @@ package notification
 import (
 	"sync"
 	"sync/atomic"
-
-	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 var (
@@ -32,20 +30,6 @@ func GetService() *Service {
 	mu.RLock()
 	defer mu.RUnlock()
 	return instance
-}
-
-// SetServiceForTesting allows setting a custom service instance for testing only
-// It returns an error if the service is already initialized in production
-func SetServiceForTesting(service *Service) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if instance != nil {
-		return errors.Newf("notification service already initialized").Component("notification").Category(errors.CategoryState).Build()
-	}
-
-	instance = service
-	return nil
 }
 
 // MustGetService returns the service instance or panics if not initialized
