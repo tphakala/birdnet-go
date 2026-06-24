@@ -722,6 +722,14 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 	// Run FFmpeg (producer)
 	if err := ffmpegCmd.Run(); err != nil {
 		g.killSoxProcess(soxCmd, soxPid)
+		// Wait for Sox to exit before reading soxOutput below. soxCmd.Stderr is a
+		// *bytes.Buffer, so os/exec runs a background goroutine that copies Sox's
+		// stderr into that buffer until soxCmd.Wait() joins it. Reading the buffer
+		// before Wait() returns races that copier goroutine. Setting soxWaitDone
+		// also stops the deferred cleanup from waiting a second time.
+		soxKillTimeout := computeRemainingTimeout(ctx, soxWaitFallbackTimeout)
+		g.waitWithTimeout(soxCmd, soxKillTimeout)
+		soxWaitDone = true
 		g.log().Warn("FFmpeg|SoX pipeline failed (FFmpeg stage)",
 			logger.String("audio_path", audioPath),
 			logger.Int("width", width),
