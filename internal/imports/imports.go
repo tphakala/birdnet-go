@@ -336,7 +336,11 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 
 	missCount := 0
 	e.copyCandidateClips(ctx, opts, rows, tss, clipNames, &missCount)
-	if missCount > 0 {
+	// Only report the miss count for a batch that ran to completion. On cancellation
+	// copyCandidateClips stops launching copies early and the batch is discarded before
+	// any detection is saved, so a partial miss count would understate reality and
+	// mislead; the separate "import cancelled" log is the accurate signal in that case.
+	if missCount > 0 && ctx.Err() == nil {
 		e.log.Info("some audio clips could not be copied",
 			logger.Int("miss_count", missCount),
 			logger.Int("batch_size", len(rows)))
