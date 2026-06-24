@@ -19,6 +19,7 @@ package processor
 import (
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -648,53 +649,80 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 	})
 }
 
-// TestRaceCondition_ProposedSolutionValidation demonstrates how sequential execution would solve the issue
+// Action delays used by TestRaceCondition_ProposedSolutionValidation. Under
+// testing/synctest the fake clock advances by exactly these durations, so the
+// measured wall-clock deltas are deterministic (no scheduling slack).
+const (
+	// proposedSolutionDBDelay is the time the simulated database action spends
+	// "writing" before it completes.
+	proposedSolutionDBDelay = 200 * time.Millisecond
+	// proposedSolutionSSEDelay is the time the simulated SSE action spends
+	// before it completes. It is shorter than the DB delay because SSE only
+	// broadcasts once the database record is ready.
+	proposedSolutionSSEDelay = 50 * time.Millisecond
+)
+
+// TestRaceCondition_ProposedSolutionValidation demonstrates how sequential execution would solve the issue.
+//
+// The test runs inside testing/synctest so the action delays are driven by a
+// virtual clock. This makes the timing assertions exact and deterministic
+// instead of relying on a hardcoded wall-clock ceiling, which previously flaked
+// under CPU contention (issue #1225): a real 50ms timer measured against a
+// 100ms bound left too little scheduling slack and tripped on loaded runners.
 func TestRaceCondition_ProposedSolutionValidation(t *testing.T) {
 	t.Parallel()
 
-	// This test shows how enforcing sequential execution would prevent race conditions
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // synctest callback, not a test helper
+		// This test shows how enforcing sequential execution would prevent race conditions
 
-	dbAction := &SimpleAction{
-		name:         "Database Action",
-		executeDelay: 200 * time.Millisecond,
-	}
+		dbAction := &SimpleAction{
+			name:         "Database Action",
+			executeDelay: proposedSolutionDBDelay,
+		}
 
-	sseAction := &SimpleAction{
-		name:         "SSE Action",
-		executeDelay: 50 * time.Millisecond,
-	}
+		sseAction := &SimpleAction{
+			name:         "SSE Action",
+			executeDelay: proposedSolutionSSEDelay,
+		}
 
-	detection := createSimpleDetection()
+		detection := createSimpleDetection()
 
-	// Sequential execution (proposed solution)
-	startTime := time.Now()
+		// Sequential execution (proposed solution)
+		startTime := time.Now()
 
-	// Step 1: Execute database action first
-	err1 := dbAction.Execute(t.Context(), detection)
-	dbCompleteTime := time.Now()
+		// Step 1: Execute database action first
+		err1 := dbAction.Execute(t.Context(), detection)
+		dbCompleteTime := time.Now()
 
-	// Step 2: Execute SSE action only after database completes
-	err2 := sseAction.Execute(t.Context(), detection)
-	sseCompleteTime := time.Now()
+		// Step 2: Execute SSE action only after database completes
+		err2 := sseAction.Execute(t.Context(), detection)
+		sseCompleteTime := time.Now()
 
-	require.NoError(t, err1, "Database action failed")
-	require.NoError(t, err2, "SSE action failed")
+		require.NoError(t, err1, "Database action failed")
+		require.NoError(t, err2, "SSE action failed")
 
-	// Analyze sequential timing
-	dbDuration := dbCompleteTime.Sub(startTime)
-	sseDuration := sseCompleteTime.Sub(dbCompleteTime)
-	totalDuration := sseCompleteTime.Sub(startTime)
+		// Analyze sequential timing
+		dbDuration := dbCompleteTime.Sub(startTime)
+		sseDuration := sseCompleteTime.Sub(dbCompleteTime)
+		totalDuration := sseCompleteTime.Sub(startTime)
 
-	t.Logf("Sequential execution results:")
-	t.Logf("  Database action: %v", dbDuration)
-	t.Logf("  SSE action: %v", sseDuration)
-	t.Logf("  Total duration: %v", totalDuration)
+		t.Logf("Sequential execution results:")
+		t.Logf("  Database action: %v", dbDuration)
+		t.Logf("  SSE action: %v", sseDuration)
+		t.Logf("  Total duration: %v", totalDuration)
 
-	// Verify sequential characteristics
-	assert.GreaterOrEqual(t, dbDuration, 150*time.Millisecond, "Database action completed too quickly")
-	assert.LessOrEqual(t, sseDuration, 100*time.Millisecond, "SSE action took too long (should be fast when DB is ready)")
+		// Verify sequential characteristics. Under synctest the virtual clock
+		// advances by exactly the configured delay for each step, so the
+		// durations are exact: the database action takes its full delay, and the
+		// SSE action only waits its own (shorter) delay. If the SSE action had
+		// blocked on the database work the SSE duration would be larger.
+		assert.Equal(t, proposedSolutionDBDelay, dbDuration, "Database action should take its full configured delay")
+		assert.Equal(t, proposedSolutionSSEDelay, sseDuration, "SSE action should only wait its own delay when DB is already complete")
+		// Explicit ordering: SSE runs strictly after the database action completes.
+		assert.True(t, sseCompleteTime.After(dbCompleteTime), "SSE action should complete after the database action")
 
-	t.Logf("✓ Sequential execution prevents race condition")
-	t.Logf("✓ SSE action executes quickly when database operation is complete")
-	t.Logf("✓ No timeouts or 'note not found' errors would occur")
+		t.Logf("✓ Sequential execution prevents race condition")
+		t.Logf("✓ SSE action executes quickly when database operation is complete")
+		t.Logf("✓ No timeouts or 'note not found' errors would occur")
+	})
 }
