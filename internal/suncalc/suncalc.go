@@ -95,13 +95,15 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		return entry.times, nil
 	}
 
-	// Double-check under write lock: another goroutine may have populated
-	// the cache between the RLock check and now. This reduces (but does
+	// Double-check under a read lock: another goroutine may have populated
+	// the cache between the first RLock check and now. This reduces (but does
 	// not fully eliminate) redundant calculations under high concurrency,
-	// which is acceptable since calculateSunEventTimes is pure math.
-	sc.lock.Lock()
+	// which is acceptable since calculateSunEventTimes is pure math. A read
+	// lock suffices here because this branch only reads; the authoritative
+	// insert double-check in the store path below runs under the write lock.
+	sc.lock.RLock()
 	if entry, ok := sc.cache[dateKey]; ok {
-		sc.lock.Unlock()
+		sc.lock.RUnlock()
 		if m != nil {
 			m.RecordSunCalcCacheHit("get_sun_events")
 			m.RecordSunCalcOperation("get_sun_events", "success")
@@ -109,7 +111,7 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		}
 		return entry.times, nil
 	}
-	sc.lock.Unlock()
+	sc.lock.RUnlock()
 
 	// Record cache miss only after the double-check confirms it
 	if m != nil {

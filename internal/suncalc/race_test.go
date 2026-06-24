@@ -39,15 +39,21 @@ func TestMetricsRaceUnderConcurrency(t *testing.T) {
 	)
 
 	baseDate := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	deadline := time.Now().Add(duration)
 
 	var wg sync.WaitGroup
+	// Release all goroutines together and start each one's deadline only after
+	// it begins, so a slow CI worker cannot let the window elapse before the
+	// goroutines are even scheduled (which would let them run zero iterations
+	// and pass vacuously).
+	start := make(chan struct{})
 
 	// Readers: hammer GetSunEventTimes across many dates (mix of hits and
 	// misses) so every metrics access path is exercised.
 	for r := range readers {
 		seed := r
 		wg.Go(func() {
+			<-start
+			deadline := time.Now().Add(duration)
 			i := seed
 			for time.Now().Before(deadline) {
 				d := baseDate.AddDate(0, 0, i%500)
@@ -62,6 +68,8 @@ func TestMetricsRaceUnderConcurrency(t *testing.T) {
 	for f := range flippers {
 		seed := f
 		wg.Go(func() {
+			<-start
+			deadline := time.Now().Add(duration)
 			i := seed
 			for time.Now().Before(deadline) {
 				if i%2 == 0 {
@@ -74,6 +82,7 @@ func TestMetricsRaceUnderConcurrency(t *testing.T) {
 		})
 	}
 
+	close(start)
 	wg.Wait()
 
 	// Leave metrics set so a final sanity call works.
