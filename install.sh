@@ -178,7 +178,9 @@ set_config_value() {
     [ -f "$file" ] || return 1
     local escaped
     escaped=$(sed_escape_replacement "$value")
-    sed -i -E "/^${block}:/,/^[A-Za-z0-9_]/ s|^([[:space:]]*${key}:[[:space:]]*).*|\\1${escaped}|" -- "$file"
+    # Anchor to exactly two leading spaces (the indentation of a direct child of a top-level
+    # block) so a same-named key in a deeper nested block is never overwritten.
+    sed -i -E "/^${block}:/,/^[A-Za-z0-9_]/ s|^([[:space:]]{2}${key}:[[:space:]]*).*|\\1${escaped}|" -- "$file"
 }
 
 # Re-run-safe update of the first audio source's device id and friendly name, scoped to the
@@ -195,27 +197,28 @@ set_first_audio_source() {
     # currently RTSP-only with the sound-card source commented out), report a no-op so the
     # caller can warn instead of the sed silently changing nothing while exit 0 looks like
     # success.
-    if ! sed -n '/^[[:space:]]\{4\}sources:/,/^[[:space:]]\{4\}[A-Za-z]/p' "$file" | grep -qE '^[[:space:]]+device:[[:space:]]'; then
+    if ! sed -n '/^[[:space:]]\{4\}sources:/,/^[[:space:]]\{4\}[A-Za-z]/p' "$file" | grep -qE '^[[:space:]]+(-[[:space:]]+)?device:[[:space:]]'; then
         return 1
     fi
     # Edit ONLY the first source item, not every entry in the sources block, so a
-    # multi-source config (e.g. extra sources added via the web UI) is not clobbered.
+    # multi-source config (e.g. extra sources added via the web UI) is not clobbered. The
+    # item boundary is the list dash (`- `), and the name/device fields are matched with an
+    # optional leading dash so the edit works regardless of which field comes first.
     # device/name are passed as literal awk variables, so sed/regex metacharacters in a
     # device name need no escaping here. Write to a temp file then copy back over the
     # original so its ownership and permissions are preserved.
     if awk -v device="$device" -v name="$name" '
         /^    sources:/ { in_sources=1; print; next }
         in_sources && /^    [A-Za-z]/ { in_sources=0 }
-        in_sources && /^[[:space:]]*- name:/ {
-            item++
-            if (item == 1) {
-                match($0, /^[[:space:]]*- name:[[:space:]]*/)
-                print substr($0, 1, RLENGTH) "\"" name "\""
-                next
-            }
+        in_sources && /^[[:space:]]*-[[:space:]]/ { item++ }
+        in_sources && item == 1 && !name_done && /^[[:space:]]*(-[[:space:]]+)?name:/ {
+            match($0, /^[[:space:]]*(-[[:space:]]+)?name:[[:space:]]*/)
+            print substr($0, 1, RLENGTH) "\"" name "\""
+            name_done = 1
+            next
         }
-        in_sources && item == 1 && !device_done && /^[[:space:]]*device:/ {
-            match($0, /^[[:space:]]*device:[[:space:]]*/)
+        in_sources && item == 1 && !device_done && /^[[:space:]]*(-[[:space:]]+)?device:/ {
+            match($0, /^[[:space:]]*(-[[:space:]]+)?device:[[:space:]]*/)
             print substr($0, 1, RLENGTH) "\"" device "\""
             device_done = 1
             next
@@ -4071,7 +4074,11 @@ configure_web_port() {
         print_message "BirdNET-Go's dashboard will be reachable on this host port (default 8080)." "$YELLOW"
         while true; do
             print_message "❓ Web interface port [${WEB_PORT}]: " "$YELLOW" "nonewline"
-            read -r port_input
+            if ! read -r port_input; then
+                # EOF (stdin exhausted): keep the current default rather than looping forever.
+                print_message "\nNo input; using port $WEB_PORT." "$YELLOW"
+                break
+            fi
             [ -z "$port_input" ] && port_input="$WEB_PORT"
             if ! [[ "$port_input" =~ ^[0-9]+$ ]] || [ "$port_input" -lt 1 ] || [ "$port_input" -gt 65535 ]; then
                 print_message "❌ Invalid port. Enter a number between 1 and 65535." "$RED"
@@ -4839,7 +4846,9 @@ EOF
         local verify_out verify_rc
         verify_out=$(systemd-analyze verify /etc/systemd/system/birdnet-go.service 2>&1)
         verify_rc=$?
-        if [ "$verify_rc" -ne 0 ]; then
+        # In minimal chroots/containers systemd-analyze cannot reach the system bus and exits
+        # non-zero with a bus-connection error even for a valid unit; do not warn on that.
+        if [ "$verify_rc" -ne 0 ] && ! echo "$verify_out" | grep -qiE "Failed to connect to bus|Connection refused|No such file or directory.*bus"; then
             log_message "WARN" "systemd-analyze verify reported errors (rc=$verify_rc): $verify_out"
             print_message "⚠️ systemd reported problems with the generated service unit:" "$YELLOW"
             print_message "$verify_out" "$YELLOW"
