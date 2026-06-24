@@ -1,10 +1,10 @@
 package spectrogram
 
 // FrequencyProfile controls spectrogram frequency range and resampling per
-// detection. The gate is the detection's model type: bat models keep the native
-// sample rate with no resampling and no filtering, so the entire recorded
-// frequency range is rendered; everything else gets bird defaults (resample to
-// 24 kHz).
+// detection. The gate is the detection's model type: bat models are resampled
+// to batResampleHz (Nyquist = 128 kHz) so the fixed 0–128 kHz axis in the UI
+// is always accurate regardless of the original capture rate; everything else
+// gets bird defaults (resample to birdResampleHz).
 type FrequencyProfile struct {
 	ResampleRate int    // Target sample rate in Hz; 0 means keep native rate
 	suffix       string // Cache-filename token identifying the profile; "" for the default bird render
@@ -12,6 +12,7 @@ type FrequencyProfile struct {
 
 const (
 	birdResampleHz  = 24000
+	batResampleHz   = 256000 // Nyquist = 128 kHz; matches the fixed 0–128 kHz overlay axis
 	modelTypeBatStr = "bat"
 )
 
@@ -22,13 +23,14 @@ func BirdProfile() FrequencyProfile {
 	}
 }
 
-// BatProfile returns the frequency profile for bat detections. Bat audio is
-// captured at a high native sample rate; the spectrogram keeps that rate (no
-// resampling) and applies no high-pass filter, so the entire recorded band -
-// including low-frequency bat calls - is rendered.
+// BatProfile returns the frequency profile for bat detections. The audio is
+// resampled to batResampleHz (256 kHz, Nyquist = 128 kHz) so the spectrogram
+// always spans the full 0–128 kHz range that the UI axis hardcodes,
+// regardless of the original capture rate (192/256/384 kHz are all supported).
 func BatProfile() FrequencyProfile {
 	return FrequencyProfile{
-		suffix: modelTypeBatStr,
+		ResampleRate: batResampleHz,
+		suffix:       modelTypeBatStr,
 	}
 }
 

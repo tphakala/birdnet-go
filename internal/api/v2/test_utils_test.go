@@ -200,6 +200,11 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 		close(controlChan)
 	})
 
+	// Default fallback for GetNoteModelType so list-endpoint tests don't need to
+	// set up per-note expectations. Tests that need a specific return value can
+	// override this by registering their own expectation before calling the handler.
+	mockDS.On("GetNoteModelType", mock.AnythingOfType("string")).Return("bird", nil).Maybe()
+
 	return e, mockDS, controller
 }
 

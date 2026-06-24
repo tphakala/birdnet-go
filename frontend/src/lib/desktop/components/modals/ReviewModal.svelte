@@ -216,6 +216,7 @@
               className="w-full mx-auto"
               enableClipExtraction={clipExtractionEnabled}
               clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
+              modelType={detection.modelType}
             />
           </div>
         </div>
@@ -347,7 +348,8 @@
                   id="comment-textarea"
                   bind:value={comment}
                   class="textarea h-24 w-full"
-                  placeholder={t('common.review.form.commentPlaceholder')}></textarea>
+                  placeholder={t('common.review.form.commentPlaceholder')}
+                ></textarea>
               </div>
             {/if}
           </div>

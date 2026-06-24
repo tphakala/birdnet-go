@@ -749,6 +749,10 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 	detection.Verified = c.mapVerificationStatus(note.Verified)
 	detection.Comments = extractNoteComments(note.Comments)
 
+	if modelType, mtErr := c.DS.GetNoteModelType(fmt.Sprintf("%d", note.ID)); mtErr == nil {
+		detection.ModelType = modelType
+	}
+
 	if includeWeather {
 		c.populateWeatherData(&detection, note, weatherCache)
 	}
@@ -1226,17 +1230,6 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 	detection := c.noteToDetectionResponse(&note, true, weatherCache)
-	// Resolve the model type so the UI can render the correct spectrogram frequency
-	// range (bat detections span a much wider band than birds). Best-effort: an error
-	// leaves it empty and the UI falls back to the default bird range. Done only here
-	// (single-detection) to avoid a per-row lookup on list endpoints.
-	if modelType, mtErr := c.DS.GetNoteModelType(id); mtErr == nil {
-		detection.ModelType = modelType
-	} else {
-		c.logWarnIfEnabled("GetNoteModelType failed, omitting detection model type",
-			logger.String("note_id", id),
-			logger.Error(mtErr))
-	}
 	if !c.isClientAuthenticated(ctx) {
 		detection.Source = nil
 	}

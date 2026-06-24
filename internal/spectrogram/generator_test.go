@@ -841,7 +841,8 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 }
 
 // TestGetSoxSpectrogramArgs_BatProfile verifies that the bat frequency profile
-// keeps the native sample rate: no resampling and no high-pass filter.
+// resamples to 256 kHz (Nyquist = 128 kHz) so the fixed 0–128 kHz UI axis is
+// always accurate, regardless of the original capture rate.
 func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.Export.Length = 15
@@ -853,9 +854,10 @@ func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
 
 	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BatProfile())
 
-	// Bat profile: native-rate render - no high-pass filter and no resampling.
+	// Bat profile: resampled to 256 kHz – no sinc filter.
 	assert.NotContains(t, args, "sinc", "bat profile should not apply a high-pass filter")
-	assert.NotContains(t, args, "rate", "bat profile should not resample")
+	assert.Contains(t, args, "rate", "bat profile should resample to 256 kHz")
+	assert.Contains(t, args, "256000", "bat profile should resample to 256000 Hz")
 }
 
 // TestGetSoxSpectrogramArgs_BirdProfile verifies that the bird frequency profile
@@ -878,7 +880,7 @@ func TestGetSoxSpectrogramArgs_BirdProfile(t *testing.T) {
 }
 
 // TestProfileForModelType verifies model type to frequency profile mapping.
-// Bat models resolve to the bat profile (native rate: no resample);
+// Bat models resolve to the bat profile (256 kHz resample);
 // every other model type falls back to bird defaults.
 func TestProfileForModelType(t *testing.T) {
 	t.Parallel()
@@ -890,7 +892,7 @@ func TestProfileForModelType(t *testing.T) {
 		wantSuffix   string
 	}{
 		{"bird model", "bird", 24000, ""},
-		{"bat model uses bat profile", "bat", 0, "bat"},
+		{"bat model uses bat profile", "bat", 256000, "bat"},
 		{"multi model defaults to bird", "multi", 24000, ""},
 		{"empty defaults to bird", "", 24000, ""},
 	}
