@@ -1486,6 +1486,38 @@ func TestIgnoreSpecies(t *testing.T) {
 		assert.False(t, removeResponse.IsExcluded)
 	})
 
+	t.Run("Localized species name", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
+
+		// Setup a mock translation
+		controller.UpdateCommonNameMap([]string{"Bubo bubo_Huuhkaja"})
+
+		// Add species using localized name
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "Huuhkaja"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.IgnoreSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response IgnoreSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		
+		// The endpoint should have resolved to the scientific name
+		assert.Equal(t, "Bubo bubo", response.CommonName)
+		assert.Equal(t, "added", response.Action)
+		assert.True(t, response.IsExcluded)
+		
+		// Verify the underlying settings were updated with the scientific name
+		settings := controller.Settings.Load()
+		assert.Contains(t, settings.Realtime.Species.Exclude, "Bubo bubo")
+	})
+
 	t.Run("Multiple toggle operations", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 		clearExcludedSpeciesList(t, controller.Settings.Load())

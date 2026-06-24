@@ -1550,6 +1550,10 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Missing species name", http.StatusBadRequest)
 	}
 
+	if resolved, hit := c.resolveSpeciesToScientific(req.CommonName); hit {
+		req.CommonName = resolved
+	}
+
 	// Toggle the species in ignored list
 	action, isExcluded, err := c.toggleSpeciesInIgnoredList(req.CommonName)
 	if err != nil {
