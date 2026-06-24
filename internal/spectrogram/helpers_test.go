@@ -213,6 +213,18 @@ func requireSoxAvailable(t *testing.T) string {
 	return soxPath
 }
 
+// requireFFmpegAvailable checks if FFmpeg is available in PATH.
+// Skips the test if FFmpeg is not found, otherwise returns the FFmpeg path.
+func requireFFmpegAvailable(t *testing.T) string {
+	t.Helper()
+
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("FFmpeg binary not found in PATH; skipping integration test")
+	}
+	return ffmpegPath
+}
+
 // integrationTestEnv extends testEnv with integration-specific fields
 type integrationTestEnv struct {
 	*testEnv
