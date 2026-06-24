@@ -313,7 +313,7 @@ func TestAutoTLS_DualListeners_RedirectStatus(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
 		if s.httpRedirectServer != nil {
@@ -419,7 +419,7 @@ func TestAutoTLS_RedirectDisabled_ServesApp(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
 		if s.httpRedirectServer != nil {

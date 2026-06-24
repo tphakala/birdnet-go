@@ -647,16 +647,7 @@ func (s *Server) startBlocking() error {
 		if !s.config.RedirectToHTTPS {
 			httpFallback = s.echo
 		} else if s.config.TLSPort != "443" {
-			tlsPort := s.config.TLSPort
-			httpFallback = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				host := r.Host
-				if h, _, err := net.SplitHostPort(host); err == nil {
-					host = h
-				}
-				host = strings.TrimRight(strings.TrimLeft(host, "["), "]")
-				target := "https://" + net.JoinHostPort(host, tlsPort) + r.URL.RequestURI()
-				http.Redirect(w, r, target, http.StatusPermanentRedirect)
-			})
+			httpFallback = httpsRedirectHandler(s.config.TLSPort)
 		}
 		s.httpRedirectServer = &http.Server{
 			Addr:         addr,
@@ -785,16 +776,12 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 	return nil
 }
 
-// newHTTPRedirectServer creates an HTTP server that redirects all requests to HTTPS.
-// The server is created synchronously to avoid a race between assignment and shutdown.
-func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
-	if tlsPort == "" {
-		tlsPort = "8443"
-	}
-
-	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// httpsRedirectHandler returns an http.Handler that 308-redirects requests to
+// HTTPS on the given tlsPort. IPv6 addresses are handled correctly.
+func httpsRedirectHandler(tlsPort string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := r.Host
-		if h, _, err := net.SplitHostPort(r.Host); err == nil {
+		if h, _, err := net.SplitHostPort(host); err == nil {
 			host = h
 		}
 		host = strings.TrimRight(strings.TrimLeft(host, "["), "]")
@@ -810,10 +797,18 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 		target := "https://" + hostPort + r.URL.RequestURI()
 		http.Redirect(w, r, target, http.StatusPermanentRedirect)
 	})
+}
+
+// newHTTPRedirectServer creates an HTTP server that redirects all requests to HTTPS.
+// The server is created synchronously to avoid a race between assignment and shutdown.
+func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
+	if tlsPort == "" {
+		tlsPort = "8443"
+	}
 
 	return &http.Server{
 		Addr:         httpAddr,
-		Handler:      redirectHandler,
+		Handler:      httpsRedirectHandler(tlsPort),
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
