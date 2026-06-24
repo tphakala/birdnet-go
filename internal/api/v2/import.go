@@ -268,6 +268,19 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "source validation failed", http.StatusBadRequest)
 	}
 
+	// For db-audio mode, resolve the export path before reserving the import slot
+	// so an unconfigured path returns 400 without occupying the slot.
+	var clipExportPath string
+	if req.Mode == importModeDBaudio {
+		if settings := c.currentSettings(); settings != nil {
+			clipExportPath = settings.Realtime.Audio.Export.Path
+		}
+		if clipExportPath == "" {
+			_ = src.Close()
+			return c.HandleError(ctx, nil, "audio export path is not configured; set the audio export path to import audio", http.StatusBadRequest)
+		}
+	}
+
 	// Reserve the single import slot.
 	id := generateCorrelationID()
 	parent := c.ctx
@@ -288,13 +301,9 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		Location:   loc,
 	}
 	if req.Mode == importModeDBaudio {
-		exportPath := ""
-		if settings := c.currentSettings(); settings != nil {
-			exportPath = settings.Realtime.Audio.Export.Path
-		}
 		opts.IncludeAudio = true
 		opts.AudioSourceDir = filepath.Dir(resolvedPath)
-		opts.ClipExportPath = exportPath
+		opts.ClipExportPath = clipExportPath
 	}
 	eng := imports.NewEngine(c.Repo)
 	c.wg.Go(func() {

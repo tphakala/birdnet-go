@@ -77,6 +77,15 @@ func resolveSourceClipPath(audioSourceDir, date, comName, fileName string) (stri
 		return "", false
 	}
 	if _, err := os.Stat(exact); err == nil {
+		if resolved, resolveErr := filepath.EvalSymlinks(exact); resolveErr == nil {
+			srcRoot, rootErr := filepath.EvalSymlinks(audioSourceDir)
+			if rootErr != nil {
+				srcRoot = audioSourceDir
+			}
+			if !isWithinDir(srcRoot, resolved) {
+				return "", false
+			}
+		}
 		return exact, true
 	}
 
@@ -96,6 +105,15 @@ func resolveSourceClipPath(audioSourceDir, date, comName, fileName string) (stri
 		return "", false
 	}
 	if _, err := os.Stat(fallbackPath); err == nil {
+		if resolved, resolveErr := filepath.EvalSymlinks(fallbackPath); resolveErr == nil {
+			srcRoot, rootErr := filepath.EvalSymlinks(audioSourceDir)
+			if rootErr != nil {
+				srcRoot = audioSourceDir
+			}
+			if !isWithinDir(srcRoot, resolved) {
+				return "", false
+			}
+		}
 		return fallbackPath, true
 	}
 

@@ -305,6 +305,12 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
 		return &fakeSource{batches: [][]imports.SourceDetection{{det}}}, nil
 	}
 
+	// db-audio mode now requires a configured export path; provide one so the
+	// handler accepts the request instead of returning 400.
+	settings := newValidTestSettings()
+	settings.Realtime.Audio.Export.Path = t.TempDir()
+	c.Settings.Store(settings)
+
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
 	c.importSourceRoot = dir
@@ -324,6 +330,61 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.NotEmpty(t, resp.JobID)
 	assert.Equal(t, importStatusStarted, resp.Status)
+}
+
+// TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400 verifies that db-audio mode
+// is rejected with 400 when the audio export path is not configured. Without this guard the
+// import would start, copy no audio (the engine skips audio when ClipExportPath is empty),
+// and silently produce detections with no clips, masking a misconfiguration.
+func TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t,
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
+
+	_, c := newImportController(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	c.Repo = mocks.NewMockDetectionRepository(t)
+
+	// Settings with an empty export path (newValidTestSettings leaves it unset).
+	c.Settings.Store(newValidTestSettings())
+
+	det := imports.SourceDetection{
+		Date: "2024-01-01", Time: "10:00:00",
+		ScientificName: "Parus major", CommonName: "Great Tit",
+		Confidence: 0.9,
+	}
+	c.importSourceFactory = func(_ string) (imports.Source, error) {
+		return &fakeSource{batches: [][]imports.SourceDetection{{det}}}, nil
+	}
+
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
+	c.importSourceRoot = dir
+
+	body := `{"mode":"db-audio","source_path":"birds.db"}`
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := c.StartBirdNETPiImport(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "db-audio without an export path must be rejected")
+
+	// No import slot may have been reserved: a subsequent status check must report idle.
+	statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	statusRec := httptest.NewRecorder()
+	statusCtx := echo.New().NewContext(statusReq, statusRec)
+	require.NoError(t, c.GetImportStatus(statusCtx))
+	var status importStatusResponse
+	require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &status))
+	assert.False(t, status.Running, "rejected db-audio request must not occupy the import slot")
 }
 
 // makeTempDBWithRow creates a temporary BirdNET-Pi SQLite file in dir with a single
