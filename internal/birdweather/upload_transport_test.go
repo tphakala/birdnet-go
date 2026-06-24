@@ -66,11 +66,15 @@ func TestBwClientClose_ConcurrentReadNoRace(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
+	const (
+		concurrentHTTPClientReaders = 8
+		httpClientReadIterations    = 200
+	)
 	// Readers mimic upload goroutines that obtained *BwClient and dereference
 	// its HTTPClient field without holding any lock.
-	for range 8 {
+	for range concurrentHTTPClientReaders {
 		wg.Go(func() {
-			for range 200 {
+			for range httpClientReadIterations {
 				_ = b.HTTPClient
 			}
 		})

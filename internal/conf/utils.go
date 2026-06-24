@@ -709,14 +709,21 @@ func GetSoxFormats(soxPath string) []string {
 	return nil
 }
 
+// redactedToolPath replaces a contaminated tool path in logs and error messages.
+// A Home Assistant ingress path embeds a credential token
+// (e.g. "/api/hassio_ingress/<token>/usr/bin/ffmpeg"), so the raw path must never
+// reach logs or support dumps.
+const redactedToolPath = "[redacted contaminated path]"
+
 // rePathContamination matches URL-like segments (e.g. "/api/", "/ingress/",
 // "/proxy/", "/hassio/") that indicate an external tool path has been
 // contaminated by a reverse-proxy or ingress prefix rather than being a clean
 // filesystem path. A real binary path on disk never contains these. Home
 // Assistant add-ons in particular can resolve a tool path to
 // "/api/hassio_ingress/<token>/usr/bin/ffmpeg", which is not a usable
-// executable and fails every invocation.
-var rePathContamination = regexp.MustCompile(`(?i)/(?:api|ingress|proxy|hassio)/`)
+// executable and fails every invocation. Both separators are matched so the
+// check is robust on Windows (backslash) as well as POSIX (forward slash).
+var rePathContamination = regexp.MustCompile(`(?i)[/\\](?:api|ingress|proxy|hassio)[/\\]`)
 
 // IsContaminatedToolPath reports whether an external tool path looks like it was
 // contaminated by a reverse-proxy or ingress URL prefix. It is the single source
@@ -735,6 +742,10 @@ func isExecutableFile(path string) bool {
 // ValidateToolPath checks if a tool is available, either at an explicit path or in the system PATH.
 // It returns the validated path to the tool if found, or an empty string and an error otherwise.
 func ValidateToolPath(configuredPath, toolName string) (string, error) {
+	// pathForMessage is what we surface in logs and errors. It mirrors
+	// configuredPath except for a contaminated path, which is redacted because it
+	// can embed an ingress credential token.
+	pathForMessage := configuredPath
 	if configuredPath != "" {
 		switch {
 		case IsContaminatedToolPath(configuredPath):
@@ -742,9 +753,10 @@ func ValidateToolPath(configuredPath, toolName string) (string, error) {
 			// Assistant add-ons the supervisor can make a path like
 			// "/api/hassio_ingress/<token>/usr/bin/ffmpeg" stat-succeed even
 			// though it is not a usable executable, so the bad path would
-			// otherwise be stored in settings and fail on every invocation.
+			// otherwise be stored in settings and fail on every invocation. Do
+			// not log the path itself; it embeds a credential token.
+			pathForMessage = redactedToolPath
 			GetLogger().Warn("Configured tool path appears contaminated by a proxy/ingress prefix; ignoring it and checking system PATH",
-				logger.String("configured_path", configuredPath),
 				logger.String("tool", toolName))
 		case isExecutableFile(configuredPath):
 			// Ideally, we'd check execute permissions here, but os.Stat doesn't provide a cross-platform way.
@@ -767,7 +779,7 @@ func ValidateToolPath(configuredPath, toolName string) (string, error) {
 
 	// If not found in configured path or system PATH
 	if configuredPath != "" {
-		return "", fmt.Errorf("tool '%s' not found at configured path '%s' or in system PATH", toolName, configuredPath)
+		return "", fmt.Errorf("tool '%s' not found at configured path '%s' or in system PATH", toolName, pathForMessage)
 	}
 	return "", fmt.Errorf("tool '%s' not found in system PATH and no path configured", toolName)
 }

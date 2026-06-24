@@ -29,6 +29,8 @@ func TestIsContaminatedToolPath(t *testing.T) {
 		{name: "proxy segment", path: "/proxy/host/usr/bin/ffmpeg", want: true},
 		{name: "hassio segment", path: "/hassio/abc/usr/bin/ffmpeg", want: true},
 		{name: "case insensitive", path: "/API/foo/ffmpeg", want: true},
+		// Windows backslash-separated contaminated path must also be caught.
+		{name: "windows contaminated path", path: `C:\api\hassio_ingress\token\usr\bin\ffmpeg.exe`, want: true},
 		// A legitimate directory literally named "apidata" must not trip the
 		// check: only full "/api/" style segments count.
 		{name: "substring not a segment", path: "/opt/apidata/ffmpeg", want: false},
@@ -69,4 +71,8 @@ func TestValidateToolPath_RejectsContaminatedConfiguredPath(t *testing.T) {
 	assert.NotEqual(t, contaminated, got, "must not accept contaminated path even though it exists on disk")
 	require.Error(t, err)
 	assert.Empty(t, got)
+
+	// The error must not leak the ingress credential token embedded in the path.
+	assert.NotContains(t, err.Error(), "hassio_ingress", "error message must not leak the contaminated ingress path/token")
+	assert.Contains(t, err.Error(), redactedToolPath, "error should reference the redacted-path placeholder")
 }
