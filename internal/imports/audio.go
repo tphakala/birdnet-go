@@ -50,14 +50,22 @@ func isWithinDir(root, target string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// resolveSourceClipPath resolves the path of a source audio clip within the BirdNET-Pi
-// audio tree. It tries the exact CommonName first, then a fallback form with spaces
-// replaced by underscores and apostrophes stripped.
-// Returns the resolved path and true if found, or ("", false) if neither form exists
-// or if any DB-derived component contains path traversal sequences.
-func resolveSourceClipPath(audioSourceDir, date, comName, fileName string) (string, bool) {
+// resolveSourceClipRel resolves the path of a source audio clip within the BirdNET-Pi
+// audio tree, relative to root (a sandboxed *os.Root handle on the audio source directory).
+// It tries the exact CommonName first, then a fallback form with spaces replaced by
+// underscores and apostrophes stripped.
+// Returns the path relative to root and true if found, or ("", false) if neither form
+// exists or if any DB-derived component contains path traversal sequences.
+//
+// Containment is enforced atomically by os.Root: every lookup stays within the audio
+// source directory, and a crafted DB value cannot escape it even via a symlink, because
+// os.Root rejects any reference (including an escaping symlink) that resolves outside the
+// root. This closes the time-of-check/time-of-use window that a separate validate-then-open
+// sequence would leave open.
+func resolveSourceClipRel(root *os.Root, date, comName, fileName string) (string, bool) {
 	// Sanitize all DB-derived path components before joining. A component containing
-	// ".." or a separator is treated as "clip not found" (defense against a crafted DB).
+	// ".." or a separator is treated as "clip not found": this gives clean miss semantics
+	// on top of the os.Root containment guarantee (defense against a crafted DB).
 	safeDate, ok := sanitizePathComponent(date)
 	if !ok {
 		return "", false
@@ -71,21 +79,11 @@ func resolveSourceClipPath(audioSourceDir, date, comName, fileName string) (stri
 		return "", false
 	}
 
-	// Try exact common name first.
-	exact := filepath.Join(audioSourceDir, "Extracted", "By_Date", safeDate, safeComName, safeFileName)
-	if !isWithinDir(audioSourceDir, exact) {
-		return "", false
-	}
-	if _, err := os.Stat(exact); err == nil {
-		if resolved, resolveErr := filepath.EvalSymlinks(exact); resolveErr == nil {
-			srcRoot, rootErr := filepath.EvalSymlinks(audioSourceDir)
-			if rootErr != nil {
-				srcRoot = audioSourceDir
-			}
-			if !isWithinDir(srcRoot, resolved) {
-				return "", false
-			}
-		}
+	// Try exact common name first. root.Stat enforces containment within the audio source
+	// directory; an escaping path (or escaping symlink) yields an error and is treated as
+	// not found.
+	exact := filepath.Join("Extracted", "By_Date", safeDate, safeComName, safeFileName)
+	if _, err := root.Stat(exact); err == nil {
 		return exact, true
 	}
 
@@ -100,20 +98,8 @@ func resolveSourceClipPath(audioSourceDir, date, comName, fileName string) (stri
 	if !ok {
 		return "", false
 	}
-	fallbackPath := filepath.Join(audioSourceDir, "Extracted", "By_Date", safeDate, safeFallback, safeFileName)
-	if !isWithinDir(audioSourceDir, fallbackPath) {
-		return "", false
-	}
-	if _, err := os.Stat(fallbackPath); err == nil {
-		if resolved, resolveErr := filepath.EvalSymlinks(fallbackPath); resolveErr == nil {
-			srcRoot, rootErr := filepath.EvalSymlinks(audioSourceDir)
-			if rootErr != nil {
-				srcRoot = audioSourceDir
-			}
-			if !isWithinDir(srcRoot, resolved) {
-				return "", false
-			}
-		}
+	fallbackPath := filepath.Join("Extracted", "By_Date", safeDate, safeFallback, safeFileName)
+	if _, err := root.Stat(fallbackPath); err == nil {
 		return fallbackPath, true
 	}
 
@@ -138,9 +124,11 @@ func targetClipRelPath(scientificName string, confidence float64, ts time.Time, 
 	return filepath.ToSlash(filepath.Join(year, month, filename))
 }
 
-// copyClipAtomic copies srcPath to destAbsPath using a unique temp file and atomic rename.
-// It creates the destination directory if needed.
-func copyClipAtomic(srcPath, destAbsPath string) error {
+// copyClipAtomic copies the source clip identified by srcRel within root to destAbsPath
+// using a unique temp file and atomic rename. It creates the destination directory if
+// needed. The source is opened through root (an *os.Root), so the read is contained within
+// the audio source directory and cannot be redirected by a symlink that escapes the root.
+func copyClipAtomic(root *os.Root, srcRel, destAbsPath string) error {
 	if err := os.MkdirAll(filepath.Dir(destAbsPath), 0o755); err != nil {
 		return errors.New(err).
 			Component("imports/audio").
@@ -162,7 +150,7 @@ func copyClipAtomic(srcPath, destAbsPath string) error {
 			Build()
 	}
 
-	srcF, err := os.Open(srcPath)
+	srcF, err := root.Open(srcRel)
 	if err != nil {
 		_ = tmpF.Close()
 		_ = os.Remove(tmpPath)
@@ -170,7 +158,7 @@ func copyClipAtomic(srcPath, destAbsPath string) error {
 			Component("imports/audio").
 			Category(errors.CategoryFileIO).
 			Context("operation", "open_src").
-			Context("path", srcPath).
+			Context("path", srcRel).
 			Build()
 	}
 
@@ -225,17 +213,24 @@ func copyClipAtomic(srcPath, destAbsPath string) error {
 }
 
 // sumSourceClipSizes sums the sizes of all source clips for the given source detections
-// and audio source directory. Missing clips are skipped silently.
+// within the audio source directory. Missing clips (and an unopenable source directory)
+// are skipped silently; this is a best-effort size estimate for the disk-space pre-check.
 func sumSourceClipSizes(audioSourceDir string, rows []SourceDetection) uint64 {
+	root, err := os.OpenRoot(audioSourceDir)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = root.Close() }()
+
 	var total uint64
 	for i := range rows {
 		row := &rows[i]
-		srcPath, ok := resolveSourceClipPath(audioSourceDir, row.Date, row.CommonName, row.FileName)
+		srcRel, ok := resolveSourceClipRel(root, row.Date, row.CommonName, row.FileName)
 		if !ok {
 			continue
 		}
-		info, err := os.Stat(srcPath)
-		if err != nil {
+		info, statErr := root.Stat(srcRel)
+		if statErr != nil {
 			continue
 		}
 		if info.Size() > 0 {
@@ -288,6 +283,22 @@ func (e *Engine) copyCandidateClips(
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
+	// Open the audio source directory as a sandboxed root once for the whole batch.
+	// *os.Root is safe for concurrent use, so all copy workers share it; every source
+	// read is then contained within the audio source directory (no traversal, no escaping
+	// symlink). If the directory cannot be opened, every clip is a miss and the detections
+	// are imported without audio (graceful degradation). No worker has started yet, so the
+	// missCount write needs no lock here.
+	root, rootErr := os.OpenRoot(opts.AudioSourceDir)
+	if rootErr != nil {
+		e.log.Warn("audio source directory unavailable, importing detections without audio",
+			logger.String("audio_source_dir", opts.AudioSourceDir),
+			logger.Error(rootErr))
+		*missCount += len(toImport)
+		return
+	}
+	defer func() { _ = root.Close() }()
+
 	for idx := range toImport {
 		capturedIdx := idx
 		capturedRow := toImport[idx]
@@ -335,7 +346,7 @@ func (e *Engine) copyCandidateClips(
 				return
 			}
 
-			srcPath, found := resolveSourceClipPath(opts.AudioSourceDir, capturedRow.Date, capturedRow.CommonName, capturedRow.FileName)
+			srcRel, found := resolveSourceClipRel(root, capturedRow.Date, capturedRow.CommonName, capturedRow.FileName)
 			if !found {
 				e.log.Warn("source clip not found, importing detection without audio",
 					logger.String("date", capturedRow.Date),
@@ -347,9 +358,9 @@ func (e *Engine) copyCandidateClips(
 				return
 			}
 
-			if copyErr := copyClipAtomic(srcPath, destAbs); copyErr != nil {
+			if copyErr := copyClipAtomic(root, srcRel, destAbs); copyErr != nil {
 				e.log.Warn("failed to copy audio clip, importing detection without audio",
-					logger.String("src", srcPath),
+					logger.String("src", srcRel),
 					logger.String("dest", destAbs),
 					logger.Error(copyErr))
 				mu.Lock()

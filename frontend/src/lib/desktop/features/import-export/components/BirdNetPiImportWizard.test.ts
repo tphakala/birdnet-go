@@ -256,6 +256,8 @@ describe('BirdNetPiImportWizard', () => {
       name: /system.importExport.mode.dbOnly.label/,
     });
     expect(dbOnlyRadio).not.toBeDisabled();
+    // db-only must be the default selection so a regression in the default mode is caught.
+    expect(dbOnlyRadio).toBeChecked();
 
     // db-audio radio should also be enabled
     const dbAudioRadio = screen.getByRole('radio', {

@@ -151,6 +151,18 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 	stats := ImportStats{Phase: "validate"}
 	e.report(reporter, stats)
 
+	// When audio import is requested, both the source directory and the export path must
+	// be configured. Failing fast here turns a misconfiguration into a clear error instead
+	// of silently importing detections without their audio (or reading a path relative to
+	// the working directory).
+	if opts.IncludeAudio && (opts.AudioSourceDir == "" || opts.ClipExportPath == "") {
+		return stats, errors.Newf("audio import requires both an audio source directory and a clip export path").
+			Component("imports").
+			Category(errors.CategoryValidation).
+			Context("phase", "validate").
+			Build()
+	}
+
 	if err := src.Validate(ctx); err != nil {
 		return stats, errors.New(err).
 			Component("imports").

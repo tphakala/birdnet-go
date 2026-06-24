@@ -11,14 +11,14 @@ import (
 // verified to leave no goroutines behind. A leaked copy goroutine or an
 // un-released semaphore would surface here.
 //
-// Ignores are kept narrowly scoped to known benign background goroutines: the
-// SQLite-backed datastore opens a database/sql connection opener, and the logger
-// uses lumberjack for rotation. Both run for the lifetime of the process.
+// Ignores are kept narrowly scoped to the two known benign background goroutines that run
+// for the lifetime of the process: the SQLite-backed datastore's database/sql connection
+// opener and the logger's lumberjack rotation worker. goleak v1.3.0 already filters the
+// test-runner stacks (testing.(*T).Run / testing.(*T).Parallel) via its built-in
+// isTestStack check, and a blanket runtime.gopark ignore would suppress real leaks of any
+// parked goroutine, so neither is listed here.
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("testing.(*T).Parallel"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
 	)

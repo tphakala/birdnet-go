@@ -350,7 +350,7 @@ func TestImport_WithAudio_Idempotent_ClipNotCopiedTwice(t *testing.T) {
 	comName := "Common Blackbird"
 	fileName := "blackbird.mp3"
 	clipContent := []byte("blackbird song")
-	makeAudioTree(t, audioSrc, date, comName, fileName, clipContent)
+	srcClipPath := makeAudioTree(t, audioSrc, date, comName, fileName, clipContent)
 
 	rows := []birdnetPiRow{
 		{
@@ -393,6 +393,12 @@ func TestImport_WithAudio_Idempotent_ClipNotCopiedTwice(t *testing.T) {
 	data1, readErr := os.ReadFile(destAbs)
 	require.NoError(t, readErr)
 	assert.Equal(t, clipContent, data1)
+
+	// Mutate the source clip between runs. If the second run wrongly re-copied the clip,
+	// the destination would now hold this mutated content; the assertions below prove it
+	// does not, catching a silent rewrite even when filesystem mtime granularity is coarse.
+	mutatedContent := []byte("MUTATED blackbird song with a different length")
+	require.NoError(t, os.WriteFile(srcClipPath, mutatedContent, 0o644))
 
 	// Second run: same detection must be skipped.
 	src2, err := newBirdNetPiSource(t, dbPath)
