@@ -1550,8 +1550,13 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Missing species name", http.StatusBadRequest)
 	}
 
+	speciesToIgnore := req.CommonName
+	if resolved, hit := c.resolveSpeciesToScientific(req.CommonName); hit {
+		speciesToIgnore = resolved
+	}
+
 	// Toggle the species in ignored list
-	action, isExcluded, err := c.toggleSpeciesInIgnoredList(req.CommonName)
+	action, isExcluded, err := c.toggleSpeciesInIgnoredList(speciesToIgnore)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to update species filter", http.StatusInternalServerError)
 	}
@@ -1584,7 +1589,11 @@ func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
 func (c *Controller) addToIgnoredSpecies(verified, ignoreSpecies string) error {
 	if verified == "false_positive" && ignoreSpecies != "" {
-		return c.addSpeciesToIgnoredList(ignoreSpecies)
+		speciesToIgnore := ignoreSpecies
+		if resolved, hit := c.resolveSpeciesToScientific(ignoreSpecies); hit {
+			speciesToIgnore = resolved
+		}
+		return c.addSpeciesToIgnoredList(speciesToIgnore)
 	}
 	return nil
 }

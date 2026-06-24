@@ -1486,6 +1486,38 @@ func TestIgnoreSpecies(t *testing.T) {
 		assert.False(t, removeResponse.IsExcluded)
 	})
 
+	t.Run("Localized name resolution", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
+
+		// Setup fake resolver
+		controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+			"Barbastella barbastellus": "mopsilepakko",
+		}})
+		controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "mopsilepakko"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.IgnoreSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response IgnoreSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, "mopsilepakko", response.CommonName) // Original name is returned
+		assert.Equal(t, "added", response.Action)
+		assert.True(t, response.IsExcluded)
+
+		// Verify settings actually contain the scientific name
+		assert.Contains(t, controller.Settings.Load().Realtime.Species.Exclude, "Barbastella barbastellus")
+		assert.NotContains(t, controller.Settings.Load().Realtime.Species.Exclude, "mopsilepakko")
+	})
+
 	t.Run("Multiple toggle operations", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 		clearExcludedSpeciesList(t, controller.Settings.Load())
