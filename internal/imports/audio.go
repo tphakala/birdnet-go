@@ -22,24 +22,79 @@ import (
 // audioWorkerLimit is the maximum number of concurrent clip-copy goroutines per batch.
 const audioWorkerLimit = 4
 
+// sanitizePathComponent validates that s is a single safe path component.
+// Returns the component and true if safe, or ("", false) if s contains a path separator,
+// is ".", is "..", or is empty. A crafted DB value containing ".." is treated as "not found".
+func sanitizePathComponent(s string) (string, bool) {
+	if s == "" || s == "." || s == ".." {
+		return "", false
+	}
+	if strings.ContainsAny(s, "/\\") {
+		return "", false
+	}
+	base := filepath.Base(filepath.Clean(s))
+	if base == "." || base == ".." || base == "" {
+		return "", false
+	}
+	return base, true
+}
+
+// isWithinDir reports whether target is physically contained within root (both cleaned).
+// Mirrors the isContained helper in internal/api/v2/import.go.
+func isWithinDir(root, target string) bool {
+	root = filepath.Clean(root)
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 // resolveSourceClipPath resolves the path of a source audio clip within the BirdNET-Pi
 // audio tree. It tries the exact CommonName first, then a fallback form with spaces
 // replaced by underscores and apostrophes stripped.
-// Returns the resolved path and true if found, or ("", false) if neither form exists.
+// Returns the resolved path and true if found, or ("", false) if neither form exists
+// or if any DB-derived component contains path traversal sequences.
 func resolveSourceClipPath(audioSourceDir, date, comName, fileName string) (string, bool) {
+	// Sanitize all DB-derived path components before joining. A component containing
+	// ".." or a separator is treated as "clip not found" (defense against a crafted DB).
+	safeDate, ok := sanitizePathComponent(date)
+	if !ok {
+		return "", false
+	}
+	safeComName, ok := sanitizePathComponent(comName)
+	if !ok {
+		return "", false
+	}
+	safeFileName, ok := sanitizePathComponent(fileName)
+	if !ok {
+		return "", false
+	}
+
 	// Try exact common name first.
-	exact := filepath.Join(audioSourceDir, "Extracted", "By_Date", date, comName, fileName)
+	exact := filepath.Join(audioSourceDir, "Extracted", "By_Date", safeDate, safeComName, safeFileName)
+	if !isWithinDir(audioSourceDir, exact) {
+		return "", false
+	}
 	if _, err := os.Stat(exact); err == nil {
 		return exact, true
 	}
 
 	// Fallback: replace spaces with underscores, strip apostrophes.
-	fallback := strings.ReplaceAll(comName, " ", "_")
+	fallback := strings.ReplaceAll(safeComName, " ", "_")
 	fallback = strings.ReplaceAll(fallback, "'", "")
-	if fallback == comName {
+	if fallback == safeComName {
 		return "", false
 	}
-	fallbackPath := filepath.Join(audioSourceDir, "Extracted", "By_Date", date, fallback, fileName)
+	// Re-sanitize the transformed fallback name.
+	safeFallback, ok := sanitizePathComponent(fallback)
+	if !ok {
+		return "", false
+	}
+	fallbackPath := filepath.Join(audioSourceDir, "Extracted", "By_Date", safeDate, safeFallback, safeFileName)
+	if !isWithinDir(audioSourceDir, fallbackPath) {
+		return "", false
+	}
 	if _, err := os.Stat(fallbackPath); err == nil {
 		return fallbackPath, true
 	}
@@ -52,10 +107,15 @@ func resolveSourceClipPath(audioSourceDir, date, comName, fileName string) (stri
 // Format: "YYYY/MM/<scientificName_lowercased_underscored>_<conf>p_<YYYYMMDDTHHMMSSZ>.<srcExt>"
 func targetClipRelPath(scientificName string, confidence float64, ts time.Time, srcExt string) string {
 	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))
+	// Strip any residual path separators from a crafted scientificName by keeping only
+	// the last component. filepath.Base("../../evil/name") -> "name".
+	formattedName = filepath.Base(formattedName)
 	formattedConf := fmt.Sprintf("%.0fp", confidence*100)
-	timestamp := ts.UTC().Format("20060102T150405Z")
-	year := ts.UTC().Format("2006")
-	month := ts.UTC().Format("01")
+	// Format ts directly (no .UTC()) to match buildClipPath in processor.go, which
+	// uses the configured-zone time with a literal "Z" suffix rather than converting to UTC.
+	timestamp := ts.Format("20060102T150405Z")
+	year := ts.Format("2006")
+	month := ts.Format("01")
 	filename := formattedName + "_" + formattedConf + "_" + timestamp + "." + srcExt
 	return filepath.ToSlash(filepath.Join(year, month, filename))
 }
@@ -222,6 +282,13 @@ func (e *Engine) copyCandidateClips(
 		wg.Go(func() {
 			defer sem.Release(1)
 
+			// Skip this copy if the context was cancelled between acquire and start.
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			srcExt := strings.TrimPrefix(filepath.Ext(capturedRow.FileName), ".")
 			if srcExt == "" {
 				srcExt = "mp3"
@@ -229,8 +296,23 @@ func (e *Engine) copyCandidateClips(
 			relPath := targetClipRelPath(capturedRow.ScientificName, capturedRow.Confidence, capturedTs, srcExt)
 			destAbs := filepath.Join(opts.ClipExportPath, filepath.FromSlash(relPath))
 
+			// Containment check: reject a dest path that escapes ClipExportPath.
+			// targetClipRelPath already sanitizes scientificName via filepath.Base; this
+			// is a defense-in-depth guard against any future path that slips through.
+			if !isWithinDir(opts.ClipExportPath, destAbs) {
+				e.log.Warn("target clip path escapes export root, skipping",
+					logger.String("dest", destAbs),
+					logger.String("export_root", opts.ClipExportPath))
+				mu.Lock()
+				*missCount++
+				mu.Unlock()
+				return
+			}
+
 			// Skip copy if target already exists (idempotency guard).
 			if _, statErr := os.Stat(destAbs); statErr == nil {
+				// clipNames[capturedIdx] needs no mutex: each index is owned by exactly one
+				// worker and is written before wg.Wait() ensures visibility.
 				clipNames[capturedIdx] = relPath
 				return
 			}
@@ -258,6 +340,8 @@ func (e *Engine) copyCandidateClips(
 				return
 			}
 
+			// clipNames[capturedIdx] needs no mutex: each index is owned by exactly one
+			// worker and is written before wg.Wait() ensures visibility.
 			clipNames[capturedIdx] = relPath
 		})
 	}

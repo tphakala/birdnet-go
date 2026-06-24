@@ -5,6 +5,7 @@ package imports
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -139,7 +140,12 @@ func detectionKey(ts time.Time, scientificName string, confidence float64) strin
 // Run imports all detections from src that are not already present in the store.
 // It returns a final ImportStats summary. Partial results are consistent because
 // the dedup set makes a re-run safe.
+// opts may be nil; a nil pointer is replaced with a zero-value ImportOptions so
+// callers are not required to allocate one.
 func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, reporter ProgressReporter) (ImportStats, error) {
+	if opts == nil {
+		opts = &ImportOptions{}
+	}
 	opts.withDefaults()
 
 	stats := ImportStats{Phase: "validate"}
@@ -228,23 +234,8 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 				rows[i] = *p.row
 				tss[i] = p.ts
 			}
-
-			// Disk-space guard: ensure the export volume can hold this batch's
-			// clips before copying any of them. Sizing source clips up front and
-			// checking once per batch keeps the import single-pass over the source.
-			requiredBytes := sumSourceClipSizes(opts.AudioSourceDir, rows)
-			if requiredBytes > 0 {
-				if spaceErr := checkDiskSpace(opts.ClipExportPath, requiredBytes, opts.DiskSpaceFunc); spaceErr != nil {
-					return spaceErr
-				}
-			}
-
-			missCount := 0
-			e.copyCandidateClips(ctx, opts, rows, tss, clipNames, &missCount)
-			if missCount > 0 {
-				e.log.Info("some audio clips could not be copied",
-					logger.Int("miss_count", missCount),
-					logger.Int("batch_size", len(pending)))
+			if err := e.copyAudioBatch(ctx, opts, rows, tss, clipNames); err != nil {
+				return err
 			}
 		}
 
@@ -308,6 +299,39 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 	return stats, nil
 }
 
+// copyAudioBatch creates the export directory, checks disk space, and copies all
+// audio clips for one pending batch. clipNames is updated in-place.
+func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows []SourceDetection, tss []time.Time, clipNames []string) error {
+	// Ensure export directory exists before the disk-space check so that
+	// GetAvailableSpace does not error on a freshly configured path.
+	if mkErr := os.MkdirAll(opts.ClipExportPath, 0o755); mkErr != nil {
+		return errors.New(mkErr).
+			Component("imports").
+			Category(errors.CategoryFileIO).
+			Context("operation", "mkdir_export_path").
+			Context("path", opts.ClipExportPath).
+			Build()
+	}
+
+	// Disk-space guard: ensure the export volume can hold this batch's clips
+	// before copying any of them.
+	requiredBytes := sumSourceClipSizes(opts.AudioSourceDir, rows)
+	if requiredBytes > 0 {
+		if spaceErr := checkDiskSpace(opts.ClipExportPath, requiredBytes, opts.DiskSpaceFunc); spaceErr != nil {
+			return spaceErr
+		}
+	}
+
+	missCount := 0
+	e.copyCandidateClips(ctx, opts, rows, tss, clipNames, &missCount)
+	if missCount > 0 {
+		e.log.Info("some audio clips could not be copied",
+			logger.Int("miss_count", missCount),
+			logger.Int("batch_size", len(rows)))
+	}
+	return nil
+}
+
 // loadExistingKeys pages through all detections attributed to sourceNode
 // and returns their dedup keys in a set.
 func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[string]struct{}, error) {
@@ -360,8 +384,9 @@ func parseTimestamp(date, timeStr string, loc *time.Location) (time.Time, error)
 // Field mapping decisions:
 //   - BeginTime and EndTime are left as zero values: BirdNET-Pi stores detections
 //     as point-in-time events without clip offsets, so there is no timing data to map.
-//   - ClipName is left empty in DB-only mode; it will be set once audio copying is
-//     implemented. An empty ClipName avoids broken "audio not available" links.
+//   - ClipName: DB-only imports leave ClipName empty; DB+audio imports set it before
+//     Save when a matching source clip is found. An empty ClipName avoids broken
+//     "audio not available" links.
 //   - Model is set to a synthetic marker so imported rows are distinguishable from
 //     live detections in queries or analytics.
 //   - Provenance is carried solely by SourceNode (a persisted column). AudioSource is

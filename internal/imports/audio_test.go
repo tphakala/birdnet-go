@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imports"
 )
 
@@ -216,6 +218,15 @@ func TestImport_WithAudio_MissingClip_ImportsContinues(t *testing.T) {
 	// Detection must still be imported even though audio is missing.
 	assert.Equal(t, 1, stats.Inserted)
 	assert.Equal(t, 0, stats.Errors)
+
+	// The saved detection must have an empty ClipName (graceful degradation).
+	results, _, searchErr := repo.Search(t.Context(), &datastore.DetectionFilters{
+		Location: []string{imports.DefaultSourceNode},
+		Limit:    10,
+	})
+	require.NoError(t, searchErr)
+	require.Len(t, results, 1)
+	assert.Empty(t, results[0].ClipName, "ClipName must be empty when source clip is missing")
 }
 
 func TestImport_WithAudio_Idempotent_ClipNotCopiedTwice(t *testing.T) {
@@ -307,4 +318,145 @@ func TestTargetClipRelPath_RoundsConfidence(t *testing.T) {
 	assert.Contains(t, got, "81p")
 	assert.Contains(t, got, "parus_major")
 	assert.Contains(t, got, ".wav")
+}
+
+// TestTargetClipRelPath_TraversalScientificName verifies that a crafted ScientificName
+// with path separators or ".." components does not escape the expected path structure.
+func TestTargetClipRelPath_TraversalScientificName(t *testing.T) {
+	ts := time.Date(2025, 6, 1, 8, 0, 0, 0, time.UTC)
+
+	crafted := []struct {
+		name    string
+		sciName string
+	}{
+		{"dot-dot prefix", "../evil"},
+		{"deep dot-dot", "../../etc/passwd"},
+		{"slash in name", "a/b/c"},
+	}
+
+	for _, tc := range crafted {
+		t.Run(tc.name, func(t *testing.T) {
+			relPath := imports.TargetClipRelPathForTest(tc.sciName, 0.9, ts, "mp3")
+			// The result must not contain ".." components.
+			assert.NotContains(t, relPath, "..", "relPath %q must not contain ..", relPath)
+			// The filename part (last slash-separated segment) must not contain forward slashes.
+			parts := strings.Split(relPath, "/")
+			require.NotEmpty(t, parts)
+			last := parts[len(parts)-1]
+			assert.NotContains(t, last, "/", "filename part must not contain /")
+		})
+	}
+}
+
+// TestResolveSourceClipPath_TraversalRejected verifies that DB-derived path components
+// containing ".." or path separators cannot escape audioSourceDir. Such detections are
+// treated as a clip miss and the detection is still imported (graceful degradation).
+func TestResolveSourceClipPath_TraversalRejected(t *testing.T) {
+	audioSrc := t.TempDir()
+
+	// A legitimate clip for the non-traversal case.
+	date := "2025-06-01"
+	comName := "Great Tit"
+	fileName := "tit.mp3"
+	makeAudioTree(t, audioSrc, date, comName, fileName, []byte("audio"))
+
+	traversalCases := []struct {
+		name     string
+		date     string
+		comName  string
+		fileName string
+	}{
+		{"dot-dot in comName", date, "../Great Tit", fileName},
+		{"dot-dot in fileName", date, comName, "../tit.mp3"},
+		{"slash in comName", date, "a/b", fileName},
+		{"slash in fileName", date, comName, "a/b.mp3"},
+	}
+
+	for _, tc := range traversalCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := []birdnetPiRow{{
+				Date: tc.date, Time: "08:00:00",
+				SciName: "Parus major", ComName: tc.comName,
+				Confidence: 0.85,
+				Cutoff:     0.5, Sens: 1.0, FileName: tc.fileName,
+			}}
+			dbPath := newFixtureDB(t, rows)
+			src, err := newBirdNetPiSource(t, dbPath)
+			require.NoError(t, err)
+
+			exportDir := t.TempDir()
+			store := newTestStore(t)
+			repo := newDetectionRepo(t, store)
+			engine := imports.NewEngine(repo)
+
+			opts := imports.ImportOptions{
+				SourceNode:     imports.DefaultSourceNode,
+				Location:       time.UTC,
+				IncludeAudio:   true,
+				AudioSourceDir: audioSrc,
+				ClipExportPath: exportDir,
+			}
+
+			stats, runErr := engine.Run(t.Context(), src, &opts, nil)
+			require.NoError(t, runErr, "traversal attempt must not cause engine error (treated as miss)")
+			assert.Equal(t, 1, stats.Inserted, "detection must be imported even with traversal in audio path")
+
+			// Verify that nothing was written outside exportDir.
+			// The traversal component is rejected, so the clip is a miss and exportDir stays empty.
+			entries, rdErr := os.ReadDir(exportDir)
+			require.NoError(t, rdErr)
+			assert.Empty(t, entries, "exportDir must be empty: no clip may be written for a traversal attempt")
+		})
+	}
+}
+
+// TestCopyCandidateClips_TraversalDestRejected verifies that a crafted ScientificName
+// cannot cause a clip to be written outside ClipExportPath. With sanitization applied,
+// the clip is placed at a safe path inside ClipExportPath, and the source clip is copied.
+func TestCopyCandidateClips_TraversalDestRejected(t *testing.T) {
+	audioSrc := t.TempDir()
+	exportDir := t.TempDir()
+	date := "2025-07-01"
+	comName := "Great Tit"
+	fileName := "tit.mp3"
+	clipContent := []byte("audio data")
+	makeAudioTree(t, audioSrc, date, comName, fileName, clipContent)
+
+	// A detection with a crafted ScientificName that would have escaped exportDir
+	// before the filepath.Base sanitization was applied.
+	rows := []birdnetPiRow{{
+		Date: date, Time: "08:00:00",
+		SciName: "../../evil/parus major", ComName: comName,
+		Confidence: 0.85,
+		Cutoff:     0.5, Sens: 1.0, FileName: fileName,
+	}}
+	dbPath := newFixtureDB(t, rows)
+	src, err := newBirdNetPiSource(t, dbPath)
+	require.NoError(t, err)
+
+	store := newTestStore(t)
+	repo := newDetectionRepo(t, store)
+	engine := imports.NewEngine(repo)
+
+	opts := imports.ImportOptions{
+		SourceNode:     imports.DefaultSourceNode,
+		Location:       time.UTC,
+		IncludeAudio:   true,
+		AudioSourceDir: audioSrc,
+		ClipExportPath: exportDir,
+	}
+
+	stats, runErr := engine.Run(t.Context(), src, &opts, nil)
+	require.NoError(t, runErr)
+	// Detection is imported regardless.
+	assert.Equal(t, 1, stats.Inserted)
+
+	// The sanitized clip must be inside exportDir (filepath.Base strips the "../../../" prefix).
+	// Verify no directory named "evil" was created outside exportDir.
+	parent := filepath.Dir(exportDir)
+	entries, rdErr := os.ReadDir(parent)
+	require.NoError(t, rdErr)
+	for _, e := range entries {
+		assert.NotEqual(t, "evil", e.Name(), "traversal must not create 'evil' directory outside export root")
+	}
 }

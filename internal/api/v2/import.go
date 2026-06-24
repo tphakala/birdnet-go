@@ -59,7 +59,7 @@ var errInvalidSourcePath = errors.NewStd("invalid source path")
 
 // startImportRequest is the JSON body for POST /import/birdnet-pi.
 type startImportRequest struct {
-	Mode       string `json:"mode"`        // must be "db-only"
+	Mode       string `json:"mode"`        // accepted values: "db-only", "db-audio"
 	SourcePath string `json:"source_path"` // path relative to the external mount root
 	Location   string `json:"location"`    // optional IANA timezone name e.g. "Europe/Helsinki"
 }
