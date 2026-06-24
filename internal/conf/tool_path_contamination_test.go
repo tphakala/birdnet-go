@@ -50,11 +50,16 @@ func TestValidateToolPath_RejectsContaminatedConfiguredPath(t *testing.T) {
 	t.Parallel()
 
 	// Create a real file whose path contains an ingress-style segment, so
-	// os.Stat succeeds and only the contamination check can reject it.
-	dir := t.TempDir()
-	ingressDir := filepath.Join(dir, "api", "hassio_ingress", "token")
+	// os.Stat succeeds and only the contamination check can reject it. The real
+	// contamination is a Home Assistant ingress URL prefix, which is always
+	// forward-slash separated, so build the path with forward slashes (not
+	// filepath.Join, which would emit backslashes on Windows and never match the
+	// forward-slash contamination regex). Go's os package accepts forward slashes
+	// on Windows, so MkdirAll/WriteFile/Stat still work cross-platform.
+	base := filepath.ToSlash(t.TempDir())
+	ingressDir := base + "/api/hassio_ingress/token"
 	require.NoError(t, os.MkdirAll(ingressDir, 0o755))
-	contaminated := filepath.Join(ingressDir, "ffmpeg")
+	contaminated := ingressDir + "/ffmpeg"
 	require.NoError(t, os.WriteFile(contaminated, []byte("#!/bin/sh\n"), 0o755))
 
 	got, err := ValidateToolPath(contaminated, "nonexistent-tool-binary-xyz")
