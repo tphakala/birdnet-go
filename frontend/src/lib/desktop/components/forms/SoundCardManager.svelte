@@ -19,7 +19,10 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { generateId } from '$lib/utils/uuid';
-  import { fetchDeviceCapabilities as fetchCapabilities } from '$lib/utils/audio/sampleRate';
+  import {
+    fetchDeviceCapabilities as fetchCapabilities,
+    coerceSupportedRate,
+  } from '$lib/utils/audio/sampleRate';
   import { toastActions } from '$lib/stores/toast';
   import { cn } from '$lib/utils/cn';
   import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
@@ -273,11 +276,9 @@
       if (newFetchController !== controller) return;
       newSampleRateOptions = result.options;
       newSampleRateVerified = result.verified;
-      // Drop a selection the new device cannot honor so an unsupported rate is
-      // never persisted.
-      if (!result.options.some(opt => Number(opt.value) === newSampleRate)) {
-        newSampleRate = 48000;
-      }
+      // Coerce the selection to a rate the new device actually supports so an
+      // unsupported rate is never persisted.
+      newSampleRate = coerceSupportedRate(result.options, newSampleRate);
     } catch {
       // Only AbortError reaches here (utility handles all other failures internally)
     } finally {

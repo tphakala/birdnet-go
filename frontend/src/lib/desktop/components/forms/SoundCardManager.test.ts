@@ -75,7 +75,9 @@ function probeFor(deviceId: string, signal: AbortSignal | undefined) {
   return makeAbortableProbe(signal, [RATE_48K, RATE_96K, RATE_192K]);
 }
 
-vi.mock('$lib/utils/audio/sampleRate', () => ({
+// Keep the real helpers (coerceSupportedRate, etc.); only stub the network probe.
+vi.mock('$lib/utils/audio/sampleRate', async importActual => ({
+  ...(await importActual<typeof import('$lib/utils/audio/sampleRate')>()),
   fetchDeviceCapabilities: vi.fn((deviceId: string, signal?: AbortSignal) =>
     probeFor(deviceId, signal)
   ),

@@ -46,7 +46,9 @@ function ratesFor(deviceId: string): RateOption[] {
   return deviceId === DEV2 ? [RATE_48K, RATE_192K, RATE_384K] : [RATE_48K, RATE_96K];
 }
 
-vi.mock('$lib/utils/audio/sampleRate', () => ({
+// Keep the real helpers (coerceSupportedRate, etc.); only stub the network probe.
+vi.mock('$lib/utils/audio/sampleRate', async importActual => ({
+  ...(await importActual<typeof import('$lib/utils/audio/sampleRate')>()),
   fetchDeviceCapabilities: vi.fn((deviceId: string, signal?: AbortSignal) =>
     makeAbortableProbe(signal, ratesFor(deviceId))
   ),

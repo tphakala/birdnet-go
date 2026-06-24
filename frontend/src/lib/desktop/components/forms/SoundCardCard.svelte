@@ -34,7 +34,10 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
-  import { fetchDeviceCapabilities as fetchCapabilities } from '$lib/utils/audio/sampleRate';
+  import {
+    fetchDeviceCapabilities as fetchCapabilities,
+    coerceSupportedRate,
+  } from '$lib/utils/audio/sampleRate';
   import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
@@ -256,11 +259,9 @@
       if (fetchController !== controller) return;
       sampleRateOptions = result.options;
       sampleRateVerified = result.verified;
-      // Drop a selection the new device cannot honor so an unsupported rate is
-      // never persisted.
-      if (!result.options.some(opt => Number(opt.value) === editSampleRate)) {
-        editSampleRate = 48000;
-      }
+      // Coerce the selection to a rate the new device actually supports so an
+      // unsupported rate is never persisted.
+      editSampleRate = coerceSupportedRate(result.options, editSampleRate);
     } catch {
       // Only AbortError reaches here (utility handles all other failures internally)
     } finally {
