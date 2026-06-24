@@ -207,20 +207,36 @@ func resolveWikiURL(rest string, idx map[string]string) string {
 	return slug + anchorSuffix(anchor)
 }
 
-// resolveRelative rewrites a repo-relative link. Links whose basename is a known
-// wiki page become extensionless slugs; any other repo file becomes an absolute
-// blob URL so it resolves on the wiki.
+// resolveRelative rewrites a repo-relative link so it resolves on the wiki. A
+// bare wiki slug (no path, no extension) or a link that resolves to a sibling
+// page inside the wiki source directory becomes an extensionless slug. Any
+// other repo file becomes an absolute blob URL. Matching is restricted to true
+// siblings so a non-wiki file that merely shares a basename with a wiki page
+// (e.g. ../../internal/installation.md) is not misrouted to the wiki page.
 func resolveRelative(u, sourceDir string, idx map[string]string) string {
 	pathPart, anchor := splitAnchor(u)
 	norm := strings.ReplaceAll(pathPart, unicodeHyphen, "-")
 	if isImagePath(norm) {
 		return u
 	}
-	base := strings.TrimSuffix(path.Base(norm), ".md")
-	if name, ok := idx[strings.ToLower(base)]; ok {
-		return name + anchorSuffix(anchor)
+
+	// Bare wiki-slug reference: no directory and no .md extension.
+	if !strings.Contains(norm, "/") && !strings.HasSuffix(strings.ToLower(norm), ".md") {
+		if name, ok := idx[strings.ToLower(norm)]; ok {
+			return name + anchorSuffix(anchor)
+		}
 	}
-	clean := path.Clean(path.Join(sourceDir, pathPart))
+
+	clean := path.Clean(path.Join(sourceDir, norm))
+	base := strings.TrimSuffix(path.Base(clean), ".md")
+	// Only a link that actually resolves to a sibling page in the wiki source
+	// directory is treated as a wiki page.
+	if clean == path.Join(sourceDir, base+".md") {
+		if name, ok := idx[strings.ToLower(base)]; ok {
+			return name + anchorSuffix(anchor)
+		}
+	}
+
 	clean = strings.TrimPrefix(clean, "./")
 	if strings.HasPrefix(clean, "..") {
 		return u // escapes the repo root; leave the link as authored

@@ -78,9 +78,14 @@ func TestRewriteLinks(t *testing.T) {
 			want: "Read about [deep detection](BirdNET-Go-Guide#deep-detection).",
 		},
 		{
-			name: "dot-dot relative md link resolves by basename case-insensitively",
-			in:   "See [ONNX setup](../ONNX-Runtime-Installation.md).",
+			name: "sibling md link to a remapped page uses its wiki slug",
+			in:   "See [ONNX setup](onnx-runtime-installation.md).",
 			want: "See [ONNX setup](ONNX-Runtime-Installation).",
+		},
+		{
+			name: "relative link to a non-wiki file sharing a wiki basename is not mapped to the wiki page",
+			in:   "Edit [the template](../../internal/installation.md).",
+			want: "Edit [the template](https://github.com/tphakala/birdnet-go/blob/main/internal/installation.md).",
 		},
 		{
 			name: "faq remaps to title-case slug",

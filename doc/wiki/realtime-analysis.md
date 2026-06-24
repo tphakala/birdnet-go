@@ -27,7 +27,7 @@ For Linux users, the PulseAudio backend is recommended. Additionally, Linux dist
 
 Make sure Pulse Audio is installed on your system and set Pulse Audio to output 16bit 48000 hz audio by editing **/etc/pulse/daemon.conf** to contain following
 
-```
+```ini
 default-sample-format = s16le
 default-sample-rate = 48000
 ```
@@ -40,7 +40,7 @@ Make sure that recording device is set to 16 bit 48000 Hz mode, 2 channel source
 
 ## Node and BirdNET settings
 
-```
+```yaml
 node:
   name: BirdNET-Go
   locale: en
@@ -56,7 +56,7 @@ Setting (**node threads**) controls the number of CPU threads used by the Tensor
 
 Setting (**node timeas24h: true**) ensures that output timestamps are in the 24-hour format. Setting it to false is intended to use the 12-hour format, but this feature is not yet implemented.
 
-```
+```yaml
 birdnet:
   sensitivity: 1.0
   threshold: 0.75
@@ -77,7 +77,7 @@ The (**birdnet latitude**) and (**birdnet longitude**) settings enable location-
 
 Configuration file has few settings which controls output of real-time detection results
 
-```
+```yaml
 realtime:
   interval: 15
   processingtime: false
@@ -98,7 +98,7 @@ Setting (**audioexport enabled: true**) allows 3-second audio clips containing i
 
 Setting (**log enabled: true**) saves the timestamp and common name of identified birds to a log file, which can be used as a chat log overlay in OBS. 
 
-```
+```yaml
 output:
   file:
     enabled: false
@@ -126,7 +126,7 @@ BirdNET-Go supports BirdWeather API for uploading captured audio clips and BirdN
 
 For Birdweather API access you need a token which can be requested by email from tim@birdweather.com. You can use following template for token request
 
-```
+```text
 Hi, Tim, and thank you so much for BirdWeather.com!
 
 Below is the information I would like to use to request a BirdWeather ID

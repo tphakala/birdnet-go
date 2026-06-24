@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,7 +64,12 @@ func TestExportSkipsImageSymlinks(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(src, "images"), 0o755))
 	writeFile(t, filepath.Join(src, "images", "real.png"), "PNGDATA")
 	if err := os.Symlink(secret, filepath.Join(src, "images", "leak.png")); err != nil {
-		t.Skipf("symlink creation not supported here: %v", err)
+		// Windows runners often lack the privilege to create symlinks; elsewhere
+		// a failure is unexpected and must not silently hide the test.
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink creation not supported here: %v", err)
+		}
+		require.NoError(t, err)
 	}
 
 	require.NoError(t, export(src, out))

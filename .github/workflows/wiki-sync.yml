@@ -89,6 +89,18 @@ jobs:
           # Unicode-hyphen guide that BirdNET-Go-Guide.md now replaces.
           find "${wiki}" -maxdepth 1 -type f -name '*.md.md' -delete
           find "${wiki}" -maxdepth 1 -type f -name 'BirdNET*Go-Guide.md' ! -name 'BirdNET-Go-Guide.md' -delete
+          # Prune managed pages the exporter no longer generates, so deleting or
+          # renaming a doc/wiki page removes its published counterpart instead of
+          # leaving an orphan. Only pages carrying the generated banner are
+          # eligible, so hand-written wiki pages are never touched.
+          for page in "${wiki}"/*.md; do
+            [ -e "${page}" ] || continue
+            name="$(basename "${page}")"
+            if grep -qF 'wiki-sync:managed' "${page}" && [ ! -e "${staging}/${name}" ]; then
+              echo "pruning stale managed page: ${name}"
+              rm -f "${page}"
+            fi
+          done
 
       - name: Commit and push
         if: steps.guard.outputs.enabled == 'true'

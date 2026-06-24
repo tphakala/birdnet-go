@@ -5,7 +5,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 ## Getting Started
 
 - [Frequently Asked Questions](faq.md) - Common questions, problems, and quick fixes
-- [BirdNET-Go Guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET%E2%80%90Go-Guide) - Overview and basic concepts
+- [BirdNET-Go Guide](guide.md) - Overview and basic concepts
 - [Installation Guide](installation.md) - Comprehensive installation instructions for all methods
 - [Recommended Hardware](hardware.md) - Hardware recommendations for optimal performance
 
@@ -22,22 +22,22 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 - [External Media (USB, SD, File Shares)](external-media.md) - Mounting removable and network storage for import and backup
 - [Detection Pipeline Architecture](detection-pipeline.md) - How audio flows through multi-model inference, filtering, and action dispatch
-- [BirdNET Detection Pipeline](BirdNET-Go-Guide#birdnet-detection-pipeline) - Understanding how settings affect detections
-- [BirdNET Range Filter](BirdNET-Go-Guide#birdnet-range-filter) - Location and time-based species filtering
-- [Web Dashboard](BirdNET-Go-Guide#web-dashboard) - Using the visualization dashboard
+- [BirdNET Detection Pipeline](guide.md#birdnet-detection-pipeline) - Understanding how settings affect detections
+- [BirdNET Range Filter](guide.md#birdnet-range-filter) - Location and time-based species filtering
+- [Web Dashboard](guide.md#web-dashboard) - Using the visualization dashboard
 - [Remote Internet Access](cloudflare_tunnel_guide.md) - Exposing BirdNET-Go to the internet securely
-- [Weather Integration](BirdNET-Go-Guide#weather-integration) - Connecting to weather data providers
-- [Audio Processing](BirdNET-Go-Guide#audio-processing) - Advanced audio processing capabilities
-- [Deep Detection](BirdNET-Go-Guide#deep-detection) - Improving detection reliability
-- [Live Audio Streaming](BirdNET-Go-Guide#live-audio-streaming) - Streaming audio from the web interface
-- [Species-Specific Settings](BirdNET-Go-Guide#species-specific-settings) - Customized detection rules for specific species
+- [Weather Integration](guide.md#weather-integration) - Connecting to weather data providers
+- [Audio Processing](guide.md#audio-processing) - Advanced audio processing capabilities
+- [Deep Detection](guide.md#deep-detection) - Improving detection reliability
+- [Live Audio Streaming](guide.md#live-audio-streaming) - Streaming audio from the web interface
+- [Species-Specific Settings](guide.md#species-specific-settings) - Customized detection rules for specific species
 
 ## Integration & Security
 
 - [Push Notifications](guide.md#push-notifications) - Discord, Telegram, Slack, and 20+ services
 - [Discord Setup Guide](guide.md#discord-setup-guide) - Step-by-step Discord webhook configuration with rich embeds
-- [MQTT Integration](BirdNET-Go-Guide#integration-options) - Connecting to IoT systems
-- [BirdWeather API](BirdNET-Go-Guide#integration-options) - Sharing data with BirdWeather.com
+- [MQTT Integration](guide.md#integration-options) - Connecting to IoT systems
+- [BirdWeather API](guide.md#integration-options) - Sharing data with BirdWeather.com
 - [Authentication](cloudflare_tunnel_guide.md#enabling-authentication) - Securing your BirdNET-Go instance
 - [Cloudflare Tunnel Setup](cloudflare_tunnel_guide.md) - Detailed guide for secure internet access
 
@@ -51,15 +51,15 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 - [Frequently Asked Questions](faq.md) - Common questions, problems, and quick fixes
 - [RTSP Troubleshooting](rtsp-troubleshooting.md) - Comprehensive guide for RTSP camera issues and configuration
-- [Docker Troubleshooting](BirdNET-Go-Guide#docker-installation-troubleshooting) - Resolving common Docker issues
-- [Support Script](BirdNET-Go-Guide#support-script) - Generating diagnostic information
-- [Reporting Issues](BirdNET-Go-Guide#reporting-issues) - How to effectively report bugs
+- [Docker Troubleshooting](guide.md#docker-installation-troubleshooting) - Resolving common Docker issues
+- [Support Script](guide.md#support-script) - Generating diagnostic information
+- [Reporting Issues](guide.md#reporting-issues) - How to effectively report bugs
 
 ## Reference
 
 - [Configuration Reference](configuration-reference.md) - Complete reference of every `config.yaml` setting with types and descriptions (auto-generated from source)
-- [Command Line Interface](BirdNET-Go-Guide#command-line-interface) - Available commands and options
-- [Detection Pipeline Flow](BirdNET-Go-Guide#birdnet-detection-pipeline) - How settings interact and affect detection results
-- [Range Filter Commands](BirdNET-Go-Guide#inspection-and-debugging) - CLI commands for inspecting range filter results
-- [Supported Languages](BirdNET-Go-Guide#supported-languages-for-species-labels) - Language options for species labels
-- [Log Rotation](BirdNET-Go-Guide#log-rotation) - Managing log files
+- [Command Line Interface](guide.md#command-line-interface) - Available commands and options
+- [Detection Pipeline Flow](guide.md#birdnet-detection-pipeline) - How settings interact and affect detection results
+- [Range Filter Commands](guide.md#inspection-and-debugging) - CLI commands for inspecting range filter results
+- [Supported Languages](guide.md#supported-languages-for-species-labels) - Language options for species labels
+- [Log Rotation](guide.md#log-rotation) - Managing log files

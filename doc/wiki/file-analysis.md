@@ -4,7 +4,7 @@ File analysis works best with WAV files which are recorded in 48k sample rate, B
 
 Running a file analysis for single file
 
-```
+```text
 raspberry$ ./birdnet-go file soundscape.wav --threshold 0.1
 Read config file: /etc/birdnet-go/config.yaml
 BirdNET GLOBAL 6K V2.4 FP32 model initialized, using 4 threads of available 4 CPUs
@@ -14,7 +14,7 @@ Output written to output/soundscape.wav.txt
 
 Default Raven table output
 
-```
+```text
 raspberry$ cat output/soundscape.wav.txt
 Selection       View    Channel Begin File      Begin Time (s)  End Time (s)    Low Freq (Hz)   High Freq (Hz)  Species Code    Common Name     Confidence
 1       Spectrogram 1   1       soundscape.wav  0.0     3.0     0       15000   bkcchi  Black-capped Chickadee  0.9016
