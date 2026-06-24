@@ -99,7 +99,12 @@
   ]);
   let newSampleRateVerified = $state(true);
   let newSampleRateLoading = $state(false);
-  let newFetchController: AbortController | null = $state(null);
+  // Plain (non-reactive) ref: the probe effect both reads (abort) and writes this
+  // controller in its synchronous prefix. As $state that read/write would register
+  // the controller as a dependency of the effect and immediately re-run it, whose
+  // cleanup then aborts the brand-new in-flight probe (issue #3593). It is only
+  // used imperatively for abort(), never in markup, so it must not be reactive.
+  let newFetchController: AbortController | null = null;
   let newModels = $state<string[]>([]);
   let newEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
@@ -253,16 +258,23 @@
   async function fetchNewDeviceCapabilities(deviceId: string) {
     if (!deviceId) return;
     newFetchController?.abort();
-    newFetchController = new AbortController();
+    const controller = new AbortController();
+    newFetchController = controller;
     newSampleRateLoading = true;
     try {
-      const result = await fetchCapabilities(deviceId, newFetchController.signal);
+      const result = await fetchCapabilities(deviceId, controller.signal);
+      // Ignore a superseded probe: a newer device selection has replaced this
+      // controller, so applying these results (or clearing the loading flag)
+      // would clobber the newer probe's state.
+      if (newFetchController !== controller) return;
       newSampleRateOptions = result.options;
       newSampleRateVerified = result.verified;
     } catch {
       // Only AbortError reaches here (utility handles all other failures internally)
     } finally {
-      newSampleRateLoading = false;
+      if (newFetchController === controller) {
+        newSampleRateLoading = false;
+      }
     }
   }
 
@@ -272,8 +284,12 @@
       prevNewDevice = newDevice;
       fetchNewDeviceCapabilities(newDevice);
     }
+    // Capture the controller this run started so the cleanup only aborts that
+    // probe. A later re-run for an unrelated reason must not abort a probe it
+    // did not start (issue #3593).
+    const controllerToAbort = newFetchController;
     return () => {
-      newFetchController?.abort();
+      controllerToAbort?.abort();
     };
   });
 </script>
