@@ -53,7 +53,7 @@ If you're using Docker Compose with BirdNET-Go, setting up Cloudflare Tunnel is 
        depends_on:
          - birdnet-go
      ```
-   - Alternatively, use the [premade docker-compose.yml](../Docker/docker-compose.yml) which already includes this configuration (commented out)
+   - Alternatively, use the [premade docker-compose.yml](../../Docker/docker-compose.yml) which already includes this configuration (commented out)
 
 4. **Start the Services**:
 
