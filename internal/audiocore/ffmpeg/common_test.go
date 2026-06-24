@@ -291,3 +291,23 @@ func TestGetAudioDuration_CanceledContext(t *testing.T) {
 	_, err := ffmpeg.GetAudioDuration(ctx, dummyPath)
 	assert.Error(t, err, "canceled context should return an error")
 }
+
+// TestValidatePath_RedactsContaminatedTokenInError verifies that the validators
+// never put a credential-bearing ingress path into the error (which reaches
+// telemetry). The Home Assistant ingress prefix carries a token in the path.
+func TestValidatePath_RedactsContaminatedTokenInError(t *testing.T) {
+	t.Parallel()
+
+	const token = "super-secret-ingress-token"
+	contaminated := "/api/hassio_ingress/" + token + "/usr/bin/ffmpeg"
+
+	ffErr := ffmpeg.ValidateFFmpegPath(contaminated)
+	require.Error(t, ffErr)
+	assert.NotContains(t, ffErr.Error(), token, "ffmpeg validation error must not leak the ingress token")
+	assert.NotContains(t, ffErr.Error(), "hassio_ingress", "ffmpeg validation error must not leak the contaminated path")
+
+	soxErr := ffmpeg.ValidateSoxPath("/api/hassio_ingress/" + token + "/usr/bin/sox")
+	require.Error(t, soxErr)
+	assert.NotContains(t, soxErr.Error(), token, "sox validation error must not leak the ingress token")
+	assert.NotContains(t, soxErr.Error(), "hassio_ingress", "sox validation error must not leak the contaminated path")
+}
