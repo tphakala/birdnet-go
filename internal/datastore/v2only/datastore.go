@@ -1104,6 +1104,14 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 	// TimeOfDay calculation
 	timeOfDay := ds.calculateTimeOfDay(timestamp, lat, lon)
 
+	// Model type from the preloaded Model entity (batch-loaded via
+	// loadDetectionRelations), so the search UI can pick the correct spectrogram
+	// frequency axis (bat vs bird) without a per-result lookup.
+	modelType := ""
+	if det.Model != nil {
+		modelType = string(det.Model.ModelType)
+	}
+
 	return datastore.DetectionRecord{
 		ID:             strconv.FormatUint(uint64(det.ID), 10),
 		Timestamp:      timestamp,
@@ -1121,6 +1129,7 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 		Device:         device,
 		Source:         source,
 		TimeOfDay:      timeOfDay,
+		ModelType:      modelType,
 	}
 }
 
