@@ -330,11 +330,22 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	require.NoError(t, err, "Get should return stale data without error")
 	assert.Equal(t, "http://old.example.com/redpoll.jpg", img.URL, "Should return stale data initially")
 
-	// Poll for background refresh to complete (replaces fixed time.Sleep which was flaky in CI)
+	// Poll for the background refresh to land the DB write, which is the actual
+	// observable the assertions below check. The refresh goroutine updates the
+	// in-memory cache (dataMap.Store) BEFORE writing the DB (saveToDB), so polling
+	// primaryCache.Get() (an in-memory read) would unblock before saveToDB runs and
+	// race the DB assertions on a loaded runner. Polling the DB here guarantees both
+	// writes have completed once the condition is met, because the DB write is the
+	// last write in the refresh goroutine's fallback branch.
 	require.Eventually(t, func() bool {
-		img2, err := primaryCache.Get(species)
-		return err == nil && img2.URL == "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg"
-	}, 5*time.Second, 50*time.Millisecond, "Background refresh should update cache with wikimedia fallback URL")
+		dbEntry, err := store.GetImageCache(datastore.ImageCacheQuery{
+			ScientificName: species,
+			ProviderName:   providerAvicommons,
+		})
+		return err == nil && dbEntry != nil &&
+			dbEntry.URL == "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg" &&
+			dbEntry.CachedAt.After(staleTime)
+	}, 5*time.Second, 50*time.Millisecond, "Background refresh should persist wikimedia fallback URL to DB")
 
 	// Verify full attribution after refresh
 	img2, err := primaryCache.Get(species)

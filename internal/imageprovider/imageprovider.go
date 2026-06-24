@@ -1388,6 +1388,14 @@ func (c *BirdImageCache) handleDBCacheHit(scientificName string, dbImage *BirdIm
 		return c.handleNegativeDBEntry(scientificName, dbImage)
 	}
 
+	// Store the (possibly stale) DB entry in memory BEFORE spawning any background
+	// refresh. The go statement is a happens-before edge for the goroutine's start,
+	// so a refresh goroutine spawned afterwards is guaranteed to run its own
+	// dataMap.Store(fresh) AFTER this store. Storing here first prevents this stale
+	// store from racing the refresh and clobbering the fresh value back to stale in
+	// memory while the DB already holds the fresh entry.
+	c.dataMap.Store(scientificName, dbImage)
+
 	// Regular positive entry - check staleness
 	if isCacheEntryStale(dbImage.CachedAt, false) {
 		log.Debug("DB cache entry is stale, returning stale data and triggering background refresh",
@@ -1399,7 +1407,6 @@ func (c *BirdImageCache) handleDBCacheHit(scientificName string, dbImage *BirdIm
 		log.Debug("Image loaded from DB cache")
 	}
 
-	c.dataMap.Store(scientificName, dbImage)
 	if c.metrics != nil {
 		c.metrics.IncrementCacheMisses()
 	}
