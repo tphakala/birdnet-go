@@ -155,6 +155,84 @@ sed_escape_replacement() {
     printf '%s' "$1" | tr -d '\n\r' | sed -e 's/[\\|&]/\\&/g'
 }
 
+# Escape a string for use on the PATTERN (left-hand) side of a sed s||| command using '|'
+# as the delimiter. Escapes BRE/ERE metacharacters and the '|' delimiter so the value is
+# matched literally (e.g. a filesystem path whose '.' must not act as "any character").
+sed_escape_pattern() {
+    printf '%s' "$1" | tr -d '\n\r' | sed -e 's/[][\\.^$*|]/\\&/g'
+}
+
+# Safely set a scalar VALUE for KEY inside the top-level YAML block BLOCK of the config
+# file (default $CONFIG_FILE). The substitution is scoped with a sed address range to the
+# block, so it never touches an identically named key in another block (for example
+# webserver.port vs mysql.port vs the rtsp port). BLOCK and KEY MUST be literal YAML
+# identifiers from the caller (never user input); VALUE is the only untrusted part and is
+# escaped via sed_escape_replacement, with '|' as the sed delimiter to match that escaping.
+# Any inline comment on the edited line is dropped. Re-run-safe: matches the current value
+# regardless of what it is. No-op if BLOCK or KEY is absent.
+set_config_value() {
+    local block="$1"
+    local key="$2"
+    local value="$3"
+    local file="${4:-$CONFIG_FILE}"
+    [ -f "$file" ] || return 1
+    local escaped
+    escaped=$(sed_escape_replacement "$value")
+    # Anchor to exactly two leading spaces (the indentation of a direct child of a top-level
+    # block) so a same-named key in a deeper nested block is never overwritten.
+    sed -i -E "/^${block}:/,/^[A-Za-z0-9_]/ s|^([[:space:]]{2}${key}:[[:space:]]*).*|\\1${escaped}|" -- "$file"
+}
+
+# Re-run-safe update of the first audio source's device id and friendly name, scoped to the
+# realtime.audio.sources block (4-space indent) so it works whether the config is pristine
+# ("sysdefault" / "Sound Card 1") or already reconfigured (Forgejo #729). The old code only
+# matched the literal template values and silently no-opped on a re-run. DEVICE and NAME are
+# escaped for sed. Assumes the single-source layout the installer manages.
+set_first_audio_source() {
+    local device="$1"
+    local name="$2"
+    local file="${3:-$CONFIG_FILE}"
+    [ -f "$file" ] || return 1
+    # If there is no active (uncommented) source device line to edit (e.g. the config is
+    # currently RTSP-only with the sound-card source commented out), report a no-op so the
+    # caller can warn instead of the sed silently changing nothing while exit 0 looks like
+    # success.
+    if ! sed -n '/^[[:space:]]\{4\}sources:/,/^[[:space:]]\{4\}[A-Za-z]/p' "$file" | grep -qE '^[[:space:]]+(-[[:space:]]+)?device:[[:space:]]'; then
+        return 1
+    fi
+    # Edit ONLY the first source item, not every entry in the sources block, so a
+    # multi-source config (e.g. extra sources added via the web UI) is not clobbered. The
+    # item boundary is the list dash (`- `), and the name/device fields are matched with an
+    # optional leading dash so the edit works regardless of which field comes first.
+    # device/name are passed as literal awk variables, so sed/regex metacharacters in a
+    # device name need no escaping here. Write to a temp file then copy back over the
+    # original so its ownership and permissions are preserved.
+    if awk -v device="$device" -v name="$name" '
+        /^    sources:/ { in_sources=1; print; next }
+        in_sources && /^    [A-Za-z]/ { in_sources=0 }
+        in_sources && /^[[:space:]]*-[[:space:]]/ { item++ }
+        in_sources && item == 1 && !name_done && /^[[:space:]]*(-[[:space:]]+)?name:/ {
+            match($0, /^[[:space:]]*(-[[:space:]]+)?name:[[:space:]]*/)
+            print substr($0, 1, RLENGTH) "\"" name "\""
+            name_done = 1
+            next
+        }
+        in_sources && item == 1 && !device_done && /^[[:space:]]*(-[[:space:]]+)?device:/ {
+            match($0, /^[[:space:]]*(-[[:space:]]+)?device:[[:space:]]*/)
+            print substr($0, 1, RLENGTH) "\"" device "\""
+            device_done = 1
+            next
+        }
+        { print }
+    ' "$file" > "${file}.tmp"; then
+        cat "${file}.tmp" > "$file"
+        rm -f "${file}.tmp"
+    else
+        rm -f "${file}.tmp"
+        return 1
+    fi
+}
+
 # Prevent sed injection from user-supplied lat/lon and port values.
 validate_numeric() {
     local value="$1"
@@ -1507,131 +1585,20 @@ EOF
         fi
     fi
 
-    # Check port availability early in prerequisites
-    print_message "🔌 Checking required port availability..." "$YELLOW"
-    local ports_to_check=("80" "443" "${WEB_PORT:-8080}" "8090")
-    local unique_ports=()
-    local failed_ports=()
-    local port_processes=()
-    local port
-    local process_info
-    
-    # Use associative array for efficient deduplication
-    local -A seen
-    
-    # Deduplicate ports array to avoid double-checking
-    for port in "${ports_to_check[@]}"; do
-        # Skip empty entries
-        if [ -z "$port" ]; then
-            continue
-        fi
-        
-        # Only add if not seen before
-        if [ -z "${seen[$port]:-}" ]; then
-            seen[$port]=1
-            unique_ports+=("$port")
-        fi
-    done
-    
-    for port in "${unique_ports[@]}"; do
-        if ! check_port_availability "$port"; then
-            failed_ports+=("$port")
-            process_info=$(get_port_process_info "$port")
-            port_processes+=("$process_info")
-            print_message "❌ Port $port is already in use by: $process_info" "$RED"
-        else
-            print_message "✅ Port $port is available" "$GREEN"
-        fi
-    done
-    
-    # If any ports are in use, show detailed error and exit
-    if [ ${#failed_ports[@]} -gt 0 ]; then
-        print_message "\n❌ ERROR: Required ports are not available" "$RED"
-        print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
-        print_message "  • Port 80   - HTTP web interface" "$YELLOW"
-        print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
-        local web_port_display="${WEB_PORT:-8080}"
-        if [ "$web_port_display" != "80" ] && [ "$web_port_display" != "443" ]; then
-            print_message "  • Port $web_port_display - Primary web interface" "$YELLOW"
-        fi
-        print_message "  • Port 8090 - Prometheus metrics endpoint" "$YELLOW"
-        
-        print_message "\n📋 Ports currently in use:" "$RED"
-        for i in "${!failed_ports[@]}"; do
-            print_message "  • Port ${failed_ports[$i]} - Used by: ${port_processes[$i]}" "$RED"
-        done
-        
-        print_message "\n💡 To resolve this issue, you can:" "$YELLOW"
-        print_message "\n1. Stop the conflicting services:" "$YELLOW"
-        
-        # Provide specific instructions based on common services
-        for i in "${!failed_ports[@]}"; do
-            local failed_port="${failed_ports[$i]}"
-            local process="${port_processes[$i]}"
-            # Convert to lowercase for case-insensitive matching
-            local process_lower
-            process_lower=$(echo "$process" | tr '[:upper:]' '[:lower:]')
-            
-            if [[ "$process_lower" == *"apache"* ]] || [[ "$process_lower" == *"httpd"* ]]; then
-                print_message "   sudo systemctl stop apache2  # For Apache on port $failed_port" "$NC"
-            elif [[ "$process_lower" == *"nginx"* ]]; then
-                print_message "   sudo systemctl stop nginx    # For Nginx on port $failed_port" "$NC"
-            elif [[ "$process_lower" == *"lighttpd"* ]]; then
-                print_message "   sudo systemctl stop lighttpd # For Lighttpd on port $failed_port" "$NC"
-            elif [[ "$process_lower" == *"caddy"* ]]; then
-                print_message "   sudo systemctl stop caddy    # For Caddy on port $failed_port" "$NC"
-            elif [[ "$failed_port" == "80" ]] || [[ "$failed_port" == "443" ]]; then
-                print_message "   sudo systemctl stop <service> # Replace <service> with the service using port $failed_port" "$NC"
-            fi
-        done
-        
-        print_message "\n2. Or use Docker with different port mappings (advanced users):" "$YELLOW"
-        print_message "   Modify the systemd service file after installation to use different ports" "$NC"
-        
-        print_message "\n3. Or uninstall conflicting software if not needed:" "$YELLOW"
-        print_message "   sudo apt remove <package-name>" "$NC"
-        
-        print_message "\n⚠️  Note: BirdNET-Go requires ports 80 and 443 for:" "$YELLOW"
-        print_message "  • HTTP web interface access" "$YELLOW"
-        print_message "  • HTTPS web interface (if SSL is configured)" "$YELLOW"
-        print_message "  • Proper web interface functionality" "$YELLOW"
-
-        # Build detailed diagnostic information about port conflicts using jq for safe JSON construction
-        local ports_json
-        ports_json="[]"
-        for i in "${!failed_ports[@]}"; do
-            # Use jq to safely construct each port object (handles newlines, quotes, special chars)
-            local port_obj
-            port_obj=$(jq -n \
-                --arg port "${failed_ports[$i]}" \
-                --arg proc "${port_processes[$i]}" \
-                '{port: ($port | tonumber), process: $proc}')
-            # Append to array
-            ports_json=$(echo "$ports_json" | jq --argjson obj "$port_obj" '. += [$obj]')
-        done
-
-        # Build complete diagnostic JSON safely with jq
-        local diagnostic_json
-        diagnostic_json=$(jq -n \
-            --argjson ports "$ports_json" \
-            --arg web_port "${WEB_PORT:-8080}" \
-            --argjson total "${#failed_ports[@]}" \
-            '{
-                failed_ports: $ports,
-                requested_ports: {
-                    web_port: $web_port,
-                    http: 80,
-                    https: 443,
-                    metrics: 8090
-                },
-                total_conflicts: $total
-            }')
-
-        send_telemetry_event "error" "Port availability check failed: ${#failed_ports[@]} port(s) in use" "error" "step=check_prerequisites" "$diagnostic_json"
-        exit 1
+    # Web interface port heads-up. Ports are configurable now, so this is informational
+    # only and never fatal (GH #3485): a busy port must not block the install. The web
+    # port can be changed during configuration (configure_web_port), and the optional
+    # 80/443 (AutoTLS) and 8090 (metrics) bindings are opt-in and checked when enabled.
+    print_message "🔌 Checking web interface port availability..." "$YELLOW"
+    local web_port_check="${WEB_PORT:-8080}"
+    if check_port_availability "$web_port_check"; then
+        print_message "✅ Web interface port $web_port_check is available" "$GREEN"
+    else
+        local web_port_proc
+        web_port_proc=$(get_port_process_info "$web_port_check")
+        print_message "⚠️ Default web interface port $web_port_check is in use by: $web_port_proc" "$YELLOW"
+        print_message "   You can choose a different web interface port during configuration." "$YELLOW"
     fi
-    
-    print_message "✅ All required ports are available" "$GREEN"
 
     log_message "INFO" "System prerequisites check completed successfully"
     print_message "🥳 System prerequisites checks passed" "$GREEN"
@@ -1701,6 +1668,31 @@ check_not_root() {
         print_message "" "$NC"
         exit 1
     fi
+}
+
+# Rewrite absolute paths in a migrated config that still reference the old installation
+# location so they resolve under the new owner's home (GH #3179: a config carried over from
+# /root keeps paths like monitoring.disk.paths: /root/.config/birdnet-go, which then fail
+# with "permission denied"). Only the exact old-install prefixes are rewritten so unrelated
+# user paths are left untouched. The pattern side is escaped so '.' is matched literally.
+rewrite_migrated_config_paths() {
+    local config="$1"
+    local old_home="$2"   # e.g. /root
+    local new_home="$3"   # e.g. /home/pi
+    [ -f "$config" ] || return 0
+    [ -n "$old_home" ] && [ -n "$new_home" ] || return 0
+    [ "$old_home" = "$new_home" ] && return 0
+
+    local pair
+    for pair in "birdnet-go-app" ".config/birdnet-go" ".cache/birdnet-go"; do
+        local old_path="${old_home}/${pair}"
+        local new_path="${new_home}/${pair}"
+        local esc_old esc_new
+        esc_old=$(sed_escape_pattern "$old_path")
+        esc_new=$(sed_escape_replacement "$new_path")
+        sed -i -e "s|${esc_old}|${esc_new}|g" -- "$config"
+    done
+    log_message "INFO" "Rewrote migrated config paths from ${old_home}/* to ${new_home}/* in $config"
 }
 
 # Function to migrate a root installation to the current user's home directory
@@ -1793,6 +1785,9 @@ migrate_installation() {
     fi
     log_message "INFO" "File ownership updated to $USER"
 
+    # Rewrite absolute paths that still point at the old install location (GH #3179)
+    rewrite_migrated_config_paths "${dest_path}/config/config.yaml" "$(dirname "$source_path")" "$HOME"
+
     # Step 4: Post-migration validation
     print_message "🔍 Validating migration..." "$YELLOW"
     local validation_ok=true
@@ -1831,21 +1826,15 @@ migrate_installation() {
         return 1
     fi
 
-    # Step 5: Preserve timezone and clean up old systemd service
-    if [ -z "$CONFIGURED_TZ" ]; then
-        local tz_service_file=""
-        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
-            tz_service_file="/etc/systemd/system/birdnet-go.service"
-        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
-            tz_service_file="/lib/systemd/system/birdnet-go.service"
-        fi
-        if [ -n "$tz_service_file" ]; then
-            CONFIGURED_TZ=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$tz_service_file" 2>/dev/null | head -1)
-            if [ -n "$CONFIGURED_TZ" ]; then
-                log_message "INFO" "Preserved timezone from old service: $CONFIGURED_TZ"
-                print_message "📍 Preserved existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
-            fi
-        fi
+    # Step 5: Preserve the web port, TLS/metrics port bindings, and timezone from the old
+    # unit BEFORE deleting it. The migration path sets MIGRATION_DONE=true and skips the
+    # interactive config steps, so without this the regenerated unit would fall back to
+    # fresh-install defaults and a migrated install would lose a custom port, AutoTLS, or the
+    # metrics binding.
+    load_existing_service_config
+    if [ -n "$CONFIGURED_TZ" ]; then
+        log_message "INFO" "Preserved settings from old service (timezone: $CONFIGURED_TZ, web port: $WEB_PORT)"
+        print_message "📍 Preserved existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
     fi
     sudo systemctl disable --now birdnet-go.service 2>/dev/null || true
     sudo rm -f /etc/systemd/system/birdnet-go.service
@@ -1879,6 +1868,15 @@ check_existing_installation_owner() {
     local found_other_install=false
     local other_user=""
     local other_path=""
+
+    # If the current user already has a valid install, skip the cross-user migration check
+    # entirely. Migration intentionally leaves the source directory in place, so a leftover
+    # install under /root or another home must not re-trigger the migration prompt on every
+    # subsequent run (GH #3258, #3273). The user's own install is the active one.
+    if [ -f "$HOME/birdnet-go-app/config/config.yaml" ]; then
+        log_message "INFO" "Current user already has an install at $HOME/birdnet-go-app; skipping cross-user migration check"
+        return 0
+    fi
 
     # Helper: given a home directory path, set other_user/other_path if it differs from $HOME
     _check_install_home() {
@@ -2956,8 +2954,22 @@ validate_audio_device() {
         fi
     fi
 
-    # Test audio device access - using LC_ALL=C to force English output
-    if ! LC_ALL=C arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>/dev/null; then
+    # Probe the device for a usable capture format. Many USB mics only support S16_LE at
+    # 48kHz, but some only offer S24_3LE/S32_LE; BirdNET-Go/ffmpeg convert formats
+    # downstream, so do not hard-fail solely because S16_LE is unavailable (GH #357). Try a
+    # few common formats (LC_ALL=C forces English output) before giving up.
+    local probe_fmt
+    local audio_probe_ok="false"
+    local audio_working_fmt=""
+    for probe_fmt in S16_LE S24_3LE S32_LE S24_LE; do
+        if LC_ALL=C arecord -c 1 -f "$probe_fmt" -r 48000 -d 1 -D "$device" /dev/null 2>/dev/null; then
+            audio_probe_ok="true"
+            audio_working_fmt="$probe_fmt"
+            break
+        fi
+    done
+
+    if [ "$audio_probe_ok" != "true" ]; then
         # Collect detailed audio device diagnostics (raw output, will be safely encoded)
         local arecord_error
         local device_list
@@ -2999,11 +3011,16 @@ validate_audio_device() {
         print_message "  • Device is busy" "$YELLOW"
         print_message "  • Insufficient permissions" "$YELLOW"
         print_message "  • Device is not properly connected" "$YELLOW"
+        print_message "  • Device does not support 48kHz mono capture in a common format" "$YELLOW"
         return 1
-    else
-        print_message "✅ Audio device validated successfully, tested 48kHz 16-bit mono capture" "$GREEN"
     fi
-    
+
+    if [ "$audio_working_fmt" = "S16_LE" ]; then
+        print_message "✅ Audio device validated successfully, tested 48kHz 16-bit mono capture" "$GREEN"
+    else
+        print_message "✅ Audio device validated using $audio_working_fmt (48kHz mono); BirdNET-Go will convert the format as needed" "$GREEN"
+    fi
+
     return 0
 }
 
@@ -3104,14 +3121,19 @@ configure_sound_card() {
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
             print_message "$ALSA_CARD"
 
-            # Update audio sources config with the selected device (new multi-source format)
-            local escaped_card
-            escaped_card=$(sed_escape_replacement "$ALSA_CARD")
-            sed -i "s|device: \"sysdefault\"|device: \"${escaped_card}\"|" "$CONFIG_FILE"
-            log_command_result "sed audio device configuration" $? "updating config file"
-            sed -i "s|name: \"Sound Card 1\"|name: \"${escaped_card}\"|" "$CONFIG_FILE"
-            log_command_result "sed audio source name" $? "updating source name in config"
-                
+            # Update the first audio source's device and name. Re-run-safe so it also works
+            # when reconfiguring an already-configured install, not just a pristine template
+            # (Forgejo #729). set_first_audio_source handles sed escaping internally and
+            # returns non-zero when there is no active source line to edit (e.g. the config
+            # is currently RTSP-only with the sound-card source commented out).
+            if set_first_audio_source "$ALSA_CARD" "$ALSA_CARD"; then
+                log_command_result "audio device configuration" 0 "updating config file"
+            else
+                print_message "⚠️ No active sound-card source found in the configuration (it may currently use RTSP)." "$YELLOW"
+                print_message "   The device selection was not applied; switch the audio source in config.yaml or reinstall." "$YELLOW"
+                log_message "WARN" "set_first_audio_source made no change: no active source line in $CONFIG_FILE"
+            fi
+
             AUDIO_ENV="--device /dev/snd"
             return 0
         else
@@ -3383,6 +3405,42 @@ get_ip_location() {
     return 1
 }
 
+# Resolve the host timezone using a single, validated detection chain.
+# Shared by configure_timezone() and generate_systemd_service_content() so the two
+# cannot drift apart (Forgejo #877). Tries, in order: an optional preferred candidate
+# (e.g. a previously configured zone), /etc/timezone, timedatectl, and the
+# /etc/localtime symlink. The result is validated against the zoneinfo database and
+# rejected if it contains path traversal. Echoes a valid IANA zone name, or an empty
+# string if none could be resolved (callers decide the UTC fallback so they can warn).
+resolve_host_timezone() {
+    local candidate="${1:-}"
+    local tz="$candidate"
+
+    if [ -z "$tz" ] && [ -f /etc/timezone ]; then
+        tz=$(cat /etc/timezone 2>/dev/null | tr -d '\n' | tr -d ' ')
+    fi
+
+    if [ -z "$tz" ] && command_exists timedatectl; then
+        tz=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '\n' | tr -d ' ')
+    fi
+
+    if [ -z "$tz" ] && [ -L /etc/localtime ]; then
+        local tz_path
+        tz_path=$(readlink -f /etc/localtime)
+        tz=${tz_path#/usr/share/zoneinfo/}
+    fi
+
+    # Validate against the zoneinfo database before trusting it. timedatectl can report
+    # "n/a" on unconfigured images and a non-standard /etc/localtime symlink can leave an
+    # absolute path; neither is a valid zone identifier. A value containing ".." would let
+    # the existence check escape /usr/share/zoneinfo, so reject those outright.
+    if [ -n "$tz" ] && { [[ "$tz" == *..* ]] || [ ! -f "/usr/share/zoneinfo/$tz" ]; }; then
+        tz=""
+    fi
+
+    printf '%s' "$tz"
+}
+
 # Function to configure timezone
 configure_timezone() {
     # Silent mode: use system timezone
@@ -3405,22 +3463,9 @@ configure_timezone() {
     local system_tz=""
     local detected_tz=""
     
-    # Try multiple methods to detect timezone
-    if [ -f /etc/timezone ]; then
-        system_tz=$(cat /etc/timezone 2>/dev/null | tr -d '\n' | tr -d ' ')
-    fi
-    
-    # Fallback to timedatectl if available
-    if [ -z "$system_tz" ] && command_exists timedatectl; then
-        system_tz=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '\n' | tr -d ' ')
-    fi
-    
-    # Fallback to readlink on /etc/localtime
-    if [ -z "$system_tz" ] && [ -L /etc/localtime ]; then
-        local tz_path=$(readlink -f /etc/localtime)
-        system_tz=${tz_path#/usr/share/zoneinfo/}
-    fi
-    
+    # Detect and validate the system timezone via the shared resolver (Forgejo #877)
+    system_tz=$(resolve_host_timezone "")
+
     # Default to UTC if we couldn't detect
     if [ -z "$system_tz" ]; then
         system_tz="UTC"
@@ -3989,19 +4034,283 @@ get_port_process_info() {
 }
 
 
-# Function to configure web interface port
-configure_web_port() {
-    # Use env var if set, otherwise default
-    WEB_PORT="${BIRDNET_WEB_PORT:-8080}"
+# Repair configs from older installs that wrote a custom value into webserver.port. The
+# container always listens on 8080 internally (the Docker image EXPOSEs 8080 and the
+# entrypoint does not remap it), so the only valid internal value is 8080; the user's
+# chosen port lives in the host-side mapping (-p WEB_PORT:8080) instead. Idempotent: only
+# rewrites when the current value is not already 8080.
+ensure_internal_port_8080() {
+    [ -f "$CONFIG_FILE" ] || return 0
+    local cur
+    cur=$(sed -n -E '/^webserver:/,/^[A-Za-z0-9_]/ s/^[[:space:]]*port:[[:space:]]*"?([0-9]+)"?.*/\1/p' "$CONFIG_FILE" | head -1)
+    if [ -n "$cur" ] && [ "$cur" != "8080" ]; then
+        log_message "INFO" "Normalizing webserver.port from $cur to 8080 (container-internal port)"
+        set_config_value webserver port '"8080"'
+    fi
+}
 
-    # Validate port is a positive integer
+# Function to configure the web interface port (host-side mapping only)
+configure_web_port() {
+    # WEB_PORT is the HOST port that maps to the container's fixed internal 8080 port
+    # (-p WEB_PORT:8080). We deliberately never change webserver.port in config so the
+    # mapping target stays valid (older versions wrote the custom port into config, which
+    # broke custom ports entirely, GH #3485). BIRDNET_WEB_PORT overrides / pre-seeds.
+    WEB_PORT="${BIRDNET_WEB_PORT:-8080}"
     if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || [ "$WEB_PORT" -lt 1 ] || [ "$WEB_PORT" -gt 65535 ]; then
         log_message "WARN" "Invalid BIRDNET_WEB_PORT: $WEB_PORT, defaulting to 8080"
         WEB_PORT="8080"
     fi
 
-    # Update config file with port (validated as numeric, safe for sed)
-    sed -i -E "s|^([[:space:]]*port:[[:space:]]*)[0-9]+|\\1$WEB_PORT|" -- "$CONFIG_FILE"
+    if [ "$SILENT_MODE" = "true" ]; then
+        if ! check_port_availability "$WEB_PORT"; then
+            local proc_info
+            proc_info=$(get_port_process_info "$WEB_PORT")
+            log_message "WARN" "Silent mode: web port $WEB_PORT is in use by $proc_info"
+            print_message "⚠️ Silent mode: web port $WEB_PORT appears to be in use by: $proc_info" "$YELLOW"
+        fi
+        print_message "🔇 Silent mode: web interface port set to $WEB_PORT" "$YELLOW"
+    else
+        print_message "\n🌐 Web Interface Port" "$GREEN"
+        print_message "BirdNET-Go's dashboard will be reachable on this host port (default 8080)." "$YELLOW"
+        while true; do
+            print_message "❓ Web interface port [${WEB_PORT}]: " "$YELLOW" "nonewline"
+            if ! read -r port_input; then
+                # EOF (stdin exhausted): keep the current default rather than looping forever.
+                print_message "\nNo input; using port $WEB_PORT." "$YELLOW"
+                break
+            fi
+            [ -z "$port_input" ] && port_input="$WEB_PORT"
+            if ! [[ "$port_input" =~ ^[0-9]+$ ]] || [ "$port_input" -lt 1 ] || [ "$port_input" -gt 65535 ]; then
+                print_message "❌ Invalid port. Enter a number between 1 and 65535." "$RED"
+                continue
+            fi
+            if ! check_port_availability "$port_input"; then
+                local proc_info
+                proc_info=$(get_port_process_info "$port_input")
+                print_message "⚠️ Port $port_input is already in use by: $proc_info" "$YELLOW"
+                print_message "   Please choose a different port." "$YELLOW"
+                continue
+            fi
+            WEB_PORT="$port_input"
+            break
+        done
+        print_message "✅ Web interface port: $WEB_PORT" "$GREEN"
+    fi
+
+    # Repair configs from older versions that wrote a custom internal port.
+    ensure_internal_port_8080
+}
+
+# Function to configure TLS / external-access mode for a fresh install. Decides whether the
+# generated unit binds ports 80/443 (Let's Encrypt AutoTLS) and seeds the matching security
+# settings (host/baseurl/autoTls). Three modes: direct access (default, no 80/443), Let's
+# Encrypt AutoTLS, or behind a reverse proxy. Silent mode is driven by BIRDNET_ENABLE_AUTOTLS
+# and BIRDNET_HOST.
+configure_tls_access() {
+    if [ "$SILENT_MODE" = "true" ]; then
+        local want_autotls="${BIRDNET_ENABLE_AUTOTLS:-false}"
+        local silent_host="${BIRDNET_HOST:-}"
+        local silent_url="${BIRDNET_URL:-}"
+        # Reject values containing characters that would produce a malformed YAML scalar
+        # (the values are already sed-escaped, so this is robustness, not a security gate).
+        if [ -n "$silent_host" ] && ! [[ "$silent_host" =~ ^[A-Za-z0-9.:/_-]+$ ]]; then
+            log_message "WARN" "Silent mode: ignoring BIRDNET_HOST with invalid characters"
+            print_message "⚠️ Silent mode: BIRDNET_HOST contains invalid characters; ignoring it" "$YELLOW"
+            silent_host=""
+        fi
+        if [ -n "$silent_url" ] && ! [[ "$silent_url" =~ ^[A-Za-z0-9.:/_-]+$ ]]; then
+            log_message "WARN" "Silent mode: ignoring BIRDNET_URL with invalid characters"
+            silent_url=""
+        fi
+        if [ "$want_autotls" = "true" ]; then
+            if [ -z "$silent_host" ]; then
+                log_message "WARN" "Silent mode: BIRDNET_ENABLE_AUTOTLS=true but BIRDNET_HOST is unset/invalid; AutoTLS not enabled"
+                print_message "⚠️ Silent mode: AutoTLS requires a valid BIRDNET_HOST; continuing without AutoTLS" "$YELLOW"
+                BIND_TLS_PORTS="false"
+                apply_tls_settings "direct" "" ""
+            else
+                BIND_TLS_PORTS="true"
+                CONFIGURED_HOST="$silent_host"
+                apply_tls_settings "autotls" "$CONFIGURED_HOST" ""
+                print_message "🔇 Silent mode: AutoTLS enabled for host $CONFIGURED_HOST" "$YELLOW"
+            fi
+        elif [ -n "$silent_host" ]; then
+            # Hostname set without AutoTLS implies a reverse-proxy / external hostname setup.
+            BIND_TLS_PORTS="false"
+            CONFIGURED_HOST="$silent_host"
+            apply_tls_settings "proxy" "$CONFIGURED_HOST" "$silent_url"
+            print_message "🔇 Silent mode: external host set to $CONFIGURED_HOST (no AutoTLS)" "$YELLOW"
+        else
+            BIND_TLS_PORTS="false"
+            apply_tls_settings "direct" "" ""
+        fi
+        return 0
+    fi
+
+    print_message "\n🔐 Web Access / TLS Mode" "$GREEN"
+    print_message "How will you reach the BirdNET-Go web interface?" "$YELLOW"
+    print_message "  1) Direct access on the port above (default, recommended)" "$NC"
+    print_message "  2) Let's Encrypt HTTPS (needs a public domain and ports 80+443)" "$NC"
+    print_message "  3) Behind a reverse proxy (proxy handles HTTPS)" "$NC"
+    local tls_choice
+    while true; do
+        print_message "❓ Select an option (1-3) [1]: " "$YELLOW" "nonewline"
+        read -r tls_choice
+        [ -z "$tls_choice" ] && tls_choice="1"
+        case "$tls_choice" in
+            1)
+                BIND_TLS_PORTS="false"
+                CONFIGURED_HOST=""
+                apply_tls_settings "direct" "" ""
+                print_message "✅ Direct access on port $WEB_PORT" "$GREEN"
+                break
+                ;;
+            2)
+                local host_input
+                prompt_public_hostname "domain name (e.g. birdnet.example.com)"
+                host_input="$PROMPTED_HOSTNAME"
+                if [ -z "$host_input" ]; then
+                    print_message "⚠️ A domain is required for Let's Encrypt; falling back to direct access" "$YELLOW"
+                    BIND_TLS_PORTS="false"
+                    CONFIGURED_HOST=""
+                    apply_tls_settings "direct" "" ""
+                    break
+                fi
+                BIND_TLS_PORTS="true"
+                CONFIGURED_HOST="$host_input"
+                apply_tls_settings "autotls" "$CONFIGURED_HOST" ""
+                print_message "✅ Let's Encrypt AutoTLS enabled for $CONFIGURED_HOST (ports 80 and 443 will be published)" "$GREEN"
+                print_message "   The domain must resolve to this machine and ports 80/443 must be reachable from the internet." "$YELLOW"
+                break
+                ;;
+            3)
+                local host_input
+                prompt_public_hostname "external hostname or full URL (e.g. birdnet.example.com or https://birdnet.example.com)"
+                host_input="$PROMPTED_HOSTNAME"
+                BIND_TLS_PORTS="false"
+                if [ -n "$host_input" ]; then
+                    CONFIGURED_HOST="$host_input"
+                    if [[ "$host_input" =~ ^https?:// ]]; then
+                        apply_tls_settings "proxy" "" "$host_input"
+                    else
+                        apply_tls_settings "proxy" "$host_input" ""
+                    fi
+                    print_message "✅ Reverse-proxy mode: external address $host_input (BirdNET-Go will not bind 80/443)" "$GREEN"
+                else
+                    print_message "✅ Reverse-proxy mode (no external hostname set)" "$GREEN"
+                fi
+                break
+                ;;
+            *)
+                print_message "❌ Invalid selection. Please choose 1, 2, or 3." "$RED"
+                ;;
+        esac
+    done
+}
+
+# Prompt for and validate a hostname or URL. Echoes the validated value, or empty if the
+# user entered nothing. Rejects values containing shell/sed metacharacters or whitespace.
+prompt_public_hostname() {
+    local what="$1"
+    # Result is returned via the global PROMPTED_HOSTNAME rather than stdout, because the
+    # prompts use print_message (which writes to stdout) and command substitution would
+    # otherwise swallow the prompt text and capture it into the value.
+    PROMPTED_HOSTNAME=""
+    local value
+    while true; do
+        print_message "❓ Enter your $what: " "$YELLOW" "nonewline"
+        read -r value
+        if [ -z "$value" ]; then
+            return 0
+        fi
+        # Allow letters, digits, dot, hyphen, colon, slash (for URLs); reject everything
+        # else (spaces, quotes, $, &, |, backticks, etc.) to keep config edits safe.
+        if [[ "$value" =~ ^[A-Za-z0-9.:/_-]+$ ]]; then
+            PROMPTED_HOSTNAME="$value"
+            return 0
+        fi
+        print_message "❌ Invalid characters. Use only letters, digits, dot, hyphen, and (for URLs) ://." "$RED"
+    done
+}
+
+# Write the security settings for the chosen TLS mode. MODE is autotls, proxy, or direct.
+# HOST sets security.host; URL (optional) sets security.baseurl. Uses block-scoped,
+# escaped edits. autoTls (legacy) is migrated to tlsMode by the app on load; tlsMode is
+# cleared defensively when present so reverse-proxy/direct modes are not overridden.
+apply_tls_settings() {
+    local mode="$1"
+    local host="$2"
+    local url="$3"
+    # Each mode writes a complete, consistent set of security keys so switching modes never
+    # leaves a stale value behind (a stale security.host breaks OAuth redirects and
+    # notification URLs even when baseurl is set, and a stale autoTls regenerates a unit out
+    # of sync with the app config).
+    case "$mode" in
+        autotls)
+            set_config_value security host "$host"
+            set_config_value security baseurl ""
+            set_config_value security autoTls "true"
+            set_config_value security redirecttohttps "true"
+            set_config_value security tlsMode ""
+            ;;
+        proxy)
+            # Behind a reverse proxy: no AutoTLS. When only a full URL was given, derive the
+            # host from it so security.host (used independently of baseurl for OAuth and
+            # notification URLs) is set rather than left stale.
+            if [ -z "$host" ] && [ -n "$url" ]; then
+                host="${url#*://}"
+                host="${host%%/*}"
+                host="${host%%:*}"
+            fi
+            set_config_value security host "$host"
+            set_config_value security baseurl "$url"
+            set_config_value security autoTls "false"
+            set_config_value security redirecttohttps "false"
+            set_config_value security tlsMode ""
+            ;;
+        direct)
+            # Direct access: clear any stale AutoTLS / reverse-proxy settings so the app
+            # config matches a unit that publishes only the web port.
+            set_config_value security host ""
+            set_config_value security baseurl ""
+            set_config_value security autoTls "false"
+            set_config_value security redirecttohttps "false"
+            set_config_value security tlsMode ""
+            ;;
+    esac
+}
+
+# Ask whether to publish the Prometheus metrics endpoint on host port 8090. Off by default
+# for fresh installs to avoid conflicts; BIRDNET_ENABLE_METRICS overrides in silent mode.
+configure_metrics_exposure() {
+    if [ "$SILENT_MODE" = "true" ]; then
+        if [ "${BIRDNET_ENABLE_METRICS:-false}" = "true" ]; then
+            BIND_METRICS_PORT="true"
+            print_message "🔇 Silent mode: Prometheus metrics published on port 8090" "$YELLOW"
+        else
+            BIND_METRICS_PORT="false"
+        fi
+        return 0
+    fi
+    print_message "\n📊 Prometheus Metrics Endpoint" "$GREEN"
+    print_message "Publish the metrics endpoint on host port 8090 for Prometheus scraping?" "$YELLOW"
+    print_message "❓ Expose metrics on port 8090? (y/N): " "$YELLOW" "nonewline"
+    local reply
+    read -r reply
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+        if ! check_port_availability 8090; then
+            local proc_info
+            proc_info=$(get_port_process_info 8090)
+            print_message "⚠️ Port 8090 is in use by: $proc_info. Metrics will not be published." "$YELLOW"
+            BIND_METRICS_PORT="false"
+        else
+            BIND_METRICS_PORT="true"
+            print_message "✅ Metrics endpoint will be published on port 8090" "$GREEN"
+        fi
+    else
+        BIND_METRICS_PORT="false"
+        print_message "✅ Metrics endpoint not published (still available inside the container)" "$GREEN"
+    fi
 }
 
 # Generate systemd service content
@@ -4010,36 +4319,12 @@ generate_systemd_service_content() {
     # Mirror the multi-method detection from configure_timezone() so newer
     # systemd distributions without /etc/timezone (e.g. Debian 13) still resolve
     # the host zone instead of silently defaulting to UTC.
-    local TZ=""
-    if [ -n "$CONFIGURED_TZ" ]; then
-        TZ="$CONFIGURED_TZ"
-    fi
-
-    if [ -z "$TZ" ] && [ -f /etc/timezone ]; then
-        TZ=$(cat /etc/timezone 2>/dev/null | tr -d '\n' | tr -d ' ')
-    fi
-
-    if [ -z "$TZ" ] && command_exists timedatectl; then
-        TZ=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '\n' | tr -d ' ')
-    fi
-
-    if [ -z "$TZ" ] && [ -L /etc/localtime ]; then
-        local tz_path=$(readlink -f /etc/localtime)
-        TZ=${tz_path#/usr/share/zoneinfo/}
-    fi
-
-    # Validate the detected zone against the zoneinfo database before trusting it.
-    # timedatectl can report "n/a" on unconfigured images, and a non-standard
-    # /etc/localtime symlink can leave TZ as an absolute path; neither is a valid
-    # zone identifier. A value containing ".." would also let the existence check
-    # below escape /usr/share/zoneinfo/ and accept a non-zone file, so reject those
-    # outright. Drop anything that is not a relative path resolving to a real
-    # zoneinfo file so the UTC fallback applies, mirroring configure_timezone()'s
-    # validation.
-    if [ -n "$TZ" ] && { [[ "$TZ" == *..* ]] || [ ! -f "/usr/share/zoneinfo/$TZ" ]; }; then
-        TZ=""
-    fi
-
+    # Resolve the host timezone via the shared resolver (Forgejo #877), preferring any
+    # zone the user already configured. Falls back to UTC only when nothing valid can be
+    # detected, so newer systemd distributions without /etc/timezone (e.g. Debian 13)
+    # still resolve the host zone instead of silently defaulting to UTC.
+    local TZ
+    TZ=$(resolve_host_timezone "$CONFIGURED_TZ")
     if [ -z "$TZ" ]; then
         TZ="UTC"
     fi
@@ -4064,6 +4349,23 @@ generate_systemd_service_content() {
     # Uses rslave propagation; read-write is the Docker default and not specified explicitly.
     # Enables hot-plug of USB/SD/fileshare media mounted under the host directory.
     local external_media_line="-v /mnt/birdnet-go/external:/external:rslave"
+
+    # Optional host-side port bindings. The web interface (WEB_PORT -> container 8080) is
+    # always published. Ports 80/443 are only needed for Let's Encrypt AutoTLS and 8090
+    # only for the Prometheus metrics endpoint; both are opt-in so a fresh install does not
+    # collide with an existing web server. Existing installs keep whatever they already had
+    # because load_existing_service_config() restores these flags from the current unit.
+    # Any restored host bind address is reapplied so a localhost-only mapping survives a
+    # regenerate (default is no address: published on all interfaces).
+    local tls_ports_line=""
+    if [ "$BIND_TLS_PORTS" = "true" ]; then
+        tls_ports_line="-p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}80:80 \\
+    -p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}443:443"
+    fi
+    local metrics_port_line=""
+    if [ "$BIND_METRICS_PORT" = "true" ]; then
+        metrics_port_line="-p ${METRICS_BIND_ADDR:+${METRICS_BIND_ADDR}:}8090:8090"
+    fi
 
     # Check if running on Raspberry Pi and add WiFi power save disable script
     local wifi_power_save_script=""
@@ -4103,9 +4405,10 @@ ExecStartPre=-/bin/chown -h ${HOST_UID}:${HOST_GID} /mnt/birdnet-go/external
 ${wifi_power_save_script:+${wifi_power_save_script}
 }ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
-    -p ${WEB_PORT}:8080 \\
-    -p 8090:8090 \\
-    --env TZ="${TZ}" \\
+    -p ${WEB_PORT_BIND_ADDR:+${WEB_PORT_BIND_ADDR}:}${WEB_PORT}:8080 \\
+${tls_ports_line:+    ${tls_ports_line} \\
+}${metrics_port_line:+    ${metrics_port_line} \\
+}    --env TZ="${TZ}" \\
     --env BIRDNET_UID=${HOST_UID} \\
     --env BIRDNET_GID=${HOST_GID} \\
 ${audio_env_line:+    ${audio_env_line} \\
@@ -4121,6 +4424,94 @@ ExecStopPost=-/usr/bin/docker rm -f birdnet-go
 [Install]
 WantedBy=multi-user.target
 EOF
+}
+
+# Extract the optional host bind address from a "-p [addr:]PORT:PORT" docker mapping (as
+# produced by grep -oE). Echoes the address (e.g. 127.0.0.1 or [::1]) or an empty string.
+_extract_bind_addr() {
+    local map="$1"
+    local portpair="$2"   # e.g. "443:443"
+    local spec="${map#-p }"
+    spec="${spec%"$portpair"}"
+    spec="${spec%:}"
+    printf '%s' "$spec"
+}
+
+# Restore the web port, AutoTLS/metrics port bindings, and timezone from an existing
+# systemd unit so updates and reconfiguration preserve the user's prior choices instead of
+# resetting to fresh-install defaults. This is the backward-compatibility guarantee: an
+# unchanged update regenerates a byte-identical unit (check_systemd_service then reports no
+# change). It must be called before check_systemd_service / add_systemd_config on the
+# update and reconfigure paths. Sets globals WEB_PORT, BIND_TLS_PORTS, BIND_METRICS_PORT,
+# and CONFIGURED_TZ.
+# shellcheck disable=SC2120  # optional $1 (unit path) is intentional, used by tests
+load_existing_service_config() {
+    # Optional explicit unit path (used by tests); defaults to the installed locations.
+    local service_file="${1:-}"
+    if [ -z "$service_file" ]; then
+        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+            service_file="/etc/systemd/system/birdnet-go.service"
+        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+            service_file="/lib/systemd/system/birdnet-go.service"
+        fi
+    fi
+    [ -z "$service_file" ] && return 0
+
+    # Web interface mapping: the one whose container side is 8080 (-p <host>:8080). The host
+    # side may carry an optional bind address (e.g. 127.0.0.1:9000:8080 when a user manually
+    # bound to localhost behind a same-host reverse proxy). Preserve the bind address as well
+    # as the port so an update does not silently re-expose a localhost-only binding to all
+    # interfaces. Each -p is on its own continuation line, so a per-line match is sufficient.
+    local web_map
+    web_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?[0-9]+:8080' "$service_file" 2>/dev/null | head -1)
+    if [ -n "$web_map" ]; then
+        # Strip the leading "-p " and trailing ":8080", leaving "<addr>:<port>" or "<port>".
+        local host_spec
+        host_spec=$(printf '%s' "$web_map" | sed -E 's/^-p[[:space:]]+//; s/:8080$//')
+        local host_port="$host_spec"
+        local host_addr=""
+        if [[ "$host_spec" == *:* ]]; then
+            host_addr="${host_spec%:*}"
+            host_port="${host_spec##*:}"
+        fi
+        if [[ "$host_port" =~ ^[0-9]+$ ]] && [ "$host_port" -ge 1 ] && [ "$host_port" -le 65535 ]; then
+            WEB_PORT="$host_port"
+            WEB_PORT_BIND_ADDR="$host_addr"
+            if [ -n "$host_addr" ]; then
+                log_message "INFO" "Restored web port mapping from existing service: ${host_addr}:${WEB_PORT}"
+            else
+                log_message "INFO" "Restored web port from existing service: $WEB_PORT"
+            fi
+        fi
+    fi
+
+    # Preserve the AutoTLS (80/443) and Prometheus metrics (8090) bindings if the existing
+    # unit currently maps them, including any host bind address (e.g. 127.0.0.1) so a
+    # localhost-only mapping is not silently re-exposed on all interfaces after an update.
+    # NOTE: this is binding preservation, not feature detection, so an unchanged update keeps
+    # exactly what the user already ran.
+    local tls_map
+    tls_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:443' "$service_file" 2>/dev/null | head -1)
+    if [ -n "$tls_map" ]; then
+        BIND_TLS_PORTS="true"
+        TLS_BIND_ADDR=$(_extract_bind_addr "$tls_map" "443:443")
+    fi
+    local metrics_map
+    metrics_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?8090:8090' "$service_file" 2>/dev/null | head -1)
+    if [ -n "$metrics_map" ]; then
+        BIND_METRICS_PORT="true"
+        METRICS_BIND_ADDR=$(_extract_bind_addr "$metrics_map" "8090:8090")
+    fi
+
+    # Timezone, only if not already chosen this run.
+    if [ -z "$CONFIGURED_TZ" ]; then
+        local existing_tz
+        existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$service_file" 2>/dev/null | head -1)
+        if [ -n "$existing_tz" ]; then
+            CONFIGURED_TZ="$existing_tz"
+            log_message "INFO" "Restored timezone from existing service: $CONFIGURED_TZ"
+        fi
+    fi
 }
 
 # Function to check Cockpit installation status
@@ -4447,6 +4838,26 @@ EOF
 
     # Reload systemd and enable service
     sudo systemctl daemon-reload
+
+    # Validate the generated unit before enabling it so a malformed unit surfaces clearly
+    # here instead of failing silently at start time (GH #1832). Only a non-zero exit
+    # (an actual parse error) is treated as a problem; benign advisory warnings are logged.
+    if command_exists systemd-analyze; then
+        local verify_out verify_rc
+        verify_out=$(systemd-analyze verify /etc/systemd/system/birdnet-go.service 2>&1)
+        verify_rc=$?
+        # In minimal chroots/containers systemd-analyze cannot reach the system bus and exits
+        # non-zero with a bus-connection error even for a valid unit; do not warn on that.
+        if [ "$verify_rc" -ne 0 ] && ! echo "$verify_out" | grep -qiE "Failed to connect to bus|Connection refused|No such file or directory.*bus"; then
+            log_message "WARN" "systemd-analyze verify reported errors (rc=$verify_rc): $verify_out"
+            print_message "⚠️ systemd reported problems with the generated service unit:" "$YELLOW"
+            print_message "$verify_out" "$YELLOW"
+            print_message "   Continuing, but this is the likely cause if the service fails to start." "$YELLOW"
+        else
+            log_message "INFO" "systemd-analyze verify passed for birdnet-go.service"
+        fi
+    fi
+
     sudo systemctl enable birdnet-go.service
 }
 
@@ -4585,30 +4996,20 @@ handle_container_update() {
         log_message "INFO" "Pre-update config file backup hash recorded"
     fi
     
+    # Restore the user's existing port/TLS/metrics/timezone choices from the current unit
+    # BEFORE comparing or regenerating it, so the update preserves them instead of resetting
+    # to fresh-install defaults (GH #3485 ports clobbered on update, #3238 timezone).
+    load_existing_service_config
+    if [ -n "$CONFIGURED_TZ" ]; then
+        print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+    fi
+
     local service_needs_update
     service_needs_update=$(check_systemd_service)
-    
+
     log_message "INFO" "Systemd service update needed: $service_needs_update"
     print_message "🔄 Checking for updates..." "$YELLOW"
-    
-    # Extract existing timezone from systemd service file if updating
-    if [ -z "$CONFIGURED_TZ" ]; then
-        local tz_service_file=""
-        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
-            tz_service_file="/etc/systemd/system/birdnet-go.service"
-        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
-            tz_service_file="/lib/systemd/system/birdnet-go.service"
-        fi
-        if [ -n "$tz_service_file" ]; then
-            local existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$tz_service_file" 2>/dev/null | head -1)
-            if [ -n "$existing_tz" ]; then
-                CONFIGURED_TZ="$existing_tz"
-                log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
-                print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
-            fi
-        fi
-    fi
-    
+
     # Stop the service and container
     log_message "INFO" "Stopping BirdNET-Go service for update"
     stop_birdnet_service
@@ -4620,7 +5021,11 @@ handle_container_update() {
     # Update configuration paths
     log_message "INFO" "Updating configuration paths"
     update_paths_in_config
-    
+
+    # Repair a stale custom webserver.port from an older broken install so the host-side
+    # mapping (always :8080) keeps working after the update.
+    ensure_internal_port_8080
+
     # Capture current version before update
     log_message "INFO" "Capturing current image hash before update"
     print_message "📸 Capturing current version for rollback..." "$YELLOW"
@@ -4710,6 +5115,10 @@ handle_container_update() {
     fi
     
     log_message "INFO" "Update validation completed - service responsive: $service_responsive"
+
+    # Confirm BirdNET-Go is actually answering (and AutoTLS ports if previously enabled)
+    verify_post_start
+
     log_message "INFO" "Container update process completed successfully"
     print_message "✅ Update completed successfully" "$GREEN"
     
@@ -4903,6 +5312,16 @@ start_birdnet_go() {
         elif echo "$service_logs" | grep -qi "failed to create endpoint\|network"; then
             error_type="network_error"
             error_detail=$(echo "$service_logs" | grep -i "network\|endpoint" | head -1 | sed 's/"/\\"/g' | head -c 200)
+        elif echo "$service_logs" | grep -qi "acme\|certificate\|tls\|let.?s.?encrypt"; then
+            error_type="tls_error"
+            error_detail=$(echo "$service_logs" | grep -iE "acme|certificate|tls" | head -1 | sed 's/"/\\"/g' | head -c 200)
+        fi
+
+        # If no known pattern matched, still capture the most relevant log line so the
+        # report is actionable instead of a bare "unknown" (Forgejo #350).
+        if [ "$error_type" = "unknown" ]; then
+            error_detail=$(echo "$service_logs" | grep -oiE '(error|fatal|panic|failed)[^;]*' | tail -1 | sed 's/"/\\"/g' | head -c 200)
+            [ -z "$error_detail" ] && error_detail="No recognized error pattern; see the service logs below"
         fi
 
         # Get container-specific logs if container exists (even if exited)
@@ -5034,6 +5453,17 @@ start_birdnet_go() {
         send_telemetry_event "error" "Service startup failed: $error_type" "error" "step=start_birdnet_go,error_type=$error_type" "$diagnostic_json"
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
 
+        # Surface a concrete summary even when the error type is unknown (Forgejo #350): the
+        # detected cause and the container exit code are the most actionable details and
+        # should never be omitted just because no known pattern matched.
+        print_message "   Detected cause: $error_type" "$YELLOW"
+        if [ -n "$error_detail" ]; then
+            print_message "   Detail: $error_detail" "$YELLOW"
+        fi
+        if [ -n "$container_exit_code" ] && [ "$container_exit_code" != "unknown" ]; then
+            print_message "   Container exit code: $container_exit_code" "$YELLOW"
+        fi
+
         # Get and display journald logs for troubleshooting
         log_message "INFO" "Retrieving service logs for troubleshooting"
         print_message "\n📋 Service logs (last 20 entries):" "$YELLOW"
@@ -5128,6 +5558,61 @@ start_birdnet_go() {
     
     print_message "\nTo follow logs in real-time, use:" "$YELLOW"
     print_message "journalctl -fu birdnet-go.service" "$NC"
+}
+
+# Verify after (re)start that BirdNET-Go itself is answering on the web port (not some other
+# server that happens to occupy it) and, when AutoTLS was selected, that ports 80 and 443
+# actually bound. Best-effort: warns with actionable guidance, never fails the install.
+# The /health endpoint returns a JSON body with a "status" field that a generic web server
+# on the same port would not, so it doubles as an identity check (GH #1722, #3527).
+verify_post_start() {
+    local base="http://localhost:${WEB_PORT:-8080}"
+    local attempts=10
+    local ok="false"
+    local i=1
+    while [ "$i" -le "$attempts" ]; do
+        local body
+        body=$(curl -s --connect-timeout 3 --max-time 5 "${base}/health" 2>/dev/null)
+        if [ -n "$body" ] && echo "$body" | jq -e 'has("status")' >/dev/null 2>&1; then
+            ok="true"
+            break
+        fi
+        sleep 2
+        ((i++))
+    done
+
+    if [ "$ok" = "true" ]; then
+        print_message "✅ Verified BirdNET-Go is responding on port ${WEB_PORT:-8080}" "$GREEN"
+        log_message "INFO" "Post-start verification passed on port ${WEB_PORT:-8080}"
+    else
+        # Distinguish "nothing is there" from "something else answered on this port".
+        if curl -s --connect-timeout 3 --max-time 5 "$base" >/dev/null 2>&1; then
+            print_message "⚠️ Port ${WEB_PORT:-8080} answered, but the BirdNET-Go health check did not pass." "$YELLOW"
+            print_message "   Another service may be using this port, or the app is still starting." "$YELLOW"
+        else
+            print_message "⚠️ BirdNET-Go did not respond on port ${WEB_PORT:-8080} yet (it may still be initializing)." "$YELLOW"
+        fi
+        print_message "   Check logs: sudo journalctl -u birdnet-go.service -n 50" "$YELLOW"
+        log_message "WARN" "Post-start verification could not confirm BirdNET-Go on port ${WEB_PORT:-8080}"
+    fi
+
+    # AutoTLS needs ports 80 and 443 actually listening; a bound listener reads as "not
+    # available" from check_port_availability.
+    if [ "$BIND_TLS_PORTS" = "true" ]; then
+        local tls_ok="true"
+        local p
+        for p in 80 443; do
+            if check_port_availability "$p"; then
+                tls_ok="false"
+                print_message "⚠️ AutoTLS port $p is not listening; Let's Encrypt certificates may not be issued." "$YELLOW"
+            fi
+        done
+        if [ "$tls_ok" = "true" ]; then
+            print_message "✅ AutoTLS ports 80 and 443 are bound" "$GREEN"
+        else
+            print_message "   AutoTLS needs your domain to resolve to this host with ports 80/443 reachable from the internet." "$YELLOW"
+        fi
+    fi
 }
 
 # Function to check if system is a Raspberry Pi
@@ -5295,7 +5780,11 @@ show_usage() {
     echo "  BIRDNET_LOCALE          BirdNET locale (default: en)"
     echo "  BIRDNET_PASSWORD        Web interface password (default: no auth)"
     echo "  BIRDNET_TELEMETRY       Enable telemetry: true/false (default: false)"
-    echo "  BIRDNET_WEB_PORT        Web interface port (default: 8080)"
+    echo "  BIRDNET_WEB_PORT        Web interface host port (default: 8080)"
+    echo "  BIRDNET_ENABLE_AUTOTLS  Enable Let's Encrypt AutoTLS, binds 80/443: true/false (default: false; requires BIRDNET_HOST)"
+    echo "  BIRDNET_HOST            Public hostname for AutoTLS / reverse proxy (sets security.host)"
+    echo "  BIRDNET_URL             Full external URL behind a reverse proxy (sets security.baseurl)"
+    echo "  BIRDNET_ENABLE_METRICS  Publish Prometheus metrics on port 8090: true/false (default: false)"
     echo ""
     echo "EXAMPLES:"
     echo "  $0                      # Install using nightly version (default)"
@@ -5393,6 +5882,25 @@ FRESH_INSTALL="false"
 MIGRATION_DONE="false"
 # Configured timezone (will be set during configuration)
 CONFIGURED_TZ=""
+# Host-side port binding flags for the docker run command in the systemd unit.
+# The web interface (-p WEB_PORT:8080) is always bound. Ports 80/443 (Let's Encrypt
+# AutoTLS) and 8090 (Prometheus metrics) are opt-in for fresh installs to avoid
+# conflicts with existing web servers, and are preserved across updates by parsing the
+# existing unit (see load_existing_service_config). Defaults can be overridden in silent
+# mode via BIRDNET_ENABLE_AUTOTLS / BIRDNET_ENABLE_METRICS.
+BIND_TLS_PORTS="false"
+BIND_METRICS_PORT="false"
+# Optional host bind address for the web port publish (e.g. 127.0.0.1 when the service is
+# meant to sit behind a same-host reverse proxy). Empty means publish on all interfaces.
+# The installer never sets this itself, but it is preserved from a hand-edited unit across
+# updates so a localhost-only binding is not silently re-exposed to all interfaces.
+WEB_PORT_BIND_ADDR=""
+# Same idea for the AutoTLS (80/443) and metrics (8090) port bindings: preserve any host
+# bind address found on the existing unit so a localhost-only mapping is not re-exposed.
+TLS_BIND_ADDR=""
+METRICS_BIND_ADDR=""
+# Public hostname for AutoTLS / reverse-proxy setups (written to security.host).
+CONFIGURED_HOST=""
 
 
 # Load telemetry configuration before cross-user check so silent-mode
@@ -5422,10 +5930,161 @@ fi
 # Log comprehensive session information now that we know the installation state
 log_enhanced_session_info "$INSTALLATION_TYPE" "$PRESERVED_DATA" "$FRESH_INSTALL"
 
+# Apply pending reconfiguration: regenerate the systemd unit from the current globals
+# (web port, AutoTLS/metrics bindings, timezone), restart the service, and verify. Used by
+# reconfigure_menu after the user chooses "Apply".
+# Restore the config and systemd unit backed up at the start of reconfiguration, then
+# restart the service so BirdNET-Go returns to its previous working state. The port, TLS,
+# and metrics settings live in the unit, so restoring only config.yaml is not enough.
+# Args: config_backup, service_backup, has_service_backup.
+_reconfigure_rollback() {
+    local cfg_backup="$1"
+    local svc_backup="$2"
+    local has_svc="$3"
+    cp "$cfg_backup" "$CONFIG_FILE" 2>/dev/null
+    if [ "$has_svc" = "true" ] && [ -f "$svc_backup" ]; then
+        sudo cp "$svc_backup" "/etc/systemd/system/birdnet-go.service" 2>/dev/null
+        sudo systemctl daemon-reload
+    fi
+    sudo systemctl start birdnet-go.service 2>/dev/null
+}
+
+# Apply pending reconfiguration: regenerate the unit from the current globals, restart, and
+# verify. On restart failure, automatically roll back to the backed-up config AND unit and
+# restart the previous working state. Args: config_backup, service_backup, has_service_backup.
+apply_reconfiguration() {
+    local cfg_backup="$1"
+    local svc_backup="$2"
+    local has_svc="$3"
+    print_message "\n💾 Applying configuration and restarting BirdNET-Go..." "$YELLOW"
+    ensure_internal_port_8080
+    add_systemd_config
+    sudo systemctl daemon-reload
+    if sudo systemctl restart birdnet-go.service; then
+        print_message "✅ BirdNET-Go restarted with the new configuration" "$GREEN"
+        verify_post_start
+        return 0
+    fi
+    print_message "❌ Failed to start with the new configuration; rolling back to the previous working setup..." "$RED"
+    _reconfigure_rollback "$cfg_backup" "$svc_backup" "$has_svc"
+    if sudo systemctl is-active --quiet birdnet-go.service; then
+        print_message "↩️ Restored the previous configuration; BirdNET-Go is running again." "$GREEN"
+    else
+        print_message "⚠️ Rollback restart did not come up; check: sudo journalctl -u birdnet-go.service -n 50" "$RED"
+        show_service_diagnostics
+    fi
+    return 1
+}
+
+# Interactive reconfiguration of an existing systemd install: lets the user change the web
+# port, TLS/access mode, metrics exposure, audio device, timezone, and locale, then
+# regenerates the unit and restarts. Edits the existing config in place (a backup is taken
+# so "discard" fully reverts). The service is stopped during reconfiguration so the chosen
+# web port is not reported as "in use" by BirdNET-Go itself. Returns 1 to return to the
+# caller's menu loop.
+reconfigure_menu() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        print_message "❌ No configuration file found at $CONFIG_FILE" "$RED"
+        return 1
+    fi
+
+    # Reconfiguration is interactive and stops the running service; refuse to run it without
+    # a terminal so a piped or non-interactive invocation (e.g. `echo 6 | ./install.sh`)
+    # cannot stop the service and then spin forever on EOF.
+    if [ ! -t 0 ]; then
+        print_message "⚠️ Reconfiguration requires an interactive terminal; skipping." "$YELLOW"
+        return 1
+    fi
+
+    # Restore the current port/TLS/metrics/timezone so untouched settings are preserved when
+    # the unit is regenerated.
+    load_existing_service_config
+
+    print_message "\n🔧 Reconfigure BirdNET-Go" "$GREEN"
+    print_message "The service will be stopped while you reconfigure, then restarted when you apply." "$YELLOW"
+
+    local rc_backup="${CONFIG_FILE}.reconfigure.bak"
+    if ! cp "$CONFIG_FILE" "$rc_backup"; then
+        print_message "❌ Could not create a configuration backup; aborting reconfiguration to avoid risking your config." "$RED"
+        return 1
+    fi
+    # Back up the systemd unit too: the port, TLS, and metrics settings live there, so a
+    # rollback that restores only config.yaml would leave a broken unit. Best-effort (the
+    # unit is usually world-readable); if it cannot be copied, rollback restores config only.
+    local service_backup="${CONFIG_FILE}.service.reconfigure.bak"
+    local has_service_backup="false"
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] && cp "/etc/systemd/system/birdnet-go.service" "$service_backup" 2>/dev/null; then
+        has_service_backup="true"
+    fi
+    stop_birdnet_service
+
+    # If the user aborts (Ctrl-C / TERM) while the service is stopped, restore the previous
+    # config and unit and bring the service back up so reconfiguration never leaves
+    # BirdNET-Go down. The global EXIT trap (cleanup_temp_files) still runs after this exits.
+    trap '_reconfigure_rollback "$rc_backup" "$service_backup" "$has_service_backup"; rm -f "$rc_backup" "$service_backup"; exit 130' INT TERM
+
+    local changed="false"
+    while true; do
+        local tls_state="off"; [ "$BIND_TLS_PORTS" = "true" ] && tls_state="on"
+        local metrics_state="off"; [ "$BIND_METRICS_PORT" = "true" ] && metrics_state="on"
+        print_message "\nCurrent: web port ${WEB_PORT}, AutoTLS ${tls_state}, metrics ${metrics_state}, timezone ${CONFIGURED_TZ:-auto}" "$NC"
+        print_message "  1) Web interface port" "$YELLOW"
+        print_message "  2) TLS / external access mode" "$YELLOW"
+        print_message "  3) Prometheus metrics endpoint" "$YELLOW"
+        print_message "  4) Audio capture device (sound card)" "$YELLOW"
+        print_message "  5) Timezone" "$YELLOW"
+        print_message "  6) Locale (species name language)" "$YELLOW"
+        print_message "  7) Apply changes and restart" "$YELLOW"
+        print_message "  8) Discard changes and go back" "$YELLOW"
+        print_message "❓ Select an option (1-8): " "$YELLOW" "nonewline"
+        local rc_choice
+        if ! read -r rc_choice; then
+            trap - INT TERM
+            print_message "\n↩️ No input; restoring previous configuration and restarting..." "$YELLOW"
+            _reconfigure_rollback "$rc_backup" "$service_backup" "$has_service_backup"
+            rm -f "$rc_backup" "$service_backup"
+            return 1
+        fi
+        case "$rc_choice" in
+            1) configure_web_port; changed="true" ;;
+            2) configure_tls_access; changed="true" ;;
+            3) configure_metrics_exposure; changed="true" ;;
+            4) if configure_sound_card; then changed="true"; fi ;;
+            5) configure_timezone; changed="true" ;;
+            6) configure_locale; changed="true" ;;
+            7)
+                trap - INT TERM
+                if [ "$changed" != "true" ]; then
+                    print_message "ℹ️ No changes made; restarting with the existing configuration." "$YELLOW"
+                    rm -f "$rc_backup" "$service_backup"
+                    sudo systemctl start birdnet-go.service
+                    verify_post_start
+                    return 1
+                fi
+                # apply_reconfiguration rolls back to the backed-up config + unit on failure.
+                apply_reconfiguration "$rc_backup" "$service_backup" "$has_service_backup"
+                rm -f "$rc_backup" "$service_backup"
+                return 1
+                ;;
+            8)
+                trap - INT TERM
+                print_message "↩️ Discarding changes and restarting with the previous configuration..." "$YELLOW"
+                _reconfigure_rollback "$rc_backup" "$service_backup" "$has_service_backup"
+                rm -f "$rc_backup" "$service_backup"
+                verify_post_start
+                return 1
+                ;;
+            *)
+                print_message "❌ Invalid selection. Please choose a number between 1 and 8." "$RED"
+                ;;
+        esac
+    done
+}
+
 # Function to display menu options based on installation type
 display_menu() {
     local installation_type="$1"
-    
+
     if [ "$installation_type" = "full" ]; then
         print_message "🔍 Found existing BirdNET-Go installation (systemd service)" "$YELLOW"
         if [ "$BIRDNET_GO_VERSION" != "nightly" ]; then
@@ -5441,9 +6100,10 @@ display_menu() {
         print_message "3) Fresh installation" "$YELLOW"
         print_message "4) Uninstall BirdNET-Go, remove data" "$YELLOW"
         print_message "5) Uninstall BirdNET-Go, preserve data" "$YELLOW"
-        print_message "6) Exit" "$YELLOW"
-        print_message "❓ Select an option (1-6): " "$YELLOW" "nonewline"
-        return 6  # Return number of options
+        print_message "6) Reconfigure settings (port, TLS, metrics, audio, timezone, locale)" "$YELLOW"
+        print_message "7) Exit" "$YELLOW"
+        print_message "❓ Select an option (1-7): " "$YELLOW" "nonewline"
+        return 7  # Return number of options
     elif [ "$installation_type" = "docker" ]; then
         print_message "🔍 Found existing BirdNET-Go Docker container/image" "$YELLOW"
         if [ "$BIRDNET_GO_VERSION" != "nightly" ]; then
@@ -5613,12 +6273,16 @@ handle_full_install_menu() {
             fi
             ;;
         6)
+            reconfigure_menu
+            return $?
+            ;;
+        7)
             print_message "👋 Goodbye!" "$GREEN"
             exit 0
             ;;
         *)
             print_message "❌ Invalid option" "$RED"
-            exit 1
+            return 1
             ;;
     esac
 }
@@ -5948,9 +6612,13 @@ if [ "$SILENT_MODE" != "true" ] && [ "$MIGRATION_DONE" != "true" ] && { [ "$INST
         display_menu "$INSTALLATION_TYPE"
         max_options=$?
         
-        # Read user selection
-        read -r response
-        
+        # Read user selection. On EOF (piped/non-interactive stdin) exit cleanly instead of
+        # looping forever on an empty read.
+        if ! read -r response; then
+            print_message "\nNo input received; exiting." "$YELLOW"
+            exit 0
+        fi
+
         # Validate user selection
         if [[ "$response" =~ ^[0-9]+$ ]] && [ "$response" -ge 1 ] && [ "$response" -le "$max_options" ]; then
             # Handle menu selection
@@ -6093,6 +6761,12 @@ else
 
     # Configure security
     configure_auth
+
+    # Configure TLS / external access mode (decides whether 80/443 are published)
+    configure_tls_access
+
+    # Configure optional Prometheus metrics endpoint (port 8090)
+    configure_metrics_exposure
 fi
 
 # Configure telemetry (only if not already configured or fresh install)
@@ -6112,6 +6786,9 @@ add_systemd_config
 
 # Start BirdNET-Go
 start_birdnet_go
+
+# Verify BirdNET-Go is actually answering on the configured port (and AutoTLS ports if set)
+verify_post_start
 
 # Validate installation
 validate_installation
