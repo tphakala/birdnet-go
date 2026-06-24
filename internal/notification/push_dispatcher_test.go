@@ -14,6 +14,16 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+// forwardWaitTimeout is the upper bound for an end-to-end dispatcher forward to
+// reach a test provider. The real path is sub-millisecond, but it crosses four
+// goroutine hops (broadcast, dispatch loop, dispatch, dispatchEnhanced) with no
+// time-based wait on the success path, so this budget exists only to absorb
+// goroutine scheduling stalls under full-suite `go test -race` CPU contention.
+// A generous ceiling keeps the test deterministic without slowing a healthy
+// run: the select wakes instantly on arrival and only reaches the timeout if
+// forwarding is genuinely broken.
+const forwardWaitTimeout = 5 * time.Second
+
 // fakeProvider implements PushProvider for testing
 type fakeProvider struct {
 	name      string
@@ -115,11 +125,16 @@ func TestPushDispatcher_ForwardsNotification(t *testing.T) {
 	_, err = svc.Create(TypeInfo, PriorityLow, "Hello", "World")
 	require.NoError(t, err, "create notification failed")
 
+	// Wait on the observable result (the forwarded notification) rather than a
+	// tight fixed deadline. The select wakes the instant the notification
+	// arrives; the generous timeout only acts as a ceiling for scheduling
+	// stalls under CI load, so a slow run no longer fails while a genuinely
+	// broken dispatcher still fails fast at the ceiling.
 	select {
 	case n := <-fp.recvCh:
 		assert.Equal(t, "Hello", n.Title)
 		assert.Equal(t, "World", n.Message)
-	case <-time.After(1 * time.Second):
+	case <-time.After(forwardWaitTimeout):
 		require.Fail(t, "timeout waiting for provider to receive notification")
 	}
 }
