@@ -21,6 +21,7 @@ const (
 	WeeksPerMonth = 4                  // BirdNET model: 4 weeks per month
 	WeeksPerYear  = WeeksPerMonth * 12 // 48 weeks per year in BirdNET's model
 	DaysPerWeek   = 7                  // Days in a calendar week
+	HoursPerDay   = 24                 // Hours in a day
 )
 
 // GetBirdNETInstance returns the BirdNET orchestrator or an error if unavailable.

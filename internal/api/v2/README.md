@@ -408,7 +408,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 - `soundCardSuppressed`: true if the sound card is currently in quiet hours
 - `suppressedStreams`: map of stream URLs to their suppression state (only suppressed streams included)
 
-### Support (`support.go`)
+### Support (`support/support.go`)
 
 | Method | Route                   | Handler               | Auth | Description                      |
 | ------ | ----------------------- | --------------------- | ---- | -------------------------------- |

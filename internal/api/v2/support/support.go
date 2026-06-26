@@ -1,4 +1,13 @@
-package api
+// Package support is the api/v2 support domain handler. It owns the
+// /api/v2/support/* endpoints: generating a diagnostic support dump (optionally
+// uploaded to Sentry), downloading a previously generated dump, and reporting
+// the current support/telemetry configuration status. The Handler embeds
+// *apicore.Core by pointer so the shared dependencies and helpers (settings,
+// datastore, the V2 manager, error/log helpers, and the Go/Context goroutine
+// plumbing) promote onto it; the facade constructs one Handler and calls
+// RegisterRoutes to wire the routes (and start the background cleanup and
+// app-event-pruning goroutines) in their existing order.
+package support
 
 import (
 	"context"
@@ -15,9 +24,50 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/support"
+	supportpkg "github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
+
+// Handler serves the support domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members promote onto it without re-wiring; Core
+// carries atomic/lock-bearing fields and must never be copied by value.
+type Handler struct {
+	*apicore.Core
+}
+
+// New builds a support Handler around the shared core. The support handlers
+// need only the shared *apicore.Core (settings, datastore, V2 manager, the
+// error/log helpers and the goroutine plumbing), so there are no facade-owned
+// dependencies to inject.
+func New(core *apicore.Core) *Handler {
+	return &Handler{Core: core}
+}
+
+// RegisterRoutes registers the support-related API endpoints on the supplied API
+// v2 group, preserving the exact routes, order, and per-route middleware the
+// facade used before the support domain was extracted. It also starts the
+// background goroutines that clean up old temporary support dumps and prune old
+// application events, matching the previous initSupportRoutes behavior.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+	// Create protected group for support endpoints (consistent with other route files)
+	supportGroup := g.Group("/support", c.AuthMiddleware)
+	supportGroup.POST("/generate", c.GenerateSupportDump)
+	supportGroup.GET("/download/:id", c.DownloadSupportDump)
+	supportGroup.GET("/status", c.GetSupportStatus)
+
+	// Start cleanup goroutine for old support dumps with proper context
+	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
+	if c.Context() != nil {
+		c.Go(func() {
+			c.startSupportDumpCleanup(c.Context())
+		})
+
+		c.Go(func() {
+			c.startAppEventPruning(c.Context())
+		})
+
+	}
+}
 
 // Support constants (file-local)
 const (
@@ -26,6 +76,12 @@ const (
 	supportBytesPerMB       = 1024 * 1024 // Bytes per megabyte
 	supportDumpTimeout      = 120 * time.Second
 )
+
+// filePermOwnerOnly is the permission for owner-only read/write (0o600). The
+// support dump is written to a temporary file before download; restrict it to
+// the owning user so diagnostics (which may contain sensitive data) are not
+// world-readable.
+const filePermOwnerOnly = 0o600
 
 // valueContext wraps a cancellation-bearing context while delegating
 // Value lookups to a separate context. This lets the support dump
@@ -75,7 +131,7 @@ func sanitizeGitHubIssueNumber(issueNum string) string {
 }
 
 // GenerateSupportDump handles the generation and optional upload of support dumps
-func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
+func (c *Handler) GenerateSupportDump(ctx echo.Context) error {
 	c.LogDebugIfEnabled("Support dump generation started")
 
 	// Use the server lifecycle context for cancellation so the dump
@@ -143,7 +199,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Create collector with proper paths
-	collector := support.NewCollector(
+	collector := supportpkg.NewCollector(
 		configPath[0], // Use first config path
 		".",           // Data directory (current directory)
 		settings.SystemID,
@@ -156,7 +212,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		if c.V2Manager.IsMySQL() {
 			dialect = datastore.DialectMySQL
 		}
-		dbCollector := support.NewGormDatabaseInfoCollector(
+		dbCollector := supportpkg.NewGormDatabaseInfoCollector(
 			c.V2Manager.DB(),
 			dialect,
 			c.V2Manager.Path(),
@@ -168,19 +224,19 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 
 	// Wire app events provider
 	if req.IncludeAppEvents && c.DS != nil {
-		collector.SetAppEventsProvider(support.NewDatastoreAppEventsProvider(c.DS, nil))
+		collector.SetAppEventsProvider(supportpkg.NewDatastoreAppEventsProvider(c.DS, nil))
 	}
 
 	// Set collection options
-	opts := support.CollectorOptions{
+	opts := supportpkg.CollectorOptions{
 		IncludeLogs:           req.IncludeLogs,
 		IncludeConfig:         req.IncludeConfig,
 		IncludeSystemInfo:     req.IncludeSystemInfo,
 		IncludeDatabaseInfo:   req.IncludeDatabaseInfo,
 		IncludeDeploymentInfo: true,
 		IncludeAppEvents:      req.IncludeAppEvents,
-		LogDuration:           supportLogDurationWeeks * apicore.DaysPerWeek * HoursPerDay * time.Hour, // 4 weeks
-		MaxLogSize:            supportMaxLogSizeMB * supportBytesPerMB,                                 // 50MB to accommodate more logs
+		LogDuration:           supportLogDurationWeeks * apicore.DaysPerWeek * apicore.HoursPerDay * time.Hour, // 4 weeks
+		MaxLogSize:            supportMaxLogSizeMB * supportBytesPerMB,                                         // 50MB to accommodate more logs
 		ScrubSensitive:        true,
 		AnonymizePII:          true,
 	}
@@ -265,7 +321,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	if !req.UploadToSentry {
 		// Store temporarily for download
 		tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-go-support-%s.zip", dump.ID))
-		if err := os.WriteFile(tempFile, archiveData, FilePermOwnerOnly); err != nil {
+		if err := os.WriteFile(tempFile, archiveData, filePermOwnerOnly); err != nil {
 			c.LogErrorIfEnabled("Failed to store temporary file",
 				logger.Error(err),
 				logger.String("path", tempFile),
@@ -286,7 +342,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 }
 
 // DownloadSupportDump handles downloading a generated support dump
-func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
+func (c *Handler) DownloadSupportDump(ctx echo.Context) error {
 	dumpID := ctx.Param("id")
 	if dumpID == "" {
 		return c.HandleError(ctx, nil, "Missing dump ID", http.StatusBadRequest)
@@ -320,7 +376,7 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 }
 
 // GetSupportStatus returns the current support/telemetry configuration status
-func (c *Controller) GetSupportStatus(ctx echo.Context) error {
+func (c *Handler) GetSupportStatus(ctx echo.Context) error {
 	// Read the live global snapshot (race-free, hot-reloading) via
 	// CurrentSettings() so out-of-band republishes are seen and the read never
 	// races the Settings.Store in UpdateSettings.
@@ -338,30 +394,8 @@ func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, status)
 }
 
-// initSupportRoutes registers support-related routes
-func (c *Controller) initSupportRoutes() {
-	// Create protected group for support endpoints (consistent with other route files)
-	supportGroup := c.Group.Group("/support", c.AuthMiddleware)
-	supportGroup.POST("/generate", c.GenerateSupportDump)
-	supportGroup.GET("/download/:id", c.DownloadSupportDump)
-	supportGroup.GET("/status", c.GetSupportStatus)
-
-	// Start cleanup goroutine for old support dumps with proper context
-	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
-	if c.Context() != nil {
-		c.Go(func() {
-			c.startSupportDumpCleanup(c.Context())
-		})
-
-		c.Go(func() {
-			c.startAppEventPruning(c.Context())
-		})
-
-	}
-}
-
 // startSupportDumpCleanup runs a periodic cleanup of old temporary support dump files
-func (c *Controller) startSupportDumpCleanup(ctx context.Context) {
+func (c *Handler) startSupportDumpCleanup(ctx context.Context) {
 	// Ensure we have a valid context
 	if ctx == nil {
 		c.LogErrorIfEnabled("Cannot start support dump cleanup with nil context")
@@ -388,7 +422,7 @@ func (c *Controller) startSupportDumpCleanup(ctx context.Context) {
 }
 
 // cleanupOldSupportDumps removes temporary support dump files older than 1 hour
-func (c *Controller) cleanupOldSupportDumps() {
+func (c *Handler) cleanupOldSupportDumps() {
 	tempDir := os.TempDir()
 	pattern := filepath.Join(tempDir, "birdnet-go-support-*.zip")
 
@@ -415,7 +449,7 @@ func (c *Controller) cleanupOldSupportDumps() {
 
 // tryRemoveOldFile attempts to remove a file if it's older than cutoff.
 // Returns true if the file was successfully removed.
-func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
+func (c *Handler) tryRemoveOldFile(file string, cutoff time.Time) bool {
 	info, err := os.Stat(file)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -440,7 +474,7 @@ func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
 const appEventRetentionDays = 90
 
 // startAppEventPruning runs periodic pruning of old application events.
-func (c *Controller) startAppEventPruning(ctx context.Context) {
+func (c *Handler) startAppEventPruning(ctx context.Context) {
 	if ctx == nil || c.DS == nil {
 		return
 	}
@@ -468,7 +502,7 @@ func (c *Controller) startAppEventPruning(ctx context.Context) {
 }
 
 // pruneAppEvents removes application events older than the retention period.
-func (c *Controller) pruneAppEvents(ctx context.Context) {
+func (c *Handler) pruneAppEvents(ctx context.Context) {
 	if c.DS == nil {
 		return
 	}
