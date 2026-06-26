@@ -157,19 +157,19 @@ func TestDeviceDedupKey(t *testing.T) {
 	usbB := usbIdentity{BusPath: "usb-0000:00:14.0-2"}
 	none := usbIdentity{}
 
-	// USB cards key on name + stable token, so two identical-named cards on
-	// different ports get DISTINCT keys and both survive deduplication, while one
-	// card's pseudo-devices (same token) collapse to a single key.
-	assert.Equal(t, "USB Mic\x00usb-path:usb-0000:00:14.0-1", deviceDedupKey("USB Mic", 1, usbA))
-	assert.Equal(t, "USB Mic\x00usb-path:usb-0000:00:14.0-2", deviceDedupKey("USB Mic", 2, usbB))
+	// A USB card's pseudo-devices share its token, so they collapse to one key
+	// even if ALSA reports slightly different names for them.
+	assert.Equal(t, "usb-path:usb-0000:00:14.0-1", deviceDedupKey("USB Mic", usbA))
+	assert.Equal(t, "usb-path:usb-0000:00:14.0-1", deviceDedupKey("USB Mic (alt)", usbA))
 
-	// Non-USB cards (no stable id) fall back to name + card number, so two
-	// same-named cards still separate while one card's pseudo-devices collapse.
-	assert.Equal(t, "HDMI\x00card:1", deviceDedupKey("HDMI", 1, none))
-	assert.Equal(t, "HDMI\x00card:2", deviceDedupKey("HDMI", 2, none))
+	// Two identical-named USB cards on different ports stay distinct and both
+	// survive deduplication (the bug the stable-id selection fixes).
+	assert.NotEqual(t, deviceDedupKey("USB Mic", usbA), deviceDedupKey("USB Mic", usbB))
 
-	// No identity and no card number falls back to the bare name.
-	assert.Equal(t, "Default Audio Device", deviceDedupKey("Default Audio Device", -1, none))
+	// Without a stable token, fall back to the display name (the original
+	// behavior), so distinctly-named non-USB capture devices are not merged.
+	assert.Equal(t, "HDMI 0", deviceDedupKey("HDMI 0", none))
+	assert.NotEqual(t, deviceDedupKey("Line In", none), deviceDedupKey("Mic In", none))
 }
 
 func TestRedactDeviceID(t *testing.T) {

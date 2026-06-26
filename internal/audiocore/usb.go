@@ -62,20 +62,18 @@ func isUSBDeviceToken(deviceID string) bool {
 }
 
 // deviceDedupKey returns the key used to collapse the several ALSA pseudo-devices
-// that one physical card enumerates as, while keeping two physically distinct
-// cards that share a display name separate (e.g. two identical USB mics). It
-// prefers the stable USB token, then the ALSA card number, then the bare name.
-// A name-only key would hide the second identical device, the exact case the
-// stable-id selection exists to fix.
-func deviceDedupKey(name string, cardNumber int, ident usbIdentity) string {
-	switch {
-	case ident.stableToken() != "":
-		return name + "\x00" + ident.stableToken()
-	case cardNumber >= 0:
-		return name + "\x00card:" + strconv.Itoa(cardNumber)
-	default:
-		return name
+// that one physical card enumerates as. A USB card's pseudo-devices all share its
+// stable USB token, so keying on the token alone collapses them to one entry
+// (even if ALSA reports slightly different names) while two physically distinct
+// cards stay separate even when they share a display name, e.g. two identical USB
+// mics. Without a stable token (non-USB or legacy) it falls back to the display
+// name, preserving the original name-based dedup so distinctly-named capture
+// devices that a user can still select by ALSA id or name are not merged away.
+func deviceDedupKey(name string, ident usbIdentity) string {
+	if token := ident.stableToken(); token != "" {
+		return token
 	}
+	return name
 }
 
 // redactDeviceID returns a log-safe form of a configured device identifier. A

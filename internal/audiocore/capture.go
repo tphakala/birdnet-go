@@ -136,7 +136,7 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 		// per card so the several pseudo-devices of one card collapse to a single
 		// entry, while two physically distinct cards that share a display name
 		// (e.g. two identical USB mics) are BOTH listed and selectable.
-		seenKey := deviceDedupKey(name, cardNumber, ident)
+		seenKey := deviceDedupKey(name, ident)
 		if seenNames[seenKey] {
 			continue
 		}
