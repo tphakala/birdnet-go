@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -81,7 +82,7 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	// Make request to browse the temp directory
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
@@ -130,7 +131,7 @@ func TestBrowseFileSystem_EmptyPath(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	// Browse with no path parameter
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse")
@@ -167,7 +168,7 @@ func TestBrowseFileSystem_SubDirectory(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	// Browse the nested directory
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + subDir)
@@ -197,7 +198,7 @@ func TestBrowseFileSystem_PathTraversal(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	// Test various path traversal attempts
 	traversalPaths := []struct {
@@ -237,7 +238,7 @@ func TestBrowseFileSystem_NonExistentPath(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	nonExistent := filepath.Join(tempDir, "does-not-exist")
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + nonExistent)
@@ -263,7 +264,7 @@ func TestBrowseFileSystem_FileNotDirectory(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	// Try to browse the file as if it were a directory
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + testFile)
@@ -289,7 +290,7 @@ func TestBrowseFileSystem_EmptyDirectory(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + emptyDir)
 	require.NoError(t, err)
@@ -323,7 +324,7 @@ func TestBrowseFileSystem_ParentPath(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	tests := []struct {
 		name               string
@@ -428,7 +429,7 @@ func TestBrowseFileSystem_MixedFileTypes(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
 	require.NoError(t, err)
@@ -474,7 +475,7 @@ func TestBrowseFileSystem_LargeDirectory(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
 	require.NoError(t, err)
@@ -513,7 +514,7 @@ func TestBrowseFileSystem_SpecialCharactersInPath(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
 	require.NoError(t, err)
@@ -658,7 +659,7 @@ func TestBrowseFileSystem_SymlinkHandling(t *testing.T) {
 	server := httptest.NewServer(e)
 	defer server.Close()
 
-	client := createTestHTTPClient(testResponseHeaderTimeout)
+	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
 
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
 	require.NoError(t, err)

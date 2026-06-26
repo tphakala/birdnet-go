@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"go.uber.org/goleak"
 )
@@ -39,7 +40,7 @@ const (
 func TestMain(m *testing.M) {
 	// Disable HTTP keep-alives for all tests to prevent goroutine leaks from
 	// persistent connections. Must run before any test creates an HTTP client.
-	DisableHTTPKeepAlivesForTesting()
+	apitest.DisableHTTPKeepAlivesForTesting()
 
 	// Run tests
 	testResult := m.Run()

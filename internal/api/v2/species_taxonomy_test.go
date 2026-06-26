@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 )
 
@@ -26,7 +27,7 @@ func TestGetGenusSpecies(t *testing.T) {
 
 	// Create a minimal controller with taxonomy DB
 	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-	c.Settings.Store(newValidTestSettings())
+	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
 		name           string
@@ -124,7 +125,7 @@ func TestGetFamilySpecies(t *testing.T) {
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-	c.Settings.Store(newValidTestSettings())
+	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
 		name           string
@@ -203,7 +204,7 @@ func TestGetSpeciesTree(t *testing.T) {
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
-	c.Settings.Store(newValidTestSettings())
+	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
 		name           string
@@ -306,7 +307,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB, EBirdClient: nil}}
-	c.Settings.Store(newValidTestSettings())
+	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
 		name           string
@@ -359,7 +360,7 @@ func TestGetSpeciesTaxonomyWithoutLocalDB(t *testing.T) {
 	t.Parallel()
 
 	c := &Controller{Core: &apicore.Core{TaxonomyDB: nil, EBirdClient: nil}}
-	c.Settings.Store(newValidTestSettings())
+	c.Settings.Store(apitest.NewValidTestSettings())
 
 	// This should fail gracefully
 	_, err := c.getDetailedTaxonomy(t.Context(), "Turdus migratorius", "", false, true)

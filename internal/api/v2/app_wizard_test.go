@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"gorm.io/driver/sqlite"
@@ -249,7 +250,7 @@ func TestDismissWizard_Success(t *testing.T) {
 	e := echo.New()
 	c := &Controller{Core: &apicore.Core{}, appMetadataRepo: mockRepo}
 	c.Settings.Store(&conf.Settings{Version: "v0.9.0"})
-	publishTestSettings(t, c.Settings.Load())
+	apitest.PublishTestSettings(t, c.Settings.Load())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/app/wizard/dismiss", http.NoBody)
 	rec := httptest.NewRecorder()

@@ -210,7 +210,7 @@ func TestApplyRuntimeBackend(t *testing.T) {
 // the shared setupTestEnvironment harness (minimalController + Echo) to exercise
 // the handler over httptest without starting any background goroutines.
 func TestGetInferenceStatus_HTTP200(t *testing.T) {
-	// NOT parallel: publishTestSettings in setupTestEnvironment mutates global state.
+	// NOT parallel: apitest.PublishTestSettings in setupTestEnvironment mutates global state.
 	e, _, controller := setupTestEnvironment(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
@@ -270,7 +270,7 @@ func TestBroadcastInferenceTopologyChanged_NilSafe(t *testing.T) {
 // audio block with the expected metric key for queue depth and a non-negative
 // queue capacity matching RouteInboxCapacity.
 func TestGetInferenceStatus_AudioBlock(t *testing.T) {
-	// NOT parallel: publishTestSettings in setupTestEnvironment mutates global state.
+	// NOT parallel: apitest.PublishTestSettings in setupTestEnvironment mutates global state.
 	e, _, controller := setupTestEnvironment(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)

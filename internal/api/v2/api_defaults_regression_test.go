@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
@@ -427,7 +428,7 @@ func TestGetEffectiveSummaryLimit_AfterMigration(t *testing.T) {
 	t.Attr("type", "regression")
 	t.Attr("issue", "2352")
 
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 
 	// Pre-migration baseline: capture effective limit before migration
 	expectedLimit := settings.GetEffectiveSummaryLimit()

@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -63,7 +64,7 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Sett
 	}
 
 	// Create mock ImageProvider
-	mockImageProvider := &MockImageProvider{}
+	mockImageProvider := &apitest.MockImageProvider{}
 	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
 
 	// Create bird image cache with mock provider
@@ -313,7 +314,7 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 		},
 	}
 
-	mockImageProvider := &MockImageProvider{}
+	mockImageProvider := &apitest.MockImageProvider{}
 	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
 	birdImageCache := &imageprovider.BirdImageCache{}
 	birdImageCache.SetImageProvider(mockImageProvider)

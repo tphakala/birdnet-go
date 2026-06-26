@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -281,7 +282,7 @@ func TestHandleSearch_LocalizedCommonName_SecondaryModelSpecies(t *testing.T) {
 	mockDS := mocks.NewMockInterface(t)
 
 	controller := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2"), DS: mockDS}}
-	controller.Settings.Store(newValidTestSettings())
+	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	// Wire a batch-capable resolver so the scientific-only bat label
 	// "Barbastella barbastellus" (no underscore-separated common name in the

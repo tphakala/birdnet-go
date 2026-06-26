@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	speciestracker "github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -617,7 +618,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	// Initialize a mock image cache for controller creation - ONCE for all test cases
 	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
 	// Create a stub provider to avoid nil pointer panics
-	stubProvider := &TestImageProvider{
+	stubProvider := &apitest.TestImageProvider{
 		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
 			return imageprovider.BirdImage{}, nil
 		},
@@ -766,7 +767,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
 
 	// Create a mock image provider (can be nil if cache doesn't need real fetching)
-	mockImageProvider := &TestImageProvider{
+	mockImageProvider := &apitest.TestImageProvider{
 		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
 			// Return placeholder or specific mock image data if needed
 			return imageprovider.BirdImage{
@@ -1030,7 +1031,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	// mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
 
 	// Create a mock image provider
-	mockImageProvider := &TestImageProvider{
+	mockImageProvider := &apitest.TestImageProvider{
 		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
 			return imageprovider.BirdImage{
 				ScientificName: scientificName,
@@ -1040,7 +1041,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	}
 
 	// Create a bird image cache with our mock provider
-	imageCache := imageprovider.InitCache("test", mockImageProvider, NewTestMetrics(t), mockDS)
+	imageCache := imageprovider.InitCache("test", mockImageProvider, apitest.NewTestMetrics(t), mockDS)
 
 	// Create a controller with our mocks
 	controller := &Controller{Core: &apicore.Core{DS: mockDS, BirdImageCache: imageCache}}
