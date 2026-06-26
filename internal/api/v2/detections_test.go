@@ -1288,6 +1288,40 @@ func TestReviewDetection(t *testing.T) {
 	}
 }
 
+// TestReviewDetectionFalsePositiveLocalizedResolution verifies the false-positive
+// review path resolves a localized common name to its scientific name before
+// adding it to the exclude list, mirroring the IgnoreSpecies endpoint.
+func TestReviewDetectionFalsePositiveLocalizedResolution(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+	clearExcludedSpeciesList(t, controller.Settings.Load())
+
+	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	mockDS.ExpectedCalls = nil
+	setupValidReviewMock(&mockDS.Mock, "7", 7, false)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/7/review",
+		strings.NewReader(`{"verified": "false_positive", "ignoreSpecies": "mopsilepakko"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("7")
+
+	require.NoError(t, controller.ReviewDetection(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// The exclude list holds the scientific name, not the localized common name,
+	// so the per-detection filter can match it.
+	assert.Contains(t, controller.Settings.Load().Realtime.Species.Exclude, "Barbastella barbastellus")
+	assert.NotContains(t, controller.Settings.Load().Realtime.Species.Exclude, "mopsilepakko")
+
+	mockDS.AssertExpectations(t)
+}
+
 // TestLockDetection tests the LockDetection endpoint
 func TestLockDetection(t *testing.T) {
 	// Setup
@@ -1515,6 +1549,103 @@ func TestIgnoreSpecies(t *testing.T) {
 		assert.False(t, removeResponse.IsExcluded)
 	})
 
+	t.Run("Localized name resolution", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
+
+		// Setup fake resolver
+		controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+			"Barbastella barbastellus": "mopsilepakko",
+		}})
+		controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "mopsilepakko"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.IgnoreSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response IgnoreSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, "mopsilepakko", response.CommonName) // Original name is returned
+		assert.Equal(t, "added", response.Action)
+		assert.True(t, response.IsExcluded)
+
+		// Verify settings actually contain the scientific name
+		assert.Contains(t, controller.Settings.Load().Realtime.Species.Exclude, "Barbastella barbastellus")
+		assert.NotContains(t, controller.Settings.Load().Realtime.Species.Exclude, "mopsilepakko")
+	})
+
+	t.Run("Localized name resolution round-trip remove", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
+
+		controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+			"Barbastella barbastellus": "mopsilepakko",
+		}})
+		controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+		toggle := func() IgnoreSpeciesResponse {
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+				strings.NewReader(`{"common_name": "mopsilepakko"}`))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			require.NoError(t, controller.IgnoreSpecies(e.NewContext(req, rec)))
+			require.Equal(t, http.StatusOK, rec.Code)
+			var resp IgnoreSpeciesResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			return resp
+		}
+
+		// First toggle adds the resolved scientific name.
+		added := toggle()
+		assert.Equal(t, "added", added.Action)
+		assert.True(t, added.IsExcluded)
+		assert.Contains(t, controller.Settings.Load().Realtime.Species.Exclude, "Barbastella barbastellus")
+
+		// Second toggle of the same localized name resolves to the same scientific
+		// name and removes it: the localized round-trip is symmetric.
+		removed := toggle()
+		assert.Equal(t, "removed", removed.Action)
+		assert.False(t, removed.IsExcluded)
+		assert.NotContains(t, controller.Settings.Load().Realtime.Species.Exclude, "Barbastella barbastellus")
+	})
+
+	t.Run("Toggle reconciles a legacy localized entry instead of duplicating", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		settings := controller.Settings.Load()
+		clearExcludedSpeciesList(t, settings)
+
+		controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+			"Barbastella barbastellus": "mopsilepakko",
+		}})
+		controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+		// Simulate a pre-fix exclude list that stored the localized common name verbatim.
+		settings.Realtime.Species.Exclude = []string{"mopsilepakko"}
+
+		// Toggling the same localized name resolves to the scientific name; the legacy
+		// common-name entry must be removed, not left as an un-removable orphan with a
+		// scientific-name duplicate appended.
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "mopsilepakko"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		require.NoError(t, controller.IgnoreSpecies(e.NewContext(req, rec)))
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var resp IgnoreSpeciesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "removed", resp.Action)
+		assert.False(t, resp.IsExcluded)
+		assert.Empty(t, controller.Settings.Load().Realtime.Species.Exclude)
+	})
+
 	t.Run("Multiple toggle operations", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 		clearExcludedSpeciesList(t, controller.Settings.Load())
@@ -1683,6 +1814,37 @@ func TestGetExcludedSpecies(t *testing.T) {
 		assert.Contains(t, response.Species, "Species B")
 		assert.NotContains(t, response.Species, "Species A")
 	})
+
+	t.Run("Reverse-resolves scientific names to common names", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
+
+		controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+			"Barbastella barbastellus": "mopsilepakko",
+		}})
+		controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+		// Ignore via the localized name; the exclude list stores the scientific name.
+		ignoreReq := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "mopsilepakko"}`))
+		ignoreReq.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		ignoreRec := httptest.NewRecorder()
+		require.NoError(t, controller.IgnoreSpecies(e.NewContext(ignoreReq, ignoreRec)))
+		require.Equal(t, http.StatusOK, ignoreRec.Code)
+		require.Contains(t, controller.Settings.Load().Realtime.Species.Exclude, "Barbastella barbastellus")
+
+		// GetExcludedSpecies reverse-resolves the stored scientific name back to the
+		// common name the detection cards key their "ignored" badge on.
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
+		rec := httptest.NewRecorder()
+		require.NoError(t, controller.GetExcludedSpecies(e.NewContext(req, rec)))
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response ExcludedSpeciesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		assert.Equal(t, []string{"mopsilepakko"}, response.Species)
+		assert.NotContains(t, response.Species, "Barbastella barbastellus")
+	})
 }
 
 // TestIgnoreSpeciesConcurrency tests concurrent access to the IgnoreSpecies endpoint
@@ -1739,6 +1901,64 @@ func TestIgnoreSpeciesConcurrency(t *testing.T) {
 	// But due to concurrent execution, the final state depends on timing
 	// We just verify the endpoint didn't crash and returned valid data
 	assert.GreaterOrEqual(t, response.Count, 0)
+}
+
+// TestGetExcludedSpeciesConcurrentReadsWithToggle exercises GetExcludedSpecies
+// (the lock-free reader) concurrently with IgnoreSpecies (the copy-on-write
+// writer) under -race. Controller.Settings is an atomic.Pointer published via
+// Settings.Store, and CloneSettings deep-copies the exclude slice, so a reader
+// never observes a slice mutated in place and needs no lock. This guards that
+// documented lock-free-read invariant against regressions.
+func TestGetExcludedSpeciesConcurrentReadsWithToggle(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	clearExcludedSpeciesList(t, controller.Settings.Load())
+
+	names := []string{
+		"Alpha Bird", "Beta Bird", "Gamma Bird", "Delta Bird",
+		"Epsilon Bird", "Zeta Bird", "Eta Bird", "Theta Bird",
+	}
+	const iterations = 25
+
+	// Spawned goroutines record failures atomically rather than asserting inline,
+	// since require/assert FailNow must run on the test goroutine, not a worker.
+	var failures atomic.Int32
+	var wg sync.WaitGroup
+	barrier := make(chan struct{})
+
+	// Writers toggle their own species in and out of the exclude list.
+	for _, name := range names {
+		wg.Go(func() {
+			<-barrier
+			for range iterations {
+				req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+					strings.NewReader(`{"common_name": "`+name+`"}`))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+				rec := httptest.NewRecorder()
+				if err := controller.IgnoreSpecies(e.NewContext(req, rec)); err != nil {
+					failures.Add(1)
+				}
+			}
+		})
+	}
+
+	// Readers hammer GetExcludedSpecies while the list is being mutated.
+	for range names {
+		wg.Go(func() {
+			<-barrier
+			for range iterations {
+				req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
+				rec := httptest.NewRecorder()
+				if err := controller.GetExcludedSpecies(e.NewContext(req, rec)); err != nil || rec.Code != http.StatusOK {
+					failures.Add(1)
+				}
+			}
+		})
+	}
+
+	close(barrier)
+	wg.Wait()
+
+	assert.Zero(t, failures.Load(), "concurrent ignore/get-excluded requests should all succeed")
 }
 
 // TestAddCommentMethod tests the AddComment method directly
