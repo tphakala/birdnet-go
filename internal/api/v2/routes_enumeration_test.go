@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -303,9 +304,9 @@ func buildFullyRoutedController(t *testing.T) *echo.Echo {
 	// Permissive expectations for DS methods that background goroutines started
 	// by initRoutes (e.g. the app-event pruning worker) may call before Shutdown.
 	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Audio.Export.Path = t.TempDir()
-	publishTestSettings(t, settings)
+	apitest.PublishTestSettings(t, settings)
 	birdImageCache := &imageprovider.BirdImageCache{}
 	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 	controlChan := make(chan string, testControlChannelBuf)
@@ -330,7 +331,7 @@ func sortedRouteSet(e *echo.Echo) []string {
 // TestRouteEnumerationMatchesGolden pins the full method+path route set so the
 // API v2 package-split phases cannot silently add, drop, or reorder a route.
 func TestRouteEnumerationMatchesGolden(t *testing.T) {
-	// NOT parallel: publishTestSettings mutates the process-global snapshot.
+	// NOT parallel: apitest.PublishTestSettings mutates the process-global snapshot.
 	e := buildFullyRoutedController(t)
 	got := sortedRouteSet(e)
 
@@ -341,7 +342,7 @@ func TestRouteEnumerationMatchesGolden(t *testing.T) {
 // TestRouteEnumerationIsDeterministic builds the controller twice and asserts the
 // route set is identical, guarding against registration-order nondeterminism.
 func TestRouteEnumerationIsDeterministic(t *testing.T) {
-	// NOT parallel: publishTestSettings mutates the process-global snapshot.
+	// NOT parallel: apitest.PublishTestSettings mutates the process-global snapshot.
 	first := sortedRouteSet(buildFullyRoutedController(t))
 	second := sortedRouteSet(buildFullyRoutedController(t))
 	assert.Equal(t, first, second)
@@ -351,7 +352,7 @@ func TestRouteEnumerationIsDeterministic(t *testing.T) {
 // registered directly on the Echo instance (not the group), preserving the
 // documented greedy-route behavior that catches all /api/v2/audio/* paths.
 func TestGreedyAudioRouteRegisteredOnEcho(t *testing.T) {
-	// NOT parallel: publishTestSettings mutates the process-global snapshot.
+	// NOT parallel: apitest.PublishTestSettings mutates the process-global snapshot.
 	e := buildFullyRoutedController(t)
 	found := false
 	for _, r := range e.Routes() {

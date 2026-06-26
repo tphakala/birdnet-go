@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/middleware"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -1258,7 +1259,7 @@ func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 
 	// Replace the mock provider with one that returns ErrImageNotFound for unknown species
-	notFoundProvider := &TestImageProvider{
+	notFoundProvider := &apitest.TestImageProvider{
 		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
 			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
 		},

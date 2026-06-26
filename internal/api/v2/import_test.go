@@ -27,6 +27,7 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imports"
 )
@@ -122,7 +123,7 @@ func newImportController(t *testing.T) (*echo.Echo, *Controller) {
 	cCore := &apicore.Core{Group: e.Group(apiV2Prefix), AuthMiddleware: func(next echo.HandlerFunc) echo.HandlerFunc { return next }}
 	cCore.SetTestContext(ctx, cancel)
 	c := &Controller{Core: cCore, importMgr: newImportManager()}
-	c.Settings.Store(newValidTestSettings())
+	c.Settings.Store(apitest.NewValidTestSettings())
 	t.Cleanup(func() {
 		cancel()
 		c.Wait()
@@ -253,7 +254,7 @@ func TestImportManager_GetByID(t *testing.T) {
 func TestStartBirdNETPiImport_NoRepo_Returns503(t *testing.T) {
 	e := echo.New()
 	c := &Controller{Core: &apicore.Core{Group: e.Group(apiV2Prefix)}, importMgr: newImportManager()}
-	c.Settings.Store(newValidTestSettings())
+	c.Settings.Store(apitest.NewValidTestSettings())
 
 	body := testDBOnlyBody
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/birdnet-pi", bytes.NewBufferString(body))
@@ -317,7 +318,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
 
 	// db-audio mode now requires a configured export path; provide one so the
 	// handler accepts the request instead of returning 400.
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Audio.Export.Path = t.TempDir()
 	c.Settings.Store(settings)
 
@@ -361,8 +362,8 @@ func TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400(t *testing.T) 
 	c.DS = mockDS
 	c.Repo = mocks.NewMockDetectionRepository(t)
 
-	// Settings with an empty export path (newValidTestSettings leaves it unset).
-	c.Settings.Store(newValidTestSettings())
+	// Settings with an empty export path (apitest.NewValidTestSettings leaves it unset).
+	c.Settings.Store(apitest.NewValidTestSettings())
 
 	det := imports.SourceDetection{
 		Date: "2024-01-01", Time: "10:00:00",
@@ -481,7 +482,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
 	// Configure a real export directory so the engine receives a non-empty
 	// ClipExportPath and the audio path is exercised.
 	exportDir := t.TempDir()
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Audio.Export.Path = exportDir
 	c.Settings.Store(settings)
 
@@ -1040,7 +1041,7 @@ func TestImportRoutes_Registered(t *testing.T) {
 		"POST " + apiV2Prefix + "/import/jobs/:jobId/cancel",
 		"GET " + apiV2Prefix + "/import/status",
 	}
-	assertRoutesRegistered(t, e, expected)
+	apitest.AssertRoutesRegistered(t, e, expected)
 }
 
 // TestImportRoutes_FailClosedWhenNoAuth verifies the import group fails closed:

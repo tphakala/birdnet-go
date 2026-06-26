@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/restart"
 )
@@ -78,7 +79,7 @@ func TestRestartDetectors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			base := newValidTestSettings()
+			base := apitest.NewValidTestSettings()
 			updated := conf.CloneSettings(base)
 			tt.mutate(updated)
 
@@ -99,7 +100,7 @@ func TestHandleSettingsChangesMarksRestart(t *testing.T) {
 	t.Cleanup(restart.Reset)
 
 	c := createTestController(t)
-	base := newValidTestSettings()
+	base := apitest.NewValidTestSettings()
 	updated := conf.CloneSettings(base)
 	updated.WebServer.Port = "9999"
 
@@ -116,7 +117,7 @@ func TestHandleSettingsChangesNoRestartForHotReloadField(t *testing.T) {
 	t.Cleanup(restart.Reset)
 
 	c := createTestController(t)
-	base := newValidTestSettings()
+	base := apitest.NewValidTestSettings()
 	updated := conf.CloneSettings(base)
 	updated.WebServer.Debug = !base.WebServer.Debug
 

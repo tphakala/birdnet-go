@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -390,5 +391,5 @@ func TestMQTTTLSRouteRegistration(t *testing.T) {
 		"POST /api/v2/integrations/mqtt/tls/certificate",
 		"DELETE /api/v2/integrations/mqtt/tls/certificate",
 	}
-	assertRoutesRegistered(t, e, expectedRoutes)
+	apitest.AssertRoutesRegistered(t, e, expectedRoutes)
 }

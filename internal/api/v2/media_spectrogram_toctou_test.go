@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -45,7 +46,7 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 	controllerCore := &apicore.Core{SFS: sfs}
 	controllerCore.SetTestContext(ctx, nil)
 	controller := &Controller{Core: controllerCore}
-	controller.Settings.Store(newValidTestSettings())
+	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	const (
 		width = SpectrogramSizeLg

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 )
 
 func TestCheckNtfyServer_HTTPSuccess(t *testing.T) {
@@ -24,7 +25,7 @@ func TestCheckNtfyServer_HTTPSuccess(t *testing.T) {
 
 	e := echo.New()
 	ctrl := &Controller{Core: &apicore.Core{}}
-	ctrl.Settings.Store(newValidTestSettings())
+	ctrl.Settings.Store(apitest.NewValidTestSettings())
 	// ts.Listener.Addr().String() returns "127.0.0.1:PORT"
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host="+ts.Listener.Addr().String(), http.NoBody)
 	rec := httptest.NewRecorder()
@@ -44,7 +45,7 @@ func TestCheckNtfyServer_HTTPSuccess(t *testing.T) {
 func TestCheckNtfyServer_MissingHost(t *testing.T) {
 	e := echo.New()
 	ctrl := &Controller{Core: &apicore.Core{}}
-	ctrl.Settings.Store(newValidTestSettings())
+	ctrl.Settings.Store(apitest.NewValidTestSettings())
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
@@ -57,7 +58,7 @@ func TestCheckNtfyServer_MissingHost(t *testing.T) {
 func TestCheckNtfyServer_InvalidHost_Unreachable(t *testing.T) {
 	e := echo.New()
 	ctrl := &Controller{Core: &apicore.Core{}}
-	ctrl.Settings.Store(newValidTestSettings())
+	ctrl.Settings.Store(apitest.NewValidTestSettings())
 	// Inject a short per-scheme probe timeout so the unreachable-host path returns
 	// quickly. 192.0.2.1 never responds, so the result is deterministically
 	// "unreachable" regardless of the timeout; the override only bounds the wait
@@ -89,7 +90,7 @@ func TestCheckNtfyServer_NonNtfyServerNotFalsePositive(t *testing.T) {
 
 	e := echo.New()
 	ctrl := &Controller{Core: &apicore.Core{}}
-	ctrl.Settings.Store(newValidTestSettings())
+	ctrl.Settings.Store(apitest.NewValidTestSettings())
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host="+ts.Listener.Addr().String(), http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
@@ -106,7 +107,7 @@ func TestCheckNtfyServer_NonNtfyServerNotFalsePositive(t *testing.T) {
 func TestCheckNtfyServer_InjectionRejected(t *testing.T) {
 	e := echo.New()
 	ctrl := &Controller{Core: &apicore.Core{}}
-	ctrl.Settings.Store(newValidTestSettings())
+	ctrl.Settings.Store(apitest.NewValidTestSettings())
 	// Slash injection attempt
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host=evil.com%2F%40good.com", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -120,7 +121,7 @@ func TestCheckNtfyServer_InjectionRejected(t *testing.T) {
 func TestCheckNtfyServer_CloudMetadataBlocked(t *testing.T) {
 	e := echo.New()
 	ctrl := &Controller{Core: &apicore.Core{}}
-	ctrl.Settings.Store(newValidTestSettings())
+	ctrl.Settings.Store(apitest.NewValidTestSettings())
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host=169.254.169.254", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)

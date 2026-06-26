@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 )
@@ -26,7 +27,7 @@ func TestRestartAudioSource_NoEngine(t *testing.T) {
 	ctx.SetParamValues("test-src")
 
 	err := c.RestartAudioSource(ctx)
-	assertControllerError(t, err, rec, http.StatusInternalServerError, "Audio engine not available")
+	apitest.AssertControllerError(t, err, rec, http.StatusInternalServerError, "Audio engine not available")
 }
 
 func TestRestartAudioSource_SourceNotFound(t *testing.T) {
@@ -45,7 +46,7 @@ func TestRestartAudioSource_SourceNotFound(t *testing.T) {
 	ctx.SetParamValues("nonexistent")
 
 	err := c.RestartAudioSource(ctx)
-	assertControllerError(t, err, rec, http.StatusNotFound, "Audio source not found")
+	apitest.AssertControllerError(t, err, rec, http.StatusNotFound, "Audio source not found")
 }
 
 func TestRestartAudioSource_NoPipeline(t *testing.T) {
@@ -72,7 +73,7 @@ func TestRestartAudioSource_NoPipeline(t *testing.T) {
 	ctx.SetParamValues("test-src")
 
 	err = c.RestartAudioSource(ctx)
-	assertControllerError(t, err, rec, http.StatusServiceUnavailable, "Audio pipeline not started")
+	apitest.AssertControllerError(t, err, rec, http.StatusServiceUnavailable, "Audio pipeline not started")
 }
 
 func TestRestartAudioSource_Success(t *testing.T) {
@@ -146,7 +147,7 @@ func TestRestartAudioSource_RestartError(t *testing.T) {
 	ctx.SetParamValues("test-src")
 
 	err = c.RestartAudioSource(ctx)
-	assertControllerError(t, err, rec, http.StatusInternalServerError, "Failed to restart audio source")
+	apitest.AssertControllerError(t, err, rec, http.StatusInternalServerError, "Failed to restart audio source")
 }
 
 func TestRestartAudioSource_EmptyID(t *testing.T) {
@@ -161,5 +162,5 @@ func TestRestartAudioSource_EmptyID(t *testing.T) {
 	ctx.SetParamValues("")
 
 	err := c.RestartAudioSource(ctx)
-	assertControllerError(t, err, rec, http.StatusBadRequest, "Source ID is required")
+	apitest.AssertControllerError(t, err, rec, http.StatusBadRequest, "Source ID is required")
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 
@@ -304,7 +305,7 @@ func TestCheckMemoryAvailable(t *testing.T) {
 	t.Attr("feature", "prerequisites")
 
 	controller := &Controller{Core: &apicore.Core{}}
-	controller.Settings.Store(newValidTestSettings())
+	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	check := controller.checkMemoryAvailable()
 
@@ -469,7 +470,7 @@ func TestGetDatabaseDirectoryResolved_NilSettings(t *testing.T) {
 	controller := &Controller{Core: &apicore.Core{}}
 	// Publish a nil global so currentSettings() falls back to the controller's
 	// nil c.Settings and exercises the "settings not available" path.
-	publishTestSettings(t, nil)
+	apitest.PublishTestSettings(t, nil)
 
 	_, err := controller.getDatabaseDirectoryResolved()
 
@@ -579,7 +580,7 @@ func setupPrerequisitesTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *
 
 	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: testDS, Repo: mockRepo}}
 	controller.Settings.Store(getTestSettings(t))
-	publishTestSettings(t, controller.Settings.Load())
+	apitest.PublishTestSettings(t, controller.Settings.Load())
 
 	return e, controller, sm
 }

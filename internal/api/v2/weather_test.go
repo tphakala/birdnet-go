@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
@@ -120,7 +121,7 @@ func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface
 
 	// Create a controller with the test datastore
 	controller := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2"), DS: mockDS}}
-	controller.Settings.Store(newValidTestSettings())
+	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	// We don't need to initialize routes for unit tests
 	// But we could initialize the weather routes specifically if needed

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -33,7 +34,7 @@ func createLegacyTestController(tb testing.TB, e *echo.Echo, settings *conf.Sett
 	tb.Helper()
 	// Handlers read the live snapshot via currentSettings(); publish the test's
 	// settings so the read resolves to them (restored on cleanup).
-	publishTestSettings(tb, settings)
+	apitest.PublishTestSettings(tb, settings)
 	c := &Controller{Core: &apicore.Core{Echo: e}, cleanupStatus: NewCleanupStatus()}
 	c.Settings.Store(settings)
 	return c
