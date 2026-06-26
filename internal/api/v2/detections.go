@@ -1691,9 +1691,15 @@ func (c *Controller) excludeEntryMatches(entry, target string) bool {
 // detection (rangeFilterSettingsChanged) sees no diff and no spurious range-filter
 // rebuild is triggered. Ambiguous common names shared by multiple species are passed
 // through unchanged by resolveSpeciesToScientific, matching the detection-side paths.
+//
+// An empty result (empty input, or every entry dropped) returns nil rather than a
+// non-nil empty slice, so the stored list has a single canonical empty form. This
+// matters because rangeFilterSettingsChanged compares with reflect.DeepEqual and
+// DeepEqual(nil, []string{}) is false: returning a non-nil empty slice would spuriously
+// differ from a nil stored list and trigger a range-filter rebuild on an empty save.
 func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
 	if len(exclude) == 0 {
-		return exclude
+		return nil
 	}
 	canonical := make([]string, 0, len(exclude))
 	for _, entry := range exclude {
@@ -1712,6 +1718,11 @@ func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
 			continue
 		}
 		canonical = append(canonical, resolved)
+	}
+	if len(canonical) == 0 {
+		// Every entry was whitespace; collapse to nil (see the doc comment) so an
+		// empty result matches a nil stored list under reflect.DeepEqual.
+		return nil
 	}
 	return canonical
 }

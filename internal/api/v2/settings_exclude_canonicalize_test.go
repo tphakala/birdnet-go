@@ -84,9 +84,9 @@ func TestCanonicalizeExcludeList(t *testing.T) {
 			want:  nil,
 		},
 		{
-			name:  "empty passthrough",
+			name:  "empty slice normalized to nil",
 			input: []string{},
-			want:  []string{},
+			want:  nil,
 		},
 		{
 			name:  "localized name resolved to scientific",
@@ -109,11 +109,12 @@ func TestCanonicalizeExcludeList(t *testing.T) {
 			want:  []string{"American Crow"},
 		},
 		{
-			// A non-empty input whose entries all drop returns a non-nil empty
-			// slice (distinct from the nil/empty passthrough path above).
-			name:  "all entries dropped yields empty slice",
+			// A non-empty input whose entries all drop collapses to nil, the single
+			// canonical empty form (so an empty save matches a nil stored list under
+			// reflect.DeepEqual and does not spuriously rebuild the range filter).
+			name:  "all entries dropped yields nil",
 			input: []string{"   ", ""},
-			want:  []string{},
+			want:  nil,
 		},
 		{
 			name:  "mixed localized + scientific de-duplicated to one scientific",
