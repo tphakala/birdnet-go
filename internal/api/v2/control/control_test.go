@@ -1,11 +1,11 @@
-// control_test.go: Package api provides tests for API v2 control endpoints.
+// control_test.go: tests for the API v2 control domain endpoints.
 //
 // Go 1.25 improvements:
 // - Uses sync.WaitGroup.Go() for cleaner goroutine management
 // - Uses T.Attr() for test metadata
 // LLM GUIDANCE: Always use WaitGroup.Go() instead of manual Add/Done patterns
 
-package api
+package control
 
 import (
 	"context"
@@ -27,8 +27,33 @@ import (
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
-// runControlEndpointTest runs a control endpoint test with the given parameters
-func runControlEndpointTest(t *testing.T, e *echo.Echo, controller *Controller, method, path string, handler func(echo.Context) error, expectedMessage, expectedAction, expectedSignal string) {
+// testControlChannelBuf is the control channel buffer size for concurrent test
+// scenarios (e.g. TestConcurrentControlRequests sends 5). Size 10 is sufficient.
+const testControlChannelBuf = 10
+
+// newControlTestHandler builds a control Handler around an apicore.Core (via
+// apitest) and a buffered control channel. It returns the Echo instance, the
+// handler, and the bidirectional channel so tests can read the signals the
+// handler sends (the handler holds only the send-only view).
+func newControlTestHandler(t *testing.T) (*echo.Echo, *Handler, chan string) {
+	t.Helper()
+	e := echo.New()
+	ch := make(chan string, testControlChannelBuf)
+	core := apitest.NewCore(t, apitest.WithEcho(e))
+	return e, New(core, ch), ch
+}
+
+// newControlHandler builds a control Handler on the supplied Echo instance with a
+// buffered control channel the caller does not need to observe.
+func newControlHandler(t *testing.T, e *echo.Echo) *Handler {
+	t.Helper()
+	core := apitest.NewCore(t, apitest.WithEcho(e))
+	return New(core, make(chan string, testControlChannelBuf))
+}
+
+// runControlEndpointTest runs a control endpoint test with the given parameters.
+// signals are read from the supplied bidirectional channel.
+func runControlEndpointTest(t *testing.T, e *echo.Echo, controlChan chan string, method, path string, handler func(echo.Context) error, expectedMessage, expectedAction, expectedSignal string) {
 	t.Helper()
 
 	// Create a request
@@ -59,7 +84,7 @@ func runControlEndpointTest(t *testing.T, e *echo.Echo, controller *Controller, 
 
 		// Verify signal was sent to control channel
 		select {
-		case signal := <-controller.controlChan:
+		case signal := <-controlChan:
 			assert.Equal(t, expectedSignal, signal)
 		case <-time.After(100 * time.Millisecond):
 			assert.Fail(t, "Control signal was not sent")
@@ -69,7 +94,7 @@ func runControlEndpointTest(t *testing.T, e *echo.Echo, controller *Controller, 
 
 // runConcurrentControlRequestsTest runs multiple concurrent control requests test
 // Uses Go 1.25's WaitGroup.Go() for automatic goroutine management
-func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controller *Controller, handler func(echo.Context) error, path, expectedSignal string) {
+func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controlChan chan string, handler func(echo.Context) error, path, expectedSignal string) {
 	t.Helper()
 	t.Attr("component", "control")
 	t.Attr("type", "concurrent")
@@ -106,11 +131,11 @@ func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controller *Co
 	wg.Wait()
 
 	// Verify that all signals were sent to the channel
-	assert.Len(t, controller.controlChan, numRequests, "All signals should be received")
+	assert.Len(t, controlChan, numRequests, "All signals should be received")
 
 	// Drain the channel
 	for range numRequests {
-		signal := <-controller.controlChan
+		signal := <-controlChan
 		assert.Equal(t, expectedSignal, signal, "Each signal should be the expected signal")
 	}
 }
@@ -122,16 +147,16 @@ func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Con
 	t.Attr("type", "blocked-channel")
 
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	// Save original channel and create a non-buffered channel that will block
-	originalChan := controller.controlChan
+	originalChan := h.controlChan
 	controlChan := make(chan string)
-	controller.controlChan = controlChan
+	h.controlChan = controlChan
 
 	// Restore original channel after test
 	defer func() {
-		controller.controlChan = originalChan
+		h.controlChan = originalChan
 	}()
 
 	// Start a goroutine that will eventually unblock the channel, but after the test timeout
@@ -168,7 +193,7 @@ func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Con
 	select {
 	case <-done:
 		// Handler completed successfully without blocking indefinitely
-		// Note: With buffered channel in setupTestEnvironment, the send won't block
+		// Note: With buffered channel in the test handler, the send won't block
 		// so we expect success (200) instead of timeout (408)
 		assert.Equal(t, http.StatusOK, rec.Code,
 			"Should return success with buffered channel")
@@ -180,7 +205,7 @@ func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Con
 // TestGetAvailableActions tests the GetAvailableActions endpoint
 func TestGetAvailableActions(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	// Create a request to the control actions endpoint
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/control/actions", http.NoBody)
@@ -189,7 +214,7 @@ func TestGetAvailableActions(t *testing.T) {
 	c.SetPath("/api/v2/control/actions")
 
 	// Test
-	require.NoError(t, controller.GetAvailableActions(c))
+	require.NoError(t, h.GetAvailableActions(c))
 	{
 		// Check status code
 		assert.Equal(t, http.StatusOK, rec.Code)
@@ -249,37 +274,37 @@ func TestGetAvailableActions(t *testing.T) {
 // TestRestartAnalysis tests the RestartAnalysis endpoint
 func TestRestartAnalysis(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, ch := newControlTestHandler(t)
 
-	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/restart", controller.RestartAnalysis,
+	runControlEndpointTest(t, e, ch, http.MethodPost, "/api/v2/control/restart", h.RestartAnalysis,
 		"Analysis restart signal sent", ActionRestartAnalysis, SignalRestartAnalysis)
 }
 
 // TestReloadModel tests the ReloadModel endpoint
 func TestReloadModel(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, ch := newControlTestHandler(t)
 
-	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/reload", controller.ReloadModel,
+	runControlEndpointTest(t, e, ch, http.MethodPost, "/api/v2/control/reload", h.ReloadModel,
 		"Model reload signal sent", ActionReloadModel, SignalReloadModel)
 }
 
 // TestRebuildFilter tests the RebuildFilter endpoint
 func TestRebuildFilter(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, ch := newControlTestHandler(t)
 
-	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/rebuild-filter", controller.RebuildFilter,
+	runControlEndpointTest(t, e, ch, http.MethodPost, "/api/v2/control/rebuild-filter", h.RebuildFilter,
 		"Filter rebuild signal sent", ActionRebuildFilter, SignalRebuildFilter)
 }
 
 // TestControlActionsWithNilChannel tests the control endpoints with a nil control channel
 func TestControlActionsWithNilChannel(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	// Explicitly set the control channel to nil
-	controller.controlChan = nil
+	h.controlChan = nil
 
 	// Define test cases
 	testCases := []struct {
@@ -290,17 +315,17 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 		{
 			name:     "RestartAnalysis with nil channel",
 			endpoint: "/api/v2/control/restart",
-			handler:  controller.RestartAnalysis,
+			handler:  h.RestartAnalysis,
 		},
 		{
 			name:     "ReloadModel with nil channel",
 			endpoint: "/api/v2/control/reload",
-			handler:  controller.ReloadModel,
+			handler:  h.ReloadModel,
 		},
 		{
 			name:     "RebuildFilter with nil channel",
 			endpoint: "/api/v2/control/rebuild-filter",
-			handler:  controller.RebuildFilter,
+			handler:  h.RebuildFilter,
 		},
 	}
 
@@ -325,7 +350,7 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 			err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
 			require.NoError(t, err)
 
-			// Check error response content — in non-debug mode, error field uses
+			// Check error response content - in non-debug mode, error field uses
 			// sanitized message instead of raw err.Error()
 			assert.Contains(t, fmt.Sprint(errorResp["error"]), "System control interface not available")
 			assert.Contains(t, errorResp["message"], "System control interface not available")
@@ -334,13 +359,13 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 	}
 }
 
-// TestInitControlRoutesRegistration tests the registration of control-related API endpoints
-func TestInitControlRoutesRegistration(t *testing.T) {
-	// Use setupTestEnvironment to get a properly configured Echo and controller
-	e, _, controller := setupTestEnvironment(t)
+// TestRegisterRoutesRegistration tests the registration of control-related API endpoints
+func TestRegisterRoutesRegistration(t *testing.T) {
+	// Build a handler whose apicore.Core exposes the /api/v2 group
+	e, h, _ := newControlTestHandler(t)
 
-	// Re-initialize the routes to ensure a clean state
-	controller.initControlRoutes()
+	// Register the control routes on the shared group
+	h.RegisterRoutes(h.Group)
 
 	// Verify expected control routes are registered
 	apitest.AssertRoutesRegistered(t, e, []string{
@@ -426,11 +451,11 @@ func TestControlActionsConstants(t *testing.T) {
 // TestControlEndpointsWithUserAuth tests the control endpoints with proper auth
 func TestControlEndpointsWithUserAuth(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	// Set up the control channel
 	controlChan := make(chan string, 3) // Buffer for multiple signals
-	controller.controlChan = controlChan
+	h.controlChan = controlChan
 
 	// Test endpoints directly
 	handlers := []struct {
@@ -438,20 +463,20 @@ func TestControlEndpointsWithUserAuth(t *testing.T) {
 		handler func(echo.Context) error
 		signal  string
 	}{
-		{"Restart Analysis", controller.RestartAnalysis, SignalRestartAnalysis},
-		{"Reload Model", controller.ReloadModel, SignalReloadModel},
-		{"Rebuild Filter", controller.RebuildFilter, SignalRebuildFilter},
+		{"Restart Analysis", h.RestartAnalysis, SignalRestartAnalysis},
+		{"Reload Model", h.ReloadModel, SignalReloadModel},
+		{"Rebuild Filter", h.RebuildFilter, SignalRebuildFilter},
 	}
 
-	for _, h := range handlers {
-		t.Run(h.name, func(t *testing.T) {
+	for _, hc := range handlers {
+		t.Run(hc.name, func(t *testing.T) {
 			// Create request and context
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/control/test", http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
 			// Call handler directly (bypass middleware)
-			err := h.handler(c)
+			err := hc.handler(c)
 			require.NoError(t, err)
 
 			// Verify response
@@ -470,7 +495,7 @@ func TestControlEndpointsWithUserAuth(t *testing.T) {
 			// Verify signal
 			select {
 			case signal := <-controlChan:
-				assert.Equal(t, h.signal, signal)
+				assert.Equal(t, hc.signal, signal)
 			case <-time.After(100 * time.Millisecond):
 				assert.Fail(t, "Control signal was not sent")
 			}
@@ -482,28 +507,28 @@ func TestControlEndpointsWithUserAuth(t *testing.T) {
 // to ensure they don't hang indefinitely
 func TestControlActionsWithBlockedChannel(t *testing.T) {
 	// Setup
-	_, _, controller := setupTestEnvironment(t)
+	_, h, _ := newControlTestHandler(t)
 
-	runControlActionsWithBlockedChannelTest(t, controller.RestartAnalysis)
+	runControlActionsWithBlockedChannelTest(t, h.RestartAnalysis)
 }
 
 // TestConcurrentControlRequests tests that multiple concurrent control requests
 // are handled properly
 func TestConcurrentControlRequests(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, ch := newControlTestHandler(t)
 
-	runConcurrentControlRequestsTest(t, e, controller, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
+	runConcurrentControlRequestsTest(t, e, ch, h.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
 }
 
 // TestControlEndpointsAuthScenarios tests various authentication scenarios for control endpoints
 func TestControlEndpointsAuthScenarios(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	// Set up the control channel
 	controlChan := make(chan string, 5)
-	controller.controlChan = controlChan
+	h.controlChan = controlChan
 
 	// Configure auth middleware with a validator that checks for a specific token
 	authConfig := middleware.KeyAuthConfig{
@@ -519,7 +544,7 @@ func TestControlEndpointsAuthScenarios(t *testing.T) {
 	authGroup.Use(middleware.KeyAuthWithConfig(authConfig))
 
 	// Register the control handler on the auth group
-	authGroup.POST("/restart", controller.RestartAnalysis)
+	authGroup.POST("/restart", h.RestartAnalysis)
 
 	// Define test cases for different auth scenarios
 	testCases := []struct {
@@ -565,11 +590,11 @@ func TestControlEndpointsAuthScenarios(t *testing.T) {
 // TestInvalidPayloads tests the control endpoints with invalid request payloads
 func TestInvalidPayloads(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	// Set up the control channel
 	controlChan := make(chan string, 1)
-	controller.controlChan = controlChan
+	h.controlChan = controlChan
 
 	// Create a request with invalid JSON payload
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart",
@@ -579,7 +604,7 @@ func TestInvalidPayloads(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	// Call the handler
-	err := controller.RestartAnalysis(c)
+	err := h.RestartAnalysis(c)
 
 	// The handler should still work with invalid payloads since it doesn't expect any
 	require.NoError(t, err, "Handler should not return an error with invalid payload")
@@ -607,17 +632,17 @@ func (m *mockShutdownRequester) RequestShutdown() {
 // TestRestartServer tests the RestartServer endpoint with a valid shutdown requester.
 func TestRestartServer(t *testing.T) {
 	t.Cleanup(restart.Reset)
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	mock := &mockShutdownRequester{}
-	controller.SetShutdownRequester(mock)
+	h.SetShutdownRequester(mock)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/control/restart-server")
 
-	require.NoError(t, controller.RestartServer(c))
+	require.NoError(t, h.RestartServer(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var result ControlResult
@@ -629,34 +654,34 @@ func TestRestartServer(t *testing.T) {
 // TestRestartServerAlreadyInProgress tests that a second restart request returns 409 Conflict.
 func TestRestartServerAlreadyInProgress(t *testing.T) {
 	t.Cleanup(restart.Reset)
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 	mock := &mockShutdownRequester{}
-	controller.SetShutdownRequester(mock)
+	h.SetShutdownRequester(mock)
 
 	// First call succeeds
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	require.NoError(t, controller.RestartServer(c))
+	require.NoError(t, h.RestartServer(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Second call returns 409
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
-	require.NoError(t, controller.RestartServer(c2))
+	require.NoError(t, h.RestartServer(c2))
 	assert.Equal(t, http.StatusConflict, rec2.Code)
 }
 
 // TestRestartServerNoShutdownRequester tests that RestartServer returns 500 when no shutdown requester is set.
 func TestRestartServerNoShutdownRequester(t *testing.T) {
 	t.Cleanup(restart.Reset)
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	require.NoError(t, controller.RestartServer(c))
+	require.NoError(t, h.RestartServer(c))
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
@@ -670,14 +695,14 @@ func TestRestartContainerNotInContainer(t *testing.T) {
 		t.Skipf("Skipping: detected container environment %q", envType)
 	}
 
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 	mock := &mockShutdownRequester{}
-	controller.SetShutdownRequester(mock)
+	h.SetShutdownRequester(mock)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	require.NoError(t, controller.RestartContainer(c))
+	require.NoError(t, h.RestartContainer(c))
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
@@ -691,14 +716,14 @@ func TestRestartContainerInContainer(t *testing.T) {
 		t.Skipf("Skipping: detected non-container environment %q", envType)
 	}
 
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 	mock := &mockShutdownRequester{}
-	controller.SetShutdownRequester(mock)
+	h.SetShutdownRequester(mock)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	require.NoError(t, controller.RestartContainer(c))
+	require.NoError(t, h.RestartContainer(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var result ControlResult
@@ -717,12 +742,12 @@ func TestRestartContainerNoShutdownRequester(t *testing.T) {
 		t.Skipf("Skipping: detected non-container environment %q", envType)
 	}
 
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	require.NoError(t, controller.RestartContainer(c))
+	require.NoError(t, h.RestartContainer(c))
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
@@ -735,21 +760,21 @@ func TestRestartContainerAlreadyInProgress(t *testing.T) {
 		t.Skipf("Skipping: detected non-container environment %q", envType)
 	}
 
-	e, _, controller := setupTestEnvironment(t)
+	e, h, _ := newControlTestHandler(t)
 	mock := &mockShutdownRequester{}
-	controller.SetShutdownRequester(mock)
+	h.SetShutdownRequester(mock)
 
 	// First call succeeds
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	require.NoError(t, controller.RestartContainer(c))
+	require.NoError(t, h.RestartContainer(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Second call returns 409
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
-	require.NoError(t, controller.RestartContainer(c2))
+	require.NoError(t, h.RestartContainer(c2))
 	assert.Equal(t, http.StatusConflict, rec2.Code)
 }
