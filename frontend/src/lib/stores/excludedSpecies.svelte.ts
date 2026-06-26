@@ -5,11 +5,14 @@
  * ("exclude") via the detection action menus.
  *
  * The set is keyed by the SERVER common name (detection.commonName), NOT the
- * localized display name from localizeSpeciesName(). The backend stores and
- * returns exactly this string: POST /api/v2/detections/ignore writes
- * req.common_name into Realtime.Species.Exclude, and
- * GET /api/v2/detections/ignored returns that same list. Keying on anything
- * else (scientificName, a localized name) would silently never match.
+ * localized display name from localizeSpeciesName(). The backend canonicalizes
+ * the exclude list to scientific names internally so the per-detection filter
+ * matches regardless of locale, but the ignore endpoints speak common names at
+ * the boundary: POST /api/v2/detections/ignore accepts and echoes req.common_name,
+ * and GET /api/v2/detections/ignored reverse-resolves the stored scientific names
+ * back to their common name. So the set stays keyed on the server common name;
+ * keying on anything else (raw scientificName, a localized name) would silently
+ * never match.
  *
  * A SvelteSet (not a plain Set) is required: it is shared by reference across
  * every detection card/row/grid, and SvelteSet.has() reads are tracked, so an
