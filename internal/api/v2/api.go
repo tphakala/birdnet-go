@@ -14,9 +14,9 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
@@ -104,6 +104,15 @@ type Controller struct {
 	// middleware, and the error/log helpers all promote from it).
 	filesystem *filesystem.Handler
 
+	// alerts serves the /api/v2/alerts/* endpoints (alert-rule CRUD,
+	// import/export, history, schema, and test-fire). Beyond the shared
+	// *apicore.Core it OWNS its two domain dependencies (the alert-rule
+	// repository and the alerting engine), which it constructs lazily in
+	// RegisterRoutes when the enhanced v2 database schema is active. The facade
+	// calls c.alerts.Shutdown() during teardown to stop the engine and its
+	// global event bus.
+	alerts *alerts.Handler
+
 	controlChan chan string
 
 	// DisableSaveSettings prevents persisting settings changes to disk.
@@ -184,10 +193,6 @@ type Controller struct {
 
 	// Application metadata repository (initialized lazily in initAppRoutes)
 	appMetadataRepo repository.AppMetadataRepository
-
-	// Alerting fields (initialized lazily in initAlertRoutes)
-	alertRuleRepo repository.AlertRuleRepository
-	alertEngine   *alerting.Engine
 
 	// Insights fields (initialized lazily in initInsightsRoutes)
 	insightsRepo repository.InsightsRepository
@@ -355,6 +360,11 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// The filesystem handler needs only the shared core (the media SecureFS
 	// sandbox, the auth middleware, and the error/log helpers all promote from it).
 	c.filesystem = filesystem.New(c.Core)
+	// The alerts handler owns its two domain dependencies (alert-rule repository
+	// and alerting engine), constructed lazily in RegisterRoutes; it needs only
+	// the shared core here (V2Manager, auth middleware, and the error/log helpers
+	// all promote from it).
+	c.alerts = alerts.New(c.Core)
 
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
@@ -466,7 +476,7 @@ func (c *Controller) initRoutes() {
 		{"debug routes", c.initDebugRoutes},
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
 		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
-		{"alert routes", c.initAlertRoutes},
+		{"alert routes", func() { c.alerts.RegisterRoutes(c.Group) }},
 		{"model routes", func() { c.models.RegisterRoutes(c.Group) }},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", func() { c.tlsHandler.RegisterRoutes(c.Group) }},
@@ -603,12 +613,11 @@ func (c *Controller) Shutdown() {
 		c.SSEManager.CloseAllClients()
 	}
 
-	// Stop alerting engine background goroutines and event bus
-	if c.alertEngine != nil {
-		c.alertEngine.Stop()
-	}
-	if bus := alerting.GetGlobalBus(); bus != nil {
-		bus.Stop()
+	// Stop the alerting engine background goroutines and its global event bus.
+	// The alerts handler owns the engine; Shutdown is a no-op when the engine was
+	// never initialized (legacy database or V2Manager absent).
+	if c.alerts != nil {
+		c.alerts.Shutdown()
 	}
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
