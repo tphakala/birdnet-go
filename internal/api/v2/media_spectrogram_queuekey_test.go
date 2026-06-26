@@ -129,7 +129,7 @@ func TestGenerateSpectrogramFromRelRetainsFailedStatusForPolling(t *testing.T) {
 	// relAudioPath points at a file that does not exist, so generation fails.
 	relAudioPath := "2024/06/04/Turdus_merula_80p.wav"
 	_, genErr := controller.generateSpectrogramFromRel(
-		t.Context(), relAudioPath, "clip.wav", queueKey, SpectrogramSizeLg, true, "", "")
+		t.Context(), relAudioPath, "clip.wav", queueKey, SpectrogramSizeLg, true, "", "", "")
 	require.Error(t, genErr, "generation against a missing audio file must fail")
 
 	statusValue, ok := spectrogramQueue.Load(queueKey)

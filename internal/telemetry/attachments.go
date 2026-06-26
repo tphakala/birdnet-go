@@ -34,6 +34,20 @@ func flushWithContext(ctx context.Context, operation string) error {
 	log := GetLogger()
 	log.Debug("flushing event to Sentry", logger.String("operation", operation))
 
+	// Honor an already-cancelled context deterministically. Without this early
+	// check, a pre-cancelled context races the flush goroutine in the select
+	// below (Go picks a ready case at random), which is especially likely when
+	// sentry.Flush returns immediately (e.g. no DSN configured in test builds).
+	if err := ctx.Err(); err != nil {
+		log.Warn(operation+" cancelled before flush", logger.Error(err))
+		return errors.New(err).
+			Component("telemetry").
+			Category(errors.CategoryNetwork).
+			Context("operation", operation).
+			Context("reason", "context_cancelled_before_flush").
+			Build()
+	}
+
 	flushDone := make(chan struct{})
 	go func() {
 		sentry.Flush(sentryFlushTimeout)

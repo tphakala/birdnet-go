@@ -15,6 +15,7 @@ type ModelInfo struct {
 	Version        string  // e.g., "2.4"
 	Variant        string  // e.g., "default", "finland_birds"
 	ClassifierPath *string // path to custom classifier file, nil for default
+	ModelType      string  // e.g., "bird", "bat", "multi"; empty when unknown
 }
 
 // WithDefaults returns a copy of the ModelInfo with empty fields replaced by defaults.

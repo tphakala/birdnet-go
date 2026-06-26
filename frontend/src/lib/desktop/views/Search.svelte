@@ -72,6 +72,7 @@
     locked: boolean;
     hasAudio: boolean;
     source?: string;
+    modelType?: string;
   }
 
   interface AudioSourceOption {
@@ -228,12 +229,14 @@
   let selectedAudioUrl = $state('');
   let selectedSpeciesName = $state('');
   let selectedDetectionId = $state<string | undefined>(undefined);
+  let selectedModelType = $state('');
 
   function openMobilePlayer(result: SearchResult) {
     if (!result?.id) return;
     selectedAudioUrl = buildAppUrl(`/api/v2/audio/${result.id}`);
     selectedSpeciesName = localizeSpeciesName(result.scientificName, result.commonName);
     selectedDetectionId = result.id;
+    selectedModelType = result.modelType ?? '';
     showMobilePlayer = true;
   }
 
@@ -242,6 +245,7 @@
     selectedAudioUrl = '';
     selectedSpeciesName = '';
     selectedDetectionId = undefined;
+    selectedModelType = '';
   }
 
   // Form validation
@@ -1151,6 +1155,7 @@
                               showSpectrogram={true}
                               enableClipExtraction={clipExtractionEnabled}
                               clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
+                              modelType={result.modelType}
                             />
                           </div>
                         </div>
@@ -1330,6 +1335,7 @@
                 audioUrl={selectedAudioUrl}
                 speciesName={selectedSpeciesName}
                 detectionId={selectedDetectionId}
+                modelType={selectedModelType}
                 onClose={closeMobilePlayer}
               />
             </div>
