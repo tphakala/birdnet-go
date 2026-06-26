@@ -549,7 +549,7 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	// Override the request context with timeout context
 	ctx.SetRequest(ctx.Request().WithContext(timeoutCtx))
 
-	setSSEHeaders(ctx)
+	apicore.SetSSEHeaders(ctx)
 	clientID := apicore.GenerateCorrelationID()
 
 	c.logSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), "stream-health", true)
@@ -564,7 +564,7 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 
 	ticker := time.NewTicker(streamHealthPollInterval)
 	defer ticker.Stop()
-	heartbeatTicker := time.NewTicker(sseHeartbeatInterval)
+	heartbeatTicker := time.NewTicker(apicore.SSEHeartbeatInterval)
 	defer heartbeatTicker.Stop()
 	statsTicker := time.NewTicker(streamStatsUpdateInterval)
 	defer statsTicker.Stop()

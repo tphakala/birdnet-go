@@ -20,10 +20,8 @@ import (
 // SSE connection configuration
 const (
 	// Connection timeouts
-	maxSSEStreamDuration = 30 * time.Minute      // Maximum stream duration to prevent resource leaks
-	sseHeartbeatInterval = 15 * time.Second      // Heartbeat interval for keep-alive (must be < server WriteTimeout)
-	sseEventLoopSleep    = 10 * time.Millisecond // Sleep duration when no events
-	sseWriteDeadline     = 10 * time.Second      // Write deadline for SSE messages
+	maxSSEStreamDuration = 30 * time.Minute // Maximum stream duration to prevent resource leaks
+	sseWriteDeadline     = 10 * time.Second // Write deadline for SSE messages
 
 	// Endpoints
 	detectionStreamEndpoint  = "/api/v2/detections/stream"
@@ -89,15 +87,6 @@ func (c *Controller) initSSERoutes() {
 
 	// SSE status endpoint - shows connected client count
 	c.Group.GET("/sse/status", c.GetSSEStatus)
-}
-
-// setSSEHeaders sets the required headers for Server-Sent Events
-func setSSEHeaders(ctx echo.Context) {
-	ctx.Response().Header().Set("Content-Type", "text/event-stream")
-	ctx.Response().Header().Set("Cache-Control", "no-cache")
-	ctx.Response().Header().Set("Connection", "keep-alive")
-	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
-	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
 }
 
 // createSSEClient creates a new SSE client with common settings
@@ -194,7 +183,7 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 	ctx.SetRequest(originalReq.WithContext(timeoutCtx))
 
 	// Set SSE headers
-	setSSEHeaders(ctx)
+	apicore.SetSSEHeaders(ctx)
 
 	// Generate client ID and create client
 	clientID := apicore.GenerateCorrelationID()
@@ -246,7 +235,7 @@ func (c *Controller) StreamDetections(ctx echo.Context) error {
 // runSSEEventLoopMulti handles the SSE event loop for detection streams,
 // which receive both detection events and pending detection snapshots.
 func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, clientID, endpoint string) error {
-	ticker := time.NewTicker(sseHeartbeatInterval)
+	ticker := time.NewTicker(apicore.SSEHeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
@@ -310,7 +299,7 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 			}
 
 			if !sent {
-				time.Sleep(sseEventLoopSleep)
+				time.Sleep(apicore.SSEEventLoopSleep)
 			}
 		}
 	}
@@ -346,7 +335,7 @@ func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
 func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, clientID string, endpoint string,
 	dataReceiver func() (any, bool), eventType string, heartbeatType string) error {
 
-	ticker := time.NewTicker(sseHeartbeatInterval)
+	ticker := time.NewTicker(apicore.SSEHeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
@@ -383,7 +372,7 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 				c.recordSSEMessage(endpoint, eventType)
 			} else {
 				// Small sleep to prevent busy-waiting when no data
-				time.Sleep(sseEventLoopSleep)
+				time.Sleep(apicore.SSEEventLoopSleep)
 			}
 		}
 	}

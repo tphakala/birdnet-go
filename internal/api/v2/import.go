@@ -339,7 +339,7 @@ func (c *Controller) StreamImportProgress(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "import job not found", http.StatusNotFound)
 	}
 
-	setSSEHeaders(ctx)
+	apicore.SetSSEHeaders(ctx)
 
 	// Bound the stream lifetime independently of the import itself.
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), maxSSEStreamDuration)
@@ -359,7 +359,7 @@ func (c *Controller) StreamImportProgress(ctx echo.Context) error {
 		}
 	}
 
-	hb := time.NewTicker(sseHeartbeatInterval)
+	hb := time.NewTicker(apicore.SSEHeartbeatInterval)
 	defer hb.Stop()
 
 	// Capture shutdown channel defensively; c.Context() may be nil in isolated unit tests.

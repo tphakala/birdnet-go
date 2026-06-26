@@ -104,7 +104,7 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 	defer topoCancel()
 
 	// Set SSE headers
-	setSSEHeaders(ctx)
+	apicore.SetSSEHeaders(ctx)
 
 	clientID := apicore.GenerateCorrelationID()
 	c.LogInfoIfEnabled("Metrics SSE client connected",
