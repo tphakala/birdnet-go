@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -51,6 +52,11 @@ const apiV2Prefix = "/api/v2"
 // and shared by this pointer.
 type Controller struct {
 	*apicore.Core
+
+	// Domain handlers. Each owns a slice of the API surface and embeds the same
+	// *apicore.Core; the facade constructs them once and calls their
+	// RegisterRoutes in the deterministic order initRoutes defines.
+	weather *weather.Handler
 
 	controlChan chan string
 
@@ -276,6 +282,10 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		importMgr:     newImportManager(),
 	}
 
+	// Construct domain handlers around the shared core. They hold the same
+	// *apicore.Core pointer and register their routes in initRoutes.
+	c.weather = weather.New(c.Core)
+
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
 	c.processingCache = newProcessingCache(cacheDir, processingCacheMaxFiles)
@@ -361,7 +371,7 @@ func (c *Controller) initRoutes() {
 		{"search routes", c.initSearchRoutes},
 		{"detection routes", c.initDetectionRoutes},
 		{"analytics routes", c.initAnalyticsRoutes},
-		{"weather routes", c.initWeatherRoutes},
+		{"weather routes", func() { c.weather.RegisterRoutes(c.Group) }},
 		{"system routes", c.initSystemRoutes},
 		{"terminal routes", c.initTerminalRoutes},
 		{"settings routes", c.initSettingsRoutes},
