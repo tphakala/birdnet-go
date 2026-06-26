@@ -680,7 +680,7 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 // "Eptesicus nilssonii") are deliberately kept as distinct scientific names so
 // both pass the scientific-name inclusion gate (conf.Settings.IsSpeciesIncluded)
 // during audio processing. Those near-duplicates are collapsed for the user only
-// at the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range.go),
+// at the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range/range.go),
 // keyed on the resolved common name, so the functional inclusion set stays intact.
 //
 // The bat model is handled separately from the loop above: it has no geomodel,

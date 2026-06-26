@@ -143,7 +143,7 @@ func (c *Controller) registerHealthChecks() {
 			return status.Supported, status.Active
 		}),
 		checks.NewRangeFilterCheck(func() checks.RangeFilterStatusInfo {
-			orch, err := c.getBirdNETInstance()
+			orch, err := c.GetBirdNETInstance()
 			if err != nil || orch == nil {
 				return checks.RangeFilterStatusInfo{}
 			}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -178,8 +179,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		IncludeDatabaseInfo:   req.IncludeDatabaseInfo,
 		IncludeDeploymentInfo: true,
 		IncludeAppEvents:      req.IncludeAppEvents,
-		LogDuration:           supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
-		MaxLogSize:            supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
+		LogDuration:           supportLogDurationWeeks * apicore.DaysPerWeek * HoursPerDay * time.Hour, // 4 weeks
+		MaxLogSize:            supportMaxLogSizeMB * supportBytesPerMB,                                 // 50MB to accommodate more logs
 		ScrubSensitive:        true,
 		AnonymizePII:          true,
 	}

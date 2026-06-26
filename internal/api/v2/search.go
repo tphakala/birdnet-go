@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -433,7 +434,7 @@ func (c *Controller) resolveSpeciesToScientific(input string) (resolved string, 
 		return "", false
 	}
 	lookup := c.loadCommonToScientificMap()
-	if scientific, ok := lookup[normalizeForLookup(trimmed)]; ok {
+	if scientific, ok := lookup[apicore.NormalizeForLookup(trimmed)]; ok {
 		return scientific, true
 	}
 	return trimmed, false

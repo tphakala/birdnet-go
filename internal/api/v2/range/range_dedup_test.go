@@ -2,7 +2,7 @@
 // range-filter species lists (collapsing force-include override copies and
 // localized taxonomic synonyms into a single displayed row).
 
-package api
+package rangeapi
 
 import (
 	"testing"
@@ -81,11 +81,11 @@ func TestDedupeSpeciesForDisplay(t *testing.T) {
 			// This pins the NFC half of the key; ToLower alone would not collapse them.
 			name: "NFC and NFD decomposed common name collapse",
 			in: []RangeFilterSpecies{
-				{ScientificName: "Strix aluco", CommonName: "Lehtop\u00f6ll\u00f6", Score: new(0.6)},
-				{ScientificName: "Syrnium aluco", CommonName: "Lehtopo\u0308llo\u0308", Score: new(0.4)},
+				{ScientificName: "Strix aluco", CommonName: "Lehtopöllö", Score: new(0.6)},
+				{ScientificName: "Syrnium aluco", CommonName: "Lehtopöllö", Score: new(0.4)},
 			},
 			want: []RangeFilterSpecies{
-				{ScientificName: "Strix aluco", CommonName: "Lehtop\u00f6ll\u00f6", Score: new(0.6)},
+				{ScientificName: "Strix aluco", CommonName: "Lehtopöllö", Score: new(0.6)},
 			},
 		},
 		{

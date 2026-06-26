@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
 	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -65,6 +66,12 @@ type Controller struct {
 	// the facade's settings-save machinery (see NewWithOptions) because TLS writes
 	// mutate persisted settings.
 	tlsHandler *tlsapi.Handler
+
+	// rangeHandler serves the /api/v2/range/* endpoints (range-filter status,
+	// species scores/count/list/CSV, test, rebuild). It is named rangeHandler
+	// because "range" is a Go reserved word; the domain package is imported as
+	// rangeapi. Like weather it needs only the shared *apicore.Core.
+	rangeHandler *rangeapi.Handler
 
 	controlChan chan string
 
@@ -293,6 +300,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Construct domain handlers around the shared core. They hold the same
 	// *apicore.Core pointer and register their routes in initRoutes.
 	c.weather = weather.New(c.Core)
+	c.rangeHandler = rangeapi.New(c.Core)
 	// The TLS handler needs the facade's settings-save machinery: the shared
 	// settingsMutex (passed by pointer so TLS certificate writes serialize against
 	// the main settings update handlers) and the bound method values for reading,
@@ -402,7 +410,7 @@ func (c *Controller) initRoutes() {
 		{"control routes", c.initControlRoutes},
 		{"auth routes", c.initAuthRoutes},
 		{"media routes", c.initMediaRoutes},
-		{"range routes", c.initRangeRoutes},
+		{"range routes", func() { c.rangeHandler.RegisterRoutes(c.Group) }},
 		{"heatmap routes", c.initHeatmapRoutes},
 		{"sse routes", c.initSSERoutes},
 		{"diagnostics routes", c.initDiagnosticsRoutes},
