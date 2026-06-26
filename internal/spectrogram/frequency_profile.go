@@ -13,7 +13,22 @@ type FrequencyProfile struct {
 const (
 	birdResampleHz  = 24000
 	batResampleHz   = 256000 // Nyquist = 128 kHz; matches the fixed 0-128 kHz overlay axis
-	modelTypeBatStr = "bat"
+	modelTypeBatStr = "bat"  // ai_models.model_type value that selects the bat profile
+
+	// batCacheSuffix is the cache-filename token for bat spectrograms (e.g.
+	// "<clip>_1026px-bat-v2.png"). It is intentionally separate from
+	// modelTypeBatStr (the stored model-type value) and carries a version marker:
+	// bumping it changes the on-disk filename, so a corrected render lands at a new
+	// path instead of colliding with a stale bat image cached by an older generator.
+	// Bumped to "-v2" alongside the FFmpeg-only fallback resample fix (#3689): bat
+	// clips rendered via the Sox-failure fallback before that fix carry a frequency
+	// axis that disagrees with the 0-128 kHz overlay, and would otherwise be served
+	// from cache indefinitely. Only bat files carry a suffix, so this invalidates
+	// just bat spectrograms; bird renders (empty suffix) are untouched. Pre-bump
+	// "-bat.png" files are left on disk (lazily superseded by the new "-bat-v2"
+	// render) and reaped when the detection is deleted (the delete scan matches any
+	// "<base>_<width>px-" prefix), so the only cost is a tiny transient orphan.
+	batCacheSuffix = "bat-v2"
 )
 
 // BirdProfile returns the default frequency profile for bird detections.
@@ -30,7 +45,7 @@ func BirdProfile() FrequencyProfile {
 func BatProfile() FrequencyProfile {
 	return FrequencyProfile{
 		ResampleRate: batResampleHz,
-		suffix:       modelTypeBatStr,
+		suffix:       batCacheSuffix,
 	}
 }
 

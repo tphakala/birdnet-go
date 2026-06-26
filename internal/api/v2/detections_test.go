@@ -1056,10 +1056,13 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		baseName + "_258px.png",
 		baseName + "_1026px.png",
 		baseName + "_1026px-legend.png",
-		// Bat frequency-profile renders carry a "-bat" token; they must be removed
-		// too (regression test for orphaned bat spectrograms on detection delete).
+		// Bat frequency-profile renders carry a versioned "-bat-v2" token; legacy
+		// "-bat" files from before the cache-version bump may still be on disk. Both
+		// must be removed (regression test for orphaned bat spectrograms on delete).
 		baseName + "_1026px-bat.png",
 		baseName + "_1026px-bat-legend.png",
+		baseName + "_1026px-bat-v2.png",
+		baseName + "_1026px-bat-v2-legend.png",
 		// Non-default visual style / dynamic-range / combined suffixes must also be
 		// removed (regression test for orphaned styled spectrograms on delete).
 		baseName + "_1026px-scientific_dark.png",

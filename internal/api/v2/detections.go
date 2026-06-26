@@ -1353,7 +1353,7 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 
 	// Remove all associated spectrogram files. buildSpectrogramPaths names them
 	// <basename>_<width>px<suffix>.png, where <suffix> encodes the visual style,
-	// dynamic range, frequency profile (e.g. "-bat") and legend/raw variant - and a
+	// dynamic range, frequency profile (e.g. "-bat-v2") and legend/raw variant - and a
 	// single clip can accumulate several of these as those settings change over time.
 	// Rather than enumerate every combination (and miss renders from styles no longer
 	// configured), scan the directory and remove any PNG whose name matches this
