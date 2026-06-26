@@ -108,6 +108,10 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 	devices := make([]DeviceInfo, 0, len(infos))
 	seenNames := make(map[string]bool, len(infos))
 
+	// Parse /proc/asound/cards once for the whole enumeration; usbIdentityForCard
+	// then resolves each device against the shared map (nil on non-Linux).
+	cards := readProcAsoundCards(defaultProcRoot)
+
 	for i := range infos {
 		name := infos[i].Name()
 		if strings.Contains(name, "Discard all samples") {
@@ -131,10 +135,16 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 		}
 		seenNames[name] = true
 
+		ident := usbIdentityForCard(parseALSACardNumber(decodedID), cards, defaultProcRoot)
 		devices = append(devices, DeviceInfo{
-			Index: i,
-			Name:  name,
-			ID:    decodedID,
+			Index:     i,
+			Name:      name,
+			ID:        decodedID,
+			BusPath:   ident.BusPath,
+			VendorID:  ident.VendorID,
+			ProductID: ident.ProductID,
+			Serial:    ident.Serial,
+			StableID:  ident.stableToken(),
 		})
 	}
 
@@ -147,18 +157,33 @@ func isDefaultDeviceToken(deviceID string) bool {
 	return deviceID == DeviceIDSysDefault || deviceID == DeviceIDDefault
 }
 
-// matchesDevice reports whether the device identified by (decodedID, info)
-// should be selected for the requested deviceID string.
+// matchesDevice reports whether the live device identified by (decodedID, ident,
+// deviceName, isDefault) should be selected for the requested deviceID string,
+// in priority order:
 //
-// On Windows and macOS the DeviceIDDefault / DeviceIDSysDefault token selects
-// the system default device. Otherwise, either a substring of the name or an
-// exact ID match is accepted.
-func matchesDevice(decodedID string, info *malgo.DeviceInfo, deviceID string) bool {
+//  1. Windows/macOS default token -> the platform default device.
+//  2. A persisted "usb-path:" token -> the device's stable USB bus path. Matches
+//     regardless of the current ALSA index, so the selection survives reboots.
+//  3. A persisted "usb-id:" token -> the device's vendor:product:serial.
+//  4. Exact decoded id match (legacy ":X,Y" configs).
+//  5. Device-name substring match (legacy name configs).
+//
+// ident carries the live device's resolved USB identity (zero on non-USB /
+// non-Linux). The USB tiers only add matching ability; tiers 4 and 5 preserve
+// the previous behavior exactly, so existing configurations are unaffected.
+func matchesDevice(decodedID string, ident usbIdentity, deviceName string, isDefault bool, deviceID string) bool {
 	if (runtime.GOOS == captureOSWindows || runtime.GOOS == captureOSDarwin) &&
 		isDefaultDeviceToken(deviceID) {
-		return info.IsDefault == 1
+		return isDefault
 	}
-	return decodedID == deviceID || strings.Contains(info.Name(), deviceID)
+	if path, ok := strings.CutPrefix(deviceID, usbPathTokenPrefix); ok {
+		return path != "" && path == ident.BusPath
+	}
+	if _, ok := strings.CutPrefix(deviceID, usbIDTokenPrefix); ok {
+		token := ident.hwIDToken()
+		return token != "" && deviceID == token
+	}
+	return decodedID == deviceID || strings.Contains(deviceName, deviceID)
 }
 
 // uninitAndFreeContext performs the two-step malgo context teardown:
@@ -169,6 +194,58 @@ func uninitAndFreeContext(ctx *malgo.AllocatedContext, log logger.Logger) {
 		log.Error("failed to uninitialize malgo context", logger.Error(uninitErr))
 	}
 	ctx.Free()
+}
+
+// selectCaptureDevice returns the enumerated device matching deviceID, as both
+// its malgo info pointer and a populated DeviceInfo carrying the matched device's
+// resolved USB identity. The returned bool is false when no device matches.
+//
+// Only a stable USB token needs the resolved USB identity to match, so for the
+// common legacy id/name configs the per-candidate proc/sysfs reads are skipped
+// and a single resolve is done for the matched device. The cards map is parsed
+// once per enumeration when needed.
+func selectCaptureDevice(infos []malgo.DeviceInfo, deviceID string, log logger.Logger) (selected *malgo.DeviceInfo, info DeviceInfo, found bool) {
+	needIdent := isUSBDeviceToken(deviceID)
+	var cards map[int]procCardEntry
+	if needIdent {
+		cards = readProcAsoundCards(defaultProcRoot)
+	}
+	for i := range infos {
+		decodedID, decErr := hexToASCII(infos[i].ID.String())
+		if decErr != nil {
+			log.Warn("failed to decode device ID",
+				logger.Int("device_index", i),
+				logger.Error(decErr))
+			continue
+		}
+		log.Debug("found capture device",
+			logger.Int("index", i),
+			logger.String("name", infos[i].Name()),
+			logger.String("decoded_id", decodedID))
+		var ident usbIdentity
+		if needIdent {
+			ident = usbIdentityForCard(parseALSACardNumber(decodedID), cards, defaultProcRoot)
+		}
+		if !matchesDevice(decodedID, ident, infos[i].Name(), infos[i].IsDefault == 1, deviceID) {
+			continue
+		}
+		// Record the matched device's stable identity. For a legacy/name match we
+		// did not resolve above, so resolve once here for the single selected device.
+		if !needIdent {
+			ident = resolveUSBIdentity(decodedID, defaultProcRoot)
+		}
+		return &infos[i], DeviceInfo{
+			Index:     i,
+			Name:      infos[i].Name(),
+			ID:        decodedID,
+			BusPath:   ident.BusPath,
+			VendorID:  ident.VendorID,
+			ProductID: ident.ProductID,
+			Serial:    ident.Serial,
+			StableID:  ident.stableToken(),
+		}, true
+	}
+	return nil, DeviceInfo{}, false
 }
 
 // startCapture locates the requested device, initialises a malgo context and
@@ -216,36 +293,13 @@ func startCapture(
 	}
 
 	// Find the device matching deviceID.
-	var selectedInfo *malgo.DeviceInfo
-	var selectedDevInfo DeviceInfo
 	log.Info("enumerating capture devices",
 		logger.String("source_id", sourceID),
 		logger.String("requested_device", deviceID),
 		logger.Int("device_count", len(infos)))
-	for i := range infos {
-		decodedID, decErr := hexToASCII(infos[i].ID.String())
-		if decErr != nil {
-			log.Warn("failed to decode device ID",
-				logger.Int("device_index", i),
-				logger.Error(decErr))
-			continue
-		}
-		log.Debug("found capture device",
-			logger.Int("index", i),
-			logger.String("name", infos[i].Name()),
-			logger.String("decoded_id", decodedID))
-		if matchesDevice(decodedID, &infos[i], deviceID) {
-			selectedInfo = &infos[i]
-			selectedDevInfo = DeviceInfo{
-				Index: i,
-				Name:  infos[i].Name(),
-				ID:    decodedID,
-			}
-			break
-		}
-	}
+	selectedInfo, selectedDevInfo, found := selectCaptureDevice(infos, deviceID, log)
 
-	if selectedInfo == nil {
+	if !found {
 		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, errors.Newf("no device found matching %q", deviceID).
 			Component("audiocore.capture").

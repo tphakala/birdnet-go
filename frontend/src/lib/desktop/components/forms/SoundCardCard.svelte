@@ -19,6 +19,12 @@
 <script lang="ts">
   import { generateId } from '$lib/utils/uuid';
   import {
+    deviceValue,
+    deviceMatches,
+    deviceLabel,
+    type AudioDevice,
+  } from '$lib/utils/audioDevices';
+  import {
     Settings,
     Trash2,
     Check,
@@ -78,7 +84,7 @@
     source: AudioSourceConfig;
     index: number;
     sources: AudioSourceConfig[];
-    audioDevices: Array<{ index: number; name: string; id: string }>;
+    audioDevices: AudioDevice[];
     modelOptions: Array<{ value: string; label: string }>;
     availableModels: Array<{
       id: string;
@@ -127,9 +133,9 @@
   // used imperatively for abort(), never in markup, so it must not be reactive.
   let fetchController: AbortController | null = null;
 
-  // Device display name lookup
+  // Device display name lookup (matches a saved stable token or legacy ALSA id)
   let deviceDisplayName = $derived(
-    audioDevices.find(d => d.id === source.device)?.name ?? source.device
+    audioDevices.find(d => deviceMatches(d, source.device))?.name ?? source.device
   );
 
   // Model display names (comma-separated for multiple)
@@ -139,11 +145,19 @@
       : (modelOptions[0]?.label ?? '')
   );
 
-  // Device dropdown options — show current source's device + devices not used by other sources
+  // Device dropdown options: the current source's device plus devices not used by
+  // other sources. The currently-configured device keeps its saved value (which
+  // may be a legacy ALSA id) so the dropdown pre-selects it; other devices use the
+  // reboot-stable token so a new pick persists the stable form (GH #3651).
   let deviceOptions = $derived(
     audioDevices
-      .filter(d => d.id === source.device || !sources.some(s => s.device === d.id))
-      .map(d => ({ value: d.id, label: d.name }))
+      .filter(
+        d => deviceMatches(d, source.device) || !sources.some(s => deviceMatches(d, s.device))
+      )
+      .map(d => ({
+        value: deviceMatches(d, source.device) ? source.device : deviceValue(d),
+        label: deviceLabel(d, audioDevices),
+      }))
   );
 
   // Edit mode functions
