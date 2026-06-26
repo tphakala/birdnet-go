@@ -25,6 +25,12 @@
   } from '$lib/utils/audio/sampleRate';
   import { toastActions } from '$lib/stores/toast';
   import { cn } from '$lib/utils/cn';
+  import {
+    deviceValue,
+    deviceMatches,
+    deviceLabel,
+    type AudioDevice,
+  } from '$lib/utils/audioDevices';
   import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
@@ -75,7 +81,7 @@
 
   interface Props {
     sources: AudioSourceConfig[];
-    audioDevices: Array<{ index: number; name: string; id: string }>;
+    audioDevices: AudioDevice[];
     audioDevicesLoading: boolean;
     disabled?: boolean;
     onUpdateSources: (_sources: AudioSourceConfig[]) => void;
@@ -115,11 +121,14 @@
   let nameError = $state<string | null>(null);
   let deviceError = $state<string | null>(null);
 
-  // Device dropdown options — filter out devices already configured as sources
+  // Device dropdown options. New selections persist the reboot-stable USB token
+  // so they survive reboots (GH #3651); the label disambiguates identical device
+  // names with the bus path only when needed. Filter out devices already
+  // configured as a source by either identifier form.
   let deviceOptions = $derived(
     audioDevices
-      .filter(d => !sources.some(s => s.device === d.id))
-      .map(d => ({ value: d.id, label: d.name }))
+      .filter(d => !sources.some(s => deviceMatches(d, s.device)))
+      .map(d => ({ value: deviceValue(d), label: deviceLabel(d, audioDevices) }))
   );
 
   // Clear form errors

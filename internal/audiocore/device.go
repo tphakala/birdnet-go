@@ -25,8 +25,27 @@ type DeviceInfo struct {
 	// Name is the human-readable device name (e.g., "HDA Intel PCH: ALC3202 Analog").
 	Name string
 
-	// ID is the decoded device identifier (e.g., ":0,0" on ALSA).
+	// ID is the decoded device identifier (e.g., ":0,0" on ALSA). This is the
+	// unstable ALSA card index; it can change across reboots for USB devices.
 	ID string
+
+	// BusPath is the stable USB topology path (e.g. "usb-0000:00:14.0-3"), empty
+	// for non-USB devices and non-Linux platforms. Stable across reboots while
+	// the device stays in the same physical port.
+	BusPath string
+
+	// VendorID and ProductID are the 4-hex-digit USB ids, empty when unavailable.
+	VendorID  string
+	ProductID string
+
+	// Serial is the USB serial number, empty when the device reports none.
+	Serial string
+
+	// StableID is the reboot-stable identifier to persist for this device
+	// ("usb-path:..." or "usb-id:..."), or "" when no stable USB identity is
+	// available (non-USB, non-Linux). Prefer this over ID when configuring a
+	// device so the selection survives reboots (GH #3651).
+	StableID string
 }
 
 // DeviceConfig carries the capture parameters for a device.
@@ -156,7 +175,7 @@ func (dm *DeviceManager) StartCapture(sourceID, deviceID string, cfg DeviceConfi
 	dm.log.Info("capture started",
 		logger.String("source_id", sourceID),
 		logger.String("device", info.Name),
-		logger.String("device_id", deviceID))
+		logger.String("device_id", redactDeviceID(deviceID)))
 
 	return nil
 }
