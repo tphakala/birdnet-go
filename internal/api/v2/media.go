@@ -1021,7 +1021,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	// Resolve frequency profile from detection's model type
 	modelType, mtErr := c.DS.GetNoteModelType(noteID)
 	if mtErr != nil {
-		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+		c.logWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
 			logger.String("note_id", noteID),
 			logger.Error(mtErr))
 	}
@@ -1193,7 +1193,7 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 
 // handleUserRequestedMode handles spectrogram serving in user-requested mode.
 // Returns true if the request was handled (either success or error response sent).
-func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters) (bool, error) {
+func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string) (bool, error) {
 	// Normalize and validate the audio path
 	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
@@ -1201,7 +1201,7 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 
 	if err == nil {
 		// Build spectrogram path
-		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange)
+		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 
 		// Check if spectrogram already exists and is non-empty
 		if statInfo, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil && statInfo.Size() > 0 {
@@ -1268,10 +1268,10 @@ func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool,
 }
 
 // handleAutoPreRenderMode handles spectrogram generation and serving in auto/prerender modes.
-func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, extraOpts ...spectrogram.GenerateOption) error {
+func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string, extraOpts ...spectrogram.GenerateOption) error {
 	// Auto or prerender mode - generate on-demand if needed
 	generationStart := time.Now()
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange, extraOpts...)
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, extraOpts...)
 	generationDuration := time.Since(generationStart)
 
 	if err != nil {
@@ -1396,14 +1396,18 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	// Parse query parameters
 	params := c.parseSpectrogramParameters(ctx)
 
-	// Resolve frequency profile from detection's model type
+	// Resolve frequency profile from detection's model type. The same profile
+	// drives both the generation effects (profileOpt) and the cache filename
+	// token (freqSuffix) so a bat render never collides with a bird-profile PNG.
 	modelType, err := c.DS.GetNoteModelType(noteID)
 	if err != nil {
-		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+		c.logWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
 			logger.String("note_id", noteID),
 			logger.Error(err))
 	}
-	profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
+	profile := spectrogram.ProfileForModelType(modelType)
+	profileOpt := spectrogram.WithFrequencyProfile(profile)
+	freqSuffix := spectrogram.ProfileSuffix(profile)
 
 	// Log request details
 	c.logDebugIfEnabled("Spectrogram requested by ID",
@@ -1421,14 +1425,14 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 
 	// Handle user-requested mode
 	if spectrogramMode == conf.SpectrogramModeUserRequested {
-		handled, err := c.handleUserRequestedMode(ctx, noteID, clipPath, params)
+		handled, err := c.handleUserRequestedMode(ctx, noteID, clipPath, params, freqSuffix)
 		if handled {
 			return err
 		}
 	}
 
 	// Handle auto or prerender mode
-	return c.handleAutoPreRenderMode(ctx, noteID, clipPath, params, profileOpt)
+	return c.handleAutoPreRenderMode(ctx, noteID, clipPath, params, freqSuffix, profileOpt)
 }
 
 // ServeAudioByQueryID serves an audio clip using query parameter for ID
@@ -1488,8 +1492,10 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	style := spec.Style
 	dynamicRange := spec.DynamicRange
 
-	// Pass the request context for cancellation/timeout
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw, style, dynamicRange)
+	// Pass the request context for cancellation/timeout. This filename route has no
+	// note/model context, so it always renders with the default bird profile (empty
+	// frequency suffix).
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw, style, dynamicRange, "")
 	if err != nil {
 		return c.spectrogramHTTPError(ctx, err)
 	}
@@ -1600,7 +1606,10 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 		})
 	}
 
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange)
+	// Resolve the profile token only after the queue miss (this path is about to stat
+	// the disk anyway), so queue-hit polls stay free of a model-type lookup.
+	freqSuffix := c.spectrogramProfileSuffix(noteID)
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 
 	// Check if file exists and is non-empty
 	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil && statInfo.Size() > 0 {
@@ -1692,11 +1701,17 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid audio path", http.StatusBadRequest)
 	}
 
+	// Resolve the detection's frequency profile up front: it feeds both the cache
+	// filename/queue-key token (so a bat render does not collide with a bird PNG)
+	// and the generation options threaded into the async worker below.
+	profile := c.resolveDetectionFrequencyProfile(noteID)
+	freqSuffix := spectrogram.ProfileSuffix(profile)
+
 	// Build the spectrogram path (for the on-disk existence check) and the immutable
 	// queue key. The queue key is derived from the note ID and visual params, not the
 	// export-path-derived path, so GetSpectrogramStatus finds this in-flight job even
 	// if Realtime.Audio.Export.Path changes after enqueue.
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange)
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 	queueKey := buildSpectrogramQueueKey(noteID, params.width, params.raw, params.style, params.dynamicRange)
 
 	// Check if file already exists on disk and is non-empty
@@ -1765,21 +1780,16 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		bgCtx, cancel := context.WithTimeout(c.ctx, spectrogramGenerationTimeout)
 		defer cancel()
 
-		// Resolve frequency profile inside goroutine to avoid blocking the HTTP handler
-		modelType, mtErr := c.DS.GetNoteModelType(noteID)
-		if mtErr != nil {
-			c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
-				logger.String("note_id", noteID),
-				logger.Error(mtErr))
-		}
-		profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
+		// Reuse the frequency profile resolved on the handler thread so the worker's
+		// generation effects and on-disk filename match the queue key computed above.
+		profileOpt := spectrogram.WithFrequencyProfile(profile)
 
 		// Thread both the handler-validated relative audio path (so the worker writes
 		// the on-disk file at the path the handler resolved, even if Export.Path
 		// changed after the handler returned) and the immutable queue key (so the
 		// worker's status updates land on the same entry GetSpectrogramStatus polls).
 		// Re-deriving either here would reopen the queue-key TOCTOU.
-		spectrogramPath, err := c.generateSpectrogramFromRel(bgCtx, relAudioPath, clipPath, queueKey, params.width, params.raw, params.style, params.dynamicRange, profileOpt)
+		spectrogramPath, err := c.generateSpectrogramFromRel(bgCtx, relAudioPath, clipPath, queueKey, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, profileOpt)
 
 		if err != nil {
 			// Update queue status so polling clients see the failure
@@ -1915,6 +1925,27 @@ func getSpectrogramLogger() logger.Logger {
 	return logger.Global().Module("spectrogram")
 }
 
+// resolveDetectionFrequencyProfile resolves a detection's spectrogram frequency
+// profile from its model type, defaulting to the bird profile when the model
+// type cannot be looked up.
+func (c *Controller) resolveDetectionFrequencyProfile(noteID string) spectrogram.FrequencyProfile {
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	if err != nil {
+		c.logWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
+			logger.String("note_id", noteID),
+			logger.Error(err))
+	}
+	return spectrogram.ProfileForModelType(modelType)
+}
+
+// spectrogramProfileSuffix resolves the frequency-profile cache token for a
+// detection so by-ID spectrogram paths and queue keys do not collide with the
+// default bird-profile render. Returns "" (bird) when the model type cannot be
+// resolved.
+func (c *Controller) spectrogramProfileSuffix(noteID string) string {
+	return spectrogram.ProfileSuffix(c.resolveDetectionFrequencyProfile(noteID))
+}
+
 // buildSpectrogramPaths constructs the spectrogram file paths from the audio path and parameters.
 // It returns the base filename, audio directory, spectrogram filename, and full relative spectrogram path.
 //
@@ -1922,7 +1953,7 @@ func getSpectrogramLogger() logger.Logger {
 // stale cached spectrograms when visual settings change. For backward compatibility,
 // the default style ("default") and default dynamic range ("100"/empty) produce the same
 // filename format as before (no style/DR suffix).
-func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dynamicRange string) (relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath string) {
+func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dynamicRange, freqSuffix string) (relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath string) {
 	// Get the base filename and directory relative to the secure root
 	relBaseFilename = strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
 	relAudioDir = filepath.Dir(relAudioPath)
@@ -1931,6 +1962,13 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dyna
 	// Default style ("default" or empty) and default dynamic range ("100" or empty)
 	// produce no suffix for backward compatibility with existing cached spectrograms.
 	styleSuffix := buildStyleSuffix(style, dynamicRange)
+
+	// Append the frequency-profile token (e.g. "bat") so renders made with a
+	// non-default profile get a distinct filename and do not collide with an
+	// existing bird-profile PNG. Bird (empty token) keeps the legacy filename.
+	if freqSuffix != "" {
+		styleSuffix += "-" + freqSuffix
+	}
 
 	// Generate spectrogram filename with style suffix
 	if raw {
@@ -1987,6 +2025,9 @@ func buildSpectrogramKey(relSpectrogramPath string, width int, raw bool) string 
 // from buildStyleSuffix so two requests that map to the same on-disk file share one queue
 // entry (default style and dynamic range produce no suffix, just like the on-disk filename).
 // Format: "noteID:width:raw<styleSuffix>" (e.g. "42:1026:true" or "42:1026:true-scientific_dark").
+// The frequency profile is intentionally omitted: a note has a single model type, so the
+// (note ID + visual params) key already identifies one logical artifact. Keeping the profile
+// out of the key lets GetSpectrogramStatus answer queue hits without a model-type lookup.
 func buildSpectrogramQueueKey(noteID string, width int, raw bool, style, dynamicRange string) string {
 	return fmt.Sprintf("%s:%d:%t%s", noteID, width, raw, buildStyleSuffix(style, dynamicRange))
 }
@@ -2732,7 +2773,7 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 // the relative path at a request boundary (e.g. GenerateSpectrogramByID) must
 // call generateSpectrogramFromRel directly and thread that path in, so the queue
 // key cannot drift if Export.Path changes mid-flight.
-func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange string, extraOpts ...spectrogram.GenerateOption) (string, error) {
+func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
 	// Step 1: Normalize and validate path
 	relAudioPath, err := c.normalizeAndValidatePath(audioPath)
 	if err != nil {
@@ -2741,7 +2782,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// Serve-flow callers have no note ID and no status poller, so pass an empty
 	// queueKey: generateSpectrogramFromRel falls back to the path-based key for both
 	// queue tracking and singleflight coalescing (unchanged behavior).
-	return c.generateSpectrogramFromRel(ctx, relAudioPath, audioPath, "", width, raw, style, dynamicRange, extraOpts...)
+	return c.generateSpectrogramFromRel(ctx, relAudioPath, audioPath, "", width, raw, style, dynamicRange, freqSuffix, extraOpts...)
 }
 
 // generateSpectrogramFromRel generates a spectrogram for an already normalized,
@@ -2756,7 +2797,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 // buildSpectrogramKey, which is also used as the singleflight coalescing key so that
 // concurrent requests for the same on-disk file still share one generation pass.
 // audioPath is retained only for log and error context.
-func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPath, audioPath, queueKey string, width int, raw bool, style, dynamicRange string, extraOpts ...spectrogram.GenerateOption) (string, error) {
+func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPath, audioPath, queueKey string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
 	start := time.Now()
 	getSpectrogramLogger().Debug("Spectrogram generation requested",
 		logger.String("audio_path", audioPath),
@@ -2768,7 +2809,7 @@ func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPat
 		logger.String("request_time", start.Format(time.DateTime)))
 
 	// Step 2: Calculate spectrogram paths early (needed for fast path check)
-	relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange)
+	relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, freqSuffix)
 
 	getSpectrogramLogger().Debug("Spectrogram path constructed",
 		logger.String("audio_path", audioPath),
@@ -2920,6 +2961,21 @@ func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPat
 		logger.String("relative_spectrogram_path", relSpectrogramPath),
 		logger.Bool("shared", shared),
 		logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
+
+	// A non-default frequency profile (e.g. bat) just wrote a distinct "-<profile>"
+	// filename. Remove the stale default-profile PNG for the same clip/params so the
+	// old bird-profile image (e.g. one cached while the bat gate was disabled) is not
+	// left orphaned alongside the new one. Best-effort: a missing file is fine.
+	if freqSuffix != "" {
+		if _, _, _, birdRelPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, ""); birdRelPath != relSpectrogramPath {
+			absBirdPath := filepath.Join(c.SFS.BaseDir(), birdRelPath)
+			if rmErr := c.SFS.Remove(absBirdPath); rmErr != nil && !os.IsNotExist(rmErr) {
+				getSpectrogramLogger().Debug("Failed to remove stale default-profile spectrogram",
+					logger.String("path", birdRelPath),
+					logger.Error(rmErr))
+			}
+		}
+	}
 
 	// Return the relative path of the newly created spectrogram
 	return relSpectrogramPath, nil

@@ -1582,6 +1582,7 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 		raw              bool
 		style            string
 		dynamicRange     string
+		freqSuffix       string
 		expectedFilename string
 	}{
 		{
@@ -1592,6 +1593,26 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			style:            "default",
 			dynamicRange:     "100",
 			expectedFilename: "bird_1026px.png",
+		},
+		{
+			name:             "bat profile suffix raw",
+			relAudioPath:     "clips/2025/01/bird.wav",
+			width:            1026,
+			raw:              true,
+			style:            "default",
+			dynamicRange:     "100",
+			freqSuffix:       "bat",
+			expectedFilename: "bird_1026px-bat.png",
+		},
+		{
+			name:             "bat profile suffix with legend and style",
+			relAudioPath:     "clips/2025/01/bird.wav",
+			width:            1026,
+			raw:              false,
+			style:            "scientific_dark",
+			dynamicRange:     "100",
+			freqSuffix:       "bat",
+			expectedFilename: "bird_1026px-scientific_dark-bat-legend.png",
 		},
 		{
 			name:             "default style with legend",
@@ -1642,7 +1663,7 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, filename, fullPath := buildSpectrogramPaths(tt.relAudioPath, tt.width, tt.raw, tt.style, tt.dynamicRange)
+			_, _, filename, fullPath := buildSpectrogramPaths(tt.relAudioPath, tt.width, tt.raw, tt.style, tt.dynamicRange, tt.freqSuffix)
 			assert.Equal(t, tt.expectedFilename, filename)
 			assert.Equal(t, filepath.Join("clips", "2025", "01", tt.expectedFilename), fullPath)
 		})

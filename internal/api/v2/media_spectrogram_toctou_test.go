@@ -52,7 +52,7 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 		raw   = true
 	)
 	relAudioPath := "2024/06/04/Turdus_merula_80p.wav"
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw, "", "")
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw, "", "", "")
 
 	// Pre-create the spectrogram on disk so the fast path returns without ffmpeg.
 	full := filepath.Join(tmp, relSpectrogramPath)
@@ -67,7 +67,7 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 	conftest.SetTestSettings(live)
 	controller.Settings.Store(live)
 
-	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "irrelevant/clip/path.wav", "", width, raw, "", "")
+	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "irrelevant/clip/path.wav", "", width, raw, "", "", "")
 	require.NoError(t, err)
 	assert.Equal(t, relSpectrogramPath, got,
 		"generateSpectrogramFromRel must derive the spectrogram path from the threaded relAudioPath, not the live Export.Path")

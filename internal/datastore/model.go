@@ -180,6 +180,7 @@ type DetectionRecord struct {
 	Device         string    `json:"device,omitempty"`
 	Source         string    `json:"source,omitempty"`
 	TimeOfDay      string    `json:"timeOfDay,omitempty"`
+	ModelType      string    `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 }
 
 // DynamicThreshold represents a persisted dynamic threshold for a species
