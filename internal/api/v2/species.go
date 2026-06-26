@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
@@ -107,8 +108,8 @@ func (c *Controller) initSpeciesRoutes() {
 
 // AllSpeciesResponse represents the response for the all species endpoint
 type AllSpeciesResponse struct {
-	Species []RangeFilterSpecies `json:"species"`
-	Count   int                  `json:"count"`
+	Species []rangeapi.RangeFilterSpecies `json:"species"`
+	Count   int                           `json:"count"`
 }
 
 // GetAllSpecies returns all known BirdNET species labels regardless of location or range filter.
@@ -157,11 +158,11 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 // orchestrator's AllLabels union there (not just the primary BirdNET labels), so the
 // picker still includes secondary-model species during that window; the fallback
 // preserves input order and the original label string.
-func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string) []RangeFilterSpecies {
+func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string) []rangeapi.RangeFilterSpecies {
 	if len(sciToCommon) > 0 {
-		speciesList := make([]RangeFilterSpecies, 0, len(sciToCommon))
+		speciesList := make([]rangeapi.RangeFilterSpecies, 0, len(sciToCommon))
 		for sci, common := range sciToCommon {
-			speciesList = append(speciesList, RangeFilterSpecies{
+			speciesList = append(speciesList, rangeapi.RangeFilterSpecies{
 				Label:          sci + "_" + common,
 				ScientificName: sci,
 				CommonName:     common,
@@ -173,7 +174,7 @@ func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string)
 		return speciesList
 	}
 
-	speciesList := make([]RangeFilterSpecies, 0, len(fallbackLabels))
+	speciesList := make([]rangeapi.RangeFilterSpecies, 0, len(fallbackLabels))
 	seen := make(map[string]struct{}, len(fallbackLabels))
 	for _, label := range fallbackLabels {
 		sp := detection.ParseSpeciesString(label)
@@ -185,7 +186,7 @@ func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string)
 			continue
 		}
 		seen[key] = struct{}{}
-		speciesList = append(speciesList, RangeFilterSpecies{
+		speciesList = append(speciesList, rangeapi.RangeFilterSpecies{
 			Label:          label,
 			ScientificName: sp.ScientificName,
 			CommonName:     sp.CommonName,
@@ -276,7 +277,7 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 	// name) as "needs localizing" and resolve through the orchestrator's
 	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
 	if matchedLabel != "" && (commonName == "" || strings.EqualFold(commonName, scientificName)) {
-		if resolved := bn.ResolveName(scientificName, c.currentLocale()); resolved != "" {
+		if resolved := bn.ResolveName(scientificName, c.CurrentLocale()); resolved != "" {
 			commonName = resolved
 		}
 	}

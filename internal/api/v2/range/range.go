@@ -1,5 +1,13 @@
-// range.go contains API v2 endpoints for range filter operations
-package api
+// Package rangeapi is the api/v2 range-filter domain handler. It owns the
+// /api/v2/range/* endpoints (status, species scores/count/list/CSV, test, and
+// rebuild). The package lives in directory internal/api/v2/range but cannot be
+// named "range" (a Go reserved word), so it is named rangeapi and imported under
+// that alias. The Handler embeds *apicore.Core by pointer so the shared
+// dependencies and helpers (Processor, TaxonomyDB, HandleError, CurrentSettings,
+// the logging helpers, GetBirdNETInstance) promote onto it; the facade
+// constructs one Handler and calls RegisterRoutes to wire the routes in their
+// existing order.
+package rangeapi
 
 import (
 	"bytes"
@@ -14,18 +22,40 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// Range filter constants (file-local)
-const (
-	weeksPerMonth = 4                  // Simplified ML model uses 4 weeks per month
-	weeksPerYear  = weeksPerMonth * 12 // 48 weeks per year in BirdNET's model
-	daysPerWeek   = 7                  // Days in a week for week calculation
-)
+// Handler serves the range-filter domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members promote onto it without re-wiring; Core
+// carries atomic/lock-bearing fields and must never be copied by value.
+type Handler struct {
+	*apicore.Core
+}
+
+// New builds a range Handler around the shared core.
+func New(core *apicore.Core) *Handler {
+	return &Handler{core}
+}
+
+// RegisterRoutes registers all range-filter related API endpoints on the
+// supplied API v2 group, preserving the exact routes and order the facade used
+// before the range domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+	// Range filter status and scores
+	g.GET("/range/status", c.GetRangeFilterStatus)
+	g.GET("/range/species/scores", c.GetRangeFilterSpeciesScores)
+
+	// Range filter species routes
+	g.GET("/range/species/count", c.GetRangeFilterSpeciesCount)
+	g.GET("/range/species/list", c.GetRangeFilterSpeciesList)
+	g.GET("/range/species/csv", c.GetRangeFilterSpeciesCSV)
+	g.POST("/range/species/test", c.TestRangeFilter)
+	g.POST("/range/rebuild", c.RebuildRangeFilter)
+}
 
 // validateRangeFilterRequest validates the range filter test request parameters.
 // Returns user-facing error messages with capitalized first letter for API responses.
@@ -39,8 +69,8 @@ func validateRangeFilterRequest(req *RangeFilterTestRequest) error {
 	if req.Threshold < 0 || req.Threshold > 1 {
 		return fmt.Errorf("Threshold must be between 0 and 1") //nolint:staticcheck // user-facing API message
 	}
-	if req.Week != 0 && (req.Week < 1 || req.Week > weeksPerYear) {
-		return fmt.Errorf("Week must be between 1 and %d", weeksPerYear) //nolint:staticcheck // user-facing API message
+	if req.Week != 0 && (req.Week < 1 || req.Week > apicore.WeeksPerYear) {
+		return fmt.Errorf("Week must be between 1 and %d", apicore.WeeksPerYear) //nolint:staticcheck // user-facing API message
 	}
 	return nil
 }
@@ -58,36 +88,16 @@ func parseTestDate(dateStr string) (time.Time, error) {
 func calculateWeek(date time.Time) float32 {
 	month := int(date.Month())
 	day := date.Day()
-	weeksFromMonths := (month - 1) * weeksPerMonth
-	weekInMonth := (day-1)/daysPerWeek + 1
+	weeksFromMonths := (month - 1) * apicore.WeeksPerMonth
+	weekInMonth := (day-1)/apicore.DaysPerWeek + 1
 	return float32(weeksFromMonths + weekInMonth)
-}
-
-// getBirdNETInstance returns the BirdNET instance or an error if unavailable.
-func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
-	// Snapshot processor to avoid TOCTOU race
-	proc := c.Processor
-	if proc == nil {
-		return nil, fmt.Errorf("BirdNET processor not available")
-	}
-	instance := proc.GetBirdNET()
-	if instance == nil {
-		return nil, fmt.Errorf("BirdNET instance not available")
-	}
-	return instance, nil
-}
-
-// currentLocale returns the BirdNET locale from the current settings.
-func (c *Controller) currentLocale() string {
-	locale := c.CurrentSettings().BirdNET.Locale
-	return locale
 }
 
 // buildTestSettings creates a settings snapshot with the given test coordinates
 // and threshold for range filter testing. The snapshot is a clone of the
 // current settings with only the test values overridden, so it can be passed
 // directly to GetProbableSpeciesWithSettings without modifying global state.
-func (c *Controller) buildTestSettings(lat, lon float64, threshold float32) *conf.Settings {
+func (c *Handler) buildTestSettings(lat, lon float64, threshold float32) *conf.Settings {
 	testSnapshot := conf.CloneSettings(c.CurrentSettings())
 
 	testSnapshot.BirdNET.Latitude = lat
@@ -179,9 +189,9 @@ func dedupeSpeciesForDisplay(species []RangeFilterSpecies) []RangeFilterSpecies 
 	indexByKey := make(map[string]int, len(species))
 	deduped := make([]RangeFilterSpecies, 0, len(species))
 	for _, sp := range species {
-		key := normalizeForLookup(sp.CommonName)
+		key := apicore.NormalizeForLookup(sp.CommonName)
 		if key == "" {
-			key = normalizeForLookup(sp.ScientificName)
+			key = apicore.NormalizeForLookup(sp.ScientificName)
 		}
 		if key == "" {
 			// No name to key on: keep the row rather than collapsing every
@@ -231,7 +241,9 @@ type RangeFilterSpeciesCount struct {
 	Location    Location  `json:"location"`
 }
 
-// RangeFilterSpecies represents a single species in the range filter
+// RangeFilterSpecies represents a single species in the range filter. It stays
+// exported because the species domain (/api/v2/species/all) reuses it as its
+// response element type.
 type RangeFilterSpecies struct {
 	Label          string   `json:"label"`
 	ScientificName string   `json:"scientificName"`
@@ -292,20 +304,6 @@ type RangeFilterTestResponse struct {
 	} `json:"parameters"`
 }
 
-// initRangeRoutes sets up the range filter related routes
-func (c *Controller) initRangeRoutes() {
-	// Range filter status and scores
-	c.Group.GET("/range/status", c.GetRangeFilterStatus)
-	c.Group.GET("/range/species/scores", c.GetRangeFilterSpeciesScores)
-
-	// Range filter species routes
-	c.Group.GET("/range/species/count", c.GetRangeFilterSpeciesCount)
-	c.Group.GET("/range/species/list", c.GetRangeFilterSpeciesList)
-	c.Group.GET("/range/species/csv", c.GetRangeFilterSpeciesCSV)
-	c.Group.POST("/range/species/test", c.TestRangeFilter)
-	c.Group.POST("/range/rebuild", c.RebuildRangeFilter)
-}
-
 // GetRangeFilterStatus returns introspection data about the active range filter
 // @Summary Get range filter status
 // @Description Returns per-classifier geomodel coverage, auto-selection status, and threshold
@@ -314,8 +312,8 @@ func (c *Controller) initRangeRoutes() {
 // @Success 200 {object} classifier.RangeFilterStatusResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/status [get]
-func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {
-	birdnetInstance, err := c.getBirdNETInstance()
+func (c *Handler) GetRangeFilterStatus(ctx echo.Context) error {
+	birdnetInstance, err := c.GetBirdNETInstance()
 	if err != nil {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
@@ -343,8 +341,8 @@ func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/scores [get]
-func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
-	birdnetInstance, err := c.getBirdNETInstance()
+func (c *Handler) GetRangeFilterSpeciesScores(ctx echo.Context) error {
+	birdnetInstance, err := c.GetBirdNETInstance()
 	if err != nil {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
@@ -358,7 +356,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 
 	// Override with query params if provided
 	if latStr := ctx.QueryParam("lat"); latStr != "" {
-		parsed, err := parseFloat64(latStr)
+		parsed, err := apicore.ParseFloat64(latStr)
 		if err != nil {
 			return c.HandleError(ctx, err, "Invalid latitude format", http.StatusBadRequest)
 		}
@@ -369,7 +367,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 	}
 
 	if lonStr := ctx.QueryParam("lon"); lonStr != "" {
-		parsed, err := parseFloat64(lonStr)
+		parsed, err := apicore.ParseFloat64(lonStr)
 		if err != nil {
 			return c.HandleError(ctx, err, "Invalid longitude format", http.StatusBadRequest)
 		}
@@ -388,8 +386,8 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		if err != nil {
 			return c.HandleError(ctx, err, "Invalid week format", http.StatusBadRequest)
 		}
-		if parsed < 1 || parsed > weeksPerYear {
-			return c.HandleError(ctx, nil, fmt.Sprintf("Week must be between 1 and %d", weeksPerYear), http.StatusBadRequest)
+		if parsed < 1 || parsed > apicore.WeeksPerYear {
+			return c.HandleError(ctx, nil, fmt.Sprintf("Week must be between 1 and %d", apicore.WeeksPerYear), http.StatusBadRequest)
 		}
 		week = float32(parsed)
 	}
@@ -430,13 +428,13 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 // @Success 200 {object} RangeFilterSpeciesCount
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/count [get]
-func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
+func (c *Handler) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 
 	// Count the de-duplicated display list so the count matches what
 	// /range/species/list renders (the same collapse of force-include override
 	// copies and localized taxonomic synonyms).
-	birdnetInstance, _ := c.getBirdNETInstance()
+	birdnetInstance, _ := c.GetBirdNETInstance()
 	speciesList := dedupeSpeciesForDisplay(convertLabels(settings.GetIncludedSpecies(), birdnetInstance, settings.BirdNET.Locale))
 
 	response := RangeFilterSpeciesCount{
@@ -460,11 +458,11 @@ func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 // @Success 200 {object} RangeFilterSpeciesList
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/list [get]
-func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
+func (c *Handler) GetRangeFilterSpeciesList(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 	includedSpecies := settings.GetIncludedSpecies()
 
-	birdnetInstance, _ := c.getBirdNETInstance()
+	birdnetInstance, _ := c.GetBirdNETInstance()
 	speciesList := dedupeSpeciesForDisplay(convertLabels(includedSpecies, birdnetInstance, settings.BirdNET.Locale))
 
 	// Extract taxonomy groups from species list via taxonomy DB
@@ -480,7 +478,7 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 		for _, sp := range speciesList {
 			_, meta, ok := c.TaxonomyDB.LookupGenusByScientificName(sp.ScientificName)
 			if !ok {
-				continue // Species not in taxonomy DB — skip gracefully
+				continue // Species not in taxonomy DB - skip gracefully
 			}
 
 			// Extract genus (first word of scientific name)
@@ -555,7 +553,7 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/test [post]
-func (c *Controller) TestRangeFilter(ctx echo.Context) error {
+func (c *Handler) TestRangeFilter(ctx echo.Context) error {
 	var req RangeFilterTestRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
@@ -573,7 +571,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	}
 
 	// Check if processor and BirdNET are available
-	birdnetInstance, err := c.getBirdNETInstance()
+	birdnetInstance, err := c.GetBirdNETInstance()
 	if err != nil {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
@@ -594,7 +592,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get probable species", http.StatusInternalServerError)
 	}
 
-	speciesList := dedupeSpeciesForDisplay(convertSpeciesScores(speciesScores, birdnetInstance, c.currentLocale()))
+	speciesList := dedupeSpeciesForDisplay(convertSpeciesScores(speciesScores, birdnetInstance, c.CurrentLocale()))
 
 	response := RangeFilterTestResponse{
 		Species:   speciesList,
@@ -631,7 +629,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/csv [get]
-func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
+func (c *Handler) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	// Check for custom parameters in query string
 	customLat := ctx.QueryParam("latitude")
 	customLon := ctx.QueryParam("longitude")
@@ -654,7 +652,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 
 		// Override with custom values if provided
 		if customLat != "" {
-			lat, err := parseFloat64(customLat)
+			lat, err := apicore.ParseFloat64(customLat)
 			if err != nil {
 				return c.HandleError(ctx, err, "Invalid latitude format", http.StatusBadRequest)
 			}
@@ -665,7 +663,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		}
 
 		if customLon != "" {
-			lon, err := parseFloat64(customLon)
+			lon, err := apicore.ParseFloat64(customLon)
 			if err != nil {
 				return c.HandleError(ctx, err, "Invalid longitude format", http.StatusBadRequest)
 			}
@@ -676,7 +674,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		}
 
 		if customThreshold != "" {
-			thr, err := parseFloat32(customThreshold)
+			thr, err := apicore.ParseFloat32(customThreshold)
 			if err != nil {
 				return c.HandleError(ctx, err, "Invalid threshold format", http.StatusBadRequest)
 			}
@@ -701,7 +699,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		// hits that branch; this branch is the no-argument fallback.
 		settings := c.CurrentSettings()
 
-		birdnetInstance, _ := c.getBirdNETInstance()
+		birdnetInstance, _ := c.GetBirdNETInstance()
 		speciesList = dedupeSpeciesForDisplay(convertLabels(settings.GetIncludedSpecies(), birdnetInstance, settings.BirdNET.Locale))
 		location = Location{
 			Latitude:  settings.BirdNET.Latitude,
@@ -740,9 +738,9 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 // species (bats/Perch). This is the path the settings UI's CSV download takes
 // (it always sends parameters), so a user who sees bats in the Active Species
 // preview gets the same bats when exporting those parameters to CSV.
-func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilterSpecies, Location, float32, error) {
+func (c *Handler) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilterSpecies, Location, float32, error) {
 	// Check if BirdNET is available
-	birdnetInstance, err := c.getBirdNETInstance()
+	birdnetInstance, err := c.GetBirdNETInstance()
 	if err != nil {
 		return nil, Location{}, 0, err
 	}
@@ -761,7 +759,7 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 		return nil, Location{}, 0, err
 	}
 
-	speciesList := dedupeSpeciesForDisplay(convertSpeciesScores(speciesScores, birdnetInstance, c.currentLocale()))
+	speciesList := dedupeSpeciesForDisplay(convertSpeciesScores(speciesScores, birdnetInstance, c.CurrentLocale()))
 
 	location := Location{
 		Latitude:  req.Latitude,
@@ -786,7 +784,7 @@ func sanitizeCSVField(field string) string {
 }
 
 // generateSpeciesCSV generates CSV content from species list using the standard CSV library
-func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location Location, threshold float32) ([]byte, error) {
+func (c *Handler) generateSpeciesCSV(species []RangeFilterSpecies, location Location, threshold float32) ([]byte, error) {
 	var buf bytes.Buffer
 
 	// Write UTF-8 BOM for Excel compatibility
@@ -844,17 +842,6 @@ func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location L
 	return buf.Bytes(), nil
 }
 
-// parseFloat64 is a helper function to parse string to float64
-func parseFloat64(s string) (float64, error) {
-	return strconv.ParseFloat(s, 64)
-}
-
-// parseFloat32 is a helper function to parse string to float32
-func parseFloat32(s string) (float32, error) {
-	f, err := strconv.ParseFloat(s, 32)
-	return float32(f), err
-}
-
 // RebuildRangeFilter rebuilds the range filter with current settings
 // @Summary Rebuild range filter
 // @Description Rebuilds the range filter using current location and threshold settings
@@ -863,9 +850,9 @@ func parseFloat32(s string) (float32, error) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/rebuild [post]
-func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
+func (c *Handler) RebuildRangeFilter(ctx echo.Context) error {
 	// Check if BirdNET is available
-	birdnetInstance, err := c.getBirdNETInstance()
+	birdnetInstance, err := c.GetBirdNETInstance()
 	if err != nil {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
