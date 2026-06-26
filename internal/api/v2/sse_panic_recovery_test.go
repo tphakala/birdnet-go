@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -20,9 +21,7 @@ import (
 func TestSendSSEMessagePanicRecovery(t *testing.T) {
 	t.Parallel()
 
-	c := &Controller{
-		apiLogger: nil, // Will skip logging in tests
-	}
+	c := &Controller{Core: &apicore.Core{APILogger: nil}}
 	c.Settings.Store(&conf.Settings{
 		WebServer: conf.WebServerSettings{
 			Debug: true,

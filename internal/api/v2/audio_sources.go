@@ -51,14 +51,14 @@ func isStreamSourceType(t audiocore.SourceType) bool {
 // source names are replaced with anonymized values for unauthenticated
 // clients, matching the behavior of the audio-level SSE stream.
 func (c *Controller) listSources(ctx echo.Context, label string, filter func(audiocore.SourceType) bool, anonymize bool) error {
-	c.logInfoIfEnabled("Listing "+label,
+	c.LogInfoIfEnabled("Listing "+label,
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 
 	resp := AudioSourceListResponse{Sources: []AudioSourceInfo{}}
 
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		return ctx.JSON(http.StatusOK, resp)
 	}
@@ -82,7 +82,7 @@ func (c *Controller) listSources(ctx echo.Context, label string, filter func(aud
 		resp.Sources = append(resp.Sources, info)
 	}
 
-	c.logInfoIfEnabled(label+" listed",
+	c.LogInfoIfEnabled(label+" listed",
 		logger.Int("count", len(resp.Sources)),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),

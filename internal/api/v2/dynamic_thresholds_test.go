@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -54,10 +55,7 @@ func TestGetMergedThresholdData_NoDuplicates(t *testing.T) {
 		},
 	}
 
-	controller := &Controller{
-		DS:        mockDS,
-		Processor: proc,
-	}
+	controller := &Controller{Core: &apicore.Core{DS: mockDS, Processor: proc}}
 	controller.Settings.Store(proc.Settings)
 
 	result := controller.getMergedThresholdData()
@@ -106,10 +104,7 @@ func TestGetMergedThresholdData_MemoryOnlySpecies(t *testing.T) {
 		},
 	}
 
-	controller := &Controller{
-		DS:        mockDS,
-		Processor: proc,
-	}
+	controller := &Controller{Core: &apicore.Core{DS: mockDS, Processor: proc}}
 	controller.Settings.Store(proc.Settings)
 
 	result := controller.getMergedThresholdData()
@@ -153,10 +148,7 @@ func TestGetMergedThresholdData_DatabaseOnlySpecies(t *testing.T) {
 		DynamicThresholds: map[string]*processor.DynamicThreshold{},
 	}
 
-	controller := &Controller{
-		DS:        mockDS,
-		Processor: proc,
-	}
+	controller := &Controller{Core: &apicore.Core{DS: mockDS, Processor: proc}}
 	controller.Settings.Store(proc.Settings)
 
 	result := controller.getMergedThresholdData()

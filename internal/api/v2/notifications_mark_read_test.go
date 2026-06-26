@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -33,7 +34,7 @@ func newNotificationTestController(t *testing.T) (*Controller, *notification.Ser
 	service := notification.NewService(config)
 	t.Cleanup(service.Stop)
 
-	controller := &Controller{notificationService: service}
+	controller := &Controller{Core: &apicore.Core{}, notificationService: service}
 	controller.Settings.Store(&conf.Settings{})
 
 	return controller, service

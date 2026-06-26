@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"gorm.io/driver/sqlite"
@@ -221,7 +222,7 @@ func TestDetermineWizardState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := &Controller{}
+			c := &Controller{Core: &apicore.Core{}}
 			c.Settings.Store(&conf.Settings{Version: tt.version})
 			c.appMetadataRepo = tt.metadataRepo
 			if tt.v2Manager != nil {
@@ -246,9 +247,7 @@ func TestDismissWizard_Success(t *testing.T) {
 	// Not parallel: publishes settings to the process-wide global snapshot.
 	mockRepo := newMockAppMetadataRepo()
 	e := echo.New()
-	c := &Controller{
-		appMetadataRepo: mockRepo,
-	}
+	c := &Controller{Core: &apicore.Core{}, appMetadataRepo: mockRepo}
 	c.Settings.Store(&conf.Settings{Version: "v0.9.0"})
 	publishTestSettings(t, c.Settings.Load())
 
@@ -268,9 +267,7 @@ func TestDismissWizard_NilRepo(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
-	c := &Controller{
-		// appMetadataRepo intentionally nil
-	}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(&conf.Settings{
 		Version:   "v0.9.0",
 		WebServer: conf.WebServerSettings{Debug: true},
@@ -294,9 +291,7 @@ func TestDismissWizard_SetError(t *testing.T) {
 	mockRepo.setErr = assert.AnError
 
 	e := echo.New()
-	c := &Controller{
-		appMetadataRepo: mockRepo,
-	}
+	c := &Controller{Core: &apicore.Core{}, appMetadataRepo: mockRepo}
 	c.Settings.Store(&conf.Settings{
 		Version:   "v0.9.0",
 		WebServer: conf.WebServerSettings{Debug: true},

@@ -362,7 +362,7 @@ func (c *Controller) initBackupRoutes() {
 		// Scan database directories where backup files are now written,
 		// plus os.TempDir() for files created by older versions.
 		var dbDirs []string
-		settings := c.currentSettings()
+		settings := c.CurrentSettings()
 		if settings != nil && settings.Output.SQLite.Path != "" {
 			dbDirs = append(dbDirs, filepath.Dir(settings.Output.SQLite.Path))
 		}
@@ -376,7 +376,7 @@ func (c *Controller) initBackupRoutes() {
 	backupGroup := c.Group.Group("/system/database/backup/jobs")
 
 	// Get the appropriate auth middleware
-	authMiddleware := c.authMiddleware
+	authMiddleware := c.AuthMiddleware
 
 	// Create auth-protected group
 	protectedGroup := backupGroup.Group("", authMiddleware)
@@ -458,7 +458,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 			notification.MsgErrBackupCreateFailed, nil)
 	}
 
-	c.logInfoIfEnabled("Backup job started",
+	c.LogInfoIfEnabled("Backup job started",
 		logger.String("job_id", job.ID),
 		logger.String("db_type", dbType),
 		logger.Int64("db_size", dbSize))
@@ -553,7 +553,7 @@ func (c *Controller) DownloadBackupFile(ctx echo.Context) error {
 	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	ctx.Response().Header().Set("Content-Type", "application/octet-stream")
 
-	c.logInfoIfEnabled("Backup download started",
+	c.LogInfoIfEnabled("Backup download started",
 		logger.String("job_id", jobID),
 		logger.String("db_type", job.DBType),
 		logger.String("filename", filename))
@@ -571,7 +571,7 @@ func (c *Controller) CancelBackupJob(ctx echo.Context) error {
 			notification.MsgErrBackupNotFound, nil)
 	}
 
-	c.logInfoIfEnabled("Backup job cancelled",
+	c.LogInfoIfEnabled("Backup job cancelled",
 		logger.String("job_id", jobID))
 
 	return ctx.JSON(http.StatusOK, map[string]string{
@@ -588,7 +588,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 
 	// Retry loop for database lock
 	for attempt := 1; attempt <= backupVacuumRetries; attempt++ {
-		c.logInfoIfEnabled("Backup VACUUM INTO starting",
+		c.LogInfoIfEnabled("Backup VACUUM INTO starting",
 			logger.String("job_id", job.ID),
 			logger.Int("attempt", attempt),
 			logger.String("temp_path", job.tempPath))
@@ -603,7 +603,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 			break // Non-recoverable error
 		}
 
-		c.logWarnIfEnabled("Backup VACUUM INTO database locked, retrying",
+		c.LogWarnIfEnabled("Backup VACUUM INTO database locked, retrying",
 			logger.String("job_id", job.ID),
 			logger.Int("attempt", attempt),
 			logger.Error(lastErr))
@@ -612,7 +612,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 	}
 
 	if lastErr != nil {
-		c.logWarnIfEnabled("Backup VACUUM INTO failed",
+		c.LogWarnIfEnabled("Backup VACUUM INTO failed",
 			logger.String("job_id", job.ID),
 			logger.Error(lastErr))
 		_ = errors.New(lastErr).
@@ -628,7 +628,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 	job.updateProgress()
 	job.setStatus(BackupStatusCompleted, "")
 
-	c.logInfoIfEnabled("Backup job completed",
+	c.LogInfoIfEnabled("Backup job completed",
 		logger.String("job_id", job.ID),
 		logger.String("db_type", job.DBType),
 		logger.Int64("bytes_written", job.BytesWritten))
@@ -637,7 +637,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 // getBackupDBInfo returns the database path and GORM DB for the given type.
 func (c *Controller) getBackupDBInfo(dbType string) (string, *gorm.DB, error) {
 	if dbType == dbTypeLegacy {
-		settings := c.currentSettings()
+		settings := c.CurrentSettings()
 		if settings == nil || settings.Output.SQLite.Path == "" {
 			return "", nil, fmt.Errorf("backup only available for SQLite databases")
 		}

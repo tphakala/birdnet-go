@@ -53,13 +53,13 @@ var terminalUpgrader = websocket.Upgrader{
 
 // initTerminalRoutes registers the terminal WebSocket endpoint.
 func (c *Controller) initTerminalRoutes() {
-	c.logInfoIfEnabled("Initializing terminal routes")
+	c.LogInfoIfEnabled("Initializing terminal routes")
 
 	terminalGroup := c.Group.Group("/terminal")
-	protectedGroup := terminalGroup.Group("", c.authMiddleware)
+	protectedGroup := terminalGroup.Group("", c.AuthMiddleware)
 	protectedGroup.GET("/ws", c.HandleTerminalWS)
 
-	c.logInfoIfEnabled("Terminal routes initialized successfully")
+	c.LogInfoIfEnabled("Terminal routes initialized successfully")
 }
 
 // HandleTerminalWS handles WebSocket connections for the browser terminal.
@@ -72,7 +72,7 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 
 	conn, err := terminalUpgrader.Upgrade(ctx.Response(), ctx.Request(), nil)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to upgrade terminal WebSocket", logger.Error(err))
+		c.LogErrorIfEnabled("Failed to upgrade terminal WebSocket", logger.Error(err))
 		return err
 	}
 	defer func() { _ = conn.Close() }()
@@ -80,9 +80,9 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 	conn.SetReadLimit(terminalMaxMsgSize)
 
 	// startPTY is platform-specific (terminal_unix.go / terminal_windows.go).
-	ph, cleanup, err := startPTY(c.ctx)
+	ph, cleanup, err := startPTY(c.Context())
 	if err != nil {
-		c.logErrorIfEnabled("Failed to start terminal PTY", logger.Error(err))
+		c.LogErrorIfEnabled("Failed to start terminal PTY", logger.Error(err))
 		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\nFailed to start shell: "+err.Error()+"\r\n"))
 		// The WebSocket connection is already hijacked; return nil to avoid
 		// Echo's error handler writing an HTTP response to a hijacked conn.
@@ -136,7 +136,7 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 				if err != nil {
 					return
 				}
-			case <-c.ctx.Done():
+			case <-c.Context().Done():
 				return
 			}
 		}

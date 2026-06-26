@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
@@ -23,12 +24,7 @@ func newExternalMediaController(
 ) (*echo.Echo, *Controller) {
 	t.Helper()
 	e := echo.New()
-	c := &Controller{
-		Echo:               e,
-		Group:              e.Group("/api/v2"),
-		externalMediaEnv:   envGetter,
-		externalMediaProbe: prober,
-	}
+	c := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}, externalMediaEnv: envGetter, externalMediaProbe: prober}
 	return e, c
 }
 

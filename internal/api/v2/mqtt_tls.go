@@ -31,11 +31,11 @@ type MQTTTLSCertificateUpload struct {
 // then falling back to TLSManager's managed directory.
 func (c *Controller) getMQTTCertPath(certType conf.TLSCertificateType) string {
 	// Check settings-configured paths first (covers manually configured certs).
-	// controllerSettings() can be nil on a standalone/test controller that never
+	// ControllerSettings() can be nil on a standalone/test controller that never
 	// stored a snapshot; in that case skip the configured paths and still allow
 	// the TLSManager-managed cert fallback below.
 	var settingsPath string
-	if settings := c.controllerSettings(); settings != nil {
+	if settings := c.ControllerSettings(); settings != nil {
 		mqttTLS := settings.Realtime.MQTT.TLS
 		switch certType {
 		case conf.TLSCertTypeCA:

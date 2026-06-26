@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -29,7 +30,7 @@ const (
 // Use this for tests that only need to call handler methods without database or full infrastructure.
 // Includes default settings to prevent nil pointer panics if a handler accesses c.Settings.
 func newMinimalController() *Controller {
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(newValidTestSettings())
 	return c
 }
@@ -91,10 +92,7 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterfa
 
 	// Create a controller with the test datastore and default settings
 	// to prevent nil pointer panics if a handler accesses c.Settings.
-	controller := &Controller{
-		Group: e.Group(apiV2Prefix),
-		DS:    mockDS,
-	}
+	controller := &Controller{Core: &apicore.Core{Group: e.Group(apiV2Prefix), DS: mockDS}}
 	controller.Settings.Store(newValidTestSettings())
 
 	// Don't initialize routes as it causes nil pointer dereference in tests

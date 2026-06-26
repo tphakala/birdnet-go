@@ -49,9 +49,9 @@ func (c *Controller) initModelRoutes() {
 	c.Group.GET("/models", c.ListModels)
 	c.Group.GET("/models/catalog", c.GetModelCatalog)
 	c.Group.GET("/models/installed", c.GetInstalledModels)
-	c.Group.POST("/models/install/:id", c.InstallModel, c.authMiddleware)
-	c.Group.POST("/models/reinstall/:id", c.ReinstallModel, c.authMiddleware)
-	c.Group.DELETE("/models/installed/:id", c.UninstallModel, c.authMiddleware)
+	c.Group.POST("/models/install/:id", c.InstallModel, c.AuthMiddleware)
+	c.Group.POST("/models/reinstall/:id", c.ReinstallModel, c.AuthMiddleware)
+	c.Group.DELETE("/models/installed/:id", c.UninstallModel, c.AuthMiddleware)
 	c.Group.GET("/models/install/:id/progress", c.StreamInstallProgress)
 }
 
@@ -111,7 +111,7 @@ func (c *Controller) GetModelCatalog(ctx echo.Context) error {
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
 
 	// Check ORT availability once, reuse for all entries that require ONNX.
-	ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+	ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 
 	for i := range visible {
 		entry := &visible[i]
@@ -189,7 +189,7 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 
 	// Reject installation of ONNX-dependent models when ORT is unavailable.
 	if entry.RequiresONNX {
-		ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+		ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 		if !ortStatus.Available {
 			return c.HandleError(ctx, nil,
 				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
@@ -199,23 +199,23 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 
 	// Start async install in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
-	c.wg.Go(func() {
+	c.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
-				c.logErrorIfEnabled("Panic during model install",
+				c.LogErrorIfEnabled("Panic during model install",
 					logger.String("catalog_id", catalogID),
 					logger.Any("panic", r),
 				)
 			}
 		}()
-		if err := c.ModelManager.Install(c.ctx, &entry, "", progressChan); err != nil {
-			c.logErrorIfEnabled("Model install failed",
+		if err := c.ModelManager.Install(c.Context(), &entry, "", progressChan); err != nil {
+			c.LogErrorIfEnabled("Model install failed",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err),
 			)
 		}
 		close(progressChan)
-		// Drain remaining progress events so the channel does not leak.
+
 		for range progressChan {
 		}
 	})
@@ -250,7 +250,7 @@ func (c *Controller) ReinstallModel(ctx echo.Context) error {
 
 	// Reject reinstall of ONNX-dependent models when ORT is unavailable.
 	if entry.RequiresONNX {
-		ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+		ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 		if !ortStatus.Available {
 			return c.HandleError(ctx, nil,
 				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
@@ -260,23 +260,23 @@ func (c *Controller) ReinstallModel(ctx echo.Context) error {
 
 	// Start async reinstall in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
-	c.wg.Go(func() {
+	c.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
-				c.logErrorIfEnabled("Panic during model reinstall",
+				c.LogErrorIfEnabled("Panic during model reinstall",
 					logger.String("catalog_id", catalogID),
 					logger.Any("panic", r),
 				)
 			}
 		}()
-		if err := c.ModelManager.Reinstall(c.ctx, &entry, "", progressChan); err != nil {
-			c.logErrorIfEnabled("Model reinstall failed",
+		if err := c.ModelManager.Reinstall(c.Context(), &entry, "", progressChan); err != nil {
+			c.LogErrorIfEnabled("Model reinstall failed",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err),
 			)
 		}
 		close(progressChan)
-		// Drain remaining progress events so the channel does not leak.
+
 		for range progressChan {
 		}
 	})

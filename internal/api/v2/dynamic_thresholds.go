@@ -127,8 +127,8 @@ func (c *Controller) initDynamicThresholdRoutes() {
 	c.Group.GET("/dynamic-thresholds/:species/events", c.GetThresholdEvents)
 
 	// Protected endpoints for modifying thresholds (require authentication)
-	c.Group.DELETE("/dynamic-thresholds/:species", c.ResetDynamicThreshold, c.authMiddleware)
-	c.Group.DELETE("/dynamic-thresholds", c.ResetAllDynamicThresholds, c.authMiddleware)
+	c.Group.DELETE("/dynamic-thresholds/:species", c.ResetDynamicThreshold, c.AuthMiddleware)
+	c.Group.DELETE("/dynamic-thresholds", c.ResetAllDynamicThresholds, c.AuthMiddleware)
 }
 
 // GetDynamicThresholds returns all dynamic thresholds with optional pagination
@@ -230,7 +230,7 @@ func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresho
 		return
 	}
 	memoryData := proc.GetDynamicThresholdData()
-	baseThreshold := c.currentSettings().BirdNET.Threshold
+	baseThreshold := c.CurrentSettings().BirdNET.Threshold
 
 	for _, dt := range memoryData {
 		key := strings.ToLower(dt.ModelName) + ":" + strings.ToLower(dt.SpeciesName)
@@ -281,7 +281,7 @@ func (c *Controller) GetDynamicThresholdStats(ctx echo.Context) error {
 		})
 	}
 
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	return ctx.JSON(http.StatusOK, ThresholdStatsResponse{
 		TotalCount:        totalCount,
 		ActiveCount:       activeCount,

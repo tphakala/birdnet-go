@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
@@ -525,7 +526,7 @@ func TestResolveClientID(t *testing.T) {
 	const testRemoteAddr = "192.168.1.100:12345"
 
 	t.Run("prefers session ID when provided", func(t *testing.T) {
-		c := &Controller{}
+		c := &Controller{Core: &apicore.Core{}}
 		c.Settings.Store(newValidTestSettings())
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
@@ -539,7 +540,7 @@ func TestResolveClientID(t *testing.T) {
 	})
 
 	t.Run("falls back to generateClientID when no session", func(t *testing.T) {
-		c := &Controller{}
+		c := &Controller{Core: &apicore.Core{}}
 		c.Settings.Store(newValidTestSettings())
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
@@ -554,7 +555,7 @@ func TestResolveClientID(t *testing.T) {
 	})
 
 	t.Run("different sessions from same IP get different IDs", func(t *testing.T) {
-		c := &Controller{}
+		c := &Controller{Core: &apicore.Core{}}
 		c.Settings.Store(newValidTestSettings())
 		e := echo.New()
 
@@ -572,7 +573,7 @@ func TestResolveClientID(t *testing.T) {
 	})
 
 	t.Run("rejects invalid session ID format", func(t *testing.T) {
-		c := &Controller{}
+		c := &Controller{Core: &apicore.Core{}}
 		c.Settings.Store(newValidTestSettings())
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)

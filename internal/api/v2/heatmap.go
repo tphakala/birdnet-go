@@ -442,7 +442,7 @@ func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 
 	cached, _, hit := cache.get(cacheKey)
 	if hit {
-		c.logAPIRequest(ctx, logger.LogLevelDebug, "Heatmap cache hit", logger.String("species", params.species))
+		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Heatmap cache hit", logger.String("species", params.species))
 		return ctx.Blob(http.StatusOK, "application/octet-stream", cached)
 	}
 
@@ -499,7 +499,7 @@ func (c *Controller) getHeatmapOptimized(ctx echo.Context, service *classifier.H
 		if result.Err != nil {
 			return c.HandleError(ctx, result.Err, "Failed to compute heatmap grid", http.StatusInternalServerError)
 		}
-		c.logAPIRequest(ctx, logger.LogLevelInfo, "Heatmap grid computed (optimized)",
+		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Heatmap grid computed (optimized)",
 			logger.String("species", params.species),
 			logger.Int("rows", params.rows),
 			logger.Int("cols", params.cols),
@@ -530,7 +530,7 @@ func (c *Controller) getHeatmapFallback(ctx echo.Context, birdnet *classifier.Or
 	encoded := encodeBNHM(params.cols, params.rows, float32(params.south), float32(params.west), float32(params.resolution), data)
 	cache.put(cacheKey, encoded, missGen)
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Heatmap grid computed (fallback)",
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Heatmap grid computed (fallback)",
 		logger.String("species", params.species),
 		logger.Int("rows", params.rows),
 		logger.Int("cols", params.cols))

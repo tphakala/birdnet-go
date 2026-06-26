@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -56,11 +57,9 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 	// path). An unexpected Get call would fail this test, which is the point.
 	mockDS := mocks.NewMockInterface(t)
 
-	controller := &Controller{
-		SFS: sfs,
-		ctx: t.Context(),
-		DS:  mockDS,
-	}
+	controllerCore := &apicore.Core{SFS: sfs, DS: mockDS}
+	controllerCore.SetTestContext(t.Context(), nil)
+	controller := &Controller{Core: controllerCore}
 	controller.Settings.Store(settings)
 	conftest.SetTestSettings(settings)
 
@@ -116,10 +115,9 @@ func TestGenerateSpectrogramFromRelRetainsFailedStatusForPolling(t *testing.T) {
 	cancel()
 
 	settings := newValidTestSettings()
-	controller := &Controller{
-		SFS: sfs,
-		ctx: ctx,
-	}
+	controllerCore := &apicore.Core{SFS: sfs}
+	controllerCore.SetTestContext(ctx, nil)
+	controller := &Controller{Core: controllerCore}
 	controller.Settings.Store(settings)
 	conftest.SetTestSettings(settings)
 

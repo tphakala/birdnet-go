@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
 )
 
@@ -22,7 +23,7 @@ import (
 func newDictController(t *testing.T) (*echo.Echo, *Controller) {
 	t.Helper()
 	e := echo.New()
-	controller := &Controller{Echo: e, Group: e.Group("/api/v2")}
+	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.initSpeciesRoutes()
 	return e, controller
 }

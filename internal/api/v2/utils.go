@@ -187,7 +187,7 @@ func NormalizeClipPath(p, clipsPrefix string) string {
 func (c *Controller) requireQueryParam(ctx echo.Context, paramName, operation string) error {
 	value := ctx.QueryParam(paramName)
 	if value == "" {
-		c.logErrorIfEnabled("Missing required parameter",
+		c.LogErrorIfEnabled("Missing required parameter",
 			logger.String("parameter", paramName),
 			logger.String("operation", operation),
 			logger.String("ip", ctx.RealIP()),
@@ -204,7 +204,7 @@ func (c *Controller) requireQueryParam(ctx echo.Context, paramName, operation st
 func (c *Controller) requireQueryArrayParam(ctx echo.Context, paramName, operation string) error {
 	values := ctx.QueryParams()[paramName]
 	if len(values) == 0 {
-		c.logErrorIfEnabled("Missing required parameter",
+		c.LogErrorIfEnabled("Missing required parameter",
 			logger.String("parameter", paramName),
 			logger.String("operation", operation),
 			logger.String("ip", ctx.RealIP()),
@@ -220,7 +220,7 @@ func (c *Controller) requireQueryArrayParam(ctx echo.Context, paramName, operati
 // Returns ErrResponseHandled after sending error response, or nil if valid.
 func (c *Controller) validateBatchSize(ctx echo.Context, count, maxSize int, operation string) error {
 	if count > maxSize {
-		c.logErrorIfEnabled("Batch size exceeded limit",
+		c.LogErrorIfEnabled("Batch size exceeded limit",
 			logger.Int("requested", count),
 			logger.Int("max", maxSize),
 			logger.String("operation", operation),
@@ -240,7 +240,7 @@ func (c *Controller) validateDateFormatWithResponse(ctx echo.Context, dateStr, p
 		return nil // Empty is valid (optional parameter)
 	}
 	if _, err := time.Parse(time.DateOnly, dateStr); err != nil {
-		c.logErrorIfEnabled("Invalid date format",
+		c.LogErrorIfEnabled("Invalid date format",
 			logger.String("parameter", paramName),
 			logger.String("value", dateStr),
 			logger.String("operation", operation),
@@ -261,7 +261,7 @@ func (c *Controller) validateDateFormatStrictWithResponse(ctx echo.Context, date
 		return nil // Empty is valid (optional parameter)
 	}
 	if !dateRegex.MatchString(dateStr) {
-		c.logErrorIfEnabled("Invalid date format",
+		c.LogErrorIfEnabled("Invalid date format",
 			logger.String("parameter", paramName),
 			logger.String("value", dateStr),
 			logger.String("operation", operation),
@@ -283,7 +283,7 @@ func (c *Controller) parseOptionalPositiveInt(ctx echo.Context, paramName string
 	}
 	val, err := strconv.Atoi(str)
 	if err != nil || val <= 0 {
-		c.logWarnIfEnabled("Invalid parameter, using default",
+		c.LogWarnIfEnabled("Invalid parameter, using default",
 			logger.String("parameter", paramName),
 			logger.String("value", str),
 			logger.Int("default", defaultVal),
@@ -304,7 +304,7 @@ func (c *Controller) parseOptionalFloat(ctx echo.Context, paramName string, defa
 	}
 	val, err := strconv.ParseFloat(str, 64)
 	if err != nil {
-		c.logWarnIfEnabled("Invalid parameter, using default",
+		c.LogWarnIfEnabled("Invalid parameter, using default",
 			logger.String("parameter", paramName),
 			logger.String("value", str),
 			logger.Float64("default", defaultVal),
@@ -439,7 +439,7 @@ func (c *Controller) validateDateOrderWithResponse(ctx echo.Context, startDate, 
 	start, _ := time.Parse(time.DateOnly, startDate)
 	end, _ := time.Parse(time.DateOnly, endDate)
 	if start.After(end) {
-		c.logErrorIfEnabled("Invalid date range",
+		c.LogErrorIfEnabled("Invalid date range",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
 			logger.String("error", "start_date cannot be after end_date"),
@@ -710,29 +710,29 @@ func parseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResul
 
 // recordSSEError records an SSE error metric if metrics are available
 func (c *Controller) recordSSEError(endpoint, errorType string) {
-	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.RecordSSEError(endpoint, errorType)
+	if c.Metrics != nil && c.Metrics.HTTP != nil {
+		c.Metrics.HTTP.RecordSSEError(endpoint, errorType)
 	}
 }
 
 // recordSSEMessage records an SSE message sent metric if metrics are available
 func (c *Controller) recordSSEMessage(endpoint, messageType string) {
-	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.RecordSSEMessageSent(endpoint, messageType)
+	if c.Metrics != nil && c.Metrics.HTTP != nil {
+		c.Metrics.HTTP.RecordSSEMessageSent(endpoint, messageType)
 	}
 }
 
 // recordSSEConnectionStart records an SSE connection start if metrics are available
 func (c *Controller) recordSSEConnectionStart(endpoint string) {
-	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.SSEConnectionStarted(endpoint)
+	if c.Metrics != nil && c.Metrics.HTTP != nil {
+		c.Metrics.HTTP.SSEConnectionStarted(endpoint)
 	}
 }
 
 // recordSSEConnectionClose records an SSE connection close if metrics are available
 func (c *Controller) recordSSEConnectionClose(endpoint string, duration float64, reason string) {
-	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.SSEConnectionClosed(endpoint, duration, reason)
+	if c.Metrics != nil && c.Metrics.HTTP != nil {
+		c.Metrics.HTTP.SSEConnectionClosed(endpoint, duration, reason)
 	}
 }
 
@@ -845,67 +845,6 @@ func (c *Controller) log() logger.Logger {
 	return GetLogger()
 }
 
-// logInfoIfEnabled logs info message if apiLogger is enabled
-func (c *Controller) logInfoIfEnabled(msg string, fields ...logger.Field) {
-	if c.apiLogger != nil {
-		c.apiLogger.Info(msg, fields...)
-	}
-}
-
-// logErrorIfEnabled logs error message if apiLogger is enabled
-func (c *Controller) logErrorIfEnabled(msg string, fields ...logger.Field) {
-	if c.apiLogger != nil {
-		c.apiLogger.Error(msg, fields...)
-	}
-}
-
-// logWarnIfEnabled logs warning message if apiLogger is enabled
-func (c *Controller) logWarnIfEnabled(msg string, fields ...logger.Field) {
-	if c.apiLogger != nil {
-		c.apiLogger.Warn(msg, fields...)
-	}
-}
-
-// logDebugIfEnabled logs debug message if apiLogger is enabled
-func (c *Controller) logDebugIfEnabled(msg string, fields ...logger.Field) {
-	if c.apiLogger != nil {
-		c.apiLogger.Debug(msg, fields...)
-	}
-}
-
-// The logSecurity* helpers mirror the api-module helpers above but write to the
-// "security" module logger, so authentication events (form login/logout, OAuth
-// callback) are co-located with the OAuth and provider-init logging where
-// admins look when debugging auth.
-
-// logSecurityInfoIfEnabled logs an info message to the security module if enabled.
-func (c *Controller) logSecurityInfoIfEnabled(msg string, fields ...logger.Field) {
-	if c.securityLogger != nil {
-		c.securityLogger.Info(msg, fields...)
-	}
-}
-
-// logSecurityWarnIfEnabled logs a warning message to the security module if enabled.
-func (c *Controller) logSecurityWarnIfEnabled(msg string, fields ...logger.Field) {
-	if c.securityLogger != nil {
-		c.securityLogger.Warn(msg, fields...)
-	}
-}
-
-// logSecurityErrorIfEnabled logs an error message to the security module if enabled.
-func (c *Controller) logSecurityErrorIfEnabled(msg string, fields ...logger.Field) {
-	if c.securityLogger != nil {
-		c.securityLogger.Error(msg, fields...)
-	}
-}
-
-// logSecurityDebugIfEnabled logs a debug message to the security module if enabled.
-func (c *Controller) logSecurityDebugIfEnabled(msg string, fields ...logger.Field) {
-	if c.securityLogger != nil {
-		c.securityLogger.Debug(msg, fields...)
-	}
-}
-
 // =============================================================================
 // Batch Response Helpers
 // =============================================================================
@@ -915,7 +854,7 @@ func (c *Controller) logSecurityDebugIfEnabled(msg string, fields ...logger.Fiel
 func (c *Controller) handleBatchResponse(ctx echo.Context, result any, successCount, requestedCount int, processingErrors []string, operationName, ip, urlPath string) error {
 	// Log partial failures if any
 	if len(processingErrors) > 0 && successCount > 0 {
-		c.logWarnIfEnabled(operationName+" completed with partial failures",
+		c.LogWarnIfEnabled(operationName+" completed with partial failures",
 			logger.Int("successful", successCount),
 			logger.Int("failed", len(processingErrors)),
 			logger.Any("errors", processingErrors),
@@ -925,7 +864,7 @@ func (c *Controller) handleBatchResponse(ctx echo.Context, result any, successCo
 
 	// Return error if all items failed
 	if successCount == 0 {
-		c.logErrorIfEnabled("All items in "+operationName+" failed",
+		c.LogErrorIfEnabled("All items in "+operationName+" failed",
 			logger.Int("requested", requestedCount),
 			logger.Any("errors", processingErrors),
 			logger.String("ip", ip),
@@ -935,7 +874,7 @@ func (c *Controller) handleBatchResponse(ctx echo.Context, result any, successCo
 	}
 
 	// Log successful completion
-	c.logInfoIfEnabled(operationName+" completed",
+	c.LogInfoIfEnabled(operationName+" completed",
 		logger.Int("requested", requestedCount),
 		logger.Int("successful", successCount),
 		logger.Int("failed", len(processingErrors)),

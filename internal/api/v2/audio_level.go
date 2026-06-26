@@ -98,11 +98,11 @@ var audioLevelMgr = &audioLevelManager{
 // This connects the audio capture system to the SSE endpoint.
 func (c *Controller) SetAudioLevelChan(ch chan audiocore.AudioLevelData) {
 	c.audioLevelChan = ch
-	c.logInfoIfEnabled("Audio level channel connected to API v2 controller")
+	c.LogInfoIfEnabled("Audio level channel connected to API v2 controller")
 
 	// Start the broadcaster goroutine (only once across all controller instances)
 	audioLevelMgr.broadcasterOnce.Do(func() {
-		ctx, cancel := context.WithCancel(c.ctx)
+		ctx, cancel := context.WithCancel(c.Context())
 		audioLevelMgr.broadcasterCancel = cancel
 		go runAudioLevelBroadcaster(ctx, ch)
 	})
@@ -231,7 +231,7 @@ func (c *Controller) initAudioLevelRoutes() {
 func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	// Early nil check for audio level channel
 	if c.audioLevelChan == nil {
-		c.logAPIRequest(ctx, logger.LogLevelWarn, "Audio level stream unavailable - channel not configured")
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Audio level stream unavailable - channel not configured")
 		return c.HandleError(ctx, nil, "Audio level stream is not available", http.StatusServiceUnavailable)
 	}
 
@@ -248,7 +248,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	}
 	if count >= audioLevelMaxConnectionsPerIP {
 		audioLevelMgr.connectionMu.Unlock()
-		c.logAPIRequest(ctx, logger.LogLevelWarn, "Rejected audio level SSE connection - max per IP reached",
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected audio level SSE connection - max per IP reached",
 			logger.String("reason", "max_connections_per_ip"),
 			logger.Int("current_count", int(count)),
 			logger.Int("max_allowed", audioLevelMaxConnectionsPerIP))
@@ -286,9 +286,9 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	atomic.AddInt64(&audioLevelMgr.totalConnections, 1)
 
 	// Track metrics if available
-	if c.metrics != nil && c.metrics.HTTP != nil {
+	if c.Metrics != nil && c.Metrics.HTTP != nil {
 		connectionStartTime := time.Now()
-		c.metrics.HTTP.SSEConnectionStarted(audioLevelStreamEndpoint)
+		c.Metrics.HTTP.SSEConnectionStarted(audioLevelStreamEndpoint)
 		defer func() {
 			duration := time.Since(connectionStartTime).Seconds()
 			closeReason := "closed"
@@ -297,7 +297,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 			} else if ctx.Request().Context().Err() == context.Canceled {
 				closeReason = "canceled"
 			}
-			c.metrics.HTTP.SSEConnectionClosed(audioLevelStreamEndpoint, duration, closeReason)
+			c.Metrics.HTTP.SSEConnectionClosed(audioLevelStreamEndpoint, duration, closeReason)
 		}()
 	}
 
@@ -328,7 +328,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	}
 
 	// Log connection
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE client connected",
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE client connected",
 		logger.Bool("authenticated", isAuthenticated),
 		logger.Int64("total_connections", atomic.LoadInt64(&audioLevelMgr.totalConnections)))
 
@@ -348,20 +348,20 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	// Main event loop - reads from subscriber channel instead of source channel
 	for {
 		select {
-		case <-c.ctx.Done():
+		case <-c.Context().Done():
 			// Controller shutting down
-			c.logAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE connection closed",
+			c.LogAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE connection closed",
 				logger.String("reason", "shutdown"))
 			return nil
 
 		case <-timeoutCtx.Done():
-			c.logAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE connection closed",
+			c.LogAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE connection closed",
 				logger.String("reason", "timeout_or_cancelled"))
 			return nil
 
 		case audioData, ok := <-subscriberChan:
 			if !ok {
-				c.logWarnIfEnabled("Audio level subscriber channel closed")
+				c.LogWarnIfEnabled("Audio level subscriber channel closed")
 				return nil
 			}
 
@@ -378,7 +378,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 
 		case <-activityCheck.C:
 			// Prune sources that have been removed/disabled since the session started.
-			eng := c.engine.Load()
+			eng := c.Engine.Load()
 			if eng == nil {
 				continue
 			}
@@ -421,7 +421,7 @@ func createAudioLevelEntry(sourceID, displayName string) audiocore.AudioLevelDat
 // initializeAudioLevels creates the initial levels map with configured sources
 func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audiocore.AudioLevelData {
 	levels := make(map[string]audiocore.AudioLevelData)
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		return levels
 	}
@@ -448,7 +448,7 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audi
 // getAudioCardSources retrieves all configured audio card sources from the registry.
 func (c *Controller) getAudioCardSources(registry *audiocore.SourceRegistry) []*audiocore.AudioSource {
 	var sources []*audiocore.AudioSource
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return nil
 	}
@@ -466,7 +466,7 @@ func (c *Controller) getAudioCardSources(registry *audiocore.SourceRegistry) []*
 
 // addStreamSourcesToLevels adds all configured stream sources to the levels map.
 func (c *Controller) addStreamSourcesToLevels(registry *audiocore.SourceRegistry, levels map[string]audiocore.AudioLevelData, isAuthenticated bool) {
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return
 	}
@@ -492,7 +492,7 @@ func (c *Controller) updateAudioLevel(
 	isAuthenticated bool,
 ) {
 	now := time.Now()
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	var registry *audiocore.SourceRegistry
 	if eng != nil {
 		registry = eng.Registry()
@@ -664,7 +664,7 @@ func (c *Controller) extractRemoteAddr(ctx echo.Context) string {
 func (c *Controller) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
 	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
 		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
-			c.logDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
+			c.LogDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
 		}
 	}
 }

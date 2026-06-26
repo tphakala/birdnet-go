@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 )
@@ -35,11 +36,7 @@ const (
 // Note: DisableHTTPKeepAlivesForTesting() is called in TestMain before any tests run
 func getTestController(t *testing.T, e *echo.Echo) *Controller {
 	t.Helper()
-	c := &Controller{
-		Echo:                e,
-		controlChan:         make(chan string, testControlChanBuffer),
-		DisableSaveSettings: true, // Disable saving to disk during tests
-	}
+	c := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, testControlChanBuffer), DisableSaveSettings: true}
 	c.Settings.Store(getTestSettings(t))
 	return c
 }

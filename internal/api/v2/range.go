@@ -79,7 +79,7 @@ func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
 
 // currentLocale returns the BirdNET locale from the current settings.
 func (c *Controller) currentLocale() string {
-	locale := c.currentSettings().BirdNET.Locale
+	locale := c.CurrentSettings().BirdNET.Locale
 	return locale
 }
 
@@ -88,7 +88,7 @@ func (c *Controller) currentLocale() string {
 // current settings with only the test values overridden, so it can be passed
 // directly to GetProbableSpeciesWithSettings without modifying global state.
 func (c *Controller) buildTestSettings(lat, lon float64, threshold float32) *conf.Settings {
-	testSnapshot := conf.CloneSettings(c.currentSettings())
+	testSnapshot := conf.CloneSettings(c.CurrentSettings())
 
 	testSnapshot.BirdNET.Latitude = lat
 	testSnapshot.BirdNET.Longitude = lon
@@ -351,7 +351,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 
 	// Read defaults from latest published settings snapshot so UI changes
 	// to coordinates take effect without restart.
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	lat := settings.BirdNET.Latitude
 	lon := settings.BirdNET.Longitude
 	locale := settings.BirdNET.Locale
@@ -418,7 +418,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		},
 	}
 
-	c.logAPIRequest(ctx, logger.LogLevelDebug, "Range filter species scores retrieved", logger.Int("species_count", len(speciesList)))
+	c.LogAPIRequest(ctx, logger.LogLevelDebug, "Range filter species scores retrieved", logger.Int("species_count", len(speciesList)))
 	return ctx.JSON(http.StatusOK, response)
 }
 
@@ -431,7 +431,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/count [get]
 func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 
 	// Count the de-duplicated display list so the count matches what
 	// /range/species/list renders (the same collapse of force-include override
@@ -461,7 +461,7 @@ func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/list [get]
 func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	includedSpecies := settings.GetIncludedSpecies()
 
 	birdnetInstance, _ := c.getBirdNETInstance()
@@ -615,7 +615,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	response.Parameters.InputDate = req.Date
 	response.Parameters.InputWeek = req.Week
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter test completed", logger.Int("species_count", len(speciesList)))
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Range filter test completed", logger.Int("species_count", len(speciesList)))
 	return ctx.JSON(http.StatusOK, response)
 }
 
@@ -647,7 +647,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		var testReq RangeFilterTestRequest
 
 		// Read current settings from the lock-free atomic snapshot for defaults
-		defaults := c.currentSettings()
+		defaults := c.CurrentSettings()
 		testReq.Latitude = defaults.BirdNET.Latitude
 		testReq.Longitude = defaults.BirdNET.Longitude
 		testReq.Threshold = defaults.BirdNET.RangeFilter.Threshold
@@ -699,7 +699,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		// full active set via getTestSpeciesList, which also includes always-active
 		// secondary-model species. The settings UI always sends parameters, so it
 		// hits that branch; this branch is the no-argument fallback.
-		settings := c.currentSettings()
+		settings := c.CurrentSettings()
 
 		birdnetInstance, _ := c.getBirdNETInstance()
 		speciesList = dedupeSpeciesForDisplay(convertLabels(settings.GetIncludedSpecies(), birdnetInstance, settings.BirdNET.Locale))
@@ -727,7 +727,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	ctx.Response().Header().Set("Pragma", "no-cache")
 	ctx.Response().Header().Set("Expires", "0")
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter species CSV exported", logger.Int("species_count", len(speciesList)))
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Range filter species CSV exported", logger.Int("species_count", len(speciesList)))
 	return ctx.Blob(http.StatusOK, "text/csv; charset=utf-8", csvBytes)
 }
 
@@ -878,7 +878,7 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 
 	// Read from the latest published snapshot so the just-published rebuild
 	// result is reflected immediately.
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	includedSpecies := settings.GetIncludedSpecies()
 	lastUpdated := settings.BirdNET.RangeFilter.LastUpdated
 
@@ -889,6 +889,6 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 		"lastUpdated": lastUpdated,
 	}
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter rebuilt successfully", logger.Int("species_count", len(includedSpecies)))
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Range filter rebuilt successfully", logger.Int("species_count", len(includedSpecies)))
 	return ctx.JSON(http.StatusOK, response)
 }

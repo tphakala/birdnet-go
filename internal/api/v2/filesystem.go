@@ -36,15 +36,15 @@ type BrowseResponse struct {
 
 // initFileSystemRoutes registers all filesystem-related API endpoints
 func (c *Controller) initFileSystemRoutes() {
-	c.logInfoIfEnabled("Initializing filesystem routes")
+	c.LogInfoIfEnabled("Initializing filesystem routes")
 
 	// Create filesystem API group with authentication
-	fsGroup := c.Group.Group("/filesystem", c.authMiddleware)
+	fsGroup := c.Group.Group("/filesystem", c.AuthMiddleware)
 
 	// GET /api/v2/filesystem/browse - Browse files and directories
 	fsGroup.GET("/browse", c.BrowseFileSystem)
 
-	c.logInfoIfEnabled("Filesystem routes initialized")
+	c.LogInfoIfEnabled("Filesystem routes initialized")
 }
 
 // browsePathResult holds validated path information for browsing.
@@ -98,7 +98,7 @@ func (c *Controller) validateBrowsePath(reqPath string) (browsePathResult, error
 func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	var req BrowseRequest
 	if err := ctx.Bind(&req); err != nil {
-		c.logErrorIfEnabled("Failed to bind browse request",
+		c.LogErrorIfEnabled("Failed to bind browse request",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -115,7 +115,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 		} else if os.IsPermission(err) {
 			status = http.StatusForbidden
 		}
-		c.logWarnIfEnabled("Path validation failed",
+		c.LogWarnIfEnabled("Path validation failed",
 			logger.String("requested_path", req.Path),
 			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
@@ -126,7 +126,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	// Read directory contents using SecureFS
 	entries, err := c.SFS.ReadDir(pathResult.browsePath)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to read directory",
+		c.LogErrorIfEnabled("Failed to read directory",
 			logger.String("path", pathResult.browsePath),
 			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
@@ -139,7 +139,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	for _, entry := range entries {
 		item, err := c.convertDirEntryToItem(pathResult.browsePath, entry)
 		if err != nil {
-			c.logDebugIfEnabled("Skipping file due to error",
+			c.LogDebugIfEnabled("Skipping file due to error",
 				logger.String("file", entry.Name()),
 				logger.String("directory", pathResult.browsePath),
 				logger.Error(err),
@@ -152,7 +152,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	// Determine parent path securely using SecureFS
 	parentPath, err := c.SFS.ParentPath(pathResult.browsePath)
 	if err != nil {
-		c.logDebugIfEnabled("Failed to get parent path",
+		c.LogDebugIfEnabled("Failed to get parent path",
 			logger.String("path", pathResult.browsePath),
 			logger.Error(err))
 		parentPath = ""
@@ -170,7 +170,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 		ParentPath:  parentPath,
 	}
 
-	c.logInfoIfEnabled("Successfully browsed directory",
+	c.LogInfoIfEnabled("Successfully browsed directory",
 		logger.String("path", currentPath),
 		logger.Int("item_count", len(items)),
 		logger.String("ip", ctx.RealIP()),

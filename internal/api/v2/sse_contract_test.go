@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
@@ -157,7 +158,7 @@ func createTestBirdImage() imageprovider.BirdImage {
 func createTestSSEDetectionData() SSEDetectionData {
 	note := createTestNoteWithAllFields()
 	birdImage := createTestBirdImage()
-	det := newSSEDetectionData(&note, &birdImage)
+	det := apicore.NewSSEDetectionData(&note, &birdImage)
 	det.IsNewSpecies = true
 	det.DaysSinceFirstSeen = 14
 	return det
@@ -403,7 +404,7 @@ func TestSSEContract_IsNewSpeciesOmittedWhenFalse(t *testing.T) {
 
 	note := createTestNoteWithAllFields()
 	birdImage := createTestBirdImage()
-	detection := newSSEDetectionData(&note, &birdImage)
+	detection := apicore.NewSSEDetectionData(&note, &birdImage)
 	detection.IsNewSpecies = false   // Should be omitted
 	detection.DaysSinceFirstSeen = 0 // Should be omitted
 
@@ -508,7 +509,7 @@ func TestSSEContract_SensitiveDataExcluded(t *testing.T) {
 	}
 
 	birdImage := createTestBirdImage()
-	detection := newSSEDetectionData(&note, &birdImage)
+	detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 	jsonBytes, err := json.Marshal(detection)
 	require.NoError(t, err)
@@ -601,7 +602,7 @@ func TestSSEContract_VerifiedAndLocked_Serialization(t *testing.T) {
 		note := createTestNoteWithAllFields()
 		note.Verified = "correct"
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -622,7 +623,7 @@ func TestSSEContract_VerifiedAndLocked_Serialization(t *testing.T) {
 		note := createTestNoteWithAllFields()
 		note.Verified = "" // empty string, omitempty should omit
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -642,7 +643,7 @@ func TestSSEContract_VerifiedAndLocked_Serialization(t *testing.T) {
 		note := createTestNoteWithAllFields()
 		note.Locked = true
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -663,7 +664,7 @@ func TestSSEContract_VerifiedAndLocked_Serialization(t *testing.T) {
 		note := createTestNoteWithAllFields()
 		note.Locked = false
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -690,7 +691,7 @@ func TestSSEContract_Source_NestedFields(t *testing.T) {
 
 		note := createTestNoteWithAllFields()
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -718,7 +719,7 @@ func TestSSEContract_Source_NestedFields(t *testing.T) {
 		// so it should be omitted due to omitempty
 		note := createTestNoteWithAllFields()
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -741,7 +742,7 @@ func TestSSEContract_Source_NestedFields(t *testing.T) {
 		note := createTestNoteWithAllFields()
 		note.Source = datastore.AudioSource{} // empty source
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -766,7 +767,7 @@ func TestSSEContract_BeginTimeEndTime_RFC3339(t *testing.T) {
 
 		note := createTestNoteWithAllFields()
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -813,7 +814,7 @@ func TestSSEContract_BeginTimeEndTime_RFC3339(t *testing.T) {
 		note.BeginTime = time.Time{} // zero value
 		note.EndTime = time.Time{}   // zero value
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -842,7 +843,7 @@ func TestSSEContract_IsNewSpecies_DaysSinceFirstSeen(t *testing.T) {
 
 		note := createTestNoteWithAllFields()
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 		detection.IsNewSpecies = true
 		detection.DaysSinceFirstSeen = 0
 
@@ -869,7 +870,7 @@ func TestSSEContract_IsNewSpecies_DaysSinceFirstSeen(t *testing.T) {
 
 		note := createTestNoteWithAllFields()
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 		detection.IsNewSpecies = false
 		detection.DaysSinceFirstSeen = 42
 
@@ -897,7 +898,7 @@ func TestSSEContract_IsNewSpecies_DaysSinceFirstSeen(t *testing.T) {
 
 		note := createTestNoteWithAllFields()
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 		detection.IsNewSpecies = true
 		detection.DaysSinceFirstSeen = 7
 
@@ -991,7 +992,7 @@ func TestSSEContract_BirdImage_AllSubFields(t *testing.T) {
 		t.Parallel()
 
 		note := createTestNoteWithAllFields()
-		detection := newSSEDetectionData(&note, nil)
+		detection := apicore.NewSSEDetectionData(&note, nil)
 
 		jsonBytes, err := json.Marshal(detection)
 		require.NoError(t, err)
@@ -1024,7 +1025,7 @@ func TestSSEContract_ZeroConfidence_NotOmitted(t *testing.T) {
 	note := createTestNoteWithAllFields()
 	note.Confidence = 0.0 // Zero confidence is valid — must not be omitted
 	birdImage := createTestBirdImage()
-	detection := newSSEDetectionData(&note, &birdImage)
+	detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 	jsonBytes, err := json.Marshal(detection)
 	require.NoError(t, err)
@@ -1047,7 +1048,7 @@ func TestSSEContract_AllFieldValues_RoundTrip(t *testing.T) {
 
 	note := createTestNoteWithAllFields()
 	birdImage := createTestBirdImage()
-	detection := newSSEDetectionData(&note, &birdImage)
+	detection := apicore.NewSSEDetectionData(&note, &birdImage)
 	detection.IsNewSpecies = true
 	detection.DaysSinceFirstSeen = 5
 
@@ -1189,7 +1190,7 @@ func TestSSEContract_OmitemptyFields_Comprehensive(t *testing.T) {
 		// Source.ID: ""       (omitempty on Source pointer)
 	}
 
-	detection := newSSEDetectionData(&note, nil)
+	detection := apicore.NewSSEDetectionData(&note, nil)
 	// IsNewSpecies: false    (omitempty)
 	// DaysSinceFirstSeen: 0  (omitempty)
 
@@ -1339,7 +1340,7 @@ func TestSSEContract_NewSSEDetectionData_Constructor(t *testing.T) {
 		note := createTestNoteWithAllFields()
 		note.ClipName = "/deeply/nested/path/to/recordings/2024/clip.wav"
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		assert.Equal(t, "clip.wav", detection.ClipName,
 			"ClipName must be stripped to filename only")
@@ -1351,7 +1352,7 @@ func TestSSEContract_NewSSEDetectionData_Constructor(t *testing.T) {
 		note := createTestNoteWithAllFields()
 		note.ClipName = ""
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		assert.Empty(t, detection.ClipName,
 			"Empty ClipName must remain empty, not '.'")
@@ -1362,7 +1363,7 @@ func TestSSEContract_NewSSEDetectionData_Constructor(t *testing.T) {
 
 		note := createTestNoteWithAllFields()
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 
 		assert.Equal(t, "new_detection", detection.EventType,
 			"EventType must always be 'new_detection'")
@@ -1374,7 +1375,7 @@ func TestSSEContract_NewSSEDetectionData_Constructor(t *testing.T) {
 		before := time.Now()
 		note := createTestNoteWithAllFields()
 		birdImage := createTestBirdImage()
-		detection := newSSEDetectionData(&note, &birdImage)
+		detection := apicore.NewSSEDetectionData(&note, &birdImage)
 		after := time.Now()
 
 		assert.False(t, detection.Timestamp.Before(before),

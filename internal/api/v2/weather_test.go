@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
@@ -118,10 +119,7 @@ func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface
 	mockDS := mocks.NewMockInterface(t)
 
 	// Create a controller with the test datastore
-	controller := &Controller{
-		Group: e.Group("/api/v2"),
-		DS:    mockDS,
-	}
+	controller := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2"), DS: mockDS}}
 	controller.Settings.Store(newValidTestSettings())
 
 	// We don't need to initialize routes for unit tests

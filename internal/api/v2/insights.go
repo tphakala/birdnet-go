@@ -398,7 +398,7 @@ func (c *Controller) initInsightsRoutes() {
 	c.insightsRepo = repository.NewInsightsRepository(db, useV2Prefix, isMySQL)
 
 	// Build both name maps once and cache on Controller
-	if s := c.controllerSettings(); s != nil {
+	if s := c.ControllerSettings(); s != nil {
 		c.UpdateCommonNameMap(s.BirdNET.Labels)
 	}
 
@@ -482,7 +482,7 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 		})
 	}
 
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return ctx.JSON(http.StatusOK, ExpectedTodayRegionalResponse{
 			Species:   []RegionalSpeciesItem{},
@@ -511,7 +511,7 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 	yearRanges := buildYearRanges(now, expectedTodayWindowDays)
 	localSpecies, localErr := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, analyticsTZOffset(now), nil)
 	if localErr != nil {
-		c.logAPIRequest(ctx, logger.LogLevelWarn, "Failed to query local species for deduplication",
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Failed to query local species for deduplication",
 			logger.Error(localErr))
 	}
 

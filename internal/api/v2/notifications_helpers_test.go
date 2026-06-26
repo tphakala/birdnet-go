@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -44,9 +45,7 @@ func assertNoNilAction(t *testing.T, result, metadata map[string]any) {
 
 // mockController creates a controller with minimal setup for testing
 func mockController() *Controller {
-	c := &Controller{
-		apiLogger: nil, // Will skip logging in tests
-	}
+	c := &Controller{Core: &apicore.Core{APILogger: nil}}
 	c.Settings.Store(&conf.Settings{
 		WebServer: conf.WebServerSettings{
 			Debug: true,
@@ -318,9 +317,7 @@ func TestController_logNotificationConnection(t *testing.T) {
 	t.Parallel()
 
 	// Test with nil logger (should not panic)
-	c := &Controller{
-		apiLogger: nil,
-	}
+	c := &Controller{Core: &apicore.Core{APILogger: nil}}
 	c.Settings.Store(mockController().Settings.Load())
 
 	// These should not panic

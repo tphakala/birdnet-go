@@ -48,7 +48,7 @@ type DebugSystemStatus struct {
 // This is defense-in-depth — debug routes are already conditionally registered.
 func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		if s := c.controllerSettings(); s == nil || !s.Debug {
+		if s := c.ControllerSettings(); s == nil || !s.Debug {
 			return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
 		}
 		return next(ctx)
@@ -57,16 +57,16 @@ func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
 
 // initDebugRoutes registers debug-related routes
 func (c *Controller) initDebugRoutes() {
-	// Only register debug routes if debug mode is enabled. Read via controllerSettings()
+	// Only register debug routes if debug mode is enabled. Read via ControllerSettings()
 	// (a nil-safe atomic Load) to match requireDebugMode; it returns nil when no
 	// snapshot has been stored (standalone/test controllers), which the guard handles.
-	if s := c.controllerSettings(); s == nil || !s.Debug {
+	if s := c.ControllerSettings(); s == nil || !s.Debug {
 		GetLogger().Debug("Debug mode not enabled, skipping debug routes")
 		return
 	}
 
 	// Debug endpoints require authentication and debug mode (defense-in-depth)
-	debugGroup := c.Group.Group("/debug", c.authMiddleware, c.requireDebugMode)
+	debugGroup := c.Group.Group("/debug", c.AuthMiddleware, c.requireDebugMode)
 
 	debugGroup.POST("/trigger-error", c.DebugTriggerError)
 	debugGroup.POST("/trigger-notification", c.DebugTriggerNotification)
@@ -112,7 +112,7 @@ func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 	err := testErr.Build()
 
 	// Log the error which will trigger telemetry if enabled
-	c.logErrorIfEnabled("Debug error triggered",
+	c.LogErrorIfEnabled("Debug error triggered",
 		logger.Error(err),
 		logger.String("component", req.Component),
 		logger.String("category", req.Category))
@@ -187,7 +187,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 
 // DebugSystemStatus returns current system status for debugging
 func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
-	settings := c.controllerSettings()
+	settings := c.ControllerSettings()
 	debug := false
 	if settings != nil {
 		debug = settings.Debug
