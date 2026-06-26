@@ -132,7 +132,7 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 // registered sources (both sound cards and streams). Each source's effective EQ
 // is resolved via Settings.ResolveEQOverride using the registry DisplayName.
 func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error {
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		return nil
 	}
@@ -264,7 +264,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Detect source/stream name changes and sync DisplayName in the registry.
 	// Each function detects renames and updates the registry in a single pass.
 	var registry sourceNameUpdater
-	if eng := c.engine.Load(); eng != nil {
+	if eng := c.Engine.Load(); eng != nil {
 		registry = eng.Registry()
 	}
 	srcNameChanged := syncAudioSourceNames(oldSettings, currentSettings, registry)

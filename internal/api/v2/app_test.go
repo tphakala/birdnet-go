@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -1025,10 +1026,7 @@ func FuzzGetAppConfig_Headers(f *testing.F) {
 			Version: "1.0.0-fuzz",
 		}
 
-		controller := &Controller{
-			DS:          mockDS,
-			authService: nil,
-		}
+		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 		publishTestSettings(t, settings)
 
@@ -1088,10 +1086,7 @@ func FuzzGetAppConfig_QueryParams(f *testing.F) {
 			Version: "1.0.0-fuzz",
 		}
 
-		controller := &Controller{
-			DS:          mockDS,
-			authService: nil,
-		}
+		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 
 		// Build URL safely - query string must be URL-encoded
@@ -1153,10 +1148,7 @@ func FuzzGetAppConfig_CSRFToken(f *testing.F) {
 			Version: "1.0.0-fuzz",
 		}
 
-		controller := &Controller{
-			DS:          mockDS,
-			authService: nil,
-		}
+		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 		publishTestSettings(t, settings)
 
@@ -1219,10 +1211,7 @@ func FuzzGetAppConfig_Version(f *testing.F) {
 			Version: version,
 		}
 
-		controller := &Controller{
-			DS:          mockDS,
-			authService: nil,
-		}
+		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 		publishTestSettings(t, settings)
 
@@ -1373,10 +1362,7 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 			},
 		}
 
-		controller := &Controller{
-			DS:          mockDS,
-			authService: nil,
-		}
+		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 		publishTestSettings(t, settings)
 

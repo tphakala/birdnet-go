@@ -41,11 +41,11 @@ func (c *Controller) initQuietHoursRoutes() {
 // StreamManager settings form) continue to receive the sanitized URL map.
 func (c *Controller) GetQuietHoursStatus(ctx echo.Context) error {
 	// Read the live global snapshot (race-free, hot-reloading) via
-	// currentSettings() so out-of-band republishes are seen and the read never
+	// CurrentSettings() so out-of-band republishes are seen and the read never
 	// races the Settings.Store in UpdateSettings.
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	var scheduler *schedule.QuietHoursScheduler
-	if eng := c.engine.Load(); eng != nil {
+	if eng := c.Engine.Load(); eng != nil {
 		scheduler = eng.Scheduler()
 	}
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
@@ -238,7 +239,7 @@ func TestBroadcastInferenceTopologyChanged_ReachesConsumer(t *testing.T) {
 	assert.Equal(t, eventInferenceTopologyChangedName, eventInferenceTopologyChanged)
 
 	store := observability.NewMemoryStore(10)
-	controller := &Controller{metricsStore: store}
+	controller := &Controller{Core: &apicore.Core{MetricsStore: store}}
 
 	topoCh, cancel := store.SubscribeTopology()
 	t.Cleanup(cancel)
@@ -261,7 +262,7 @@ func TestBroadcastInferenceTopologyChanged_NilSafe(t *testing.T) {
 	var nilController *Controller
 	assert.NotPanics(t, nilController.BroadcastInferenceTopologyChanged)
 
-	noStore := &Controller{}
+	noStore := &Controller{Core: &apicore.Core{}}
 	assert.NotPanics(t, noStore.BroadcastInferenceTopologyChanged)
 }
 

@@ -15,13 +15,13 @@ func TestEngineAtomicLoadStore(t *testing.T) {
 	c := getTestController(t, e)
 
 	// Initially nil.
-	assert.Nil(t, c.engine.Load())
+	assert.Nil(t, c.Engine.Load())
 
 	// Store and load back.
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
-	c.engine.Store(eng)
-	require.Same(t, eng, c.engine.Load())
+	c.Engine.Store(eng)
+	require.Same(t, eng, c.Engine.Load())
 }
 
 func TestWithAudioEngineOption(t *testing.T) {
@@ -34,5 +34,5 @@ func TestWithAudioEngineOption(t *testing.T) {
 
 	opt := WithAudioEngine(eng)
 	opt(c)
-	require.Same(t, eng, c.engine.Load())
+	require.Same(t, eng, c.Engine.Load())
 }

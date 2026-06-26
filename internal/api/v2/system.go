@@ -230,14 +230,14 @@ type JobQueueStats struct {
 
 // GetJobQueueStats returns statistics about the job queue
 func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
-	c.logInfoIfEnabled("Getting job queue statistics",
+	c.LogInfoIfEnabled("Getting job queue statistics",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 
 	proc := c.Processor
 	if proc == nil {
-		c.logErrorIfEnabled("Processor not available for job queue stats",
+		c.LogErrorIfEnabled("Processor not available for job queue stats",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -246,7 +246,7 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 
 	jq := proc.JobQueue
 	if jq == nil {
-		c.logErrorIfEnabled("Job queue not available",
+		c.LogErrorIfEnabled("Job queue not available",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -258,7 +258,7 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 	// Convert to JSON
 	jsonStats, err := stats.ToJSON()
 	if err != nil {
-		c.logErrorIfEnabled("Failed to convert job queue stats to JSON",
+		c.LogErrorIfEnabled("Failed to convert job queue stats to JSON",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -269,7 +269,7 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 	// Parse the JSON string back to a map for proper JSON response
 	var statsMap map[string]any
 	if err := json.Unmarshal([]byte(jsonStats), &statsMap); err != nil {
-		c.logErrorIfEnabled("Failed to parse job queue stats JSON",
+		c.LogErrorIfEnabled("Failed to parse job queue stats JSON",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -277,7 +277,7 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse job queue stats JSON", http.StatusInternalServerError)
 	}
 
-	c.logInfoIfEnabled("Job queue statistics retrieved successfully",
+	c.LogInfoIfEnabled("Job queue statistics retrieved successfully",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -296,7 +296,7 @@ type NetworkInterface struct {
 // GetNetworkInterfaces returns the IPv4 network interfaces available for binding.
 // GET /api/v2/system/network-interfaces
 func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting network interfaces")
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting network interfaces")
 
 	interfaces := []NetworkInterface{
 		{Address: "0.0.0.0", Name: "all", Label: "All interfaces", Status: "up"},
@@ -308,11 +308,11 @@ func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		// Log but don't fail — return at least the wildcard and loopback
-		c.logAPIRequest(ctx, logger.LogLevelWarn, "Failed to enumerate network interfaces", logger.Error(err))
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Failed to enumerate network interfaces", logger.Error(err))
 		interfaces = append(interfaces, NetworkInterface{
 			Address: "127.0.0.1", Name: "lo", Label: "Loopback", Status: "up",
 		})
-		c.logAPIRequest(ctx, logger.LogLevelInfo, "Network interfaces retrieved (fallback)",
+		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Network interfaces retrieved (fallback)",
 			logger.Int("count", len(interfaces)))
 		return ctx.JSON(http.StatusOK, map[string]any{"interfaces": interfaces})
 	}
@@ -363,14 +363,14 @@ func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
 		}
 	}
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Network interfaces retrieved successfully",
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Network interfaces retrieved successfully",
 		logger.Int("count", len(interfaces)))
 	return ctx.JSON(http.StatusOK, map[string]any{"interfaces": interfaces})
 }
 
 // GetRestartStatus handles GET /api/v2/system/restart-status
 func (c *Controller) GetRestartStatus(ctx echo.Context) error {
-	canRestart := c.getShutdownRequester() != nil
+	canRestart := c.GetShutdownRequester() != nil
 	status := RestartStatus{
 		BinaryRestartAvailable:    canRestart,
 		ContainerRestartAvailable: canRestart && sysinfo.IsContainer(),
@@ -383,21 +383,21 @@ func (c *Controller) GetRestartStatus(ctx echo.Context) error {
 
 // Initialize system routes
 func (c *Controller) initSystemRoutes() {
-	c.logInfoIfEnabled("Initializing system routes")
+	c.LogInfoIfEnabled("Initializing system routes")
 
 	// Start CPU usage monitoring in background with controller's context for controlled shutdown
 	// Go 1.25: Using WaitGroup.Go() for cleaner goroutine management
-	c.wg.Go(func() {
-		UpdateCPUCache(c.ctx)
+	c.Go(func() {
+		UpdateCPUCache(c.Context())
 	})
 
-	c.logInfoIfEnabled("Started CPU usage monitoring")
+	c.LogInfoIfEnabled("Started CPU usage monitoring")
 
 	// Create system API group
 	systemGroup := c.Group.Group("/system")
 
 	// Get the appropriate auth middleware
-	authMiddleware := c.authMiddleware
+	authMiddleware := c.AuthMiddleware
 
 	// Create auth-protected group using the appropriate middleware
 	protectedGroup := systemGroup.Group("", authMiddleware)
@@ -441,17 +441,17 @@ func (c *Controller) initSystemRoutes() {
 	// Initialize legacy cleanup routes
 	c.initLegacyCleanupRoutes()
 
-	c.logInfoIfEnabled("System routes initialized successfully")
+	c.LogInfoIfEnabled("System routes initialized successfully")
 }
 
 // GetSystemInfo handles GET /api/v2/system/info
 func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting system information", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Getting system information", logger.String("path", path), logger.String("ip", ip))
 
 	hostInfo, err := host.Info()
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get host information", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+		c.LogErrorIfEnabled("Failed to get host information", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to get host information", http.StatusInternalServerError)
 	}
 
@@ -477,7 +477,7 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		Virtualization: envDetail,
 	}
 
-	c.logInfoIfEnabled("System information retrieved successfully", logger.String("os_display", info.OSDisplay), logger.String("arch", info.Architecture), logger.String("hostname", info.Hostname), logger.Any("uptime", info.UpTime), logger.Int64("app_uptime", info.AppUptime), logger.String("timezone", info.TimeZone), logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("System information retrieved successfully", logger.String("os_display", info.OSDisplay), logger.String("arch", info.Architecture), logger.String("hostname", info.Hostname), logger.Any("uptime", info.UpTime), logger.Int64("app_uptime", info.AppUptime), logger.String("timezone", info.TimeZone), logger.String("path", path), logger.String("ip", ip))
 
 	return ctx.JSON(http.StatusOK, info)
 }
@@ -486,7 +486,7 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 func (c *Controller) getHostnameWithFallback(ip, path string) string {
 	hostname, err := os.Hostname()
 	if err != nil {
-		c.logWarnIfEnabled("Failed to get hostname, using 'unknown'", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+		c.LogWarnIfEnabled("Failed to get hostname, using 'unknown'", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return ValueUnknown
 	}
 	return hostname
@@ -499,7 +499,7 @@ func (c *Controller) getSystemModelWithLogging(ip, path string) string {
 	}
 	systemModel := getSystemModelFromProc()
 	if systemModel == "" {
-		c.logDebugIfEnabled("Could not determine system model from /proc/cpuinfo", logger.String("path", path), logger.String("ip", ip))
+		c.LogDebugIfEnabled("Could not determine system model from /proc/cpuinfo", logger.String("path", path), logger.String("ip", ip))
 	}
 	return systemModel
 }
@@ -578,7 +578,7 @@ func getSystemModelFromProc() string {
 
 // GetResourceInfo handles GET /api/v2/system/resources
 func (c *Controller) GetResourceInfo(ctx echo.Context) error {
-	c.logInfoIfEnabled("Getting system resource information",
+	c.LogInfoIfEnabled("Getting system resource information",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -586,7 +586,7 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 	// Get memory statistics
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get memory information",
+		c.LogErrorIfEnabled("Failed to get memory information",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -597,7 +597,7 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 	// Get swap statistics
 	swapInfo, err := mem.SwapMemory()
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get swap information",
+		c.LogErrorIfEnabled("Failed to get swap information",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -611,7 +611,7 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 	// Get process information (current process)
 	proc, err := process.NewProcess(int32(os.Getpid())) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get process information",
+		c.LogErrorIfEnabled("Failed to get process information",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -622,7 +622,7 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 	procMem, err := proc.MemoryInfo()
 	if err != nil {
 		c.Debug("Failed to get process memory info: %v", err)
-		c.logWarnIfEnabled("Failed to get process memory info",
+		c.LogWarnIfEnabled("Failed to get process memory info",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -633,7 +633,7 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 	procCPU, err := proc.CPUPercent()
 	if err != nil {
 		c.Debug("Failed to get process CPU info: %v", err)
-		c.logWarnIfEnabled("Failed to get process CPU info",
+		c.LogWarnIfEnabled("Failed to get process CPU info",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -670,7 +670,7 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 		resourceInfo.CPUUsage = cpuPercent[0]
 	}
 
-	c.logInfoIfEnabled("System resource information retrieved successfully",
+	c.LogInfoIfEnabled("System resource information retrieved successfully",
 		logger.Float64("cpu_usage", resourceInfo.CPUUsage),
 		logger.Float64("memory_usage", resourceInfo.MemoryUsage),
 		logger.Float64("swap_usage", resourceInfo.SwapUsage),
@@ -685,18 +685,18 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 
 // GetDiskInfo handles GET /api/v2/system/disks
 func (c *Controller) GetDiskInfo(ctx echo.Context) error {
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting disk information")
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting disk information")
 
 	partitions, err := disk.Partitions(false)
 	if err != nil {
-		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to get disk partitions",
+		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to get disk partitions",
 			logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to get disk partitions", http.StatusInternalServerError)
 	}
 
 	ioCounters, err := disk.IOCounters()
 	if err != nil {
-		c.logAPIRequest(ctx, logger.LogLevelWarn, "Failed to get IO counters, continuing without IO metrics",
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Failed to get IO counters, continuing without IO metrics",
 			logger.Error(err))
 	}
 	uptimeMs := c.getUptimeMs()
@@ -710,7 +710,7 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 		disks = append(disks, diskInfo)
 	}
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Disk information retrieved successfully",
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Disk information retrieved successfully",
 		logger.Int("disk_count", len(disks)))
 	return ctx.JSON(http.StatusOK, disks)
 }
@@ -838,7 +838,7 @@ func isReadOnlyMount(opts []string) bool {
 
 // GetAudioDevices handles GET /api/v2/system/audio/devices
 func (c *Controller) GetAudioDevices(ctx echo.Context) error {
-	c.logInfoIfEnabled("Getting audio devices",
+	c.LogInfoIfEnabled("Getting audio devices",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -846,7 +846,7 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 	// Get audio devices
 	devices, err := audiocore.ListCaptureDevices()
 	if err != nil {
-		c.logErrorIfEnabled("Failed to list audio devices",
+		c.LogErrorIfEnabled("Failed to list audio devices",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -857,7 +857,7 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 	// Check if no devices were found
 	if len(devices) == 0 {
 		c.Debug("No audio devices found on the system")
-		c.logWarnIfEnabled("No audio devices found on the system",
+		c.LogWarnIfEnabled("No audio devices found on the system",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("os", runtime.GOOS),
@@ -884,7 +884,7 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 		deviceNames[i] = device.Name
 	}
 
-	c.logInfoIfEnabled("Audio devices retrieved successfully",
+	c.LogInfoIfEnabled("Audio devices retrieved successfully",
 		logger.Int("device_count", len(apiDevices)),
 		logger.String("devices", strings.Join(deviceNames, ", ")),
 		logger.String("path", ctx.Request().URL.Path),
@@ -902,25 +902,25 @@ func (c *Controller) GetDeviceCapabilities(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "deviceId query parameter is required", http.StatusBadRequest)
 	}
 
-	c.logInfoIfEnabled("Probing device capabilities",
+	c.LogInfoIfEnabled("Probing device capabilities",
 		logger.String("device_id", deviceID),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	caps, err := audiocore.ProbeDeviceCapabilities(deviceID, c.apiLogger)
+	caps, err := audiocore.ProbeDeviceCapabilities(deviceID, c.APILogger)
 	if err != nil {
 		if goerrors.Is(err, audiocore.ErrDeviceNotFound) {
 			return c.HandleError(ctx, err, "Device not found", http.StatusNotFound)
 		}
-		c.logErrorIfEnabled("Failed to probe device capabilities",
+		c.LogErrorIfEnabled("Failed to probe device capabilities",
 			logger.Error(err),
 			logger.String("device_id", deviceID),
 		)
 		return c.HandleError(ctx, err, "Failed to probe device capabilities", http.StatusInternalServerError)
 	}
 
-	c.logInfoIfEnabled("Device capabilities retrieved",
+	c.LogInfoIfEnabled("Device capabilities retrieved",
 		logger.String("device_id", caps.DeviceID),
 		logger.String("device_name", caps.DeviceName),
 		logger.Int("rate_count", len(caps.SampleRates)),
@@ -932,21 +932,21 @@ func (c *Controller) GetDeviceCapabilities(ctx echo.Context) error {
 
 // GetActiveAudioDevice handles GET /api/v2/system/audio/active
 func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
-	c.logInfoIfEnabled("Getting active audio device",
+	c.LogInfoIfEnabled("Getting active audio device",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 
 	// Get active audio device from settings (first configured source)
 	var deviceName string
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings != nil && len(settings.Realtime.Audio.Sources) > 0 {
 		deviceName = settings.Realtime.Audio.Sources[0].Device
 	}
 
 	// Check if no device is configured
 	if deviceName == "" {
-		c.logInfoIfEnabled("No audio device currently active",
+		c.LogInfoIfEnabled("No audio device currently active",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -994,7 +994,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 			diagnostics["note"] = "On Linux, check if PulseAudio/ALSA is running and the user has proper permissions"
 		}
 
-		c.logWarnIfEnabled("Failed to list audio devices for verification",
+		c.LogWarnIfEnabled("Failed to list audio devices for verification",
 			logger.String("device_name", deviceName),
 			logger.Error(err),
 			logger.String("os", runtime.GOOS),
@@ -1043,7 +1043,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 			diagnostics["suggestion"] = fmt.Sprintf("Consider using one of the available devices: %s", strings.Join(availableDevices, ", "))
 		}
 
-		c.logWarnIfEnabled("Configured audio device not found on system",
+		c.LogWarnIfEnabled("Configured audio device not found on system",
 			logger.String("configured_device", deviceName),
 			logger.String("available_devices", strings.Join(availableDevices, ", ")),
 			logger.String("os", runtime.GOOS),
@@ -1060,7 +1060,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		})
 	}
 
-	c.logInfoIfEnabled("Active audio device verified",
+	c.LogInfoIfEnabled("Active audio device verified",
 		logger.String("device_name", deviceName),
 		logger.String("device_id", activeDevice.ID),
 		logger.Int("sample_rate", activeDevice.SampleRate),
@@ -1085,7 +1085,7 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 	name, err := p.Name()
 	if err != nil {
 		// Log error but continue, maybe process terminated?
-		c.logWarnIfEnabled("Failed to get process name", logger.Any("pid", p.Pid), logger.Error(err))
+		c.LogWarnIfEnabled("Failed to get process name", logger.Any("pid", p.Pid), logger.Error(err))
 		// Return an error to indicate this process couldn't be fully processed
 		return ProcessInfo{}, fmt.Errorf("failed to get process name for pid %d: %w", p.Pid, err)
 	}
@@ -1095,7 +1095,7 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 	switch {
 	case err != nil:
 		status = ValueUnknown
-		c.logWarnIfEnabled("Failed to get process status", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
+		c.LogWarnIfEnabled("Failed to get process status", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
 	case len(statusList) > 0:
 		// Use the first status code returned
 		status = mapProcessStatus(statusList[0])
@@ -1106,7 +1106,7 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 	cpuPercent, err := p.CPUPercent()
 	if err != nil {
 		// Log error but default to 0
-		c.logWarnIfEnabled("Failed to get process CPU percent", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
+		c.LogWarnIfEnabled("Failed to get process CPU percent", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
 		cpuPercent = 0.0
 	}
 
@@ -1114,7 +1114,7 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 	var memRSS uint64
 	if err != nil {
 		// Log error but default to 0
-		c.logWarnIfEnabled("Failed to get process memory info", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
+		c.LogWarnIfEnabled("Failed to get process memory info", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
 		memRSS = 0
 	} else {
 		memRSS = memInfo.RSS // Resident Set Size
@@ -1124,7 +1124,7 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 	var uptimeSeconds int64
 	if err != nil {
 		// Log error but default to 0
-		c.logWarnIfEnabled("Failed to get process create time", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
+		c.LogWarnIfEnabled("Failed to get process create time", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
 		uptimeSeconds = 0
 	} else {
 		// Calculate uptime relative to now
@@ -1171,19 +1171,19 @@ func mapProcessStatus(statusCode string) string {
 // By default, it shows only the main application process and its direct children.
 func (c *Controller) GetProcessInfo(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting process information", logger.String("path", path), logger.String("ip", ip), logger.String("query", ctx.QueryString()))
+	c.LogInfoIfEnabled("Getting process information", logger.String("path", path), logger.String("ip", ip), logger.String("query", ctx.QueryString()))
 
 	showAll := ctx.QueryParam("all") == "true"
 
 	procs, err := process.Processes()
 	if err != nil {
-		c.logErrorIfEnabled("Failed to list processes", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+		c.LogErrorIfEnabled("Failed to list processes", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to list processes", http.StatusInternalServerError)
 	}
 
 	processInfos := c.collectProcessInfos(procs, showAll)
 
-	c.logInfoIfEnabled("Process information retrieved successfully", logger.Int("count", len(processInfos)), logger.Bool("filter_applied", !showAll), logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Process information retrieved successfully", logger.Int("count", len(processInfos)), logger.Bool("filter_applied", !showAll), logger.String("path", path), logger.String("ip", ip))
 
 	return ctx.JSON(http.StatusOK, processInfos)
 }
@@ -1200,7 +1200,7 @@ func (c *Controller) collectProcessInfos(procs []*process.Process, showAll bool)
 
 		info, err := c.getSingleProcessInfo(p)
 		if err != nil {
-			c.logWarnIfEnabled("Skipping process due to error retrieving details", logger.Any("pid", p.Pid), logger.Error(err))
+			c.LogWarnIfEnabled("Skipping process due to error retrieving details", logger.Any("pid", p.Pid), logger.Error(err))
 			continue
 		}
 
@@ -1214,7 +1214,7 @@ func (c *Controller) collectProcessInfos(procs []*process.Process, showAll bool)
 func (c *Controller) isRelevantProcess(p *process.Process, currentPID int32) bool {
 	parentPID, err := p.Ppid()
 	if err != nil {
-		c.logWarnIfEnabled("Failed to get parent PID, skipping process", logger.Any("pid", p.Pid), logger.Error(err))
+		c.LogWarnIfEnabled("Failed to get parent PID, skipping process", logger.Any("pid", p.Pid), logger.Error(err))
 		return false
 	}
 	return p.Pid == currentPID || parentPID == currentPID
@@ -1230,7 +1230,7 @@ func (c *Controller) checkThermalZone(zonePath string, targetTypes map[string]bo
 	typeData, err := os.ReadFile(typePath)
 	if err != nil {
 		// Not a critical error for the overall request, just skip this zone.
-		c.logDebugIfEnabled("Failed to read type file for zone", logger.String("zone", zoneName), logger.String("type_path", typePath), logger.Error(err))
+		c.LogDebugIfEnabled("Failed to read type file for zone", logger.String("zone", zoneName), logger.String("type_path", typePath), logger.Error(err))
 		return 0, fmt.Sprintf("Failed to read type for %s", zoneName), false, nil
 	}
 
@@ -1247,7 +1247,7 @@ func (c *Controller) checkThermalZone(zonePath string, targetTypes map[string]bo
 	tempData, err := os.ReadFile(tempFilePath)
 	if err != nil {
 		details = fmt.Sprintf("Error reading temp from %s (type: %s)", zoneName, sensorType)
-		c.logWarnIfEnabled(details, logger.String("temp_path", tempFilePath), logger.Error(err))
+		c.LogWarnIfEnabled(details, logger.String("temp_path", tempFilePath), logger.Error(err))
 		return 0, details, false, nil // Error reading temp, but might find another valid zone.
 	}
 
@@ -1255,7 +1255,7 @@ func (c *Controller) checkThermalZone(zonePath string, targetTypes map[string]bo
 	tempMillCelsius, err := strconv.Atoi(tempStr)
 	if err != nil {
 		details = fmt.Sprintf("Error parsing temp from %s (type: %s, value: '%s')", zoneName, sensorType, tempStr)
-		c.logWarnIfEnabled(details, logger.Error(err))
+		c.LogWarnIfEnabled(details, logger.Error(err))
 		return 0, details, false, nil // Error parsing temp.
 	}
 
@@ -1264,7 +1264,7 @@ func (c *Controller) checkThermalZone(zonePath string, targetTypes map[string]bo
 	// Validate temperature range (0 to 100 °C inclusive)
 	if celsius < 0.0 || celsius > 100.0 {
 		details = fmt.Sprintf("Invalid temp from %s (type: %s, value: %.1f°C, expected 0-100°C)", zoneName, sensorType, celsius)
-		c.logWarnIfEnabled("Temperature reading out of valid range", logger.String("details", details))
+		c.LogWarnIfEnabled("Temperature reading out of valid range", logger.String("details", details))
 		return 0, details, false, nil // Temp out of range.
 	}
 
@@ -1294,7 +1294,7 @@ var cpuThermalTypes = map[string]bool{
 
 func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting system CPU temperature", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Getting system CPU temperature", logger.String("path", path), logger.String("ip", ip))
 
 	response := SystemTemperature{
 		IsAvailable: false,
@@ -1317,7 +1317,7 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 	}
 	if len(zones) == 0 {
 		response.Message = "No thermal zones found. This feature is typically available on Linux systems."
-		c.logInfoIfEnabled("No thermal zones found via Glob.", logger.String("pattern", filepath.Join(thermalBasePath, "thermal_zone*")), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
+		c.LogInfoIfEnabled("No thermal zones found via Glob.", logger.String("pattern", filepath.Join(thermalBasePath, "thermal_zone*")), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
 		return ctx.JSON(http.StatusOK, response)
 	}
 
@@ -1338,11 +1338,11 @@ func (c *Controller) checkThermalDirectoryAccess(response *SystemTemperature, ip
 
 	if errors.Is(err, os.ErrNotExist) {
 		response.Message = "Thermal zone directory not found. This feature is typically available on Linux systems."
-		c.logDebugIfEnabled("Thermal zone directory not found, CPU temperature feature unavailable.", logger.String("path", thermalBasePath), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
+		c.LogDebugIfEnabled("Thermal zone directory not found, CPU temperature feature unavailable.", logger.String("path", thermalBasePath), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
 		return false, nil
 	}
 
-	c.logErrorIfEnabled("Failed to stat thermal base path", logger.String("path", thermalBasePath), logger.Error(err), logger.String("request_path", path), logger.String("ip", ip))
+	c.LogErrorIfEnabled("Failed to stat thermal base path", logger.String("path", thermalBasePath), logger.Error(err), logger.String("request_path", path), logger.String("ip", ip))
 	return false, fmt.Errorf("failed to access thermal information: %w", err)
 }
 
@@ -1350,7 +1350,7 @@ func (c *Controller) checkThermalDirectoryAccess(response *SystemTemperature, ip
 func (c *Controller) getThermalZones(ctx echo.Context, ip, path string) ([]string, error) {
 	zones, err := filepath.Glob(filepath.Join(thermalBasePath, "thermal_zone*"))
 	if err != nil {
-		c.logErrorIfEnabled("Failed to glob for thermal zones", logger.String("base_path", thermalBasePath), logger.Error(err), logger.String("request_path", path), logger.String("ip", ip))
+		c.LogErrorIfEnabled("Failed to glob for thermal zones", logger.String("base_path", thermalBasePath), logger.Error(err), logger.String("request_path", path), logger.String("ip", ip))
 		return nil, c.HandleError(ctx, err, "Error scanning for thermal zones", http.StatusInternalServerError)
 	}
 	return zones, nil
@@ -1363,7 +1363,7 @@ func (c *Controller) findValidThermalZone(zones []string, response *SystemTemper
 	for _, zonePath := range zones {
 		celsius, details, isValid, err := c.checkThermalZone(zonePath, cpuThermalTypes)
 		if err != nil {
-			c.logErrorIfEnabled("Unexpected error checking thermal zone", logger.String("zone", zonePath), logger.Error(err))
+			c.LogErrorIfEnabled("Unexpected error checking thermal zone", logger.String("zone", zonePath), logger.Error(err))
 			continue
 		}
 
@@ -1372,7 +1372,7 @@ func (c *Controller) findValidThermalZone(zones []string, response *SystemTemper
 			response.IsAvailable = true
 			response.SensorDetails = details
 			response.Message = "CPU temperature retrieved successfully."
-			c.logInfoIfEnabled("CPU temperature retrieved successfully", logger.Float64("temperature_celsius", response.Celsius), logger.String("sensor_details", response.SensorDetails), logger.String("request_path", path), logger.String("ip", ip))
+			c.LogInfoIfEnabled("CPU temperature retrieved successfully", logger.Float64("temperature_celsius", response.Celsius), logger.String("sensor_details", response.SensorDetails), logger.String("request_path", path), logger.String("ip", ip))
 			return
 		}
 
@@ -1394,7 +1394,7 @@ func (c *Controller) setTemperatureNotFoundResponse(response *SystemTemperature,
 		response.Message = "No targeted CPU temperature sensor types (e.g., cpu-thermal, x86_pkg_temp) found or readable in available thermal zones."
 	}
 
-	c.logInfoIfEnabled("Could not retrieve a valid CPU temperature after checking all zones.", logger.String("final_message", response.Message), logger.String("sensor_details_attempted", response.SensorDetails), logger.String("request_path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Could not retrieve a valid CPU temperature after checking all zones.", logger.String("final_message", response.Message), logger.String("sensor_details_attempted", response.SensorDetails), logger.String("request_path", path), logger.String("ip", ip))
 }
 
 // Helper functions
@@ -1473,7 +1473,7 @@ func skipFilesystem(fstype string) bool {
 
 // GetEqualizerConfig handles GET /api/v2/system/audio/equalizer/config
 func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
-	c.logInfoIfEnabled("Getting equalizer filter configuration",
+	c.LogInfoIfEnabled("Getting equalizer filter configuration",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -1490,14 +1490,14 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 // for the active store (legacy SQLite/MySQL or v2only.Datastore).
 func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting database statistics",
+	c.LogInfoIfEnabled("Getting database statistics",
 		logger.String("path", path),
 		logger.String("ip", ip),
 	)
 
 	ds := c.DS
 	if ds == nil {
-		c.logErrorIfEnabled("Datastore not available",
+		c.LogErrorIfEnabled("Datastore not available",
 			logger.String("path", path),
 			logger.String("ip", ip),
 		)
@@ -1511,7 +1511,7 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	if err != nil {
 		// If the database is not connected, log as warning and return partial stats with 200 OK
 		if errors.Is(err, datastore.ErrDBNotConnected) {
-			c.logWarnIfEnabled("Database not connected, returning partial stats",
+			c.LogWarnIfEnabled("Database not connected, returning partial stats",
 				logger.Error(err),
 				logger.String("path", path),
 				logger.String("ip", ip),
@@ -1519,7 +1519,7 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 			isPartialStats = true
 			// Continue to return partial stats below
 		} else {
-			c.logErrorIfEnabled("Failed to get database stats",
+			c.LogErrorIfEnabled("Failed to get database stats",
 				logger.Error(err),
 				logger.String("path", path),
 				logger.String("ip", ip),
@@ -1530,7 +1530,7 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 
 	// Guard against nil stats (defensive - future implementations might return nil)
 	if stats == nil {
-		c.logErrorIfEnabled("GetDatabaseStats returned nil stats",
+		c.LogErrorIfEnabled("GetDatabaseStats returned nil stats",
 			logger.String("path", path),
 			logger.String("ip", ip),
 		)
@@ -1539,14 +1539,14 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 
 	// Log with appropriate message based on whether stats are partial or complete
 	if isPartialStats {
-		c.logInfoIfEnabled("Database statistics retrieved (partial)",
+		c.LogInfoIfEnabled("Database statistics retrieved (partial)",
 			logger.String("type", stats.Type),
 			logger.Bool("connected", stats.Connected),
 			logger.String("path", path),
 			logger.String("ip", ip),
 		)
 	} else {
-		c.logInfoIfEnabled("Database statistics retrieved successfully",
+		c.LogInfoIfEnabled("Database statistics retrieved successfully",
 			logger.String("type", stats.Type),
 			logger.Any("size_bytes", stats.SizeBytes),
 			logger.Any("total_detections", stats.TotalDetections),
@@ -1584,7 +1584,7 @@ func (c *Controller) getV2ManagerStats(ctx context.Context) (*datastore.Database
 
 	if !mgr.IsMySQL() {
 		if err := db.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&stats.SizeBytes).Error; err != nil {
-			c.logWarnIfEnabled("Failed to get v2 SQLite database size", logger.Error(err))
+			c.LogWarnIfEnabled("Failed to get v2 SQLite database size", logger.Error(err))
 		}
 	} else {
 		prefix := mgr.TablePrefix()
@@ -1596,7 +1596,7 @@ func (c *Controller) getV2ManagerStats(ctx context.Context) (*datastore.Database
 				FROM information_schema.TABLES
 				WHERE table_schema = DATABASE() AND table_name LIKE ?
 			`, escaped+"%").Scan(&stats.SizeBytes).Error; err != nil {
-				c.logWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
+				c.LogWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
 			}
 		} else {
 			if err := db.WithContext(ctx).Raw(`
@@ -1604,14 +1604,14 @@ func (c *Controller) getV2ManagerStats(ctx context.Context) (*datastore.Database
 				FROM information_schema.TABLES
 				WHERE table_schema = DATABASE()
 			`).Scan(&stats.SizeBytes).Error; err != nil {
-				c.logWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
+				c.LogWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
 			}
 		}
 	}
 
 	var count int64
 	if err := db.WithContext(ctx).Table(mgr.TablePrefix() + "detections").Count(&count).Error; err != nil {
-		c.logWarnIfEnabled("Failed to count v2 detections", logger.Error(err))
+		c.LogWarnIfEnabled("Failed to count v2 detections", logger.Error(err))
 	} else {
 		stats.TotalDetections = count
 	}
@@ -1622,7 +1622,7 @@ func (c *Controller) getV2ManagerStats(ctx context.Context) (*datastore.Database
 // GetV2DatabaseStats handles GET /api/v2/system/database/v2/stats
 func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting v2 database statistics",
+	c.LogInfoIfEnabled("Getting v2 database statistics",
 		logger.String("path", path), logger.String("ip", ip))
 
 	stats, ok := c.getV2ManagerStats(ctx.Request().Context())
@@ -1651,7 +1651,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	ip, reqPath := ctx.RealIP(), ctx.Request().URL.Path
 	dbType := ctx.QueryParam("type")
 
-	c.logInfoIfEnabled("Database backup requested",
+	c.LogInfoIfEnabled("Database backup requested",
 		logger.String("db_type", dbType),
 		logger.String("path", reqPath), logger.String("ip", ip))
 
@@ -1667,7 +1667,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 
 	if dbType == dbTypeLegacy {
 		// Check if it's SQLite
-		settings := c.currentSettings()
+		settings := c.CurrentSettings()
 		if settings == nil || settings.Output.SQLite.Path == "" {
 			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
 				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
@@ -1716,7 +1716,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	}
 	dbSize := fileInfo.Size()
 
-	c.logInfoIfEnabled("Database backup: source database info",
+	c.LogInfoIfEnabled("Database backup: source database info",
 		logger.String("db_type", dbType),
 		logger.String("db_path", dbPath),
 		// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
@@ -1738,7 +1738,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 			http.StatusInsufficientStorage) // HTTP 507
 	}
 
-	c.logInfoIfEnabled("Database backup: disk space check passed",
+	c.LogInfoIfEnabled("Database backup: disk space check passed",
 		logger.String("temp_dir", tempDir),
 		logger.String("free_space", formatBytesUint64(usage.Free)),
 		logger.String("required_space", formatBytesUint64(requiredSpace)))
@@ -1769,7 +1769,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		flusher.Flush()
 	}
 
-	c.logInfoIfEnabled("Database backup: headers sent, starting VACUUM INTO",
+	c.LogInfoIfEnabled("Database backup: headers sent, starting VACUUM INTO",
 		logger.String("db_type", dbType),
 		logger.String("temp_path", tempPath))
 
@@ -1783,7 +1783,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	vacuumDuration := time.Since(vacuumStart)
 
 	if vacuumErr != nil {
-		c.logWarnIfEnabled("Database backup: VACUUM INTO failed",
+		c.LogWarnIfEnabled("Database backup: VACUUM INTO failed",
 			logger.String("db_type", dbType),
 			logger.Duration("duration", vacuumDuration),
 			logger.Error(vacuumErr))
@@ -1794,10 +1794,10 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	// Ensure cleanup of temp file after response is sent
 	defer func() {
 		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
-			c.logWarnIfEnabled("Failed to cleanup backup temp file",
+			c.LogWarnIfEnabled("Failed to cleanup backup temp file",
 				logger.String("path", tempPath), logger.Error(err))
 		} else {
-			c.logInfoIfEnabled("Database backup: temp file cleaned up",
+			c.LogInfoIfEnabled("Database backup: temp file cleaned up",
 				logger.String("path", tempPath))
 		}
 	}()
@@ -1812,7 +1812,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		backupSize = formatBytesUint64(uint64(backupSizeBytes))
 	}
 
-	c.logInfoIfEnabled("Database backup: VACUUM INTO completed, streaming file",
+	c.LogInfoIfEnabled("Database backup: VACUUM INTO completed, streaming file",
 		logger.String("db_type", dbType),
 		logger.Duration("vacuum_duration", vacuumDuration),
 		logger.String("backup_size", backupSize))
@@ -1821,14 +1821,14 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	//#nosec G304 -- tempPath is constructed from trusted sources (os.TempDir + controlled filename)
 	backupFile, err := os.Open(tempPath)
 	if err != nil {
-		c.logWarnIfEnabled("Database backup: failed to open backup file",
+		c.LogWarnIfEnabled("Database backup: failed to open backup file",
 			logger.String("path", tempPath),
 			logger.Error(err))
 		return err
 	}
 	defer func() {
 		if err := backupFile.Close(); err != nil {
-			c.logWarnIfEnabled("Database backup: failed to close backup file", logger.Error(err))
+			c.LogWarnIfEnabled("Database backup: failed to close backup file", logger.Error(err))
 		}
 	}()
 
@@ -1837,7 +1837,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 
 	totalDuration := time.Since(backupStart)
 	if copyErr != nil {
-		c.logWarnIfEnabled("Database backup: file transfer failed",
+		c.LogWarnIfEnabled("Database backup: file transfer failed",
 			logger.String("db_type", dbType),
 			logger.String("filename", filename),
 			logger.Int64("bytes_written", written),
@@ -1846,7 +1846,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		return copyErr
 	}
 
-	c.logInfoIfEnabled("Database backup: completed successfully",
+	c.LogInfoIfEnabled("Database backup: completed successfully",
 		logger.String("db_type", dbType),
 		logger.String("filename", filename),
 		logger.String("backup_size", backupSize),

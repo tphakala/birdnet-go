@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -37,12 +38,9 @@ func setupAudioSourcesTestEnv(t *testing.T, sources []*audiocore.SourceConfig) (
 	}
 
 	e := echo.New()
-	controller := &Controller{
-		Echo:  e,
-		Group: e.Group("/api/v2"),
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(&conf.Settings{})
-	controller.engine.Store(eng)
+	controller.Engine.Store(eng)
 	return e, controller
 }
 
@@ -54,10 +52,7 @@ func TestListAudioSources(t *testing.T) {
 
 	t.Run("No engine returns empty list", func(t *testing.T) {
 		e := echo.New()
-		controller := &Controller{
-			Echo:  e,
-			Group: e.Group("/api/v2"),
-		}
+		controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 		controller.Settings.Store(&conf.Settings{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/sources", http.NoBody)
@@ -124,10 +119,7 @@ func TestListStreamSources(t *testing.T) {
 
 	t.Run("No engine returns empty list", func(t *testing.T) {
 		e := echo.New()
-		controller := &Controller{
-			Echo:  e,
-			Group: e.Group("/api/v2"),
-		}
+		controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 		controller.Settings.Store(&conf.Settings{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/sources", http.NoBody)

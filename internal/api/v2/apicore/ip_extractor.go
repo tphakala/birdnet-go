@@ -4,7 +4,7 @@
 // X-Forwarded-For, X-Real-IP) when the immediate connection peer is a trusted
 // reverse proxy. On a directly-exposed instance this prevents a client from
 // spoofing its source IP, which feeds rate limiting, ban/allow lists, and logs.
-package api
+package apicore
 
 import (
 	"net"
@@ -32,6 +32,25 @@ var (
 	canonicalXForwardedFor  = http.CanonicalHeaderKey(echo.HeaderXForwardedFor)
 	canonicalXRealIP        = http.CanonicalHeaderKey(echo.HeaderXRealIP)
 )
+
+// parseIPFromHeader attempts to parse a valid IP from a header value.
+// Returns the IP string if valid, empty string otherwise.
+func parseIPFromHeader(headerValue string) string {
+	if headerValue == "" {
+		return ""
+	}
+	// Strip IPv6 zone ID (e.g., %wlan0) before parsing.
+	// net.ParseIP does not handle zone identifiers, and iOS Safari
+	// commonly connects via IPv6 link-local addresses with zone IDs.
+	if before, _, found := strings.Cut(headerValue, "%"); found {
+		headerValue = before
+	}
+	ip := net.ParseIP(headerValue)
+	if ip != nil {
+		return ip.String()
+	}
+	return ""
+}
 
 // cloudflareEdgeCIDRs lists Cloudflare's published proxy IP ranges
 // (https://www.cloudflare.com/ips/). These ranges are stable and change rarely;

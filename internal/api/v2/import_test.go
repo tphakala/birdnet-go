@@ -26,6 +26,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imports"
 )
@@ -118,20 +119,13 @@ func newImportController(t *testing.T) (*echo.Echo, *Controller) {
 	t.Helper()
 	e := echo.New()
 	ctx, cancel := context.WithCancel(t.Context())
-	c := &Controller{
-		Group:     e.Group(apiV2Prefix),
-		importMgr: newImportManager(),
-		ctx:       ctx,
-		cancel:    cancel,
-		// Pass-through auth middleware, mirroring production where the server always
-		// injects a non-nil middleware (it enforces or passes based on auth config).
-		// Tests that exercise the fail-closed nil case set authMiddleware to nil.
-		authMiddleware: func(next echo.HandlerFunc) echo.HandlerFunc { return next },
-	}
+	cCore := &apicore.Core{Group: e.Group(apiV2Prefix), AuthMiddleware: func(next echo.HandlerFunc) echo.HandlerFunc { return next }}
+	cCore.SetTestContext(ctx, cancel)
+	c := &Controller{Core: cCore, importMgr: newImportManager()}
 	c.Settings.Store(newValidTestSettings())
 	t.Cleanup(func() {
 		cancel()
-		c.wg.Wait()
+		c.Wait()
 	})
 	return e, c
 }
@@ -258,10 +252,7 @@ func TestImportManager_GetByID(t *testing.T) {
 // TestStartBirdNETPiImport_NoRepo_Returns503 verifies 503 when no datastore.
 func TestStartBirdNETPiImport_NoRepo_Returns503(t *testing.T) {
 	e := echo.New()
-	c := &Controller{
-		Group:     e.Group(apiV2Prefix),
-		importMgr: newImportManager(),
-	}
+	c := &Controller{Core: &apicore.Core{Group: e.Group(apiV2Prefix)}, importMgr: newImportManager()}
 	c.Settings.Store(newValidTestSettings())
 
 	body := testDBOnlyBody
@@ -273,7 +264,7 @@ func TestStartBirdNETPiImport_NoRepo_Returns503(t *testing.T) {
 	// requireDatastore writes the 503 response and returns the sentinel error,
 	// which the handler propagates (matching the established datastore-guard pattern).
 	err := c.StartBirdNETPiImport(ctx)
-	require.ErrorIs(t, err, errDatastoreUnavailable)
+	require.ErrorIs(t, err, apicore.ErrDatastoreUnavailable)
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
@@ -1057,7 +1048,7 @@ func TestImportRoutes_Registered(t *testing.T) {
 // registering the state-changing endpoints unprotected.
 func TestImportRoutes_FailClosedWhenNoAuth(t *testing.T) {
 	e, c := newImportController(t)
-	c.authMiddleware = nil // exercise the fail-closed path: no auth middleware configured
+	c.AuthMiddleware = nil // exercise the fail-closed path: no auth middleware configured
 	c.initImportRoutes()
 
 	req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/import/status", http.NoBody)

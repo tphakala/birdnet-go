@@ -142,14 +142,14 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	// same-origin requests, but this endpoint must always provide a token.
 	csrfToken, err := middleware.EnsureCSRFToken(ctx)
 	if err != nil {
-		c.logWarnIfEnabled("Failed to generate CSRF token", logger.Error(err))
+		c.LogWarnIfEnabled("Failed to generate CSRF token", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to generate CSRF token", http.StatusInternalServerError)
 	}
 
 	// Snapshot the live settings once so the response reflects the latest
 	// published configuration and every read below is race-free against a
 	// concurrent settings save (see currentSettings).
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
 	}
@@ -234,7 +234,7 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		}
 	}
 
-	c.logDebugIfEnabled("Serving app config",
+	c.LogDebugIfEnabled("Serving app config",
 		logger.Bool("security_enabled", securityEnabled),
 		logger.Bool("access_allowed", accessAllowed),
 		logger.String("ip", ctx.RealIP()),
@@ -264,7 +264,7 @@ func (c *Controller) determineWizardState(ctx context.Context, settings *conf.Se
 
 	lastSeenVersion, err := c.appMetadataRepo.Get(ctx, appMetadataKeyLastSeenVersion)
 	if err != nil {
-		c.logWarnIfEnabled("Failed to read last_seen_version from app_metadata", logger.Error(err))
+		c.LogWarnIfEnabled("Failed to read last_seen_version from app_metadata", logger.Error(err))
 		return false, false, ""
 	}
 
@@ -274,7 +274,7 @@ func (c *Controller) determineWizardState(ctx context.Context, settings *conf.Se
 			// Auto-seed: existing install predates wizard tracking.
 			// Intentional write inside GET handler (idempotent upsert, fires once per install).
 			if err := c.appMetadataRepo.Set(ctx, appMetadataKeyLastSeenVersion, settings.Version); err != nil {
-				c.logWarnIfEnabled("Failed to auto-seed last_seen_version", logger.Error(err))
+				c.LogWarnIfEnabled("Failed to auto-seed last_seen_version", logger.Error(err))
 			}
 			return false, false, settings.Version
 		}
@@ -307,7 +307,7 @@ func (c *Controller) hasZeroDetections(ctx context.Context) bool {
 	err := c.V2Manager.DB().WithContext(ctx).Table(tableName).
 		Select("1").Limit(1).Scan(&exists).Error
 	if err != nil {
-		c.logWarnIfEnabled("Failed to check detections for wizard state", logger.Error(err))
+		c.LogWarnIfEnabled("Failed to check detections for wizard state", logger.Error(err))
 		// On error, assume not a fresh install to avoid showing wizard incorrectly
 		return false
 	}
@@ -350,7 +350,7 @@ func (c *Controller) hasNotes(ctx context.Context) bool {
 	err := c.V2Manager.DB().WithContext(ctx).Table(tableName).
 		Select("1").Limit(1).Scan(&exists).Error
 	if err != nil {
-		c.logWarnIfEnabled("Failed to check notes for wizard state", logger.Error(err))
+		c.LogWarnIfEnabled("Failed to check notes for wizard state", logger.Error(err))
 		return false
 	}
 	return exists != 0
@@ -369,7 +369,7 @@ func (c *Controller) DismissWizard(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "App metadata not available", http.StatusServiceUnavailable)
 	}
 
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
 	}

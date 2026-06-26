@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -33,7 +34,7 @@ type MetricsHistoryResponse struct {
 //
 //	GET /api/v2/system/metrics/history?metrics=cpu.total,memory.used_percent&points=60
 func (c *Controller) GetMetricsHistory(ctx echo.Context) error {
-	if c.metricsStore == nil {
+	if c.MetricsStore == nil {
 		return c.HandleError(ctx, nil, "Metrics history not available", http.StatusServiceUnavailable)
 	}
 
@@ -56,15 +57,15 @@ func (c *Controller) GetMetricsHistory(ctx echo.Context) error {
 			if name == "" {
 				continue
 			}
-			if pts := c.metricsStore.Get(name, points); pts != nil {
+			if pts := c.MetricsStore.Get(name, points); pts != nil {
 				result[name] = pts
 			}
 		}
 	} else {
-		result = c.metricsStore.GetAll(points)
+		result = c.MetricsStore.GetAll(points)
 	}
 
-	c.logDebugIfEnabled("Metrics history retrieved",
+	c.LogDebugIfEnabled("Metrics history retrieved",
 		logger.Int("metrics_count", len(result)),
 		logger.Int("points_requested", points),
 	)
@@ -76,7 +77,7 @@ func (c *Controller) GetMetricsHistory(ctx echo.Context) error {
 //
 //	GET /api/v2/system/metrics/stream?metrics=cpu.total,memory.used_percent
 func (c *Controller) StreamMetrics(ctx echo.Context) error {
-	if c.metricsStore == nil {
+	if c.MetricsStore == nil {
 		return c.HandleError(ctx, nil, "Metrics stream not available", http.StatusServiceUnavailable)
 	}
 
@@ -94,19 +95,19 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 	}
 
 	// Subscribe to metric updates
-	ch, cancel := c.metricsStore.Subscribe()
+	ch, cancel := c.MetricsStore.Subscribe()
 	defer cancel()
 
 	// Subscribe to inference topology changes (model add/remove, source
 	// reassignment) so the client re-fetches the inference snapshot.
-	topoCh, topoCancel := c.metricsStore.SubscribeTopology()
+	topoCh, topoCancel := c.MetricsStore.SubscribeTopology()
 	defer topoCancel()
 
 	// Set SSE headers
 	setSSEHeaders(ctx)
 
-	clientID := generateCorrelationID()
-	c.logInfoIfEnabled("Metrics SSE client connected",
+	clientID := apicore.GenerateCorrelationID()
+	c.LogInfoIfEnabled("Metrics SSE client connected",
 		logger.String("client_id", clientID),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -126,14 +127,14 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 
 	for {
 		select {
-		case <-c.ctx.Done():
-			c.logInfoIfEnabled("Metrics SSE client disconnected due to shutdown",
+		case <-c.Context().Done():
+			c.LogInfoIfEnabled("Metrics SSE client disconnected due to shutdown",
 				logger.String("client_id", clientID),
 			)
 			return nil
 
 		case <-reqCtx.Done():
-			c.logInfoIfEnabled("Metrics SSE client disconnected",
+			c.LogInfoIfEnabled("Metrics SSE client disconnected",
 				logger.String("client_id", clientID),
 			)
 			return nil
@@ -156,7 +157,7 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 
 			if len(data) > 0 {
 				if err := c.sendSSEMessage(ctx, "metrics", data); err != nil {
-					c.logDebugIfEnabled("Metrics SSE send failed, client likely disconnected",
+					c.LogDebugIfEnabled("Metrics SSE send failed, client likely disconnected",
 						logger.String("client_id", clientID),
 						logger.Error(err),
 					)
@@ -168,7 +169,7 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 			if err := c.sendSSEMessage(ctx, eventInferenceTopologyChanged, map[string]any{
 				"timestamp": time.Now().Unix(),
 			}); err != nil {
-				c.logDebugIfEnabled("Metrics SSE topology-changed send failed, client likely disconnected",
+				c.LogDebugIfEnabled("Metrics SSE topology-changed send failed, client likely disconnected",
 					logger.String("client_id", clientID),
 					logger.Error(err),
 				)
@@ -179,7 +180,7 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 			if err := c.sendSSEMessage(ctx, "heartbeat", map[string]any{
 				"timestamp": time.Now().Unix(),
 			}); err != nil {
-				c.logDebugIfEnabled("Metrics SSE heartbeat failed",
+				c.LogDebugIfEnabled("Metrics SSE heartbeat failed",
 					logger.String("client_id", clientID),
 					logger.Error(err),
 				)
@@ -191,15 +192,15 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 
 // initMetricsHistoryRoutes registers the metrics history endpoints.
 func (c *Controller) initMetricsHistoryRoutes() {
-	if c.metricsStore == nil {
-		c.logWarnIfEnabled("Metrics store not configured, skipping metrics history routes")
+	if c.MetricsStore == nil {
+		c.LogWarnIfEnabled("Metrics store not configured, skipping metrics history routes")
 		return
 	}
 
-	c.logInfoIfEnabled("Initializing metrics history routes")
+	c.LogInfoIfEnabled("Initializing metrics history routes")
 
 	systemGroup := c.Group.Group("/system")
-	authMiddleware := c.authMiddleware
+	authMiddleware := c.AuthMiddleware
 
 	// Rate limiter for metrics SSE connections (10 requests per minute per IP)
 	rateLimiterConfig := middleware.RateLimiterConfig{
@@ -227,24 +228,21 @@ func (c *Controller) initMetricsHistoryRoutes() {
 	metricsGroup.GET("/stream", c.StreamMetrics, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// Start the collector background goroutine
-	c.wg.Go(func() {
+	c.Go(func() {
 		collector := observability.NewCollector(
-			c.metricsStore,
+			c.MetricsStore,
 			metricsCollectorInterval,
 			c.getCPUUsageFunc(),
 		)
 
-		// Wire database counters if the datastore supports them
 		if provider, ok := c.DS.(datastore.DBCountersProvider); ok {
 			if counters := provider.GetDBCounters(); counters != nil {
 				collector.SetDBCounters(counters)
 			}
 		}
 
-		// Wire BirdNET inference counters
 		collector.SetInferenceCounters(classifier.GetInferenceCounters())
 
-		// Wire per-model clip length and RSS functions for RTF computation and RSS gauges
 		if c.Processor != nil {
 			if bn := c.Processor.GetBirdNET(); bn != nil {
 				collector.SetModelClipFunc(func() map[string]float64 {
@@ -258,12 +256,11 @@ func (c *Controller) initMetricsHistoryRoutes() {
 				collector.SetModelRSSFunc(bn.ModelRSS)
 			}
 		}
-		if c.metrics != nil && c.metrics.BirdNET != nil {
-			collector.SetInferenceGaugeSetters(c.metrics.BirdNET.SetInferenceRTF, c.metrics.BirdNET.SetModelRSSBytes, c.metrics.BirdNET.DeleteInferenceMetrics)
-			collector.SetAudioGaugeSetters(c.metrics.BirdNET.SetAudioQueueDepth, c.metrics.BirdNET.SetAudioDroppedChunks)
+		if c.Metrics != nil && c.Metrics.BirdNET != nil {
+			collector.SetInferenceGaugeSetters(c.Metrics.BirdNET.SetInferenceRTF, c.Metrics.BirdNET.SetModelRSSBytes, c.Metrics.BirdNET.DeleteInferenceMetrics)
+			collector.SetAudioGaugeSetters(c.Metrics.BirdNET.SetAudioQueueDepth, c.Metrics.BirdNET.SetAudioDroppedChunks)
 		}
 
-		// Wire health counter collection (drops, overruns, stream restarts)
 		if c.healthMetricsStore != nil {
 			collector.SetHealthStore(c.healthMetricsStore)
 			collector.SetHealthEvents(c.healthEvents)
@@ -271,10 +268,10 @@ func (c *Controller) initMetricsHistoryRoutes() {
 			collector.SetStreamHealth(c.buildStreamHealthSnapshotProvider())
 		}
 
-		collector.Start(c.ctx)
+		collector.Start(c.Context())
 	})
 
-	c.logInfoIfEnabled(fmt.Sprintf("Metrics history routes initialized (collector interval: %s)", metricsCollectorInterval))
+	c.LogInfoIfEnabled(fmt.Sprintf("Metrics history routes initialized (collector interval: %s)", metricsCollectorInterval))
 }
 
 // metricsCollectorInterval is the time between metric collection ticks.

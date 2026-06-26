@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -85,12 +86,9 @@ func TestSendReconfigActionsExitsOnShutdown(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	controlChan := make(chan string, 1)
-	c := &Controller{
-		controlChan: controlChan,
-		ctx:         ctx,
-		cancel:      cancel,
-		apiLogger:   logger.Global().Module("api"),
-	}
+	cCore := &apicore.Core{APILogger: logger.Global().Module("api")}
+	cCore.SetTestContext(ctx, cancel)
+	c := &Controller{Core: cCore, controlChan: controlChan}
 
 	actions := []string{"action_one", "action_two", "action_three"}
 
@@ -121,12 +119,9 @@ func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
 	defer cancel()
 
 	controlChan := make(chan string, 1)
-	c := &Controller{
-		controlChan: controlChan,
-		ctx:         ctx,
-		cancel:      cancel,
-		apiLogger:   logger.Global().Module("api"),
-	}
+	cCore := &apicore.Core{APILogger: logger.Global().Module("api")}
+	cCore.SetTestContext(ctx, cancel)
+	c := &Controller{Core: cCore, controlChan: controlChan}
 
 	close(controlChan)
 

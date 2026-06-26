@@ -15,6 +15,7 @@ import (
 	_ "github.com/mattn/go-sqlite3" // SQLite driver for safety check test
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -33,10 +34,7 @@ func createLegacyTestController(tb testing.TB, e *echo.Echo, settings *conf.Sett
 	// Handlers read the live snapshot via currentSettings(); publish the test's
 	// settings so the read resolves to them (restored on cleanup).
 	publishTestSettings(tb, settings)
-	c := &Controller{
-		Echo:          e,
-		cleanupStatus: NewCleanupStatus(),
-	}
+	c := &Controller{Core: &apicore.Core{Echo: e}, cleanupStatus: NewCleanupStatus()}
 	c.Settings.Store(settings)
 	return c
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -38,9 +37,6 @@ var metricsCollectorIntervalSec = metricsCollectorInterval.Seconds()
 // samplesPerHour is how many ring buffer entries cover one hour at the collector interval.
 var samplesPerHour = int(3600 / metricsCollectorIntervalSec)
 
-// detectionRateCacheTTL is how long detection rate query results are cached.
-const detectionRateCacheTTL = 5 * time.Minute
-
 // GetDatabaseOverview handles GET /api/v2/system/database/overview.
 // It assembles engine metadata, table stats, performance metrics, and detection rates
 // into a single response.
@@ -49,7 +45,7 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 	basicStats, err := c.DS.GetDatabaseStats(ctx.Request().Context())
 	if err != nil || basicStats == nil {
 		if err != nil {
-			c.logDebugIfEnabled("Database stats unavailable", logger.Error(err))
+			c.LogDebugIfEnabled("Database stats unavailable", logger.Error(err))
 		}
 		return ctx.JSON(http.StatusOK, &DatabaseOverviewResponse{
 			Status:           dbStatusDisconnected,
@@ -78,7 +74,7 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 	if ok {
 		// Engine details
 		if details, err := inspector.GetEngineDetails(); err != nil {
-			c.logDebugIfEnabled("Failed to get engine details", logger.Error(err))
+			c.LogDebugIfEnabled("Failed to get engine details", logger.Error(err))
 		} else {
 			resp.SQLite = details.SQLite
 			resp.MySQL = details.MySQL
@@ -86,15 +82,15 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 
 		// Table stats
 		if tables, err := inspector.GetTableStats(); err != nil {
-			c.logDebugIfEnabled("Failed to get table stats", logger.Error(err))
+			c.LogDebugIfEnabled("Failed to get table stats", logger.Error(err))
 		} else {
 			resp.Tables = tables
 			resp.TotalTables = len(tables)
 		}
 
 		// Detection rate (24h hourly histogram) — cached to avoid repeated queries
-		if rates, err := c.detectionRateCache.GetHourly(inspector.GetDetectionRate24h); err != nil {
-			c.logDebugIfEnabled("Failed to get detection rate", logger.Error(err))
+		if rates, err := c.DetectionRateCache.GetHourly(inspector.GetDetectionRate24h); err != nil {
+			c.LogDebugIfEnabled("Failed to get detection rate", logger.Error(err))
 		} else {
 			resp.DetectionRate24h = rates
 		}
@@ -111,12 +107,12 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 func (c *Controller) assemblePerformanceStats() datastore.PerformanceStats {
 	stats := datastore.PerformanceStats{}
 
-	if c.metricsStore == nil {
+	if c.MetricsStore == nil {
 		return stats
 	}
 
 	// Current values from latest ring buffer entry
-	latest := c.metricsStore.GetLatest()
+	latest := c.MetricsStore.GetLatest()
 	if latest != nil {
 		if pt, ok := latest["db.read_latency_ms"]; ok {
 			stats.ReadLatencyAvgMs = pt.Value
@@ -136,7 +132,7 @@ func (c *Controller) assemblePerformanceStats() datastore.PerformanceStats {
 	}
 
 	// QueriesLastHour: sum ring buffer entries × collection interval
-	samples := c.metricsStore.Get("db.queries_per_sec", samplesPerHour)
+	samples := c.MetricsStore.Get("db.queries_per_sec", samplesPerHour)
 	if len(samples) > 0 {
 		var total float64
 		for _, s := range samples {
@@ -161,9 +157,9 @@ func (c *Controller) initDatabaseOverviewRoutes() {
 	dbGroup := c.Group.Group("/system/database")
 
 	// Get the appropriate auth middleware
-	authMiddleware := c.authMiddleware
+	authMiddleware := c.AuthMiddleware
 
 	dbGroup.GET("/overview", c.GetDatabaseOverview, authMiddleware)
 
-	c.logInfoIfEnabled("Database overview route initialized")
+	c.LogInfoIfEnabled("Database overview route initialized")
 }

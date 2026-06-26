@@ -84,7 +84,7 @@ const MinMySQLWaitTimeout = 600
 // Returns the status of all prerequisite checks before migration can start.
 func (c *Controller) GetPrerequisites(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Checking migration prerequisites", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Checking migration prerequisites", logger.String("path", path), logger.String("ip", ip))
 
 	criticalFailures := 0
 	warnings := 0
@@ -127,7 +127,7 @@ func (c *Controller) GetPrerequisites(ctx echo.Context) error {
 		CheckedAt:         time.Now(),
 	}
 
-	c.logInfoIfEnabled("Prerequisites check complete",
+	c.LogInfoIfEnabled("Prerequisites check complete",
 		logger.String("path", path),
 		logger.String("ip", ip),
 		logger.Bool("can_start", canStart),
@@ -139,7 +139,7 @@ func (c *Controller) GetPrerequisites(ctx echo.Context) error {
 
 // isUsingMySQL returns true if the application is configured to use MySQL.
 func (c *Controller) isUsingMySQL() bool {
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return false
 	}
@@ -212,7 +212,7 @@ func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 	requiredSpace := uint64(MinDiskSpaceBytes)
 	dbSizeInfo := ""
 
-	if settings := c.currentSettings(); settings != nil && !settings.Output.MySQL.Enabled {
+	if settings := c.CurrentSettings(); settings != nil && !settings.Output.MySQL.Enabled {
 		dbPath := settings.Output.SQLite.Path
 		if !filepath.IsAbs(dbPath) {
 			dbPath, _ = filepath.Abs(dbPath)
@@ -254,7 +254,7 @@ func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 // Returns an error if the directory cannot be determined or verified.
 // For MySQL, returns empty string with nil error (disk space check not applicable to remote DB).
 func (c *Controller) getDatabaseDirectoryResolved() (string, error) {
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return "", fmt.Errorf("settings not available")
 	}
@@ -597,7 +597,7 @@ func (c *Controller) checkRecordCount() PrerequisiteCheck {
 	}
 
 	// Use context.Background() as fallback if ctx is nil (e.g., in tests)
-	ctx := c.ctx
+	ctx := c.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}

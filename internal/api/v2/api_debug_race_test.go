@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
@@ -24,7 +25,7 @@ func TestDebugSkipsControllerFallbackWhenGlobalUnset(t *testing.T) {
 		conftest.SetTestSettings(previous)
 	})
 
-	controller := &Controller{}
+	controller := &Controller{Core: &apicore.Core{}}
 	controller.Settings.Store(newValidTestSettings())
 
 	stopWriter := make(chan struct{})

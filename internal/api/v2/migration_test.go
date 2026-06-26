@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -116,12 +117,7 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *data
 		db:            db,
 	}
 
-	controller := &Controller{
-		Echo:  e,
-		Group: e.Group("/api/v2"),
-		DS:    testDS,
-		Repo:  mockRepo,
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: testDS, Repo: mockRepo}}
 	controller.Settings.Store(getTestSettings(t))
 	publishTestSettings(t, controller.Settings.Load())
 
@@ -573,10 +569,7 @@ func TestGetMigrationStatus_NoStateManager(t *testing.T) {
 	t.Attr("feature", "error-handling")
 
 	e := echo.New()
-	controller := &Controller{
-		Echo:  e,
-		Group: e.Group("/api/v2"),
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(getTestSettings(t))
 
 	// Save and clear the global state manager

@@ -16,6 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 )
 
 // TestGetSpectrogramStatusReturns503WhenDatastoreDisabled pins that a DS-dependent
@@ -36,7 +37,7 @@ func TestGetSpectrogramStatusReturns503WhenDatastoreDisabled(t *testing.T) {
 
 	var err error
 	require.NotPanics(t, func() { err = controller.GetSpectrogramStatus(ctx) })
-	require.ErrorIs(t, err, errDatastoreUnavailable,
+	require.ErrorIs(t, err, apicore.ErrDatastoreUnavailable,
 		"DS-dependent handler must short-circuit with the datastore-unavailable sentinel, not panic")
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code,
 		"DS-dependent handler must return 503 when the datastore is disabled, not panic")
@@ -47,11 +48,7 @@ func TestGetSpectrogramStatusReturns503WhenDatastoreDisabled(t *testing.T) {
 // the datastore-independent media routes (filename serve, species images) still register.
 func TestInitMediaRoutesSkippedWhenDatastoreDisabled(t *testing.T) {
 	e := echo.New()
-	controller := &Controller{
-		Echo:  e,
-		Group: e.Group("/api/v2"),
-		DS:    nil,
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: nil}}
 
 	controller.initMediaRoutes()
 
@@ -80,11 +77,7 @@ func TestInitMediaRoutesSkippedWhenDatastoreDisabled(t *testing.T) {
 // is not registered when the controller has no datastore.
 func TestInitDetectionRoutesSkippedWhenDatastoreDisabled(t *testing.T) {
 	e := echo.New()
-	controller := &Controller{
-		Echo:  e,
-		Group: e.Group("/api/v2"),
-		DS:    nil,
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: nil}}
 
 	controller.initDetectionRoutes()
 
@@ -104,10 +97,7 @@ func TestInitDebugRoutesReadsSettingsNilSafely(t *testing.T) {
 	settings := newValidTestSettings()
 	settings.Debug = false // debug mode off -> initDebugRoutes takes the skip path
 
-	controller := &Controller{
-		Echo:  e,
-		Group: e.Group("/api/v2"),
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	// initDebugRoutes must read settings through the nil-safe controllerSettings()
 	// accessor (an atomic Load), not assume a non-nil snapshot.
 	controller.Settings.Store(settings)

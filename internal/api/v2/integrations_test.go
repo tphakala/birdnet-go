@@ -876,7 +876,7 @@ func TestTestWeatherConnection_RestoresRedactedAPIKey(t *testing.T) {
 		}
 
 		// Reproduce the handler's restore sequence using the production helper.
-		current := controller.currentSettings()
+		current := controller.CurrentSettings()
 		restoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
 		restoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
 
@@ -932,7 +932,7 @@ func TestTestEBirdConnection_RestoresRedactedAPIKey(t *testing.T) {
 		})
 
 		apiKey := redactedSecretPlaceholder
-		restoreRedactedSecret(controller.currentSettings().Realtime.EBird.APIKey, &apiKey)
+		restoreRedactedSecret(controller.CurrentSettings().Realtime.EBird.APIKey, &apiKey)
 		assert.Equal(t, realKey, apiKey,
 			"eBird test must use the real saved key, not the redacted placeholder")
 	})

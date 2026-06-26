@@ -56,16 +56,16 @@ type TLSGenerateRequest struct {
 
 // initTLSRoutes registers TLS certificate management endpoints.
 func (c *Controller) initTLSRoutes() {
-	c.logInfoIfEnabled("Initializing TLS routes")
+	c.LogInfoIfEnabled("Initializing TLS routes")
 
-	tlsGroup := c.Group.Group("/tls", c.authMiddleware)
+	tlsGroup := c.Group.Group("/tls", c.AuthMiddleware)
 	tlsGroup.GET("/certificate", c.GetTLSCertificate)
 	tlsGroup.POST("/certificate", c.UploadTLSCertificate)
 	tlsGroup.DELETE("/certificate", c.DeleteTLSCertificate)
 	tlsGroup.POST("/certificate/generate", c.GenerateSelfSignedCertificate)
 	tlsGroup.GET("/certificate/download", c.DownloadTLSCertificate)
 
-	c.logInfoIfEnabled("TLS routes initialized successfully")
+	c.LogInfoIfEnabled("TLS routes initialized successfully")
 }
 
 // GetTLSCertificate handles GET /api/v2/tls/certificate.
@@ -84,7 +84,7 @@ func (c *Controller) GetTLSCertificate(ctx echo.Context) error {
 
 	// Include current TLS mode from settings (skip when no snapshot is stored,
 	// e.g. a standalone/test controller; controllerSettings() may then be nil).
-	if settings := c.controllerSettings(); settings != nil {
+	if settings := c.ControllerSettings(); settings != nil {
 		info.Mode = string(settings.Security.TLSMode)
 	}
 

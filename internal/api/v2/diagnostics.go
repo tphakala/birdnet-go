@@ -51,7 +51,7 @@ func (c *Controller) initDiagnosticsRoutes() {
 
 	c.registerHealthChecks()
 
-	diagnosticsGroup := c.Group.Group("/system/diagnostics", c.authMiddleware)
+	diagnosticsGroup := c.Group.Group("/system/diagnostics", c.AuthMiddleware)
 	diagnosticsGroup.GET("/status", c.GetDiagnosticsStatus)
 	diagnosticsGroup.POST("/run", c.RunDiagnostics)
 	diagnosticsGroup.GET("/report/:id", c.GetDiagnosticsReport)
@@ -76,7 +76,7 @@ func (c *Controller) HealthEventBuffer() *observability.HealthEventBuffer {
 // registerHealthChecks registers all health checks with dependency injection closures.
 func (c *Controller) registerHealthChecks() {
 	snapshotProvider := func() []audiocore.SourceHealthSnapshot {
-		w := c.audioWatchdog.Load()
+		w := c.AudioWatchdog.Load()
 		if w == nil {
 			return nil
 		}
@@ -135,7 +135,7 @@ func (c *Controller) registerHealthChecks() {
 		}),
 		checks.NewResultsQueueDropCheck(c.healthMetricsStore, c.healthEvents.Recent),
 		checks.NewORTAvailabilityCheck(func() (available, initialized bool, version, libraryPath, errMsg string) {
-			status := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+			status := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 			return status.Available, status.Initialized, status.Version, status.LibraryPath, status.Error
 		}),
 		checks.NewOpenVINOAvailabilityCheck(func() (supported, active bool) {
@@ -164,14 +164,14 @@ func (c *Controller) registerHealthChecks() {
 
 		// Database checks
 		checks.NewDatabaseSizeCheck(func() string {
-			return c.currentSettings().Output.SQLite.Path
+			return c.CurrentSettings().Output.SQLite.Path
 		}),
 		checks.NewMigrationStatusCheck(func() (bool, string, error) {
 			if c.DS == nil {
 				return false, "", errors.NewStd("datastore unavailable")
 			}
 			dbType := "sqlite"
-			if c.currentSettings().Output.MySQL.Enabled {
+			if c.CurrentSettings().Output.MySQL.Enabled {
 				dbType = "mysql"
 			}
 			return true, dbType + " (auto-migrated at startup)", nil
@@ -197,7 +197,7 @@ func (c *Controller) registerHealthChecks() {
 
 		// Network checks
 		checks.NewMQTTCheck(
-			func() bool { return c.currentSettings().Realtime.MQTT.Enabled },
+			func() bool { return c.CurrentSettings().Realtime.MQTT.Enabled },
 			func() bool {
 				proc := c.Processor
 				if proc == nil {
@@ -211,7 +211,7 @@ func (c *Controller) registerHealthChecks() {
 			},
 		),
 		checks.NewBirdWeatherCheck(
-			func() bool { return c.currentSettings().Realtime.Birdweather.Enabled },
+			func() bool { return c.CurrentSettings().Realtime.Birdweather.Enabled },
 			func() (bool, string) {
 				proc := c.Processor
 				if proc == nil {
@@ -250,7 +250,7 @@ func (c *Controller) registerHealthChecks() {
 		}),
 		checks.NewWeatherCheck(
 			func() bool {
-				p := c.currentSettings().Realtime.Weather.Provider
+				p := c.CurrentSettings().Realtime.Weather.Provider
 				return p != string(conf.WeatherNone)
 			},
 			weather.GetStatus,
@@ -258,7 +258,7 @@ func (c *Controller) registerHealthChecks() {
 
 		// Config checks
 		checks.NewToolAvailabilityCheck(func() []checks.ToolInfo {
-			s := c.currentSettings()
+			s := c.CurrentSettings()
 			return []checks.ToolInfo{
 				{
 					Name:    "FFmpeg",
@@ -272,7 +272,7 @@ func (c *Controller) registerHealthChecks() {
 			}
 		}),
 		checks.NewPathAccessCheck(map[string]string{
-			"data": filepath.Dir(c.currentSettings().Output.SQLite.Path),
+			"data": filepath.Dir(c.CurrentSettings().Output.SQLite.Path),
 		}),
 		checks.NewConfigConsistencyCheck(func() []string { return nil }),
 		checks.NewDiskBudgetCheck(
@@ -390,10 +390,10 @@ var errNoTempSensors = errors.NewStd("no temperature sensors found")
 
 // buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
 // stream health data to the checks.StreamHealthInfo format. The closure
-// atomically loads c.engine at call time because it is set after Controller init.
+// atomically loads c.Engine at call time because it is set after Controller init.
 func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 	return func() []checks.StreamHealthInfo {
-		eng := c.engine.Load()
+		eng := c.Engine.Load()
 		if eng == nil {
 			return nil
 		}
@@ -434,7 +434,7 @@ func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInf
 // audio counter values from the audio router for the health metrics collector.
 func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.AudioRouterSnapshot {
 	return func() []observability.AudioRouterSnapshot {
-		eng := c.engine.Load()
+		eng := c.Engine.Load()
 		if eng == nil {
 			return nil
 		}
@@ -475,7 +475,7 @@ func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.A
 // stream restart counts for the health metrics collector.
 func (c *Controller) buildStreamHealthSnapshotProvider() func() []observability.StreamHealthSnapshot {
 	return func() []observability.StreamHealthSnapshot {
-		eng := c.engine.Load()
+		eng := c.Engine.Load()
 		if eng == nil {
 			return nil
 		}
@@ -508,7 +508,7 @@ func (c *Controller) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
 		}
 
 		// Require engine/router so checks skip cleanly before startup and after teardown.
-		eng := c.engine.Load()
+		eng := c.Engine.Load()
 		if eng == nil {
 			return nil
 		}
@@ -547,7 +547,7 @@ func (c *Controller) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
 // utilization from the buffer manager.
 func (c *Controller) buildCaptureBufferHealthProvider() func() []checks.CaptureBufferInfo {
 	return func() []checks.CaptureBufferInfo {
-		eng := c.engine.Load()
+		eng := c.Engine.Load()
 		if eng == nil {
 			return nil
 		}
@@ -573,7 +573,7 @@ func (c *Controller) buildCaptureBufferHealthProvider() func() []checks.CaptureB
 
 // getDataPaths returns filesystem paths that should be monitored for disk space.
 func (c *Controller) getDataPaths() []string {
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	seen := make(map[string]struct{})
 	var paths []string
 	addPath := func(p string) {

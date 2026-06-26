@@ -174,13 +174,13 @@ func (c *Controller) requireMigrationStateManager(next echo.HandlerFunc) echo.Ha
 
 // initMigrationRoutes registers the migration API routes.
 func (c *Controller) initMigrationRoutes() {
-	c.logInfoIfEnabled("Initializing migration routes")
+	c.LogInfoIfEnabled("Initializing migration routes")
 
 	// Create migration API group under system/database
 	migrationGroup := c.Group.Group("/system/database/migration")
 
 	// Get the appropriate auth middleware
-	authMiddleware := c.authMiddleware
+	authMiddleware := c.AuthMiddleware
 
 	// Create auth-protected group
 	protectedGroup := migrationGroup.Group("", authMiddleware)
@@ -198,13 +198,13 @@ func (c *Controller) initMigrationRoutes() {
 	smGroup.POST("/cancel", c.CancelMigration)
 	smGroup.POST("/rollback", c.RollbackMigration)
 
-	c.logInfoIfEnabled("Migration routes initialized successfully")
+	c.LogInfoIfEnabled("Migration routes initialized successfully")
 }
 
 // GetMigrationStatus handles GET /api/v2/system/database/migration/status
 func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting migration status", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Getting migration status", logger.String("path", path), logger.String("ip", ip))
 
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
@@ -215,7 +215,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	if sm == nil {
 		// In enhanced database mode, migration is complete and state manager is not needed
 		if v2Only {
-			c.logInfoIfEnabled("Running in enhanced database mode, migration is complete",
+			c.LogInfoIfEnabled("Running in enhanced database mode, migration is complete",
 				logger.String("path", path), logger.String("ip", ip))
 			// Get cleanup state for v2-only mode
 			var cleanupState, cleanupErr string
@@ -245,7 +245,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 				CleanupSpaceReclaimed:  cleanupReclaimed,
 			})
 		}
-		c.logWarnIfEnabled("Migration state manager not available",
+		c.LogWarnIfEnabled("Migration state manager not available",
 			logger.String("path", path), logger.String("ip", ip))
 		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
 			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
@@ -254,7 +254,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	// Get migration state
 	state, err := sm.GetState()
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get migration state",
+		c.LogErrorIfEnabled("Failed to get migration state",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to get migration status", http.StatusInternalServerError)
 	}
@@ -262,7 +262,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	// Get dirty ID count
 	dirtyCount, err := sm.GetDirtyIDCount()
 	if err != nil {
-		c.logWarnIfEnabled("Failed to get dirty ID count",
+		c.LogWarnIfEnabled("Failed to get dirty ID count",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		dirtyCount = 0
 	}
@@ -355,7 +355,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		CleanupSpaceReclaimed:  cleanupReclaimed,
 	}
 
-	c.logInfoIfEnabled("Migration status retrieved",
+	c.LogInfoIfEnabled("Migration status retrieved",
 		logger.String("state", response.State),
 		logger.String("phase", response.CurrentPhase),
 		logger.Int("phase_number", response.PhaseNumber),
@@ -372,7 +372,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 // StartMigration handles POST /api/v2/system/database/migration/start
 func (c *Controller) StartMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Starting migration", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Starting migration", logger.String("path", path), logger.String("ip", ip))
 
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
@@ -380,7 +380,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 
 	// Run pre-flight checks
 	if err := c.runPreflightChecks(); err != nil {
-		c.logErrorIfEnabled("Pre-flight checks failed",
+		c.LogErrorIfEnabled("Pre-flight checks failed",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest, notification.MsgErrMigrationPreFlight, nil)
 	}
@@ -388,7 +388,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	// Parse request body
 	var req MigrationStartRequest
 	if err := ctx.Bind(&req); err != nil {
-		c.logErrorIfEnabled("Failed to parse start request",
+		c.LogErrorIfEnabled("Failed to parse start request",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationInvalidBody, nil)
 	}
@@ -398,12 +398,12 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	// to avoid this slower fallback
 	totalRecords := req.TotalRecords
 	if totalRecords <= 0 {
-		c.logWarnIfEnabled("Total records not provided, counting from database",
+		c.LogWarnIfEnabled("Total records not provided, counting from database",
 			logger.String("path", path), logger.String("ip", ip))
 
 		count, err := c.Repo.CountAll(ctx.Request().Context())
 		if err != nil {
-			c.logErrorIfEnabled("Failed to count legacy records",
+			c.LogErrorIfEnabled("Failed to count legacy records",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 			return c.HandleErrorWithKey(ctx, err, "Failed to determine total records", http.StatusInternalServerError, notification.MsgErrMigrationRecordCount, nil)
 		}
@@ -412,18 +412,18 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 
 	// Start migration
 	if err := sm.StartMigration(totalRecords); err != nil {
-		c.logErrorIfEnabled("Failed to start migration",
+		c.LogErrorIfEnabled("Failed to start migration",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleErrorWithKey(ctx, err, "Failed to start migration", http.StatusConflict, notification.MsgErrMigrationStartFailed, nil)
 	}
 
 	// Transition to dual-write
 	if err := sm.TransitionToDualWrite(); err != nil {
-		c.logErrorIfEnabled("Failed to transition to dual-write",
+		c.LogErrorIfEnabled("Failed to transition to dual-write",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		// Try to cancel since we couldn't complete initialization
 		if cancelErr := sm.Cancel(); cancelErr != nil {
-			c.logWarnIfEnabled("Failed to cancel after transition failure",
+			c.LogWarnIfEnabled("Failed to cancel after transition failure",
 				logger.Error(cancelErr))
 		}
 		return c.HandleErrorWithKey(ctx, err, "Failed to initialize migration", http.StatusInternalServerError, notification.MsgErrMigrationInitFailed, nil)
@@ -436,13 +436,13 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 		SetMigrationWorkerCancel(workerCancel)
 		if err := worker.Start(workerCtx); err != nil {
 			workerCancel() // Clean up on failure
-			c.logWarnIfEnabled("Failed to start migration worker",
+			c.LogWarnIfEnabled("Failed to start migration worker",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 			// Migration state is still valid, worker can be started later
 		}
 	}
 
-	c.logInfoIfEnabled("Migration started successfully",
+	c.LogInfoIfEnabled("Migration started successfully",
 		logger.Int64("total_records", totalRecords),
 		logger.String("path", path), logger.String("ip", ip))
 
@@ -464,7 +464,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 			WithMessageKey(notification.MsgMigrationStartedMessage, nil)
 
 		if err := notifService.CreateWithMetadata(notif); err != nil {
-			c.logWarnIfEnabled("Failed to send migration start notification",
+			c.LogWarnIfEnabled("Failed to send migration start notification",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		}
 	}
@@ -502,7 +502,7 @@ func (c *Controller) PauseMigration(ctx echo.Context) error {
 // ResumeMigration handles POST /api/v2/system/database/migration/resume
 func (c *Controller) ResumeMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Resuming migration", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Resuming migration", logger.String("path", path), logger.String("ip", ip))
 
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
@@ -510,7 +510,7 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 
 	// Resume the state
 	if err := sm.Resume(); err != nil {
-		c.logErrorIfEnabled("Failed to resume migration",
+		c.LogErrorIfEnabled("Failed to resume migration",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleErrorWithKey(ctx, err, "Failed to resume migration", http.StatusConflict, notification.MsgErrMigrationResumeFailed, nil)
 	}
@@ -525,7 +525,7 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 			SetMigrationWorkerCancel(workerCancel)
 			if err := worker.Start(workerCtx); err != nil {
 				workerCancel() // Clean up on failure
-				c.logWarnIfEnabled("Failed to restart migration worker",
+				c.LogWarnIfEnabled("Failed to restart migration worker",
 					logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 			}
 		}
@@ -533,11 +533,11 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 
 	// Clear any previous error
 	if err := sm.ClearError(); err != nil {
-		c.logWarnIfEnabled("Failed to clear error message",
+		c.LogWarnIfEnabled("Failed to clear error message",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 	}
 
-	c.logInfoIfEnabled("Migration resumed successfully",
+	c.LogInfoIfEnabled("Migration resumed successfully",
 		logger.String("path", path), logger.String("ip", ip))
 
 	// Get the actual state after resume
@@ -557,14 +557,14 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 // RetryValidation handles POST /api/v2/system/database/migration/retry-validation
 func (c *Controller) RetryValidation(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Retrying migration validation", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Retrying migration validation", logger.String("path", path), logger.String("ip", ip))
 
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
 	// Transition FAILED → VALIDATING
 	if err := sm.RetryValidation(); err != nil {
-		c.logErrorIfEnabled("Failed to retry validation",
+		c.LogErrorIfEnabled("Failed to retry validation",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to retry validation", http.StatusConflict)
 	}
@@ -578,7 +578,7 @@ func (c *Controller) RetryValidation(ctx echo.Context) error {
 			SetMigrationWorkerCancel(workerCancel)
 			if err := worker.Start(workerCtx); err != nil {
 				workerCancel()
-				c.logWarnIfEnabled("Failed to restart migration worker",
+				c.LogWarnIfEnabled("Failed to restart migration worker",
 					logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 			}
 		}
@@ -586,11 +586,11 @@ func (c *Controller) RetryValidation(ctx echo.Context) error {
 
 	// Clear any previous error
 	if err := sm.ClearError(); err != nil {
-		c.logWarnIfEnabled("Failed to clear error message",
+		c.LogWarnIfEnabled("Failed to clear error message",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 	}
 
-	c.logInfoIfEnabled("Migration validation retry initiated",
+	c.LogInfoIfEnabled("Migration validation retry initiated",
 		logger.String("path", path), logger.String("ip", ip))
 
 	return ctx.JSON(http.StatusOK, MigrationActionResponse{
@@ -603,7 +603,7 @@ func (c *Controller) RetryValidation(ctx echo.Context) error {
 // CancelMigration handles POST /api/v2/system/database/migration/cancel
 func (c *Controller) CancelMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Cancelling migration", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Cancelling migration", logger.String("path", path), logger.String("ip", ip))
 
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
@@ -623,18 +623,18 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 
 	// Cancel the state
 	if err := sm.Cancel(); err != nil {
-		c.logErrorIfEnabled("Failed to cancel migration",
+		c.LogErrorIfEnabled("Failed to cancel migration",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to cancel migration", http.StatusConflict)
 	}
 
 	// Clear dirty IDs since we're cancelling
 	if err := sm.ClearDirtyIDs(); err != nil {
-		c.logWarnIfEnabled("Failed to clear dirty IDs",
+		c.LogWarnIfEnabled("Failed to clear dirty IDs",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 	}
 
-	c.logInfoIfEnabled("Migration cancelled successfully",
+	c.LogInfoIfEnabled("Migration cancelled successfully",
 		logger.String("path", path), logger.String("ip", ip))
 
 	// Report cancellation to telemetry
@@ -655,7 +655,7 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 			WithMessageKey(notification.MsgMigrationCancelledMessage, nil)
 
 		if err := notifService.CreateWithMetadata(notif); err != nil {
-			c.logWarnIfEnabled("Failed to send migration cancel notification",
+			c.LogWarnIfEnabled("Failed to send migration cancel notification",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		}
 	}
@@ -753,7 +753,7 @@ type migrationActionParams struct {
 // All callers are behind the requireMigrationStateManager middleware.
 func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationActionParams) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled(params.logStart, logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled(params.logStart, logger.String("path", path), logger.String("ip", ip))
 
 	// Perform worker action if worker is running
 	if params.worker != nil && params.worker.IsRunning() {
@@ -762,12 +762,12 @@ func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationA
 
 	// Perform state action
 	if err := params.stateAction(); err != nil {
-		c.logErrorIfEnabled(params.logFailure,
+		c.LogErrorIfEnabled(params.logFailure,
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, params.logFailure, http.StatusConflict)
 	}
 
-	c.logInfoIfEnabled(params.logSuccess,
+	c.LogInfoIfEnabled(params.logSuccess,
 		logger.String("path", path), logger.String("ip", ip))
 
 	// Send notification if configured
@@ -789,7 +789,7 @@ func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationA
 			}
 
 			if err := notifService.CreateWithMetadata(notif); err != nil {
-				c.logWarnIfEnabled("Failed to send migration notification",
+				c.LogWarnIfEnabled("Failed to send migration notification",
 					logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 			}
 		}

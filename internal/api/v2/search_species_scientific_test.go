@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 )
 
 func TestSanitizeSpeciesScientific(t *testing.T) {
@@ -41,7 +42,7 @@ func TestSanitizeSpeciesScientific(t *testing.T) {
 func TestBuildSearchFilters_ThreadsSpeciesScientific(t *testing.T) {
 	t.Parallel()
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	req := &SearchRequest{
 		Species:           "Corvus",
 		SpeciesScientific: []string{"Barbastella barbastellus", "Myotis daubentonii"},

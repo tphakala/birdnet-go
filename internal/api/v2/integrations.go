@@ -214,10 +214,10 @@ type BirdWeatherStatus struct {
 
 // initIntegrationsRoutes registers all integration-related API endpoints
 func (c *Controller) initIntegrationsRoutes() {
-	c.logInfoIfEnabled("Initializing integrations routes")
+	c.LogInfoIfEnabled("Initializing integrations routes")
 
 	// Create integrations API group with auth middleware
-	integrationsGroup := c.Group.Group("/integrations", c.authMiddleware)
+	integrationsGroup := c.Group.Group("/integrations", c.AuthMiddleware)
 
 	// MQTT routes
 	mqttGroup := integrationsGroup.Group("/mqtt")
@@ -226,7 +226,7 @@ func (c *Controller) initIntegrationsRoutes() {
 	mqttGroup.POST("/homeassistant/discovery", c.TriggerHomeAssistantDiscovery)
 
 	// MQTT TLS certificate management
-	mqttTLSGroup := mqttGroup.Group("/tls", c.authMiddleware)
+	mqttTLSGroup := mqttGroup.Group("/tls", c.AuthMiddleware)
 	mqttTLSGroup.GET("/certificate", c.GetMQTTTLSCertificate)
 	mqttTLSGroup.POST("/certificate", c.UploadMQTTTLSCertificate)
 	mqttTLSGroup.DELETE("/certificate", c.DeleteMQTTTLSCertificate)
@@ -244,19 +244,19 @@ func (c *Controller) initIntegrationsRoutes() {
 	ebirdGroup := integrationsGroup.Group("/ebird")
 	ebirdGroup.POST("/test", c.TestEBirdConnection)
 
-	c.logInfoIfEnabled("Integrations routes initialized successfully")
+	c.LogInfoIfEnabled("Integrations routes initialized successfully")
 }
 
 // GetMQTTStatus handles GET /api/v2/integrations/mqtt/status
 func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting MQTT status",
+	c.LogInfoIfEnabled("Getting MQTT status",
 		logger.String("path", path),
 		logger.String("ip", ip))
 
 	// Get MQTT configuration from fresh settings
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	mqttConfig := settings.Realtime.MQTT
 
 	// Prepare status response
@@ -269,14 +269,14 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 
 	// If MQTT is not enabled, return status as-is
 	if !mqttConfig.Enabled {
-		c.logInfoIfEnabled("MQTT is disabled, returning status",
+		c.LogInfoIfEnabled("MQTT is disabled, returning status",
 			logger.String("path", path),
 			logger.String("ip", ip))
 		return ctx.JSON(http.StatusOK, status)
 	}
 
 	// Check connection status using a temporary client
-	c.logDebugIfEnabled("Checking MQTT connection status",
+	c.LogDebugIfEnabled("Checking MQTT connection status",
 		logger.String("path", path),
 		logger.String("ip", ip))
 	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context(), settings)
@@ -285,7 +285,7 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 		status.LastError = checkErr
 	}
 
-	c.logInfoIfEnabled("Retrieved MQTT status successfully",
+	c.LogInfoIfEnabled("Retrieved MQTT status successfully",
 		logger.Bool("connected", status.Connected),
 		logger.String("broker", status.Broker),
 		logger.String("last_error", status.LastError),
@@ -300,14 +300,14 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 // Returns true if connected, false otherwise, along with any error message encountered.
 func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context, settings *conf.Settings) (connected bool, lastError string) {
 	// Use the injected metrics instance
-	if c.metrics == nil {
-		c.logErrorIfEnabled("Metrics instance not available for MQTT status check")
+	if c.Metrics == nil {
+		c.LogErrorIfEnabled("Metrics instance not available for MQTT status check")
 		return false, "error:metrics:not_initialized"
 	}
 
-	tempClient, err := mqtt.NewClient(settings, c.metrics)
+	tempClient, err := mqtt.NewClient(settings, c.Metrics)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to create temporary MQTT client for status check",
+		c.LogErrorIfEnabled("Failed to create temporary MQTT client for status check",
 			logger.Error(err))
 		return false, fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error())
 	}
@@ -320,7 +320,7 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context, settin
 	// Try to connect
 	err = tempClient.Connect(connectCtx)
 	if err != nil {
-		c.logWarnIfEnabled("Temporary MQTT client connection failed during status check",
+		c.LogWarnIfEnabled("Temporary MQTT client connection failed during status check",
 			logger.Error(err),
 			logger.String("broker", settings.Realtime.MQTT.Broker))
 		return false, fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error())
@@ -328,13 +328,13 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context, settin
 
 	// Check if genuinely connected
 	if !tempClient.IsConnected() {
-		c.logWarnIfEnabled("Temporary MQTT client connected but IsConnected() returned false",
+		c.LogWarnIfEnabled("Temporary MQTT client connected but IsConnected() returned false",
 			logger.String("broker", settings.Realtime.MQTT.Broker))
 		// Consider this a failure for status purposes, though connection might be flapping
 		return false, "error:connection:mqtt_connection_unstable"
 	}
 
-	c.logDebugIfEnabled("Temporary MQTT client connected successfully for status check",
+	c.LogDebugIfEnabled("Temporary MQTT client connected successfully for status check",
 		logger.String("broker", settings.Realtime.MQTT.Broker))
 	return true, "" // Connected successfully
 }
@@ -343,12 +343,12 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context, settin
 func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting BirdWeather status",
+	c.LogInfoIfEnabled("Getting BirdWeather status",
 		logger.String("path", path),
 		logger.String("ip", ip))
 
 	// Get BirdWeather configuration from fresh settings
-	bwConfig := c.currentSettings().Realtime.Birdweather
+	bwConfig := c.CurrentSettings().Realtime.Birdweather
 
 	// Prepare status response
 	status := BirdWeatherStatus{
@@ -360,7 +360,7 @@ func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 
 	// For now, we just return the configuration status
 	// In the future, we could add checks for client status here
-	c.logInfoIfEnabled("Retrieved BirdWeather status successfully",
+	c.LogInfoIfEnabled("Retrieved BirdWeather status successfully",
 		logger.Bool("enabled", status.Enabled),
 		logger.String("station_id", status.StationID),
 		logger.Float64("threshold", status.Threshold),
@@ -374,7 +374,7 @@ func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 // TestMQTTConnection handles POST /api/v2/integrations/mqtt/test
 func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	// Get MQTT configuration from fresh settings
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	mqttConfig := settings.Realtime.MQTT
 
 	if !mqttConfig.Enabled {
@@ -393,7 +393,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	}
 
 	// Use the injected metrics instance
-	if c.metrics == nil {
+	if c.Metrics == nil {
 		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
 			Success: false,
 			Message: "Metrics instance not available for MQTT test",
@@ -401,7 +401,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	}
 
 	// Create test MQTT client with the current configuration
-	client, err := mqtt.NewClient(settings, c.metrics)
+	client, err := mqtt.NewClient(settings, c.Metrics)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
 			Success: false,
@@ -447,7 +447,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 	}
 
 	// Clone current settings and override only BirdWeather fields from the request
-	testSettings := conf.CloneSettings(c.currentSettings())
+	testSettings := conf.CloneSettings(c.CurrentSettings())
 	testSettings.Realtime.Birdweather = conf.BirdweatherSettings{
 		Enabled:          request.Enabled,
 		ID:               request.ID,
@@ -525,7 +525,7 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 	// the key, the request carries that placeholder instead of the real key.
 	// Restoring here (and not only in the save flow) prevents the test from
 	// failing with a bogus "authentication failed".
-	current := c.currentSettings()
+	current := c.CurrentSettings()
 	restoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
 	restoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
 
@@ -775,7 +775,7 @@ func getProviderDisplayName(provider string) string {
 // TriggerHomeAssistantDiscovery handles POST /api/v2/integrations/mqtt/homeassistant/discovery
 // It manually triggers Home Assistant MQTT discovery message publishing.
 func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
-	c.logInfoIfEnabled("Triggering Home Assistant discovery",
+	c.LogInfoIfEnabled("Triggering Home Assistant discovery",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
 
@@ -790,7 +790,7 @@ func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, err, "Failed to trigger Home Assistant discovery", http.StatusBadRequest, notification.MsgErrIntegDiscoveryFailed, nil)
 	}
 
-	c.logInfoIfEnabled("Home Assistant discovery triggered successfully",
+	c.LogInfoIfEnabled("Home Assistant discovery triggered successfully",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
 
@@ -830,7 +830,7 @@ func (c *Controller) TestEBirdConnection(ctx echo.Context) error {
 	// placeholder (redactedValue); if the user clicks Test without re-entering
 	// it, the request carries that placeholder instead of the real key, which
 	// would otherwise fail authentication.
-	restoreRedactedSecret(c.currentSettings().Realtime.EBird.APIKey, &request.APIKey)
+	restoreRedactedSecret(c.CurrentSettings().Realtime.EBird.APIKey, &request.APIKey)
 
 	if !request.Enabled {
 		return ctx.JSON(http.StatusOK, map[string]any{

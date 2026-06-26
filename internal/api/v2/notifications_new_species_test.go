@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -34,7 +35,7 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{}
+	controller := &Controller{Core: &apicore.Core{}}
 	controller.Settings.Store(&conf.Settings{})
 
 	// Call through middleware to test the guard
@@ -69,7 +70,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{notificationService: service}
+	controller := &Controller{Core: &apicore.Core{}, notificationService: service}
 	// Build a minimal settings snapshot with only the fields this test needs,
 	// then publish it once (the empty base matches the original test).
 	settings := &conf.Settings{}

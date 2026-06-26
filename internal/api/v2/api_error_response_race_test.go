@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 )
 
 // TestNewErrorResponseConcurrentSettingsPublishIsRaceFree hammers
@@ -25,7 +26,7 @@ import (
 func TestNewErrorResponseConcurrentSettingsPublishIsRaceFree(t *testing.T) {
 	withRestoredGlobalSettings(t)
 
-	controller := &Controller{}
+	controller := &Controller{Core: &apicore.Core{}}
 	controller.Settings.Store(newValidTestSettings())
 
 	testErr := echo.NewHTTPError(http.StatusInternalServerError, "raw internal detail")
@@ -56,7 +57,7 @@ func TestNewErrorResponseConcurrentSettingsPublishIsRaceFree(t *testing.T) {
 	for range readers {
 		wg.Go(func() {
 			for range itersPerWorker {
-				_ = controller.newErrorResponse(testErr, "sanitized message", http.StatusInternalServerError)
+				_ = controller.NewErrorResponse(testErr, "sanitized message", http.StatusInternalServerError)
 			}
 		})
 	}

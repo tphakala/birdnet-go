@@ -35,7 +35,7 @@ func (c *Controller) getMQTTCertPath(certType conf.TLSCertificateType) string {
 	// stored a snapshot; in that case skip the configured paths and still allow
 	// the TLSManager-managed cert fallback below.
 	var settingsPath string
-	if settings := c.controllerSettings(); settings != nil {
+	if settings := c.ControllerSettings(); settings != nil {
 		mqttTLS := settings.Realtime.MQTT.TLS
 		switch certType {
 		case conf.TLSCertTypeCA:

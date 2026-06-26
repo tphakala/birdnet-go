@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -29,9 +30,7 @@ var testLabels = []string{
 func setupSearchTestController(t *testing.T, labels []string) *Controller {
 	t.Helper()
 	e := echo.New()
-	c := &Controller{
-		Group: e.Group("/api/v2"),
-	}
+	c := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2")}}
 	c.Settings.Store(&conf.Settings{
 		BirdNET: conf.BirdNETConfig{
 			Labels: labels,
@@ -170,9 +169,7 @@ func TestUpdateCommonNameMap_PopulatesBothMaps(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
-	c := &Controller{
-		Group: e.Group("/api/v2"),
-	}
+	c := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2")}}
 
 	labels := []string{
 		"Strix aluco_Tawny Owl",
@@ -260,7 +257,7 @@ func TestBuildNameMaps_MalformedLabels(t *testing.T) {
 func TestLoadNameMaps_CalledBeforeInit(t *testing.T) {
 	t.Parallel()
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	assert.NotNil(t, c.loadCommonNameMap())
 	assert.NotNil(t, c.loadCommonToScientificMap())
 	assert.Empty(t, c.loadCommonNameMap())
@@ -283,10 +280,7 @@ func TestHandleSearch_LocalizedCommonName_SecondaryModelSpecies(t *testing.T) {
 	e := echo.New()
 	mockDS := mocks.NewMockInterface(t)
 
-	controller := &Controller{
-		Group: e.Group("/api/v2"),
-		DS:    mockDS,
-	}
+	controller := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2"), DS: mockDS}}
 	controller.Settings.Store(newValidTestSettings())
 
 	// Wire a batch-capable resolver so the scientific-only bat label

@@ -28,7 +28,7 @@ const (
 
 // valueContext wraps a cancellation-bearing context while delegating
 // Value lookups to a separate context. This lets the support dump
-// handler use the server lifecycle context (c.ctx) for cancellation
+// handler use the server lifecycle context (c.Context()) for cancellation
 // while still reading trace IDs from the HTTP request context.
 type valueContext struct {
 	context.Context
@@ -75,12 +75,12 @@ func sanitizeGitHubIssueNumber(issueNum string) string {
 
 // GenerateSupportDump handles the generation and optional upload of support dumps
 func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
-	c.logDebugIfEnabled("Support dump generation started")
+	c.LogDebugIfEnabled("Support dump generation started")
 
 	// Use the server lifecycle context for cancellation so the dump
 	// stops on shutdown, but delegate Value lookups to the request
 	// context so trace IDs remain accessible.
-	parentCtx := c.ctx
+	parentCtx := c.Context()
 	if parentCtx == nil {
 		parentCtx = context.Background()
 	}
@@ -95,7 +95,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	// is 30s, but the dump can take much longer).
 	rc := http.NewResponseController(ctx.Response().Writer)
 	if err := rc.SetWriteDeadline(time.Now().Add(supportDumpTimeout)); err != nil {
-		c.logDebugIfEnabled("Failed to extend write deadline for support dump", logger.Error(err))
+		c.LogDebugIfEnabled("Failed to extend write deadline for support dump", logger.Error(err))
 	}
 
 	// Parse JSON request
@@ -107,7 +107,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	// Sanitize GitHub issue number: must be digits only (frontend strips '#' prefix)
 	req.GitHubIssueNumber = sanitizeGitHubIssueNumber(req.GitHubIssueNumber)
 
-	c.logDebugIfEnabled("Support dump request parsed",
+	c.LogDebugIfEnabled("Support dump request parsed",
 		logger.Bool("include_logs", req.IncludeLogs),
 		logger.Bool("include_config", req.IncludeConfig),
 		logger.Bool("include_system_info", req.IncludeSystemInfo),
@@ -124,13 +124,13 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		req.IncludeSystemInfo = true
 		req.IncludeDatabaseInfo = true
 		req.IncludeAppEvents = true
-		c.logDebugIfEnabled("Set default options for support dump")
+		c.LogDebugIfEnabled("Set default options for support dump")
 	}
 
 	// Read the live global snapshot (race-free, hot-reloading) via
-	// currentSettings() so out-of-band republishes are seen and the read never
+	// CurrentSettings() so out-of-band republishes are seen and the read never
 	// races the Settings.Store in UpdateSettings.
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)
 	}
@@ -185,30 +185,30 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Collect data
-	c.logDebugIfEnabled("Starting support data collection", logger.String("system_id", settings.SystemID))
+	c.LogDebugIfEnabled("Starting support data collection", logger.String("system_id", settings.SystemID))
 	dump, err := collector.Collect(dumpCtx, opts)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to collect support data",
+		c.LogErrorIfEnabled("Failed to collect support data",
 			logger.Error(err),
 			logger.String("system_id", settings.SystemID),
 			logger.Any("opts", opts),
 		)
 		return c.HandleError(ctx, err, "Failed to collect support data", http.StatusInternalServerError)
 	}
-	c.logDebugIfEnabled("Support data collected successfully", logger.String("dump_id", dump.ID))
+	c.LogDebugIfEnabled("Support data collected successfully", logger.String("dump_id", dump.ID))
 
 	// Create archive
-	c.logDebugIfEnabled("Creating support archive", logger.String("dump_id", dump.ID))
+	c.LogDebugIfEnabled("Creating support archive", logger.String("dump_id", dump.ID))
 	archiveData, err := collector.CreateArchive(dumpCtx, dump, opts)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to create support archive",
+		c.LogErrorIfEnabled("Failed to create support archive",
 			logger.Error(err),
 			logger.String("dump_id", dump.ID),
 			logger.Any("context_err", dumpCtx.Err()),
 		)
 		return c.HandleError(ctx, err, "Failed to create support archive", http.StatusInternalServerError)
 	}
-	c.logDebugIfEnabled("Support archive created successfully",
+	c.LogDebugIfEnabled("Support archive created successfully",
 		logger.String("dump_id", dump.ID),
 		logger.Int("archive_size", len(archiveData)))
 
@@ -223,7 +223,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		// Initialize minimal Sentry if needed
 		if !settings.Sentry.Enabled {
 			if err := telemetry.InitMinimalSentryForSupport(settings.SystemID, settings.Version); err != nil {
-				c.logErrorIfEnabled("Failed to initialize minimal Sentry for support upload",
+				c.LogErrorIfEnabled("Failed to initialize minimal Sentry for support upload",
 					logger.Error(err),
 					logger.String("dump_id", dump.ID),
 				)
@@ -240,7 +240,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 				// the user can still retrieve the dump: builds without a Sentry
 				// DSN (e.g. from-source) have a disabled uploader, and a
 				// transient upload failure should not strand the dump.
-				c.logErrorIfEnabled("Failed to upload support dump to Sentry",
+				c.LogErrorIfEnabled("Failed to upload support dump to Sentry",
 					logger.Error(err),
 					logger.String("dump_id", dump.ID),
 				)
@@ -249,7 +249,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 			} else {
 				response.UploadedAt = time.Now().UTC().Format(time.RFC3339)
 				response.Message = "Support dump generated and uploaded successfully"
-				c.logInfoIfEnabled("Support dump uploaded to Sentry",
+				c.LogInfoIfEnabled("Support dump uploaded to Sentry",
 					logger.String("dump_id", dump.ID),
 					logger.String("system_id", settings.SystemID),
 					logger.Bool("telemetry_enabled", settings.Sentry.Enabled),
@@ -265,7 +265,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		// Store temporarily for download
 		tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-go-support-%s.zip", dump.ID))
 		if err := os.WriteFile(tempFile, archiveData, FilePermOwnerOnly); err != nil {
-			c.logErrorIfEnabled("Failed to store temporary file",
+			c.LogErrorIfEnabled("Failed to store temporary file",
 				logger.Error(err),
 				logger.String("path", tempFile),
 			)
@@ -275,7 +275,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Log successful generation
-	c.logInfoIfEnabled("Support dump generated",
+	c.LogInfoIfEnabled("Support dump generated",
 		logger.String("dump_id", dump.ID),
 		logger.Int("size", len(archiveData)),
 		logger.Bool("uploaded", response.UploadedAt != ""),
@@ -321,9 +321,9 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 // GetSupportStatus returns the current support/telemetry configuration status
 func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 	// Read the live global snapshot (race-free, hot-reloading) via
-	// currentSettings() so out-of-band republishes are seen and the read never
+	// CurrentSettings() so out-of-band republishes are seen and the read never
 	// races the Settings.Store in UpdateSettings.
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)
 	}
@@ -340,20 +340,22 @@ func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 // initSupportRoutes registers support-related routes
 func (c *Controller) initSupportRoutes() {
 	// Create protected group for support endpoints (consistent with other route files)
-	supportGroup := c.Group.Group("/support", c.authMiddleware)
+	supportGroup := c.Group.Group("/support", c.AuthMiddleware)
 	supportGroup.POST("/generate", c.GenerateSupportDump)
 	supportGroup.GET("/download/:id", c.DownloadSupportDump)
 	supportGroup.GET("/status", c.GetSupportStatus)
 
 	// Start cleanup goroutine for old support dumps with proper context
 	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
-	if c.ctx != nil {
-		c.wg.Go(func() {
-			c.startSupportDumpCleanup(c.ctx)
+	if c.Context() != nil {
+		c.Go(func() {
+			c.startSupportDumpCleanup(c.Context())
 		})
-		c.wg.Go(func() {
-			c.startAppEventPruning(c.ctx)
+
+		c.Go(func() {
+			c.startAppEventPruning(c.Context())
 		})
+
 	}
 }
 
@@ -361,7 +363,7 @@ func (c *Controller) initSupportRoutes() {
 func (c *Controller) startSupportDumpCleanup(ctx context.Context) {
 	// Ensure we have a valid context
 	if ctx == nil {
-		c.logErrorIfEnabled("Cannot start support dump cleanup with nil context")
+		c.LogErrorIfEnabled("Cannot start support dump cleanup with nil context")
 		return
 	}
 
@@ -376,7 +378,7 @@ func (c *Controller) startSupportDumpCleanup(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			// Context cancelled, exit gracefully
-			c.logInfoIfEnabled("Support dump cleanup goroutine stopping due to context cancellation")
+			c.LogInfoIfEnabled("Support dump cleanup goroutine stopping due to context cancellation")
 			return
 		case <-ticker.C:
 			c.cleanupOldSupportDumps()
@@ -391,7 +393,7 @@ func (c *Controller) cleanupOldSupportDumps() {
 
 	files, err := filepath.Glob(pattern)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to list support dump files for cleanup",
+		c.LogErrorIfEnabled("Failed to list support dump files for cleanup",
 			logger.String("pattern", pattern), logger.Error(err))
 		return
 	}
@@ -406,7 +408,7 @@ func (c *Controller) cleanupOldSupportDumps() {
 	}
 
 	if removedCount > 0 {
-		c.logInfoIfEnabled("Cleaned up old support dump files", logger.Int("count", removedCount))
+		c.LogInfoIfEnabled("Cleaned up old support dump files", logger.Int("count", removedCount))
 	}
 }
 
@@ -416,7 +418,7 @@ func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
 	info, err := os.Stat(file)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			c.logWarnIfEnabled("Failed to stat support dump file", logger.String("path", file), logger.Error(err))
+			c.LogWarnIfEnabled("Failed to stat support dump file", logger.String("path", file), logger.Error(err))
 		}
 		return false
 	}
@@ -426,7 +428,7 @@ func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
 	}
 
 	if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
-		c.logWarnIfEnabled("Failed to remove old support dump file",
+		c.LogWarnIfEnabled("Failed to remove old support dump file",
 			logger.String("path", file), logger.Duration("age", time.Since(info.ModTime())), logger.Error(err))
 		return false
 	}
@@ -471,10 +473,10 @@ func (c *Controller) pruneAppEvents(ctx context.Context) {
 	}
 	pruned, err := c.DS.PruneAppEvents(ctx, appEventRetentionDays)
 	if err != nil {
-		c.logWarnIfEnabled("Failed to prune app events", logger.Error(err))
+		c.LogWarnIfEnabled("Failed to prune app events", logger.Error(err))
 		return
 	}
 	if pruned > 0 {
-		c.logInfoIfEnabled("Pruned old app events", logger.Int64("count", pruned))
+		c.LogInfoIfEnabled("Pruned old app events", logger.Int64("count", pruned))
 	}
 }

@@ -144,7 +144,7 @@ func (c *Controller) executeNotificationAction(ctx echo.Context, action notifica
 		if errors.Is(err, notification.ErrNotificationNotFound) || errors.IsNotFound(err) {
 			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
 		}
-		c.logErrorIfEnabled(action.errorLogMsg,
+		c.LogErrorIfEnabled(action.errorLogMsg,
 			logger.Error(err),
 			logger.String("id", id))
 		return c.HandleError(ctx, err, action.errorRespMsg, http.StatusInternalServerError)
@@ -194,7 +194,7 @@ func (c *Controller) SetupNotificationRoutes() {
 	// Route priority: Echo matches static path segments before parameter
 	// routes ("/:id"), so /unread/count and /stream always win over the
 	// /:id routes registered in the auth group below. Register these on
-	// the parent c.Group so they are NOT wrapped by c.authMiddleware.
+	// the parent c.Group so they are NOT wrapped by c.AuthMiddleware.
 	// (/check-ntfy-server is intentionally NOT public — see the auth group
 	// registration later in this function, kept authed to prevent SSRF.)
 	c.Group.GET("/notifications", c.GetNotifications, c.requireNotificationService)
@@ -205,7 +205,7 @@ func (c *Controller) SetupNotificationRoutes() {
 	// Auth-protected endpoints: per-item read, mutations, the test-notification
 	// trigger, and the NTFY connectivity probe (kept authed to avoid being
 	// used as an SSRF relay by unauthenticated callers).
-	notificationsGroup := c.Group.Group("/notifications", c.authMiddleware)
+	notificationsGroup := c.Group.Group("/notifications", c.AuthMiddleware)
 
 	notifServiceGroup := notificationsGroup.Group("", c.requireNotificationService)
 	notifServiceGroup.PUT("/read-all", c.MarkAllNotificationsRead)
@@ -401,8 +401,8 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	connectionStartTime := time.Now()
 
 	// Track active connections using metrics
-	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.SSEConnectionStarted(sseEndpoint)
+	if c.Metrics != nil && c.Metrics.HTTP != nil {
+		c.Metrics.HTTP.SSEConnectionStarted(sseEndpoint)
 		defer func() {
 			duration := time.Since(connectionStartTime).Seconds()
 			// Determine close reason based on context
@@ -412,7 +412,7 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 			} else if ctx.Request().Context().Err() == context.Canceled {
 				closeReason = metrics.SSECloseReasonCanceled
 			}
-			c.metrics.HTTP.SSEConnectionClosed(sseEndpoint, duration, closeReason)
+			c.Metrics.HTTP.SSEConnectionClosed(sseEndpoint, duration, closeReason)
 		}()
 	}
 
@@ -477,8 +477,8 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 		return nil, nil, err
 	}
 
-	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, sseEventConnected)
+	if c.Metrics != nil && c.Metrics.HTTP != nil {
+		c.Metrics.HTTP.RecordSSEMessageSent(sseEndpoint, sseEventConnected)
 	}
 
 	// Log the connection
@@ -516,9 +516,9 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 	// Main event loop
 	for {
 		select {
-		case <-c.ctx.Done():
+		case <-c.Context().Done():
 			// Controller shutting down
-			c.logInfoIfEnabled("notification SSE client disconnected due to shutdown",
+			c.LogInfoIfEnabled("notification SSE client disconnected due to shutdown",
 				logger.String("client_id", client.ID),
 			)
 			return nil
@@ -665,13 +665,13 @@ func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, c
 		action = "disconnected"
 	}
 
-	if s := c.currentSettings(); s != nil && s.WebServer.Debug && connected {
-		c.logDebugIfEnabled("notification SSE client "+action,
+	if s := c.CurrentSettings(); s != nil && s.WebServer.Debug && connected {
+		c.LogDebugIfEnabled("notification SSE client "+action,
 			logger.String("clientId", clientID),
 			logger.String("ip", privacy.AnonymizeIP(ip)),
 			logger.String("user_agent", privacy.RedactUserAgent(userAgent)))
 	} else {
-		c.logInfoIfEnabled("notification SSE client "+action,
+		c.LogInfoIfEnabled("notification SSE client "+action,
 			logger.String("clientId", clientID),
 			logger.String("ip", privacy.AnonymizeIP(ip)))
 	}
@@ -679,16 +679,16 @@ func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, c
 
 // logNotificationError logs SSE errors
 func (c *Controller) logNotificationError(message string, err error, clientID string) {
-	c.logErrorIfEnabled(message,
+	c.LogErrorIfEnabled(message,
 		logger.Error(err),
 		logger.String("clientId", clientID))
 }
 
 // logToastSent logs successful toast sending
 func (c *Controller) logToastSent(clientID string, notif *notification.Notification) {
-	if s := c.currentSettings(); s != nil && s.WebServer.Debug {
+	if s := c.CurrentSettings(); s != nil && s.WebServer.Debug {
 		toastType, _ := notif.Metadata["toastType"].(string)
-		c.logDebugIfEnabled("toast sent via SSE",
+		c.LogDebugIfEnabled("toast sent via SSE",
 			logger.String("clientId", clientID),
 			logger.Any("toast_id", notif.Metadata["toastId"]),
 			logger.String("type", toastType),
@@ -698,8 +698,8 @@ func (c *Controller) logToastSent(clientID string, notif *notification.Notificat
 
 // logNotificationSent logs successful notification sending
 func (c *Controller) logNotificationSent(clientID string, notif *notification.Notification) {
-	if s := c.currentSettings(); s != nil && s.WebServer.Debug {
-		c.logDebugIfEnabled("notification sent via SSE",
+	if s := c.CurrentSettings(); s != nil && s.WebServer.Debug {
+		c.LogDebugIfEnabled("notification sent via SSE",
 			logger.String("clientId", clientID),
 			logger.String("notification_id", notif.ID),
 			logger.String("type", string(notif.Type)),
@@ -766,8 +766,8 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		}
 	}
 
-	if s := c.currentSettings(); s != nil && s.WebServer.Debug {
-		c.logDebugIfEnabled("listing notifications",
+	if s := c.CurrentSettings(); s != nil && s.WebServer.Debug {
+		c.LogDebugIfEnabled("listing notifications",
 			logger.Any("status", filter.Status),
 			logger.Any("types", filter.Types),
 			logger.Any("priorities", filter.Priorities),
@@ -778,7 +778,7 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 	// Get notifications
 	notifications, err := service.List(filter)
 	if err != nil {
-		c.logErrorIfEnabled("failed to list notifications", logger.Error(err))
+		c.LogErrorIfEnabled("failed to list notifications", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to retrieve notifications", http.StatusInternalServerError)
 	}
 
@@ -801,13 +801,13 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		notifications = filtered
 	}
 
-	if s := c.currentSettings(); s != nil && s.WebServer.Debug {
+	if s := c.CurrentSettings(); s != nil && s.WebServer.Debug {
 		unreadCount, err := service.GetUnreadCount()
 		if err != nil {
-			c.logErrorIfEnabled("failed to get unread count", logger.Error(err))
+			c.LogErrorIfEnabled("failed to get unread count", logger.Error(err))
 			unreadCount = -1 // Indicate error in debug log
 		}
-		c.logDebugIfEnabled("notifications retrieved",
+		c.LogDebugIfEnabled("notifications retrieved",
 			logger.Int("count", len(notifications)),
 			logger.Int("total_unread", unreadCount))
 	}
@@ -833,7 +833,7 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 		if errors.Is(err, notification.ErrNotificationNotFound) || errors.IsNotFound(err) {
 			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
 		}
-		c.logErrorIfEnabled("failed to get notification",
+		c.LogErrorIfEnabled("failed to get notification",
 			logger.Error(err),
 			logger.String("id", id))
 		return c.HandleError(ctx, err, "Failed to retrieve notification", http.StatusInternalServerError)
@@ -848,7 +848,7 @@ func (c *Controller) MarkAllNotificationsRead(ctx echo.Context) error {
 
 	count, err := service.MarkAllAsRead()
 	if err != nil {
-		c.logErrorIfEnabled("failed to mark all notifications as read", logger.Error(err))
+		c.LogErrorIfEnabled("failed to mark all notifications as read", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to mark all notifications as read", http.StatusInternalServerError)
 	}
 
@@ -904,7 +904,7 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 			Status: []notification.Status{notification.StatusUnread},
 		})
 		if err != nil {
-			c.logErrorIfEnabled("failed to count detection notifications for guest", logger.Error(err))
+			c.LogErrorIfEnabled("failed to count detection notifications for guest", logger.Error(err))
 			return c.HandleError(ctx, err, "Failed to get unread count", http.StatusInternalServerError)
 		}
 		return ctx.JSON(http.StatusOK, map[string]any{
@@ -914,7 +914,7 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 
 	count, err := service.GetUnreadCount()
 	if err != nil {
-		c.logErrorIfEnabled("failed to get unread count", logger.Error(err))
+		c.LogErrorIfEnabled("failed to get unread count", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to get unread count", http.StatusInternalServerError)
 	}
 
@@ -925,7 +925,7 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 
 // CreateTestNewSpeciesNotification creates a test new species detection notification
 func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
 	}
@@ -991,12 +991,12 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	// Use CreateWithMetadata to persist and broadcast
 	if err := service.CreateWithMetadata(testNotification); err != nil {
-		c.logErrorIfEnabled("failed to create test notification", logger.Error(err))
+		c.LogErrorIfEnabled("failed to create test notification", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to create test notification", http.StatusInternalServerError)
 	}
 
 	if settings.WebServer.Debug {
-		c.logDebugIfEnabled("test new species notification created",
+		c.LogDebugIfEnabled("test new species notification created",
 			logger.String("notification_id", testNotification.ID),
 			logger.String("species", testTemplateData.CommonName),
 			logger.String("rendered_title", title),
