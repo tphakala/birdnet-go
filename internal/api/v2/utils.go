@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -341,8 +342,8 @@ func deduplicateSpeciesList(speciesParams []string) []string {
 
 // initEmptyHourlyDistribution creates an array of 24 HourlyDistribution entries initialized to zero.
 func initEmptyHourlyDistribution() []HourlyDistribution {
-	data := make([]HourlyDistribution, HoursPerDay)
-	for hour := range HoursPerDay {
+	data := make([]HourlyDistribution, apicore.HoursPerDay)
+	for hour := range apicore.HoursPerDay {
 		data[hour] = HourlyDistribution{Hour: hour, Count: 0}
 	}
 	return data
@@ -373,7 +374,7 @@ func fillHourlyFromItems(dest []HourlyDistribution, items []hourlyDataItem) int 
 	totalCount := 0
 	for _, item := range items {
 		hour := item.GetHour()
-		if hour >= 0 && hour < HoursPerDay {
+		if hour >= 0 && hour < apicore.HoursPerDay {
 			dest[hour].Count = item.GetCount()
 			totalCount += item.GetCount()
 		}

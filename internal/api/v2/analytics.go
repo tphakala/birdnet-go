@@ -16,6 +16,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -633,7 +634,7 @@ func getThumbnailWithFallback(thumbnailURLs map[string]string, scientificName st
 
 // buildSpeciesSummaryFromData creates a SpeciesDailySummary from aggregated data
 func buildSpeciesSummaryFromData(data *aggregatedBirdInfo, thumbnailURL string) SpeciesDailySummary {
-	hourlyCountsSlice := make([]int, HoursPerDay)
+	hourlyCountsSlice := make([]int, apicore.HoursPerDay)
 	copy(hourlyCountsSlice, data.HourlyCounts[:])
 
 	return SpeciesDailySummary{
@@ -898,12 +899,12 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	}
 
 	// Create a 24-hour array filled with zeros
-	hourlyCountsArray := make([]int, HoursPerDay)
+	hourlyCountsArray := make([]int, apicore.HoursPerDay)
 
 	// Fill in the actual counts
 	for i := range hourlyData {
 		data := hourlyData[i]
-		if data.Hour >= 0 && data.Hour < HoursPerDay {
+		if data.Hour >= 0 && data.Hour < apicore.HoursPerDay {
 			hourlyCountsArray[data.Hour] = data.Count
 		}
 	}
