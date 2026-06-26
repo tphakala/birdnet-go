@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -448,7 +449,7 @@ func TestGetAllSpecies_LocalizedSecondaryModel(t *testing.T) {
 	var response AllSpeciesResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
-	byScientific := make(map[string]RangeFilterSpecies, len(response.Species))
+	byScientific := make(map[string]rangeapi.RangeFilterSpecies, len(response.Species))
 	for _, s := range response.Species {
 		byScientific[s.ScientificName] = s
 	}

@@ -1,6 +1,6 @@
-// range_test.go: Package api provides tests for range filter API v2 endpoints.
+// range_test.go: tests for the API v2 range-filter domain endpoints.
 
-package api
+package rangeapi
 
 import (
 	"bytes"
@@ -15,6 +15,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -47,26 +49,29 @@ func (m *MockProcessor) GetBirdNET() *classifier.Orchestrator {
 	return nil
 }
 
-// setupRangeTestEnvironment creates a test environment specifically for range filter tests
-func setupRangeTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
+// setupRangeTestEnvironment creates a test environment with Echo, a mock
+// datastore, and a range Handler built from a *apicore.Core via apitest. The
+// settings carry range-filter test data (coordinates, threshold, included
+// species) injected before the snapshot is published.
+func setupRangeTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Handler) {
 	t.Helper()
 
-	e, mockDS, controller := setupTestEnvironment(t)
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(mockDS),
+		apitest.WithSettingsFunc(func(s *conf.Settings) {
+			s.BirdNET.Latitude = 60.1699
+			s.BirdNET.Longitude = 24.9384
+			s.BirdNET.RangeFilter.Threshold = 0.01
+			s.BirdNET.RangeFilter.LastUpdated = time.Now()
+			s.BirdNET.RangeFilter.Species = []string{
+				"Turdus merula_Eurasian Blackbird",
+				"Parus major_Great Tit",
+				"Corvus cornix_Hooded Crow",
+			}
+		}))
 
-	// Set up mock settings with range filter data
-	controller.Settings.Load().BirdNET.Latitude = 60.1699
-	controller.Settings.Load().BirdNET.Longitude = 24.9384
-	controller.Settings.Load().BirdNET.RangeFilter.Threshold = 0.01
-	controller.Settings.Load().BirdNET.RangeFilter.LastUpdated = time.Now()
-
-	// Set the included species list directly for test setup
-	controller.Settings.Load().BirdNET.RangeFilter.Species = []string{
-		"Turdus merula_Eurasian Blackbird",
-		"Parus major_Great Tit",
-		"Corvus cornix_Hooded Crow",
-	}
-
-	return e, mockDS, controller
+	return e, mockDS, New(core)
 }
 
 // TestGetRangeFilterSpeciesCount tests the species count endpoint
@@ -166,7 +171,7 @@ func TestTestRangeFilterWithoutProcessor(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	// Parse error response
-	var response ErrorResponse
+	var response apicore.ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Contains(t, response.Message, "BirdNET service not available")
@@ -295,7 +300,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, rec.Code)
 
 			// Parse error response
-			var response ErrorResponse
+			var response apicore.ErrorResponse
 			err = json.Unmarshal(rec.Body.Bytes(), &response)
 			require.NoError(t, err)
 			assert.Contains(t, response.Message, tt.expectedError)
@@ -331,7 +336,7 @@ func TestValidWeekBoundaries(t *testing.T) {
 			// Valid week passes validation and reaches processor (500, not 400)
 			assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
-			var response ErrorResponse
+			var response apicore.ErrorResponse
 			err = json.Unmarshal(rec.Body.Bytes(), &response)
 			require.NoError(t, err)
 			assert.Contains(t, response.Message, "BirdNET service not available")
@@ -361,7 +366,7 @@ func TestRebuildRangeFilterWithoutProcessor(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	// Parse error response
-	var response ErrorResponse
+	var response apicore.ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Contains(t, response.Message, "BirdNET service not available")

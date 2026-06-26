@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"golang.org/x/text/unicode/norm"
 )
 
 // Insights constants
@@ -160,15 +159,6 @@ type nameMaps struct {
 	commonToSci map[string]string
 }
 
-// normalizeForLookup prepares a string for case- and Unicode-form-insensitive
-// map lookup. BirdNET labels ship in composed (NFC) form, but users typing
-// on macOS or with composing keyboards may submit decomposed (NFD) bytes
-// for diacritics, so normalising both sides to NFC prevents silent misses
-// on species like "Lehtopöllö".
-func normalizeForLookup(s string) string {
-	return strings.ToLower(norm.NFC.String(s))
-}
-
 // buildNameMaps parses a BirdNET label list ("ScientificName_CommonName")
 // and builds both lookup maps in a single pass. If two or more labels share
 // the same normalised common name but map to different scientific names,
@@ -190,7 +180,7 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 	for _, sn := range datastore.ResolveLabelNames(labels, resolver) {
 		nm.sciToCommon[sn.Scientific] = sn.Common
 
-		key := normalizeForLookup(sn.Common)
+		key := apicore.NormalizeForLookup(sn.Common)
 		if _, seen := ambiguous[key]; seen {
 			continue
 		}
