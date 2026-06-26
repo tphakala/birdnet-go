@@ -1,6 +1,6 @@
-// filesystem_test.go: Package api provides tests for filesystem browsing functionality.
+// filesystem_test.go: tests for the filesystem domain browse endpoint.
 
-package api
+package filesystem
 
 import (
 	"encoding/json"
@@ -15,11 +15,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
-	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
+// osWindows is the runtime.GOOS value for Windows. Used to gate the symlink
+// tests, where creating a symlink requires SeCreateSymbolicLinkPrivilege.
+const osWindows = "windows"
+
 // passthroughMiddleware returns a middleware that does nothing (allows all requests).
-// Used for testing endpoints that require authentication middleware.
+// Used for testing endpoints that require authentication middleware: the
+// /filesystem group is created with c.AuthMiddleware, so a non-nil passthrough is
+// needed for behavioral tests that route HTTP requests through it.
 func passthroughMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -29,37 +34,47 @@ func passthroughMiddleware() echo.MiddlewareFunc {
 }
 
 // setupFilesystemTestEnvironment creates a test environment specifically for filesystem tests.
-// It sets up a controller with SecureFS rooted in a temporary directory.
-func setupFilesystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
+// apitest.NewCore already provisions an isolated SecureFS rooted in its own
+// per-test t.TempDir() (and registers cleanup that closes it before the TempDir
+// is removed), so this reuses that base directory as the browse root instead of
+// re-rooting SFS, which would invert the cleanup order and break Windows TempDir
+// removal. A passthrough auth middleware is injected so requests route through
+// the /filesystem group middleware.
+func setupFilesystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string) {
 	t.Helper()
 
-	// Get base test environment
-	e, _, controller := setupTestEnvironment(t)
+	e := echo.New()
+	core := apitest.NewCore(t, apitest.WithEcho(e))
 
-	// Create temp directory for filesystem tests
-	tempDir := t.TempDir()
+	// Set passthrough auth middleware for testing so the /filesystem group
+	// middleware (c.AuthMiddleware) is non-nil and lets requests through.
+	core.AuthMiddleware = passthroughMiddleware()
 
-	// Close existing SFS if any
-	if controller.SFS != nil {
-		require.NoError(t, controller.SFS.Close(), "Failed to close existing SFS")
+	// Use the SecureFS base directory apitest already rooted at a per-test
+	// t.TempDir() as the browse root.
+	tempDir := core.SFS.BaseDir()
+
+	h := New(core)
+	h.RegisterRoutes(core.Group)
+
+	return e, h, tempDir
+}
+
+// TestFilesystemRouteRegistration verifies the filesystem handler registers exactly
+// the browse endpoint, with the same method and path the monolithic facade used
+// before the domain was extracted.
+func TestFilesystemRouteRegistration(t *testing.T) {
+	e := echo.New()
+
+	core := apitest.NewCore(t, apitest.WithEcho(e))
+	h := New(core)
+
+	h.RegisterRoutes(core.Group)
+
+	expectedRoutes := []string{
+		"GET /api/v2/filesystem/browse",
 	}
-
-	// Create new SecureFS rooted in temp directory
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS for filesystem test")
-	controller.SFS = sfs
-
-	// Set passthrough auth middleware for testing
-	WithAuthMiddleware(passthroughMiddleware())(controller)
-
-	t.Cleanup(func() {
-		assert.NoError(t, controller.SFS.Close(), "Failed to close SFS")
-	})
-
-	// Initialize filesystem routes
-	controller.initFileSystemRoutes()
-
-	return e, controller, tempDir
+	apitest.AssertRoutesRegistered(t, e, expectedRoutes)
 }
 
 // TestBrowseFileSystem_BasicDirectory tests browsing a directory with files and subdirectories.
@@ -372,7 +387,7 @@ func TestConvertDirEntryToItem(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "dir-entry-conversion")
 
-	_, controller, tempDir := setupFilesystemTestEnvironment(t)
+	_, handler, tempDir := setupFilesystemTestEnvironment(t)
 
 	// Create test files
 	testFile := filepath.Join(tempDir, "testfile.txt")
@@ -387,7 +402,7 @@ func TestConvertDirEntryToItem(t *testing.T) {
 	require.Len(t, entries, 2)
 
 	for _, entry := range entries {
-		item, err := controller.convertDirEntryToItem(tempDir, entry)
+		item, err := handler.convertDirEntryToItem(tempDir, entry)
 		require.NoError(t, err)
 
 		assert.Equal(t, entry.Name(), item.Name)
@@ -545,7 +560,7 @@ func TestValidateSymlinkTarget(t *testing.T) {
 	t.Attr("type", "security")
 	t.Attr("feature", "symlink-validation")
 
-	_, controller, tempDir := setupFilesystemTestEnvironment(t)
+	_, handler, tempDir := setupFilesystemTestEnvironment(t)
 
 	// Create a subdirectory and file for symlink targets
 	targetDir := filepath.Join(tempDir, "target")
@@ -567,7 +582,7 @@ func TestValidateSymlinkTarget(t *testing.T) {
 			// maps only ERROR_ACCESS_DENIED/EACCES/EPERM to os.ErrPermission, so
 			// it would NOT match ERROR_PRIVILEGE_NOT_HELD and the skip would never
 			// fire. On Unix a symlink failure is a genuine error and must fail.
-			if runtime.GOOS == OSWindows {
+			if runtime.GOOS == osWindows {
 				t.Skipf("skipping: cannot create symlink (needs privilege/Developer Mode on Windows): %v", err)
 			}
 			require.NoError(t, err)
@@ -606,7 +621,7 @@ func TestValidateSymlinkTarget(t *testing.T) {
 				// use a Windows-absolute target there to exercise the escaping-
 				// symlink rejection on every OS.
 				outside := "/etc"
-				if runtime.GOOS == OSWindows {
+				if runtime.GOOS == osWindows {
 					outside = `C:\Windows`
 				}
 				return symlinkOrSkip(t, outside, filepath.Join(tempDir, "escape_link"))
@@ -628,7 +643,7 @@ func TestValidateSymlinkTarget(t *testing.T) {
 			// Note: Not parallel because setup creates files in shared directory
 			symlinkPath := tc.setup(t)
 
-			err := controller.validateSymlinkTarget(symlinkPath)
+			err := handler.validateSymlinkTarget(symlinkPath)
 			if tc.expectError {
 				assert.Error(t, err, "Expected error for symlink %q", symlinkPath)
 			} else {
