@@ -1,4 +1,4 @@
-package api
+package control
 
 import (
 	"encoding/json"
@@ -18,7 +18,7 @@ import (
 func TestRestartAudioSource_NoEngine(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
-	c := getTestController(t, e)
+	c := newControlHandler(t, e)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-source/test-src", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -33,7 +33,7 @@ func TestRestartAudioSource_NoEngine(t *testing.T) {
 func TestRestartAudioSource_SourceNotFound(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
-	c := getTestController(t, e)
+	c := newControlHandler(t, e)
 
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
@@ -52,7 +52,7 @@ func TestRestartAudioSource_SourceNotFound(t *testing.T) {
 func TestRestartAudioSource_NoPipeline(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
-	c := getTestController(t, e)
+	c := newControlHandler(t, e)
 
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
@@ -79,7 +79,7 @@ func TestRestartAudioSource_NoPipeline(t *testing.T) {
 func TestRestartAudioSource_Success(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
-	c := getTestController(t, e)
+	c := newControlHandler(t, e)
 
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
@@ -121,7 +121,7 @@ func TestRestartAudioSource_Success(t *testing.T) {
 func TestRestartAudioSource_RestartError(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
-	c := getTestController(t, e)
+	c := newControlHandler(t, e)
 
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
@@ -153,7 +153,7 @@ func TestRestartAudioSource_RestartError(t *testing.T) {
 func TestRestartAudioSource_EmptyID(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
-	c := getTestController(t, e)
+	c := newControlHandler(t, e)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-source/", http.NoBody)
 	rec := httptest.NewRecorder()

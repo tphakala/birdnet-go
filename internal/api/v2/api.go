@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/control"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
@@ -113,6 +114,15 @@ type Controller struct {
 	// global event bus.
 	alerts *alerts.Handler
 
+	// control serves the /api/v2/control/* endpoints (restart analysis, reload
+	// model, rebuild range filter, restart server/container, restart a single
+	// audio source, and list actions). Beyond the shared *apicore.Core it OWNS
+	// sourceRestarter (set via the SetSourceRestarter facade delegator) and
+	// receives the shared controlChan as a send-only injection (the facade keeps
+	// the bidirectional field because the settings domain also sends on it and
+	// internal/analysis owns and closes it).
+	control *control.Handler
+
 	controlChan chan string
 
 	// DisableSaveSettings prevents persisting settings changes to disk.
@@ -153,10 +163,6 @@ type Controller struct {
 	// This is primarily used in testing to ensure proper setup before assertions.
 	// Only created when routes are initialized (production mode or specific tests).
 	goroutinesStarted chan struct{} // signals when all background goroutines have started (nil if routes not initialized)
-
-	// sourceRestarter restarts a single audio source by ID. Set during
-	// pipeline Start() and called by the restart-source control endpoint.
-	sourceRestarter atomic.Pointer[SourceRestarterFunc]
 
 	// externalMediaEnv and externalMediaProbe are injectable dependencies for
 	// the GET /api/v2/system/external-media endpoint. Both default to the real
@@ -212,9 +218,6 @@ type Controller struct {
 	healthMetricsStore *observability.HealthMetricsStore
 	healthEvents       *observability.HealthEventBuffer
 }
-
-// SourceRestarterFunc restarts a single audio source identified by sourceID.
-type SourceRestarterFunc func(sourceID string) error
 
 // Option is a functional option for configuring the Controller.
 type Option func(*Controller)
@@ -365,6 +368,13 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// the shared core here (V2Manager, auth middleware, and the error/log helpers
 	// all promote from it).
 	c.alerts = alerts.New(c.Core)
+	// The control handler owns its sourceRestarter and receives the shared
+	// control-signal channel as a send-only injection. c.controlChan is already
+	// set in the Controller literal above; passing it here narrows it to a
+	// send-only view so the handler can never read or close a channel that
+	// internal/analysis owns. The remaining deps (Engine, ShutdownRequester, and
+	// the error/log helpers) all promote from the shared core.
+	c.control = control.New(c.Core, c.controlChan)
 
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
@@ -434,6 +444,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	return c, nil // Return controller and nil error
 }
 
+// SetSourceRestarter injects the function used by the restart-source control
+// endpoint. It delegates to the control domain handler, which owns the
+// sourceRestarter slot. The audio pipeline calls this on *Controller during
+// Start(), so the method stays on the facade as a one-line delegator.
+func (c *Controller) SetSourceRestarter(fn control.SourceRestarterFunc) {
+	c.control.SetSourceRestarter(fn)
+}
+
 // initRoutes registers all API endpoints
 func (c *Controller) initRoutes() {
 	// Health check endpoint - publicly accessible
@@ -463,7 +481,7 @@ func (c *Controller) initRoutes() {
 		{"audio level routes", c.initAudioLevelRoutes},
 		{"hls streaming routes", c.initHLSRoutes},
 		{"integration routes", c.initIntegrationsRoutes},
-		{"control routes", c.initControlRoutes},
+		{"control routes", func() { c.control.RegisterRoutes(c.Group) }},
 		{"auth routes", c.initAuthRoutes},
 		{"media routes", c.initMediaRoutes},
 		{"range routes", func() { c.rangeHandler.RegisterRoutes(c.Group) }},

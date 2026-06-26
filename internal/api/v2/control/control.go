@@ -1,13 +1,29 @@
-// internal/api/v2/control.go
-package api
+// Package control is the api/v2 control domain handler. It owns the
+// /api/v2/control/* endpoints (restart analysis, reload model, rebuild range
+// filter, restart server/container, restart a single audio source, and list
+// available actions). The Handler embeds *apicore.Core by pointer so the shared
+// dependencies and helpers (HandleError, the logging helpers, Debug, Context,
+// GetShutdownRequester, and the audio Engine) promote onto it.
+//
+// Two domain members differ from the Core-only leaf domains:
+//   - controlChan is the control-signal channel. It is SHARED: the settings
+//     domain also sends on it and internal/analysis creates and closes it, so
+//     the facade keeps the field and injects the same channel here as a
+//     send-only view. The control handler never reads or closes it.
+//   - sourceRestarter is referenced only by this domain (SetSourceRestarter and
+//     the restart-source endpoint), so the Handler owns it outright. The facade
+//     exposes a one-line SetSourceRestarter delegator for the external pipeline.
+package control
 
 import (
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -45,12 +61,45 @@ const (
 	SignalRebuildFilter   = "rebuild_range_filter"
 )
 
-// initControlRoutes registers all control-related API endpoints
-func (c *Controller) initControlRoutes() {
+// SourceRestarterFunc restarts a single audio source identified by sourceID.
+type SourceRestarterFunc func(sourceID string) error
+
+// Handler serves the control domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members promote onto it without re-wiring; Core
+// carries atomic/lock-bearing fields and must never be copied by value.
+//
+// controlChan is injected from the facade as a send-only view of the shared
+// control-signal channel: the control handler only sends on it, while the
+// settings domain (also a sender) and internal/analysis (the owner that creates
+// and closes it) keep their bidirectional references. sourceRestarter is owned
+// by this handler; it is set via SetSourceRestarter (called from the audio
+// pipeline through the facade delegator) and read by the restart-source endpoint.
+type Handler struct {
+	*apicore.Core
+
+	controlChan     chan<- string
+	sourceRestarter atomic.Pointer[SourceRestarterFunc]
+}
+
+// New builds a control Handler around the shared core and the shared
+// control-signal channel. controlChan MUST be the same channel the settings
+// domain sends on and internal/analysis owns; it is held as a send-only view so
+// the control handler can never read or close it.
+func New(core *apicore.Core, controlChan chan<- string) *Handler {
+	return &Handler{
+		Core:        core,
+		controlChan: controlChan,
+	}
+}
+
+// RegisterRoutes registers all control-related API endpoints on the supplied API
+// v2 group, preserving the exact routes, per-route middleware, and order the
+// facade used before the control domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	c.LogInfoIfEnabled("Initializing control routes")
 
 	// Create control API group with auth middleware
-	controlGroup := c.Group.Group("/control", c.AuthMiddleware)
+	controlGroup := g.Group("/control", c.AuthMiddleware)
 
 	// Control routes
 	controlGroup.POST("/restart", c.RestartAnalysis)
@@ -66,7 +115,7 @@ func (c *Controller) initControlRoutes() {
 
 // GetAvailableActions handles GET /api/v2/control/actions
 // Returns a list of available control actions
-func (c *Controller) GetAvailableActions(ctx echo.Context) error {
+func (c *Handler) GetAvailableActions(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Getting available control actions",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -120,7 +169,7 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 //   - successMessage: Message to return in the response when successful
 //
 // Returns an error if the control channel is nil or if the request times out
-func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMessage, successMessage string) error {
+func (c *Handler) handleControlSignal(ctx echo.Context, signal, action, logMessage, successMessage string) error {
 	c.LogInfoIfEnabled(logMessage,
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -178,21 +227,21 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 
 // RestartAnalysis handles POST /api/v2/control/restart
 // Restarts the audio analysis process
-func (c *Controller) RestartAnalysis(ctx echo.Context) error {
+func (c *Handler) RestartAnalysis(ctx echo.Context) error {
 	return c.handleControlSignal(ctx, SignalRestartAnalysis, ActionRestartAnalysis,
 		"Received request to restart analysis", "Analysis restart signal sent")
 }
 
 // ReloadModel handles POST /api/v2/control/reload
 // Reloads the BirdNET model
-func (c *Controller) ReloadModel(ctx echo.Context) error {
+func (c *Handler) ReloadModel(ctx echo.Context) error {
 	return c.handleControlSignal(ctx, SignalReloadModel, ActionReloadModel,
 		"Received request to reload model", "Model reload signal sent")
 }
 
 // RebuildFilter handles POST /api/v2/control/rebuild-filter
 // Rebuilds the species filter based on current location
-func (c *Controller) RebuildFilter(ctx echo.Context) error {
+func (c *Handler) RebuildFilter(ctx echo.Context) error {
 	return c.handleControlSignal(ctx, SignalRebuildFilter, ActionRebuildFilter,
 		"Received request to rebuild species filter", "Filter rebuild signal sent")
 }
@@ -200,7 +249,7 @@ func (c *Controller) RebuildFilter(ctx echo.Context) error {
 // handleRestartRequest is the shared logic for restart endpoints.
 // It checks the shutdown requester, applies the CAS flag via setFlag,
 // and schedules an async shutdown after the HTTP response is sent.
-func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFlag func() bool, successMessage string) error {
+func (c *Handler) handleRestartRequest(ctx echo.Context, action string, setFlag func() bool, successMessage string) error {
 	sr := c.GetShutdownRequester()
 	if sr == nil {
 		err := fmt.Errorf("shutdown requester not initialized")
@@ -245,7 +294,7 @@ func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFl
 
 // RestartServer handles POST /api/v2/control/restart-server
 // Triggers a graceful binary restart.
-func (c *Controller) RestartServer(ctx echo.Context) error {
+func (c *Handler) RestartServer(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Received request to restart server",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -256,7 +305,7 @@ func (c *Controller) RestartServer(ctx echo.Context) error {
 
 // RestartContainer handles POST /api/v2/control/restart-container
 // Triggers a container restart by exiting the process.
-func (c *Controller) RestartContainer(ctx echo.Context) error {
+func (c *Handler) RestartContainer(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Received request to restart container",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -274,7 +323,7 @@ func (c *Controller) RestartContainer(ctx echo.Context) error {
 }
 
 // SetSourceRestarter injects the function used by the restart-source endpoint.
-func (c *Controller) SetSourceRestarter(fn SourceRestarterFunc) {
+func (c *Handler) SetSourceRestarter(fn SourceRestarterFunc) {
 	if fn == nil {
 		c.sourceRestarter.Store(nil)
 		return
@@ -284,7 +333,7 @@ func (c *Controller) SetSourceRestarter(fn SourceRestarterFunc) {
 
 // RestartAudioSource handles POST /api/v2/control/restart-source/:id
 // Restarts a single audio source without affecting the rest of the pipeline.
-func (c *Controller) RestartAudioSource(ctx echo.Context) error {
+func (c *Handler) RestartAudioSource(ctx echo.Context) error {
 	sourceID := ctx.Param("id")
 	if sourceID == "" {
 		return c.HandleError(ctx, nil, "Source ID is required", http.StatusBadRequest)
