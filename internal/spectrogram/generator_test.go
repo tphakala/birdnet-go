@@ -370,7 +370,7 @@ func TestAudioDurationCache_EvictsOldestEntries(t *testing.T) {
 // fallback honors the frequency profile's resample rate, just like the Sox paths.
 // Without an aresample stage the fallback renders to the native Nyquist, so a bat
 // clip captured at 192/384 kHz would disagree with the fixed 0-128 kHz UI axis (and
-// that mismatched image would be cached under the "-bat" filename).
+// that mismatched image would be cached under the "-bat-v2" filename).
 func TestBuildFFmpegSpectrogramFilter_ResamplesPerProfile(t *testing.T) {
 	t.Parallel()
 
@@ -932,7 +932,7 @@ func TestProfileForModelType(t *testing.T) {
 		wantSuffix   string
 	}{
 		{"bird model", "bird", 24000, ""},
-		{"bat model uses bat profile", "bat", 256000, "bat"},
+		{"bat model uses bat profile", "bat", 256000, "bat-v2"},
 		{"multi model defaults to bird", "multi", 24000, ""},
 		{"empty defaults to bird", "", 24000, ""},
 	}
@@ -947,14 +947,15 @@ func TestProfileForModelType(t *testing.T) {
 }
 
 // TestProfileSuffix verifies the cache-key token derived from a frequency profile:
-// bat profiles get a "bat" token; bird defaults stay empty for backward
-// compatibility with existing cached spectrogram filenames.
+// bat profiles get a versioned "bat-v2" token (bumped with the FFmpeg-fallback
+// resample fix so stale bat renders are not served from cache); bird defaults stay
+// empty for backward compatibility with existing cached spectrogram filenames.
 func TestProfileSuffix(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "bat", ProfileSuffix(BatProfile()), "bat profile should map to the bat token")
+	assert.Equal(t, "bat-v2", ProfileSuffix(BatProfile()), "bat profile should map to the versioned bat token")
 	assert.Empty(t, ProfileSuffix(BirdProfile()), "bird profile should map to an empty token")
-	assert.Equal(t, "bat", ProfileSuffix(ProfileForModelType("bat")))
+	assert.Equal(t, "bat-v2", ProfileSuffix(ProfileForModelType("bat")))
 	assert.Empty(t, ProfileSuffix(ProfileForModelType("bird")))
 }
 
