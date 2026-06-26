@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/control"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
@@ -136,8 +137,16 @@ type Controller struct {
 	startTime            *time.Time
 	spectrogramGenerator *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
 
-	// authService is the authentication service injected from server.
+	// authService is the authentication service injected from server (via the
+	// WithAuthService functional option). The facade keeps it as the injection
+	// source and hands the same value to the auth domain handler.
 	authService auth.Service
+
+	// authHandler serves the /api/v2/auth/* endpoints (login, OAuth callback,
+	// logout, auth status). Beyond the shared *apicore.Core it receives the
+	// facade-injected authService. It is constructed AFTER the functional options
+	// are applied so authService reflects WithAuthService (see NewWithOptions).
+	authHandler *authapi.Handler
 
 	// notificationService is the notification service this controller uses. It is
 	// nil in production, where getNotificationService() falls back to the
@@ -403,6 +412,17 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		opt(c)
 	}
 
+	// Construct the auth domain handler AFTER the functional options are applied:
+	// WithAuthService sets c.authService in the loop above (unlike the other
+	// domain deps, which are set in the Controller literal before construction).
+	// The handler captures the injected authService (nil if WithAuthService was
+	// not passed; the handlers nil-guard it). authService is read fresh per
+	// request in the monolith but never changes after this point, so capturing
+	// the post-option value is behaviorally identical. The shared AuthMiddleware
+	// it uses for the protected logout/status group promotes from c.Core and is
+	// read at RegisterRoutes time (after this), so it is also populated.
+	c.authHandler = authapi.New(c.Core, c.authService)
+
 	// Log auth configuration status
 	log := GetLogger()
 	if c.AuthMiddleware != nil {
@@ -482,7 +502,7 @@ func (c *Controller) initRoutes() {
 		{"hls streaming routes", c.initHLSRoutes},
 		{"integration routes", c.initIntegrationsRoutes},
 		{"control routes", func() { c.control.RegisterRoutes(c.Group) }},
-		{"auth routes", c.initAuthRoutes},
+		{"auth routes", func() { c.authHandler.RegisterRoutes(c.Group) }},
 		{"media routes", c.initMediaRoutes},
 		{"range routes", func() { c.rangeHandler.RegisterRoutes(c.Group) }},
 		{"heatmap routes", c.initHeatmapRoutes},
