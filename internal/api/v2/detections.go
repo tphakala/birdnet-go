@@ -1613,6 +1613,22 @@ func (c *Controller) resolveExcludeName(name string) string {
 	return name
 }
 
+// excludeEntryMatches reports whether an existing exclude-list entry refers to
+// the same species as target (which callers pass already canonicalized via
+// resolveExcludeName). It matches case-insensitively and resolves the stored
+// entry too, so an entry persisted under a localized or common name (legacy data,
+// or a name typed into Settings) reconciles with the scientific-name form on
+// toggle/dedup instead of leaving an orphan that can never be removed.
+func (c *Controller) excludeEntryMatches(entry, target string) bool {
+	if strings.EqualFold(entry, target) {
+		return true
+	}
+	if resolved, hit := c.resolveSpeciesToScientific(entry); hit {
+		return strings.EqualFold(resolved, target)
+	}
+	return false
+}
+
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
 func (c *Controller) addToIgnoredSpecies(verified, ignoreSpecies string) error {
 	if verified == "false_positive" && ignoreSpecies != "" {
@@ -1639,12 +1655,14 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 	// this controller owns it, so out-of-band StoreSettings calls are seen.
 	current := c.getSettingsOrFallback()
 
-	wasExcluded := slices.Contains(current.Realtime.Species.Exclude, species)
+	wasExcluded := slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
+		return c.excludeEntryMatches(s, species)
+	})
 
 	updated := conf.CloneSettings(current)
 	if wasExcluded {
 		updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
-			return s == species
+			return c.excludeEntryMatches(s, species)
 		})
 		action = "removed"
 		isExcluded = false
@@ -1681,7 +1699,9 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	defer c.settingsMutex.Unlock()
 
 	current := c.getSettingsOrFallback()
-	if slices.Contains(current.Realtime.Species.Exclude, species) {
+	if slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
+		return c.excludeEntryMatches(s, species)
+	}) {
 		return nil
 	}
 

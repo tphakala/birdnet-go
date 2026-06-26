@@ -1587,6 +1587,36 @@ func TestIgnoreSpecies(t *testing.T) {
 		assert.NotContains(t, controller.Settings.Load().Realtime.Species.Exclude, "Barbastella barbastellus")
 	})
 
+	t.Run("Toggle reconciles a legacy localized entry instead of duplicating", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		settings := controller.Settings.Load()
+		clearExcludedSpeciesList(t, settings)
+
+		controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+			"Barbastella barbastellus": "mopsilepakko",
+		}})
+		controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+		// Simulate a pre-fix exclude list that stored the localized common name verbatim.
+		settings.Realtime.Species.Exclude = []string{"mopsilepakko"}
+
+		// Toggling the same localized name resolves to the scientific name; the legacy
+		// common-name entry must be removed, not left as an un-removable orphan with a
+		// scientific-name duplicate appended.
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "mopsilepakko"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		require.NoError(t, controller.IgnoreSpecies(e.NewContext(req, rec)))
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var resp IgnoreSpeciesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "removed", resp.Action)
+		assert.False(t, resp.IsExcluded)
+		assert.Empty(t, controller.Settings.Load().Realtime.Species.Exclude)
+	})
+
 	t.Run("Multiple toggle operations", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 		clearExcludedSpeciesList(t, controller.Settings.Load())
