@@ -1597,15 +1597,22 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Missing species name", http.StatusBadRequest)
 	}
 
+	// Canonicalize a localized common name to its scientific name so the
+	// per-detection exclusion filter can match it regardless of UI locale.
+	speciesToIgnore := c.resolveExcludeName(req.CommonName)
+
 	// Toggle the species in ignored list
-	action, isExcluded, err := c.toggleSpeciesInIgnoredList(req.CommonName)
+	action, isExcluded, err := c.toggleSpeciesInIgnoredList(speciesToIgnore)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to update species filter", http.StatusInternalServerError)
 	}
 
-	// Log the action
+	// Log the action. "species" is the name the user supplied; "stored_species"
+	// is what actually landed in the exclude list, so support can tell the two
+	// apart when a localized name was resolved to a scientific name.
 	c.logInfoIfEnabled("Species exclusion toggled",
 		logger.String("species", req.CommonName),
+		logger.String("stored_species", speciesToIgnore),
 		logger.String("action", action),
 		logger.Bool("is_excluded", isExcluded),
 		logger.String("ip", ctx.RealIP()),
@@ -1618,9 +1625,21 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 	})
 }
 
-// GetExcludedSpecies returns the list of excluded species
+// GetExcludedSpecies returns the list of excluded species, mapped to their
+// display common name. The exclude list is stored canonically as scientific
+// names (IgnoreSpecies/addToIgnoredSpecies resolve localized common names before
+// storing so the per-detection filter can match), but the detection cards key
+// their "ignored" badge on the localized common name. Reverse-resolving each
+// entry here keeps that badge state correct after a reload; entries with no
+// scientific->common mapping (legacy common-name entries, unresolvable names)
+// pass through unchanged.
 func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
-	species := slices.Clone(c.getSettingsOrFallback().Realtime.Species.Exclude)
+	excluded := c.getSettingsOrFallback().Realtime.Species.Exclude
+	nameMap := c.loadCommonNameMap()
+	species := make([]string, len(excluded))
+	for i, name := range excluded {
+		species[i] = resolveCommonName(nameMap, name)
+	}
 
 	return ctx.JSON(http.StatusOK, ExcludedSpeciesResponse{
 		Species: species,
@@ -1628,10 +1647,39 @@ func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
 	})
 }
 
+// resolveExcludeName canonicalizes a species name for the exclude list. A
+// localized common name is resolved to its scientific name so the per-detection
+// exclusion filter (which matches the non-localized common name or the scientific
+// name) works regardless of the UI locale. Input that does not map to a known
+// common name (already a scientific name, unknown, or an ambiguous common name
+// shared by multiple species) is returned unchanged.
+func (c *Controller) resolveExcludeName(name string) string {
+	if resolved, hit := c.resolveSpeciesToScientific(name); hit {
+		return resolved
+	}
+	return name
+}
+
+// excludeEntryMatches reports whether an existing exclude-list entry refers to
+// the same species as target (which callers pass already canonicalized via
+// resolveExcludeName). It matches case-insensitively and resolves the stored
+// entry too, so an entry persisted under a localized or common name (legacy data,
+// or a name typed into Settings) reconciles with the scientific-name form on
+// toggle/dedup instead of leaving an orphan that can never be removed.
+func (c *Controller) excludeEntryMatches(entry, target string) bool {
+	if strings.EqualFold(entry, target) {
+		return true
+	}
+	if resolved, hit := c.resolveSpeciesToScientific(entry); hit {
+		return strings.EqualFold(resolved, target)
+	}
+	return false
+}
+
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
 func (c *Controller) addToIgnoredSpecies(verified, ignoreSpecies string) error {
 	if verified == "false_positive" && ignoreSpecies != "" {
-		return c.addSpeciesToIgnoredList(ignoreSpecies)
+		return c.addSpeciesToIgnoredList(c.resolveExcludeName(ignoreSpecies))
 	}
 	return nil
 }
@@ -1654,12 +1702,14 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 	// this controller owns it, so out-of-band StoreSettings calls are seen.
 	current := c.getSettingsOrFallback()
 
-	wasExcluded := slices.Contains(current.Realtime.Species.Exclude, species)
+	wasExcluded := slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
+		return c.excludeEntryMatches(s, species)
+	})
 
 	updated := conf.CloneSettings(current)
 	if wasExcluded {
 		updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
-			return s == species
+			return c.excludeEntryMatches(s, species)
 		})
 		action = "removed"
 		isExcluded = false
@@ -1696,7 +1746,9 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	defer c.settingsMutex.Unlock()
 
 	current := c.getSettingsOrFallback()
-	if slices.Contains(current.Realtime.Species.Exclude, species) {
+	if slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
+		return c.excludeEntryMatches(s, species)
+	}) {
 		return nil
 	}
 
