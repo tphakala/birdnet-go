@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/patrickmn/go-cache"
+	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	detectionPkg "github.com/tphakala/birdnet-go/internal/detection"
@@ -869,8 +870,8 @@ func (c *Controller) getWeatherForDetectionTime(detectionTime time.Time, date st
 		return nil
 	}
 
-	closestWeather := c.findClosestHourlyWeather(detectionTime, weatherData)
-	if closestWeather.WeatherIcon == "" {
+	closestWeather := weather.ClosestHourlyWeather(detectionTime, weatherData)
+	if closestWeather == nil || closestWeather.WeatherIcon == "" {
 		return nil
 	}
 

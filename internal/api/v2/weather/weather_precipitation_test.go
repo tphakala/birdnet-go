@@ -1,6 +1,6 @@
 // weather_precipitation_test.go: precipitation fields in the weather API response.
 
-package api
+package weather
 
 import (
 	"encoding/json"
