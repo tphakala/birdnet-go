@@ -61,6 +61,44 @@ func isUSBDeviceToken(deviceID string) bool {
 		strings.HasPrefix(deviceID, usbIDTokenPrefix)
 }
 
+// deviceDedupKey returns the key used to collapse the several ALSA pseudo-devices
+// that one physical card enumerates as, while keeping two physically distinct
+// cards that share a display name separate (e.g. two identical USB mics). It
+// prefers the stable USB token, then the ALSA card number, then the bare name.
+// A name-only key would hide the second identical device, the exact case the
+// stable-id selection exists to fix.
+func deviceDedupKey(name string, cardNumber int, ident usbIdentity) string {
+	switch {
+	case ident.stableToken() != "":
+		return name + "\x00" + ident.stableToken()
+	case cardNumber >= 0:
+		return name + "\x00card:" + strconv.Itoa(cardNumber)
+	default:
+		return name
+	}
+}
+
+// redactDeviceID returns a log-safe form of a configured device identifier. A
+// usb-id token embeds the USB serial number, a persistent per-unit hardware
+// identifier, so the serial is masked before the value reaches logs, error
+// context, or support bundles. Bus-path and legacy ALSA/name identifiers carry
+// no such per-unit id and are returned unchanged.
+func redactDeviceID(deviceID string) string {
+	rest, ok := strings.CutPrefix(deviceID, usbIDTokenPrefix)
+	if !ok {
+		return deviceID
+	}
+	vendor, after, found := strings.Cut(rest, ":")
+	if !found {
+		return deviceID
+	}
+	product, serial, found := strings.Cut(after, ":")
+	if !found || serial == "" {
+		return deviceID
+	}
+	return usbIDTokenPrefix + vendor + ":" + product + ":<redacted>"
+}
+
 // stableToken returns the preferred persisted identifier for this device, or ""
 // when no stable USB identity is available. The bus path is preferred because it
 // disambiguates multiple identical devices (same vendor:product, no serial) by

@@ -147,7 +147,7 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 			Component("audiocore.capabilities").
 			Category(errors.CategoryAudioSource).
 			Context("operation", "probe_context_init").
-			Context("device_id", deviceID).
+			Context("device_id", redactDeviceID(deviceID)).
 			Build()
 	}
 	defer uninitAndFreeContext(malgoCtx, log)
@@ -158,7 +158,7 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 			Component("audiocore.capabilities").
 			Category(errors.CategoryAudioSource).
 			Context("operation", "probe_enumerate_devices").
-			Context("device_id", deviceID).
+			Context("device_id", redactDeviceID(deviceID)).
 			Build()
 	}
 
@@ -204,7 +204,7 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 
 	if len(rates) > 0 && runtime.GOOS != captureOSLinux {
 		log.Debug("device capabilities from native formats",
-			logger.String("device_id", deviceID),
+			logger.String("device_id", redactDeviceID(deviceID)),
 			logger.String("device_name", deviceName),
 			logger.Any("sample_rates", rates))
 		return &DeviceCapabilities{
@@ -219,7 +219,7 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 	// On other platforms, this is the fallback when formats are all zero.
 	if runtime.GOOS == captureOSLinux {
 		log.Info("probing device by init (ALSA zero-rate formats)",
-			logger.String("device_id", deviceID),
+			logger.String("device_id", redactDeviceID(deviceID)),
 			logger.String("device_name", deviceName))
 		rates = probeByInit(malgoCtx, selectedInfo, log)
 		if len(rates) > 0 {

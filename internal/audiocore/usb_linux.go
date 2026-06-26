@@ -76,6 +76,13 @@ func usbIdentityForCard(card int, cards map[int]procCardEntry, root string) usbI
 // do not report one.
 func readUSBSerial(root string, card int) string {
 	sysRoot := filepath.Join(root, "sys")
+	// Resolve sysRoot the same way as target below; otherwise a symlinked element
+	// in root (a test temp dir, or a path like macOS /var -> /private/var) would
+	// leave the resolved target without the literal sysRoot prefix and the walk
+	// would stop immediately.
+	if resolved, symErr := filepath.EvalSymlinks(sysRoot); symErr == nil {
+		sysRoot = resolved
+	}
 	target, err := filepath.EvalSymlinks(filepath.Join(sysRoot, "class", "sound", "card"+strconv.Itoa(card)))
 	if err != nil {
 		return ""

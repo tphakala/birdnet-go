@@ -129,13 +129,19 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 			continue
 		}
 
-		// ALSA enumerates multiple pseudo-devices per card; deduplicate by name.
-		if seenNames[name] {
+		cardNumber := parseALSACardNumber(decodedID)
+		ident := usbIdentityForCard(cardNumber, cards, defaultProcRoot)
+
+		// ALSA enumerates multiple pseudo-devices per physical card; deduplicate
+		// per card so the several pseudo-devices of one card collapse to a single
+		// entry, while two physically distinct cards that share a display name
+		// (e.g. two identical USB mics) are BOTH listed and selectable.
+		seenKey := deviceDedupKey(name, cardNumber, ident)
+		if seenNames[seenKey] {
 			continue
 		}
-		seenNames[name] = true
+		seenNames[seenKey] = true
 
-		ident := usbIdentityForCard(parseALSACardNumber(decodedID), cards, defaultProcRoot)
 		devices = append(devices, DeviceInfo{
 			Index:     i,
 			Name:      name,
@@ -295,7 +301,7 @@ func startCapture(
 	// Find the device matching deviceID.
 	log.Info("enumerating capture devices",
 		logger.String("source_id", sourceID),
-		logger.String("requested_device", deviceID),
+		logger.String("requested_device", redactDeviceID(deviceID)),
 		logger.Int("device_count", len(infos)))
 	selectedInfo, selectedDevInfo, found := selectCaptureDevice(infos, deviceID, log)
 
@@ -306,7 +312,7 @@ func startCapture(
 			Category(errors.CategoryAudioSource).
 			Context("operation", "find_device").
 			Context("source_id", sourceID).
-			Context("device_id", deviceID).
+			Context("device_id", redactDeviceID(deviceID)).
 			Build()
 	}
 

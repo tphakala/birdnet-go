@@ -175,7 +175,7 @@ func (dm *DeviceManager) StartCapture(sourceID, deviceID string, cfg DeviceConfi
 	dm.log.Info("capture started",
 		logger.String("source_id", sourceID),
 		logger.String("device", info.Name),
-		logger.String("device_id", deviceID))
+		logger.String("device_id", redactDeviceID(deviceID)))
 
 	return nil
 }

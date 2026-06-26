@@ -151,6 +151,50 @@ func TestParseUSBID(t *testing.T) {
 	}
 }
 
+func TestDeviceDedupKey(t *testing.T) {
+	t.Parallel()
+	usbA := usbIdentity{BusPath: "usb-0000:00:14.0-1"}
+	usbB := usbIdentity{BusPath: "usb-0000:00:14.0-2"}
+	none := usbIdentity{}
+
+	// USB cards key on name + stable token, so two identical-named cards on
+	// different ports get DISTINCT keys and both survive deduplication, while one
+	// card's pseudo-devices (same token) collapse to a single key.
+	assert.Equal(t, "USB Mic\x00usb-path:usb-0000:00:14.0-1", deviceDedupKey("USB Mic", 1, usbA))
+	assert.Equal(t, "USB Mic\x00usb-path:usb-0000:00:14.0-2", deviceDedupKey("USB Mic", 2, usbB))
+
+	// Non-USB cards (no stable id) fall back to name + card number, so two
+	// same-named cards still separate while one card's pseudo-devices collapse.
+	assert.Equal(t, "HDMI\x00card:1", deviceDedupKey("HDMI", 1, none))
+	assert.Equal(t, "HDMI\x00card:2", deviceDedupKey("HDMI", 2, none))
+
+	// No identity and no card number falls back to the bare name.
+	assert.Equal(t, "Default Audio Device", deviceDedupKey("Default Audio Device", -1, none))
+}
+
+func TestRedactDeviceID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"usb-id with serial is masked", "usb-id:0b33:0024:ABC123", "usb-id:0b33:0024:<redacted>"},
+		{"usb-id with empty serial is unchanged", "usb-id:0d8c:0014:", "usb-id:0d8c:0014:"},
+		{"usb-path is unchanged", "usb-path:usb-xhci-hcd.0-1", "usb-path:usb-xhci-hcd.0-1"},
+		{"legacy alsa id is unchanged", ":1,0", ":1,0"},
+		{"device name is unchanged", "USB Audio Device", "USB Audio Device"},
+		{"malformed usb-id is unchanged", "usb-id:onlyone", "usb-id:onlyone"},
+		{"empty is unchanged", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, redactDeviceID(tt.in))
+		})
+	}
+}
+
 func TestMatchesDevice(t *testing.T) {
 	t.Parallel()
 	// A live USB device with a known identity (as resolved from /proc).
