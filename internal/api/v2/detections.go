@@ -1676,6 +1676,51 @@ func (c *Controller) excludeEntryMatches(entry, target string) bool {
 	return false
 }
 
+// canonicalizeExcludeList returns a copy of the species exclude list with every
+// entry resolved to its scientific name (via resolveExcludeName) and de-duplicated
+// case-insensitively, preserving first-occurrence order. Whitespace-only entries
+// are dropped. Settings-page saves persist the slice verbatim through the generic
+// reflection/JSON merge, so without this a localized or common name typed into the
+// Settings exclude editor would be stored in a non-canonical form; routing it
+// through the same resolution the detection endpoints use keeps the stored list in
+// a single scientific-name form that the per-detection filter (isSpeciesExcluded)
+// and the detection-card toggle both match regardless of the UI locale.
+//
+// It is idempotent: a list that is already canonical (all scientific, de-duplicated,
+// trimmed) is returned with identical contents, so reflect.DeepEqual-based change
+// detection (rangeFilterSettingsChanged) sees no diff and no spurious range-filter
+// rebuild is triggered. Ambiguous common names shared by multiple species are passed
+// through unchanged by resolveSpeciesToScientific, matching the detection-side paths.
+func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
+	if len(exclude) == 0 {
+		return exclude
+	}
+	canonical := make([]string, 0, len(exclude))
+	for _, entry := range exclude {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed == "" {
+			continue
+		}
+		resolved := c.resolveExcludeName(trimmed)
+		// Dedup with EqualFold for exact parity with excludeEntryMatches (both
+		// operands are already resolved here, so no second resolution is needed).
+		// A plain scan over the small, already-canonical slice avoids the per-entry
+		// map a lowercased-key set would allocate.
+		dup := false
+		for _, existing := range canonical {
+			if strings.EqualFold(existing, resolved) {
+				dup = true
+				break
+			}
+		}
+		if dup {
+			continue
+		}
+		canonical = append(canonical, resolved)
+	}
+	return canonical
+}
+
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
 func (c *Controller) addToIgnoredSpecies(verified, ignoreSpecies string) error {
 	if verified == "false_positive" && ignoreSpecies != "" {
