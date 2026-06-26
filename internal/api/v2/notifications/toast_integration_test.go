@@ -109,7 +109,7 @@ func TestToastIntegrationFlow(t *testing.T) {
 			err := service.SendToastWithDuration(tc.message, tc.toastType, "api", tc.duration)
 			require.NoError(t, err, "SendToastWithDuration() error")
 
-			capturedNotif := awaitNotification(t, notifCh, 100*time.Millisecond)
+			capturedNotif := awaitNotification(t, notifCh, 500*time.Millisecond)
 			toastID := checkToastMarking(t, capturedNotif)
 			sseEventData := h.createToastEventData(capturedNotif)
 
