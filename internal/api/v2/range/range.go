@@ -23,6 +23,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -122,12 +123,12 @@ func resolveLocalizedName(resolver *classifier.Orchestrator, locale string, sp d
 // convertSpeciesScores converts classifier.SpeciesScore entries to the API
 // response format with probability score pointers. When resolver and locale
 // are provided, common names are resolved to the user's locale.
-func convertSpeciesScores(scores []classifier.SpeciesScore, resolver *classifier.Orchestrator, locale string) []RangeFilterSpecies {
-	species := make([]RangeFilterSpecies, 0, len(scores))
+func convertSpeciesScores(scores []classifier.SpeciesScore, resolver *classifier.Orchestrator, locale string) []dto.RangeFilterSpecies {
+	species := make([]dto.RangeFilterSpecies, 0, len(scores))
 	for _, s := range scores {
 		sp := detection.ParseSpeciesString(s.Label)
 		score := s.Score
-		species = append(species, RangeFilterSpecies{
+		species = append(species, dto.RangeFilterSpecies{
 			Label:          s.Label,
 			ScientificName: sp.ScientificName,
 			CommonName:     resolveLocalizedName(resolver, locale, sp),
@@ -140,11 +141,11 @@ func convertSpeciesScores(scores []classifier.SpeciesScore, resolver *classifier
 // convertLabels converts string labels to the API response format without scores.
 // When resolver and locale are provided, common names are resolved to the
 // user's locale.
-func convertLabels(labels []string, resolver *classifier.Orchestrator, locale string) []RangeFilterSpecies {
-	species := make([]RangeFilterSpecies, 0, len(labels))
+func convertLabels(labels []string, resolver *classifier.Orchestrator, locale string) []dto.RangeFilterSpecies {
+	species := make([]dto.RangeFilterSpecies, 0, len(labels))
 	for _, label := range labels {
 		sp := detection.ParseSpeciesString(label)
-		species = append(species, RangeFilterSpecies{
+		species = append(species, dto.RangeFilterSpecies{
 			Label:          label,
 			ScientificName: sp.ScientificName,
 			CommonName:     resolveLocalizedName(resolver, locale, sp),
@@ -182,12 +183,12 @@ func convertLabels(labels []string, resolver *classifier.Orchestrator, locale st
 // always-active 1.0 sentinel survives over its lower range-filter probability.
 // The first occurrence's position is preserved (the input arrives sorted by
 // score descending), keeping the output order stable and deterministic.
-func dedupeSpeciesForDisplay(species []RangeFilterSpecies) []RangeFilterSpecies {
+func dedupeSpeciesForDisplay(species []dto.RangeFilterSpecies) []dto.RangeFilterSpecies {
 	if len(species) < 2 {
 		return species
 	}
 	indexByKey := make(map[string]int, len(species))
-	deduped := make([]RangeFilterSpecies, 0, len(species))
+	deduped := make([]dto.RangeFilterSpecies, 0, len(species))
 	for _, sp := range species {
 		key := apicore.NormalizeForLookup(sp.CommonName)
 		if key == "" {
@@ -217,7 +218,7 @@ func dedupeSpeciesForDisplay(species []RangeFilterSpecies) []RangeFilterSpecies 
 // speciesScoreHigher reports whether a has a strictly higher score than b. A nil
 // score (label-only display rows) sorts below any real score, so a scored entry
 // always wins over an unscored one.
-func speciesScoreHigher(a, b RangeFilterSpecies) bool {
+func speciesScoreHigher(a, b dto.RangeFilterSpecies) bool {
 	if a.Score == nil {
 		return false
 	}
@@ -241,16 +242,6 @@ type RangeFilterSpeciesCount struct {
 	Location    Location  `json:"location"`
 }
 
-// RangeFilterSpecies represents a single species in the range filter. It stays
-// exported because the species domain (/api/v2/species/all) reuses it as its
-// response element type.
-type RangeFilterSpecies struct {
-	Label          string   `json:"label"`
-	ScientificName string   `json:"scientificName"`
-	CommonName     string   `json:"commonName"`
-	Score          *float64 `json:"score,omitempty"` // Nullable - only present when individual scores are available
-}
-
 // TaxonomyFamily represents a bird family with scientific and common names
 type TaxonomyFamily struct {
 	Name       string `json:"name"`       // Scientific name, e.g. "Strigidae"
@@ -259,23 +250,23 @@ type TaxonomyFamily struct {
 
 // RangeFilterSpeciesList represents the full list response for range filter species
 type RangeFilterSpeciesList struct {
-	Species     []RangeFilterSpecies `json:"species"`
-	Count       int                  `json:"count"`
-	LastUpdated time.Time            `json:"lastUpdated"`
-	Threshold   float32              `json:"threshold"`
-	Location    Location             `json:"location"`
-	Genera      []string             `json:"genera"`
-	Families    []TaxonomyFamily     `json:"families"`
-	Orders      []string             `json:"orders"`
+	Species     []dto.RangeFilterSpecies `json:"species"`
+	Count       int                      `json:"count"`
+	LastUpdated time.Time                `json:"lastUpdated"`
+	Threshold   float32                  `json:"threshold"`
+	Location    Location                 `json:"location"`
+	Genera      []string                 `json:"genera"`
+	Families    []TaxonomyFamily         `json:"families"`
+	Orders      []string                 `json:"orders"`
 }
 
 // RangeFilterScoresResponse represents all species with their raw geomodel scores
 type RangeFilterScoresResponse struct {
-	Species   []RangeFilterSpecies `json:"species"`
-	Count     int                  `json:"count"`
-	Location  Location             `json:"location"`
-	Week      int                  `json:"week"`
-	Threshold float32              `json:"threshold"`
+	Species   []dto.RangeFilterSpecies `json:"species"`
+	Count     int                      `json:"count"`
+	Location  Location                 `json:"location"`
+	Week      int                      `json:"week"`
+	Threshold float32                  `json:"threshold"`
 }
 
 // RangeFilterTestRequest represents the request for testing range filter
@@ -289,12 +280,12 @@ type RangeFilterTestRequest struct {
 
 // RangeFilterTestResponse represents the response for range filter testing
 type RangeFilterTestResponse struct {
-	Species    []RangeFilterSpecies `json:"species"`
-	Count      int                  `json:"count"`
-	Threshold  float32              `json:"threshold"`
-	Location   Location             `json:"location"`
-	TestDate   time.Time            `json:"testDate"`
-	Week       int                  `json:"week"`
+	Species    []dto.RangeFilterSpecies `json:"species"`
+	Count      int                      `json:"count"`
+	Threshold  float32                  `json:"threshold"`
+	Location   Location                 `json:"location"`
+	TestDate   time.Time                `json:"testDate"`
+	Week       int                      `json:"week"`
 	Parameters struct {
 		InputLatitude  float64 `json:"inputLatitude"`
 		InputLongitude float64 `json:"inputLongitude"`
@@ -635,7 +626,7 @@ func (c *Handler) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	customLon := ctx.QueryParam("longitude")
 	customThreshold := ctx.QueryParam("threshold")
 
-	var speciesList []RangeFilterSpecies
+	var speciesList []dto.RangeFilterSpecies
 	var location Location
 	var threshold float32
 
@@ -738,7 +729,7 @@ func (c *Handler) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 // species (bats/Perch). This is the path the settings UI's CSV download takes
 // (it always sends parameters), so a user who sees bats in the Active Species
 // preview gets the same bats when exporting those parameters to CSV.
-func (c *Handler) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilterSpecies, Location, float32, error) {
+func (c *Handler) getTestSpeciesList(req RangeFilterTestRequest) ([]dto.RangeFilterSpecies, Location, float32, error) {
 	// Check if BirdNET is available
 	birdnetInstance, err := c.GetBirdNETInstance()
 	if err != nil {
@@ -784,7 +775,7 @@ func sanitizeCSVField(field string) string {
 }
 
 // generateSpeciesCSV generates CSV content from species list using the standard CSV library
-func (c *Handler) generateSpeciesCSV(species []RangeFilterSpecies, location Location, threshold float32) ([]byte, error) {
+func (c *Handler) generateSpeciesCSV(species []dto.RangeFilterSpecies, location Location, threshold float32) ([]byte, error) {
 	var buf bytes.Buffer
 
 	// Write UTF-8 BOM for Excel compatibility

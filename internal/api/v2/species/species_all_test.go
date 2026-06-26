@@ -1,7 +1,7 @@
 // species_all_test.go: tests for buildAllSpeciesList, the /api/v2/species/all
 // include/exclude picker payload builder.
 
-package api
+package species
 
 import (
 	"testing"
