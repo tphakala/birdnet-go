@@ -197,6 +197,18 @@ type Controller struct {
 	// importSourceFactory builds an import Source from a resolved path.
 	// Defaults to a BirdNET-Pi adapter when nil. Overridable in tests.
 	importSourceFactory func(path string) (imports.Source, error)
+
+	// ntfyCheckTimeoutOverride overrides the per-scheme ntfy connectivity probe
+	// timeout used by CheckNtfyServer. Zero in production, where the probe uses
+	// ntfyServerCheckTimeout. Tests set a short timeout so the unreachable-host
+	// path returns quickly instead of waiting the full default for each scheme.
+	ntfyCheckTimeoutOverride time.Duration
+
+	// audioWaitTimeoutOverride overrides the server-side wait for an in-progress
+	// audio encoding used by waitForAudioFile. Zero in production, where the wait
+	// uses audioWaitTimeout. Tests set a short timeout to exercise the
+	// 503-after-timeout path without waiting the full default.
+	audioWaitTimeoutOverride time.Duration
 }
 
 // SourceRestarterFunc restarts a single audio source identified by sourceID.

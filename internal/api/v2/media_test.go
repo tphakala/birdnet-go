@@ -1428,6 +1428,12 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
+	// Inject a short server-side wait so the 503-after-timeout path is exercised
+	// quickly. The final file never appears, so the wait deterministically expires
+	// regardless of the timeout value; the override only bounds the wait (default
+	// would be audioWaitTimeout).
+	controller.audioWaitTimeoutOverride = testFailFastTimeout
+
 	audioFilename := "slow-encoding.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
 	// Mirror the per-export unique temp name "<clip>.<pid>.<seq>.temp" the real
@@ -1435,7 +1441,7 @@ func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 	// isAudioBeingEncoded rather than a fixed name that production never produces.
 	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
 
-	// Create only the temp file — final file never appears
+	// Create only the temp file; the final file never appears.
 	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
 	require.NoError(t, err)
 

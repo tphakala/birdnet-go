@@ -23,6 +23,12 @@ const (
 	testControlChanBuffer     = 10               // Buffer size for control channel in tests
 	testNewYorkLongitude      = -74.0060         // New York City longitude for test data
 	testResponseHeaderTimeout = 30 * time.Second // HTTP response header timeout for tests
+	// testFailFastTimeout is a short timeout injected into deliberate-failure
+	// waits (unreachable ntfy host, audio file that never appears) so those
+	// tests reach the expected timeout state quickly instead of waiting the full
+	// production defaults. It is intentionally well above any local/CI dial or
+	// scheduling latency while staying far below the production timeouts.
+	testFailFastTimeout = 200 * time.Millisecond
 )
 
 // getTestController creates a test controller with disabled saving

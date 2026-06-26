@@ -33,7 +33,7 @@ func TestCheckNtfyServer_RealContainer(t *testing.T) {
 	host := container.GetHost(ctx)
 
 	t.Run("http_reachable", func(t *testing.T) {
-		resp := probeNtfyServer(context.Background(), host)
+		resp := probeNtfyServer(context.Background(), host, ntfyServerCheckTimeout)
 
 		assert.Equal(t, "http", resp.Recommended, "container should be reachable via HTTP")
 		assert.True(t, resp.HTTP, "HTTP should be true")
@@ -46,7 +46,7 @@ func TestCheckNtfyServer_RealContainer(t *testing.T) {
 		require.NoError(t, err, "should parse host:port")
 
 		unreachableHost := fmt.Sprintf("%s:1", hostPart)
-		resp := probeNtfyServer(context.Background(), unreachableHost)
+		resp := probeNtfyServer(context.Background(), unreachableHost, ntfyServerCheckTimeout)
 
 		assert.Equal(t, "unreachable", resp.Recommended, "port 1 should be unreachable")
 	})
