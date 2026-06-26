@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
@@ -69,10 +70,7 @@ func setupInsightsTestController(t *testing.T, mock *mockInsightsRepo) (*echo.Ec
 			},
 		},
 	}
-	controller := &Controller{
-		Group:        e.Group("/api/v2"),
-		insightsRepo: mock,
-	}
+	controller := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2")}, insightsRepo: mock}
 	controller.Settings.Store(settingsVal)
 	controller.UpdateCommonNameMap(controller.Settings.Load().BirdNET.Labels)
 	return e, controller

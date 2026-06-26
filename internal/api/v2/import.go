@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
@@ -178,14 +179,14 @@ func isContained(root, target string) bool {
 // initImportRoutes registers all import-related API routes.
 //
 // These endpoints start, cancel, and inspect a database import, so the group
-// must fail closed. c.authMiddleware is non-nil in every real deployment: the
+// must fail closed. c.AuthMiddleware is non-nil in every real deployment: the
 // server always injects it via WithAuthMiddleware, and that middleware itself
 // enforces or passes through based on the auth configuration. It can only be nil
 // in unit tests or a misconfiguration; in that case install a middleware that
 // denies access with 401 rather than registering the routes unprotected (Echo's
 // applyMiddleware would also panic on a literal nil entry).
 func (c *Controller) initImportRoutes() {
-	authMiddleware := c.authMiddleware
+	authMiddleware := c.AuthMiddleware
 	if authMiddleware == nil {
 		authMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
 			return func(ctx echo.Context) error {
@@ -204,11 +205,11 @@ func (c *Controller) initImportRoutes() {
 // Returns 202 Accepted with a job_id on success.
 func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 	// Verify datastore is available.
-	if err := c.requireDatastore(ctx); err != nil {
+	if err := c.RequireDatastore(ctx); err != nil {
 		return err
 	}
 	if c.Repo == nil {
-		return c.HandleError(ctx, errDatastoreUnavailable, "datastore is not available", http.StatusServiceUnavailable)
+		return c.HandleError(ctx, apicore.ErrDatastoreUnavailable, "datastore is not available", http.StatusServiceUnavailable)
 	}
 
 	// Parse and bind request body.
@@ -272,7 +273,7 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 	// so an unconfigured path returns 400 without occupying the slot.
 	var clipExportPath string
 	if req.Mode == importModeDBaudio {
-		if settings := c.currentSettings(); settings != nil {
+		if settings := c.CurrentSettings(); settings != nil {
 			clipExportPath = settings.Realtime.Audio.Export.Path
 		}
 		if clipExportPath == "" {
@@ -282,8 +283,8 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 	}
 
 	// Reserve the single import slot.
-	id := generateCorrelationID()
-	parent := c.ctx
+	id := apicore.GenerateCorrelationID()
+	parent := c.Context()
 	if parent == nil {
 		parent = context.Background()
 	}
@@ -306,16 +307,14 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 		opts.ClipExportPath = clipExportPath
 	}
 	eng := imports.NewEngine(c.Repo)
-	c.wg.Go(func() {
+	c.Go(func() {
 		var stats imports.ImportStats
 		var runErr error
-		// Registered first so it runs last: it recovers panics from eng.Run AND from
-		// the cleanup defers below, and always drives the job to a terminal state so the
-		// single import slot is released and SSE streams unblock.
+
 		defer func() {
 			if r := recover(); r != nil {
 				runErr = errors.Newf("import panicked: %v", r).Component("api").Category(errors.CategoryGeneric).Build()
-				// The local stats var is stale on panic; recover the last reported progress.
+
 				stats, _, _, _, _ = job.snapshot()
 			}
 			job.finish(stats, runErr)
@@ -363,10 +362,10 @@ func (c *Controller) StreamImportProgress(ctx echo.Context) error {
 	hb := time.NewTicker(sseHeartbeatInterval)
 	defer hb.Stop()
 
-	// Capture shutdown channel defensively; c.ctx may be nil in isolated unit tests.
+	// Capture shutdown channel defensively; c.Context() may be nil in isolated unit tests.
 	var shutdown <-chan struct{}
-	if c.ctx != nil {
-		shutdown = c.ctx.Done()
+	if c.Context() != nil {
+		shutdown = c.Context().Done()
 	} else {
 		neverClose := make(chan struct{})
 		shutdown = neverClose
@@ -458,7 +457,7 @@ func (c *Controller) sendImportEvent(ctx echo.Context, id uint64, event string, 
 		if err := conn.SetWriteDeadline(time.Now().Add(sseWriteDeadline)); err != nil {
 			// Best-effort: not all response writers support deadlines; log and proceed,
 			// matching sendSSEMessage in sse.go.
-			c.logDebugIfEnabled("Failed to set write deadline for import SSE event", logger.Error(err))
+			c.LogDebugIfEnabled("Failed to set write deadline for import SSE event", logger.Error(err))
 		}
 	}
 	if _, err := ctx.Response().Write([]byte(msg)); err != nil {

@@ -36,12 +36,10 @@ func (e *dateValidationError) Error() string { return e.message }
 
 // Detection constants (file-local)
 const (
-	detectionCacheExpiry  = 5 * time.Minute  // Default cache expiration
-	detectionCacheCleanup = 10 * time.Minute // Cache cleanup interval
-	defaultNumResults     = 100              // Default number of results
-	maxNumResults         = 1000             // Maximum number of results
-	sunEventWindowMinutes = 30               // Minutes before/after sunrise/sunset
-	minHourRangeParts     = 2                // Minimum parts for hour range parsing
+	defaultNumResults     = 100  // Default number of results
+	maxNumResults         = 1000 // Maximum number of results
+	sunEventWindowMinutes = 30   // Minutes before/after sunrise/sunset
+	minHourRangeParts     = 2    // Minimum parts for hour range parsing
 
 	// queryType values for detection queries
 	queryTypeHourly  = "hourly"
@@ -139,11 +137,11 @@ func (c *Controller) initDetectionRoutes() {
 	// mode (NewWithOptions permits a nil datastore) by not registering this route group
 	// when there is no datastore, instead of registering handlers that would panic.
 	if c.DS == nil {
-		c.logWarnIfEnabled("Skipping detection routes: datastore is not available")
+		c.LogWarnIfEnabled("Skipping detection routes: datastore is not available")
 		return
 	}
 
-	// detectionCache is already initialized by the constructor (NewWithOptions); do not
+	// DetectionCache is already initialized by the constructor (NewWithOptions); do not
 	// re-create it here, which would orphan the constructor's cache (and its janitor).
 
 	// Detection endpoints - publicly accessible
@@ -157,7 +155,7 @@ func (c *Controller) initDetectionRoutes() {
 	c.Group.GET("/detections/:id/time-of-day", c.GetDetectionTimeOfDay)
 
 	// Protected detection management endpoints
-	detectionGroup := c.Group.Group("/detections", c.authMiddleware)
+	detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
 	detectionGroup.DELETE("/:id", c.DeleteDetection)
 	detectionGroup.POST("/:id/review", c.ReviewDetection)
 	detectionGroup.POST("/:id/lock", c.LockDetection)
@@ -406,7 +404,7 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 	// Validate individual date formats
 	for _, dp := range []struct{ value, name string }{{startDateStr, "start_date"}, {endDateStr, "end_date"}} {
 		if err := validateDateParam(dp.value, dp.name); err != nil {
-			c.logErrorIfEnabled("Invalid date parameter",
+			c.LogErrorIfEnabled("Invalid date parameter",
 				logger.String("parameter", dp.name),
 				logger.String("value", dp.value),
 				logger.String("path", ctx.Request().URL.Path),
@@ -417,7 +415,7 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 
 	// Check date order
 	if err := validateDateOrder(startDateStr, endDateStr); err != nil {
-		c.logErrorIfEnabled("Invalid date range",
+		c.LogErrorIfEnabled("Invalid date range",
 			logger.String("start_date", startDateStr),
 			logger.String("end_date", endDateStr),
 			logger.String("path", ctx.Request().URL.Path),
@@ -434,12 +432,12 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 		return defaultNumResults, nil // Default value
 	}
 
-	c.logDebugIfEnabled("GetDetections: Raw numResults string",
+	c.LogDebugIfEnabled("GetDetections: Raw numResults string",
 		logger.String("value", numResultsStr),
 	)
 	numResults, err := strconv.Atoi(numResultsStr)
 	if err != nil {
-		c.logDebugIfEnabled("GetDetections: Invalid numResults string",
+		c.LogDebugIfEnabled("GetDetections: Invalid numResults string",
 			logger.String("value", numResultsStr),
 			logger.Error(err),
 		)
@@ -454,11 +452,11 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 		return 0, fmt.Errorf("Invalid numeric value for numResults: %w", err) //nolint:staticcheck // matches test expectations
 	}
 
-	c.logDebugIfEnabled("GetDetections: Parsed numResults value",
+	c.LogDebugIfEnabled("GetDetections: Parsed numResults value",
 		logger.Int("value", numResults),
 	)
 	if numResults <= 0 {
-		c.logDebugIfEnabled("GetDetections: Zero or negative numResults value",
+		c.LogDebugIfEnabled("GetDetections: Zero or negative numResults value",
 			logger.Int("value", numResults),
 		)
 		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
@@ -473,7 +471,7 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 	}
 
 	if numResults > maxNumResults {
-		c.logDebugIfEnabled("GetDetections: Too large numResults value",
+		c.LogDebugIfEnabled("GetDetections: Too large numResults value",
 			logger.Int("value", numResults),
 		)
 		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
@@ -496,12 +494,12 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 		return 0, nil // Default value
 	}
 
-	c.logDebugIfEnabled("GetDetections: Raw offset string",
+	c.LogDebugIfEnabled("GetDetections: Raw offset string",
 		logger.String("value", offsetStr),
 	)
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
-		c.logDebugIfEnabled("GetDetections: Invalid offset string",
+		c.LogDebugIfEnabled("GetDetections: Invalid offset string",
 			logger.String("value", offsetStr),
 			logger.Error(err),
 		)
@@ -515,11 +513,11 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 		return 0, fmt.Errorf("Invalid numeric value for offset: %w", err) //nolint:staticcheck // matches test expectations
 	}
 
-	c.logDebugIfEnabled("GetDetections: Parsed offset value",
+	c.LogDebugIfEnabled("GetDetections: Parsed offset value",
 		logger.Int("value", offset),
 	)
 	if offset < 0 {
-		c.logDebugIfEnabled("GetDetections: Negative offset value",
+		c.LogDebugIfEnabled("GetDetections: Negative offset value",
 			logger.Int("value", offset),
 		)
 		// Log the enhanced error for telemetry
@@ -534,7 +532,7 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 
 	const maxOffset = 1000000
 	if offset > maxOffset {
-		c.logDebugIfEnabled("GetDetections: Too large offset value",
+		c.LogDebugIfEnabled("GetDetections: Too large offset value",
 			logger.Int("value", offset),
 		)
 		// Log the enhanced error for telemetry
@@ -556,7 +554,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	// Parse and validate query parameters
 	params, err := c.parseDetectionQueryParams(ctx)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to parse query parameters",
+		c.LogErrorIfEnabled("Failed to parse query parameters",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -569,7 +567,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	}
 
 	// Log the retrieval attempt
-	c.logInfoIfEnabled("Retrieving detections",
+	c.LogInfoIfEnabled("Retrieving detections",
 		logger.String("queryType", params.QueryType),
 		logger.String("date", params.Date),
 		logger.String("hour", params.Hour),
@@ -587,7 +585,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	// Get notes based on query type
 	notes, totalResults, err := c.getDetectionsByQueryType(params)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to retrieve detections",
+		c.LogErrorIfEnabled("Failed to retrieve detections",
 			logger.String("queryType", params.QueryType),
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
@@ -604,7 +602,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	response := c.createPaginatedResponse(detections, totalResults, params.NumResults, params.Offset)
 
 	// Log the successful response
-	c.logInfoIfEnabled("Detections retrieved successfully",
+	c.LogInfoIfEnabled("Detections retrieved successfully",
 		logger.String("queryType", params.QueryType),
 		logger.Int("count", len(detections)),
 		logger.Int64("total", response.Total),
@@ -834,7 +832,7 @@ func (c *Controller) populateWeatherData(detection *DetectionResponse, note *dat
 	detectionTimeStr := note.Date + " " + note.Time
 	detectionTime, err := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, time.Local)
 	if err != nil {
-		c.logWarnIfEnabled("Failed to parse detection time for weather data",
+		c.LogWarnIfEnabled("Failed to parse detection time for weather data",
 			logger.String("time_str", detectionTimeStr),
 			logger.Error(err))
 		return
@@ -940,7 +938,7 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 	cacheKey := fmt.Sprintf("hourly:%s:%s:%d:%d:%d", date, hour, duration, numResults, offset)
 
 	// Check if data is in cache
-	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
 		cachedResult := cachedData.(struct {
 			Notes []datastore.Note
 			Total int64
@@ -951,7 +949,7 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 	// If not in cache, query the database
 	notes, err := c.DS.GetHourlyDetections(date, hour, duration, numResults, offset)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get hourly detections",
+		c.LogErrorIfEnabled("Failed to get hourly detections",
 			logger.String("date", date),
 			logger.String("hour", hour),
 			logger.Int("duration", duration),
@@ -964,7 +962,7 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 
 	totalCount, err := c.DS.CountHourlyDetections(date, hour, duration)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to count hourly detections",
+		c.LogErrorIfEnabled("Failed to count hourly detections",
 			logger.String("date", date),
 			logger.String("hour", hour),
 			logger.Int("duration", duration),
@@ -974,12 +972,12 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 	}
 
 	// Cache the results
-	c.detectionCache.Set(cacheKey, struct {
+	c.DetectionCache.Set(cacheKey, struct {
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
 
-	c.logInfoIfEnabled("Retrieved hourly detections",
+	c.LogInfoIfEnabled("Retrieved hourly detections",
 		logger.String("date", date),
 		logger.String("hour", hour),
 		logger.Int("duration", duration),
@@ -996,7 +994,7 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 	cacheKey := fmt.Sprintf("species:%s:%s:%s:%d:%d:%d", species, date, hour, duration, numResults, offset)
 
 	// Check if data is in cache
-	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
 		cachedResult := cachedData.(struct {
 			Notes []datastore.Note
 			Total int64
@@ -1007,7 +1005,7 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 	// If not in cache, query the database
 	notes, err := c.DS.SpeciesDetections(species, date, hour, duration, false, numResults, offset)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get species detections",
+		c.LogErrorIfEnabled("Failed to get species detections",
 			logger.String("species", species),
 			logger.String("date", date),
 			logger.String("hour", hour),
@@ -1021,7 +1019,7 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 
 	totalCount, err := c.DS.CountSpeciesDetections(species, date, hour, duration)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to count species detections",
+		c.LogErrorIfEnabled("Failed to count species detections",
 			logger.String("species", species),
 			logger.String("date", date),
 			logger.String("hour", hour),
@@ -1032,12 +1030,12 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 	}
 
 	// Cache the results
-	c.detectionCache.Set(cacheKey, struct {
+	c.DetectionCache.Set(cacheKey, struct {
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
 
-	c.logInfoIfEnabled("Retrieved species detections",
+	c.LogInfoIfEnabled("Retrieved species detections",
 		logger.String("species", species),
 		logger.String("date", date),
 		logger.String("hour", hour),
@@ -1053,7 +1051,7 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]datastore.Note, int64, error) {
 	cacheKey := params.advancedSearchCacheKey()
 
-	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
 		cachedResult := cachedData.(struct {
 			Notes []datastore.Note
 			Total int64
@@ -1065,14 +1063,14 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 
 	notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to perform advanced search",
+		c.LogErrorIfEnabled("Failed to perform advanced search",
 			logger.String("filters", fmt.Sprintf("%+v", filters)),
 			logger.Error(err),
 		)
 		return nil, 0, err
 	}
 
-	c.detectionCache.Set(cacheKey, struct {
+	c.DetectionCache.Set(cacheKey, struct {
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
@@ -1156,7 +1154,7 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	cacheKey := fmt.Sprintf("search:%s:%d:%d", search, numResults, offset)
 
 	// Check if data is in cache
-	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
 		cachedResult := cachedData.(struct {
 			Notes []datastore.Note
 			Total int64
@@ -1167,7 +1165,7 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	// If not in cache, query the database
 	notes, totalCount, err := c.DS.SearchNotes(search, false, numResults, offset)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to search notes",
+		c.LogErrorIfEnabled("Failed to search notes",
 			logger.String("query", search),
 			logger.Int("limit", numResults),
 			logger.Int("offset", offset),
@@ -1177,12 +1175,12 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	}
 
 	// Cache the results
-	c.detectionCache.Set(cacheKey, struct {
+	c.DetectionCache.Set(cacheKey, struct {
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
 
-	c.logInfoIfEnabled("Retrieved search results",
+	c.LogInfoIfEnabled("Retrieved search results",
 		logger.String("query", search),
 		logger.Int("count", len(notes)),
 		logger.Int64("total", totalCount),
@@ -1197,7 +1195,7 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 	cacheKey := fmt.Sprintf("all:%d:%d", numResults, offset)
 
 	// Check if data is in cache
-	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
 		cachedResult := cachedData.(struct {
 			Notes []datastore.Note
 			Total int64
@@ -1208,7 +1206,7 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 	// Use the datastore.SearchNotes method with an empty query to get all notes
 	notes, totalResults, err := c.DS.SearchNotes("", false, numResults, offset)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get all detections",
+		c.LogErrorIfEnabled("Failed to get all detections",
 			logger.Int("limit", numResults),
 			logger.Int("offset", offset),
 			logger.Error(err),
@@ -1217,12 +1215,12 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 	}
 
 	// Cache the results
-	c.detectionCache.Set(cacheKey, struct {
+	c.DetectionCache.Set(cacheKey, struct {
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalResults}, cache.DefaultExpiration)
 
-	c.logInfoIfEnabled("Retrieved all detections",
+	c.LogInfoIfEnabled("Retrieved all detections",
 		logger.Int("count", len(notes)),
 		logger.Int64("total", totalResults),
 	)
@@ -1317,10 +1315,10 @@ var spectrogramWidths = []int{
 // are silently ignored, and other errors are logged as warnings without
 // affecting the caller.
 func (c *Controller) removeDetectionFiles(clipName string) {
-	log := c.apiLogger
+	log := c.APILogger
 
 	// Normalize the clip path to get a relative path within SecureFS
-	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
+	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
 	normalized := NormalizeClipPath(clipName, clipsPrefix)
 	if normalized == "" {
 		log.Warn("Cannot remove detection files: empty normalized clip path",
@@ -1415,7 +1413,7 @@ func isSpectrogramFileFor(pngName, baseFilename string) bool {
 // operation that modifies detection data.
 func (c *Controller) invalidateDetectionCache() {
 	// Clear all cached detection data to ensure fresh results
-	c.detectionCache.Flush()
+	c.DetectionCache.Flush()
 }
 
 // checkAndHandleLock verifies if a detection is locked and manages lock state
@@ -1501,7 +1499,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 
 	// Handle lock/unlock request separately
 	if req.LockDetection != note.Locked {
-		c.logInfoIfEnabled("Updating lock status",
+		c.LogInfoIfEnabled("Updating lock status",
 			logger.String("detection_id", idStr),
 			logger.Bool("current_locked", note.Locked),
 			logger.Bool("new_locked", req.LockDetection),
@@ -1511,7 +1509,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		err = c.AddLock(note.ID, req.LockDetection)
 		if err != nil {
 			// Log the lock operation failure
-			c.logErrorIfEnabled("Failed to update lock status",
+			c.LogErrorIfEnabled("Failed to update lock status",
 				logger.String("detection_id", idStr),
 				logger.Bool("attempted_lock_state", req.LockDetection),
 				logger.Error(err),
@@ -1610,7 +1608,7 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 	// Log the action. "species" is the name the user supplied; "stored_species"
 	// is what actually landed in the exclude list, so support can tell the two
 	// apart when a localized name was resolved to a scientific name.
-	c.logInfoIfEnabled("Species exclusion toggled",
+	c.LogInfoIfEnabled("Species exclusion toggled",
 		logger.String("species", req.CommonName),
 		logger.String("stored_species", speciesToIgnore),
 		logger.String("action", action),
@@ -1933,10 +1931,10 @@ func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTime
 // Returns "imperial" for Fahrenheit or "metric" for Celsius to match frontend expectations.
 func (c *Controller) getWeatherUnits() string {
 	// Use dashboard temperature unit preference for display. Read the live
-	// snapshot (race-free, hot-reloading) via currentSettings() so out-of-band
+	// snapshot (race-free, hot-reloading) via CurrentSettings() so out-of-band
 	// global republishes are picked up, matching the rest of the Dashboard reads.
 	// All temperatures are now stored in Celsius internally.
-	switch c.currentSettings().Realtime.Dashboard.TemperatureUnit {
+	switch c.CurrentSettings().Realtime.Dashboard.TemperatureUnit {
 	case conf.TemperatureUnitFahrenheit:
 		return "imperial"
 	case conf.TemperatureUnitCelsius:

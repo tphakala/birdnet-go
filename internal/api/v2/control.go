@@ -47,10 +47,10 @@ const (
 
 // initControlRoutes registers all control-related API endpoints
 func (c *Controller) initControlRoutes() {
-	c.logInfoIfEnabled("Initializing control routes")
+	c.LogInfoIfEnabled("Initializing control routes")
 
 	// Create control API group with auth middleware
-	controlGroup := c.Group.Group("/control", c.authMiddleware)
+	controlGroup := c.Group.Group("/control", c.AuthMiddleware)
 
 	// Control routes
 	controlGroup.POST("/restart", c.RestartAnalysis)
@@ -61,13 +61,13 @@ func (c *Controller) initControlRoutes() {
 	controlGroup.POST("/restart-source/:id", c.RestartAudioSource)
 	controlGroup.GET("/actions", c.GetAvailableActions)
 
-	c.logInfoIfEnabled("Control routes initialized successfully")
+	c.LogInfoIfEnabled("Control routes initialized successfully")
 }
 
 // GetAvailableActions handles GET /api/v2/control/actions
 // Returns a list of available control actions
 func (c *Controller) GetAvailableActions(ctx echo.Context) error {
-	c.logInfoIfEnabled("Getting available control actions",
+	c.LogInfoIfEnabled("Getting available control actions",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -102,7 +102,7 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 		})
 	}
 
-	c.logInfoIfEnabled("Retrieved available control actions successfully",
+	c.LogInfoIfEnabled("Retrieved available control actions successfully",
 		logger.Int("action_count", len(actions)),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -121,14 +121,14 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 //
 // Returns an error if the control channel is nil or if the request times out
 func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMessage, successMessage string) error {
-	c.logInfoIfEnabled(logMessage,
+	c.LogInfoIfEnabled(logMessage,
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 
 	if c.controlChan == nil {
 		err := fmt.Errorf("control channel not initialized")
-		c.logErrorIfEnabled("Control channel not available",
+		c.LogErrorIfEnabled("Control channel not available",
 			logger.Error(err),
 			logger.String("action", action),
 			logger.String("path", ctx.Request().URL.Path),
@@ -144,21 +144,21 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 	reqCtx := ctx.Request().Context()
 
 	// Send signal with context timeout and shutdown awareness.
-	// The c.ctx.Done() case prevents a send-on-closed-channel panic if shutdown
+	// The c.Context().Done() case prevents a send-on-closed-channel panic if shutdown
 	// closes controlChan while an HTTP request is still in-flight.
 	select {
 	case c.controlChan <- signal:
-		c.logInfoIfEnabled("Control signal sent successfully",
+		c.LogInfoIfEnabled("Control signal sent successfully",
 			logger.String("action", action),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-	case <-c.ctx.Done():
-		return c.HandleError(ctx, c.ctx.Err(),
+	case <-c.Context().Done():
+		return c.HandleError(ctx, c.Context().Err(),
 			"Server is shutting down", http.StatusServiceUnavailable)
 	case <-reqCtx.Done():
 		err := reqCtx.Err()
-		c.logErrorIfEnabled("Request timeout/cancel while sending control signal",
+		c.LogErrorIfEnabled("Request timeout/cancel while sending control signal",
 			logger.Error(err),
 			logger.String("action", action),
 			logger.String("path", ctx.Request().URL.Path),
@@ -201,7 +201,7 @@ func (c *Controller) RebuildFilter(ctx echo.Context) error {
 // It checks the shutdown requester, applies the CAS flag via setFlag,
 // and schedules an async shutdown after the HTTP response is sent.
 func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFlag func() bool, successMessage string) error {
-	sr := c.getShutdownRequester()
+	sr := c.GetShutdownRequester()
 	if sr == nil {
 		err := fmt.Errorf("shutdown requester not initialized")
 		return c.HandleError(ctx, err,
@@ -218,7 +218,7 @@ func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFl
 		})
 	}
 
-	c.logInfoIfEnabled(successMessage,
+	c.LogInfoIfEnabled(successMessage,
 		logger.String("action", action),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -246,7 +246,7 @@ func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFl
 // RestartServer handles POST /api/v2/control/restart-server
 // Triggers a graceful binary restart.
 func (c *Controller) RestartServer(ctx echo.Context) error {
-	c.logInfoIfEnabled("Received request to restart server",
+	c.LogInfoIfEnabled("Received request to restart server",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -257,7 +257,7 @@ func (c *Controller) RestartServer(ctx echo.Context) error {
 // RestartContainer handles POST /api/v2/control/restart-container
 // Triggers a container restart by exiting the process.
 func (c *Controller) RestartContainer(ctx echo.Context) error {
-	c.logInfoIfEnabled("Received request to restart container",
+	c.LogInfoIfEnabled("Received request to restart container",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -290,13 +290,13 @@ func (c *Controller) RestartAudioSource(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Source ID is required", http.StatusBadRequest)
 	}
 
-	c.logInfoIfEnabled("Received request to restart audio source",
+	c.LogInfoIfEnabled("Received request to restart audio source",
 		logger.String("source_id", sourceID),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		return c.HandleError(ctx, fmt.Errorf("audio engine not initialized"),
 			"Audio engine not available", http.StatusInternalServerError)
@@ -313,7 +313,7 @@ func (c *Controller) RestartAudioSource(ctx echo.Context) error {
 	}
 
 	if err := (*fn)(sourceID); err != nil {
-		c.logErrorIfEnabled("Failed to restart audio source",
+		c.LogErrorIfEnabled("Failed to restart audio source",
 			logger.String("source_id", sourceID),
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
@@ -322,7 +322,7 @@ func (c *Controller) RestartAudioSource(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to restart audio source", http.StatusInternalServerError)
 	}
 
-	c.logInfoIfEnabled("Audio source restarted successfully",
+	c.LogInfoIfEnabled("Audio source restarted successfully",
 		logger.String("source_id", sourceID),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),

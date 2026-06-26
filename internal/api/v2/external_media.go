@@ -46,7 +46,7 @@ type ExternalMediaResponse struct {
 // running application, and when it is not, provides deployment-specific setup
 // instructions for the detected container runtime.
 func (c *Controller) GetExternalMedia(ctx echo.Context) error {
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting external media status")
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting external media status")
 
 	envGetter := c.externalMediaEnv
 	if envGetter == nil {
@@ -74,7 +74,7 @@ func (c *Controller) GetExternalMedia(ctx echo.Context) error {
 		Guidance:      guidance,
 	}
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "External media status retrieved",
+	c.LogAPIRequest(ctx, logger.LogLevelInfo, "External media status retrieved",
 		logger.String("environment", envType),
 		logger.Bool("containerized", containerized),
 		logger.Bool("mountPresent", mountPresent),

@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -70,7 +71,7 @@ func putFullSettings(t *testing.T, e *echo.Echo, c *Controller, s *conf.Settings
 func TestCanonicalizeExcludeList(t *testing.T) {
 	t.Parallel()
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	installExcludeTestResolver(t, c)
 
 	tests := []struct {

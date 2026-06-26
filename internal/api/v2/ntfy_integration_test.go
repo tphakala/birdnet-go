@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/testutil/containers"
 )
 
@@ -54,7 +55,7 @@ func TestCheckNtfyServer_RealContainer(t *testing.T) {
 	t.Run("handler_integration", func(t *testing.T) {
 		// Test the full CheckNtfyServer handler via Echo context
 		e := echo.New()
-		ctrl := &Controller{}
+		ctrl := &Controller{Core: &apicore.Core{}}
 		ctrl.Settings.Store(newValidTestSettings())
 
 		req := httptest.NewRequest(http.MethodGet,

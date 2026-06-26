@@ -14,17 +14,17 @@ type AudioHealthResponse struct {
 
 // initAudioHealthRoutes registers the audio liveness health endpoints.
 func (c *Controller) initAudioHealthRoutes() {
-	c.Group.GET("/health/audio", c.GetAudioHealth, c.authMiddleware)
+	c.Group.GET("/health/audio", c.GetAudioHealth, c.AuthMiddleware)
 }
 
 // SetAudioWatchdog injects the liveness watchdog for the health endpoint.
 func (c *Controller) SetAudioWatchdog(w *audiocore.LivenessWatchdog) {
-	c.audioWatchdog.Store(w)
+	c.AudioWatchdog.Store(w)
 }
 
 // GetAudioHealth returns the current liveness state for all monitored audio sources.
 func (c *Controller) GetAudioHealth(ctx echo.Context) error {
-	w := c.audioWatchdog.Load()
+	w := c.AudioWatchdog.Load()
 	if w == nil {
 		return ctx.JSON(http.StatusOK, AudioHealthResponse{
 			Sources: []audiocore.SourceHealthSnapshot{},

@@ -36,7 +36,7 @@ func TestRestartAudioSource_SourceNotFound(t *testing.T) {
 
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
-	c.engine.Store(eng)
+	c.Engine.Store(eng)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-source/nonexistent", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestRestartAudioSource_NoPipeline(t *testing.T) {
 
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
-	c.engine.Store(eng)
+	c.Engine.Store(eng)
 
 	src := &audiocore.SourceConfig{
 		ID:          "test-src",
@@ -82,7 +82,7 @@ func TestRestartAudioSource_Success(t *testing.T) {
 
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
-	c.engine.Store(eng)
+	c.Engine.Store(eng)
 
 	src := &audiocore.SourceConfig{
 		ID:          "test-src",
@@ -124,7 +124,7 @@ func TestRestartAudioSource_RestartError(t *testing.T) {
 
 	eng := engine.New(t.Context(), &engine.Config{}, nil)
 	defer eng.Stop()
-	c.engine.Store(eng)
+	c.Engine.Store(eng)
 
 	src := &audiocore.SourceConfig{
 		ID:          "test-src",

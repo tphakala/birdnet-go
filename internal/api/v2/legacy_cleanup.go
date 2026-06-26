@@ -72,7 +72,7 @@ func (c *Controller) tableExistsMySQL(db *gorm.DB, tableName string) (bool, erro
 	var count int64
 	err := db.Raw(
 		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-		c.currentSettings().Output.MySQL.Database, tableName,
+		c.CurrentSettings().Output.MySQL.Database, tableName,
 	).Scan(&count).Error
 	if err != nil {
 		return false, err
@@ -139,7 +139,7 @@ func (cs *CleanupStatus) TryStart() bool {
 
 // initLegacyCleanupRoutes registers the legacy cleanup API routes.
 func (c *Controller) initLegacyCleanupRoutes() {
-	c.logInfoIfEnabled("Initializing legacy cleanup routes")
+	c.LogInfoIfEnabled("Initializing legacy cleanup routes")
 
 	// Initialize cleanup status tracker
 	c.cleanupStatus = NewCleanupStatus()
@@ -148,7 +148,7 @@ func (c *Controller) initLegacyCleanupRoutes() {
 	legacyGroup := c.Group.Group("/system/database/legacy")
 
 	// Get the appropriate auth middleware
-	authMiddleware := c.authMiddleware
+	authMiddleware := c.AuthMiddleware
 
 	// Create auth-protected group
 	protectedGroup := legacyGroup.Group("", authMiddleware)
@@ -157,14 +157,14 @@ func (c *Controller) initLegacyCleanupRoutes() {
 	protectedGroup.GET("/status", c.GetLegacyStatus)
 	protectedGroup.POST("/cleanup", c.StartLegacyCleanup)
 
-	c.logInfoIfEnabled("Legacy cleanup routes initialized successfully")
+	c.LogInfoIfEnabled("Legacy cleanup routes initialized successfully")
 }
 
 // GetLegacyStatus handles GET /api/v2/system/database/legacy/status
 // Returns information about the legacy database for the cleanup UI.
 func (c *Controller) GetLegacyStatus(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting legacy database status", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Getting legacy database status", logger.String("path", path), logger.String("ip", ip))
 
 	response := LegacyStatusResponse{
 		Tables: []LegacyTableInfo{},
@@ -180,7 +180,7 @@ func (c *Controller) GetLegacyStatus(ctx echo.Context) error {
 
 // getLegacyStatusSQLite handles legacy status for SQLite deployments.
 func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatusResponse) error {
-	legacyPath := c.currentSettings().Output.SQLite.Path
+	legacyPath := c.CurrentSettings().Output.SQLite.Path
 	response.Location = legacyPath
 
 	// Check if legacy file exists
@@ -249,7 +249,7 @@ func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacySta
 
 // getLegacyStatusMySQL handles legacy status for MySQL deployments.
 func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusResponse) error {
-	response.Location = c.currentSettings().Output.MySQL.Database
+	response.Location = c.CurrentSettings().Output.MySQL.Database
 
 	// Check if we're in v2-only mode (required for cleanup)
 	if !isV2OnlyMode {
@@ -290,10 +290,10 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 			// remaining table query would fail the same way, so stop quietly
 			// instead of logging a warning per table.
 			if reqCtx.Err() != nil {
-				c.logDebugIfEnabled("Legacy status query cancelled by client", logger.Error(reqCtx.Err()))
+				c.LogDebugIfEnabled("Legacy status query cancelled by client", logger.Error(reqCtx.Err()))
 				break
 			}
-			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+			c.LogWarnIfEnabled("Legacy cleanup: failed to check table existence",
 				logger.String("table", tableName),
 				logger.Error(err))
 			continue
@@ -305,7 +305,7 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		// Get row count
 		err = db.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&tableInfo.RowCount).Error
 		if err != nil {
-			c.logWarnIfEnabled("Legacy cleanup: failed to query row count",
+			c.LogWarnIfEnabled("Legacy cleanup: failed to query row count",
 				logger.String("table", tableName),
 				logger.Error(err))
 			tableInfo.RowCount = 0
@@ -318,9 +318,9 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 			SELECT COALESCE(data_length, 0), COALESCE(index_length, 0)
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,
-			c.currentSettings().Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
+			c.CurrentSettings().Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
 		if err != nil {
-			c.logWarnIfEnabled("Legacy cleanup: failed to query table size",
+			c.LogWarnIfEnabled("Legacy cleanup: failed to query table size",
 				logger.String("table", tableName),
 				logger.Error(err))
 		} else {
@@ -352,7 +352,7 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 // Initiates asynchronous legacy database cleanup.
 func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Starting legacy database cleanup", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Starting legacy database cleanup", logger.String("path", path), logger.String("ip", ip))
 
 	// Check if we're in v2-only mode (check before trying to start)
 	if !isV2OnlyMode {
@@ -381,9 +381,9 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 	}
 
 	// Start async cleanup using WaitGroup for proper lifecycle management
-	c.wg.Go(func() {
-		// Use controller's shutdown context for graceful cancellation
-		cleanupCtx := c.ctx
+	c.Go(func() {
+
+		cleanupCtx := c.Context()
 		if cleanupCtx == nil {
 			cleanupCtx = context.Background()
 		}
@@ -398,11 +398,11 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 		}
 
 		if err != nil {
-			c.logErrorIfEnabled("Legacy cleanup failed", logger.Error(err))
+			c.LogErrorIfEnabled("Legacy cleanup failed", logger.Error(err))
 			c.cleanupStatus.Set(CleanupStateFailed, err.Error(), remaining, 0)
 			c.sendCleanupNotification(false, 0, err.Error())
 		} else {
-			c.logInfoIfEnabled("Legacy cleanup completed successfully",
+			c.LogInfoIfEnabled("Legacy cleanup completed successfully",
 				logger.Int64("space_reclaimed_bytes", sizeBytes),
 				logger.String("space_reclaimed", formatBytes(sizeBytes)))
 			c.cleanupStatus.Set(CleanupStateCompleted, "", nil, sizeBytes)
@@ -410,7 +410,7 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 		}
 	})
 
-	c.logInfoIfEnabled("Legacy cleanup started", logger.String("path", path), logger.String("ip", ip))
+	c.LogInfoIfEnabled("Legacy cleanup started", logger.String("path", path), logger.String("ip", ip))
 
 	return ctx.JSON(http.StatusOK, CleanupActionResponse{
 		Success: true,
@@ -427,33 +427,33 @@ func (c *Controller) cleanupSQLiteLegacy(ctx context.Context) error {
 	default:
 	}
 
-	legacyPath := c.currentSettings().Output.SQLite.Path
+	legacyPath := c.CurrentSettings().Output.SQLite.Path
 
-	c.logInfoIfEnabled("Starting SQLite legacy database cleanup",
+	c.LogInfoIfEnabled("Starting SQLite legacy database cleanup",
 		logger.String("path", legacyPath))
 
 	// CRITICAL SAFETY CHECK: Ensure we're not deleting a V2 database
 	if datastoreV2.CheckSQLiteHasV2Schema(legacyPath) {
-		c.logErrorIfEnabled("Safety check failed: target is a V2 database",
+		c.LogErrorIfEnabled("Safety check failed: target is a V2 database",
 			logger.String("path", legacyPath))
 		return fmt.Errorf("target file appears to be a V2 database - cleanup aborted for safety")
 	}
 
-	c.logInfoIfEnabled("Safety check passed: confirmed legacy database",
+	c.LogInfoIfEnabled("Safety check passed: confirmed legacy database",
 		logger.String("path", legacyPath))
 
 	// Delete main database file
 	if err := os.Remove(legacyPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete legacy database: %w", err)
 	}
-	c.logInfoIfEnabled("Deleted legacy database file",
+	c.LogInfoIfEnabled("Deleted legacy database file",
 		logger.String("file", legacyPath))
 
 	// Delete WAL and SHM files if they exist (ignore errors)
 	walDeleted := os.Remove(legacyPath+"-wal") == nil
 	shmDeleted := os.Remove(legacyPath+"-shm") == nil
 
-	c.logInfoIfEnabled("SQLite legacy cleanup completed",
+	c.LogInfoIfEnabled("SQLite legacy cleanup completed",
 		logger.String("path", legacyPath),
 		logger.Bool("wal_deleted", walDeleted),
 		logger.Bool("shm_deleted", shmDeleted))
@@ -463,7 +463,7 @@ func (c *Controller) cleanupSQLiteLegacy(ctx context.Context) error {
 
 // cleanupMySQLLegacy drops legacy tables from MySQL.
 func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
-	c.logInfoIfEnabled("Starting MySQL legacy tables cleanup",
+	c.LogInfoIfEnabled("Starting MySQL legacy tables cleanup",
 		logger.Int("total_tables", len(legacyTables)))
 
 	dbProvider, ok := c.Repo.(gormDBProvider)
@@ -483,7 +483,7 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 		// Check for cancellation before each table
 		select {
 		case <-ctx.Done():
-			c.logWarnIfEnabled("MySQL cleanup cancelled",
+			c.LogWarnIfEnabled("MySQL cleanup cancelled",
 				logger.Int("tables_dropped", droppedCount),
 				logger.Int("tables_remaining", len(legacyTables)-i))
 			return legacyTables[i:], ctx.Err()
@@ -493,7 +493,7 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 		// Check if table exists first
 		exists, err := c.tableExistsMySQL(db, tableName)
 		if err != nil {
-			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+			c.LogWarnIfEnabled("Legacy cleanup: failed to check table existence",
 				logger.String("table", tableName),
 				logger.Error(err))
 			continue
@@ -505,7 +505,7 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 		// Drop the table
 		err = db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)).Error
 		if err != nil {
-			c.logErrorIfEnabled("Failed to drop legacy table",
+			c.LogErrorIfEnabled("Failed to drop legacy table",
 				logger.String("table", tableName),
 				logger.Error(err))
 			// Stop on first error, return remaining tables
@@ -514,11 +514,11 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 		}
 
 		droppedCount++
-		c.logInfoIfEnabled("Dropped legacy table",
+		c.LogInfoIfEnabled("Dropped legacy table",
 			logger.String("table", tableName))
 	}
 
-	c.logInfoIfEnabled("MySQL legacy cleanup completed",
+	c.LogInfoIfEnabled("MySQL legacy cleanup completed",
 		logger.Int("tables_dropped", droppedCount))
 
 	return nil, nil
@@ -526,7 +526,7 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 
 // getSQLiteLegacySize returns the total size of SQLite legacy files.
 func (c *Controller) getSQLiteLegacySize() int64 {
-	legacyPath := c.currentSettings().Output.SQLite.Path
+	legacyPath := c.CurrentSettings().Output.SQLite.Path
 	var totalSize int64
 
 	if info, err := os.Stat(legacyPath); err == nil {
@@ -558,10 +558,10 @@ func (c *Controller) getMySQLLegacySize(ctx context.Context) int64 {
 		if err != nil {
 			// Client disconnected: stop quietly instead of warning per table.
 			if ctx.Err() != nil {
-				c.logDebugIfEnabled("Legacy size query cancelled by client", logger.Error(ctx.Err()))
+				c.LogDebugIfEnabled("Legacy size query cancelled by client", logger.Error(ctx.Err()))
 				break
 			}
-			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+			c.LogWarnIfEnabled("Legacy cleanup: failed to check table existence",
 				logger.String("table", tableName),
 				logger.Error(err))
 			continue
@@ -575,9 +575,9 @@ func (c *Controller) getMySQLLegacySize(ctx context.Context) int64 {
 			SELECT COALESCE(data_length, 0), COALESCE(index_length, 0)
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,
-			c.currentSettings().Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
+			c.CurrentSettings().Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
 		if err != nil {
-			c.logWarnIfEnabled("Legacy cleanup: failed to query table size",
+			c.LogWarnIfEnabled("Legacy cleanup: failed to query table size",
 				logger.String("table", tableName),
 				logger.Error(err))
 		} else {
@@ -627,7 +627,7 @@ func (c *Controller) sendCleanupNotification(success bool, spaceReclaimed int64,
 		WithMessageKey(messageKey, messageParams)
 
 	if err := notifService.CreateWithMetadata(notif); err != nil {
-		c.logWarnIfEnabled("Failed to send cleanup notification", logger.Error(err))
+		c.LogWarnIfEnabled("Failed to send cleanup notification", logger.Error(err))
 	}
 }
 

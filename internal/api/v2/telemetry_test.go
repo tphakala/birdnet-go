@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -42,7 +43,7 @@ func newTestContext(t *testing.T, method, path string) (echo.Context, *httptest.
 func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections")
 
@@ -64,7 +65,7 @@ func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 func TestHandleError_4xxNotReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodPost, "/api/v2/settings")
 
@@ -80,7 +81,7 @@ func TestHandleError_4xxNotReportedToTelemetry(t *testing.T) {
 func TestHandleError_NilError_5xxReported(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/health")
 
@@ -100,7 +101,7 @@ func TestHandleError_NilError_5xxReported(t *testing.T) {
 func TestHandleErrorWithKey_5xxReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodDelete, "/api/v2/detections/123")
 
@@ -133,7 +134,7 @@ func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 	// Now install the hook (after pre-reporting, so the Build() call above is not counted).
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections")
 
@@ -149,7 +150,7 @@ func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 func TestHandleError_404NotReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections/99999")
 
@@ -165,7 +166,7 @@ func TestHandleError_404NotReportedToTelemetry(t *testing.T) {
 func TestHandleError_502BadGatewayReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/system")
 

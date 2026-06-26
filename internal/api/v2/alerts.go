@@ -39,7 +39,7 @@ func (c *Controller) initAlertRoutes() {
 	alerts.GET("/history", c.ListAlertHistory)
 
 	// Protected endpoints
-	protected := alerts.Group("", c.authMiddleware)
+	protected := alerts.Group("", c.AuthMiddleware)
 	protected.GET("/rules/export", c.ExportAlertRules)
 	protected.POST("/rules", c.CreateAlertRule)
 	protected.PUT("/rules/:id", c.UpdateAlertRule)
@@ -155,7 +155,7 @@ func (c *Controller) ListAlertRules(ctx echo.Context) error {
 
 	rules, err := c.alertRuleRepo.ListRules(ctx.Request().Context(), filter)
 	if err != nil {
-		c.logErrorIfEnabled("failed to list alert rules", logger.Error(err))
+		c.LogErrorIfEnabled("failed to list alert rules", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to list alert rules", http.StatusInternalServerError)
 	}
 
@@ -181,7 +181,7 @@ func (c *Controller) GetAlertRule(ctx echo.Context) error {
 		if errors.Is(err, repository.ErrAlertRuleNotFound) {
 			return c.HandleErrorWithKey(ctx, err, "Alert rule not found", http.StatusNotFound, notification.MsgErrAlertNotFound, nil)
 		}
-		c.logErrorIfEnabled("failed to get alert rule", logger.Error(err))
+		c.LogErrorIfEnabled("failed to get alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to get alert rule", http.StatusInternalServerError)
 	}
 
@@ -202,7 +202,7 @@ func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 	// Prevent duplicate names
 	count, err := c.alertRuleRepo.CountRulesByName(ctx.Request().Context(), rule.Name)
 	if err != nil {
-		c.logErrorIfEnabled("failed to check rule name uniqueness", logger.Error(err))
+		c.LogErrorIfEnabled("failed to check rule name uniqueness", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to create alert rule", http.StatusInternalServerError)
 	}
 	if count > 0 {
@@ -210,14 +210,14 @@ func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 	}
 
 	if err := c.alertRuleRepo.CreateRule(ctx.Request().Context(), rule); err != nil {
-		c.logErrorIfEnabled("failed to create alert rule", logger.Error(err))
+		c.LogErrorIfEnabled("failed to create alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to create alert rule", http.StatusInternalServerError)
 	}
 
 	// Refresh engine cache if available
 	c.refreshAlertEngine(ctx)
 
-	c.logInfoIfEnabled("alert rule created",
+	c.LogInfoIfEnabled("alert rule created",
 		logger.String("name", rule.Name),
 		logger.Uint64("id", uint64(rule.ID)))
 
@@ -253,7 +253,7 @@ func (c *Controller) UpdateAlertRule(ctx echo.Context) error {
 	rule.CreatedAt = existing.CreatedAt
 
 	if err := c.alertRuleRepo.UpdateRule(ctx.Request().Context(), rule); err != nil {
-		c.logErrorIfEnabled("failed to update alert rule", logger.Error(err))
+		c.LogErrorIfEnabled("failed to update alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to update alert rule", http.StatusInternalServerError)
 	}
 
@@ -284,7 +284,7 @@ func (c *Controller) ToggleAlertRule(ctx echo.Context) error {
 		if errors.Is(err, repository.ErrAlertRuleNotFound) {
 			return c.HandleErrorWithKey(ctx, err, "Alert rule not found", http.StatusNotFound, notification.MsgErrAlertNotFound, nil)
 		}
-		c.logErrorIfEnabled("failed to toggle alert rule", logger.Error(err))
+		c.LogErrorIfEnabled("failed to toggle alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to toggle alert rule", http.StatusInternalServerError)
 	}
 
@@ -308,7 +308,7 @@ func (c *Controller) DeleteAlertRule(ctx echo.Context) error {
 		if errors.Is(err, repository.ErrAlertRuleNotFound) {
 			return c.HandleErrorWithKey(ctx, err, "Alert rule not found", http.StatusNotFound, notification.MsgErrAlertNotFound, nil)
 		}
-		c.logErrorIfEnabled("failed to delete alert rule", logger.Error(err))
+		c.LogErrorIfEnabled("failed to delete alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to delete alert rule", http.StatusInternalServerError)
 	}
 
@@ -354,7 +354,7 @@ func (c *Controller) ResetDefaultAlertRules(ctx echo.Context) error {
 
 	_, err := c.alertRuleRepo.DeleteBuiltInRules(reqCtx)
 	if err != nil {
-		c.logErrorIfEnabled("failed to delete built-in rules", logger.Error(err))
+		c.LogErrorIfEnabled("failed to delete built-in rules", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to reset default rules", http.StatusInternalServerError)
 	}
 
@@ -362,7 +362,7 @@ func (c *Controller) ResetDefaultAlertRules(ctx echo.Context) error {
 	defaults := alerting.DefaultRules()
 	for i := range defaults {
 		if err := c.alertRuleRepo.CreateRule(reqCtx, &defaults[i]); err != nil {
-			c.logErrorIfEnabled("failed to seed default rule",
+			c.LogErrorIfEnabled("failed to seed default rule",
 				logger.String("name", defaults[i].Name), logger.Error(err))
 		}
 	}
@@ -407,7 +407,7 @@ func (c *Controller) ListAlertHistory(ctx echo.Context) error {
 
 	items, total, err := c.alertRuleRepo.ListHistory(ctx.Request().Context(), filter)
 	if err != nil {
-		c.logErrorIfEnabled("failed to list alert history", logger.Error(err))
+		c.LogErrorIfEnabled("failed to list alert history", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to list alert history", http.StatusInternalServerError)
 	}
 
@@ -427,7 +427,7 @@ func (c *Controller) ClearAlertHistory(ctx echo.Context) error {
 
 	deleted, err := c.alertRuleRepo.DeleteHistory(ctx.Request().Context())
 	if err != nil {
-		c.logErrorIfEnabled("failed to clear alert history", logger.Error(err))
+		c.LogErrorIfEnabled("failed to clear alert history", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to clear alert history", http.StatusInternalServerError)
 	}
 
@@ -442,7 +442,7 @@ func (c *Controller) ExportAlertRules(ctx echo.Context) error {
 
 	rules, err := c.alertRuleRepo.ListRules(ctx.Request().Context(), repository.AlertRuleFilter{})
 	if err != nil {
-		c.logErrorIfEnabled("failed to export alert rules", logger.Error(err))
+		c.LogErrorIfEnabled("failed to export alert rules", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to export alert rules", http.StatusInternalServerError)
 	}
 
@@ -483,13 +483,13 @@ func (c *Controller) ImportAlertRules(ctx echo.Context) error {
 		}
 
 		if err := validateEscalationSteps(rule.EscalationSteps); err != nil {
-			c.logErrorIfEnabled("skipping imported rule with invalid escalation steps",
+			c.LogErrorIfEnabled("skipping imported rule with invalid escalation steps",
 				logger.String("name", rule.Name), logger.Error(err))
 			continue
 		}
 
 		if err := c.alertRuleRepo.CreateRule(reqCtx, rule); err != nil {
-			c.logErrorIfEnabled("failed to import rule",
+			c.LogErrorIfEnabled("failed to import rule",
 				logger.String("name", rule.Name), logger.Error(err))
 			continue
 		}
@@ -508,7 +508,7 @@ func (c *Controller) ImportAlertRules(ctx echo.Context) error {
 func (c *Controller) refreshAlertEngine(ctx echo.Context) {
 	if c.alertEngine != nil {
 		if err := c.alertEngine.RefreshRules(ctx.Request().Context()); err != nil {
-			c.logErrorIfEnabled("failed to refresh alert engine rules", logger.Error(err))
+			c.LogErrorIfEnabled("failed to refresh alert engine rules", logger.Error(err))
 		}
 	}
 }

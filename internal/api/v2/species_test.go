@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -423,10 +424,7 @@ func TestGetAllSpecies_LocalizedSecondaryModel(t *testing.T) {
 	t.Attr("feature", "localized-name-resolution")
 
 	e := echo.New()
-	controller := &Controller{
-		Echo:  e,
-		Group: e.Group("/api/v2"),
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(&conf.Settings{})
 
 	// Wire a batch-capable resolver so the scientific-only bat label gets a
@@ -512,10 +510,7 @@ func TestGetAllSpecies(t *testing.T) {
 			settings := &conf.Settings{}
 			settings.BirdNET.Labels = tt.labels
 
-			controller := &Controller{
-				Echo:  e,
-				Group: e.Group("/api/v2"),
-			}
+			controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 			controller.Settings.Store(settings)
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/species/all", http.NoBody)

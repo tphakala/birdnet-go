@@ -616,7 +616,7 @@ func TestDDoSProtection(t *testing.T) {
 	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Initialize the detection cache manually since routes aren't initialized in test environment
-	controller.detectionCache = cache.New(5*time.Minute, 10*time.Minute)
+	controller.DetectionCache = cache.New(5*time.Minute, 10*time.Minute)
 
 	// Number of concurrent requests to simulate
 	concurrentRequests := 50

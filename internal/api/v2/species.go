@@ -124,14 +124,14 @@ type AllSpeciesResponse struct {
 func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
-	c.logDebugIfEnabled("Retrieving all BirdNET species labels",
+	c.LogDebugIfEnabled("Retrieving all BirdNET species labels",
 		logger.String("ip", ip),
 		logger.String("path", path),
 	)
 
 	speciesList := buildAllSpeciesList(c.loadCommonNameMap(), c.allModelLabels())
 
-	c.logInfoIfEnabled("All species labels retrieved successfully",
+	c.LogInfoIfEnabled("All species labels retrieved successfully",
 		logger.Int("count", len(speciesList)),
 		logger.String("ip", ip),
 		logger.String("path", path),
@@ -206,7 +206,7 @@ func (c *Controller) allModelLabels() []string {
 			}
 		}
 	}
-	if s := c.controllerSettings(); s != nil {
+	if s := c.ControllerSettings(); s != nil {
 		return s.BirdNET.Labels
 	}
 	return nil
@@ -677,7 +677,7 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	}
 
 	// Log the request if API logger is available
-	c.logDebugIfEnabled("Retrieving thumbnail for species code",
+	c.LogDebugIfEnabled("Retrieving thumbnail for species code",
 		logger.String("species_code", speciesCode),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),

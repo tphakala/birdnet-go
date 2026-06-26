@@ -241,7 +241,7 @@ func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 	appLogPath := logger.Global().GetDefaultOutputPath()
 	if appLogPath != "" {
 		if entries, err := readLogSource(appLogPath, targetDate, level, time.Local); err != nil {
-			c.logWarnIfEnabled("Failed to read application log",
+			c.LogWarnIfEnabled("Failed to read application log",
 				logger.Error(err),
 				logger.String("path", appLogPath),
 				logger.String("date", date),
@@ -255,7 +255,7 @@ func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 	audioLogPath := logger.Global().GetOutputPath("audio")
 	if audioLogPath != "" {
 		if entries, err := readLogSource(audioLogPath, targetDate, level, time.Local); err != nil {
-			c.logWarnIfEnabled("Failed to read audio log",
+			c.LogWarnIfEnabled("Failed to read audio log",
 				logger.Error(err),
 				logger.String("path", audioLogPath),
 				logger.String("date", date),

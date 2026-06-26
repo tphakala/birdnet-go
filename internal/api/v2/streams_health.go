@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -116,7 +117,7 @@ type StreamSummaryResponse struct {
 // so that if a handler is ever carved out in the future, raw RTSP credentials
 // cannot leak.
 func (c *Controller) initStreamHealthRoutes() {
-	authMiddleware := c.authMiddleware
+	authMiddleware := c.AuthMiddleware
 
 	// REST endpoints — authenticated
 	c.Group.GET("/streams/health", c.GetAllStreamsHealth, authMiddleware)
@@ -178,7 +179,7 @@ type streamInfo struct {
 // Reads the controller's lock-free settings snapshot, so a hot-reload that
 // republishes settings is visible on the next call.
 func (c *Controller) getStreamInfo(rawURL string) streamInfo {
-	settings := c.controllerSettings()
+	settings := c.ControllerSettings()
 	if settings == nil {
 		return streamInfo{}
 	}
@@ -202,7 +203,7 @@ func (c *Controller) getStreamInfo(rawURL string) streamInfo {
 // @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/health [get]
 func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		// No engine - we cannot report real stream health. Signal the
 		// caller with 503 rather than fabricating misleading zero counts.
@@ -259,7 +260,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid URL encoding", http.StatusBadRequest)
 	}
 
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		// Match GetAllStreamsHealth / GetStreamsStatusSummary: 503, not
 		// 404. The stream may very well exist in config, we just cannot
@@ -290,7 +291,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 
 	if lookupErr != nil {
 		healthData := ffmpegMgr.AllStreamHealth()
-		c.logAPIRequest(ctx, logger.LogLevelWarn, "Stream not found",
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Stream not found",
 			logger.String("requested_url", privacy.SanitizeStreamUrl(decodedURL)),
 			logger.Int("active_streams", len(healthData)))
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
@@ -316,7 +317,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 // @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/status [get]
 func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		// Zero counts would be technically accurate but misleading: clients
 		// cannot tell "no streams configured" apart from "audio engine not
@@ -478,7 +479,7 @@ func convertErrorContextToResponse(errCtx *ffmpeg.ErrorContext) *ErrorContextRes
 // handleStreamHealthHeartbeat sends a heartbeat and returns true if client disconnected.
 func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID string) error {
 	if err := c.sendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
-		c.logDebugIfEnabled("Stream health SSE heartbeat failed, client likely disconnected",
+		c.LogDebugIfEnabled("Stream health SSE heartbeat failed, client likely disconnected",
 			logger.String("client_id", clientID),
 			logger.Error(err))
 		return err
@@ -488,7 +489,7 @@ func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID stri
 
 // handleStreamHealthPoll polls for stream health changes and processes updates.
 func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, previousState map[string]streamHealthSnapshot) error {
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		return nil
 	}
@@ -505,7 +506,7 @@ func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, p
 // This enables real-time bandwidth and bytes display in the UI regardless of state changes.
 // Note: This sends a lightweight payload without history arrays to reduce bandwidth.
 func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) error {
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		return nil
 	}
@@ -515,7 +516,7 @@ func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) 
 	for sourceID, fh := range healthData {
 		rawURL := c.resolveSourceURL(registry, sourceID)
 		if err := c.sendStreamStatsUpdate(ctx, rawURL, fh); err != nil {
-			c.logDebugIfEnabled("Failed to send stats update, client disconnected",
+			c.LogDebugIfEnabled("Failed to send stats update, client disconnected",
 				logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 				logger.String("client_id", clientID),
 				logger.Error(err))
@@ -536,7 +537,7 @@ func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) 
 // @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/health/stream [get]
 func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
-	eng := c.engine.Load()
+	eng := c.Engine.Load()
 	if eng == nil {
 		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
 	}
@@ -549,7 +550,7 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	ctx.SetRequest(ctx.Request().WithContext(timeoutCtx))
 
 	setSSEHeaders(ctx)
-	clientID := generateCorrelationID()
+	clientID := apicore.GenerateCorrelationID()
 
 	c.logSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), "stream-health", true)
 	defer c.logSSEConnection(clientID, ctx.RealIP(), "", "stream-health", false)
@@ -570,9 +571,9 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 
 	for {
 		select {
-		case <-c.ctx.Done():
+		case <-c.Context().Done():
 			// Controller shutting down
-			c.logInfoIfEnabled("stream health SSE client disconnected due to shutdown",
+			c.LogInfoIfEnabled("stream health SSE client disconnected due to shutdown",
 				logger.String("client_id", clientID),
 			)
 			return nil
@@ -674,7 +675,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 		if !exists {
 			// New stream detected
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, health, "stream_added"); err != nil {
-				c.logDebugIfEnabled("Failed to send stream_added event, client disconnected",
+				c.LogDebugIfEnabled("Failed to send stream_added event, client disconnected",
 					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 					logger.String("client_id", clientID),
 					logger.Error(err))
@@ -684,7 +685,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			// Stream health changed
 			eventType := determineEventType(&previousSnapshot, &currentSnapshot)
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, health, eventType); err != nil {
-				c.logDebugIfEnabled("Failed to send health update, client disconnected",
+				c.LogDebugIfEnabled("Failed to send health update, client disconnected",
 					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 					logger.String("event_type", eventType),
 					logger.String("client_id", clientID),
@@ -732,7 +733,7 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 
 		delete(previousState, prevSourceID)
 
-		c.logInfoIfEnabled("Stream removed",
+		c.LogInfoIfEnabled("Stream removed",
 			logger.String("url", sanitizedURL),
 			logger.String("client_id", clientID))
 	}
@@ -758,7 +759,7 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 		return err
 	}
 
-	c.logDebugIfEnabled("Stream health update sent",
+	c.LogDebugIfEnabled("Stream health update sent",
 		logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 		logger.String("event_type", eventType),
 		logger.Bool("is_healthy", health.IsHealthy),

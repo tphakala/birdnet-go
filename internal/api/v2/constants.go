@@ -128,12 +128,6 @@ const (
 	DefaultCacheDurationMinutes = 30
 )
 
-// Default path constants
-const (
-	// defaultExportPath is the default audio clip export directory, matching internal/conf/defaults.go.
-	defaultExportPath = "clips/"
-)
-
 // File permission constants
 const (
 	// FilePermReadWrite is the permission for read/write files (0o644)

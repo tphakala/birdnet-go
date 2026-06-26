@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -17,9 +18,7 @@ func TestDebugTriggerError(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
-	c := &Controller{
-		apiLogger: nil,
-	}
+	c := &Controller{Core: &apicore.Core{APILogger: nil}}
 	c.Settings.Store(&conf.Settings{Debug: true})
 
 	tests := []struct {
@@ -66,9 +65,7 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 
 	// Create controller with debug disabled
 	e := echo.New()
-	c := &Controller{
-		apiLogger: nil,
-	}
+	c := &Controller{Core: &apicore.Core{APILogger: nil}}
 	c.Settings.Store(&conf.Settings{Debug: false})
 
 	// Table-driven tests for all debug endpoints returning 403 when debug mode is disabled

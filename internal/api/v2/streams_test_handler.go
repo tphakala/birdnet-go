@@ -63,8 +63,8 @@ type probeStreamInfoFunc func(ctx context.Context, url string) (*ffmpeg.StreamIn
 
 // initStreamTestRoutes registers stream testing endpoints.
 func (c *Controller) initStreamTestRoutes() {
-	c.Group.POST("/streams/test", c.TestStream, c.authMiddleware)
-	c.Group.POST("/streams/analyze-channels", c.AnalyzeChannels, c.authMiddleware)
+	c.Group.POST("/streams/test", c.TestStream, c.AuthMiddleware)
+	c.Group.POST("/streams/analyze-channels", c.AnalyzeChannels, c.AuthMiddleware)
 }
 
 // TestStream tests a stream URL to discover its audio properties.

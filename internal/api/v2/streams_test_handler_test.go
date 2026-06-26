@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -89,7 +90,7 @@ func TestTestStreamHandler_ValidationErrors(t *testing.T) {
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(req, rec)
 
-			ctrl := &Controller{}
+			ctrl := &Controller{Core: &apicore.Core{}}
 			ctrl.Settings.Store(&conf.Settings{})
 			err := ctrl.TestStream(ctx)
 			require.NoError(t, err)
@@ -113,11 +114,9 @@ func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	ctrl := &Controller{
-		probeStreamInfo: func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
-			return nil, ffmpeg.ErrNoAudioStreamsFound
-		},
-	}
+	ctrl := &Controller{Core: &apicore.Core{}, probeStreamInfo: func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
+		return nil, ffmpeg.ErrNoAudioStreamsFound
+	}}
 	ctrl.Settings.Store(&conf.Settings{})
 	err := ctrl.TestStream(ctx)
 	require.NoError(t, err)

@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 )
 
@@ -24,9 +25,7 @@ func TestGetGenusSpecies(t *testing.T) {
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	// Create a minimal controller with taxonomy DB
-	c := &Controller{
-		TaxonomyDB: taxonomyDB,
-	}
+	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
 	c.Settings.Store(newValidTestSettings())
 
 	tests := []struct {
@@ -124,9 +123,7 @@ func TestGetFamilySpecies(t *testing.T) {
 	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
-	c := &Controller{
-		TaxonomyDB: taxonomyDB,
-	}
+	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
 	c.Settings.Store(newValidTestSettings())
 
 	tests := []struct {
@@ -205,9 +202,7 @@ func TestGetSpeciesTree(t *testing.T) {
 	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
-	c := &Controller{
-		TaxonomyDB: taxonomyDB,
-	}
+	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
 	c.Settings.Store(newValidTestSettings())
 
 	tests := []struct {
@@ -310,11 +305,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
-	c := &Controller{
-		TaxonomyDB: taxonomyDB,
-		// No EBirdClient - testing local DB only
-		EBirdClient: nil,
-	}
+	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB, EBirdClient: nil}}
 	c.Settings.Store(newValidTestSettings())
 
 	tests := []struct {
@@ -367,11 +358,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 func TestGetSpeciesTaxonomyWithoutLocalDB(t *testing.T) {
 	t.Parallel()
 
-	c := &Controller{
-		// No TaxonomyDB and no EBirdClient
-		TaxonomyDB:  nil,
-		EBirdClient: nil,
-	}
+	c := &Controller{Core: &apicore.Core{TaxonomyDB: nil, EBirdClient: nil}}
 	c.Settings.Store(newValidTestSettings())
 
 	// This should fail gracefully

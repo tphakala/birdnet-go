@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -162,9 +163,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 			},
 		},
 	}
-	controller := &Controller{
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{}, DisableSaveSettings: true}
 	controller.Settings.Store(settings)
 
 	// Update with zero values
@@ -247,9 +246,7 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 			},
 		},
 	}
-	controller := &Controller{
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{}, DisableSaveSettings: true}
 	controller.Settings.Store(settings)
 
 	// Update only Bird A with zero values, Bird B should remain unchanged
@@ -309,9 +306,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 			},
 		},
 	}
-	controller := &Controller{
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{}, DisableSaveSettings: true}
 	controller.Settings.Store(settings)
 
 	// Step 1: PATCH update with zero values
@@ -432,9 +427,7 @@ func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (e
 		Exclude: []string{},
 		Config:  map[string]conf.SpeciesConfig{},
 	}
-	controller := &Controller{
-		DisableSaveSettings: true, // Disable file save for testing
-	}
+	controller := &Controller{Core: &apicore.Core{}, DisableSaveSettings: true}
 	controller.Settings.Store(settings)
 
 	// Use default values if method or path are empty
@@ -506,9 +499,7 @@ func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
 		Exclude: []string{},
 		Config:  make(map[string]conf.SpeciesConfig),
 	}
-	controller := &Controller{
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{}, DisableSaveSettings: true}
 	controller.Settings.Store(settings)
 
 	// Update with mixed-case species names (as UI would send)
@@ -571,9 +562,7 @@ func createTestController(t *testing.T) *Controller {
 		Config:  map[string]conf.SpeciesConfig{},
 	}
 
-	c := &Controller{
-		DisableSaveSettings: true,
-	}
+	c := &Controller{Core: &apicore.Core{}, DisableSaveSettings: true}
 	c.Settings.Store(settings)
 	return c
 }

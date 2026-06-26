@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -2545,11 +2546,9 @@ func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 	// Seed the tracker: species first seen on 2026-03-20
 	_, _ = tracker.CheckAndUpdateSpecies("Parus major", time.Date(2026, 3, 20, 8, 0, 0, 0, time.Local))
 
-	controller := &Controller{
-		Processor: &processor.Processor{
-			NewSpeciesTracker: tracker,
-		},
-	}
+	controller := &Controller{Core: &apicore.Core{Processor: &processor.Processor{
+		NewSpeciesTracker: tracker,
+	}}}
 
 	tests := []struct {
 		name            string
@@ -2597,7 +2596,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "source-info")
 
-	controller := &Controller{}
+	controller := &Controller{Core: &apicore.Core{}}
 	controller.Settings.Store(newValidTestSettings())
 
 	tests := []struct {

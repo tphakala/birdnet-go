@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -54,11 +55,7 @@ func TestEQFilterRoundTrip_PUT(t *testing.T) {
 	}
 
 	e := echo.New()
-	controller := &Controller{
-		Echo:                e,
-		controlChan:         make(chan string, testControlChanBuffer),
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, testControlChanBuffer), DisableSaveSettings: true}
 	controller.Settings.Store(initial)
 
 	eqConfig := map[string]any{
@@ -164,11 +161,7 @@ func TestEQFilterRoundTrip_PUT_PerSource(t *testing.T) {
 	}}
 
 	e := echo.New()
-	controller := &Controller{
-		Echo:                e,
-		controlChan:         make(chan string, testControlChanBuffer),
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, testControlChanBuffer), DisableSaveSettings: true}
 	controller.Settings.Store(initial)
 
 	sourceEQ := map[string]any{
@@ -223,11 +216,7 @@ func TestEQFilterRoundTrip_PATCH(t *testing.T) {
 	}
 
 	e := echo.New()
-	controller := &Controller{
-		Echo:                e,
-		controlChan:         make(chan string, testControlChanBuffer),
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, testControlChanBuffer), DisableSaveSettings: true}
 	controller.Settings.Store(initial)
 
 	payload := map[string]any{
@@ -305,11 +294,7 @@ func TestEQFilterRoundTrip_PUT_PerStream(t *testing.T) {
 	}}
 
 	e := echo.New()
-	controller := &Controller{
-		Echo:                e,
-		controlChan:         make(chan string, testControlChanBuffer),
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, testControlChanBuffer), DisableSaveSettings: true}
 	controller.Settings.Store(initial)
 
 	streamEQ := map[string]any{
@@ -357,11 +342,7 @@ func TestEQFilterRoundTrip_PUT_WithFrontendIDField(t *testing.T) {
 
 	initial := getTestSettings(t)
 	e := echo.New()
-	controller := &Controller{
-		Echo:                e,
-		controlChan:         make(chan string, testControlChanBuffer),
-		DisableSaveSettings: true,
-	}
+	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, testControlChanBuffer), DisableSaveSettings: true}
 	controller.Settings.Store(initial)
 
 	eqConfig := map[string]any{

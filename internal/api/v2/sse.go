@@ -6,18 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"runtime/debug"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
-	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -44,154 +39,11 @@ const (
 	// Rate limits
 	sseRateLimitRequests = 10              // SSE rate limit requests per window
 	sseRateLimitWindow   = 1 * time.Minute // SSE rate limit time window
-
-	// Client health monitoring
-	maxConsecutiveDrops = 3 // Auto-disconnect clients after this many consecutive dropped messages
-
-	// Stream types - used to identify what data a client wants to receive
-	// Note: StreamType="all" shares a single consecutiveDrops counter across both streams,
-	// meaning drops on one stream affect health tracking for both
-	streamTypeDetections  = "detections"
-	streamTypeSoundLevels = "soundlevels"
-	streamTypeAll         = "all"
 )
 
 // WriteDeadlineSetter interface for response writers that support write deadlines
 type WriteDeadlineSetter interface {
 	SetWriteDeadline(time.Time) error
-}
-
-// SSEDetectionData represents the detection data sent via SSE.
-// Uses explicit fields with camelCase JSON tags instead of embedding datastore.Note
-// to avoid exposing internal Go struct layout, sensitive data (filesystem paths,
-// RTSP credentials), and to provide a stable, well-defined API contract.
-type SSEDetectionData struct {
-	// Detection identity and classification
-	ID             uint    `json:"id"`
-	Date           string  `json:"date"` // "2024-01-15"
-	Time           string  `json:"time"` // "14:30:00"
-	ScientificName string  `json:"scientificName"`
-	CommonName     string  `json:"commonName"`
-	SpeciesCode    string  `json:"speciesCode,omitempty"`
-	Confidence     float64 `json:"confidence"` // No omitempty — 0.0 is a valid confidence value
-
-	// Location
-	Latitude  float64 `json:"latitude,omitempty"`
-	Longitude float64 `json:"longitude,omitempty"`
-
-	// Audio clip (filename only, no path)
-	ClipName string `json:"clipName,omitempty"`
-
-	// Source info (safe fields only, no credentials)
-	Source *SSESourceInfo `json:"source,omitempty"`
-
-	// Time context
-	BeginTime string `json:"beginTime,omitempty"`
-	EndTime   string `json:"endTime,omitempty"`
-
-	// Review status
-	Verified string `json:"verified,omitempty"`
-	Locked   bool   `json:"locked"`
-	Unlikely bool   `json:"unlikely,omitempty"`
-
-	// Bird image with attribution
-	BirdImage SSEBirdImage `json:"birdImage"`
-
-	// SSE event metadata
-	Timestamp time.Time `json:"timestamp"`
-	EventType string    `json:"eventType"`
-
-	// Species tracking metadata
-	IsNewSpecies       bool `json:"isNewSpecies,omitempty"`       // First seen within tracking window
-	DaysSinceFirstSeen int  `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
-}
-
-// SSESourceInfo describes the audio source in SSE events.
-// Only exposes safe identifiers, never raw connection strings or credentials.
-type SSESourceInfo struct {
-	ID          string `json:"id"`
-	Type        string `json:"type,omitempty"`
-	DisplayName string `json:"displayName,omitempty"`
-}
-
-// SSEBirdImage represents bird image data in SSE events with proper JSON tags.
-type SSEBirdImage struct {
-	URL            string `json:"url"`
-	ScientificName string `json:"scientificName,omitempty"`
-	LicenseName    string `json:"licenseName,omitempty"`
-	LicenseURL     string `json:"licenseURL,omitempty"`
-	AuthorName     string `json:"authorName,omitempty"`
-	AuthorURL      string `json:"authorURL,omitempty"`
-	SourceProvider string `json:"sourceProvider,omitempty"`
-}
-
-// safeBaseName returns the filename component of a path, or empty string if the path is empty.
-// Unlike filepath.Base("") which returns ".", this returns "" for empty inputs.
-func safeBaseName(path string) string {
-	if path == "" {
-		return ""
-	}
-	return filepath.Base(path)
-}
-
-// newSSEDetectionData creates an SSEDetectionData from a datastore.Note and BirdImage.
-// It sanitizes sensitive data: ClipName is stripped to filename only, and Source
-// only includes safe display fields (no raw connection strings or credentials).
-func newSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImage) SSEDetectionData {
-	det := SSEDetectionData{
-		ID:             note.ID,
-		Date:           note.Date,
-		Time:           note.Time,
-		ScientificName: note.ScientificName,
-		CommonName:     note.CommonName,
-		SpeciesCode:    note.SpeciesCode,
-		Confidence:     note.Confidence,
-		Latitude:       note.Latitude,
-		Longitude:      note.Longitude,
-		ClipName:       safeBaseName(note.ClipName),
-		Verified:       note.Verified,
-		Locked:         note.Locked,
-		Unlikely:       note.Unlikely,
-		Timestamp:      time.Now(),
-		EventType:      "new_detection",
-	}
-
-	// Format time fields as RFC3339 if non-zero
-	if !note.BeginTime.IsZero() {
-		det.BeginTime = note.BeginTime.Format(time.RFC3339)
-	}
-	if !note.EndTime.IsZero() {
-		det.EndTime = note.EndTime.Format(time.RFC3339)
-	}
-
-	// Only expose safe source identifiers, never raw connection strings
-	if note.Source.ID != "" {
-		det.Source = &SSESourceInfo{
-			ID:          note.Source.ID,
-			DisplayName: note.Source.DisplayName,
-		}
-	}
-
-	// Map bird image with proper camelCase tags
-	if birdImage != nil {
-		det.BirdImage = SSEBirdImage{
-			URL:            birdImage.URL,
-			ScientificName: birdImage.ScientificName,
-			LicenseName:    birdImage.LicenseName,
-			LicenseURL:     birdImage.LicenseURL,
-			AuthorName:     birdImage.AuthorName,
-			AuthorURL:      birdImage.AuthorURL,
-			SourceProvider: birdImage.SourceProvider,
-		}
-	}
-
-	return det
-}
-
-// SSESoundLevelData represents sound level data sent via SSE
-type SSESoundLevelData struct {
-	soundlevel.SoundLevelData
-	EventType string `json:"eventType"`
 }
 
 // SSEEvent represents a generic SSE event that can contain different data types
@@ -201,252 +53,11 @@ type SSEEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// SSEClient represents a connected SSE client
-type SSEClient struct {
-	ID             string
-	Channel        chan SSEDetectionData
-	SoundLevelChan chan SSESoundLevelData
-	PendingChan    chan any // Channel for pending detection snapshots ([]SSEPendingDetection from processor)
-	Request        *http.Request
-	Response       http.ResponseWriter
-	Done           chan struct{} // Signal-only buffered channel to prevent blocking
-	StreamType     string        // streamTypeDetections, streamTypeSoundLevels, or streamTypeAll
-
-	// Health tracking for auto-disconnect of slow/blocked clients
-	// Uses atomic operations for thread-safe access during concurrent broadcasts
-	consecutiveDrops atomic.Int32 // Count of consecutive failed message sends
-}
-
-// SSEManager manages SSE connections and broadcasts
-type SSEManager struct {
-	clients      map[string]*SSEClient
-	mutex        sync.RWMutex
-	shuttingDown atomic.Bool // blocks new registrations during shutdown
-}
-
-// NewSSEManager creates a new SSE manager
-func NewSSEManager() *SSEManager {
-	return &SSEManager{
-		clients: make(map[string]*SSEClient),
-	}
-}
-
-// AddClient adds a new SSE client. Returns false if the manager is
-// shutting down and no new registrations are accepted.
-func (m *SSEManager) AddClient(client *SSEClient) bool {
-	if m.shuttingDown.Load() {
-		return false
-	}
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	if m.shuttingDown.Load() {
-		return false
-	}
-	m.clients[client.ID] = client
-	GetLogger().Debug("SSE client connected",
-		logger.String("client_id", client.ID),
-		logger.Int("total_clients", len(m.clients)),
-	)
-	return true
-}
-
-// RemoveClient removes an SSE client
-func (m *SSEManager) RemoveClient(clientID string) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	if client, exists := m.clients[clientID]; exists {
-		if client.Channel != nil {
-			close(client.Channel)
-		}
-		if client.SoundLevelChan != nil {
-			close(client.SoundLevelChan)
-		}
-		if client.PendingChan != nil {
-			close(client.PendingChan)
-		}
-		close(client.Done)
-		delete(m.clients, clientID)
-		GetLogger().Debug("SSE client disconnected",
-			logger.String("client_id", clientID),
-			logger.Int("total_clients", len(m.clients)),
-		)
-	}
-}
-
-// BroadcastDetection sends detection data to all connected clients
-// Uses non-blocking send to prevent slow clients from blocking fast clients.
-// Clients are automatically disconnected after maxConsecutiveDrops failed sends.
-func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
-	m.mutex.RLock()
-
-	if len(m.clients) == 0 {
-		m.mutex.RUnlock()
-		return // No clients to broadcast to
-	}
-
-	// Collect blocked client IDs to remove them after releasing the lock
-	var blockedClients []string
-
-	for clientID, client := range m.clients {
-		select {
-		case client.Channel <- *detection:
-			// Successfully sent to client - reset health counter atomically
-			client.consecutiveDrops.Store(0)
-
-		default:
-			// Channel full - drop this update, increment counter atomically
-			drops := client.consecutiveDrops.Add(1)
-
-			// Only log when reaching disconnect threshold to avoid log spam
-			if drops >= maxConsecutiveDrops {
-				GetLogger().Info("SSE client disconnected after consecutive drops",
-					logger.String("client_id", clientID),
-					logger.Int("consecutive_drops", int(drops)),
-				)
-				blockedClients = append(blockedClients, clientID)
-			}
-		}
-	}
-
-	// Release the read lock before removing clients
-	m.mutex.RUnlock()
-
-	// Remove blocked clients synchronously (we're outside the lock and RemoveClient is fast)
-	// Note: Low probability race if client reconnects with same ID between unlock and removal
-	for _, clientID := range blockedClients {
-		m.RemoveClient(clientID)
-	}
-}
-
-// BroadcastSoundLevel sends sound level data to all connected clients
-// Uses non-blocking send to prevent slow clients from blocking fast clients.
-// Clients are automatically disconnected after maxConsecutiveDrops failed sends.
-func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
-	m.mutex.RLock()
-
-	if len(m.clients) == 0 {
-		m.mutex.RUnlock()
-		return // No clients to broadcast to
-	}
-
-	// Collect blocked client IDs to remove them after releasing the lock
-	var blockedClients []string
-
-	for clientID, client := range m.clients {
-		// Only send to clients that want sound level data
-		if client.StreamType == streamTypeSoundLevels || client.StreamType == streamTypeAll {
-			if client.SoundLevelChan != nil {
-				select {
-				case client.SoundLevelChan <- *soundLevel:
-					// Successfully sent to client - reset health counter atomically
-					client.consecutiveDrops.Store(0)
-
-				default:
-					// Channel full - drop this update, increment counter atomically
-					drops := client.consecutiveDrops.Add(1)
-
-					// Only log when reaching disconnect threshold to avoid log spam
-					if drops >= maxConsecutiveDrops {
-						GetLogger().Info("SSE client disconnected after consecutive drops",
-							logger.String("client_id", clientID),
-							logger.Int("consecutive_drops", int(drops)),
-						)
-						blockedClients = append(blockedClients, clientID)
-					}
-				}
-			}
-		}
-	}
-
-	// Release the read lock before removing clients
-	m.mutex.RUnlock()
-
-	// Remove blocked clients synchronously (we're outside the lock and RemoveClient is fast)
-	// Note: Low probability race if client reconnects with same ID between unlock and removal
-	for _, clientID := range blockedClients {
-		m.RemoveClient(clientID)
-	}
-}
-
-// BroadcastPending sends pending detection data to all connected detection stream clients.
-// Uses non-blocking send to prevent slow clients from blocking the processor.
-// Clients are automatically disconnected after maxConsecutiveDrops failed sends.
-func (m *SSEManager) BroadcastPending(pending any) {
-	m.mutex.RLock()
-
-	if len(m.clients) == 0 {
-		m.mutex.RUnlock()
-		return
-	}
-
-	var blockedClients []string
-
-	for clientID, client := range m.clients {
-		// Only send to clients receiving detection data
-		if client.StreamType != streamTypeDetections && client.StreamType != streamTypeAll {
-			continue
-		}
-		if client.PendingChan == nil {
-			continue
-		}
-		select {
-		case client.PendingChan <- pending:
-			client.consecutiveDrops.Store(0)
-		default:
-			drops := client.consecutiveDrops.Add(1)
-			if drops >= maxConsecutiveDrops {
-				GetLogger().Info("SSE client disconnected after consecutive drops",
-					logger.String("client_id", clientID),
-					logger.Int("consecutive_drops", int(drops)),
-				)
-				blockedClients = append(blockedClients, clientID)
-			}
-		}
-	}
-
-	m.mutex.RUnlock()
-
-	for _, clientID := range blockedClients {
-		m.RemoveClient(clientID)
-	}
-}
-
-// CloseAllClients disconnects all SSE clients during shutdown.
-// This must be called before echo.Shutdown() so the HTTP server
-// has no active connections to wait for.
-func (m *SSEManager) CloseAllClients() {
-	m.shuttingDown.Store(true)
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	for id, client := range m.clients {
-		if client.Channel != nil {
-			close(client.Channel)
-		}
-		if client.SoundLevelChan != nil {
-			close(client.SoundLevelChan)
-		}
-		if client.PendingChan != nil {
-			close(client.PendingChan)
-		}
-		close(client.Done)
-		delete(m.clients, id)
-	}
-	GetLogger().Info("SSE shutdown: closed all clients",
-		logger.String("operation", "sse_close_all_clients"))
-}
-
-// GetClientCount returns the number of connected clients
-func (m *SSEManager) GetClientCount() int {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	return len(m.clients)
-}
-
 // initSSERoutes registers SSE-related API endpoints
 func (c *Controller) initSSERoutes() {
 	// Initialize SSE manager if not already done
-	if c.sseManager == nil {
-		c.sseManager = NewSSEManager()
+	if c.SSEManager == nil {
+		c.SSEManager = apicore.NewSSEManager()
 	}
 
 	// Create rate limiter for SSE connections (10 requests per minute per IP)
@@ -519,7 +130,7 @@ func (c *Controller) logSSEConnection(clientID, ip, userAgent, streamType string
 		action = SSEStatusDisconnected
 	}
 
-	c.logInfoIfEnabled(fmt.Sprintf("SSE %s client %s", streamType, action),
+	c.LogInfoIfEnabled(fmt.Sprintf("SSE %s client %s", streamType, action),
 		logger.String("client_id", clientID),
 		logger.String("ip", ip),
 		logger.String("user_agent", userAgent),
@@ -530,14 +141,14 @@ func (c *Controller) logSSEConnection(clientID, ip, userAgent, streamType string
 func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType string) error {
 	data := map[string]any{
 		"timestamp": time.Now().Unix(),
-		"clients":   c.sseManager.GetClientCount(),
+		"clients":   c.SSEManager.GetClientCount(),
 	}
 	if streamType != "" {
 		data["type"] = streamType
 	}
 
 	if err := c.sendSSEMessage(ctx, "heartbeat", data); err != nil {
-		c.logDebugIfEnabled("SSE heartbeat failed, client likely disconnected",
+		c.LogDebugIfEnabled("SSE heartbeat failed, client likely disconnected",
 			logger.String("client_id", clientID),
 			logger.Error(err),
 		)
@@ -560,8 +171,8 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 		endpoint = soundLevelStreamEndpoint
 	}
 
-	if c.metrics != nil && c.metrics.HTTP != nil && endpoint != "" {
-		c.metrics.HTTP.SSEConnectionStarted(endpoint)
+	if c.Metrics != nil && c.Metrics.HTTP != nil && endpoint != "" {
+		c.Metrics.HTTP.SSEConnectionStarted(endpoint)
 		defer func() {
 			duration := time.Since(connectionStartTime).Seconds()
 			closeReason := metrics.SSECloseReasonClosed
@@ -570,7 +181,7 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 			} else if ctx.Request().Context().Err() == context.Canceled {
 				closeReason = metrics.SSECloseReasonCanceled
 			}
-			c.metrics.HTTP.SSEConnectionClosed(endpoint, duration, closeReason)
+			c.Metrics.HTTP.SSEConnectionClosed(endpoint, duration, closeReason)
 		}()
 	}
 
@@ -586,7 +197,7 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 	setSSEHeaders(ctx)
 
 	// Generate client ID and create client
-	clientID := generateCorrelationID()
+	clientID := apicore.GenerateCorrelationID()
 	client := createSSEClient(clientID, ctx, streamType)
 
 	// Allow custom setup
@@ -595,7 +206,7 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 	}
 
 	// Add client to manager (rejected during shutdown)
-	if !c.sseManager.AddClient(client) {
+	if !c.SSEManager.AddClient(client) {
 		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
 			"error": "Server is shutting down",
 		})
@@ -603,7 +214,7 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 
 	// Send initial connection message
 	if err := c.sendConnectionMessage(ctx, clientID, message, streamType); err != nil {
-		c.sseManager.RemoveClient(clientID)
+		c.SSEManager.RemoveClient(clientID)
 		return err
 	}
 
@@ -612,7 +223,7 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 
 	// Handle the SSE connection
 	defer func() {
-		c.sseManager.RemoveClient(clientID)
+		c.SSEManager.RemoveClient(clientID)
 		c.logSSEConnection(clientID, ctx.RealIP(), "", logPrefix, false)
 	}()
 
@@ -663,7 +274,7 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 					return nil
 				}
 				if err := c.sendSSEMessage(ctx, "detection", detection); err != nil {
-					c.logErrorIfEnabled("Failed to send SSE detection",
+					c.LogErrorIfEnabled("Failed to send SSE detection",
 						logger.String("client_id", clientID),
 						logger.String("endpoint", endpoint),
 						logger.Error(err),
@@ -684,7 +295,7 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 						return nil
 					}
 					if err := c.sendSSEMessage(ctx, "pending", pending); err != nil {
-						c.logErrorIfEnabled("Failed to send SSE pending",
+						c.LogErrorIfEnabled("Failed to send SSE pending",
 							logger.String("client_id", clientID),
 							logger.String("endpoint", endpoint),
 							logger.Error(err),
@@ -760,7 +371,7 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 			// Check for data on the channel (non-blocking)
 			if data, hasData := dataReceiver(); hasData {
 				if err := c.sendSSEMessage(ctx, eventType, data); err != nil {
-					c.logErrorIfEnabled("Failed to send SSE message",
+					c.LogErrorIfEnabled("Failed to send SSE message",
 						logger.String("client_id", clientID),
 						logger.String("endpoint", endpoint),
 						logger.String("event_type", eventType),
@@ -794,7 +405,7 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) er
 		deadline := time.Now().Add(sseWriteDeadline) // Write deadline timeout
 		if err := conn.SetWriteDeadline(deadline); err != nil {
 			// If we can't set deadline, log but continue - not all response writers support this
-			c.logDebugIfEnabled("Failed to set write deadline for SSE message", logger.Error(err))
+			c.LogDebugIfEnabled("Failed to set write deadline for SSE message", logger.Error(err))
 		}
 	}
 
@@ -811,21 +422,13 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) er
 	return nil
 }
 
-// BroadcastPending broadcasts pending detection snapshot from the controller.
-func (c *Controller) BroadcastPending(snapshot any) {
-	if c.sseManager == nil {
-		return
-	}
-	c.sseManager.BroadcastPending(snapshot)
-}
-
 // safeMarshalJSON marshals data to JSON with panic recovery.
 // This protects against panics from concurrent map access or unmarshalable data.
 func (c *Controller) safeMarshalJSON(event string, data any) (jsonData []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("JSON marshal panic: %v", r)
-			c.logErrorIfEnabled("SSE marshal panic recovered",
+			c.LogErrorIfEnabled("SSE marshal panic recovered",
 				logger.String("event", event),
 				logger.Any("panic", r),
 				logger.String("stack", string(debug.Stack())),
@@ -843,7 +446,7 @@ func (c *Controller) safeMarshalJSON(event string, data any) (jsonData []byte, e
 
 // GetSSEStatus returns information about SSE connections
 func (c *Controller) GetSSEStatus(ctx echo.Context) error {
-	if c.sseManager == nil {
+	if c.SSEManager == nil {
 		return ctx.JSON(http.StatusOK, map[string]any{
 			"connected_clients": 0,
 			"status":            "disabled",
@@ -851,66 +454,7 @@ func (c *Controller) GetSSEStatus(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
-		"connected_clients": c.sseManager.GetClientCount(),
+		"connected_clients": c.SSEManager.GetClientCount(),
 		"status":            "active",
 	})
-}
-
-// BroadcastDetection is a helper method to broadcast detection from the controller.
-// It maps the internal datastore.Note to a sanitized SSEDetectionData struct that
-// only exposes safe fields with proper camelCase JSON tags.
-func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imageprovider.BirdImage) error {
-	if c.sseManager == nil {
-		return fmt.Errorf("SSE manager not initialized")
-	}
-
-	// Add nil checks to prevent panic
-	if note == nil {
-		c.logErrorIfEnabled("SSE broadcast skipped: note is nil")
-		return fmt.Errorf("note is nil")
-	}
-	if birdImage == nil {
-		c.logErrorIfEnabled("SSE broadcast skipped: birdImage is nil")
-		return fmt.Errorf("birdImage is nil")
-	}
-
-	detection := newSSEDetectionData(note, birdImage)
-
-	// Add species tracking metadata if processor has tracker.
-	// Compare the detection date with the species' first-seen date so the flag
-	// is true only for the actual first detection, not for every detection of a
-	// recently-first-seen species.
-	// Snapshot processor and tracker to avoid TOCTOU race.
-	if proc := c.Processor; proc != nil {
-		if tracker := proc.GetNewSpeciesTracker(); tracker != nil {
-			status := tracker.GetSpeciesStatus(note.ScientificName, time.Now())
-			detection.IsNewSpecies = !status.FirstSeenTime.IsZero() &&
-				note.Date == status.FirstSeenTime.Format(time.DateOnly)
-			detection.DaysSinceFirstSeen = status.DaysSinceFirst
-		}
-	}
-
-	c.sseManager.BroadcastDetection(&detection)
-	return nil
-}
-
-// BroadcastSoundLevel is a helper method to broadcast sound level data from the controller
-func (c *Controller) BroadcastSoundLevel(soundLevel *soundlevel.SoundLevelData) error {
-	if c.sseManager == nil {
-		return fmt.Errorf("SSE manager not initialized")
-	}
-
-	// Add nil check to prevent panic
-	if soundLevel == nil {
-		c.logErrorIfEnabled("SSE broadcast skipped: soundLevel is nil")
-		return fmt.Errorf("soundLevel is nil")
-	}
-
-	sseData := SSESoundLevelData{
-		SoundLevelData: *soundLevel,
-		EventType:      "sound_level_update",
-	}
-
-	c.sseManager.BroadcastSoundLevel(&sseData)
-	return nil
 }
