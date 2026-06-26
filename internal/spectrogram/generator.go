@@ -90,8 +90,8 @@ func WithDuration(seconds float64) GenerateOption {
 }
 
 // WithFrequencyProfile sets the frequency profile for spectrogram generation.
-// BatProfile() keeps the native sample rate with no resampling or high-pass;
-// BirdProfile() resamples to 24 kHz. When not set, defaults to BirdProfile().
+// BatProfile() resamples to 256 kHz (0-128 kHz axis); BirdProfile() resamples to
+// 24 kHz (0-12 kHz axis). When not set, defaults to BirdProfile().
 func WithFrequencyProfile(fp FrequencyProfile) GenerateOption {
 	return func(o *generateOptions) {
 		o.freqProfile = &fp
@@ -826,9 +826,8 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 		"-n", // No audio output (null output)
 	}
 
-	// Frequency-dependent effects: resample for bird detections. Bat detections
-	// keep the native sample rate with no resampling so the full recorded band is
-	// rendered.
+	// Frequency-dependent effects: resample to the profile's rate (bird 24 kHz,
+	// bat 256 kHz) so the spectrogram's frequency axis matches the fixed UI overlay.
 	if profile.ResampleRate > 0 {
 		args = append(args, "rate", strconv.Itoa(profile.ResampleRate))
 	}
@@ -894,6 +893,37 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 	return nil
 }
 
+// buildFFmpegSpectrogramFilter builds the -lavfi filtergraph for the FFmpeg-only
+// fallback. The showspectrumpic stage uses a style-aware color mode so the fallback
+// visually matches the Sox primary path (without it the fallback always renders the
+// default colorful style, causing intermittent mismatches when Sox fails under load).
+// When the frequency profile sets a resample rate, an aresample stage is prepended so
+// the rendered frequency axis matches the Sox paths (which apply the same rate) and the
+// fixed UI overlay: bird clips resample to 24 kHz (0-12 kHz axis) and bat clips to
+// 256 kHz (0-128 kHz axis) regardless of capture rate. Without it the fallback renders
+// to the native Nyquist and that axis-mismatched image gets cached under the profile
+// filename.
+func buildFFmpegSpectrogramFilter(width int, raw bool, style string, profile FrequencyProfile) string {
+	height := fftFriendlyHeight(width)
+	colorMode := getFFmpegColorMode(style)
+
+	legendFlag := 1
+	if raw {
+		legendFlag = 0
+	}
+
+	// Match the Sox "rate" effect so both backends produce the same frequency axis:
+	// an aresample stage sets showspectrumpic's input rate, so the axis tops out at
+	// its Nyquist (rate/2). Built as a single Sprintf to avoid a throwaway alloc.
+	resamplePrefix := ""
+	if profile.ResampleRate > 0 {
+		resamplePrefix = fmt.Sprintf("aresample=%d,", profile.ResampleRate)
+	}
+
+	return fmt.Sprintf("%sshowspectrumpic=s=%dx%d:legend=%d:gain=%s:drange=%s:color=%s",
+		resamplePrefix, width, height, legendFlag, ffmpegGain, ffmpegDrange, colorMode)
+}
+
 // generateWithFFmpeg generates a spectrogram using only FFmpeg (no Sox).
 // This is a fallback when Sox is not available or fails.
 func (g *Generator) generateWithFFmpeg(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, profile FrequencyProfile) error {
@@ -908,21 +938,8 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, settings *conf.Setti
 			Build()
 	}
 
-	height := fftFriendlyHeight(width)
-
-	// Apply style-aware color mode so FFmpeg fallback matches the Sox primary style.
-	// Without this, the FFmpeg fallback always produces the default colorful style,
-	// causing intermittent style mismatches when Sox fails under resource pressure.
 	style := settings.Realtime.Dashboard.Spectrogram.Style
-	colorMode := getFFmpegColorMode(style)
-
-	legendFlag := 1
-	if raw {
-		legendFlag = 0
-	}
-
-	filterStr := fmt.Sprintf("showspectrumpic=s=%dx%d:legend=%d:gain=%s:drange=%s:color=%s",
-		width, height, legendFlag, ffmpegGain, ffmpegDrange, colorMode)
+	filterStr := buildFFmpegSpectrogramFilter(width, raw, style, profile)
 
 	ffmpegArgs := []string{
 		"-hide_banner",
@@ -993,8 +1010,8 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Se
 	heightStr := strconv.Itoa(fftFriendlyHeight(width))
 	widthStr := strconv.Itoa(width)
 
-	// Build base args: resample for bird detections. Bat detections keep the native
-	// sample rate (no resampling) so the full recorded band is rendered.
+	// Build base args: resample to the profile's rate (bird 24 kHz, bat 256 kHz) so
+	// the spectrogram's frequency axis matches the fixed UI overlay.
 	var args []string
 	if profile.ResampleRate > 0 {
 		args = []string{"-n", "rate", strconv.Itoa(profile.ResampleRate), "spectrogram", "-x", widthStr, "-y", heightStr}
