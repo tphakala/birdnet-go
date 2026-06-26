@@ -259,6 +259,12 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		updated.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(updated.Realtime.Species.Config)
 	}
 
+	// Canonicalize the species exclude list to scientific names so a localized or
+	// common name typed into the Settings exclude editor is stored in the same form
+	// the per-detection filter and the detection-card toggle match. Idempotent for
+	// an already-canonical list, so this does not spuriously trigger a rebuild.
+	updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
+
 	// Ensure LocationConfigured is set when birdnet coordinates are present.
 	// Backward compatibility with older frontends that don't send the flag.
 	if updated.BirdNET.Latitude != 0 || updated.BirdNET.Longitude != 0 {
@@ -680,6 +686,14 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 
 	// Migrate legacy single audio source if a cached frontend sent it.
 	updated.MigrateAudioSourceConfig()
+
+	// Canonicalize the species exclude list to scientific names (see UpdateSettings).
+	// Only the realtime/species sections carry it, so skip other sections: an
+	// unrelated section save must not rewrite the list or trigger a spurious
+	// range-filter rebuild via rangeFilterSettingsChanged.
+	if strings.EqualFold(section, SettingsSectionRealtime) || strings.EqualFold(section, SettingsSectionSpecies) {
+		updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
+	}
 
 	// Validate the clone before publishing. No rollback needed on validation
 	// failure: we simply never publish.
