@@ -304,7 +304,7 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 	model := ctx.QueryParam("model")
 	dt, err := c.DS.GetDynamicThreshold(species, model)
 	if err != nil {
-		return c.handleErrorWithNotFound(ctx, err, "Threshold not found", "Failed to get threshold")
+		return c.HandleErrorWithNotFound(ctx, err, "Threshold not found", "Failed to get threshold")
 	}
 
 	response := DynamicThresholdResponse{

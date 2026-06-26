@@ -233,7 +233,7 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 | ------ | -------------------- | ------------------ | ---- | -------------------------------------------------------- |
 | GET    | `/filesystem/browse` | `BrowseFileSystem` | ✅   | Browse files and directories with secure path validation |
 
-### Species (`species.go`)
+### Species (`species/species.go`)
 
 | Method | Route                      | Handler               | Auth | Description                                                       |
 | ------ | -------------------------- | --------------------- | ---- | ----------------------------------------------------------------- |

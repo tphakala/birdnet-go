@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
+	"github.com/tphakala/birdnet-go/internal/api/v2/species"
 	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
 	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -72,6 +73,15 @@ type Controller struct {
 	// because "range" is a Go reserved word; the domain package is imported as
 	// rangeapi. Like weather it needs only the shared *apicore.Core.
 	rangeHandler *rangeapi.Handler
+
+	// species serves the /api/v2/species/* and /api/v2/taxonomy/* endpoints
+	// (species info, rarity, the all-species picker, the dictionary, thumbnails,
+	// and genus/family/tree lookups). Besides the shared *apicore.Core it receives
+	// two facade-owned function dependencies: a read accessor over the shared
+	// scientific-to-common name map (loadCommonNameMap) and the media domain's
+	// species-image proxy handler (ServeSpeciesImageProxy), both still owned by
+	// package api until their domains are extracted.
+	species *species.Handler
 
 	controlChan chan string
 
@@ -309,6 +319,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// stable for the controller's lifetime.
 	c.tlsHandler = tlsapi.New(c.Core, &c.settingsMutex,
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+	// The species handler delegates to two facade-owned dependencies that have not
+	// been extracted into their own domains yet: loadCommonNameMap (the shared
+	// name-map read accessor) and ServeSpeciesImageProxy (the media image proxy the
+	// thumbnail endpoint forwards to). They are passed as bound method values; c is
+	// fully constructed here, so the method values are stable for its lifetime.
+	c.species = species.New(c.Core, c.loadCommonNameMap, c.ServeSpeciesImageProxy)
 
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
@@ -418,7 +434,7 @@ func (c *Controller) initRoutes() {
 		{"notification routes", c.initNotificationRoutes},
 		{"support routes", c.initSupportRoutes},
 		{"debug routes", c.initDebugRoutes},
-		{"species routes", c.initSpeciesRoutes},
+		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
 		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
 		{"alert routes", c.initAlertRoutes},
 		{"model routes", c.initModelRoutes},

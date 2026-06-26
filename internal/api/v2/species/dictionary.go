@@ -1,5 +1,4 @@
-// internal/api/v2/species_dictionary.go
-package api
+package species
 
 import (
 	"fmt"
@@ -45,7 +44,7 @@ const (
 // immutable caching; requests without it receive a short-lived cache header.
 //
 // Public endpoint, no authentication required.
-func (c *Controller) ServeSpeciesDictionary(ctx echo.Context) error {
+func (c *Handler) ServeSpeciesDictionary(ctx echo.Context) error {
 	locale := ctx.Param("locale")
 
 	// Validate locale against the embedded allowlist before touching anything
