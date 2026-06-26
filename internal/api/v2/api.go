@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/control"
+	"github.com/tphakala/birdnet-go/internal/api/v2/dynamicthresholds"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
@@ -105,6 +106,14 @@ type Controller struct {
 	// it needs only the shared *apicore.Core (the media SecureFS sandbox, the auth
 	// middleware, and the error/log helpers all promote from it).
 	filesystem *filesystem.Handler
+
+	// dynamicThresholds serves the /api/v2/dynamic-thresholds* endpoints (BG-59:
+	// reading the merged runtime threshold data from the database and processor
+	// memory, aggregate stats, per-species lookups and event history, plus the
+	// protected single and bulk reset controls). Like weather it needs only the
+	// shared *apicore.Core (DS, Processor, AuthMiddleware, settings, and the
+	// error/log helpers all promote from it).
+	dynamicThresholds *dynamicthresholds.Handler
 
 	// alerts serves the /api/v2/alerts/* endpoints (alert-rule CRUD,
 	// import/export, history, schema, and test-fire). Beyond the shared
@@ -372,6 +381,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// The filesystem handler needs only the shared core (the media SecureFS
 	// sandbox, the auth middleware, and the error/log helpers all promote from it).
 	c.filesystem = filesystem.New(c.Core)
+	// The dynamic-thresholds handler needs only the shared core (DS, Processor,
+	// the auth middleware, settings, and the error/log helpers all promote from it).
+	c.dynamicThresholds = dynamicthresholds.New(c.Core)
 	// The alerts handler owns its two domain dependencies (alert-rule repository
 	// and alerting engine), constructed lazily in RegisterRoutes; it needs only
 	// the shared core here (V2Manager, auth middleware, and the error/log helpers
@@ -513,7 +525,7 @@ func (c *Controller) initRoutes() {
 		{"support routes", func() { c.support.RegisterRoutes(c.Group) }},
 		{"debug routes", c.initDebugRoutes},
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
-		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
+		{"dynamic threshold routes", func() { c.dynamicThresholds.RegisterRoutes(c.Group) }},
 		{"alert routes", func() { c.alerts.RegisterRoutes(c.Group) }},
 		{"model routes", func() { c.models.RegisterRoutes(c.Group) }},
 		{"insights routes", c.initInsightsRoutes},
