@@ -182,6 +182,56 @@ assert_nonzero "missing leaf returns non-zero" "$rc"
 set_yaml_value "webserver.port" '"9000"' "$cfg"
 assert_eq "webserver.port set" '"9000"' "$(yaml_after "$cfg" '^webserver:' 2 port)"
 
+# The app (Go yaml.v3) re-serializes config.yaml with 4-space indentation, not the
+# template's 2-space. set_yaml_value must locate nested paths regardless of indent width,
+# or reconfigure silently no-ops on a live install (audio format / web auth / locale).
+# The soundlevel.export node is synthetic (the real config has no audio.soundlevel.export);
+# it exists only to place a same-named key one level deeper than the real audio.export.type
+# so the grandchild-false-match guard is exercised.
+app_config() { # -> path to a 4-space app-style fixture
+    local p="${WORK}/app.$RANDOM.$RANDOM.yaml"
+    cat > "$p" <<'YAML'
+realtime:
+    audio:
+        soundlevel:
+            export:
+                type: bad
+        export:
+            enabled: true
+            type: wav
+birdnet:
+    locale: en
+    threshold: "0.8"
+security:
+    basicauth:
+        enabled: false
+        password: ""
+    allowsubnetbypass:
+        enabled: false
+YAML
+    printf '%s' "$p"
+}
+
+it "set_yaml_value (4-space app config)"
+
+acfg="$(app_config)"
+set_yaml_value "realtime.audio.export.type" "flac" "$acfg"
+assert_eq "4-space export.type set to flac" "flac" "$(yaml_after "$acfg" '^[[:space:]]{8}export:' 12 type)"
+assert_eq "4-space export.enabled untouched" "true" "$(yaml_after "$acfg" '^[[:space:]]{8}export:' 12 enabled)"
+# A same-named key nested deeper under a non-matching sibling must not be rewritten.
+assert_eq "4-space grandchild soundlevel.export.type untouched" "bad" "$(yaml_after "$acfg" '^[[:space:]]{12}export:' 16 type)"
+
+set_yaml_value "birdnet.locale" "fi" "$acfg"
+assert_eq "4-space birdnet.locale set to fi" "fi" "$(yaml_after "$acfg" '^birdnet:' 4 locale)"
+
+set_yaml_value "security.basicauth.enabled" "true" "$acfg"
+assert_eq "4-space basicauth.enabled set to true" "true" "$(yaml_after "$acfg" '^[[:space:]]{4}basicauth:' 8 enabled)"
+assert_eq "4-space allowsubnetbypass.enabled untouched" "false" "$(yaml_after "$acfg" '^[[:space:]]{4}allowsubnetbypass:' 8 enabled)"
+
+# Re-run on the 4-space config changes an already-set value (not a no-op).
+set_yaml_value "realtime.audio.export.type" "opus" "$acfg"
+assert_eq "4-space export.type re-changed flac->opus" "opus" "$(yaml_after "$acfg" '^[[:space:]]{8}export:' 12 type)"
+
 # ===========================================================================
 # set_config_value
 # ===========================================================================
@@ -199,6 +249,17 @@ assert_eq "security.host re-changed" "other.example.com" "$(yaml_after "$cfg" '^
 set_config_value security enabled "true"
 assert_eq "set_config_value does not reach grandchild basicauth.enabled" "false" "$(yaml_after "$cfg" '^[[:space:]]{2}basicauth:' 4 enabled)"
 
+# 4-space (app-serialized) config: a direct child of a top-level block sits at indent 4, not 2.
+# The old fixed 2-space sed anchor silently no-opped here (breaking TLS / web-port reconfigure
+# on a live config); delegating to the indent-agnostic set_yaml_value fixes it. Fails on old code.
+acfg2="$(app_config)"
+CONFIG_FILE="$acfg2"
+set_config_value birdnet locale "fi"
+assert_eq "4-space set_config_value reaches indent-4 child" "fi" "$(yaml_after "$acfg2" '^birdnet:' 4 locale)"
+# A non-existent direct scalar child must no-op without reaching the indent-8 grandchild.
+set_config_value security enabled "true"
+assert_eq "4-space set_config_value does not reach grandchild" "false" "$(yaml_after "$acfg2" '^[[:space:]]{4}basicauth:' 8 enabled)"
+
 # ===========================================================================
 # set_first_audio_source
 # ===========================================================================
@@ -212,6 +273,13 @@ dev="$(awk '/^[[:space:]]{4}sources:/{f=1} f&&/^[[:space:]]+(-[[:space:]]+)?devi
 nm="$(awk '/^[[:space:]]{4}sources:/{f=1} f&&/^[[:space:]]+-[[:space:]]+name:/{sub(/^[[:space:]]*-[[:space:]]+name:[[:space:]]*/,"");print;exit}' "$cfg")"
 assert_eq "device set" '"hw:1,0"' "$dev"
 assert_eq "name set" '"USB Mic"' "$nm"
+
+# ENVIRON (not awk -v) preserves a backslash in the device verbatim. With the old `awk -v`,
+# `\t` in the value was processed into a literal tab; ENVIRON keeps it as two characters.
+cfg="$(fresh_config)"
+set_first_audio_source 'hw:Foo\tBar' "USB Mic" "$cfg"
+dev="$(awk '/^[[:space:]]{4}sources:/{f=1} f&&/^[[:space:]]+(-[[:space:]]+)?device:/{sub(/^[[:space:]]*(-[[:space:]]+)?device:[[:space:]]*/,"");print;exit}' "$cfg")"
+assert_eq "backslash in device preserved verbatim (ENVIRON, not awk -v)" '"hw:Foo\tBar"' "$dev"
 
 # Reverse field order (device before name) must also work.
 cat > "$cfg" <<'EOF'
