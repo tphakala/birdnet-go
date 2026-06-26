@@ -998,13 +998,16 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Locked:         locked,
 	}
 
-	// Populate model info from preloaded Model entity
+	// Populate model info from preloaded Model entity. ModelType is carried here
+	// (from the batch-loaded ai_models relation) so API handlers can read it
+	// directly instead of issuing a per-detection lookup (avoids N+1 on lists).
 	if det.Model != nil {
 		note.Model = detection.ModelInfo{
 			Name:           det.Model.Name,
 			Version:        det.Model.Version,
 			Variant:        det.Model.Variant,
 			ClassifierPath: det.Model.ClassifierPath,
+			ModelType:      string(det.Model.ModelType),
 		}
 	}
 
@@ -1101,6 +1104,14 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 	// TimeOfDay calculation
 	timeOfDay := ds.calculateTimeOfDay(timestamp, lat, lon)
 
+	// Model type from the preloaded Model entity (batch-loaded via
+	// loadDetectionRelations), so the search UI can pick the correct spectrogram
+	// frequency axis (bat vs bird) without a per-result lookup.
+	modelType := ""
+	if det.Model != nil {
+		modelType = string(det.Model.ModelType)
+	}
+
 	return datastore.DetectionRecord{
 		ID:             strconv.FormatUint(uint64(det.ID), 10),
 		Timestamp:      timestamp,
@@ -1118,6 +1129,7 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 		Device:         device,
 		Source:         source,
 		TimeOfDay:      timeOfDay,
+		ModelType:      modelType,
 	}
 }
 

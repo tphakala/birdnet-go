@@ -9,6 +9,8 @@
     detectionTime?: string;
     detectionId?: number | string;
     showSpectrogram?: boolean;
+    /** AI model type (e.g. 'bat'); selects the spectrogram frequency axis */
+    modelType?: string;
     onClose?: () => void;
   }
 
@@ -18,6 +20,7 @@
     detectionTime = '',
     detectionId = undefined,
     showSpectrogram = true,
+    modelType = '',
     onClose,
   }: Props = $props();
 
@@ -75,6 +78,7 @@
         showDownload={true}
         spectrogramSize="md"
         className="w-full"
+        {modelType}
       />
     </div>
   </div>

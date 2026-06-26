@@ -841,7 +841,8 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 }
 
 // TestGetSoxSpectrogramArgs_BatProfile verifies that the bat frequency profile
-// produces a high-pass sinc filter instead of rate resampling.
+// resamples to 256 kHz (Nyquist = 128 kHz) so the fixed 0–128 kHz UI axis is
+// always accurate, regardless of the original capture rate.
 func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.Export.Length = 15
@@ -853,10 +854,10 @@ func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
 
 	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BatProfile())
 
-	// Bat profile: sinc high-pass filter, no rate resampling
-	assert.Contains(t, args, "sinc", "bat profile should use sinc high-pass filter")
-	assert.Contains(t, args, "18000-", "bat profile should filter at 18 kHz")
-	assert.NotContains(t, args, "rate", "bat profile should not resample")
+	// Bat profile: resampled to 256 kHz – no sinc filter.
+	assert.NotContains(t, args, "sinc", "bat profile should not apply a high-pass filter")
+	assert.Contains(t, args, "rate", "bat profile should resample to 256 kHz")
+	assert.Contains(t, args, "256000", "bat profile should resample to 256000 Hz")
 }
 
 // TestGetSoxSpectrogramArgs_BirdProfile verifies that the bird frequency profile
@@ -879,10 +880,8 @@ func TestGetSoxSpectrogramArgs_BirdProfile(t *testing.T) {
 }
 
 // TestProfileForModelType verifies model type to frequency profile mapping.
-// The bat profile is temporarily disabled (see ProfileForModelType and commit
-// e2edab6d2): every model type, including "bat", resolves to bird defaults
-// until the bat spectrogram generation bugs are fixed. Restore the bat case to
-// {wantResample: 0, wantHighPass: 18000} when the bat profile is re-enabled.
+// Bat models resolve to the bat profile (256 kHz resample);
+// every other model type falls back to bird defaults.
 func TestProfileForModelType(t *testing.T) {
 	t.Parallel()
 
@@ -890,21 +889,33 @@ func TestProfileForModelType(t *testing.T) {
 		name         string
 		modelType    string
 		wantResample int
-		wantHighPass int
+		wantSuffix   string
 	}{
-		{"bird model", "bird", 24000, 0},
-		{"bat model disabled, falls back to bird", "bat", 24000, 0},
-		{"multi model defaults to bird", "multi", 24000, 0},
-		{"empty defaults to bird", "", 24000, 0},
+		{"bird model", "bird", 24000, ""},
+		{"bat model uses bat profile", "bat", 256000, "bat"},
+		{"multi model defaults to bird", "multi", 24000, ""},
+		{"empty defaults to bird", "", 24000, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			p := ProfileForModelType(tt.modelType)
 			assert.Equal(t, tt.wantResample, p.ResampleRate)
-			assert.Equal(t, tt.wantHighPass, p.HighPassHz)
+			assert.Equal(t, tt.wantSuffix, ProfileSuffix(p))
 		})
 	}
+}
+
+// TestProfileSuffix verifies the cache-key token derived from a frequency profile:
+// bat profiles get a "bat" token; bird defaults stay empty for backward
+// compatibility with existing cached spectrogram filenames.
+func TestProfileSuffix(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "bat", ProfileSuffix(BatProfile()), "bat profile should map to the bat token")
+	assert.Empty(t, ProfileSuffix(BirdProfile()), "bird profile should map to an empty token")
+	assert.Equal(t, "bat", ProfileSuffix(ProfileForModelType("bat")))
+	assert.Empty(t, ProfileSuffix(ProfileForModelType("bird")))
 }
 
 // TestGetSoxSpectrogramArgs_UsesProvidedDuration verifies that a non-zero preValidatedDuration

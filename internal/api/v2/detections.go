@@ -50,6 +50,11 @@ const (
 
 	// Default sort order for non-hourly query types
 	sortByDateDesc = "date_desc"
+
+	// defaultModelType is returned when a detection's model type is unknown
+	// (e.g. the legacy datastore does not track it). The UI maps this to the
+	// default bird spectrogram frequency range.
+	defaultModelType = "bird"
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -188,6 +193,7 @@ type DetectionResponse struct {
 	ScientificName     string            `json:"scientificName"`
 	CommonName         string            `json:"commonName"`
 	Confidence         float64           `json:"confidence"`
+	ModelType          string            `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
 	Unlikely           bool              `json:"unlikely,omitempty"`
@@ -747,6 +753,16 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 	c.applySpeciesTrackingMetadata(&detection, note.ScientificName, note.Date)
 	detection.Verified = c.mapVerificationStatus(note.Verified)
 	detection.Comments = extractNoteComments(note.Comments)
+
+	// Model type drives the UI spectrogram frequency range (bat detections span a
+	// much wider band than birds). It is carried on note.Model from the datastore's
+	// batch-loaded ai_models relation, so reading it here adds no extra query.
+	// Fall back to the default bird range when the model type is unknown (e.g. the
+	// legacy datastore does not track it).
+	detection.ModelType = note.Model.ModelType
+	if detection.ModelType == "" {
+		detection.ModelType = defaultModelType
+	}
 
 	if includeWeather {
 		c.populateWeatherData(&detection, note, weatherCache)
@@ -1335,24 +1351,37 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 			logger.String("path", absClipPath))
 	}
 
-	// Remove all associated spectrogram files.
-	// Spectrograms follow the naming pattern: <basename>_<width>px.png
-	// and <basename>_<width>px-legend.png for each valid width.
+	// Remove all associated spectrogram files. buildSpectrogramPaths names them
+	// <basename>_<width>px<suffix>.png, where <suffix> encodes the visual style,
+	// dynamic range, frequency profile (e.g. "-bat") and legend/raw variant - and a
+	// single clip can accumulate several of these as those settings change over time.
+	// Rather than enumerate every combination (and miss renders from styles no longer
+	// configured), scan the directory and remove any PNG whose name matches this
+	// clip's "<basename>_<width>px" prefix followed by ".png" or a "-"-prefixed
+	// suffix. The separator anchor after the width prevents matching a different clip
+	// whose basename merely shares this prefix.
 	ext := filepath.Ext(normalized)
-	basePath := strings.TrimSuffix(absClipPath, ext)
+	baseFilename := strings.TrimSuffix(filepath.Base(normalized), ext)
+	clipDir := filepath.Dir(absClipPath)
 
 	removed := 0
-	suffixes := []string{"%s_%dpx.png", "%s_%dpx-legend.png"}
-	for _, width := range spectrogramWidths {
-		for _, sfx := range suffixes {
-			path := fmt.Sprintf(sfx, basePath, width)
-			if err := os.Remove(path); err == nil {
-				removed++
-			} else if !os.IsNotExist(err) {
-				log.Warn("Failed to remove spectrogram file",
-					logger.String("path", path),
-					logger.Error(err))
-			}
+	entries, readErr := c.SFS.ReadDirRel(filepath.Dir(normalized))
+	if readErr != nil && !os.IsNotExist(readErr) {
+		log.Warn("Failed to scan directory for spectrogram files",
+			logger.String("dir", clipDir),
+			logger.Error(readErr))
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !isSpectrogramFileFor(entry.Name(), baseFilename) {
+			continue
+		}
+		path := filepath.Join(clipDir, entry.Name())
+		if err := c.SFS.Remove(path); err == nil {
+			removed++
+		} else if !os.IsNotExist(err) {
+			log.Warn("Failed to remove spectrogram file",
+				logger.String("path", path),
+				logger.Error(err))
 		}
 	}
 
@@ -1361,6 +1390,24 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 			logger.Int("count", removed),
 			logger.String("clip_name", clipName))
 	}
+}
+
+// isSpectrogramFileFor reports whether pngName is a spectrogram render of the clip
+// with the given base filename. It matches "<baseFilename>_<width>px" followed by
+// either ".png" or a "-"-prefixed suffix (style, dynamic-range, frequency-profile
+// and legend tokens), for any known render width. The "."/"-" anchor after the
+// width avoids matching a different clip whose base name merely shares this prefix.
+func isSpectrogramFileFor(pngName, baseFilename string) bool {
+	if !strings.HasSuffix(pngName, ".png") {
+		return false
+	}
+	for _, width := range spectrogramWidths {
+		prefix := fmt.Sprintf("%s_%dpx", baseFilename, width)
+		if pngName == prefix+".png" || strings.HasPrefix(pngName, prefix+"-") {
+			return true
+		}
+	}
+	return false
 }
 
 // invalidateDetectionCache clears the detection cache to ensure fresh data
