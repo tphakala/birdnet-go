@@ -343,7 +343,6 @@ func TestExportAudio_ErrorsAreEnhanced(t *testing.T) {
 // cmd.Wait() non-zero-exit and os.Rename finalize branches are exercised
 // deterministically without a real FFmpeg. POSIX-only; skipped on Windows.
 func TestExportAudio_RuntimeFailuresAreEnhanced(t *testing.T) {
-	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("fake shell-script FFmpeg binaries are POSIX-only")
 	}
@@ -358,10 +357,19 @@ func TestExportAudio_RuntimeFailuresAreEnhanced(t *testing.T) {
 		return p
 	}
 
+	// Build the fake binaries before t.Parallel() so the write file descriptors
+	// are closed before any concurrent test goroutine can call fork+exec. A
+	// forked child inherits all open fds; if one inherits a write fd to a script
+	// that another goroutine then tries to exec, Linux returns ETXTBSY
+	// (write-then-exec-under-concurrent-fork, golang/go#22315). Building here,
+	// in the sequential pre-parallel phase, eliminates that window entirely.
+	//
 	// Drains stdin then exits non-zero -> cmd.Wait() reports a non-zero exit.
 	waitFailBin := writeFakeBin(t, "wait-fail.sh", "#!/bin/sh\ncat > /dev/null\nexit 1\n")
 	// Exits zero but never writes the temp output file -> os.Rename finalize fails.
 	renameFailBin := writeFakeBin(t, "rename-fail.sh", "#!/bin/sh\ncat > /dev/null\nexit 0\n")
+
+	t.Parallel() // safe: write fds are closed; no concurrent fork can race on the scripts above
 
 	tests := []struct {
 		name          string
@@ -476,7 +484,6 @@ func TestExportAudioToBuffer_ErrorsAreEnhanced(t *testing.T) {
 // error paths using a fake POSIX-shell "FFmpeg" binary so the cmd.Wait()
 // non-zero-exit branch is exercised deterministically. POSIX-only.
 func TestExportAudioToBuffer_RuntimeFailuresAreEnhanced(t *testing.T) {
-	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("fake shell-script FFmpeg binaries are POSIX-only")
 	}
@@ -484,9 +491,16 @@ func TestExportAudioToBuffer_RuntimeFailuresAreEnhanced(t *testing.T) {
 	outDir := t.TempDir()
 	pcm := makePCMSilence(t, 1)
 
+	// Build the fake binary before t.Parallel() so the write file descriptor is
+	// closed before any concurrent test goroutine can call fork+exec. See the
+	// comment in TestExportAudio_RuntimeFailuresAreEnhanced for the full
+	// explanation of the write-then-exec-under-concurrent-fork (ETXTBSY) race.
+	//
 	// Drains stdin, writes nothing to stdout, exits non-zero -> cmd.Wait() error.
 	waitFailBin := filepath.Join(outDir, "wait-fail.sh")
 	require.NoError(t, os.WriteFile(waitFailBin, []byte("#!/bin/sh\ncat > /dev/null\nexit 1\n"), 0o755)) //nolint:gosec // test-only fake binary must be executable
+
+	t.Parallel() // safe: write fd is closed; no concurrent fork can race on waitFailBin above
 
 	buf, err := ffmpeg.ExportAudioToBuffer(t.Context(), pcm, waitFailBin, 48000, 1, 16, []string{"-c:a", "flac", "-f", "flac"})
 	require.Error(t, err)
