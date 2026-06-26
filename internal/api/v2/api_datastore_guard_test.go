@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 )
 
 // TestGetSpectrogramStatusReturns503WhenDatastoreDisabled pins that a DS-dependent
@@ -94,7 +95,7 @@ func TestInitDebugRoutesReadsSettingsNilSafely(t *testing.T) {
 	withRestoredGlobalSettings(t)
 
 	e := echo.New()
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Debug = false // debug mode off -> initDebugRoutes takes the skip path
 
 	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}

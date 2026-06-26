@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -127,7 +128,7 @@ func TestInitIntegrationsRoutesRegistration(t *testing.T) {
 	controller.initIntegrationsRoutes()
 
 	// Verify expected integration routes are registered
-	assertRoutesRegistered(t, e, []string{
+	apitest.AssertRoutesRegistered(t, e, []string{
 		"GET /api/v2/integrations/mqtt/status",
 		"POST /api/v2/integrations/mqtt/test",
 		"GET /api/v2/integrations/birdweather/status",
@@ -811,7 +812,7 @@ func publishWeatherTestSettings(t *testing.T, mutate func(*conf.Settings)) (*ech
 	e, _, controller := setupTestEnvironment(t)
 	settings := controller.Settings.Load()
 	mutate(settings)
-	publishTestSettings(t, settings)
+	apitest.PublishTestSettings(t, settings)
 	return e, controller
 }
 

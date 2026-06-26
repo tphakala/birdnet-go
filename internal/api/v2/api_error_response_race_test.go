@@ -16,6 +16,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 )
 
 // TestNewErrorResponseConcurrentSettingsPublishIsRaceFree hammers
@@ -27,7 +28,7 @@ func TestNewErrorResponseConcurrentSettingsPublishIsRaceFree(t *testing.T) {
 	withRestoredGlobalSettings(t)
 
 	controller := &Controller{Core: &apicore.Core{}}
-	controller.Settings.Store(newValidTestSettings())
+	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	testErr := echo.NewHTTPError(http.StatusInternalServerError, "raw internal detail")
 
@@ -42,7 +43,7 @@ func TestNewErrorResponseConcurrentSettingsPublishIsRaceFree(t *testing.T) {
 	for w := range writers {
 		wg.Go(func() {
 			for i := range itersPerWorker {
-				snap := newValidTestSettings()
+				snap := apitest.NewValidTestSettings()
 				snap.WebServer.Debug = (w+i)%2 == 0
 				// Republish the same way UpdateSettings does: Settings.Store while
 				// holding settingsMutex. The mutex serialises writers; the read side

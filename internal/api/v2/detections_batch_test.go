@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -384,7 +385,7 @@ func TestBatchRoutes(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 	controller.initDetectionRoutes()
 
-	assertRoutesRegistered(t, e, []string{
+	apitest.AssertRoutesRegistered(t, e, []string{
 		"POST /api/v2/detections/batch/delete",
 		"POST /api/v2/detections/batch/review",
 		"POST /api/v2/detections/batch/lock",

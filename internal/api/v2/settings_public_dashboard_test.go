@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -107,7 +108,7 @@ func newSettingsAuthTestEnvWithNotifier(t *testing.T) (*echo.Echo, *notification
 		},
 	}
 
-	mockImageProvider := &MockImageProvider{}
+	mockImageProvider := &apitest.MockImageProvider{}
 	mockImageProvider.On("Fetch", mock.Anything).
 		Return(imageprovider.BirdImage{}, nil).Maybe()
 

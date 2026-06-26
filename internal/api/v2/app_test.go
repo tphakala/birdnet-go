@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -67,7 +68,7 @@ func setupAppConfigTest(t *testing.T, securityConfig *conf.Security) (*echo.Echo
 		Security: secCfg,
 	}
 
-	mockImageProvider := &MockImageProvider{}
+	mockImageProvider := &apitest.MockImageProvider{}
 	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
 
 	birdImageCache := &imageprovider.BirdImageCache{}
@@ -77,7 +78,7 @@ func setupAppConfigTest(t *testing.T, securityConfig *conf.Security) (*echo.Echo
 	controlChan := make(chan string, testControlChannelBuf)
 	mockMetrics, _ := observability.NewMetrics()
 
-	publishTestSettings(t, settings)
+	apitest.PublishTestSettings(t, settings)
 
 	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)
 	require.NoError(t, err, "Failed to create test API controller")
@@ -119,7 +120,7 @@ func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*e
 		Security: secCfg,
 	}
 
-	mockImageProvider := &MockImageProvider{}
+	mockImageProvider := &apitest.MockImageProvider{}
 	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
 
 	birdImageCache := &imageprovider.BirdImageCache{}
@@ -131,7 +132,7 @@ func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*e
 
 	// Publish settings to the global snapshot so GetAppConfig (which reads via
 	// currentSettings) observes this controller's settings, not a leaked snapshot.
-	publishTestSettings(t, settings)
+	apitest.PublishTestSettings(t, settings)
 
 	// Create OAuth2Server for auth
 	oauth2Server := securitytest.NewOAuth2ServerForTesting(t, settings)
@@ -593,7 +594,7 @@ func TestGetAppConfig_EmptyVersion(t *testing.T) {
 		},
 	}
 
-	mockImageProvider := &MockImageProvider{}
+	mockImageProvider := &apitest.MockImageProvider{}
 	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
 	birdImageCache := &imageprovider.BirdImageCache{}
 	birdImageCache.SetImageProvider(mockImageProvider)
@@ -653,7 +654,7 @@ func TestGetAppConfig_VersionWithSpecialChars(t *testing.T) {
 				},
 			}
 
-			mockImageProvider := &MockImageProvider{}
+			mockImageProvider := &apitest.MockImageProvider{}
 			mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
 			birdImageCache := &imageprovider.BirdImageCache{}
 			birdImageCache.SetImageProvider(mockImageProvider)
@@ -1028,7 +1029,7 @@ func FuzzGetAppConfig_Headers(f *testing.F) {
 
 		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
-		publishTestSettings(t, settings)
+		apitest.PublishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 		if accept != "" {
@@ -1150,7 +1151,7 @@ func FuzzGetAppConfig_CSRFToken(f *testing.F) {
 
 		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
-		publishTestSettings(t, settings)
+		apitest.PublishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -1213,7 +1214,7 @@ func FuzzGetAppConfig_Version(f *testing.F) {
 
 		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
-		publishTestSettings(t, settings)
+		apitest.PublishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -1364,7 +1365,7 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 
 		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
-		publishTestSettings(t, settings)
+		apitest.PublishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 		rec := httptest.NewRecorder()

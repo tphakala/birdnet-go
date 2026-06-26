@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -547,7 +548,7 @@ func TestValidationErrors(t *testing.T) {
 			err = controller.UpdateSectionSettings(ctx)
 
 			// Use helper function to assert error response
-			assertControllerError(t, err, rec, tt.expectedCode, tt.expectedError)
+			apitest.AssertControllerError(t, err, rec, tt.expectedCode, tt.expectedError)
 		})
 	}
 }

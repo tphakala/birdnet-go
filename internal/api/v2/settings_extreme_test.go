@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 )
 
 // executeLargeDataSettingsPatch creates and executes a PATCH request with large data.
@@ -217,7 +218,7 @@ func TestExtremeValues(t *testing.T) {
 
 			if tt.expectedError {
 				// Use helper function to assert error response (expects BadRequest for extreme values)
-				assertControllerError(t, err, rec, http.StatusBadRequest, "")
+				apitest.AssertControllerError(t, err, rec, http.StatusBadRequest, "")
 				t.Logf("Extreme value properly rejected: %s", tt.description)
 			} else {
 				if err != nil {

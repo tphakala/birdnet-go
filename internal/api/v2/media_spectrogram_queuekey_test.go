@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -49,7 +50,7 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 		raw    = true
 	)
 
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Audio.Export.Path = filepath.Join(tmp, "original")
 
 	// A non-nil datastore satisfies requireDatastore; no Get expectation is set because
@@ -114,7 +115,7 @@ func TestGenerateSpectrogramFromRelRetainsFailedStatusForPolling(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	controllerCore := &apicore.Core{SFS: sfs}
 	controllerCore.SetTestContext(ctx, nil)
 	controller := &Controller{Core: controllerCore}

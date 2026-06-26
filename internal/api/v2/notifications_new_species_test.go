@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -50,7 +51,7 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 
 func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	// No t.Parallel(): this test publishes to the process-global settings
-	// singleton via publishTestSettings (CreateTestNewSpeciesNotification reads
+	// singleton via apitest.PublishTestSettings (CreateTestNewSpeciesNotification reads
 	// the live snapshot through currentSettings(), which consults
 	// conf.GetSettings() first). The notification service is fully isolated
 	// per test via dependency injection.
@@ -83,7 +84,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	controller.Settings.Store(settings)
 	// CreateTestNewSpeciesNotification reads the live snapshot via currentSettings();
 	// publish the controller's settings so the read resolves to them.
-	publishTestSettings(t, settings)
+	apitest.PublishTestSettings(t, settings)
 
 	err := controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)

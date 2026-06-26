@@ -22,6 +22,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
@@ -342,7 +343,7 @@ func TestInitControlRoutesRegistration(t *testing.T) {
 	controller.initControlRoutes()
 
 	// Verify expected control routes are registered
-	assertRoutesRegistered(t, e, []string{
+	apitest.AssertRoutesRegistered(t, e, []string{
 		"GET /api/v2/control/actions",
 		"POST /api/v2/control/restart",
 		"POST /api/v2/control/reload",

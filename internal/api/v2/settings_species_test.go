@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -150,7 +151,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 
 	// Setup
 	e := echo.New()
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Interval = 15
 	settings.Realtime.Species = conf.SpeciesSettings{
 		Include: []string{"Robin"},
@@ -225,7 +226,7 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 
 	// Setup with existing configs (use lowercase keys since they're set directly)
 	e := echo.New()
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Species = conf.SpeciesSettings{
 		Config: map[string]conf.SpeciesConfig{
 			"bird a": {
@@ -293,7 +294,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	// Setup controller with its own settings (simulating real usage)
 	// Use lowercase keys since they're set directly
 	e := echo.New()
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Interval = 15
 	settings.Realtime.Species = conf.SpeciesSettings{
 		Include: []string{},
@@ -420,7 +421,7 @@ func TestSpeciesSettingsRejectInvalid(t *testing.T) {
 func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (echo.Context, *httptest.ResponseRecorder, *Controller) {
 	t.Helper()
 
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Main.Name = "TestNode"
 	settings.Realtime.Species = conf.SpeciesSettings{
 		Include: []string{},
@@ -493,7 +494,7 @@ func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Species = conf.SpeciesSettings{
 		Include: []string{},
 		Exclude: []string{},
@@ -555,7 +556,7 @@ func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
 func createTestController(t *testing.T) *Controller {
 	t.Helper()
 
-	settings := newValidTestSettings()
+	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Species = conf.SpeciesSettings{
 		Include: []string{},
 		Exclude: []string{},

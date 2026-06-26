@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/testutil/containers"
 )
 
@@ -56,7 +57,7 @@ func TestCheckNtfyServer_RealContainer(t *testing.T) {
 		// Test the full CheckNtfyServer handler via Echo context
 		e := echo.New()
 		ctrl := &Controller{Core: &apicore.Core{}}
-		ctrl.Settings.Store(newValidTestSettings())
+		ctrl.Settings.Store(apitest.NewValidTestSettings())
 
 		req := httptest.NewRequest(http.MethodGet,
 			"/api/v2/notifications/check-ntfy-server?host="+host, http.NoBody)

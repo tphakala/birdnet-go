@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -2358,7 +2359,7 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 			barrier.Wait()
 
 			// Create a fresh request for each goroutine
-			client := createTestHTTPClient(5 * time.Second)
+			client := apitest.NewTestHTTPClient(5 * time.Second)
 			defer client.CloseIdleConnections() // Ensure cleanup
 			req, _ := http.NewRequest(
 				http.MethodPost,
@@ -2470,7 +2471,7 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 				barrier.Wait()
 
 				// Create request with timeout appropriate for platform
-				client := createTestHTTPClient(5 * time.Second)
+				client := apitest.NewTestHTTPClient(5 * time.Second)
 				defer client.CloseIdleConnections() // Ensure cleanup
 
 				// Add small stagger time to simulate more realistic conditions
@@ -2597,7 +2598,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	t.Attr("feature", "source-info")
 
 	controller := &Controller{Core: &apicore.Core{}}
-	controller.Settings.Store(newValidTestSettings())
+	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
 		name        string
