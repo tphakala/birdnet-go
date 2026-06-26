@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -363,6 +364,45 @@ func TestAudioDurationCache_EvictsOldestEntries(t *testing.T) {
 
 	// Old entry should have been evicted (it was the oldest)
 	assert.False(t, HasCacheEntry(oldFile), "Old cache entry should have been evicted but was still present")
+}
+
+// TestBuildFFmpegSpectrogramFilter_ResamplesPerProfile verifies the FFmpeg-only
+// fallback honors the frequency profile's resample rate, just like the Sox paths.
+// Without an aresample stage the fallback renders to the native Nyquist, so a bat
+// clip captured at 192/384 kHz would disagree with the fixed 0-128 kHz UI axis (and
+// that mismatched image would be cached under the "-bat" filename).
+func TestBuildFFmpegSpectrogramFilter_ResamplesPerProfile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		profile            FrequencyProfile
+		wantResamplePrefix string // expected leading "aresample=<rate>," stage, or "" for none
+	}{
+		{"bird profile resamples to 24 kHz", BirdProfile(), "aresample=24000,"},
+		{"bat profile resamples to 256 kHz", BatProfile(), "aresample=256000,"},
+		{"native profile keeps the source rate", FrequencyProfile{}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := buildFFmpegSpectrogramFilter(1026, false, "", tt.profile)
+
+			// The showspectrumpic stage must always be present.
+			assert.Contains(t, got, "showspectrumpic=", "filter must always include showspectrumpic")
+
+			if tt.wantResamplePrefix == "" {
+				assert.NotContains(t, got, "aresample", "native profile must not add a resample stage")
+				assert.True(t, strings.HasPrefix(got, "showspectrumpic="),
+					"native filter should start with showspectrumpic, got %q", got)
+			} else {
+				assert.True(t, strings.HasPrefix(got, tt.wantResamplePrefix),
+					"filter should start with %q, got %q", tt.wantResamplePrefix, got)
+			}
+		})
+	}
 }
 
 // TestFFmpegFallback_GetsFreshContext tests that FFmpeg fallback gets adequate time
