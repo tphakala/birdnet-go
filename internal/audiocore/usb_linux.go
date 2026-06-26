@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// maxUSBSysfsWalkDepth bounds the upward sysfs walk in readUSBSerial; the USB
+// maxUSBSysfsWalkDepth bounds the upward sysfs walk in findUSBDeviceNode; the USB
 // device node is normally only 3-4 levels above the card directory, so this is a
 // generous cap that simply guarantees termination.
 const maxUSBSysfsWalkDepth = 12
@@ -22,12 +22,14 @@ const maxUSBSysfsWalkDepth = 12
 //
 // It returns a zero usbIdentity (never an error) on any failure, so device
 // matching falls back to the legacy id/name tiers and capture is never broken by
-// a probing failure. Bus path and USB detection come from /proc/asound/cards and
-// vendor:product from /proc/asound/cardN/usbid (regular files, available even in
-// Docker containers using --device /dev/snd). The serial is a best-effort sysfs
-// read that is often empty. A persisted usb-path:/usb-id: token therefore depends
-// on /proc/asound being readable; when it is not, the token matches nothing and
-// capture reports the device as missing rather than risking a wrong-device match.
+// a probing failure. On a native install the bus path and vendor:product come from
+// /proc/asound (cards + cardN/usbid). In a Docker container /proc/asound is masked
+// with an empty tmpfs even with --device /dev/snd, so usbIdentityForCard falls back
+// to /sys/class/sound (still exposed) for vendor:product:serial. A usb-id: token
+// (vendor:product:serial) therefore resolves in both; a usb-path: token is
+// /proc-only because the sysfs bus-path format differs, so it resolves natively but
+// not in a masked-/proc container, where capture reports the device missing rather
+// than risking a wrong-device match.
 func resolveUSBIdentity(decodedID, root string) usbIdentity {
 	card := parseALSACardNumber(decodedID)
 	if card < 0 {
@@ -46,12 +48,21 @@ func readProcAsoundCards(root string) map[int]procCardEntry {
 	return parseProcAsoundCards(string(data))
 }
 
-// usbIdentityForCard resolves the USB identity of a single ALSA card from an
-// already-parsed cards map. Returns a zero usbIdentity for a non-USB card or an
-// absent entry.
+// usbIdentityForCard resolves the USB identity of a single ALSA card. When the card is present
+// in the parsed /proc/asound/cards map it uses /proc (bus path from the map, vendor:product from
+// /proc/asound/cardN/usbid) plus a best-effort sysfs serial. When the card is ABSENT from that
+// map (Docker masks /proc/asound with an empty tmpfs, so /proc/asound/cards does not exist, or
+// /proc is otherwise unreadable) it falls back to deriving vendor:product:serial from /sys via
+// usbIdentityFromSysfs, so the usb-id token still resolves in a container. Returns a zero
+// usbIdentity for a card the /proc map lists as non-USB.
 func usbIdentityForCard(card int, cards map[int]procCardEntry, root string) usbIdentity {
 	entry, ok := cards[card]
-	if !ok || !entry.isUSB {
+	if !ok {
+		// Card not listed in /proc/asound/cards (masked or unavailable): derive from /sys,
+		// which Docker still exposes. Yields a usb-id (vendor:product:serial) token only.
+		return usbIdentityFromSysfs(root, card)
+	}
+	if !entry.isUSB {
 		return usbIdentity{}
 	}
 	ident := usbIdentity{BusPath: entry.busPath}
@@ -65,43 +76,33 @@ func usbIdentityForCard(card int, cards map[int]procCardEntry, root string) usbI
 	return ident
 }
 
-// readUSBSerial walks up from <root>/sys/class/sound/cardN to the USB device node
-// and returns that device's serial, or "" when the device reports none. The
-// device node is the first ancestor exposing an "idVendor" file; the serial (when
-// present) lives alongside it. The walk stops there so a parent hub or host
-// controller's serial (e.g. "xhci-hcd.0" on a root hub) is never mistaken for the
-// device's, and is bounded to the <root>/sys subtree so a symlink that resolves
-// outside sysfs cannot send it wandering into unrelated system directories.
-// Returns "" on any failure; the USB serial is optional and many audio adapters
-// do not report one.
-func readUSBSerial(root string, card int) string {
+// findUSBDeviceNode walks up from <root>/sys/class/sound/cardN to the USB device node and
+// returns its directory. The device node is the first ancestor exposing an "idVendor" file; the
+// walk stops there so a parent hub or host controller (e.g. "xhci-hcd.0" on a root hub) is never
+// mistaken for the device, and is bounded to the <root>/sys subtree so a symlink that resolves
+// outside sysfs cannot send it wandering into unrelated system directories. Returns ("", false)
+// when the card is absent or is not backed by a USB device.
+func findUSBDeviceNode(root string, card int) (string, bool) {
 	sysRoot := filepath.Join(root, "sys")
-	// Resolve sysRoot the same way as target below; otherwise a symlinked element
-	// in root (a test temp dir, or a path like macOS /var -> /private/var) would
-	// leave the resolved target without the literal sysRoot prefix and the walk
-	// would stop immediately.
+	// Resolve sysRoot the same way as target below; otherwise a symlinked element in root (a
+	// test temp dir, or a path like macOS /var -> /private/var) would leave the resolved target
+	// without the literal sysRoot prefix and the walk would stop immediately.
 	if resolved, symErr := filepath.EvalSymlinks(sysRoot); symErr == nil {
 		sysRoot = resolved
 	}
 	target, err := filepath.EvalSymlinks(filepath.Join(sysRoot, "class", "sound", "card"+strconv.Itoa(card)))
 	if err != nil {
-		return ""
+		return "", false
 	}
 	dir := target
 	for range maxUSBSysfsWalkDepth {
-		// Stay strictly below the sysfs root: the USB device node is always a
-		// descendant of <root>/sys, so stop at sysRoot itself or anything that
-		// symlink resolution placed outside the subtree.
+		// Stay strictly below the sysfs root: the USB device node is always a descendant of
+		// <root>/sys, so stop at sysRoot itself or anything symlink resolution placed outside.
 		if dir == sysRoot || !strings.HasPrefix(dir, sysRoot+string(os.PathSeparator)) {
 			break
 		}
 		if _, statErr := os.Stat(filepath.Join(dir, "idVendor")); statErr == nil {
-			// Reached the USB device node. Its serial is optional.
-			data, readErr := os.ReadFile(filepath.Join(dir, "serial"))
-			if readErr != nil {
-				return ""
-			}
-			return strings.TrimSpace(string(data))
+			return dir, true
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -109,5 +110,54 @@ func readUSBSerial(root string, card int) string {
 		}
 		dir = parent
 	}
-	return ""
+	return "", false
+}
+
+// readSysfsAttr reads a single sysfs attribute file and returns its trimmed contents, or "" on
+// any read error.
+func readSysfsAttr(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// readUSBSerial returns the serial of the USB device backing ALSA card N, or "" when the device
+// reports none (common on inexpensive audio adapters) or cannot be located.
+func readUSBSerial(root string, card int) string {
+	dir, ok := findUSBDeviceNode(root, card)
+	if !ok {
+		return ""
+	}
+	return readSysfsAttr(filepath.Join(dir, "serial"))
+}
+
+// usbIdentityFromSysfs derives a card's USB identity entirely from <root>/sys, the fallback used
+// when /proc/asound is unavailable (Docker masks /proc/asound with an empty tmpfs, so
+// /proc/asound/cards and /proc/asound/cardN/usbid do not exist even with --device /dev/snd,
+// while /sys/class/sound is still exposed). It returns vendor:product:serial; the BusPath is left
+// empty on purpose, because the sysfs bus-path string (e.g. "1-1") differs in format from the
+// /proc bus path (e.g. "usb-xhci-hcd.0-1"), so a sysfs value could not match a /proc-derived
+// usb-path token. The usb-id token (vendor:product:serial) is identical from both sources, so it
+// stays a stable cross-reboot identifier here. Returns a zero usbIdentity for a non-USB card or
+// when the vendor/product ids are missing or malformed.
+func usbIdentityFromSysfs(root string, card int) usbIdentity {
+	dir, ok := findUSBDeviceNode(root, card)
+	if !ok {
+		return usbIdentity{}
+	}
+	vendor := readSysfsAttr(filepath.Join(dir, "idVendor"))
+	if !hex4Re.MatchString(vendor) {
+		return usbIdentity{}
+	}
+	product := readSysfsAttr(filepath.Join(dir, "idProduct"))
+	if !hex4Re.MatchString(product) {
+		return usbIdentity{}
+	}
+	return usbIdentity{
+		VendorID:  vendor,
+		ProductID: product,
+		Serial:    readSysfsAttr(filepath.Join(dir, "serial")),
+	}
 }
