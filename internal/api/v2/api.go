@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
+	"github.com/tphakala/birdnet-go/internal/api/v2/support"
 	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
 	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -89,6 +90,12 @@ type Controller struct {
 	// streamed download progress). Like weather it needs only the shared
 	// *apicore.Core (ModelManager, settings, error/log helpers, goroutine plumbing).
 	models *models.Handler
+
+	// support serves the /api/v2/support/* endpoints (generating a diagnostic
+	// support dump, downloading it, and reporting telemetry status). Like weather
+	// it needs only the shared *apicore.Core (settings, datastore, V2 manager,
+	// error/log helpers, goroutine plumbing).
+	support *support.Handler
 
 	controlChan chan string
 
@@ -335,6 +342,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// The models handler needs only the shared core (ModelManager and the
 	// settings/error/log/goroutine helpers all promote from it).
 	c.models = models.New(c.Core)
+	// The support handler needs only the shared core (settings, datastore, V2
+	// manager, and the error/log/goroutine helpers all promote from it).
+	c.support = support.New(c.Core)
 
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
@@ -442,7 +452,7 @@ func (c *Controller) initRoutes() {
 		{"diagnostics routes", c.initDiagnosticsRoutes},
 		{"metrics history routes", c.initMetricsHistoryRoutes},
 		{"notification routes", c.initNotificationRoutes},
-		{"support routes", c.initSupportRoutes},
+		{"support routes", func() { c.support.RegisterRoutes(c.Group) }},
 		{"debug routes", c.initDebugRoutes},
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
 		{"dynamic threshold routes", c.initDynamicThresholdRoutes},

@@ -106,9 +106,6 @@ const (
 	// PercentageMultiplier is used for converting fractions to percentages
 	PercentageMultiplier = 100.0
 
-	// HoursPerDay is the number of hours in a day
-	HoursPerDay = 24
-
 	// SecondsPerMinute is the number of seconds in a minute
 	SecondsPerMinute = 60
 
@@ -135,9 +132,6 @@ const (
 
 	// FilePermExecutable is the permission for executable files (0o755)
 	FilePermExecutable = 0o755
-
-	// FilePermOwnerOnly is the permission for owner-only read/write (0o600)
-	FilePermOwnerOnly = 0o600
 )
 
 // Buffer and channel size constants
