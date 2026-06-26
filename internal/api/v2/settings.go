@@ -2162,7 +2162,6 @@ const (
 	reasonWebserverRestart = "restart.reasons.webserver"
 	reasonDatabaseRestart  = "restart.reasons.database"
 	reasonLoggingRestart   = "restart.reasons.logging"
-	reasonTLSCertRestart   = "restart.reasons.tlsCertificate"
 )
 
 // settingsChangeChecks defines all settings change detectors in order of execution.
