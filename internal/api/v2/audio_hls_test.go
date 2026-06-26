@@ -18,6 +18,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
@@ -651,8 +652,8 @@ func TestIsPrivateModeExempt(t *testing.T) {
 		path   string
 	}{
 		{http.MethodGet, apiV2Prefix + AppConfigEndpoint},
-		{http.MethodPost, apiV2Prefix + authGroupPath + authLoginPath},
-		{http.MethodGet, apiV2Prefix + authGroupPath + authCallbackPath},
+		{http.MethodPost, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthLoginPath},
+		{http.MethodGet, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthCallbackPath},
 		{http.MethodPost, apiV2Prefix + hlsGroupPath + hlsStartPath},
 		{http.MethodPost, apiV2Prefix + hlsGroupPath + hlsHeartbeatPath},
 		{http.MethodGet, apiV2Prefix + hlsGroupPath + hlsStatusPath},
@@ -675,16 +676,16 @@ func TestIsPrivateModeExempt(t *testing.T) {
 		{http.MethodGet, "/api/v2/detections"},
 		{http.MethodGet, "/api/v2/notifications"},
 		{http.MethodGet, "/api/v2/settings/dashboard"},
-		{http.MethodPost, apiV2Prefix + authGroupPath + authLogoutPath},
-		{http.MethodGet, apiV2Prefix + authGroupPath + authStatusPath},
+		{http.MethodPost, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthLogoutPath},
+		{http.MethodGet, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthStatusPath},
 		{http.MethodPost, apiV2Prefix + hlsGroupPath + hlsStopPath}, // mutation, always auth-gated
 		{http.MethodPost, apiV2Prefix + WizardDismissEndpoint},      // gated under PrivateMode by design
 		{http.MethodGet, "/api/v2/streams/audio-level"},
 		{http.MethodGet, "/api/v2/streams/sources"},
 		{http.MethodGet, "/health"},
 		// Method mismatches must NOT match the allow-list.
-		{http.MethodGet, apiV2Prefix + authGroupPath + authLoginPath}, // login is POST-only
-		{http.MethodPost, apiV2Prefix + AppConfigEndpoint},            // config is GET-only
+		{http.MethodGet, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthLoginPath}, // login is POST-only
+		{http.MethodPost, apiV2Prefix + AppConfigEndpoint},                            // config is GET-only
 		{http.MethodDelete, apiV2Prefix + AppConfigEndpoint},
 	}
 	for _, tt := range notExempt {
@@ -716,12 +717,12 @@ func TestPrivateModeExemptPathsAreRegisteredRoutes(t *testing.T) {
 	g.GET(AppConfigEndpoint, noop)
 	g.POST(WizardDismissEndpoint, noop) // registered but NOT exempt under PrivateMode
 
-	// Auth flow (mirrors initAuthRoutes).
-	authGroup := g.Group(authGroupPath)
-	authGroup.POST(authLoginPath, noop)
-	authGroup.GET(authCallbackPath, noop)
-	authGroup.POST(authLogoutPath, noop)
-	authGroup.GET(authStatusPath, noop)
+	// Auth flow (mirrors the auth domain's RegisterRoutes).
+	authGroup := g.Group(authapi.AuthGroupPath)
+	authGroup.POST(authapi.AuthLoginPath, noop)
+	authGroup.GET(authapi.AuthCallbackPath, noop)
+	authGroup.POST(authapi.AuthLogoutPath, noop)
+	authGroup.GET(authapi.AuthStatusPath, noop)
 
 	// HLS streaming (mirrors initHLSRoutes).
 	hlsGroup := g.Group(hlsGroupPath)
@@ -739,8 +740,8 @@ func TestPrivateModeExemptPathsAreRegisteredRoutes(t *testing.T) {
 	// production code and isPrivateModeExempt use.
 	wantExempt := map[string]bool{
 		key(http.MethodGet, apiV2Prefix+AppConfigEndpoint):                              true,
-		key(http.MethodPost, apiV2Prefix+authGroupPath+authLoginPath):                   true,
-		key(http.MethodGet, apiV2Prefix+authGroupPath+authCallbackPath):                 true,
+		key(http.MethodPost, apiV2Prefix+authapi.AuthGroupPath+authapi.AuthLoginPath):   true,
+		key(http.MethodGet, apiV2Prefix+authapi.AuthGroupPath+authapi.AuthCallbackPath): true,
 		key(http.MethodPost, apiV2Prefix+hlsGroupPath+hlsStartPath):                     true,
 		key(http.MethodPost, apiV2Prefix+hlsGroupPath+hlsHeartbeatPath):                 true,
 		key(http.MethodGet, apiV2Prefix+hlsGroupPath+hlsStatusPath):                     true,

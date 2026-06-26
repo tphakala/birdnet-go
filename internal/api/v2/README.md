@@ -72,7 +72,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 }
 ```
 
-### Authentication (`auth.go`)
+### Authentication (`auth/auth.go`)
 
 | Method | Route          | Handler         | Auth | Description                 |
 | ------ | -------------- | --------------- | ---- | --------------------------- |

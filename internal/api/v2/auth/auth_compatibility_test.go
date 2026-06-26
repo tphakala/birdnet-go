@@ -2,7 +2,7 @@
 // This file exposes issues where the old UI (/login) works but the new UI (/api/v2/auth/login) fails.
 // See GitHub Issue #1234: "Cannot login when using /ui endpoint"
 
-package api
+package authapi
 
 import (
 	"crypto/sha256"

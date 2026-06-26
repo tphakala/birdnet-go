@@ -25,6 +25,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
@@ -279,21 +280,22 @@ func (c *Controller) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc
 // at one of these paths under a different verb is fail-closed by default.
 func isPrivateModeExempt(method, path string) bool {
 	// Compose the exempt paths from the same constants used at the route
-	// registration sites (see initHLSRoutes, initAuthRoutes and the app config
-	// route in initAppRoutes) so the allow-list cannot silently drift from the
-	// actual routes. TestPrivateModeExemptPathsAreRegisteredRoutes asserts this
-	// correspondence.
+	// registration sites (see initHLSRoutes, the auth domain's RegisterRoutes and
+	// the app config route in initAppRoutes) so the allow-list cannot silently
+	// drift from the actual routes. The auth route fragments are sourced from the
+	// authapi package, which both registers the routes and owns the constants.
+	// TestPrivateModeExemptPathsAreRegisteredRoutes asserts this correspondence.
 	const (
-		authBase     = apiV2Prefix + authGroupPath
+		authBase     = apiV2Prefix + authapi.AuthGroupPath
 		hlsBase      = apiV2Prefix + hlsGroupPath
 		hlsTokenBase = hlsBase + hlsTokenGroupPath
 	)
 	switch {
 	case method == http.MethodGet && path == apiV2Prefix+AppConfigEndpoint:
 		return true
-	case method == http.MethodPost && path == authBase+authLoginPath:
+	case method == http.MethodPost && path == authBase+authapi.AuthLoginPath:
 		return true
-	case method == http.MethodGet && path == authBase+authCallbackPath:
+	case method == http.MethodGet && path == authBase+authapi.AuthCallbackPath:
 		return true
 	case method == http.MethodPost && path == hlsBase+hlsStartPath:
 		return true
