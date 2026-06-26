@@ -436,7 +436,14 @@ func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
 // This reduces 503 responses by waiting server-side instead of requiring
 // the client to retry.
 func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath, tempPath string) bool {
-	waitCtx, cancel := context.WithTimeout(ctx.Request().Context(), audioWaitTimeout)
+	// Resolve the wait timeout. Production leaves the override at zero and uses the
+	// default constant; tests inject a short timeout to exercise the
+	// 503-after-timeout path without waiting the full default.
+	timeout := audioWaitTimeout
+	if c.audioWaitTimeoutOverride > 0 {
+		timeout = c.audioWaitTimeoutOverride
+	}
+	waitCtx, cancel := context.WithTimeout(ctx.Request().Context(), timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(audioWaitPollInterval)

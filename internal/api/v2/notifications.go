@@ -251,7 +251,15 @@ func (c *Controller) CheckNtfyServer(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, nil, "invalid host parameter", http.StatusBadRequest, notification.MsgErrNotifInvalidHost, nil)
 	}
 
-	resp := probeNtfyServer(ctx.Request().Context(), host)
+	// Resolve the per-scheme probe timeout. Production leaves the override at zero
+	// and uses the default constant; tests inject a short timeout so the
+	// unreachable-host path does not wait the full default for each scheme.
+	timeout := ntfyServerCheckTimeout
+	if c.ntfyCheckTimeoutOverride > 0 {
+		timeout = c.ntfyCheckTimeoutOverride
+	}
+
+	resp := probeNtfyServer(ctx.Request().Context(), host, timeout)
 	return ctx.JSON(http.StatusOK, resp)
 }
 
@@ -339,7 +347,8 @@ func isNtfyHealthResponse(r *http.Response) bool {
 // It validates the response is from an ntfy server by checking for the
 // /v1/health JSON response with a "healthy" key, preventing false positives
 // from unrelated HTTP servers running on the same host/port.
-func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
+// timeout is the per-scheme client timeout applied to each probe attempt.
+func probeNtfyServer(ctx context.Context, host string, timeout time.Duration) NtfyServerCheckResponse {
 	resp := NtfyServerCheckResponse{Recommended: "unreachable"}
 
 	// Normalize bare IPv6 addresses (e.g. ::1 → [::1]) for RFC 3986 URL compliance.
@@ -352,8 +361,8 @@ func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
 	}
 
 	client := &http.Client{
-		Timeout: ntfyServerCheckTimeout,
-		// Don't follow redirects — ntfy health endpoint does not redirect
+		Timeout: timeout,
+		// Don't follow redirects: the ntfy health endpoint does not redirect
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

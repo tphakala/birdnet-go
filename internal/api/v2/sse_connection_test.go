@@ -44,6 +44,14 @@ type SSETestConfig struct {
 	connectionTimeout time.Duration
 }
 
+// maxSSEReadLines is the number of lines attemptSSEConnection reads from an SSE
+// stream before returning. The initial connected event is exactly this many
+// lines ("event: ...", "data: ...", and the trailing blank line from the
+// "\n\n" terminator), so reading this many confirms the connection was
+// established without blocking on the next event, which only arrives at the
+// heartbeat interval.
+const maxSSEReadLines = 3
+
 // attemptSSEConnection attempts to establish an SSE connection and read events.
 // Returns true if connection was established and events were read.
 func attemptSSEConnection(t *testing.T, serverURL, endpoint string, connID int, timeout time.Duration) bool {
@@ -68,13 +76,20 @@ func attemptSSEConnection(t *testing.T, serverURL, endpoint string, connID int, 
 		return false
 	}
 
-	// Read a few events
+	// Read the initial connected event's lines, then stop. The line-count check
+	// must come before scanner.Scan() so that once we have read the connected
+	// event (exactly maxSSEReadLines lines) we never issue another Scan. A Scan
+	// after the connected event would block until the next heartbeat or the
+	// client timeout, burning the full timeout per connection for no benefit.
 	scanner := bufio.NewScanner(resp.Body)
 	eventCount := 0
-	for scanner.Scan() && eventCount < 3 {
+	for eventCount < maxSSEReadLines && scanner.Scan() {
 		eventCount++
 	}
-	return true
+	// Report success only if the full connected event was read. Returning true
+	// unconditionally would count a connection that got HTTP 200 but never
+	// delivered the handshake (e.g. the stream closed early) as established.
+	return eventCount == maxSSEReadLines
 }
 
 // Common test configurations for different SSE endpoints

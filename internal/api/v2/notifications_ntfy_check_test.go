@@ -57,6 +57,11 @@ func TestCheckNtfyServer_InvalidHost_Unreachable(t *testing.T) {
 	e := echo.New()
 	ctrl := &Controller{}
 	ctrl.Settings.Store(newValidTestSettings())
+	// Inject a short per-scheme probe timeout so the unreachable-host path returns
+	// quickly. 192.0.2.1 never responds, so the result is deterministically
+	// "unreachable" regardless of the timeout; the override only bounds the wait
+	// (default would be ntfyServerCheckTimeout for HTTPS plus HTTP).
+	ctrl.ntfyCheckTimeoutOverride = testFailFastTimeout
 	// Use a reserved/invalid IP that will not respond (TEST-NET-1, RFC 5737)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host=192.0.2.1", http.NoBody)
 	rec := httptest.NewRecorder()
