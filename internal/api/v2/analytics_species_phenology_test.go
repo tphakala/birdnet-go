@@ -110,7 +110,7 @@ func TestGetSpeciesPhenology_LimitClamping(t *testing.T) {
 	t.Run("over-max limit falls back to the default", func(t *testing.T) {
 		t.Parallel()
 		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-		// 999 exceeds the max (20), so parsePaginationLimit returns the default (12).
+		// 999 exceeds the max (20), so apicore.ParsePaginationLimit returns the default (12).
 		mockDS.On("GetSpeciesPhenology", mock.Anything, "2026-03-01", "2026-03-02", 12).
 			Return(sampleSpeciesPhenology(), nil)
 

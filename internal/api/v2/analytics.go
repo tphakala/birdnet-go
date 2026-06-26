@@ -1628,7 +1628,7 @@ func serveTopNHourlyChart[T any](
 		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
 	}
 
-	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultLimit, maxLimit)
+	limit := apicore.ParsePaginationLimit(ctx.QueryParam("limit"), defaultLimit, maxLimit)
 
 	c.LogInfoIfEnabled("Retrieving "+operation,
 		logger.String("start_date", startDate),
@@ -1805,7 +1805,7 @@ func (c *Controller) GetConfidenceDistribution(ctx echo.Context) error {
 	}
 
 	bins := clampConfidenceBins(ctx.QueryParam("bins"))
-	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultSpeciesRidgelineLimit, maxSpeciesRidgelineLimit)
+	limit := apicore.ParsePaginationLimit(ctx.QueryParam("limit"), defaultSpeciesRidgelineLimit, maxSpeciesRidgelineLimit)
 
 	c.LogInfoIfEnabled("Retrieving confidence distribution",
 		logger.String("start_date", startDate),
@@ -2208,7 +2208,7 @@ func (c *Controller) GetSpeciesPhenology(ctx echo.Context) error {
 		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
 	}
 
-	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultSpeciesPhenologyLimit, maxSpeciesPhenologyLimit)
+	limit := apicore.ParsePaginationLimit(ctx.QueryParam("limit"), defaultSpeciesPhenologyLimit, maxSpeciesPhenologyLimit)
 
 	c.LogInfoIfEnabled("Retrieving species phenology",
 		logger.String("start_date", startDate),

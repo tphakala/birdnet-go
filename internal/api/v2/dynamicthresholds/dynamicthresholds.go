@@ -1,6 +1,13 @@
-// internal/api/v2/dynamic_thresholds.go
-// BG-59: Dynamic threshold runtime data and reset controls
-package api
+// Package dynamicthresholds is the api/v2 dynamic-thresholds domain handler. It
+// owns the /api/v2/dynamic-thresholds* endpoints (BG-59: reading the merged
+// runtime threshold data from the database and processor memory, aggregate
+// stats, per-species lookups and event history, plus the protected single and
+// bulk reset controls). The Handler embeds *apicore.Core by pointer so the
+// shared dependencies and helpers (DS, Processor, AuthMiddleware, HandleError,
+// HandleErrorWithNotFound, CurrentSettings, Debug, and the v2 route group)
+// promote onto it. The domain needs only the shared core; it injects no
+// facade-owned dependencies.
+package dynamicthresholds
 
 import (
 	"net/http"
@@ -11,6 +18,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -21,6 +29,34 @@ const (
 	defaultEventLimit     = 10
 	maxEventLimit         = 100
 )
+
+// Handler serves the api/v2 dynamic-thresholds endpoints. It embeds the shared
+// *apicore.Core by pointer (never copied by value) so the shared state and
+// helpers promote onto the handler methods.
+type Handler struct {
+	*apicore.Core
+}
+
+// New builds a dynamic-thresholds Handler around the shared core. The domain has
+// no facade-owned dependencies; everything it needs promotes from the core.
+func New(core *apicore.Core) *Handler {
+	return &Handler{Core: core}
+}
+
+// RegisterRoutes wires the dynamic-threshold endpoints onto the v2 group,
+// preserving the exact routes, order, and per-route middleware of the former
+// initDynamicThresholdRoutes.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+	// Public endpoints for reading threshold data
+	g.GET("/dynamic-thresholds", c.GetDynamicThresholds)
+	g.GET("/dynamic-thresholds/stats", c.GetDynamicThresholdStats)
+	g.GET("/dynamic-thresholds/:species", c.GetDynamicThreshold)
+	g.GET("/dynamic-thresholds/:species/events", c.GetThresholdEvents)
+
+	// Protected endpoints for modifying thresholds (require authentication)
+	g.DELETE("/dynamic-thresholds/:species", c.ResetDynamicThreshold, c.AuthMiddleware)
+	g.DELETE("/dynamic-thresholds", c.ResetAllDynamicThresholds, c.AuthMiddleware)
+}
 
 // DynamicThresholdResponse represents a single dynamic threshold for API responses
 type DynamicThresholdResponse struct {
@@ -70,7 +106,7 @@ type LevelStatItem struct {
 
 // parseSpeciesParam extracts and validates the species parameter from the request.
 // Returns the species name and nil on success, or empty string and error on failure.
-func (c *Controller) parseSpeciesParam(ctx echo.Context) (string, error) {
+func (c *Handler) parseSpeciesParam(ctx echo.Context) (string, error) {
 	species, err := url.PathUnescape(ctx.Param("species"))
 	if err != nil {
 		return "", c.HandleError(ctx, errors.Newf("invalid species parameter").
@@ -90,7 +126,7 @@ func (c *Controller) parseSpeciesParam(ctx echo.Context) (string, error) {
 // requireProcessor snapshots c.Processor and returns it if non-nil.
 // Callers must use the returned pointer for all subsequent accesses
 // to avoid a TOCTOU race between the nil check and usage.
-func (c *Controller) requireProcessor(ctx echo.Context) (*processor.Processor, error) {
+func (c *Handler) requireProcessor(ctx echo.Context) (*processor.Processor, error) {
 	proc := c.Processor
 	if proc == nil {
 		err := errors.Newf("processor not available").
@@ -118,25 +154,12 @@ func applyMemoryOverlay(response *DynamicThresholdResponse, level, highConfCount
 	}
 }
 
-// initDynamicThresholdRoutes registers all dynamic threshold API endpoints
-func (c *Controller) initDynamicThresholdRoutes() {
-	// Public endpoints for reading threshold data
-	c.Group.GET("/dynamic-thresholds", c.GetDynamicThresholds)
-	c.Group.GET("/dynamic-thresholds/stats", c.GetDynamicThresholdStats)
-	c.Group.GET("/dynamic-thresholds/:species", c.GetDynamicThreshold)
-	c.Group.GET("/dynamic-thresholds/:species/events", c.GetThresholdEvents)
-
-	// Protected endpoints for modifying thresholds (require authentication)
-	c.Group.DELETE("/dynamic-thresholds/:species", c.ResetDynamicThreshold, c.AuthMiddleware)
-	c.Group.DELETE("/dynamic-thresholds", c.ResetAllDynamicThresholds, c.AuthMiddleware)
-}
-
 // GetDynamicThresholds returns all dynamic thresholds with optional pagination
 // GET /api/v2/dynamic-thresholds?limit=50&offset=0
-func (c *Controller) GetDynamicThresholds(ctx echo.Context) error {
+func (c *Handler) GetDynamicThresholds(ctx echo.Context) error {
 	// Parse pagination parameters
-	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultThresholdLimit, maxThresholdLimit)
-	offset := c.parsePaginationOffset(ctx.QueryParam("offset"))
+	limit := apicore.ParsePaginationLimit(ctx.QueryParam("limit"), defaultThresholdLimit, maxThresholdLimit)
+	offset := parsePaginationOffset(ctx.QueryParam("offset"))
 
 	// Get merged threshold data from memory and database
 	thresholdMap := c.getMergedThresholdData()
@@ -159,17 +182,12 @@ func (c *Controller) GetDynamicThresholds(ctx echo.Context) error {
 	})
 }
 
-// parsePaginationLimit parses and validates the limit parameter
-func (c *Controller) parsePaginationLimit(value string, defaultVal, maxVal int) int {
-	limit, _ := strconv.Atoi(value)
-	if limit <= 0 || limit > maxVal {
-		return defaultVal
-	}
-	return limit
-}
-
-// parsePaginationOffset parses and validates the offset parameter
-func (c *Controller) parsePaginationOffset(value string) int {
+// parsePaginationOffset parses and validates the offset parameter. The offset is
+// dynamic-thresholds-specific (no other domain paginates by offset), so it stays
+// local; the shared limit parser lives in apicore as ParsePaginationLimit. It is a
+// package-level function (no receiver state needed), matching the apicore parser
+// convention.
+func parsePaginationOffset(value string) int {
 	offset, _ := strconv.Atoi(value)
 	if offset < 0 {
 		return 0
@@ -178,7 +196,7 @@ func (c *Controller) parsePaginationOffset(value string) int {
 }
 
 // getMergedThresholdData merges database and in-memory threshold data
-func (c *Controller) getMergedThresholdData() map[string]*DynamicThresholdResponse {
+func (c *Handler) getMergedThresholdData() map[string]*DynamicThresholdResponse {
 	thresholdMap := make(map[string]*DynamicThresholdResponse)
 
 	// Add database thresholds first
@@ -193,7 +211,7 @@ func (c *Controller) getMergedThresholdData() map[string]*DynamicThresholdRespon
 // addDatabaseThresholds adds thresholds from the database to the map.
 // Map keys are normalized to lowercase to ensure case-insensitive merging
 // with in-memory data (which uses lowercase species names).
-func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThresholdResponse) {
+func (c *Handler) addDatabaseThresholds(thresholdMap map[string]*DynamicThresholdResponse) {
 	dbThresholds, err := c.DS.GetAllDynamicThresholds()
 	if err != nil {
 		c.Debug("Failed to get dynamic thresholds from database: %v", err)
@@ -224,7 +242,7 @@ func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThres
 
 // addMemoryThresholds adds/updates thresholds from processor memory.
 // If processor is unavailable, this function returns early without modification.
-func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresholdResponse) {
+func (c *Handler) addMemoryThresholds(thresholdMap map[string]*DynamicThresholdResponse) {
 	proc := c.Processor
 	if proc == nil {
 		return
@@ -255,7 +273,7 @@ func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresho
 }
 
 // paginateThresholds applies offset and limit to the threshold slice
-func (c *Controller) paginateThresholds(result []DynamicThresholdResponse, offset, limit int) []DynamicThresholdResponse {
+func (c *Handler) paginateThresholds(result []DynamicThresholdResponse, offset, limit int) []DynamicThresholdResponse {
 	total := len(result)
 	if offset >= total {
 		return []DynamicThresholdResponse{}
@@ -266,7 +284,7 @@ func (c *Controller) paginateThresholds(result []DynamicThresholdResponse, offse
 
 // GetDynamicThresholdStats returns aggregate statistics about dynamic thresholds
 // GET /api/v2/dynamic-thresholds/stats
-func (c *Controller) GetDynamicThresholdStats(ctx echo.Context) error {
+func (c *Handler) GetDynamicThresholdStats(ctx echo.Context) error {
 	totalCount, activeCount, atMinimumCount, levelDist, err := c.DS.GetDynamicThresholdStats()
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get threshold statistics", http.StatusInternalServerError)
@@ -294,7 +312,7 @@ func (c *Controller) GetDynamicThresholdStats(ctx echo.Context) error {
 
 // GetDynamicThreshold returns a single dynamic threshold by species name
 // GET /api/v2/dynamic-thresholds/:species
-func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
+func (c *Handler) GetDynamicThreshold(ctx echo.Context) error {
 	species, err := c.parseSpeciesParam(ctx)
 	if err != nil {
 		return err
@@ -339,14 +357,14 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 
 // GetThresholdEvents returns event history for a specific species
 // GET /api/v2/dynamic-thresholds/:species/events?limit=10
-func (c *Controller) GetThresholdEvents(ctx echo.Context) error {
+func (c *Handler) GetThresholdEvents(ctx echo.Context) error {
 	species, err := c.parseSpeciesParam(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Parse limit parameter
-	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultEventLimit, maxEventLimit)
+	limit := apicore.ParsePaginationLimit(ctx.QueryParam("limit"), defaultEventLimit, maxEventLimit)
 
 	events, err := c.DS.GetThresholdEvents(species, limit)
 	if err != nil {
@@ -379,7 +397,7 @@ func (c *Controller) GetThresholdEvents(ctx echo.Context) error {
 
 // ResetDynamicThreshold resets a single species threshold
 // DELETE /api/v2/dynamic-thresholds/:species
-func (c *Controller) ResetDynamicThreshold(ctx echo.Context) error {
+func (c *Handler) ResetDynamicThreshold(ctx echo.Context) error {
 	proc, err := c.requireProcessor(ctx)
 	if err != nil {
 		return err
@@ -404,7 +422,7 @@ func (c *Controller) ResetDynamicThreshold(ctx echo.Context) error {
 
 // ResetAllDynamicThresholds resets all dynamic thresholds
 // DELETE /api/v2/dynamic-thresholds?confirm=true
-func (c *Controller) ResetAllDynamicThresholds(ctx echo.Context) error {
+func (c *Handler) ResetAllDynamicThresholds(ctx echo.Context) error {
 	proc, err := c.requireProcessor(ctx)
 	if err != nil {
 		return err

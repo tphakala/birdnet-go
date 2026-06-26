@@ -70,3 +70,14 @@ func ParseFloat32(s string) (float32, error) {
 	f, err := strconv.ParseFloat(s, 32)
 	return float32(f), err
 }
+
+// ParsePaginationLimit parses and validates a pagination "limit" query value.
+// It returns defaultVal when the value is missing, non-numeric, non-positive, or
+// exceeds maxVal. Shared by the analytics and dynamic-thresholds query parsing.
+func ParsePaginationLimit(value string, defaultVal, maxVal int) int {
+	limit, _ := strconv.Atoi(value)
+	if limit <= 0 || limit > maxVal {
+		return defaultVal
+	}
+	return limit
+}
