@@ -1,16 +1,20 @@
-package api
+// tls_test.go: tests for the API v2 TLS domain endpoints.
+
+package tls
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	tlspkg "github.com/tphakala/birdnet-go/internal/tls"
@@ -27,12 +31,31 @@ func generateTestCertKeyPair(t *testing.T) (certPEM, keyPEM string) {
 	return cert, key
 }
 
-// setupTLSTestEnvironment creates a test environment with a TLS manager
-// pointing at a temporary directory.
-func setupTLSTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *conf.TLSManager) {
+// newTestHandler builds a TLS Handler around a *apicore.Core via apitest, with
+// in-memory test doubles for the facade's settings-save machinery. The doubles
+// mirror the production behavior the original tests asserted: getSettingsOrFallback
+// reads the core's atomic snapshot, publishAndSaveSettings stores the updated
+// snapshot back (no disk write, matching the original DisableSaveSettings=true),
+// and handleSettingsChanges is a no-op. They share the supplied mutex so the
+// handler serialises just as the facade does.
+func newTestHandler(t *testing.T, core *apicore.Core, mu *sync.RWMutex) *Handler {
+	t.Helper()
+	return New(core, mu,
+		func() *conf.Settings { return core.Settings.Load() },
+		func(_, updated *conf.Settings) error { core.Settings.Store(updated); return nil },
+		func(_, _ *conf.Settings) error { return nil },
+	)
+}
+
+// setupTLSTestEnvironment creates a test environment with Echo, an apicore.Core
+// built via apitest, a TLS Handler, and a TLS manager pointing at a temporary
+// directory. The returned Handler reads through the same core whose Settings the
+// test doubles mutate, so assertions on the TLS mode observe the writes.
+func setupTLSTestEnvironment(t *testing.T) (*echo.Echo, *Handler, *conf.TLSManager) {
 	t.Helper()
 
-	e, _, controller := setupTestEnvironment(t)
+	e := echo.New()
+	core := apitest.NewCore(t, apitest.WithEcho(e))
 
 	// Create a TLS manager using a temp directory
 	tlsDir := t.TempDir()
@@ -45,10 +68,8 @@ func setupTLSTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *conf.TLSMa
 		conf.SetTLSManagerForTest(origManager)
 	})
 
-	// Disable settings persistence in tests
-	controller.DisableSaveSettings = true
-
-	return e, controller, tlsMgr
+	var mu sync.RWMutex
+	return e, newTestHandler(t, core, &mu), tlsMgr
 }
 
 func TestTLSGetCertificate_NoCert(t *testing.T) {
@@ -106,7 +127,7 @@ func TestTLSUploadCertificate_ValidPEM(t *testing.T) {
 
 	certPEM, keyPEM := generateTestCertKeyPair(t)
 
-	body, err := json.Marshal(TLSCertificateUpload{
+	body, err := json.Marshal(certificateUpload{
 		Certificate: certPEM,
 		PrivateKey:  keyPEM,
 	})
@@ -134,7 +155,7 @@ func TestTLSUploadCertificate_ValidPEM(t *testing.T) {
 func TestTLSUploadCertificate_InvalidPEM(t *testing.T) {
 	e, controller, _ := setupTLSTestEnvironment(t)
 
-	body, err := json.Marshal(TLSCertificateUpload{
+	body, err := json.Marshal(certificateUpload{
 		Certificate: "not-a-valid-pem",
 		PrivateKey:  "also-not-valid",
 	})
@@ -158,7 +179,7 @@ func TestTLSUploadCertificate_MismatchedKeyPair(t *testing.T) {
 	_, keyPEM2 := generateTestCertKeyPair(t)
 
 	// Upload cert from pair 1 with key from pair 2
-	body, err := json.Marshal(TLSCertificateUpload{
+	body, err := json.Marshal(certificateUpload{
 		Certificate: certPEM1,
 		PrivateKey:  keyPEM2,
 	})
@@ -207,7 +228,7 @@ func TestTLSDeleteCertificate(t *testing.T) {
 func TestTLSGenerateSelfSignedCertificate(t *testing.T) {
 	e, controller, _ := setupTLSTestEnvironment(t)
 
-	body, err := json.Marshal(TLSGenerateRequest{
+	body, err := json.Marshal(generateRequest{
 		Validity: "30d",
 	})
 	require.NoError(t, err)
@@ -288,9 +309,12 @@ func TestTLSDownloadCertificate_NoCert(t *testing.T) {
 }
 
 func TestTLSRouteRegistration(t *testing.T) {
-	e, _, controller := setupTestEnvironment(t)
+	e := echo.New()
+	core := apitest.NewCore(t, apitest.WithEcho(e))
+	var mu sync.RWMutex
+	h := newTestHandler(t, core, &mu)
 
-	controller.initTLSRoutes()
+	h.RegisterRoutes(core.Group)
 
 	expectedRoutes := []string{
 		"GET /api/v2/tls/certificate",

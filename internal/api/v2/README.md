@@ -524,7 +524,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 ]
 ```
 
-### TLS Certificate Management (`tls.go`)
+### TLS Certificate Management (`tls/tls.go`)
 
 | Method | Route                       | Handler                         | Auth | Description                                |
 | ------ | --------------------------- | ------------------------------- | ---- | ------------------------------------------ |

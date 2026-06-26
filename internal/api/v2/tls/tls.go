@@ -1,5 +1,13 @@
-// Package api provides TLS certificate management endpoints.
-package api
+// Package tls is the api/v2 TLS domain handler. It owns the /api/v2/tls/*
+// certificate-management endpoints (get/upload/delete/generate/download). The
+// Handler embeds *apicore.Core by pointer so the shared dependencies and helpers
+// (HandleError, ControllerSettings, AuthMiddleware, the logging helpers) promote
+// onto it. Unlike the weather domain, TLS certificate writes mutate persisted
+// settings, so the Handler also holds the facade's settings-save machinery
+// (the shared settings mutex and the publish/save/change helpers) injected as
+// function fields; the facade constructs one Handler and calls RegisterRoutes to
+// wire the routes in their existing order.
+package tls
 
 import (
 	"crypto/sha256"
@@ -11,9 +19,11 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/restart"
@@ -28,7 +38,15 @@ const (
 	tlsServiceName      = "webserver"   // Service name for TLS certificate storage
 )
 
+// reasonTLSCertRestart is the restart-reason i18n key recorded via
+// restart.MarkRestartRequired when a TLS certificate change requires the web
+// server to restart before the new certificate takes effect. The frontend
+// RestartBanner resolves it via t(). Named constant to avoid a magic string.
+const reasonTLSCertRestart = "restart.reasons.tlsCertificate"
+
 // TLSCertificateInfo represents TLS certificate details returned by the API.
+// It is exported because the integrations (MQTT TLS) domain reuses
+// ParseCertificateInfo and embeds this type in its own response struct.
 type TLSCertificateInfo struct {
 	Installed       bool     `json:"installed"`
 	Mode            string   `json:"mode,omitempty"`
@@ -42,23 +60,63 @@ type TLSCertificateInfo struct {
 	Fingerprint     string   `json:"fingerprint,omitempty"`
 }
 
-// TLSCertificateUpload represents the request body for uploading a TLS certificate.
-type TLSCertificateUpload struct {
+// certificateUpload represents the request body for uploading a TLS certificate.
+type certificateUpload struct {
 	Certificate   string `json:"certificate"`
 	PrivateKey    string `json:"privateKey"`
 	CACertificate string `json:"caCertificate,omitempty"`
 }
 
-// TLSGenerateRequest represents the request body for generating a self-signed certificate.
-type TLSGenerateRequest struct {
+// generateRequest represents the request body for generating a self-signed certificate.
+type generateRequest struct {
 	Validity string `json:"validity,omitempty"`
 }
 
-// initTLSRoutes registers TLS certificate management endpoints.
-func (c *Controller) initTLSRoutes() {
+// Handler serves the TLS domain endpoints. It embeds *apicore.Core BY POINTER so
+// the shared Core members promote onto it without re-wiring; Core carries
+// atomic/lock-bearing fields and must never be copied by value. The four
+// settings-save members are injected from the facade (the settings domain still
+// owns them): the shared *sync.RWMutex serializes TLS certificate writes against
+// the main settings update handlers, and the function fields are bound method
+// values of the facade Controller, named identically to the originals so the
+// moved handler bodies stay verbatim.
+type Handler struct {
+	*apicore.Core
+
+	settingsMutex          *sync.RWMutex
+	getSettingsOrFallback  func() *conf.Settings
+	publishAndSaveSettings func(current, updated *conf.Settings) error
+	handleSettingsChanges  func(oldSettings, currentSettings *conf.Settings) error
+}
+
+// New builds a TLS Handler around the shared core and the facade's settings-save
+// machinery. settingsMutex MUST be the same *sync.RWMutex the settings update
+// handlers lock, so TLS certificate writes serialize against them; the function
+// arguments are the facade's getSettingsOrFallback/publishAndSaveSettings/
+// handleSettingsChanges method values.
+func New(
+	core *apicore.Core,
+	settingsMutex *sync.RWMutex,
+	getSettingsOrFallback func() *conf.Settings,
+	publishAndSaveSettings func(current, updated *conf.Settings) error,
+	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
+) *Handler {
+	return &Handler{
+		Core:                   core,
+		settingsMutex:          settingsMutex,
+		getSettingsOrFallback:  getSettingsOrFallback,
+		publishAndSaveSettings: publishAndSaveSettings,
+		handleSettingsChanges:  handleSettingsChanges,
+	}
+}
+
+// RegisterRoutes registers all TLS certificate management endpoints on the
+// supplied API v2 group, preserving the exact routes, per-route middleware, and
+// order the facade used before the TLS domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	c.LogInfoIfEnabled("Initializing TLS routes")
 
-	tlsGroup := c.Group.Group("/tls", c.AuthMiddleware)
+	tlsGroup := g.Group("/tls", c.AuthMiddleware)
 	tlsGroup.GET("/certificate", c.GetTLSCertificate)
 	tlsGroup.POST("/certificate", c.UploadTLSCertificate)
 	tlsGroup.DELETE("/certificate", c.DeleteTLSCertificate)
@@ -70,7 +128,7 @@ func (c *Controller) initTLSRoutes() {
 
 // GetTLSCertificate handles GET /api/v2/tls/certificate.
 // Returns certificate information if installed, or {installed: false} otherwise.
-func (c *Controller) GetTLSCertificate(ctx echo.Context) error {
+func (c *Handler) GetTLSCertificate(ctx echo.Context) error {
 	tlsMgr := conf.GetTLSManager()
 	if !tlsMgr.CertificateExists(tlsServiceName, conf.TLSCertTypeServerCert) {
 		return ctx.JSON(http.StatusOK, &TLSCertificateInfo{Installed: false})
@@ -94,8 +152,8 @@ func (c *Controller) GetTLSCertificate(ctx echo.Context) error {
 // UploadTLSCertificate handles POST /api/v2/tls/certificate.
 // Accepts a PEM-encoded certificate and private key pair, validates them,
 // and stores them for use by the web server.
-func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
-	var req TLSCertificateUpload
+func (c *Handler) UploadTLSCertificate(ctx echo.Context) error {
+	var req certificateUpload
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
 	}
@@ -149,7 +207,7 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 			http.StatusInternalServerError)
 	}
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
-		GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
+		apicore.GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
 			logger.Error(handleErr))
 	}
 	tlsMgr.CleanupBackups(tlsServiceName)
@@ -174,7 +232,7 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 
 // DeleteTLSCertificate handles DELETE /api/v2/tls/certificate.
 // Removes all TLS certificates for the web server and resets TLS mode to none.
-func (c *Controller) DeleteTLSCertificate(ctx echo.Context) error {
+func (c *Handler) DeleteTLSCertificate(ctx echo.Context) error {
 	tlsMgr := conf.GetTLSManager()
 
 	// Serialise the entire backup-remove-save sequence so concurrent
@@ -200,7 +258,7 @@ func (c *Controller) DeleteTLSCertificate(ctx echo.Context) error {
 			http.StatusInternalServerError)
 	}
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
-		GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
+		apicore.GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
 			logger.Error(handleErr))
 	}
 	tlsMgr.CleanupBackups(tlsServiceName)
@@ -213,8 +271,8 @@ func (c *Controller) DeleteTLSCertificate(ctx echo.Context) error {
 
 // GenerateSelfSignedCertificate handles POST /api/v2/tls/certificate/generate.
 // Generates a self-signed TLS certificate with SANs collected from the system.
-func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
-	var req TLSGenerateRequest
+func (c *Handler) GenerateSelfSignedCertificate(ctx echo.Context) error {
+	var req generateRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
 	}
@@ -282,7 +340,7 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 			http.StatusInternalServerError)
 	}
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
-		GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
+		apicore.GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
 			logger.Error(handleErr))
 	}
 	tlsMgr.CleanupBackups(tlsServiceName)
@@ -307,7 +365,7 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 // Serves the installed server certificate as a downloadable PEM file.
 // Users can install this in their OS trust store to avoid browser warnings
 // when using self-signed certificates.
-func (c *Controller) DownloadTLSCertificate(ctx echo.Context) error {
+func (c *Handler) DownloadTLSCertificate(ctx echo.Context) error {
 	tlsMgr := conf.GetTLSManager()
 	if !tlsMgr.CertificateExists(tlsServiceName, conf.TLSCertTypeServerCert) {
 		return c.HandleError(ctx, nil, "No certificate installed", http.StatusNotFound)
