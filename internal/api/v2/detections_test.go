@@ -1874,6 +1874,64 @@ func TestIgnoreSpeciesConcurrency(t *testing.T) {
 	assert.GreaterOrEqual(t, response.Count, 0)
 }
 
+// TestGetExcludedSpeciesConcurrentReadsWithToggle exercises GetExcludedSpecies
+// (the lock-free reader) concurrently with IgnoreSpecies (the copy-on-write
+// writer) under -race. Controller.Settings is an atomic.Pointer published via
+// Settings.Store, and CloneSettings deep-copies the exclude slice, so a reader
+// never observes a slice mutated in place and needs no lock. This guards that
+// documented lock-free-read invariant against regressions.
+func TestGetExcludedSpeciesConcurrentReadsWithToggle(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	clearExcludedSpeciesList(t, controller.Settings.Load())
+
+	names := []string{
+		"Alpha Bird", "Beta Bird", "Gamma Bird", "Delta Bird",
+		"Epsilon Bird", "Zeta Bird", "Eta Bird", "Theta Bird",
+	}
+	const iterations = 25
+
+	// Spawned goroutines record failures atomically rather than asserting inline,
+	// since require/assert FailNow must run on the test goroutine, not a worker.
+	var failures atomic.Int32
+	var wg sync.WaitGroup
+	barrier := make(chan struct{})
+
+	// Writers toggle their own species in and out of the exclude list.
+	for _, name := range names {
+		wg.Go(func() {
+			<-barrier
+			for range iterations {
+				req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+					strings.NewReader(`{"common_name": "`+name+`"}`))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+				rec := httptest.NewRecorder()
+				if err := controller.IgnoreSpecies(e.NewContext(req, rec)); err != nil {
+					failures.Add(1)
+				}
+			}
+		})
+	}
+
+	// Readers hammer GetExcludedSpecies while the list is being mutated.
+	for range names {
+		wg.Go(func() {
+			<-barrier
+			for range iterations {
+				req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
+				rec := httptest.NewRecorder()
+				if err := controller.GetExcludedSpecies(e.NewContext(req, rec)); err != nil || rec.Code != http.StatusOK {
+					failures.Add(1)
+				}
+			}
+		})
+	}
+
+	close(barrier)
+	wg.Wait()
+
+	assert.Zero(t, failures.Load(), "concurrent ignore/get-excluded requests should all succeed")
+}
+
 // TestAddCommentMethod tests the AddComment method directly
 func TestAddCommentMethod(t *testing.T) {
 	// Setup
