@@ -1077,14 +1077,9 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 
 	params := c.parseSpectrogramParameters(ctx)
 
-	// Resolve frequency profile from detection's model type
-	modelType, mtErr := c.DS.GetNoteModelType(noteID)
-	if mtErr != nil {
-		c.logWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
-			logger.String("note_id", noteID),
-			logger.Error(mtErr))
-	}
-	profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
+	// Resolve frequency profile from detection's model type (the helper logs a
+	// warning and falls back to the bird profile when the lookup fails).
+	profileOpt := spectrogram.WithFrequencyProfile(c.resolveDetectionFrequencyProfile(noteID))
 
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw, profileOpt); err != nil {
 		if ctx.Request().Context().Err() != nil {
@@ -1455,16 +1450,11 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	// Parse query parameters
 	params := c.parseSpectrogramParameters(ctx)
 
-	// Resolve frequency profile from detection's model type. The same profile
-	// drives both the generation effects (profileOpt) and the cache filename
-	// token (freqSuffix) so a bat render never collides with a bird-profile PNG.
-	modelType, err := c.DS.GetNoteModelType(noteID)
-	if err != nil {
-		c.logWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
-			logger.String("note_id", noteID),
-			logger.Error(err))
-	}
-	profile := spectrogram.ProfileForModelType(modelType)
+	// Resolve frequency profile from detection's model type. The same profile drives
+	// both the generation effects (profileOpt) and the cache filename token
+	// (freqSuffix) so a bat render never collides with a bird-profile PNG. The helper
+	// logs a warning and falls back to the bird profile when the lookup fails.
+	profile := c.resolveDetectionFrequencyProfile(noteID)
 	profileOpt := spectrogram.WithFrequencyProfile(profile)
 	freqSuffix := spectrogram.ProfileSuffix(profile)
 
@@ -1475,7 +1465,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		logger.Int("width", params.width),
 		logger.Bool("raw", params.raw),
 		logger.String("size_param", params.sizeStr),
-		logger.String("model_type", modelType),
+		logger.String("freq_suffix", freqSuffix),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
 
