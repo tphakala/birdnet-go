@@ -148,8 +148,11 @@ func usbIdentityFromSysfs(root string, card int) usbIdentity {
 		return usbIdentity{}
 	}
 	vendor := readSysfsAttr(filepath.Join(dir, "idVendor"))
+	if !hex4Re.MatchString(vendor) {
+		return usbIdentity{}
+	}
 	product := readSysfsAttr(filepath.Join(dir, "idProduct"))
-	if !hex4Re.MatchString(vendor) || !hex4Re.MatchString(product) {
+	if !hex4Re.MatchString(product) {
 		return usbIdentity{}
 	}
 	return usbIdentity{
