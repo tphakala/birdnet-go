@@ -38,7 +38,12 @@ type fakeSource struct {
 	mu       sync.Mutex
 	batches  [][]imports.SourceDetection
 	validate error
-	block    chan struct{} // optional: gate between batches for cancel tests
+	block    chan struct{} // optional: gate before each batch, released by test to let processing proceed
+	// entered, when non-nil, is closed by Iterate once the goroutine reaches the
+	// first batch and is about to enter the block wait. The test waits for this
+	// signal before posting cancel, ensuring cancel is always observed before any
+	// batch processing completes (eliminates cancel-vs-complete ordering race).
+	entered chan struct{}
 	// gate, when non-nil, makes Iterate receive one value before producing each
 	// batch. The test sends one token per batch and reads the resulting progress
 	// event before sending the next, so progress updates cannot coalesce. This
@@ -65,6 +70,8 @@ func (f *fakeSource) Iterate(ctx context.Context, _ int, fn func([]imports.Sourc
 	batches := f.batches
 	block := f.block
 	gate := f.gate
+	entered := f.entered
+	f.entered = nil // consume once; prevents double-close if Iterate is called again
 	f.mu.Unlock()
 	for _, b := range batches {
 		if gate != nil {
@@ -76,18 +83,29 @@ func (f *fakeSource) Iterate(ctx context.Context, _ int, fn func([]imports.Sourc
 				return ctx.Err()
 			}
 		}
-		if err := ctx.Err(); err != nil {
-			return err
+		// Signal that this goroutine has entered the batch loop and is about to
+		// block. The test waits for this before posting cancel, guaranteeing the
+		// context is already cancelled when blockCh is closed so the cancel is
+		// always observed (fixes cancel-vs-complete ordering race).
+		if entered != nil {
+			close(entered)
+			entered = nil // prevent double-close on subsequent iterations
 		}
-		if err := fn(b); err != nil {
-			return err
-		}
+		// Block BEFORE fn(b) so that cancel posted after <-entered is received
+		// is always observed: either <-ctx.Done() fires in the select, or the
+		// explicit ctx.Err() check below catches it before fn(b) can complete.
 		if block != nil {
 			select {
 			case <-block:
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := fn(b); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1309,6 +1327,12 @@ func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
 	c.Repo = mockRepo
 
 	blockCh := make(chan struct{})
+	// entered is closed by the import goroutine when it reaches the first batch
+	// and is about to enter the block wait. Waiting for it before posting cancel
+	// ensures the context is cancelled before blockCh is released, making the
+	// cancel-vs-complete race deterministic: ctx.Err() is always non-nil when
+	// the goroutine unblocks, so Iterate always returns context.Canceled.
+	entered := make(chan struct{})
 	det := imports.SourceDetection{
 		Date: "2024-06-01", Time: "09:00:00",
 		ScientificName: "Erithacus rubecula", CommonName: "Robin",
@@ -1318,6 +1342,7 @@ func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
 		return &fakeSource{
 			batches: [][]imports.SourceDetection{{det}},
 			block:   blockCh,
+			entered: entered,
 		}, nil
 	}
 
@@ -1344,14 +1369,25 @@ func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = streamResp.Body.Close() }()
 
-	// Cancel the import.
+	// Wait for the import goroutine to enter batch processing (and block).
+	// Only after this handshake is it safe to post cancel: the goroutine is
+	// parked in the block select, so cancel is guaranteed to precede any batch
+	// completion.
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for import goroutine to enter batch processing")
+	}
+
+	// Cancel the import now that the goroutine is confirmed to be blocked.
 	cancelResp, err := http.Post(srv.URL+"/api/v2/import/jobs/"+jobID+"/cancel", //nolint:noctx // test uses simplified HTTP calls without context
 		"application/json", http.NoBody)
 	require.NoError(t, err)
 	defer func() { _ = cancelResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, cancelResp.StatusCode)
 
-	// Unblock so the import goroutine can exit cleanly via context cancellation.
+	// Release the block. The context is already cancelled, so the goroutine
+	// exits via context.Canceled regardless of which select case fires.
 	close(blockCh)
 
 	// Drain the SSE stream and find the terminal event.
