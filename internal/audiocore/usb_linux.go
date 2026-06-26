@@ -82,8 +82,10 @@ func readUSBSerial(root string, card int) string {
 	}
 	dir := target
 	for range maxUSBSysfsWalkDepth {
-		// Stay within the sysfs subtree; if symlink resolution escaped it, stop.
-		if dir != sysRoot && !strings.HasPrefix(dir, sysRoot+string(os.PathSeparator)) {
+		// Stay strictly below the sysfs root: the USB device node is always a
+		// descendant of <root>/sys, so stop at sysRoot itself or anything that
+		// symlink resolution placed outside the subtree.
+		if dir == sysRoot || !strings.HasPrefix(dir, sysRoot+string(os.PathSeparator)) {
 			break
 		}
 		if _, statErr := os.Stat(filepath.Join(dir, "idVendor")); statErr == nil {
