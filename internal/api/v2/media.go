@@ -2012,7 +2012,7 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dyna
 	// produce no suffix for backward compatibility with existing cached spectrograms.
 	styleSuffix := buildStyleSuffix(style, dynamicRange)
 
-	// Append the frequency-profile token (e.g. "bat") so renders made with a
+	// Append the frequency-profile token (e.g. "bat-v2") so renders made with a
 	// non-default profile get a distinct filename and do not collide with an
 	// existing bird-profile PNG. Bird (empty token) keeps the legacy filename.
 	if freqSuffix != "" {
