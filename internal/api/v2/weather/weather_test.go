@@ -1,6 +1,6 @@
-// weather_test.go: Package api provides tests for API v2 weather endpoints.
+// weather_test.go: tests for the API v2 weather domain endpoints.
 
-package api
+package weather
 
 import (
 	"encoding/json"
@@ -18,6 +18,20 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
+
+// setupWeatherTestEnvironment creates a test environment with Echo, a mock
+// datastore, and a weather Handler built from a *apicore.Core via apitest. The
+// returned Echo is used to build request contexts; the returned mock is the one
+// the Handler reads through, so tests set expectations on it.
+func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Handler) {
+	t.Helper()
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(mockDS))
+
+	return e, mockDS, New(core)
+}
 
 // runGetHourlyWeatherForDayNoDataTest runs the hourly weather endpoint test with no data for a given date
 func runGetHourlyWeatherForDayNoDataTest(t *testing.T, date string) {
@@ -45,7 +59,7 @@ func runGetHourlyWeatherForDayNoDataTest(t *testing.T, date string) {
 		// Parse response body
 		var response struct {
 			Message string                  `json:"message"`
-			Data    []HourlyWeatherResponse `json:"data"`
+			Data    []hourlyWeatherResponse `json:"data"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
@@ -94,7 +108,7 @@ func TestGetDailyWeather(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body
-		var response DailyWeatherResponse
+		var response dailyWeatherResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
 
@@ -107,27 +121,6 @@ func TestGetDailyWeather(t *testing.T) {
 	}
 
 	// Verify mock expectations
-}
-
-// setupWeatherTestEnvironment creates a test environment with Echo, mocks.MockInterface, and Controller
-// specifically configured for weather API tests
-func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
-	t.Helper()
-	// Create a new Echo instance
-	e := echo.New()
-
-	// Create a test datastore
-	mockDS := mocks.NewMockInterface(t)
-
-	// Create a controller with the test datastore
-	controller := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2"), DS: mockDS}}
-	controller.Settings.Store(apitest.NewValidTestSettings())
-
-	// We don't need to initialize routes for unit tests
-	// But we could initialize the weather routes specifically if needed
-	// controller.initWeatherRoutes()
-
-	return e, mockDS, controller
 }
 
 // TestGetDailyWeatherMissingDate tests the daily weather endpoint with missing date
@@ -157,7 +150,7 @@ func TestGetDailyWeatherMissingDate(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	// Parse error response
-	var errorResponse ErrorResponse
+	var errorResponse apicore.ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
@@ -196,11 +189,11 @@ func TestGetDailyWeatherDatabaseError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	// Parse error response
-	var errorResponse ErrorResponse
+	var errorResponse apicore.ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
-	// Check error message — in non-debug mode, Error field uses sanitized message
+	// Check error message: in non-debug mode, Error field uses sanitized message
 	assert.Equal(t, "Failed to get daily weather data", errorResponse.Message)
 	assert.Equal(t, "Failed to get daily weather data", errorResponse.Error)
 
@@ -261,7 +254,7 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 
 		// Parse response body
 		var response struct {
-			Data []HourlyWeatherResponse `json:"data"`
+			Data []hourlyWeatherResponse `json:"data"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
@@ -331,7 +324,7 @@ func TestGetHourlyWeatherForDayFutureDate(t *testing.T) {
 		// Parse response body
 		var response struct {
 			Message string                  `json:"message"`
-			Data    []HourlyWeatherResponse `json:"data"`
+			Data    []hourlyWeatherResponse `json:"data"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
@@ -375,11 +368,11 @@ func TestGetHourlyWeatherForDayDatabaseError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	// Parse error response
-	var errorResponse ErrorResponse
+	var errorResponse apicore.ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
-	// Check error message — in non-debug mode, Error field uses sanitized message
+	// Check error message: in non-debug mode, Error field uses sanitized message
 	assert.Equal(t, "Failed to get hourly weather data", errorResponse.Message)
 	assert.Equal(t, "Failed to get hourly weather data", errorResponse.Error)
 
@@ -432,7 +425,7 @@ func TestGetHourlyWeatherForHour(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body
-		var response HourlyWeatherResponse
+		var response hourlyWeatherResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
 
@@ -486,7 +479,7 @@ func TestGetHourlyWeatherForHourNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 
 	// Parse error response
-	var errorResponse ErrorResponse
+	var errorResponse apicore.ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
@@ -519,7 +512,7 @@ func TestGetHourlyWeatherForHourInvalidHour(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	// Parse error response
-	var errorResponse ErrorResponse
+	var errorResponse apicore.ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
@@ -579,7 +572,7 @@ func TestGetWeatherForDetection(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body
-		var response DetectionWeatherResponse
+		var response detectionWeatherResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
 
@@ -624,7 +617,7 @@ func TestGetWeatherForDetectionMissingID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	// Parse error response
-	var errorResponse ErrorResponse
+	var errorResponse apicore.ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
@@ -673,8 +666,8 @@ func TestGetLatestWeather(t *testing.T) {
 
 		// Parse response body
 		var response struct {
-			Daily  *DailyWeatherResponse `json:"daily"`
-			Hourly HourlyWeatherResponse `json:"hourly"`
+			Daily  *dailyWeatherResponse `json:"daily"`
+			Hourly hourlyWeatherResponse `json:"hourly"`
 			Time   string                `json:"timestamp"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)

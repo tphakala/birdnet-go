@@ -1,5 +1,10 @@
-// internal/api/v2/weather.go
-package api
+// Package weather is the api/v2 weather domain handler. It owns the
+// /api/v2/weather/* endpoints (daily/hourly/latest weather, weather for a
+// detection, sun times, moon phase). The Handler embeds *apicore.Core by
+// pointer so the shared dependencies and helpers (DS, SunCalc, HandleError, the
+// logging helpers) promote onto it; the facade constructs one Handler and calls
+// RegisterRoutes to wire the routes in their existing order.
+package weather
 
 import (
 	"errors"
@@ -8,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	errors_pkg "github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -15,62 +21,31 @@ import (
 	"gorm.io/gorm"
 )
 
-// Weather constants (file-local)
+// Weather constants (package-local)
 const (
 	timePeriodNight        = datastore.TimeOfDayNight
 	minTimeStringLength    = 2  // Minimum length for parsing hour from time string
 	weatherSunWindowMinute = 30 // Minutes before/after sunrise/sunset for weather
 )
 
-// DailyWeatherResponse represents the API response for daily weather data
-type DailyWeatherResponse struct {
-	Date     string    `json:"date"`
-	Sunrise  time.Time `json:"sunrise"`
-	Sunset   time.Time `json:"sunset"`
-	Country  string    `json:"country,omitempty"`
-	CityName string    `json:"city_name,omitempty"`
+// Handler serves the weather domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members promote onto it without re-wiring; Core
+// carries atomic/lock-bearing fields and must never be copied by value.
+type Handler struct {
+	*apicore.Core
 }
 
-// HourlyWeatherResponse represents the API response for hourly weather data
-type HourlyWeatherResponse struct {
-	Time              string  `json:"time"`
-	Temperature       float64 `json:"temperature"`
-	FeelsLike         float64 `json:"feels_like"`
-	TempMin           float64 `json:"temp_min,omitempty"`
-	TempMax           float64 `json:"temp_max,omitempty"`
-	Pressure          int     `json:"pressure,omitempty"`
-	Humidity          int     `json:"humidity,omitempty"`
-	Visibility        int     `json:"visibility,omitempty"`
-	WindSpeed         float64 `json:"wind_speed,omitempty"`
-	WindDeg           int     `json:"wind_deg,omitempty"`
-	WindGust          float64 `json:"wind_gust,omitempty"`
-	Clouds            int     `json:"clouds,omitempty"`
-	Precipitation     float64 `json:"precipitation,omitempty"`
-	PrecipitationType string  `json:"precipitation_type,omitempty"`
-	WeatherMain       string  `json:"weather_main,omitempty"`
-	WeatherDesc       string  `json:"weather_desc,omitempty"`
-	WeatherIcon       string  `json:"weather_icon,omitempty"`
+// New builds a weather Handler around the shared core.
+func New(core *apicore.Core) *Handler {
+	return &Handler{core}
 }
 
-// DetectionWeatherResponse represents weather data associated with a detection
-type DetectionWeatherResponse struct {
-	Daily     DailyWeatherResponse  `json:"daily"`
-	Hourly    HourlyWeatherResponse `json:"hourly"`
-	TimeOfDay string                `json:"time_of_day"`
-}
-
-// MoonResponse holds moon phase data for API responses.
-type MoonResponse struct {
-	Phase        float64 `json:"phase"`        // 0–27.99, raw phase value
-	PhaseName    string  `json:"phase_name"`   // e.g. "Full Moon"
-	Illumination float64 `json:"illumination"` // 0–100 percentage
-	IconName     string  `json:"icon_name"`    // Basmilius icon name e.g. "moon-full"
-}
-
-// initWeatherRoutes registers all weather-related API endpoints
-func (c *Controller) initWeatherRoutes() {
+// RegisterRoutes registers all weather-related API endpoints on the supplied
+// API v2 group, preserving the exact routes and order the facade used before
+// the weather domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Create weather API group
-	weatherGroup := c.Group.Group("/weather")
+	weatherGroup := g.Group("/weather")
 
 	// TODO: Consider adding authentication middleware to protect these endpoints
 	// Example: weatherGroup.Use(middlewares.RequireAuth())
@@ -98,10 +73,55 @@ func (c *Controller) initWeatherRoutes() {
 	weatherGroup.GET("/moon/:date", c.GetMoonPhase)
 }
 
-// buildDailyWeatherResponse creates a DailyWeatherResponse from a DailyEvents struct
+// dailyWeatherResponse represents the API response for daily weather data
+type dailyWeatherResponse struct {
+	Date     string    `json:"date"`
+	Sunrise  time.Time `json:"sunrise"`
+	Sunset   time.Time `json:"sunset"`
+	Country  string    `json:"country,omitempty"`
+	CityName string    `json:"city_name,omitempty"`
+}
+
+// hourlyWeatherResponse represents the API response for hourly weather data
+type hourlyWeatherResponse struct {
+	Time              string  `json:"time"`
+	Temperature       float64 `json:"temperature"`
+	FeelsLike         float64 `json:"feels_like"`
+	TempMin           float64 `json:"temp_min,omitempty"`
+	TempMax           float64 `json:"temp_max,omitempty"`
+	Pressure          int     `json:"pressure,omitempty"`
+	Humidity          int     `json:"humidity,omitempty"`
+	Visibility        int     `json:"visibility,omitempty"`
+	WindSpeed         float64 `json:"wind_speed,omitempty"`
+	WindDeg           int     `json:"wind_deg,omitempty"`
+	WindGust          float64 `json:"wind_gust,omitempty"`
+	Clouds            int     `json:"clouds,omitempty"`
+	Precipitation     float64 `json:"precipitation,omitempty"`
+	PrecipitationType string  `json:"precipitation_type,omitempty"`
+	WeatherMain       string  `json:"weather_main,omitempty"`
+	WeatherDesc       string  `json:"weather_desc,omitempty"`
+	WeatherIcon       string  `json:"weather_icon,omitempty"`
+}
+
+// detectionWeatherResponse represents weather data associated with a detection
+type detectionWeatherResponse struct {
+	Daily     dailyWeatherResponse  `json:"daily"`
+	Hourly    hourlyWeatherResponse `json:"hourly"`
+	TimeOfDay string                `json:"time_of_day"`
+}
+
+// moonResponse holds moon phase data for API responses.
+type moonResponse struct {
+	Phase        float64 `json:"phase"`        // 0-27.99, raw phase value
+	PhaseName    string  `json:"phase_name"`   // e.g. "Full Moon"
+	Illumination float64 `json:"illumination"` // 0-100 percentage
+	IconName     string  `json:"icon_name"`    // Basmilius icon name e.g. "moon-full"
+}
+
+// buildDailyWeatherResponse creates a dailyWeatherResponse from a DailyEvents struct
 // This helper function reduces code duplication and simplifies maintenance
-func (c *Controller) buildDailyWeatherResponse(dailyEvents *datastore.DailyEvents) DailyWeatherResponse {
-	return DailyWeatherResponse{
+func (c *Handler) buildDailyWeatherResponse(dailyEvents *datastore.DailyEvents) dailyWeatherResponse {
+	return dailyWeatherResponse{
 		Date:     dailyEvents.Date,
 		Sunrise:  time.Unix(dailyEvents.Sunrise, 0).In(time.Local),
 		Sunset:   time.Unix(dailyEvents.Sunset, 0).In(time.Local),
@@ -112,7 +132,7 @@ func (c *Controller) buildDailyWeatherResponse(dailyEvents *datastore.DailyEvent
 
 // GetDailyWeather handles GET /api/v2/weather/daily/:date
 // Retrieves daily weather data for a specific date
-func (c *Controller) GetDailyWeather(ctx echo.Context) error {
+func (c *Handler) GetDailyWeather(ctx echo.Context) error {
 	date := ctx.Param("date")
 	if date == "" {
 		c.LogErrorIfEnabled("Missing date parameter in daily weather request",
@@ -156,7 +176,7 @@ func (c *Controller) GetDailyWeather(ctx echo.Context) error {
 
 // GetHourlyWeatherForDay handles GET /api/v2/weather/hourly/:date
 // Retrieves all hourly weather data for a specific date
-func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
+func (c *Handler) GetHourlyWeatherForDay(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	date := ctx.Param("date")
 	if date == "" {
@@ -180,19 +200,19 @@ func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Retrieved hourly weather data", logger.String("date", date), logger.Int("count", len(response)), logger.String("path", path), logger.String("ip", ip))
 
 	return ctx.JSON(http.StatusOK, struct {
-		Data []HourlyWeatherResponse `json:"data"`
+		Data []hourlyWeatherResponse `json:"data"`
 	}{
 		Data: response,
 	})
 }
 
 // handleEmptyHourlyWeather handles the case when no hourly weather data is found
-func (c *Controller) handleEmptyHourlyWeather(ctx echo.Context, date, ip, path string) error {
+func (c *Handler) handleEmptyHourlyWeather(ctx echo.Context, date, ip, path string) error {
 	emptyResponse := struct {
 		Message string                  `json:"message"`
-		Data    []HourlyWeatherResponse `json:"data"`
+		Data    []hourlyWeatherResponse `json:"data"`
 	}{
-		Data: []HourlyWeatherResponse{},
+		Data: []hourlyWeatherResponse{},
 	}
 
 	// Check if it's a future date
@@ -215,8 +235,8 @@ func (c *Controller) handleEmptyHourlyWeather(ctx echo.Context, date, ip, path s
 }
 
 // buildHourlyWeatherResponseList converts hourly weather data to response format
-func (c *Controller) buildHourlyWeatherResponseList(hourlyWeather []datastore.HourlyWeather) []HourlyWeatherResponse {
-	response := make([]HourlyWeatherResponse, 0, len(hourlyWeather))
+func (c *Handler) buildHourlyWeatherResponseList(hourlyWeather []datastore.HourlyWeather) []hourlyWeatherResponse {
+	response := make([]hourlyWeatherResponse, 0, len(hourlyWeather))
 	for i := range hourlyWeather {
 		response = append(response, c.buildHourlyWeatherResponse(&hourlyWeather[i]))
 	}
@@ -225,7 +245,7 @@ func (c *Controller) buildHourlyWeatherResponseList(hourlyWeather []datastore.Ho
 
 // GetHourlyWeatherForHour handles GET /api/v2/weather/hourly/:date/:hour
 // Retrieves hourly weather data for a specific date and hour
-func (c *Controller) GetHourlyWeatherForHour(ctx echo.Context) error {
+func (c *Handler) GetHourlyWeatherForHour(ctx echo.Context) error {
 	date := ctx.Param("date")
 	hour := ctx.Param("hour")
 
@@ -246,7 +266,7 @@ func (c *Controller) GetHourlyWeatherForHour(ctx echo.Context) error {
 	}
 
 	// Find the weather data for the requested hour
-	var targetHourData *HourlyWeatherResponse
+	var targetHourData *hourlyWeatherResponse
 	for i := range hourlyWeather {
 		hw := &hourlyWeather[i]
 		storedHourStr := hw.Time.In(time.Local).Format("15")
@@ -277,7 +297,7 @@ func (c *Controller) GetHourlyWeatherForHour(ctx echo.Context) error {
 // Frontend applications should first request detection data from the detections API,
 // then use this endpoint to separately retrieve the associated weather data.
 // This allows for more efficient data loading and keeps concerns separated.
-func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
+func (c *Handler) GetWeatherForDetection(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	id := ctx.Param("id")
 	if id == "" {
@@ -300,7 +320,7 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 	detectionTime, timeOfDay := c.getDetectionTimeOfDay(&note, date, id)
 	closestHourlyData := c.findClosestHourlyWeatherWithFallback(detectionTime, hourlyWeatherList, &note, id, ip, path)
 
-	response := DetectionWeatherResponse{
+	response := detectionWeatherResponse{
 		Daily:     dailyResponse,
 		Hourly:    closestHourlyData,
 		TimeOfDay: timeOfDay,
@@ -311,7 +331,7 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 }
 
 // handleDetectionFetchError handles errors when fetching a detection
-func (c *Controller) handleDetectionFetchError(ctx echo.Context, err error, id, ip, path string) error {
+func (c *Handler) handleDetectionFetchError(ctx echo.Context, err error, id, ip, path string) error {
 	c.LogErrorIfEnabled("Failed to get detection", logger.String("detection_id", id), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
@@ -320,7 +340,7 @@ func (c *Controller) handleDetectionFetchError(ctx echo.Context, err error, id, 
 }
 
 // fetchDailyWeatherForDetection fetches daily weather data with error handling
-func (c *Controller) fetchDailyWeatherForDetection(date, id, ip, path string) DailyWeatherResponse {
+func (c *Handler) fetchDailyWeatherForDetection(date, id, ip, path string) dailyWeatherResponse {
 	dailyEvents, err := c.DS.GetDailyEvents(date)
 	if err != nil {
 		c.LogWarnIfEnabled("Failed to get daily weather data for detection", logger.String("detection_id", id), logger.String("date", date), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
@@ -330,7 +350,7 @@ func (c *Controller) fetchDailyWeatherForDetection(date, id, ip, path string) Da
 }
 
 // fetchHourlyWeatherForDetection fetches hourly weather data with error handling
-func (c *Controller) fetchHourlyWeatherForDetection(date, id, ip, path string) []datastore.HourlyWeather {
+func (c *Handler) fetchHourlyWeatherForDetection(date, id, ip, path string) []datastore.HourlyWeather {
 	hourlyWeatherList, err := c.DS.GetHourlyWeather(date)
 	if err != nil {
 		c.LogWarnIfEnabled("Failed to get hourly weather data for detection", logger.String("detection_id", id), logger.String("date", date), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
@@ -340,7 +360,7 @@ func (c *Controller) fetchHourlyWeatherForDetection(date, id, ip, path string) [
 }
 
 // getDetectionTimeOfDay determines time of day for a detection
-func (c *Controller) getDetectionTimeOfDay(note *datastore.Note, date, id string) (detectionTime *time.Time, timeOfDay string) {
+func (c *Handler) getDetectionTimeOfDay(note *datastore.Note, date, id string) (detectionTime *time.Time, timeOfDay string) {
 	detectionTime, timeOfDay, parseErr := c.determineTimeOfDayForDetection(note, date, id)
 	if parseErr != nil {
 		c.LogWarnIfEnabled("Proceeding with default TimeOfDay due to parsing/calculation error", logger.String("detection_id", id), logger.Error(parseErr))
@@ -349,9 +369,9 @@ func (c *Controller) getDetectionTimeOfDay(note *datastore.Note, date, id string
 }
 
 // findClosestHourlyWeatherWithFallback finds closest hourly weather with fallback logic
-func (c *Controller) findClosestHourlyWeatherWithFallback(detectionTime *time.Time, hourlyWeatherList []datastore.HourlyWeather, note *datastore.Note, id, ip, path string) HourlyWeatherResponse {
+func (c *Handler) findClosestHourlyWeatherWithFallback(detectionTime *time.Time, hourlyWeatherList []datastore.HourlyWeather, note *datastore.Note, id, ip, path string) hourlyWeatherResponse {
 	if len(hourlyWeatherList) == 0 {
-		return HourlyWeatherResponse{}
+		return hourlyWeatherResponse{}
 	}
 
 	// Primary: use detection time if available
@@ -364,16 +384,16 @@ func (c *Controller) findClosestHourlyWeatherWithFallback(detectionTime *time.Ti
 }
 
 // findHourlyWeatherByHourString finds hourly weather by matching hour from time string
-func (c *Controller) findHourlyWeatherByHourString(hourlyWeatherList []datastore.HourlyWeather, timeStr, id, ip, path string) HourlyWeatherResponse {
+func (c *Handler) findHourlyWeatherByHourString(hourlyWeatherList []datastore.HourlyWeather, timeStr, id, ip, path string) hourlyWeatherResponse {
 	if len(timeStr) < minTimeStringLength {
-		return HourlyWeatherResponse{}
+		return hourlyWeatherResponse{}
 	}
 
 	hourStr := timeStr[:2]
 	requestedHour, convErr := strconv.Atoi(hourStr)
 	if convErr != nil {
 		c.LogErrorIfEnabled("Invalid hour derived from detection time during fallback", logger.String("detection_id", id), logger.String("hour", hourStr), logger.String("time", timeStr), logger.Error(convErr), logger.String("path", path), logger.String("ip", ip))
-		return HourlyWeatherResponse{}
+		return hourlyWeatherResponse{}
 	}
 
 	for i := range hourlyWeatherList {
@@ -381,12 +401,12 @@ func (c *Controller) findHourlyWeatherByHourString(hourlyWeatherList []datastore
 			return c.buildHourlyWeatherResponse(&hourlyWeatherList[i])
 		}
 	}
-	return HourlyWeatherResponse{}
+	return hourlyWeatherResponse{}
 }
 
 // determineTimeOfDayForDetection calculates the time of day string ("day", "night", etc.)
 // It returns the parsed detection time, the calculated timeOfDay string, and any error during parsing or calculation.
-func (c *Controller) determineTimeOfDayForDetection(note *datastore.Note, date, detectionID string) (*time.Time, string, error) {
+func (c *Handler) determineTimeOfDayForDetection(note *datastore.Note, date, detectionID string) (*time.Time, string, error) {
 	timeOfDay := timePeriodNight // Default
 
 	detectionTimeStr := date + " " + note.Time
@@ -411,16 +431,19 @@ func (c *Controller) determineTimeOfDayForDetection(note *datastore.Note, date, 
 	return &detectionTime, timeOfDay, nil
 }
 
-// findClosestHourlyWeather finds the hourly weather record closest to the detection time.
-func (c *Controller) findClosestHourlyWeather(detectionTime time.Time, hourlyWeatherList []datastore.HourlyWeather) HourlyWeatherResponse {
-	closestHourlyData := HourlyWeatherResponse{}
-	if len(hourlyWeatherList) == 0 {
-		return closestHourlyData // Return empty if no hourly data provided
-	}
-
+// ClosestHourlyWeather returns the hourly weather record closest in time to
+// detectionTime, or nil when the list is empty or no record falls within a day
+// of detectionTime. It is a free function (no Core state) so other api/v2
+// domains (e.g. detections, which enriches its detection responses with
+// weather) can reuse the weather domain's matching logic by importing this
+// package, without depending on a constructed Handler instance.
+//
+// The returned pointer aliases an element of hourlyWeatherList; callers that
+// keep it must not mutate or let the backing slice outlive their use of it.
+func ClosestHourlyWeather(detectionTime time.Time, hourlyWeatherList []datastore.HourlyWeather) *datastore.HourlyWeather {
 	loc := detectionTime.Location()  // Use the location from the detection time
 	var closestDiff = 24 * time.Hour // Initialize with a large duration
-	found := false
+	var closest *datastore.HourlyWeather
 
 	for i := range hourlyWeatherList {
 		hw := &hourlyWeatherList[i]
@@ -432,22 +455,30 @@ func (c *Controller) findClosestHourlyWeather(detectionTime time.Time, hourlyWea
 
 		if diff < closestDiff {
 			closestDiff = diff
-			closestHourlyData = c.buildHourlyWeatherResponse(hw)
-			found = true
+			closest = hw
 		}
 	}
 
-	if !found {
-		// This case should ideally not happen if hourlyWeatherList is not empty
-		c.LogWarnIfEnabled("No closest hourly weather record found despite having data", logger.Int("count", len(hourlyWeatherList)))
-	}
-
-	return closestHourlyData
+	return closest
 }
 
-// buildHourlyWeatherResponse creates an HourlyWeatherResponse from an HourlyWeather struct
-func (c *Controller) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) HourlyWeatherResponse {
-	return HourlyWeatherResponse{
+// findClosestHourlyWeather finds the hourly weather record closest to the
+// detection time and converts it to the API response shape.
+func (c *Handler) findClosestHourlyWeather(detectionTime time.Time, hourlyWeatherList []datastore.HourlyWeather) hourlyWeatherResponse {
+	closest := ClosestHourlyWeather(detectionTime, hourlyWeatherList)
+	if closest == nil {
+		if len(hourlyWeatherList) > 0 {
+			// This case should ideally not happen if hourlyWeatherList is not empty
+			c.LogWarnIfEnabled("No closest hourly weather record found despite having data", logger.Int("count", len(hourlyWeatherList)))
+		}
+		return hourlyWeatherResponse{}
+	}
+	return c.buildHourlyWeatherResponse(closest)
+}
+
+// buildHourlyWeatherResponse creates an hourlyWeatherResponse from an HourlyWeather struct
+func (c *Handler) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) hourlyWeatherResponse {
+	return hourlyWeatherResponse{
 		Time:              hw.Time.In(time.Local).Format(time.TimeOnly),
 		Temperature:       hw.Temperature,
 		FeelsLike:         hw.FeelsLike,
@@ -470,7 +501,7 @@ func (c *Controller) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) Hou
 
 // GetLatestWeather handles GET /api/v2/weather/latest
 // Retrieves the latest available weather data
-func (c *Controller) GetLatestWeather(ctx echo.Context) error {
+func (c *Handler) GetLatestWeather(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Getting latest weather data",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -492,9 +523,9 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 
 	// Build response with hourly data
 	response := struct {
-		Daily  *DailyWeatherResponse `json:"daily"`
-		Hourly HourlyWeatherResponse `json:"hourly"`
-		Moon   *MoonResponse         `json:"moon,omitempty"`
+		Daily  *dailyWeatherResponse `json:"daily"`
+		Hourly hourlyWeatherResponse `json:"hourly"`
+		Moon   *moonResponse         `json:"moon,omitempty"`
 		Time   string                `json:"timestamp"`
 	}{
 		Daily:  nil, // Will be populated if available
@@ -520,7 +551,7 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 
 	// Compute moon phase from the weather snapshot timestamp for consistency
 	moonData := suncalc.GetMoonPhase(latestWeather.Time)
-	response.Moon = &MoonResponse{
+	response.Moon = &moonResponse{
 		Phase:        moonData.Phase,
 		PhaseName:    moonData.PhaseName,
 		Illumination: moonData.Illumination,
@@ -539,7 +570,7 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 }
 
 // calculateTimeOfDay determines the time of day based on the detection time and sun events
-func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
+func (c *Handler) calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
 	// Convert all times to the same format for comparison
 	detTime := detectionTime.Format(time.TimeOnly)
 	sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
@@ -565,7 +596,7 @@ func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *sunc
 
 // GetMoonPhase handles GET /api/v2/weather/moon/:date
 // Returns the moon phase for a given date.
-func (c *Controller) GetMoonPhase(ctx echo.Context) error {
+func (c *Handler) GetMoonPhase(ctx echo.Context) error {
 	date := ctx.Param("date")
 
 	parsedDate, err := time.Parse(time.DateOnly, date)
@@ -575,7 +606,7 @@ func (c *Controller) GetMoonPhase(ctx echo.Context) error {
 
 	moonData := suncalc.GetMoonPhase(parsedDate)
 
-	return ctx.JSON(http.StatusOK, MoonResponse{
+	return ctx.JSON(http.StatusOK, moonResponse{
 		Phase:        moonData.Phase,
 		PhaseName:    moonData.PhaseName,
 		Illumination: moonData.Illumination,
@@ -583,8 +614,8 @@ func (c *Controller) GetMoonPhase(ctx echo.Context) error {
 	})
 }
 
-// SunTimesResponse represents the API response for sun times
-type SunTimesResponse struct {
+// sunTimesResponse represents the API response for sun times
+type sunTimesResponse struct {
 	Date      string    `json:"date"`
 	Sunrise   time.Time `json:"sunrise"`
 	Sunset    time.Time `json:"sunset"`
@@ -595,7 +626,7 @@ type SunTimesResponse struct {
 
 // GetSunTimes handles GET /api/v2/weather/sun/:date
 // Calculates sunrise and sunset times for a specific date using SunCalc
-func (c *Controller) GetSunTimes(ctx echo.Context) error {
+func (c *Handler) GetSunTimes(ctx echo.Context) error {
 	date := ctx.Param("date")
 	if date == "" {
 		c.LogErrorIfEnabled("Missing date parameter in sun times request",
@@ -648,7 +679,7 @@ func (c *Controller) GetSunTimes(ctx echo.Context) error {
 	}
 
 	// Build response
-	response := SunTimesResponse{
+	response := sunTimesResponse{
 		Date:      date,
 		Sunrise:   sunTimes.Sunrise,
 		Sunset:    sunTimes.Sunset,

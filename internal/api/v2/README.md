@@ -448,7 +448,7 @@ Registered under the system route group. All endpoints require authentication.
 - `GET /system/events/detections`: `date` (YYYY-MM-DD, defaults to today)
 - `GET /system/events/operational`: `date` (YYYY-MM-DD, defaults to today), `level` (DEBUG/INFO/WARN/ERROR, defaults to INFO)
 
-### Weather (`weather.go`)
+### Weather (`weather/weather.go`)
 
 | Method | Route                         | Handler                   | Auth | Description                         |
 | ------ | ----------------------------- | ------------------------- | ---- | ----------------------------------- |
