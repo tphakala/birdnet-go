@@ -119,6 +119,13 @@ func GetCachedCapabilities(deviceName string) *DeviceCapabilities {
 // plugged in after startup. Concurrent live probes for the same device are collapsed so the
 // device is opened in exclusive mode by at most one goroutine at a time.
 func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabilities, error) {
+	// An empty deviceID would match any cached device via the name-substring scan in
+	// lookupCachedCapabilities (strings.Contains(name, "") is always true), so reject it as
+	// not-found rather than returning an arbitrary device.
+	if deviceID == "" {
+		return nil, fmt.Errorf("probe device: %w", ErrDeviceNotFound)
+	}
+
 	// Fast path: the cache covers devices probed at startup.
 	if caps, ok := lookupCachedCapabilities(deviceID); ok {
 		return cloneCapabilities(caps), nil
@@ -163,7 +170,7 @@ func lookupCachedCapabilities(deviceID string) (*DeviceCapabilities, bool) {
 		return caps, true
 	}
 	for _, caps := range capabilitiesCache {
-		if caps.DeviceName == deviceID || strings.Contains(caps.DeviceName, deviceID) {
+		if caps != nil && (caps.DeviceName == deviceID || strings.Contains(caps.DeviceName, deviceID)) {
 			return caps, true
 		}
 	}

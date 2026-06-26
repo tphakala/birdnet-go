@@ -158,8 +158,14 @@ func TestProbeDeviceCapabilities_SingleFlightCollapsesConcurrentProbes(t *testin
 			require.NotNilf(t, results[i], "caller %d", i)
 			assert.Equalf(t, []int{wantRate}, results[i].SampleRates, "caller %d sample rates", i)
 		}
-		// Every caller must get its own clone, never a shared pointer into the cache.
-		assert.NotSame(t, results[0], results[1], "callers must receive independent clones")
+		// Every caller must get its own clone, never a shared pointer into the cache; check
+		// all pairs so a shared pointer among any callers is caught.
+		for i := range concurrentCallers {
+			for j := i + 1; j < concurrentCallers; j++ {
+				assert.NotSamef(t, results[i], results[j],
+					"callers %d and %d must receive independent clones", i, j)
+			}
+		}
 	})
 
 	// The probe populated the cache, so a follow-up call is served from it without a new
@@ -169,4 +175,28 @@ func TestProbeDeviceCapabilities_SingleFlightCollapsesConcurrentProbes(t *testin
 	require.NotNil(t, got)
 	assert.Equal(t, int32(1), liveCalls.Load(),
 		"a cached follow-up must not trigger another live probe")
+}
+
+// TestProbeDeviceCapabilities_EmptyDeviceIDRejected verifies an empty deviceID is rejected as
+// not-found rather than matching an arbitrary cached device via the name-substring scan
+// (strings.Contains(name, "") is always true). Mutates the package cache, so it is not parallel.
+func TestProbeDeviceCapabilities_EmptyDeviceIDRejected(t *testing.T) {
+	log := logger.Global().Module("audiocore_test")
+
+	// Seed a device so a "" substring scan would otherwise return it.
+	capabilitiesCacheMu.Lock()
+	savedCache := capabilitiesCache
+	capabilitiesCache = map[string]*DeviceCapabilities{
+		"hw:0,0": {DeviceID: "hw:0,0", DeviceName: "Some Mic", SampleRates: []int{48000}, Verified: true},
+	}
+	capabilitiesCacheMu.Unlock()
+	t.Cleanup(func() {
+		capabilitiesCacheMu.Lock()
+		capabilitiesCache = savedCache
+		capabilitiesCacheMu.Unlock()
+	})
+
+	caps, err := ProbeDeviceCapabilities("", log)
+	require.ErrorIs(t, err, ErrDeviceNotFound)
+	assert.Nil(t, caps, "empty deviceID must not return the cached device")
 }
