@@ -3834,7 +3834,7 @@ configure_location() {
     print_message "3) Skip location configuration (use default: 0.0, 0.0)" "$YELLOW"
     
     while true; do
-        print_message "❓ Select location input method (1-3): " "$YELLOW" "nonewline"
+        print_message "❓ Select location input method (1-3) or 'b' to go back: " "$YELLOW" "nonewline"
         if ! read -r location_choice; then
             print_message "\n⚠️ No input; skipping location configuration (using 0.0, 0.0)." "$YELLOW"
             lat="0.0"; lon="0.0"
@@ -3842,6 +3842,12 @@ configure_location() {
         fi
 
         case $location_choice in
+            b)
+                # Back out without touching the existing coordinates. The caller
+                # (reconfigure menu) treats a non-zero return as "no change".
+                log_message "INFO" "User backed out of location configuration"
+                return 1
+                ;;
             1)
                 while true; do
                     print_message "Enter latitude (-90 to 90) or 'b' to go back: " "$YELLOW" "nonewline"
@@ -3970,7 +3976,13 @@ configure_auth() {
     print_message "Do you want to enable password protection for the settings interface?" "$YELLOW"
     print_message "This is highly recommended if BirdNET-Go will be accessible from the internet." "$YELLOW"
     print_message "❓ Enable password protection? (y/n): " "$YELLOW" "nonewline"
-    read -r enable_auth
+    # EOF guard: a closed stdin (piped or otherwise non-interactive run) must not fall
+    # through to the disable branch and silently turn authentication off. Leave the
+    # existing setting untouched and signal "no change" to the caller.
+    if ! read -r enable_auth; then
+        print_message "\n⚠️ No input; leaving authentication settings unchanged." "$YELLOW"
+        return 1
+    fi
 
     if [[ $enable_auth == "y" ]]; then
         log_message "INFO" "User enabled password protection"
@@ -6178,10 +6190,10 @@ reconfigure_menu() {
             3) configure_metrics_exposure; changed="true" ;;
             4) if configure_sound_card; then changed="true"; fi ;;
             5) configure_audio_format; changed="true" ;;
-            6) configure_auth; changed="true" ;;
+            6) if configure_auth; then changed="true"; fi ;;
             7) configure_timezone; changed="true" ;;
             8) configure_locale; changed="true" ;;
-            9) configure_location; changed="true" ;;
+            9) if configure_location; then changed="true"; fi ;;
             10)
                 trap - INT TERM
                 if [ "$changed" != "true" ]; then

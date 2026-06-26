@@ -97,6 +97,7 @@ command_exists() { command -v "$1" >/dev/null 2>&1; }
 RED=""; GREEN=""; YELLOW=""; NC=""; GRAY=""
 CONFIG_FILE=""
 SILENT_MODE=""
+BIRDNET_PASSWORD=""
 
 # Load the helpers under test (order matters: callees before callers).
 for fn in \
@@ -112,6 +113,7 @@ for fn in \
     configure_rtsp_in_config \
     configure_audio_format \
     configure_locale \
+    configure_auth \
     rewrite_migrated_config_paths
 do
     load_fn "$fn"
@@ -407,6 +409,24 @@ assert_eq "silent: birdnet.locale set to fi" "fi" "$(yaml_after "$cfg" '^birdnet
 # birdnet-locale edit (the pre-existing double-locale bug).
 ebird_locale="$(yaml_after "$cfg" '^[[:space:]]{2}ebird:' 4 locale)"
 assert_eq "silent: eBird locale untouched" '"en"' "$ebird_locale"
+SILENT_MODE=""
+
+# ===========================================================================
+# configure_auth (interactive EOF guard: a closed stdin must not disable auth)
+# ===========================================================================
+it "configure_auth"
+
+# Pre-enable auth, then drive the interactive path with stdin closed. The gating
+# "Enable password protection? (y/n)" read hits EOF; before the guard this fell through
+# to the disable branch and silently set basicauth.enabled false. The guard must instead
+# return non-zero and leave the existing setting untouched.
+cfg="$(fresh_config)"
+CONFIG_FILE="$cfg"
+SILENT_MODE="false"
+set_yaml_value "security.basicauth.enabled" "true" "$cfg"
+configure_auth </dev/null
+assert_nonzero "EOF on enable prompt returns non-zero (no change)" "$?"
+assert_eq "EOF must not disable existing auth" "true" "$(yaml_after "$cfg" '^[[:space:]]{2}basicauth:' 4 enabled)"
 SILENT_MODE=""
 
 # ===========================================================================
