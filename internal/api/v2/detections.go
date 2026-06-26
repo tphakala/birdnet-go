@@ -141,7 +141,7 @@ func (c *Controller) initDetectionRoutes() {
 		return
 	}
 
-	// detectionCache is already initialized by the constructor (NewWithOptions); do not
+	// DetectionCache is already initialized by the constructor (NewWithOptions); do not
 	// re-create it here, which would orphan the constructor's cache (and its janitor).
 
 	// Detection endpoints - publicly accessible

@@ -83,7 +83,7 @@ func (c *Controller) GetTLSCertificate(ctx echo.Context) error {
 	}
 
 	// Include current TLS mode from settings (skip when no snapshot is stored,
-	// e.g. a standalone/test controller; controllerSettings() may then be nil).
+	// e.g. a standalone/test controller; ControllerSettings() may then be nil).
 	if settings := c.ControllerSettings(); settings != nil {
 		info.Mode = string(settings.Security.TLSMode)
 	}

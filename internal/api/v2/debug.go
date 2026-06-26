@@ -57,7 +57,7 @@ func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
 
 // initDebugRoutes registers debug-related routes
 func (c *Controller) initDebugRoutes() {
-	// Only register debug routes if debug mode is enabled. Read via controllerSettings()
+	// Only register debug routes if debug mode is enabled. Read via ControllerSettings()
 	// (a nil-safe atomic Load) to match requireDebugMode; it returns nil when no
 	// snapshot has been stored (standalone/test controllers), which the guard handles.
 	if s := c.ControllerSettings(); s == nil || !s.Debug {
