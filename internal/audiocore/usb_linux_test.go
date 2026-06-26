@@ -201,9 +201,24 @@ func TestUsbIdentityFromSysfs_NonUSBYieldsZero(t *testing.T) {
 	assert.False(t, usbIdentityForCard(1, nil, root).hasStableID())
 }
 
-// TestUsbIdentityFromSysfs_MalformedIDsYieldZero: a non-hex idVendor/idProduct is rejected.
+// TestUsbIdentityFromSysfs_MalformedIDsYieldZero: a non-hex idVendor or idProduct is rejected.
+// Both are exercised separately so the vendor || product short-circuit cannot hide a broken
+// product check.
 func TestUsbIdentityFromSysfs_MalformedIDsYieldZero(t *testing.T) {
 	t.Parallel()
-	root := writeFakeSysfsUSBCard(t, 0, "zzzz", "0014", "")
-	assert.False(t, usbIdentityFromSysfs(root, 0).hasStableID())
+	tests := []struct {
+		name    string
+		vendor  string
+		product string
+	}{
+		{name: "malformed vendor", vendor: "zzzz", product: "0014"},
+		{name: "malformed product", vendor: "0d8c", product: "zzzz"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := writeFakeSysfsUSBCard(t, 0, tc.vendor, tc.product, "")
+			assert.False(t, usbIdentityFromSysfs(root, 0).hasStableID())
+		})
+	}
 }
