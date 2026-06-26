@@ -289,30 +289,6 @@ func TestController_processNotificationEvent(t *testing.T) {
 	}
 }
 
-func Test_setSSEHeaders(t *testing.T) {
-	t.Parallel()
-
-	e := echo.New()
-	req := httptest.NewRequest("GET", "/test", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	setSSEHeaders(ctx)
-
-	expectedHeaders := map[string]string{
-		"Content-Type":                 "text/event-stream",
-		"Cache-Control":                "no-cache",
-		"Connection":                   "keep-alive",
-		"Access-Control-Allow-Origin":  "*",
-		"Access-Control-Allow-Headers": "Cache-Control",
-	}
-
-	for key, expectedValue := range expectedHeaders {
-		actualValue := rec.Header().Get(key)
-		assert.Equal(t, expectedValue, actualValue, "setSSEHeaders() header %q mismatch", key)
-	}
-}
-
 func TestController_logNotificationConnection(t *testing.T) {
 	t.Parallel()
 

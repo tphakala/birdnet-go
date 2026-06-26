@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
 	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
@@ -82,6 +83,12 @@ type Controller struct {
 	// species-image proxy handler (ServeSpeciesImageProxy), both still owned by
 	// package api until their domains are extracted.
 	species *species.Handler
+
+	// models serves the /api/v2/models/* endpoints (listing enabled classifier
+	// models, browsing the gallery catalog, and install/reinstall/uninstall plus
+	// streamed download progress). Like weather it needs only the shared
+	// *apicore.Core (ModelManager, settings, error/log helpers, goroutine plumbing).
+	models *models.Handler
 
 	controlChan chan string
 
@@ -325,6 +332,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// thumbnail endpoint forwards to). They are passed as bound method values; c is
 	// fully constructed here, so the method values are stable for its lifetime.
 	c.species = species.New(c.Core, c.loadCommonNameMap, c.ServeSpeciesImageProxy)
+	// The models handler needs only the shared core (ModelManager and the
+	// settings/error/log/goroutine helpers all promote from it).
+	c.models = models.New(c.Core)
 
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
@@ -437,7 +447,7 @@ func (c *Controller) initRoutes() {
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
 		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
 		{"alert routes", c.initAlertRoutes},
-		{"model routes", c.initModelRoutes},
+		{"model routes", func() { c.models.RegisterRoutes(c.Group) }},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", func() { c.tlsHandler.RegisterRoutes(c.Group) }},
 		{"import routes", c.initImportRoutes},
