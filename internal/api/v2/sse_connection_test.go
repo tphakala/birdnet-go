@@ -86,7 +86,10 @@ func attemptSSEConnection(t *testing.T, serverURL, endpoint string, connID int, 
 	for eventCount < maxSSEReadLines && scanner.Scan() {
 		eventCount++
 	}
-	return true
+	// Report success only if the full connected event was read. Returning true
+	// unconditionally would count a connection that got HTTP 200 but never
+	// delivered the handshake (e.g. the stream closed early) as established.
+	return eventCount == maxSSEReadLines
 }
 
 // Common test configurations for different SSE endpoints
