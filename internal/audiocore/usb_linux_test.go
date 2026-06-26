@@ -126,3 +126,84 @@ func TestReadUSBSerial_StopsAtDeviceNode(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dev, "serial"), []byte("DEVICE123\n"), 0o644))
 	assert.Equal(t, "DEVICE123", readUSBSerial(root, 0))
 }
+
+// writeFakeSysfsUSBCard builds a fake <root>/sys tree for a USB-backed ALSA card and writes NO
+// /proc/asound (the Docker scenario, where /proc/asound is masked). The card's
+// /sys/class/sound/cardN symlink resolves to a sound node under a USB device directory carrying
+// idVendor/idProduct and, when non-empty, a serial.
+func writeFakeSysfsUSBCard(t *testing.T, card int, vendor, product, serial string) string {
+	t.Helper()
+	root := t.TempDir()
+	dev := filepath.Join(root, "sys", "devices", "platform", "xhci-hcd.0", "usb1", "1-1")
+	cardDir := filepath.Join(dev, "1-1:1.0", "sound", "card"+strconv.Itoa(card))
+	require.NoError(t, os.MkdirAll(cardDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dev, "idVendor"), []byte(vendor+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dev, "idProduct"), []byte(product+"\n"), 0o644))
+	if serial != "" {
+		require.NoError(t, os.WriteFile(filepath.Join(dev, "serial"), []byte(serial+"\n"), 0o644))
+	}
+	classDir := filepath.Join(root, "sys", "class", "sound")
+	require.NoError(t, os.MkdirAll(classDir, 0o755))
+	require.NoError(t, os.Symlink(cardDir, filepath.Join(classDir, "card"+strconv.Itoa(card))))
+	return root
+}
+
+// TestUsbIdentityForCard_SysfsFallbackWhenProcAbsent covers the Docker case: /proc/asound is
+// masked (the parsed cards map is nil), so the identity must come from /sys and yield a usb-id
+// token. Before the fallback this returned a zero identity and the device fell back to the
+// unstable legacy ALSA index.
+func TestUsbIdentityForCard_SysfsFallbackWhenProcAbsent(t *testing.T) {
+	t.Parallel()
+	root := writeFakeSysfsUSBCard(t, 0, "0d8c", "0014", "")
+
+	ident := usbIdentityForCard(0, nil, root)
+	assert.Empty(t, ident.BusPath, "no /proc bus path is synthesized in the Docker fallback")
+	assert.Equal(t, "0d8c", ident.VendorID)
+	assert.Equal(t, "0014", ident.ProductID)
+	assert.Empty(t, ident.Serial)
+	assert.True(t, ident.hasStableID())
+	assert.Equal(t, "usb-id:0d8c:0014:", ident.stableToken())
+}
+
+func TestUsbIdentityForCard_SysfsFallbackWithSerial(t *testing.T) {
+	t.Parallel()
+	root := writeFakeSysfsUSBCard(t, 2, "0b33", "0024", "ZOOMSER9")
+
+	ident := usbIdentityForCard(2, nil, root)
+	assert.Equal(t, "ZOOMSER9", ident.Serial)
+	assert.Equal(t, "usb-id:0b33:0024:ZOOMSER9", ident.stableToken())
+}
+
+// TestResolveUSBIdentity_DockerSysfsFallback is the full masked-/proc path: resolveUSBIdentity
+// reads /proc/asound (absent -> nil map) and falls back to /sys, producing a usable usb-id token
+// where the unfixed code produced a zero identity.
+func TestResolveUSBIdentity_DockerSysfsFallback(t *testing.T) {
+	t.Parallel()
+	root := writeFakeSysfsUSBCard(t, 0, "0d8c", "0014", "")
+
+	ident := resolveUSBIdentity(":0,0", root)
+	require.True(t, ident.hasStableID(), "Docker (no /proc/asound) must still resolve a usb-id token")
+	assert.Equal(t, "usb-id:0d8c:0014:", ident.stableToken())
+}
+
+// TestUsbIdentityFromSysfs_NonUSBYieldsZero: a card whose /sys path has no idVendor ancestor
+// (non-USB, e.g. an HDMI codec) yields a zero identity from both the helper and the fallback.
+func TestUsbIdentityFromSysfs_NonUSBYieldsZero(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	cardDir := filepath.Join(root, "sys", "devices", "platform", "soc", "sound", "card1")
+	require.NoError(t, os.MkdirAll(cardDir, 0o755))
+	classDir := filepath.Join(root, "sys", "class", "sound")
+	require.NoError(t, os.MkdirAll(classDir, 0o755))
+	require.NoError(t, os.Symlink(cardDir, filepath.Join(classDir, "card1")))
+
+	assert.False(t, usbIdentityFromSysfs(root, 1).hasStableID())
+	assert.False(t, usbIdentityForCard(1, nil, root).hasStableID())
+}
+
+// TestUsbIdentityFromSysfs_MalformedIDsYieldZero: a non-hex idVendor/idProduct is rejected.
+func TestUsbIdentityFromSysfs_MalformedIDsYieldZero(t *testing.T) {
+	t.Parallel()
+	root := writeFakeSysfsUSBCard(t, 0, "zzzz", "0014", "")
+	assert.False(t, usbIdentityFromSysfs(root, 0).hasStableID())
+}
