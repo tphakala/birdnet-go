@@ -71,6 +71,7 @@ func (f *fakeSource) Iterate(ctx context.Context, _ int, fn func([]imports.Sourc
 	block := f.block
 	gate := f.gate
 	entered := f.entered
+	f.entered = nil // consume once; prevents double-close if Iterate is called again
 	f.mu.Unlock()
 	for _, b := range batches {
 		if gate != nil {
