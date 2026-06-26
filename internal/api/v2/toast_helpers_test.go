@@ -10,8 +10,24 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+// mockController creates a controller with minimal setup for testing. It lives
+// here (alongside the toast SendToast tests) because the notifications domain
+// handler tests moved to the internal/api/v2/notifications package along with
+// the previous home of this helper.
+func mockController() *Controller {
+	c := &Controller{Core: &apicore.Core{APILogger: nil}}
+	c.Settings.Store(&conf.Settings{
+		WebServer: conf.WebServerSettings{
+			Debug: true,
+		},
+	})
+	return c
+}
 
 // assertEventDataNil checks that a field in eventData is nil.
 func assertEventDataNil(t *testing.T, eventData map[string]any, field, context string) {

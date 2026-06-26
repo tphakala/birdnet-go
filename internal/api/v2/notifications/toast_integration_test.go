@@ -2,7 +2,7 @@
 // - Uses b.Loop() for benchmark iterations
 // LLM GUIDANCE: Always use b.Loop() instead of manual for i := 0; i < b.N; i++
 
-package api
+package notifications
 
 import (
 	"testing"
@@ -59,22 +59,23 @@ func checkSSERequired(t *testing.T, eventData map[string]any) {
 	assert.WithinDuration(t, time.Now(), timestamp, time.Second, "SSE event timestamp should be recent")
 }
 
-// TestToastIntegrationFlow tests the complete flow:
-// SendToast -> notification creation -> SSE event data creation
+// TestToastIntegrationFlow tests the toast SSE-formatting flow: toast creation
+// (via the notification service, the same path Controller.SendToast delegates to)
+// -> broadcast -> SSE event data creation (createToastEventData).
 func TestToastIntegrationFlow(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
 		name              string
 		message           string
-		toastType         string
+		toastType         notification.ToastType
 		duration          int
 		expectedSSEFields map[string]any
 	}{
 		{
 			name:      "success toast complete flow",
 			message:   "Operation completed successfully",
-			toastType: "success",
+			toastType: notification.ToastTypeSuccess,
 			duration:  3000,
 			expectedSSEFields: map[string]any{
 				"message": "Operation completed successfully", "type": "success",
@@ -84,7 +85,7 @@ func TestToastIntegrationFlow(t *testing.T) {
 		{
 			name:      "error toast complete flow",
 			message:   "Operation failed with error",
-			toastType: "error",
+			toastType: notification.ToastTypeError,
 			duration:  5000,
 			expectedSSEFields: map[string]any{
 				"message": "Operation failed with error", "type": "error",
@@ -98,16 +99,19 @@ func TestToastIntegrationFlow(t *testing.T) {
 			t.Parallel()
 			// Each subtest gets its own isolated service so parallel subtests do
 			// not receive each other's broadcasts on a shared subscription.
-			c, service := newToastTestController(t)
+			h, service := newToastTestHandler(t)
 			notifCh, _ := service.Subscribe()
 			defer service.Unsubscribe(notifCh)
 
-			err := c.SendToast(tc.message, tc.toastType, tc.duration)
-			require.NoError(t, err, "SendToast() error")
+			// Produce the toast through the same service path Controller.SendToast
+			// delegates to (SendToastWithDuration), so the wire-format assertions
+			// below exercise a real broadcast notification.
+			err := service.SendToastWithDuration(tc.message, tc.toastType, "api", tc.duration)
+			require.NoError(t, err, "SendToastWithDuration() error")
 
 			capturedNotif := awaitNotification(t, notifCh, 100*time.Millisecond)
 			toastID := checkToastMarking(t, capturedNotif)
-			sseEventData := c.createToastEventData(capturedNotif)
+			sseEventData := h.createToastEventData(capturedNotif)
 
 			checkSSEFields(t, sseEventData, tc.expectedSSEFields)
 			checkSSERequired(t, sseEventData)
@@ -119,7 +123,7 @@ func TestToastIntegrationFlow(t *testing.T) {
 
 // TestToastEventDataEdgeCases tests edge cases in SSE event data creation
 func TestToastEventDataEdgeCases(t *testing.T) {
-	c := mockController()
+	c := mockHandler()
 
 	t.Run("notification without toast metadata", func(t *testing.T) {
 		notif := notification.NewNotification(
@@ -177,7 +181,7 @@ func TestToastToSSEEventConsistency(t *testing.T) {
 	notif := originalToast.ToNotification()
 
 	// Create SSE event data
-	c := mockController()
+	c := mockHandler()
 	eventData := c.createToastEventData(notif)
 
 	// Verify consistency
@@ -193,9 +197,9 @@ func TestToastToSSEEventConsistency(t *testing.T) {
 
 // BenchmarkCompleteToastFlow benchmarks the complete toast flow
 func BenchmarkCompleteToastFlow(b *testing.B) {
-	c, service := newToastTestController(b)
+	h, service := newToastTestHandler(b)
 
-	// Subscribe to notifications (needed for SendToast to work)
+	// Subscribe to notifications (needed for the broadcast to be observed)
 	notifCh, _ := service.Subscribe()
 	defer service.Unsubscribe(notifCh)
 
@@ -204,15 +208,15 @@ func BenchmarkCompleteToastFlow(b *testing.B) {
 
 	// Use b.Loop() for benchmark iteration (Go 1.25)
 	for b.Loop() {
-		// Step 1: Send toast
-		err := c.SendToast("Benchmark message", "info", 3000)
-		require.NoError(b, err, "SendToast error")
+		// Step 1: Send toast (same service path Controller.SendToast delegates to)
+		err := service.SendToastWithDuration("Benchmark message", notification.ToastTypeInfo, "api", 3000)
+		require.NoError(b, err, "SendToastWithDuration error")
 
 		// Step 2: Receive notification
 		select {
 		case notif := <-notifCh:
 			// Step 3: Create SSE event data
-			_ = c.createToastEventData(notif)
+			_ = h.createToastEventData(notif)
 		case <-time.After(10 * time.Millisecond):
 			require.Fail(b, "Timeout waiting for notification")
 		}

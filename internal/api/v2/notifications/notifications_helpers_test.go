@@ -1,4 +1,4 @@
-package api
+package notifications
 
 import (
 	"net/http"
@@ -9,7 +9,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -43,21 +42,10 @@ func assertNoNilAction(t *testing.T, result, metadata map[string]any) {
 	}
 }
 
-// mockController creates a controller with minimal setup for testing
-func mockController() *Controller {
-	c := &Controller{Core: &apicore.Core{APILogger: nil}}
-	c.Settings.Store(&conf.Settings{
-		WebServer: conf.WebServerSettings{
-			Debug: true,
-		},
-	})
-	return c
-}
-
 func TestController_createToastEventData(t *testing.T) {
 	t.Parallel()
 
-	c := mockController()
+	c := mockHandler()
 
 	tests := []struct {
 		name     string
@@ -211,7 +199,7 @@ func TestController_processNotificationEvent(t *testing.T) {
 
 	// Since processNotificationEvent calls other methods that require HTTP context,
 	// we'll test the decision logic by checking which path it takes
-	c := mockController()
+	c := mockHandler()
 
 	tests := []struct {
 		name      string
@@ -273,11 +261,11 @@ func TestController_processNotificationEvent(t *testing.T) {
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(req, rec)
 
-			// We can't easily test the full method without mocking sendSSEMessage,
+			// We can't easily test the full method without mocking SendSSEMessage,
 			// but we can verify that the method doesn't panic and handles the input
 			err := c.processNotificationEvent(ctx, "test-client", tt.notif)
 
-			// The method will likely fail because sendSSEMessage isn't mocked,
+			// The method will likely fail because SendSSEMessage isn't mocked,
 			// but we're mainly testing that it doesn't panic and follows the right path
 			if tt.expectErr {
 				assert.Error(t, err, "processNotificationEvent() expected error but got none")
@@ -293,8 +281,8 @@ func TestController_logNotificationConnection(t *testing.T) {
 	t.Parallel()
 
 	// Test with nil logger (should not panic)
-	c := &Controller{Core: &apicore.Core{APILogger: nil}}
-	c.Settings.Store(mockController().Settings.Load())
+	c := New(&apicore.Core{APILogger: nil}, nil, nil)
+	c.Settings.Store(mockHandler().Settings.Load())
 
 	// These should not panic
 	c.logNotificationConnection("test-client", "192.168.1.1", "test-agent", true)
@@ -308,7 +296,7 @@ func TestController_logNotificationConnection(t *testing.T) {
 func TestController_logNotificationError(t *testing.T) {
 	t.Parallel()
 
-	c := mockController()
+	c := mockHandler()
 
 	// Should not panic with nil logger
 	c.logNotificationError("test error", nil, "test-client")
@@ -318,7 +306,7 @@ func TestController_logNotificationError(t *testing.T) {
 func TestController_logToastSent(t *testing.T) {
 	t.Parallel()
 
-	c := mockController()
+	c := mockHandler()
 
 	notif := &notification.Notification{
 		ID:        "test-id",
@@ -341,7 +329,7 @@ func TestController_logToastSent(t *testing.T) {
 func TestController_logNotificationSent(t *testing.T) {
 	t.Parallel()
 
-	c := mockController()
+	c := mockHandler()
 
 	notif := &notification.Notification{
 		ID:       "test-id",
