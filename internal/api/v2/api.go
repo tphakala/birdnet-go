@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
 	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
@@ -57,6 +58,13 @@ type Controller struct {
 	// *apicore.Core; the facade constructs them once and calls their
 	// RegisterRoutes in the deterministic order initRoutes defines.
 	weather *weather.Handler
+
+	// tlsHandler serves the /api/v2/tls/* certificate endpoints. It is named
+	// tlsHandler (not tls) and the domain package is imported as tlsapi to avoid
+	// colliding with the crypto/tls standard package. Unlike weather it also holds
+	// the facade's settings-save machinery (see NewWithOptions) because TLS writes
+	// mutate persisted settings.
+	tlsHandler *tlsapi.Handler
 
 	controlChan chan string
 
@@ -285,6 +293,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Construct domain handlers around the shared core. They hold the same
 	// *apicore.Core pointer and register their routes in initRoutes.
 	c.weather = weather.New(c.Core)
+	// The TLS handler needs the facade's settings-save machinery: the shared
+	// settingsMutex (passed by pointer so TLS certificate writes serialize against
+	// the main settings update handlers) and the bound method values for reading,
+	// publishing/persisting, and post-processing settings changes. c is fully
+	// constructed here, so the &c.settingsMutex address and the method values are
+	// stable for the controller's lifetime.
+	c.tlsHandler = tlsapi.New(c.Core, &c.settingsMutex,
+		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
 
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
@@ -399,7 +415,7 @@ func (c *Controller) initRoutes() {
 		{"alert routes", c.initAlertRoutes},
 		{"model routes", c.initModelRoutes},
 		{"insights routes", c.initInsightsRoutes},
-		{"tls routes", c.initTLSRoutes},
+		{"tls routes", func() { c.tlsHandler.RegisterRoutes(c.Group) }},
 		{"import routes", c.initImportRoutes},
 	}
 
