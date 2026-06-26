@@ -1,4 +1,4 @@
-package api
+package dynamicthresholds
 
 import (
 	"net/http"
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -55,10 +56,13 @@ func TestGetMergedThresholdData_NoDuplicates(t *testing.T) {
 		},
 	}
 
-	controller := &Controller{Core: &apicore.Core{DS: mockDS, Processor: proc}}
-	controller.Settings.Store(proc.Settings)
+	// The merge tests construct the Core directly (rather than via apitest.NewCore)
+	// because they need to inject a *processor.Processor, which apitest.NewCore does
+	// not expose; the NotFound tests below use apitest.NewCore (Processor stays nil).
+	handler := &Handler{Core: &apicore.Core{DS: mockDS, Processor: proc}}
+	handler.Settings.Store(proc.Settings)
 
-	result := controller.getMergedThresholdData()
+	result := handler.getMergedThresholdData()
 
 	// Bug: before fix this returns 2 entries (one Title Case, one lowercase)
 	// After fix: should return exactly 1 entry with memory overlay applied
@@ -104,10 +108,10 @@ func TestGetMergedThresholdData_MemoryOnlySpecies(t *testing.T) {
 		},
 	}
 
-	controller := &Controller{Core: &apicore.Core{DS: mockDS, Processor: proc}}
-	controller.Settings.Store(proc.Settings)
+	handler := &Handler{Core: &apicore.Core{DS: mockDS, Processor: proc}}
+	handler.Settings.Store(proc.Settings)
 
-	result := controller.getMergedThresholdData()
+	result := handler.getMergedThresholdData()
 
 	require.Len(t, result, 1, "memory-only species should appear")
 	var entry *DynamicThresholdResponse
@@ -148,10 +152,10 @@ func TestGetMergedThresholdData_DatabaseOnlySpecies(t *testing.T) {
 		DynamicThresholds: map[string]*processor.DynamicThreshold{},
 	}
 
-	controller := &Controller{Core: &apicore.Core{DS: mockDS, Processor: proc}}
-	controller.Settings.Store(proc.Settings)
+	handler := &Handler{Core: &apicore.Core{DS: mockDS, Processor: proc}}
+	handler.Settings.Store(proc.Settings)
 
-	result := controller.getMergedThresholdData()
+	result := handler.getMergedThresholdData()
 
 	require.Len(t, result, 1, "database-only species should appear")
 	var entry *DynamicThresholdResponse
@@ -176,7 +180,7 @@ func TestGetDynamicThreshold_NotFoundStatus(t *testing.T) {
 	const species = "Nonexistent species"
 
 	t.Run("CategoryNotFoundMapsTo404", func(t *testing.T) {
-		e, mockDS, controller := setupTestEnvironment(t)
+		e, mockDS, handler := newThresholdsTestHandler(t)
 		// What the fixed v2only datastore (and the legacy backend) returns.
 		notFound := errors.New(errors.NewStd("dynamic threshold not found")).
 			Component("datastore").
@@ -184,36 +188,48 @@ func TestGetDynamicThreshold_NotFoundStatus(t *testing.T) {
 			Build()
 		mockDS.EXPECT().GetDynamicThreshold(species, "").Return(nil, notFound)
 
-		rec := serveGetDynamicThreshold(t, e, controller, species)
+		rec := serveGetDynamicThreshold(t, e, handler, species)
 		assert.Equal(t, http.StatusNotFound, rec.Code,
 			"a CategoryNotFound threshold miss must map to 404, not 500")
 	})
 
 	t.Run("BareSentinelMapsTo500", func(t *testing.T) {
-		e, mockDS, controller := setupTestEnvironment(t)
+		e, mockDS, handler := newThresholdsTestHandler(t)
 		// The pre-fix v2only behavior: a bare, unclassified sentinel. The handler
 		// cannot tell it is a benign not-found, so it falls through to 500. This is
 		// the #1068 bug, pinned so a future unwrapped return is caught at the handler.
 		mockDS.EXPECT().GetDynamicThreshold(species, "").
 			Return(nil, errors.NewStd("dynamic threshold not found"))
 
-		rec := serveGetDynamicThreshold(t, e, controller, species)
+		rec := serveGetDynamicThreshold(t, e, handler, species)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code,
 			"an unclassified (bare sentinel) threshold miss falls through to 500")
 	})
 }
 
+// newThresholdsTestHandler builds a dynamic-thresholds Handler around an
+// apicore.Core (via apitest) with a mock datastore the caller can set
+// expectations on. apitest.NewCore leaves Processor nil, so GetDynamicThreshold's
+// processor-overlay branch is skipped and only DS.GetDynamicThreshold is exercised.
+func newThresholdsTestHandler(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Handler) {
+	t.Helper()
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(mockDS))
+	return e, mockDS, New(core)
+}
+
 // serveGetDynamicThreshold issues GET /api/v2/dynamic-thresholds/:species against the
-// controller with the given species path param and returns the response recorder. The
+// handler with the given species path param and returns the response recorder. The
 // handler writes the response via HandleError and returns nil (ctx.JSON success), so
 // the observable contract is the recorded status code.
-func serveGetDynamicThreshold(t *testing.T, e *echo.Echo, controller *Controller, species string) *httptest.ResponseRecorder {
+func serveGetDynamicThreshold(t *testing.T, e *echo.Echo, handler *Handler, species string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/dynamic-thresholds/test", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 	ctx.SetParamNames("species")
 	ctx.SetParamValues(species)
-	require.NoError(t, controller.GetDynamicThreshold(ctx))
+	require.NoError(t, handler.GetDynamicThreshold(ctx))
 	return rec
 }
