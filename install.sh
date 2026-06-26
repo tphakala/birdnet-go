@@ -170,6 +170,10 @@ sed_escape_pattern() {
 # escaped via sed_escape_replacement, with '|' as the sed delimiter to match that escaping.
 # Any inline comment on the edited line is dropped. Re-run-safe: matches the current value
 # regardless of what it is. No-op if BLOCK or KEY is absent.
+#
+# set_yaml_value (below) is the path-aware superset of this helper, handling keys nested deeper
+# than a top-level block's direct child. This sed variant is kept separate on purpose: the
+# TLS/port callers rely on its silent-success-on-missing-key contract, so do not merge the two.
 set_config_value() {
     local block="$1"
     local key="$2"
@@ -183,9 +187,67 @@ set_config_value() {
     sed -i -E "/^${block}:/,/^[A-Za-z0-9_]/ s|^([[:space:]]{2}${key}:[[:space:]]*).*|\\1${escaped}|" -- "$file"
 }
 
+# Re-run-safe set of a scalar value at an arbitrary YAML key PATH (dotted, e.g.
+# "security.basicauth.enabled" or "realtime.audio.export.type") in the config file (default
+# $CONFIG_FILE). Generalizes set_config_value to keys nested deeper than a top-level block's
+# direct child: it walks the single known descent path, matching each element at exactly two
+# spaces of indentation per level and popping scope on dedent, so a same-named key in a
+# SIBLING block (e.g. security.allowsubnetbypass.enabled vs security.basicauth.enabled, both
+# at indent 4) is never touched and field order within a block is irrelevant. Only the leaf
+# scalar is rewritten; any inline comment on that line is dropped. PATH elements MUST be
+# literal YAML identifiers from the caller (never user input); VALUE is the only untrusted
+# part and is passed to awk through the environment (not -v), so awk performs no backslash
+# escape processing and sed/regex metacharacters in it need no escaping. Returns non-zero if
+# the leaf key was not found (so callers can warn instead of silently succeeding) or the file
+# is missing. The caller decides quoting: pass a value that already includes surrounding
+# quotes for string scalars that need them (e.g. a password hash).
+set_yaml_value() {
+    local path="$1"
+    local value="$2"
+    local file="${3:-$CONFIG_FILE}"
+    [ -f "$file" ] || return 1
+    if BIRDNET_YAML_VALUE="$value" awk -v path="$path" '
+        BEGIN {
+            n = split(path, p, ".")
+            val = ENVIRON["BIRDNET_YAML_VALUE"]
+            depth = 0       # path ancestors currently matched and still in scope
+            replaced = 0
+        }
+        # Only "key:" lines drive scope tracking. Comments, blank lines and list items
+        # ("- ...") are passed through untouched and never change the descent state.
+        /^[[:space:]]*[A-Za-z0-9_]+:/ {
+            ind = 0
+            while (substr($0, ind + 1, 1) == " ") ind++
+            key = $0
+            sub(/^[[:space:]]*/, "", key)
+            sub(/:.*/, "", key)
+            # Pop ancestors we have dedented out of: a key line at or shallower than the
+            # deepest matched ancestor header indent means that block has ended.
+            while (depth > 0 && ind <= 2 * (depth - 1)) depth--
+            if (depth < n && ind == 2 * depth && key == p[depth + 1]) {
+                if (depth + 1 == n) {
+                    # Leaf reached: rewrite the scalar, preserving the original indentation.
+                    print substr($0, 1, ind) key ": " val
+                    replaced = 1
+                    next
+                }
+                depth++
+            }
+        }
+        { print }
+        END { exit (replaced ? 0 : 1) }
+    ' "$file" > "${file}.tmp"; then
+        cat "${file}.tmp" > "$file"
+        rm -f "${file}.tmp"
+        return 0
+    fi
+    rm -f "${file}.tmp"
+    return 1
+}
+
 # Re-run-safe update of the first audio source's device id and friendly name, scoped to the
 # realtime.audio.sources block (4-space indent) so it works whether the config is pristine
-# ("sysdefault" / "Sound Card 1") or already reconfigured (Forgejo #729). The old code only
+# ("sysdefault" / "Sound Card 1") or already reconfigured. The old code only
 # matched the literal template values and silently no-opped on a re-run. DEVICE and NAME are
 # escaped for sed. Assumes the single-source layout the installer manages.
 set_first_audio_source() {
@@ -3123,7 +3185,7 @@ configure_sound_card() {
 
             # Update the first audio source's device and name. Re-run-safe so it also works
             # when reconfiguring an already-configured install, not just a pristine template
-            # (Forgejo #729). set_first_audio_source handles sed escaping internally and
+            #. set_first_audio_source handles sed escaping internally and
             # returns non-zero when there is no active source line to edit (e.g. the config
             # is currently RTSP-only with the sound-card source commented out).
             if set_first_audio_source "$ALSA_CARD" "$ALSA_CARD"; then
@@ -3149,13 +3211,29 @@ configure_rtsp_in_config() {
     local url="$1"
     local stream_name="${2:-RTSP Stream}"
 
+    # Re-run safety: only populate the stream list when it is still the empty
+    # template default. If streams are already configured (by a prior run or by the user via
+    # the web UI), rewriting the list with sed/awk risks clobbering customizations or
+    # corrupting the YAML, so warn and leave the existing configuration intact. This function
+    # runs only on fresh installs today, where the array is always "[]"; the guard just
+    # prevents silent breakage (or partial commenting of the audio source) if it is ever
+    # reached against an already-configured file.
+    if ! grep -qE '^[[:space:]]{4}streams:[[:space:]]*\[\]' "$CONFIG_FILE"; then
+        log_message "WARN" "rtsp.streams already configured; leaving existing streams untouched"
+        print_message "⚠️ RTSP streams are already configured; leaving them unchanged." "$YELLOW"
+        print_message "   Edit $CONFIG_FILE or use the web interface to change RTSP streams." "$YELLOW"
+        return 0
+    fi
+
     local escaped_url
     escaped_url=$(sed_escape_replacement "$url")
     local escaped_name
     escaped_name=$(sed_escape_replacement "$stream_name")
 
-    # Add stream entry to the rtsp.streams section (replaces empty array)
-    sed -i "s|    streams: \[\].*|    streams:\n      - name: \"${escaped_name}\"\n        url: \"${escaped_url}\"\n        enabled: true\n        type: rtsp\n        transport: tcp|" "$CONFIG_FILE"
+    # Add stream entry to the rtsp.streams section (replaces empty array). Match the same
+    # flexible whitespace the empty-streams guard above accepts, so a config the guard treated
+    # as the empty default is never left silently unpopulated by a stricter pattern.
+    sed -i -E "s|^[[:space:]]{4}streams:[[:space:]]*\[\].*|    streams:\n      - name: \"${escaped_name}\"\n        url: \"${escaped_url}\"\n        enabled: true\n        type: rtsp\n        transport: tcp|" "$CONFIG_FILE"
     log_command_result "sed RTSP stream configuration" $? "adding RTSP stream to config"
 
     # Comment out default sound card source (RTSP replaces local capture)
@@ -3248,7 +3326,9 @@ configure_audio_format() {
             *) log_message "WARN" "Invalid BIRDNET_AUDIO_FORMAT: $format, defaulting to aac"
                format="aac" ;;
         esac
-        sed -i "s|type: wav|type: $format|" "$CONFIG_FILE"
+        # Block-scoped, re-run-safe edit so a re-run can change a format that
+        # was already set away from the "wav" template default.
+        set_yaml_value "realtime.audio.export.type" "$format"
         print_message "🔇 Silent mode: audio format set to $format" "$YELLOW"
         return
     fi
@@ -3283,8 +3363,9 @@ configure_audio_format() {
     print_message "✅ Selected audio format: " "$GREEN" "nonewline"
     print_message "$format"
 
-    # Update config file (format is from hardcoded case, safe)
-    sed -i "s|type: wav|type: $format|" "$CONFIG_FILE"
+    # Update config file with a block-scoped, re-run-safe edit. The format is
+    # from the hardcoded case above; awk writes it literally.
+    set_yaml_value "realtime.audio.export.type" "$format"
 }
 
 # Function to configure locale
@@ -3297,7 +3378,9 @@ configure_locale() {
             log_message "ERROR" "Invalid BIRDNET_LOCALE format: $locale"
             locale="en-uk"
         fi
-        sed -i "s|locale: [a-zA-Z0-9_-]*|locale: ${locale}|" "$CONFIG_FILE"
+        # Scope to birdnet.locale so the loose pattern does not also corrupt the eBird locale
+        # (realtime.ebird.locale: "en" -> locale: fi"en").
+        set_yaml_value "birdnet.locale" "$locale"
         print_message "🔇 Silent mode: locale set to $locale" "$YELLOW"
         return
     fi
@@ -3331,7 +3414,9 @@ configure_locale() {
             print_message "✅ Selected language: " "$GREEN" "nonewline"
             print_message "${locale_names[$((selection-1))]}"
             # Update config file (LOCALE_CODE is from hardcoded array, safe)
-            sed -i "s|locale: [a-zA-Z0-9_-]*|locale: ${LOCALE_CODE}|" "$CONFIG_FILE"
+            # Scope to birdnet.locale so the loose pattern does not also corrupt the eBird
+            # locale (realtime.ebird.locale).
+            set_yaml_value "birdnet.locale" "$LOCALE_CODE"
             break
         else
             print_message "❌ Invalid selection. Please try again." "$RED"
@@ -3749,22 +3834,40 @@ configure_location() {
     print_message "3) Skip location configuration (use default: 0.0, 0.0)" "$YELLOW"
     
     while true; do
-        print_message "❓ Select location input method (1-3): " "$YELLOW" "nonewline"
-        read -r location_choice
+        print_message "❓ Select location input method (1-3) or 'b' to go back: " "$YELLOW" "nonewline"
+        if ! read -r location_choice; then
+            print_message "\n⚠️ No input; skipping location configuration (using 0.0, 0.0)." "$YELLOW"
+            lat="0.0"; lon="0.0"
+            break
+        fi
 
         case $location_choice in
+            b)
+                # Back out without touching the existing coordinates. The caller
+                # (reconfigure menu) treats a non-zero return as "no change".
+                log_message "INFO" "User backed out of location configuration"
+                return 1
+                ;;
             1)
                 while true; do
                     print_message "Enter latitude (-90 to 90) or 'b' to go back: " "$YELLOW" "nonewline"
-                    read -r lat
-                    
+                    if ! read -r lat; then
+                        print_message "\n⚠️ No input; skipping location configuration (using 0.0, 0.0)." "$YELLOW"
+                        lat="0.0"; lon="0.0"
+                        break 2
+                    fi
+
                     if [ "$lat" = "b" ]; then
                         break  # Go back to method selection
                     fi
                     
                     print_message "Enter longitude (-180 to 180) or 'b' to go back: " "$YELLOW" "nonewline"
-                    read -r lon
-                    
+                    if ! read -r lon; then
+                        print_message "\n⚠️ No input; skipping location configuration (using 0.0, 0.0)." "$YELLOW"
+                        lat="0.0"; lon="0.0"
+                        break 2
+                    fi
+
                     if [ "$lon" = "b" ]; then
                         break  # Go back to method selection
                     fi
@@ -3784,8 +3887,12 @@ configure_location() {
             2)
                 while true; do
                     print_message "Enter location (e.g., 'Helsinki, Finland', 'New York, US') or 'b' to go back: " "$YELLOW" "nonewline"
-                    read -r location
-                    
+                    if ! read -r location; then
+                        print_message "\n⚠️ No input; skipping location configuration (using 0.0, 0.0)." "$YELLOW"
+                        lat="0.0"; lon="0.0"
+                        break 2
+                    fi
+
                     if [ "$location" = "b" ]; then
                         break  # Go back to method selection
                     fi
@@ -3853,11 +3960,11 @@ configure_auth() {
         if [ -n "$BIRDNET_PASSWORD" ]; then
             local password_hash
             password_hash=$(echo -n "$BIRDNET_PASSWORD" | htpasswd -niB "" | cut -d: -f2)
-            local escaped_hash
-            escaped_hash=$(sed_escape_replacement "$password_hash")
-            sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
-            sed -i "s|password: \"\"|password: \"${escaped_hash}\"|" "$CONFIG_FILE"
-            unset BIRDNET_PASSWORD password_hash escaped_hash
+            # Block-scoped, re-run-safe edits: awk writes the value literally,
+            # so the bcrypt hash needs no sed escaping.
+            set_yaml_value "security.basicauth.enabled" "true"
+            set_yaml_value "security.basicauth.password" "\"${password_hash}\""
+            unset BIRDNET_PASSWORD password_hash
             print_message "🔇 Silent mode: password protection enabled" "$YELLOW"
         else
             print_message "🔇 Silent mode: no password set (BIRDNET_PASSWORD not provided)" "$YELLOW"
@@ -3869,31 +3976,52 @@ configure_auth() {
     print_message "Do you want to enable password protection for the settings interface?" "$YELLOW"
     print_message "This is highly recommended if BirdNET-Go will be accessible from the internet." "$YELLOW"
     print_message "❓ Enable password protection? (y/n): " "$YELLOW" "nonewline"
-    read -r enable_auth
+    # EOF guard: a closed stdin (piped or otherwise non-interactive run) must not fall
+    # through to the disable branch and silently turn authentication off. Leave the
+    # existing setting untouched and signal "no change" to the caller.
+    if ! read -r enable_auth; then
+        print_message "\n⚠️ No input; leaving authentication settings unchanged." "$YELLOW"
+        return 1
+    fi
 
     if [[ $enable_auth == "y" ]]; then
         log_message "INFO" "User enabled password protection"
         while true; do
-            read -s -r -p "Enter password: " password
+            # EOF guard: a closed stdin must not loop forever or silently confirm an empty
+            # password (read returns non-zero and leaves the var empty). Reject empty input
+            # explicitly so auth is never enabled with an empty-string hash.
+            if ! read -s -r -p "Enter password: " password; then
+                printf '\n'
+                print_message "⚠️ No input; password protection not enabled." "$YELLOW"
+                break
+            fi
             printf '\n'
-            read -s -r -p "Confirm password: " password2
+            if ! read -s -r -p "Confirm password: " password2; then
+                printf '\n'
+                print_message "⚠️ No input; password protection not enabled." "$YELLOW"
+                break
+            fi
             printf '\n'
-            
+
+            if [ -z "$password" ]; then
+                print_message "❌ Password cannot be empty. Please try again." "$RED"
+                continue
+            fi
+
             if [ "$password" = "$password2" ]; then
                 log_message "INFO" "Password confirmed, generating hash and updating config"
                 # Generate password hash (using bcrypt)
                 password_hash=$(echo -n "$password" | htpasswd -niB "" | cut -d: -f2)
-                local escaped_hash
-                escaped_hash=$(sed_escape_replacement "$password_hash")
 
-                # Update config file
-                sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
-                log_command_result "sed enable auth" $? "enabling authentication"
-                sed -i "s|password: \"\"|password: \"${escaped_hash}\"|" "$CONFIG_FILE"
-                log_command_result "sed password hash" $? "setting password hash"
+                # Update config with block-scoped, re-run-safe edits. awk
+                # writes the value literally, so the bcrypt hash needs no sed escaping.
+                set_yaml_value "security.basicauth.enabled" "true"
+                log_command_result "enable auth" $? "enabling authentication"
+                set_yaml_value "security.basicauth.password" "\"${password_hash}\""
+                log_command_result "set password hash" $? "setting password hash"
 
                 # Clear sensitive variables from shell memory
-                unset password password2 password_hash escaped_hash
+                unset password password2 password_hash
 
                 log_message "INFO" "Password protection configured successfully"
                 print_message "✅ Password protection enabled successfully!" "$GREEN"
@@ -3907,7 +4035,12 @@ configure_auth() {
             fi
         done
     else
+        # Explicitly disable auth so this can turn an existing password off when run from the
+        # reconfigure menu, not just leave it unchanged. Idempotent on a fresh
+        # install (already disabled). Any existing password hash is left in place so it can be
+        # reused if auth is re-enabled later; enabled:false means it is not enforced.
         log_message "INFO" "User disabled password protection"
+        set_yaml_value "security.basicauth.enabled" "false"
     fi
 }
 
@@ -5977,8 +6110,11 @@ apply_reconfiguration() {
 }
 
 # Interactive reconfiguration of an existing systemd install: lets the user change the web
-# port, TLS/access mode, metrics exposure, audio device, timezone, and locale, then
-# regenerates the unit and restarts. Edits the existing config in place (a backup is taken
+# port, TLS/access mode, metrics exposure, audio device, audio export format, web
+# authentication, timezone, locale, and location, then regenerates the unit and restarts.
+# RTSP is intentionally not offered here: rewriting the streams list in place is too brittle
+# to do safely, so RTSP stays a fresh-install-only step for now. Edits the
+# existing config in place (a backup is taken
 # so "discard" fully reverts). The service is stopped during reconfiguration so the chosen
 # web port is not reported as "in use" by BirdNET-Go itself. Returns 1 to return to the
 # caller's menu loop.
@@ -6032,11 +6168,14 @@ reconfigure_menu() {
         print_message "  2) TLS / external access mode" "$YELLOW"
         print_message "  3) Prometheus metrics endpoint" "$YELLOW"
         print_message "  4) Audio capture device (sound card)" "$YELLOW"
-        print_message "  5) Timezone" "$YELLOW"
-        print_message "  6) Locale (species name language)" "$YELLOW"
-        print_message "  7) Apply changes and restart" "$YELLOW"
-        print_message "  8) Discard changes and go back" "$YELLOW"
-        print_message "❓ Select an option (1-8): " "$YELLOW" "nonewline"
+        print_message "  5) Audio export format" "$YELLOW"
+        print_message "  6) Web authentication (password)" "$YELLOW"
+        print_message "  7) Timezone" "$YELLOW"
+        print_message "  8) Locale (species name language)" "$YELLOW"
+        print_message "  9) Location (latitude/longitude)" "$YELLOW"
+        print_message "  10) Apply changes and restart" "$YELLOW"
+        print_message "  11) Discard changes and go back" "$YELLOW"
+        print_message "❓ Select an option (1-11): " "$YELLOW" "nonewline"
         local rc_choice
         if ! read -r rc_choice; then
             trap - INT TERM
@@ -6050,9 +6189,12 @@ reconfigure_menu() {
             2) configure_tls_access; changed="true" ;;
             3) configure_metrics_exposure; changed="true" ;;
             4) if configure_sound_card; then changed="true"; fi ;;
-            5) configure_timezone; changed="true" ;;
-            6) configure_locale; changed="true" ;;
-            7)
+            5) configure_audio_format; changed="true" ;;
+            6) if configure_auth; then changed="true"; fi ;;
+            7) configure_timezone; changed="true" ;;
+            8) configure_locale; changed="true" ;;
+            9) if configure_location; then changed="true"; fi ;;
+            10)
                 trap - INT TERM
                 if [ "$changed" != "true" ]; then
                     print_message "ℹ️ No changes made; restarting with the existing configuration." "$YELLOW"
@@ -6066,7 +6208,7 @@ reconfigure_menu() {
                 rm -f "$rc_backup" "$service_backup"
                 return 1
                 ;;
-            8)
+            11)
                 trap - INT TERM
                 print_message "↩️ Discarding changes and restarting with the previous configuration..." "$YELLOW"
                 _reconfigure_rollback "$rc_backup" "$service_backup" "$has_service_backup"
@@ -6075,7 +6217,7 @@ reconfigure_menu() {
                 return 1
                 ;;
             *)
-                print_message "❌ Invalid selection. Please choose a number between 1 and 8." "$RED"
+                print_message "❌ Invalid selection. Please choose a number between 1 and 11." "$RED"
                 ;;
         esac
     done
@@ -6100,7 +6242,7 @@ display_menu() {
         print_message "3) Fresh installation" "$YELLOW"
         print_message "4) Uninstall BirdNET-Go, remove data" "$YELLOW"
         print_message "5) Uninstall BirdNET-Go, preserve data" "$YELLOW"
-        print_message "6) Reconfigure settings (port, TLS, metrics, audio, timezone, locale)" "$YELLOW"
+        print_message "6) Reconfigure settings (port, TLS, metrics, audio, auth, timezone, locale, location)" "$YELLOW"
         print_message "7) Exit" "$YELLOW"
         print_message "❓ Select an option (1-7): " "$YELLOW" "nonewline"
         return 7  # Return number of options
