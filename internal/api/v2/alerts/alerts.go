@@ -1,4 +1,15 @@
-package api
+// Package alerts is the api/v2 alerts domain handler. It owns the
+// /api/v2/alerts/* endpoints (alert-rule CRUD, import/export, history, and the
+// schema/test-fire helpers). The Handler embeds *apicore.Core by pointer so the
+// shared dependencies and helpers (HandleError, HandleErrorWithKey, the logging
+// helpers, the V2Manager and auth middleware) promote onto it.
+//
+// Unlike the Core-only leaf domains, alerts owns two domain-specific
+// dependencies: the alert-rule repository and the alerting engine. Both are
+// referenced only by this domain (plus the facade Shutdown), so the Handler owns
+// them outright: they are constructed lazily in RegisterRoutes (mirroring the
+// old initAlertRoutes) and torn down in Shutdown, which the facade calls.
+package alerts
 
 import (
 	"encoding/json"
@@ -10,6 +21,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/alerting"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
@@ -20,17 +32,42 @@ import (
 
 const maxHistoryLimit = 200
 
-// initAlertRoutes registers alert rule API endpoints and starts the alerting engine.
+// queryValueTrue is the canonical "true" query-parameter value used when parsing
+// optional boolean filters (enabled, built_in). Kept local to the alerts domain
+// to avoid rippling the shared constant in package api into unrelated domains.
+const queryValueTrue = "true"
+
+// Handler serves the alerts domain endpoints. It embeds *apicore.Core BY POINTER
+// so the shared Core members promote onto it without re-wiring; Core carries
+// atomic/lock-bearing fields and must never be copied by value. alertRuleRepo and
+// alertEngine are owned by this handler: they are nil until RegisterRoutes
+// constructs them (only when the enhanced v2 database schema is active), and the
+// facade calls Shutdown to stop them on teardown.
+type Handler struct {
+	*apicore.Core
+
+	alertRuleRepo repository.AlertRuleRepository
+	alertEngine   *alerting.Engine
+}
+
+// New builds an alerts Handler around the shared core. The alert-rule repository
+// and alerting engine are constructed lazily in RegisterRoutes.
+func New(core *apicore.Core) *Handler {
+	return &Handler{Core: core}
+}
+
+// RegisterRoutes registers alert rule API endpoints and starts the alerting engine.
 // Routes are registered when V2Manager is available (handlers check v2 mode
 // per-request), but the alerting engine is only started when the v2 schema is
-// active — preventing background operations (rule seeding, history cleanup)
-// against missing tables.
-func (c *Controller) initAlertRoutes() {
+// active - preventing background operations (rule seeding, history cleanup)
+// against missing tables. The routes, per-route middleware, and order match the
+// facade's old initAlertRoutes exactly.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	if c.V2Manager == nil {
 		return
 	}
 
-	alerts := c.Group.Group("/alerts")
+	alerts := g.Group("/alerts")
 
 	// Public read endpoints
 	alerts.GET("/schema", c.GetAlertSchema)
@@ -54,23 +91,37 @@ func (c *Controller) initAlertRoutes() {
 	// On legacy databases the alert tables do not exist, so starting the
 	// engine would fail during rule seeding and history cleanup.
 	if !datastoreV2.IsEnhancedDatabase() {
-		GetLogger().Info("alerting engine skipped: v2 database schema not active")
+		apicore.GetLogger().Info("alerting engine skipped: v2 database schema not active")
 		return
 	}
 
 	// Initialize repository lazily from V2Manager
 	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB(), nil)
 
-	// Initialize the alerting engine — seeds default rules and starts event processing
+	// Initialize the alerting engine - seeds default rules and starts event processing
 	alertTelemetry := alerting.NewAlertingTelemetry()
 	eventBus := alerting.NewAlertEventBus(alertTelemetry)
-	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, GetLogger(), alertTelemetry)
+	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, apicore.GetLogger(), alertTelemetry)
 	if err != nil {
-		GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
+		apicore.GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
 		eventBus.Stop() // Stop the bus goroutine since Initialize didn't set it as global
-		// Continue without engine — CRUD routes still work, but events won't fire
+		// Continue without engine - CRUD routes still work, but events won't fire
 	} else {
 		c.alertEngine = engine
+	}
+}
+
+// Shutdown stops the alerting engine's background goroutines and its global event
+// bus. The facade Controller.Shutdown calls this in the same order the monolith
+// used (after closing SSE clients, before cancelling the controller context). It
+// is safe to call when the engine was never initialized: alertEngine is nil and
+// GetGlobalBus returns nil when Initialize failed or was skipped.
+func (c *Handler) Shutdown() {
+	if c.alertEngine != nil {
+		c.alertEngine.Stop()
+	}
+	if bus := alerting.GetGlobalBus(); bus != nil {
+		bus.Stop()
 	}
 }
 
@@ -104,7 +155,7 @@ func validateEscalationSteps(steps []float64) error {
 // bindAndValidateAlertRule binds and validates the alert rule from the request body.
 // On validation failure, it writes the error response and returns nil with the written error.
 // Callers should check: if rule == nil { return err }
-func (c *Controller) bindAndValidateAlertRule(ctx echo.Context) (*entities.AlertRule, error) {
+func (c *Handler) bindAndValidateAlertRule(ctx echo.Context) (*entities.AlertRule, error) {
 	var rule entities.AlertRule
 	if err := ctx.Bind(&rule); err != nil {
 		return nil, c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrAlertInvalidBody, nil)
@@ -122,13 +173,13 @@ func (c *Controller) bindAndValidateAlertRule(ctx echo.Context) (*entities.Alert
 }
 
 // requireV2 checks that the enhanced database is available and returns an error response if not.
-func (c *Controller) requireV2(ctx echo.Context) error {
+func (c *Handler) requireV2(ctx echo.Context) error {
 	return c.HandleErrorWithKey(ctx, nil,
 		"Alert rules require the enhanced (v2) database", http.StatusConflict, notification.MsgErrAlertV2Required, nil)
 }
 
 // GetAlertSchema returns the alerting schema for the UI.
-func (c *Controller) GetAlertSchema(ctx echo.Context) error {
+func (c *Handler) GetAlertSchema(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -136,7 +187,7 @@ func (c *Controller) GetAlertSchema(ctx echo.Context) error {
 }
 
 // ListAlertRules returns all alert rules, optionally filtered.
-func (c *Controller) ListAlertRules(ctx echo.Context) error {
+func (c *Handler) ListAlertRules(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -145,11 +196,11 @@ func (c *Controller) ListAlertRules(ctx echo.Context) error {
 		ObjectType: ctx.QueryParam("object_type"),
 	}
 	if enabledParam := ctx.QueryParam("enabled"); enabledParam != "" {
-		v := enabledParam == QueryValueTrue
+		v := enabledParam == queryValueTrue
 		filter.Enabled = &v
 	}
 	if builtInParam := ctx.QueryParam("built_in"); builtInParam != "" {
-		v := builtInParam == QueryValueTrue
+		v := builtInParam == queryValueTrue
 		filter.BuiltIn = &v
 	}
 
@@ -166,7 +217,7 @@ func (c *Controller) ListAlertRules(ctx echo.Context) error {
 }
 
 // GetAlertRule returns a single alert rule by ID.
-func (c *Controller) GetAlertRule(ctx echo.Context) error {
+func (c *Handler) GetAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -189,7 +240,7 @@ func (c *Controller) GetAlertRule(ctx echo.Context) error {
 }
 
 // CreateAlertRule creates a new alert rule.
-func (c *Controller) CreateAlertRule(ctx echo.Context) error {
+func (c *Handler) CreateAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -225,7 +276,7 @@ func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 }
 
 // UpdateAlertRule replaces an existing alert rule.
-func (c *Controller) UpdateAlertRule(ctx echo.Context) error {
+func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -263,7 +314,7 @@ func (c *Controller) UpdateAlertRule(ctx echo.Context) error {
 }
 
 // ToggleAlertRule enables or disables an alert rule.
-func (c *Controller) ToggleAlertRule(ctx echo.Context) error {
+func (c *Handler) ToggleAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -294,7 +345,7 @@ func (c *Controller) ToggleAlertRule(ctx echo.Context) error {
 }
 
 // DeleteAlertRule deletes an alert rule.
-func (c *Controller) DeleteAlertRule(ctx echo.Context) error {
+func (c *Handler) DeleteAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -318,7 +369,7 @@ func (c *Controller) DeleteAlertRule(ctx echo.Context) error {
 }
 
 // TestAlertRule simulates firing a rule for testing purposes.
-func (c *Controller) TestAlertRule(ctx echo.Context) error {
+func (c *Handler) TestAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -345,7 +396,7 @@ func (c *Controller) TestAlertRule(ctx echo.Context) error {
 }
 
 // ResetDefaultAlertRules deletes all built-in rules and re-seeds them.
-func (c *Controller) ResetDefaultAlertRules(ctx echo.Context) error {
+func (c *Handler) ResetDefaultAlertRules(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -373,7 +424,7 @@ func (c *Controller) ResetDefaultAlertRules(ctx echo.Context) error {
 }
 
 // ListAlertHistory returns paginated alert firing history.
-func (c *Controller) ListAlertHistory(ctx echo.Context) error {
+func (c *Handler) ListAlertHistory(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -420,7 +471,7 @@ func (c *Controller) ListAlertHistory(ctx echo.Context) error {
 }
 
 // ClearAlertHistory deletes all alert history records.
-func (c *Controller) ClearAlertHistory(ctx echo.Context) error {
+func (c *Handler) ClearAlertHistory(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -435,7 +486,7 @@ func (c *Controller) ClearAlertHistory(ctx echo.Context) error {
 }
 
 // ExportAlertRules exports all rules as JSON.
-func (c *Controller) ExportAlertRules(ctx echo.Context) error {
+func (c *Handler) ExportAlertRules(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -454,7 +505,7 @@ func (c *Controller) ExportAlertRules(ctx echo.Context) error {
 }
 
 // ImportAlertRules imports rules from JSON.
-func (c *Controller) ImportAlertRules(ctx echo.Context) error {
+func (c *Handler) ImportAlertRules(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
@@ -505,7 +556,7 @@ func (c *Controller) ImportAlertRules(ctx echo.Context) error {
 }
 
 // refreshAlertEngine refreshes the engine's rule cache if the engine is set.
-func (c *Controller) refreshAlertEngine(ctx echo.Context) {
+func (c *Handler) refreshAlertEngine(ctx echo.Context) {
 	if c.alertEngine != nil {
 		if err := c.alertEngine.RefreshRules(ctx.Request().Context()); err != nil {
 			c.LogErrorIfEnabled("failed to refresh alert engine rules", logger.Error(err))

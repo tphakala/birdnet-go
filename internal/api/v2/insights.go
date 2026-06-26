@@ -14,7 +14,17 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+// requireV2 checks that the enhanced database is available and returns an error
+// response if not. Shared by the insights handlers in this file. The alerts
+// domain (now its own package) keeps its own copy of this guard; consolidating
+// the two is deferred so this extraction stays behavior-preserving.
+func (c *Controller) requireV2(ctx echo.Context) error {
+	return c.HandleErrorWithKey(ctx, nil,
+		"Alert rules require the enhanced (v2) database", http.StatusConflict, notification.MsgErrAlertV2Required, nil)
+}
 
 // Insights constants
 const (
