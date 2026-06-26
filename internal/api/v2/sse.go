@@ -3,16 +3,13 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"runtime/debug"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -21,7 +18,6 @@ import (
 const (
 	// Connection timeouts
 	maxSSEStreamDuration = 30 * time.Minute // Maximum stream duration to prevent resource leaks
-	sseWriteDeadline     = 10 * time.Second // Write deadline for SSE messages
 
 	// Endpoints
 	detectionStreamEndpoint  = "/api/v2/detections/stream"
@@ -38,11 +34,6 @@ const (
 	sseRateLimitRequests = 10              // SSE rate limit requests per window
 	sseRateLimitWindow   = 1 * time.Minute // SSE rate limit time window
 )
-
-// WriteDeadlineSetter interface for response writers that support write deadlines
-type WriteDeadlineSetter interface {
-	SetWriteDeadline(time.Time) error
-}
 
 // SSEEvent represents a generic SSE event that can contain different data types
 type SSEEvent struct {
@@ -109,7 +100,7 @@ func (c *Controller) sendConnectionMessage(ctx echo.Context, clientID, message, 
 	if streamType != "" {
 		data["type"] = streamType
 	}
-	return c.sendSSEMessage(ctx, SSEStatusConnected, data)
+	return c.SendSSEMessage(ctx, SSEStatusConnected, data)
 }
 
 // logSSEConnection logs SSE client connection/disconnection events
@@ -136,7 +127,7 @@ func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType str
 		data["type"] = streamType
 	}
 
-	if err := c.sendSSEMessage(ctx, "heartbeat", data); err != nil {
+	if err := c.SendSSEMessage(ctx, "heartbeat", data); err != nil {
 		c.LogDebugIfEnabled("SSE heartbeat failed, client likely disconnected",
 			logger.String("client_id", clientID),
 			logger.Error(err),
@@ -242,10 +233,10 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 		select {
 		case <-ticker.C:
 			if err := c.sendSSEHeartbeat(ctx, clientID, ""); err != nil {
-				c.recordSSEError(endpoint, "heartbeat_failed")
+				c.RecordSSEError(endpoint, "heartbeat_failed")
 				return err
 			}
-			c.recordSSEMessage(endpoint, "heartbeat")
+			c.RecordSSEMessage(endpoint, "heartbeat")
 
 		case <-ctx.Request().Context().Done():
 			return nil
@@ -262,16 +253,16 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 				if !ok {
 					return nil
 				}
-				if err := c.sendSSEMessage(ctx, "detection", detection); err != nil {
+				if err := c.SendSSEMessage(ctx, "detection", detection); err != nil {
 					c.LogErrorIfEnabled("Failed to send SSE detection",
 						logger.String("client_id", clientID),
 						logger.String("endpoint", endpoint),
 						logger.Error(err),
 					)
-					c.recordSSEError(endpoint, "send_failed")
+					c.RecordSSEError(endpoint, "send_failed")
 					return err
 				}
-				c.recordSSEMessage(endpoint, "detection")
+				c.RecordSSEMessage(endpoint, "detection")
 				sent = true
 			default:
 			}
@@ -283,16 +274,16 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 					if !ok {
 						return nil
 					}
-					if err := c.sendSSEMessage(ctx, "pending", pending); err != nil {
+					if err := c.SendSSEMessage(ctx, "pending", pending); err != nil {
 						c.LogErrorIfEnabled("Failed to send SSE pending",
 							logger.String("client_id", clientID),
 							logger.String("endpoint", endpoint),
 							logger.Error(err),
 						)
-						c.recordSSEError(endpoint, "send_failed")
+						c.RecordSSEError(endpoint, "send_failed")
 						return err
 					}
-					c.recordSSEMessage(endpoint, "pending")
+					c.RecordSSEMessage(endpoint, "pending")
 					sent = true
 				default:
 				}
@@ -343,10 +334,10 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 		case <-ticker.C:
 			// Send heartbeat
 			if err := c.sendSSEHeartbeat(ctx, clientID, heartbeatType); err != nil {
-				c.recordSSEError(endpoint, "heartbeat_failed")
+				c.RecordSSEError(endpoint, "heartbeat_failed")
 				return err
 			}
-			c.recordSSEMessage(endpoint, "heartbeat")
+			c.RecordSSEMessage(endpoint, "heartbeat")
 
 		case <-ctx.Request().Context().Done():
 			// Client disconnected
@@ -359,78 +350,23 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 		default:
 			// Check for data on the channel (non-blocking)
 			if data, hasData := dataReceiver(); hasData {
-				if err := c.sendSSEMessage(ctx, eventType, data); err != nil {
+				if err := c.SendSSEMessage(ctx, eventType, data); err != nil {
 					c.LogErrorIfEnabled("Failed to send SSE message",
 						logger.String("client_id", clientID),
 						logger.String("endpoint", endpoint),
 						logger.String("event_type", eventType),
 						logger.Error(err),
 					)
-					c.recordSSEError(endpoint, "send_failed")
+					c.RecordSSEError(endpoint, "send_failed")
 					return err
 				}
-				c.recordSSEMessage(endpoint, eventType)
+				c.RecordSSEMessage(endpoint, eventType)
 			} else {
 				// Small sleep to prevent busy-waiting when no data
 				time.Sleep(apicore.SSEEventLoopSleep)
 			}
 		}
 	}
-}
-
-// sendSSEMessage sends a Server-Sent Event message
-func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) error {
-	// Convert data to JSON with panic recovery
-	jsonData, err := c.safeMarshalJSON(event, data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal SSE data: %w", err)
-	}
-
-	// Format SSE message
-	message := fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(jsonData))
-
-	// Set write deadline to prevent hanging on slow/disconnected clients
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		deadline := time.Now().Add(sseWriteDeadline) // Write deadline timeout
-		if err := conn.SetWriteDeadline(deadline); err != nil {
-			// If we can't set deadline, log but continue - not all response writers support this
-			c.LogDebugIfEnabled("Failed to set write deadline for SSE message", logger.Error(err))
-		}
-	}
-
-	// Write to response
-	if _, err := ctx.Response().Write([]byte(message)); err != nil {
-		return fmt.Errorf("failed to write SSE message: %w", err)
-	}
-
-	// Flush the response
-	if flusher, ok := ctx.Response().Writer.(http.Flusher); ok {
-		flusher.Flush()
-	}
-
-	return nil
-}
-
-// safeMarshalJSON marshals data to JSON with panic recovery.
-// This protects against panics from concurrent map access or unmarshalable data.
-func (c *Controller) safeMarshalJSON(event string, data any) (jsonData []byte, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("JSON marshal panic: %v", r)
-			c.LogErrorIfEnabled("SSE marshal panic recovered",
-				logger.String("event", event),
-				logger.Any("panic", r),
-				logger.String("stack", string(debug.Stack())),
-			)
-			_ = errors.Newf("SSE JSON marshal panic: %v", r).
-				Component("api").
-				Category(errors.CategoryBroadcast).
-				Context("operation", "sse_marshal_panic").
-				Priority(errors.PriorityCritical).
-				Build()
-		}
-	}()
-	return json.Marshal(data)
 }
 
 // GetSSEStatus returns information about SSE connections

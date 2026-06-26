@@ -1,4 +1,4 @@
-package api
+package notifications
 
 import (
 	"encoding/json"
@@ -36,7 +36,7 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{Core: &apicore.Core{}}
+	controller := New(&apicore.Core{}, nil, nil)
 	controller.Settings.Store(&conf.Settings{})
 
 	// Call through middleware to test the guard
@@ -71,7 +71,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{Core: &apicore.Core{}, notificationService: service}
+	controller := New(&apicore.Core{}, service, nil)
 	// Build a minimal settings snapshot with only the fields this test needs,
 	// then publish it once (the empty base matches the original test).
 	settings := &conf.Settings{}

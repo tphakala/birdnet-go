@@ -1,6 +1,6 @@
 //go:build integration
 
-package api
+package notifications
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func TestCheckNtfyServer_RealContainer(t *testing.T) {
 	t.Run("handler_integration", func(t *testing.T) {
 		// Test the full CheckNtfyServer handler via Echo context
 		e := echo.New()
-		ctrl := &Controller{Core: &apicore.Core{}}
+		ctrl := New(&apicore.Core{}, nil, nil)
 		ctrl.Settings.Store(apitest.NewValidTestSettings())
 
 		req := httptest.NewRequest(http.MethodGet,

@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/dynamicthresholds"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
+	"github.com/tphakala/birdnet-go/internal/api/v2/notifications"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
 	"github.com/tphakala/birdnet-go/internal/api/v2/support"
@@ -161,8 +162,20 @@ type Controller struct {
 	// nil in production, where getNotificationService() falls back to the
 	// process-global singleton (notification.GetService()). Tests inject an
 	// isolated per-test instance via WithNotificationService so each test gets its
-	// own config and store without touching the global singleton.
+	// own config and store without touching the global singleton. The facade
+	// keeps this field because debug.go, migration.go and legacy_cleanup.go still
+	// resolve the service through getNotificationService(); the same value is
+	// handed to the notifications domain handler below.
 	notificationService *notification.Service
+
+	// notifications serves the /api/v2/notifications/* endpoints (list, unread
+	// count, SSE notification+toast stream, per-item mutations, the test
+	// new-species trigger, and the NTFY connectivity probe). Beyond the shared
+	// *apicore.Core it receives the facade-injected notificationService and
+	// authService. It is constructed AFTER the functional options are applied so
+	// both services reflect WithNotificationService / WithAuthService (see
+	// NewWithOptions).
+	notifications *notifications.Handler
 
 	// Audio processing fields
 	processingCache     *processingCache
@@ -198,12 +211,6 @@ type Controller struct {
 	// importSourceFactory builds an import Source from a resolved path.
 	// Defaults to a BirdNET-Pi adapter when nil. Overridable in tests.
 	importSourceFactory func(path string) (imports.Source, error)
-
-	// ntfyCheckTimeoutOverride overrides the per-scheme ntfy connectivity probe
-	// timeout used by CheckNtfyServer. Zero in production, where the probe uses
-	// ntfyServerCheckTimeout. Tests set a short timeout so the unreachable-host
-	// path returns quickly instead of waiting the full default for each scheme.
-	ntfyCheckTimeoutOverride time.Duration
 
 	// audioWaitTimeoutOverride overrides the server-side wait for an in-progress
 	// audio encoding used by waitForAudioFile. Zero in production, where the wait
@@ -262,6 +269,20 @@ func WithNotificationService(svc *notification.Service) Option {
 	return func(c *Controller) {
 		c.notificationService = svc
 	}
+}
+
+// getNotificationService returns the notification service this controller uses:
+// the injected instance when set (tests inject via WithNotificationService),
+// otherwise the process-global singleton (notification.GetService()). The
+// notifications domain handler holds its own injected copy; this facade accessor
+// serves the remaining package-api callers (debug.go, migration.go,
+// legacy_cleanup.go) that resolve the service outside that handler. The field is
+// nil in production, so it falls back to the singleton exactly as before.
+func (c *Controller) getNotificationService() *notification.Service {
+	if c.notificationService != nil {
+		return c.notificationService
+	}
+	return notification.GetService()
 }
 
 // WithMetricsStore sets the system metrics history store for the controller.
@@ -435,6 +456,16 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// read at RegisterRoutes time (after this), so it is also populated.
 	c.authHandler = authapi.New(c.Core, c.authService)
 
+	// Construct the notifications domain handler AFTER the functional options are
+	// applied, for the same reason as the auth handler: both WithNotificationService
+	// and WithAuthService set their fields in the loop above. The handler captures
+	// the injected services (notificationService falls back to the global singleton
+	// when nil; authService is nil-guarded). Neither changes after this point, so
+	// capturing the post-option values is behaviorally identical to the monolith's
+	// per-request reads. The facade keeps c.notificationService for the other
+	// handlers that still resolve the service via getNotificationService().
+	c.notifications = notifications.New(c.Core, c.notificationService, c.authService)
+
 	// Log auth configuration status
 	log := GetLogger()
 	if c.AuthMiddleware != nil {
@@ -521,7 +552,7 @@ func (c *Controller) initRoutes() {
 		{"sse routes", c.initSSERoutes},
 		{"diagnostics routes", c.initDiagnosticsRoutes},
 		{"metrics history routes", c.initMetricsHistoryRoutes},
-		{"notification routes", c.initNotificationRoutes},
+		{"notification routes", func() { c.notifications.RegisterRoutes(c.Group) }},
 		{"support routes", func() { c.support.RegisterRoutes(c.Group) }},
 		{"debug routes", c.initDebugRoutes},
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
