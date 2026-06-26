@@ -170,7 +170,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
 
-### Notifications (`notifications.go`)
+### Notifications (`notifications/notifications.go`)
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                         |
 | ------ | ---------------------------------- | ---------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------- |

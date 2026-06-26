@@ -340,7 +340,7 @@ func TestNotifications_GuestSSEFiltersNonDetectionAndToasts(t *testing.T) {
 	require.Eventually(t, func() bool {
 		select {
 		case ev := <-events:
-			return ev.Event == sseEventConnected
+			return ev.Event == SSEStatusConnected
 		default:
 			return false
 		}

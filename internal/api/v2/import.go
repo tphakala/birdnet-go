@@ -448,15 +448,15 @@ func (c *Controller) GetImportStatus(ctx echo.Context) error {
 
 // sendImportEvent sends a single SSE event with a monotonic id field.
 func (c *Controller) sendImportEvent(ctx echo.Context, id uint64, event string, data any) error {
-	payload, err := c.safeMarshalJSON(event, data)
+	payload, err := c.SafeMarshalJSON(event, data)
 	if err != nil {
 		return fmt.Errorf("marshal import event: %w", err)
 	}
 	msg := fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", id, event, payload)
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		if err := conn.SetWriteDeadline(time.Now().Add(sseWriteDeadline)); err != nil {
+	if conn, ok := ctx.Response().Writer.(apicore.WriteDeadlineSetter); ok {
+		if err := conn.SetWriteDeadline(time.Now().Add(apicore.SSEWriteDeadline)); err != nil {
 			// Best-effort: not all response writers support deadlines; log and proceed,
-			// matching sendSSEMessage in sse.go.
+			// matching SendSSEMessage in apicore.
 			c.LogDebugIfEnabled("Failed to set write deadline for import SSE event", logger.Error(err))
 		}
 	}
@@ -471,7 +471,7 @@ func (c *Controller) sendImportEvent(ctx echo.Context, id uint64, event string, 
 
 // sendImportHeartbeat sends a lightweight SSE event to keep the connection alive.
 func (c *Controller) sendImportHeartbeat(ctx echo.Context) error {
-	return c.sendSSEMessage(ctx, importEventHeartbeat, map[string]int64{"ts": time.Now().Unix()})
+	return c.SendSSEMessage(ctx, importEventHeartbeat, map[string]int64{"ts": time.Now().Unix()})
 }
 
 // sendImportTerminal sends the final SSE event based on the import outcome.

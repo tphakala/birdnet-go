@@ -113,7 +113,7 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 	)
 
 	// Send initial connection message
-	if err := c.sendSSEMessage(ctx, "connected", map[string]string{
+	if err := c.SendSSEMessage(ctx, "connected", map[string]string{
 		"clientId": clientID,
 		"message":  "Connected to metrics stream",
 	}); err != nil {
@@ -156,7 +156,7 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 			}
 
 			if len(data) > 0 {
-				if err := c.sendSSEMessage(ctx, "metrics", data); err != nil {
+				if err := c.SendSSEMessage(ctx, "metrics", data); err != nil {
 					c.LogDebugIfEnabled("Metrics SSE send failed, client likely disconnected",
 						logger.String("client_id", clientID),
 						logger.Error(err),
@@ -166,7 +166,7 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 			}
 
 		case <-topoCh:
-			if err := c.sendSSEMessage(ctx, eventInferenceTopologyChanged, map[string]any{
+			if err := c.SendSSEMessage(ctx, eventInferenceTopologyChanged, map[string]any{
 				"timestamp": time.Now().Unix(),
 			}); err != nil {
 				c.LogDebugIfEnabled("Metrics SSE topology-changed send failed, client likely disconnected",
@@ -177,7 +177,7 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 			}
 
 		case <-heartbeatTicker.C:
-			if err := c.sendSSEMessage(ctx, "heartbeat", map[string]any{
+			if err := c.SendSSEMessage(ctx, "heartbeat", map[string]any{
 				"timestamp": time.Now().Unix(),
 			}); err != nil {
 				c.LogDebugIfEnabled("Metrics SSE heartbeat failed",

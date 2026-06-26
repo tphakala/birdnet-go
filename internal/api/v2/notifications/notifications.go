@@ -1,4 +1,23 @@
-package api
+// Package notifications is the api/v2 notifications domain handler. It owns the
+// /api/v2/notifications/* endpoints: the notification list and unread-count, the
+// SSE notification+toast stream, per-item read/acknowledge/delete mutations, the
+// test new-species trigger, and the NTFY connectivity probe.
+//
+// The Handler embeds *apicore.Core by pointer so the shared dependencies and
+// helpers (HandleError/HandleErrorWithKey, the logging helpers, the SSE write
+// primitives SendSSEMessage/RecordSSEMessage/RecordSSEError, Metrics, the
+// settings accessors, and the AuthMiddleware field) promote onto it.
+//
+// Two domain members are injected from the facade because they are supplied via
+// functional options applied AFTER the facade's options loop:
+//   - notificationService: getNotificationService() returns the injected
+//     instance or falls back to the process-global singleton
+//     (notification.GetService()) when nil, exactly as the monolith did. The
+//     facade keeps its own copy of this field for the other handlers (debug,
+//     migration, legacy cleanup) that still resolve the service.
+//   - authService: used by isGuestNotificationRequest to harden the public
+//     notification endpoints so guests only ever see bird-detection events.
+package notifications
 
 import (
 	"context"
@@ -15,6 +34,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -23,6 +43,44 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"golang.org/x/time/rate"
 )
+
+// Handler serves the api/v2 notifications domain endpoints. It embeds the shared
+// *apicore.Core (by pointer) and additionally holds the facade-injected
+// notification and auth services plus a test-only probe timeout override.
+type Handler struct {
+	*apicore.Core
+
+	// notificationService is the notification service injected from the facade
+	// (set there via the WithNotificationService functional option). It is nil in
+	// production, where getNotificationService() falls back to the process-global
+	// singleton (notification.GetService()). Tests inject an isolated per-test
+	// instance so each test gets its own config and store.
+	notificationService *notification.Service
+
+	// authService is the authentication service injected from the facade (set
+	// there via the WithAuthService functional option). It is used by
+	// isGuestNotificationRequest; a nil service means auth is disabled and every
+	// caller is treated as trusted, exactly as in the monolith.
+	authService auth.Service
+
+	// ntfyCheckTimeoutOverride overrides the per-scheme ntfy connectivity probe
+	// timeout used by CheckNtfyServer. Zero in production, where the probe uses
+	// ntfyServerCheckTimeout. Tests set a short timeout so the unreachable-host
+	// path returns quickly instead of waiting the full default for each scheme.
+	ntfyCheckTimeoutOverride time.Duration
+}
+
+// New constructs the notifications domain handler around the shared core and the
+// facade-injected services. The facade constructs this AFTER applying its
+// functional options so notificationService and authService reflect
+// WithNotificationService / WithAuthService.
+func New(core *apicore.Core, notificationService *notification.Service, authService auth.Service) *Handler {
+	return &Handler{
+		Core:                core,
+		notificationService: notificationService,
+		authService:         authService,
+	}
+}
 
 // SSE Connection configuration
 const (
@@ -108,13 +166,13 @@ type notificationAction struct {
 	successRespMsg string
 }
 
-// getNotificationService returns the notification service this controller uses:
+// getNotificationService returns the notification service this handler uses:
 // the injected instance when set (tests inject via WithNotificationService),
 // otherwise the process-global singleton (notification.GetService()). Routing all
-// handlers through this accessor lets a controller be fully isolated from global
+// handlers through this accessor lets a handler be fully isolated from global
 // state while keeping production behavior unchanged (the field is nil in
 // production, so it falls back to the singleton exactly as before).
-func (c *Controller) getNotificationService() *notification.Service {
+func (c *Handler) getNotificationService() *notification.Service {
 	if c.notificationService != nil {
 		return c.notificationService
 	}
@@ -122,7 +180,7 @@ func (c *Controller) getNotificationService() *notification.Service {
 }
 
 // requireNotificationService is middleware that returns 503 if the notification service is not initialized.
-func (c *Controller) requireNotificationService(next echo.HandlerFunc) echo.HandlerFunc {
+func (c *Handler) requireNotificationService(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		if c.getNotificationService() == nil {
 			return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
@@ -134,7 +192,7 @@ func (c *Controller) requireNotificationService(next echo.HandlerFunc) echo.Hand
 // executeNotificationAction handles the common pattern for notification operations:
 // validate ID, execute operation, handle errors.
 // All callers are behind the requireNotificationService middleware.
-func (c *Controller) executeNotificationAction(ctx echo.Context, action notificationAction) error {
+func (c *Handler) executeNotificationAction(ctx echo.Context, action notificationAction) error {
 	id := ctx.Param("id")
 	if id == "" {
 		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
@@ -156,18 +214,15 @@ func (c *Controller) executeNotificationAction(ctx echo.Context, action notifica
 	})
 }
 
-// initNotificationRoutes registers notification-related routes
-func (c *Controller) initNotificationRoutes() {
-	c.SetupNotificationRoutes()
-}
-
-// SetupNotificationRoutes configures notification-related routes
-func (c *Controller) SetupNotificationRoutes() {
+// RegisterRoutes registers the notifications domain routes on the provided v2
+// API group, preserving the exact route order and per-route middleware the
+// monolithic initNotificationRoutes/SetupNotificationRoutes pair used.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Rate limiter configuration for SSE connections. `Rate` is interpreted
 	// as tokens per second by golang.org/x/time/rate, so
 	// `rateLimitRequestsPerWindow / rateLimitWindow` gives us the intended
 	// 10 connections per minute (≈0.1667/sec). A bare `10` here would mean
-	// 10/second — 60× too permissive for an unauthenticated SSE endpoint
+	// 10/second; 60x too permissive for an unauthenticated SSE endpoint
 	// (Sentry flagged this on PR #2775).
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Skipper: middleware.DefaultSkipper,
@@ -195,18 +250,18 @@ func (c *Controller) SetupNotificationRoutes() {
 	// Route priority: Echo matches static path segments before parameter
 	// routes ("/:id"), so /unread/count and /stream always win over the
 	// /:id routes registered in the auth group below. Register these on
-	// the parent c.Group so they are NOT wrapped by c.AuthMiddleware.
-	// (/check-ntfy-server is intentionally NOT public — see the auth group
+	// the parent group g so they are NOT wrapped by c.AuthMiddleware.
+	// (/check-ntfy-server is intentionally NOT public; see the auth group
 	// registration later in this function, kept authed to prevent SSRF.)
-	c.Group.GET("/notifications", c.GetNotifications, c.requireNotificationService)
-	c.Group.GET("/notifications/unread/count", c.GetUnreadCount, c.requireNotificationService)
-	c.Group.GET("/notifications/stream", c.StreamNotifications,
+	g.GET("/notifications", c.GetNotifications, c.requireNotificationService)
+	g.GET("/notifications/unread/count", c.GetUnreadCount, c.requireNotificationService)
+	g.GET("/notifications/stream", c.StreamNotifications,
 		c.requireNotificationService, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// Auth-protected endpoints: per-item read, mutations, the test-notification
 	// trigger, and the NTFY connectivity probe (kept authed to avoid being
 	// used as an SSRF relay by unauthenticated callers).
-	notificationsGroup := c.Group.Group("/notifications", c.AuthMiddleware)
+	notificationsGroup := g.Group("/notifications", c.AuthMiddleware)
 
 	notifServiceGroup := notificationsGroup.Group("", c.requireNotificationService)
 	notifServiceGroup.PUT("/read-all", c.MarkAllNotificationsRead)
@@ -242,7 +297,7 @@ type NtfyServerCheckResponse struct {
 // CheckNtfyServer probes an NTFY server host for HTTPS and HTTP connectivity.
 // It tries HTTPS first; on failure it falls back to HTTP.
 // GET /api/v2/notifications/check-ntfy-server?host=<hostname[:port]>
-func (c *Controller) CheckNtfyServer(ctx echo.Context) error {
+func (c *Handler) CheckNtfyServer(ctx echo.Context) error {
 	host := ctx.QueryParam("host")
 	if host == "" {
 		return c.HandleErrorWithKey(ctx, nil, "host parameter is required", http.StatusBadRequest, notification.MsgErrNotifHostRequired, nil)
@@ -271,7 +326,7 @@ func isValidNtfyHost(host string) bool {
 		return false
 	}
 
-	// Reject if a scheme is included — we expect a bare host or host:port
+	// Reject if a scheme is included; we expect a bare host or host:port
 	if strings.Contains(host, "://") {
 		return false
 	}
@@ -287,7 +342,7 @@ func isValidNtfyHost(host string) bool {
 		return false
 	}
 
-	// Try parsing as host:port — if it works, validate both parts
+	// Try parsing as host:port; if it works, validate both parts
 	if h, port, err := net.SplitHostPort(host); err == nil {
 		p, err := strconv.Atoi(port)
 		if err != nil || p < 1 || p > 65535 {
@@ -397,7 +452,7 @@ func probeNtfyServer(ctx context.Context, host string, timeout time.Duration) Nt
 }
 
 // StreamNotifications handles the SSE connection for real-time notification streaming
-func (c *Controller) StreamNotifications(ctx echo.Context) error {
+func (c *Handler) StreamNotifications(ctx echo.Context) error {
 	// Track connection start time for metrics
 	connectionStartTime := time.Now()
 
@@ -445,7 +500,7 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 }
 
 // setupNotificationSSEClient initializes the SSE client and establishes connection
-func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*NotificationClient, *notification.Service, error) {
+func (c *Handler) setupNotificationSSEClient(ctx echo.Context) (*NotificationClient, *notification.Service, error) {
 	// Set SSE headers
 	apicore.SetSSEHeaders(ctx)
 
@@ -470,7 +525,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	}
 
 	// Send initial connection message
-	if err := c.sendSSEMessage(ctx, sseEventConnected, map[string]string{
+	if err := c.SendSSEMessage(ctx, sseEventConnected, map[string]string{
 		"clientId": clientID,
 		"message":  "Connected to notification stream",
 	}); err != nil {
@@ -489,7 +544,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 }
 
 // setupNotificationDisconnectHandler sets up client disconnect handling with timeout
-func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client *NotificationClient) {
+func (c *Handler) setupNotificationDisconnectHandler(ctx echo.Context, client *NotificationClient) {
 	go func() {
 		// Wait for client disconnect or timeout
 		<-ctx.Request().Context().Done()
@@ -506,7 +561,7 @@ func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client
 }
 
 // runNotificationEventLoop runs the main SSE event loop
-func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *NotificationClient) error {
+func (c *Handler) runNotificationEventLoop(ctx echo.Context, client *NotificationClient) error {
 	// Send heartbeat every 30 seconds
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
@@ -554,10 +609,10 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 			}
 			// Send heartbeat
 			if err := c.sendNotificationHeartbeat(ctx); err != nil {
-				c.recordSSEError(sseEndpoint, "heartbeat_failed")
+				c.RecordSSEError(sseEndpoint, "heartbeat_failed")
 				return err
 			}
-			c.recordSSEMessage(sseEndpoint, "heartbeat")
+			c.RecordSSEMessage(sseEndpoint, "heartbeat")
 
 		case <-client.Done:
 			// Client disconnected
@@ -571,7 +626,7 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 }
 
 // processNotificationEvent processes a single notification event
-func (c *Controller) processNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
+func (c *Handler) processNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
 	// Check if this is a toast notification
 	isToast, _ := notif.Metadata[notification.MetadataKeyIsToast].(bool)
 
@@ -583,24 +638,24 @@ func (c *Controller) processNotificationEvent(ctx echo.Context, clientID string,
 }
 
 // sendToastEvent sends a toast event via SSE
-func (c *Controller) sendToastEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
+func (c *Handler) sendToastEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
 	// Clone notification to prevent concurrent access issues during JSON marshaling
 	safeNotif := notif.Clone()
 	toastEvent := c.createToastEventData(safeNotif)
 
-	if err := c.sendSSEMessage(ctx, "toast", toastEvent); err != nil {
+	if err := c.SendSSEMessage(ctx, "toast", toastEvent); err != nil {
 		c.logNotificationError("failed to send toast SSE", err, clientID)
-		c.recordSSEError(sseEndpoint, "send_failed")
+		c.RecordSSEError(sseEndpoint, "send_failed")
 		return err
 	}
 
-	c.recordSSEMessage(sseEndpoint, "toast")
+	c.RecordSSEMessage(sseEndpoint, "toast")
 	c.logToastSent(clientID, notif)
 	return nil
 }
 
 // sendNotificationEvent sends a notification event via SSE
-func (c *Controller) sendNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
+func (c *Handler) sendNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
 	// Clone notification to prevent concurrent access issues during JSON marshaling
 	safeNotif := notif.Clone()
 
@@ -609,19 +664,19 @@ func (c *Controller) sendNotificationEvent(ctx echo.Context, clientID string, no
 		EventType:    "notification",
 	}
 
-	if err := c.sendSSEMessage(ctx, "notification", event); err != nil {
+	if err := c.SendSSEMessage(ctx, "notification", event); err != nil {
 		c.logNotificationError("failed to send notification SSE", err, clientID)
-		c.recordSSEError(sseEndpoint, "send_failed")
+		c.RecordSSEError(sseEndpoint, "send_failed")
 		return err
 	}
 
-	c.recordSSEMessage(sseEndpoint, "notification")
+	c.RecordSSEMessage(sseEndpoint, "notification")
 	c.logNotificationSent(clientID, notif)
 	return nil
 }
 
 // createToastEventData creates toast event data from notification
-func (c *Controller) createToastEventData(notif *notification.Notification) map[string]any {
+func (c *Handler) createToastEventData(notif *notification.Notification) map[string]any {
 	toastType, _ := notif.Metadata["toastType"].(string)
 	duration, _ := notif.Metadata["duration"].(int)
 	action, _ := notif.Metadata["action"].(*notification.ToastAction)
@@ -653,14 +708,14 @@ func (c *Controller) createToastEventData(notif *notification.Notification) map[
 }
 
 // sendNotificationHeartbeat sends a heartbeat message
-func (c *Controller) sendNotificationHeartbeat(ctx echo.Context) error {
-	return c.sendSSEMessage(ctx, "heartbeat", map[string]string{
+func (c *Handler) sendNotificationHeartbeat(ctx echo.Context) error {
+	return c.SendSSEMessage(ctx, "heartbeat", map[string]string{
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
 
 // logNotificationConnection logs SSE client connection/disconnection events
-func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, connected bool) {
+func (c *Handler) logNotificationConnection(clientID, ip, userAgent string, connected bool) {
 	action := "connected"
 	if !connected {
 		action = "disconnected"
@@ -679,14 +734,14 @@ func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, c
 }
 
 // logNotificationError logs SSE errors
-func (c *Controller) logNotificationError(message string, err error, clientID string) {
+func (c *Handler) logNotificationError(message string, err error, clientID string) {
 	c.LogErrorIfEnabled(message,
 		logger.Error(err),
 		logger.String("clientId", clientID))
 }
 
 // logToastSent logs successful toast sending
-func (c *Controller) logToastSent(clientID string, notif *notification.Notification) {
+func (c *Handler) logToastSent(clientID string, notif *notification.Notification) {
 	if s := c.CurrentSettings(); s != nil && s.WebServer.Debug {
 		toastType, _ := notif.Metadata["toastType"].(string)
 		c.LogDebugIfEnabled("toast sent via SSE",
@@ -698,7 +753,7 @@ func (c *Controller) logToastSent(clientID string, notif *notification.Notificat
 }
 
 // logNotificationSent logs successful notification sending
-func (c *Controller) logNotificationSent(clientID string, notif *notification.Notification) {
+func (c *Handler) logNotificationSent(clientID string, notif *notification.Notification) {
 	if s := c.CurrentSettings(); s != nil && s.WebServer.Debug {
 		c.LogDebugIfEnabled("notification sent via SSE",
 			logger.String("clientId", clientID),
@@ -713,7 +768,7 @@ func (c *Controller) logNotificationSent(clientID string, notif *notification.No
 // notifications endpoints to detection-type notifications only so that
 // operational/admin notifications (integration errors, config problems) are
 // not leaked to anonymous clients.
-func (c *Controller) isGuestNotificationRequest(ctx echo.Context) bool {
+func (c *Handler) isGuestNotificationRequest(ctx echo.Context) bool {
 	if c.authService == nil {
 		// No auth service configured → auth is disabled, treat everyone as trusted.
 		return false
@@ -722,7 +777,7 @@ func (c *Controller) isGuestNotificationRequest(ctx echo.Context) bool {
 }
 
 // GetNotifications returns a list of notifications with optional filtering
-func (c *Controller) GetNotifications(ctx echo.Context) error {
+func (c *Handler) GetNotifications(ctx echo.Context) error {
 	service := c.getNotificationService()
 
 	// Build filter options from query parameters
@@ -822,7 +877,7 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 }
 
 // GetNotification returns a single notification by ID
-func (c *Controller) GetNotification(ctx echo.Context) error {
+func (c *Handler) GetNotification(ctx echo.Context) error {
 	id := ctx.Param("id")
 	if id == "" {
 		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
@@ -844,7 +899,7 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 }
 
 // MarkAllNotificationsRead marks every unread notification as read in one call.
-func (c *Controller) MarkAllNotificationsRead(ctx echo.Context) error {
+func (c *Handler) MarkAllNotificationsRead(ctx echo.Context) error {
 	service := c.getNotificationService()
 
 	count, err := service.MarkAllAsRead()
@@ -860,7 +915,7 @@ func (c *Controller) MarkAllNotificationsRead(ctx echo.Context) error {
 }
 
 // MarkNotificationRead marks a notification as read
-func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
+func (c *Handler) MarkNotificationRead(ctx echo.Context) error {
 	return c.executeNotificationAction(ctx, notificationAction{
 		operation:      func(s *notification.Service, id string) error { return s.MarkAsRead(id) },
 		errorLogMsg:    "failed to mark notification as read",
@@ -870,7 +925,7 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 }
 
 // MarkNotificationAcknowledged marks a notification as acknowledged
-func (c *Controller) MarkNotificationAcknowledged(ctx echo.Context) error {
+func (c *Handler) MarkNotificationAcknowledged(ctx echo.Context) error {
 	return c.executeNotificationAction(ctx, notificationAction{
 		operation:      func(s *notification.Service, id string) error { return s.MarkAsAcknowledged(id) },
 		errorLogMsg:    "failed to mark notification as acknowledged",
@@ -880,7 +935,7 @@ func (c *Controller) MarkNotificationAcknowledged(ctx echo.Context) error {
 }
 
 // DeleteNotification deletes a notification
-func (c *Controller) DeleteNotification(ctx echo.Context) error {
+func (c *Handler) DeleteNotification(ctx echo.Context) error {
 	return c.executeNotificationAction(ctx, notificationAction{
 		operation:      func(s *notification.Service, id string) error { return s.Delete(id) },
 		errorLogMsg:    "failed to delete notification",
@@ -892,7 +947,7 @@ func (c *Controller) DeleteNotification(ctx echo.Context) error {
 // GetUnreadCount returns the count of unread notifications. For
 // unauthenticated dashboard requests, only unread detection notifications are
 // counted so the NotificationBell badge matches the filtered guest list.
-func (c *Controller) GetUnreadCount(ctx echo.Context) error {
+func (c *Handler) GetUnreadCount(ctx echo.Context) error {
 	service := c.getNotificationService()
 
 	if c.isGuestNotificationRequest(ctx) {
@@ -925,7 +980,7 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 }
 
 // CreateTestNewSpeciesNotification creates a test new species detection notification
-func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
+func (c *Handler) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)

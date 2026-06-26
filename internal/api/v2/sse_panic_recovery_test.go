@@ -16,7 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// TestSendSSEMessagePanicRecovery verifies that sendSSEMessage handles
+// TestSendSSEMessagePanicRecovery verifies that SendSSEMessage handles
 // unmarshalable data gracefully without panicking.
 func TestSendSSEMessagePanicRecovery(t *testing.T) {
 	t.Parallel()
@@ -42,7 +42,7 @@ func TestSendSSEMessagePanicRecovery(t *testing.T) {
 			"normal":  "value",
 		}
 
-		err := c.sendSSEMessage(ctx, "test", badData)
+		err := c.SendSSEMessage(ctx, "test", badData)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "marshal")
 	})
@@ -55,7 +55,7 @@ func TestSendSSEMessagePanicRecovery(t *testing.T) {
 			"normal": "value",
 		}
 
-		err := c.sendSSEMessage(ctx, "test", badData)
+		err := c.SendSSEMessage(ctx, "test", badData)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "marshal")
 	})
@@ -74,7 +74,7 @@ func TestSendSSEMessagePanicRecovery(t *testing.T) {
 		}
 
 		// Should succeed without error
-		err := c.sendSSEMessage(ctx, "notification", validData)
+		err := c.SendSSEMessage(ctx, "notification", validData)
 		require.NoError(t, err)
 
 		// Verify SSE format in response
@@ -89,10 +89,10 @@ func TestSendSSEMessagePanicRecovery(t *testing.T) {
 		ctx = e.NewContext(req, rec)
 
 		// Use a custom type that panics during JSON marshaling
-		// to verify the recover() block in safeMarshalJSON works correctly.
+		// to verify the recover() block in SafeMarshalJSON works correctly.
 		badData := &panicMarshaler{}
 
-		err := c.sendSSEMessage(ctx, "test_panic", badData)
+		err := c.SendSSEMessage(ctx, "test_panic", badData)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "JSON marshal panic")
 		assert.Contains(t, err.Error(), "intentional panic for testing")
@@ -100,7 +100,7 @@ func TestSendSSEMessagePanicRecovery(t *testing.T) {
 }
 
 // panicMarshaler is a helper type that panics during JSON marshaling.
-// Used to test the recover() block in safeMarshalJSON.
+// Used to test the recover() block in SafeMarshalJSON.
 type panicMarshaler struct{}
 
 // MarshalJSON implements json.Marshaler and panics when called.

@@ -708,20 +708,6 @@ func parseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResul
 // SSE Metrics Helpers
 // =============================================================================
 
-// recordSSEError records an SSE error metric if metrics are available
-func (c *Controller) recordSSEError(endpoint, errorType string) {
-	if c.Metrics != nil && c.Metrics.HTTP != nil {
-		c.Metrics.HTTP.RecordSSEError(endpoint, errorType)
-	}
-}
-
-// recordSSEMessage records an SSE message sent metric if metrics are available
-func (c *Controller) recordSSEMessage(endpoint, messageType string) {
-	if c.Metrics != nil && c.Metrics.HTTP != nil {
-		c.Metrics.HTTP.RecordSSEMessageSent(endpoint, messageType)
-	}
-}
-
 // recordSSEConnectionStart records an SSE connection start if metrics are available
 func (c *Controller) recordSSEConnectionStart(endpoint string) {
 	if c.Metrics != nil && c.Metrics.HTTP != nil {

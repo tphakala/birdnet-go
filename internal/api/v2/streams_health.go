@@ -727,7 +727,7 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 			EventType:            "stream_removed",
 		}
 
-		if err := c.sendSSEMessage(ctx, "stream_health", event); err != nil {
+		if err := c.SendSSEMessage(ctx, "stream_health", event); err != nil {
 			return err
 		}
 
@@ -755,7 +755,7 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 		EventType:            eventType,
 	}
 
-	if err := c.sendSSEMessage(ctx, "stream_health", event); err != nil {
+	if err := c.SendSSEMessage(ctx, "stream_health", event); err != nil {
 		return err
 	}
 
@@ -806,5 +806,5 @@ func (c *Controller) sendStreamStatsUpdate(ctx echo.Context, rawURL string, heal
 		EventType:            "stats_update",
 	}
 
-	return c.sendSSEMessage(ctx, "stream_health", event)
+	return c.SendSSEMessage(ctx, "stream_health", event)
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -662,7 +663,7 @@ func (c *Controller) extractRemoteAddr(ctx echo.Context) string {
 // resetAudioLevelWriteDeadline resets the write deadline for the SSE connection.
 // This prevents the server's WriteTimeout from terminating long-lived SSE connections.
 func (c *Controller) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
+	if conn, ok := ctx.Response().Writer.(apicore.WriteDeadlineSetter); ok {
 		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
 			c.LogDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
 		}
