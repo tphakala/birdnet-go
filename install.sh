@@ -162,38 +162,38 @@ sed_escape_pattern() {
     printf '%s' "$1" | tr -d '\n\r' | sed -e 's/[][\\.^$*|]/\\&/g'
 }
 
-# Safely set a scalar VALUE for KEY inside the top-level YAML block BLOCK of the config
-# file (default $CONFIG_FILE). The substitution is scoped with a sed address range to the
-# block, so it never touches an identically named key in another block (for example
-# webserver.port vs mysql.port vs the rtsp port). BLOCK and KEY MUST be literal YAML
-# identifiers from the caller (never user input); VALUE is the only untrusted part and is
-# escaped via sed_escape_replacement, with '|' as the sed delimiter to match that escaping.
-# Any inline comment on the edited line is dropped. Re-run-safe: matches the current value
-# regardless of what it is. No-op if BLOCK or KEY is absent.
-#
-# set_yaml_value (below) is the path-aware superset of this helper, handling keys nested deeper
-# than a top-level block's direct child. This sed variant is kept separate on purpose: the
-# TLS/port callers rely on its silent-success-on-missing-key contract, so do not merge the two.
+# Safely set a scalar VALUE for KEY (a direct child of the top-level YAML block BLOCK) in the
+# config file (default $CONFIG_FILE). A top-level block plus its direct child is just a
+# two-element path, so this delegates to set_yaml_value, which descends structurally and learns
+# each level's indentation from the file. That makes it work on both the 2-space template and
+# the app's 4-space serialized config; the previous fixed 2-space sed anchor silently no-opped
+# on a live (app-written) config. The structural descent keeps the original block-scoping
+# guarantee (it never touches an identically named key in another block, e.g. webserver.port vs
+# mysql.port). BLOCK and KEY MUST be literal YAML identifiers from the caller (never user
+# input); VALUE is the only untrusted part and is written literally by set_yaml_value (through
+# the environment), so no sed/regex metacharacter escaping is needed. Any inline comment on the
+# edited line is dropped. Re-run-safe. The set_yaml_value not-found return is intentionally
+# swallowed to preserve this helper's silent-success-on-missing-key contract that the TLS/port
+# callers rely on; a missing file still returns non-zero.
 set_config_value() {
     local block="$1"
     local key="$2"
     local value="$3"
     local file="${4:-$CONFIG_FILE}"
     [ -f "$file" ] || return 1
-    local escaped
-    escaped=$(sed_escape_replacement "$value")
-    # Anchor to exactly two leading spaces (the indentation of a direct child of a top-level
-    # block) so a same-named key in a deeper nested block is never overwritten.
-    sed -i -E "/^${block}:/,/^[A-Za-z0-9_]/ s|^([[:space:]]{2}${key}:[[:space:]]*).*|\\1${escaped}|" -- "$file"
+    set_yaml_value "${block}.${key}" "$value" "$file"
+    return 0
 }
 
 # Re-run-safe set of a scalar value at an arbitrary YAML key PATH (dotted, e.g.
 # "security.basicauth.enabled" or "realtime.audio.export.type") in the config file (default
-# $CONFIG_FILE). Generalizes set_config_value to keys nested deeper than a top-level block's
-# direct child: it walks the single known descent path, matching each element at exactly two
-# spaces of indentation per level and popping scope on dedent, so a same-named key in a
-# SIBLING block (e.g. security.allowsubnetbypass.enabled vs security.basicauth.enabled, both
-# at indent 4) is never touched and field order within a block is irrelevant. Only the leaf
+# $CONFIG_FILE). Walks the single known descent path, learning each level's indentation from
+# the file rather than assuming a fixed width, so it works on both the 2-space template and the
+# app's 4-space serialized config. A child must be more indented than its parent and at the
+# indent the parent's first child established, so a same-named key in a SIBLING block (e.g.
+# security.allowsubnetbypass.enabled vs security.basicauth.enabled) or one nested deeper under a
+# non-matching sibling is never touched, and field order within a block is irrelevant. Only the
+# leaf
 # scalar is rewritten; any inline comment on that line is dropped. PATH elements MUST be
 # literal YAML identifiers from the caller (never user input); VALUE is the only untrusted
 # part and is passed to awk through the environment (not -v), so awk performs no backslash
@@ -221,17 +221,32 @@ set_yaml_value() {
             key = $0
             sub(/^[[:space:]]*/, "", key)
             sub(/:.*/, "", key)
-            # Pop ancestors we have dedented out of: a key line at or shallower than the
-            # deepest matched ancestor header indent means that block has ended.
-            while (depth > 0 && ind <= 2 * (depth - 1)) depth--
-            if (depth < n && ind == 2 * depth && key == p[depth + 1]) {
-                if (depth + 1 == n) {
-                    # Leaf reached: rewrite the scalar, preserving the original indentation.
-                    print substr($0, 1, ind) key ": " val
-                    replaced = 1
-                    next
+            # Pop ancestors we have dedented out of: a key at or shallower than a matched
+            # ancestor indent means that block has ended. Per-level indentation is learned from
+            # the file (ancInd[] holds each matched ancestor indent for this pop; childInd[]
+            # below holds the child indent used for matching) rather than assumed to be two
+            # spaces, so the setter works on both the 2-space template and the 4-space config
+            # the app serializes. Assuming two spaces silently no-opped every nested set on a
+            # live (app-written) config.
+            while (depth > 0 && ind <= ancInd[depth]) depth--
+            # The next path component must be a direct child of the deepest matched ancestor:
+            # deeper than it (column 0 at the root) and at the child indent the first child
+            # established (childInd[]). Keys deeper than that are grandchildren under a
+            # non-matching sibling and must not match, which is the safety the old
+            # exact-indent check gave for free.
+            if (depth < n && (depth == 0 ? ind == 0 : ind > ancInd[depth])) {
+                if (childInd[depth] == "") childInd[depth] = ind
+                if (ind == childInd[depth] && key == p[depth + 1]) {
+                    if (depth + 1 == n) {
+                        # Leaf reached: rewrite the scalar, preserving the original indentation.
+                        print substr($0, 1, ind) key ": " val
+                        replaced = 1
+                        next
+                    }
+                    depth++
+                    ancInd[depth] = ind
+                    childInd[depth] = ""
                 }
-                depth++
             }
         }
         { print }
@@ -266,10 +281,12 @@ set_first_audio_source() {
     # multi-source config (e.g. extra sources added via the web UI) is not clobbered. The
     # item boundary is the list dash (`- `), and the name/device fields are matched with an
     # optional leading dash so the edit works regardless of which field comes first.
-    # device/name are passed as literal awk variables, so sed/regex metacharacters in a
-    # device name need no escaping here. Write to a temp file then copy back over the
-    # original so its ownership and permissions are preserved.
-    if awk -v device="$device" -v name="$name" '
+    # device/name are passed through the environment and read with ENVIRON (like
+    # set_yaml_value) rather than awk -v, so awk never interprets backslash escapes in a
+    # device name and no sed/regex metacharacters need escaping here. Write to a temp file
+    # then copy back over the original so its ownership and permissions are preserved.
+    if BIRDNET_SRC_DEVICE="$device" BIRDNET_SRC_NAME="$name" awk '
+        BEGIN { device = ENVIRON["BIRDNET_SRC_DEVICE"]; name = ENVIRON["BIRDNET_SRC_NAME"] }
         /^    sources:/ { in_sources=1; print; next }
         in_sources && /^    [A-Za-z]/ { in_sources=0 }
         in_sources && /^[[:space:]]*-[[:space:]]/ { item++ }
@@ -767,9 +784,12 @@ backup_config_with_version() {
         # Update version history with backup info
         if [ -n "$image_hash" ]; then
             # Update only the most recent entry matching this image_hash with empty backup
-            local temp_file
-            temp_file=$(mktemp /tmp/version_history_XXXXXX.tmp)
             if [ -f "$VERSION_HISTORY_FILE" ]; then
+                # Allocate the temp file only when there is a history file to rewrite, so a
+                # fresh install (no history yet) does not leak an empty /tmp file until the
+                # EXIT trap reaps it.
+                local temp_file
+                temp_file=$(mktemp /tmp/version_history_XXXXXX.tmp)
                 # Store lines and find last matching row index, then update only that row
                 awk -F'|' -v OFS='|' -v ih="$image_hash" -v bf="$backup_filename" '
                   { lines[NR]=$0 }
