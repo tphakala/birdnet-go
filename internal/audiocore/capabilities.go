@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"golang.org/x/sync/singleflight"
 )
 
 // capabilitiesCache stores probed device capabilities keyed by device name.
@@ -21,6 +22,16 @@ import (
 var (
 	capabilitiesCache   = make(map[string]*DeviceCapabilities)
 	capabilitiesCacheMu sync.RWMutex
+
+	// probeGroup collapses concurrent live probes for the same device so only one opens
+	// the ALSA device in malgo.Exclusive mode; the rest wait and read the freshly-cached
+	// result instead of racing into a "device busy" ALSA error.
+	probeGroup singleflight.Group
+
+	// probeLiveFn is the live-probe entry point, indirected through a package var so tests
+	// can substitute a stub. The real implementation calls malgo/CGO and cannot run in a
+	// unit test.
+	probeLiveFn = probeDeviceCapabilitiesLive
 )
 
 // CandidateSampleRates are the rates tested during device probing.
@@ -103,36 +114,67 @@ func GetCachedCapabilities(deviceName string) *DeviceCapabilities {
 	return nil
 }
 
-// ProbeDeviceCapabilities returns cached capabilities if available, otherwise
-// probes the device live. The cache is populated at startup; live probing is
-// the fallback for devices plugged in after startup.
+// ProbeDeviceCapabilities returns cached capabilities if available, otherwise probes the
+// device live. The cache is populated at startup; live probing is the fallback for devices
+// plugged in after startup. Concurrent live probes for the same device are collapsed so the
+// device is opened in exclusive mode by at most one goroutine at a time.
 func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabilities, error) {
-	// Check cache first (covers devices probed at startup). The cache is keyed by
-	// both the decoded ALSA id and the stable USB token, so a direct lookup hits
-	// for a "usb-path:"/"usb-id:" config; the name-substring scan is a legacy
-	// fallback for name-based configs.
-	capabilitiesCacheMu.RLock()
-	if caps, ok := capabilitiesCache[deviceID]; ok {
-		capabilitiesCacheMu.RUnlock()
+	// An empty deviceID would match any cached device via the name-substring scan in
+	// lookupCachedCapabilities (strings.Contains(name, "") is always true), so reject it as
+	// not-found rather than returning an arbitrary device.
+	if deviceID == "" {
+		return nil, fmt.Errorf("probe device: %w", ErrDeviceNotFound)
+	}
+
+	// Fast path: the cache covers devices probed at startup.
+	if caps, ok := lookupCachedCapabilities(deviceID); ok {
 		return cloneCapabilities(caps), nil
 	}
+
+	// Cache miss (device likely plugged in after startup): probe live. Collapse concurrent
+	// probes for the same device through singleflight so only one opens the ALSA device in
+	// malgo.Exclusive mode; the rest wait and read the freshly-cached result instead of both
+	// racing into a "device busy" failure.
+	result, err, _ := probeGroup.Do(deviceID, func() (any, error) {
+		// Re-check the cache: a probe that completed while we waited for the group slot
+		// already populated it, so we skip a redundant second live probe.
+		if caps, ok := lookupCachedCapabilities(deviceID); ok {
+			return caps, nil
+		}
+		caps, probeErr := probeLiveFn(deviceID, log)
+		if probeErr == nil && caps != nil {
+			capabilitiesCacheMu.Lock()
+			capabilitiesCache[caps.DeviceID] = caps
+			capabilitiesCacheMu.Unlock()
+		}
+		return caps, probeErr
+	})
+	if err != nil {
+		return nil, err
+	}
+	// The shared result is one *DeviceCapabilities handed to every waiter; clone it so no
+	// caller can mutate another's copy (matching the cache-hit return above).
+	caps, _ := result.(*DeviceCapabilities)
+	return cloneCapabilities(caps), nil
+}
+
+// lookupCachedCapabilities returns the cached capabilities for deviceID and true on a hit, or
+// (nil, false) on a miss. The cache is keyed by both the decoded ALSA id and the stable USB
+// token, so a direct lookup hits for a "usb-path:"/"usb-id:" config; the name-substring scan
+// is a legacy fallback for name-based configs. The returned pointer is the cached value (the
+// caller clones before handing it out); cached entries are never mutated in place.
+func lookupCachedCapabilities(deviceID string) (*DeviceCapabilities, bool) {
+	capabilitiesCacheMu.RLock()
+	defer capabilitiesCacheMu.RUnlock()
+	if caps, ok := capabilitiesCache[deviceID]; ok {
+		return caps, true
+	}
 	for _, caps := range capabilitiesCache {
-		if caps.DeviceName == deviceID ||
-			strings.Contains(caps.DeviceName, deviceID) {
-			capabilitiesCacheMu.RUnlock()
-			return cloneCapabilities(caps), nil
+		if caps != nil && (caps.DeviceName == deviceID || strings.Contains(caps.DeviceName, deviceID)) {
+			return caps, true
 		}
 	}
-	capabilitiesCacheMu.RUnlock()
-
-	// Cache miss: probe live (device may have been plugged in after startup).
-	caps, err := probeDeviceCapabilitiesLive(deviceID, log)
-	if err == nil && caps != nil {
-		capabilitiesCacheMu.Lock()
-		capabilitiesCache[caps.DeviceID] = caps
-		capabilitiesCacheMu.Unlock()
-	}
-	return caps, err
+	return nil, false
 }
 
 // probeDeviceCapabilitiesLive queries supported sample rates for a device.
