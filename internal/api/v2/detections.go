@@ -1702,18 +1702,13 @@ func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
 			continue
 		}
 		resolved := c.resolveExcludeName(trimmed)
-		// Dedup with EqualFold for exact parity with excludeEntryMatches (both
-		// operands are already resolved here, so no second resolution is needed).
-		// A plain scan over the small, already-canonical slice avoids the per-entry
-		// map a lowercased-key set would allocate.
-		dup := false
-		for _, existing := range canonical {
-			if strings.EqualFold(existing, resolved) {
-				dup = true
-				break
-			}
-		}
-		if dup {
+		// Dedup with EqualFold for parity with excludeEntryMatches (both operands are
+		// already resolved here, so no second resolution is needed). Uses the same
+		// slices.ContainsFunc idiom the exclude-list toggle/add paths use; lists are
+		// small, so the linear scan is fine.
+		if slices.ContainsFunc(canonical, func(existing string) bool {
+			return strings.EqualFold(existing, resolved)
+		}) {
 			continue
 		}
 		canonical = append(canonical, resolved)
