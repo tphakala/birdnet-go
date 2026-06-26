@@ -25,6 +25,16 @@ const (
 	testFailFastTimeout = 200 * time.Millisecond
 )
 
+// passthroughMiddleware returns a middleware that does nothing (allows all requests).
+// Used for testing endpoints that require authentication middleware.
+func passthroughMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			return next(c)
+		}
+	}
+}
+
 // getTestController creates a test controller with disabled saving
 // Note: apitest.DisableHTTPKeepAlivesForTesting() is called in TestMain before any tests run
 func getTestController(t *testing.T, e *echo.Echo) *Controller {

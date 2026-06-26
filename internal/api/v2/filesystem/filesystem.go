@@ -1,5 +1,11 @@
-// internal/api/v2/filesystem.go
-package api
+// Package filesystem is the api/v2 filesystem domain handler. It owns the
+// /api/v2/filesystem/* endpoints: the secure file-browser endpoint backing the
+// frontend directory picker. The Handler embeds *apicore.Core by pointer so the
+// shared dependencies and helpers (the media SecureFS sandbox, the auth
+// middleware, and the error/log helpers) promote onto it; the facade constructs
+// one Handler and calls RegisterRoutes to wire the routes in their existing
+// order.
+package filesystem
 
 import (
 	"fmt"
@@ -10,8 +16,40 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// Handler serves the filesystem domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members (notably the SecureFS sandbox SFS, the
+// AuthMiddleware, and the error/log helpers) promote onto it without re-wiring;
+// Core carries atomic/lock-bearing fields and must never be copied by value.
+type Handler struct {
+	*apicore.Core
+}
+
+// New builds a filesystem Handler around the shared core. The filesystem
+// handlers need only the shared *apicore.Core (the media SecureFS instance, the
+// auth middleware, and the error/log helpers), so there are no facade-owned
+// dependencies to inject.
+func New(core *apicore.Core) *Handler {
+	return &Handler{Core: core}
+}
+
+// RegisterRoutes registers all filesystem-related API endpoints on the supplied
+// API v2 group, preserving the exact route, order, and per-route middleware the
+// facade used before the filesystem domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+	c.LogInfoIfEnabled("Initializing filesystem routes")
+
+	// Create filesystem API group with authentication
+	fsGroup := g.Group("/filesystem", c.AuthMiddleware)
+
+	// GET /api/v2/filesystem/browse - Browse files and directories
+	fsGroup.GET("/browse", c.BrowseFileSystem)
+
+	c.LogInfoIfEnabled("Filesystem routes initialized")
+}
 
 // FileSystemItem represents a file or directory for the frontend file browser
 type FileSystemItem struct {
@@ -34,19 +72,6 @@ type BrowseResponse struct {
 	ParentPath  string           `json:"parentPath,omitempty"`
 }
 
-// initFileSystemRoutes registers all filesystem-related API endpoints
-func (c *Controller) initFileSystemRoutes() {
-	c.LogInfoIfEnabled("Initializing filesystem routes")
-
-	// Create filesystem API group with authentication
-	fsGroup := c.Group.Group("/filesystem", c.AuthMiddleware)
-
-	// GET /api/v2/filesystem/browse - Browse files and directories
-	fsGroup.GET("/browse", c.BrowseFileSystem)
-
-	c.LogInfoIfEnabled("Filesystem routes initialized")
-}
-
 // browsePathResult holds validated path information for browsing.
 type browsePathResult struct {
 	browsePath string
@@ -55,7 +80,7 @@ type browsePathResult struct {
 
 // validateBrowsePath validates and normalizes the browse path, checking security constraints.
 // Returns the validated path info or an error with appropriate HTTP status code.
-func (c *Controller) validateBrowsePath(reqPath string) (browsePathResult, error) {
+func (c *Handler) validateBrowsePath(reqPath string) (browsePathResult, error) {
 	// Default to base directory if no path specified
 	browsePath := reqPath
 	if browsePath == "" {
@@ -95,7 +120,7 @@ func (c *Controller) validateBrowsePath(reqPath string) (browsePathResult, error
 }
 
 // BrowseFileSystem lists files and directories in the specified path
-func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
+func (c *Handler) BrowseFileSystem(ctx echo.Context) error {
 	var req BrowseRequest
 	if err := ctx.Bind(&req); err != nil {
 		c.LogErrorIfEnabled("Failed to bind browse request",
@@ -180,7 +205,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 }
 
 // validateSymlinkTarget validates that a symlink target is within allowed boundaries
-func (c *Controller) validateSymlinkTarget(symlinkPath string) error {
+func (c *Handler) validateSymlinkTarget(symlinkPath string) error {
 	// Use SecureFS to safely read the symlink target within the sandbox
 	target, err := c.SFS.Readlink(symlinkPath)
 	if err != nil {
@@ -207,7 +232,7 @@ func (c *Controller) validateSymlinkTarget(symlinkPath string) error {
 }
 
 // convertDirEntryToItem converts a fs.DirEntry to FileSystemItem with enhanced error context
-func (c *Controller) convertDirEntryToItem(basePath string, entry fs.DirEntry) (FileSystemItem, error) {
+func (c *Handler) convertDirEntryToItem(basePath string, entry fs.DirEntry) (FileSystemItem, error) {
 	fullPath := filepath.Join(basePath, entry.Name())
 
 	info, err := entry.Info()

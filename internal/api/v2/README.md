@@ -227,7 +227,7 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 - `startEvent` / `endEvent` (`"sunrise"` | `"sunset"`): Solar mode events
 - `startOffset` / `endOffset` (int, -180 to 180): Minutes offset from solar event
 
-### Filesystem (`filesystem.go`)
+### Filesystem (`filesystem/filesystem.go`)
 
 | Method | Route                | Handler            | Auth | Description                                              |
 | ------ | -------------------- | ------------------ | ---- | -------------------------------------------------------- |

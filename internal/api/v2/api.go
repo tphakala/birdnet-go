@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
@@ -96,6 +97,12 @@ type Controller struct {
 	// it needs only the shared *apicore.Core (settings, datastore, V2 manager,
 	// error/log helpers, goroutine plumbing).
 	support *support.Handler
+
+	// filesystem serves the /api/v2/filesystem/* endpoints (the secure
+	// file-browser endpoint backing the frontend directory picker). Like weather
+	// it needs only the shared *apicore.Core (the media SecureFS sandbox, the auth
+	// middleware, and the error/log helpers all promote from it).
+	filesystem *filesystem.Handler
 
 	controlChan chan string
 
@@ -345,6 +352,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// The support handler needs only the shared core (settings, datastore, V2
 	// manager, and the error/log/goroutine helpers all promote from it).
 	c.support = support.New(c.Core)
+	// The filesystem handler needs only the shared core (the media SecureFS
+	// sandbox, the auth middleware, and the error/log helpers all promote from it).
+	c.filesystem = filesystem.New(c.Core)
 
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
@@ -435,7 +445,7 @@ func (c *Controller) initRoutes() {
 		{"system routes", c.initSystemRoutes},
 		{"terminal routes", c.initTerminalRoutes},
 		{"settings routes", c.initSettingsRoutes},
-		{"filesystem routes", c.initFileSystemRoutes},
+		{"filesystem routes", func() { c.filesystem.RegisterRoutes(c.Group) }},
 		{"stream health routes", c.initStreamHealthRoutes},
 		{"stream test routes", c.initStreamTestRoutes},
 		{"audio health routes", c.initAudioHealthRoutes},
