@@ -1,4 +1,12 @@
-package api
+// Package models is the api/v2 models domain handler. It owns the
+// /api/v2/models/* endpoints: listing the enabled classifier models, browsing
+// the model gallery catalog, and installing, reinstalling, uninstalling, and
+// streaming download progress for gallery models. The Handler embeds
+// *apicore.Core by pointer so the shared dependencies and helpers (ModelManager,
+// CurrentSettings, HandleError, the Go/Context goroutine plumbing, and the
+// logging helpers) promote onto it; the facade constructs one Handler and calls
+// RegisterRoutes to wire the routes in their existing order.
+package models
 
 import (
 	"encoding/json"
@@ -9,11 +17,39 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// Handler serves the models domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members promote onto it without re-wiring; Core
+// carries atomic/lock-bearing fields and must never be copied by value.
+type Handler struct {
+	*apicore.Core
+}
+
+// New builds a models Handler around the shared core. The models handlers need
+// only the shared *apicore.Core (ModelManager, settings, error/log helpers and
+// the goroutine plumbing), so there are no facade-owned dependencies to inject.
+func New(core *apicore.Core) *Handler {
+	return &Handler{Core: core}
+}
+
+// RegisterRoutes registers all model-related API endpoints on the supplied API
+// v2 group, preserving the exact routes and order the facade used before the
+// models domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+	g.GET("/models", c.ListModels)
+	g.GET("/models/catalog", c.GetModelCatalog)
+	g.GET("/models/installed", c.GetInstalledModels)
+	g.POST("/models/install/:id", c.InstallModel, c.AuthMiddleware)
+	g.POST("/models/reinstall/:id", c.ReinstallModel, c.AuthMiddleware)
+	g.DELETE("/models/installed/:id", c.UninstallModel, c.AuthMiddleware)
+	g.GET("/models/install/:id/progress", c.StreamInstallProgress)
+}
 
 // ModelListItem represents a model in the API response.
 type ModelListItem struct {
@@ -44,19 +80,8 @@ type CatalogEntryResponse struct {
 	HasGeomodel        bool   `json:"hasGeomodel"`
 }
 
-// initModelRoutes registers model-related API routes.
-func (c *Controller) initModelRoutes() {
-	c.Group.GET("/models", c.ListModels)
-	c.Group.GET("/models/catalog", c.GetModelCatalog)
-	c.Group.GET("/models/installed", c.GetInstalledModels)
-	c.Group.POST("/models/install/:id", c.InstallModel, c.AuthMiddleware)
-	c.Group.POST("/models/reinstall/:id", c.ReinstallModel, c.AuthMiddleware)
-	c.Group.DELETE("/models/installed/:id", c.UninstallModel, c.AuthMiddleware)
-	c.Group.GET("/models/install/:id/progress", c.StreamInstallProgress)
-}
-
 // ListModels returns classifier models that are enabled in the configuration.
-func (c *Controller) ListModels(ctx echo.Context) error {
+func (c *Handler) ListModels(ctx echo.Context) error {
 	// Read from the live settings (atomic pointer) so that models added
 	// at runtime (via gallery install) are immediately visible.
 	settings := conf.GetSettings()
@@ -106,7 +131,7 @@ func (c *Controller) ListModels(ctx echo.Context) error {
 
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information.
-func (c *Controller) GetModelCatalog(ctx echo.Context) error {
+func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	visible := classifier.VisibleCatalog()
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
 
@@ -162,7 +187,7 @@ func (c *Controller) GetModelCatalog(ctx echo.Context) error {
 }
 
 // GetInstalledModels returns all models that have been downloaded and installed.
-func (c *Controller) GetInstalledModels(ctx echo.Context) error {
+func (c *Handler) GetInstalledModels(ctx echo.Context) error {
 	if c.ModelManager == nil {
 		return ctx.JSON(http.StatusOK, []classifier.InstalledModel{})
 	}
@@ -172,7 +197,7 @@ func (c *Controller) GetInstalledModels(ctx echo.Context) error {
 
 // InstallModel starts an asynchronous model download and installation.
 // It returns 202 Accepted immediately while the download runs in the background.
-func (c *Controller) InstallModel(ctx echo.Context) error {
+func (c *Handler) InstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
 		return c.HandleError(ctx, nil, "catalog ID is required", http.StatusBadRequest)
@@ -229,7 +254,7 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 // ReinstallModel re-downloads missing or corrupt files for an installed model.
 // Files that pass SHA256 validation are skipped. It returns 202 Accepted
 // immediately while the re-download runs in the background.
-func (c *Controller) ReinstallModel(ctx echo.Context) error {
+func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
 		return c.HandleError(ctx, nil, "catalog ID is required", http.StatusBadRequest)
@@ -288,7 +313,7 @@ func (c *Controller) ReinstallModel(ctx echo.Context) error {
 }
 
 // UninstallModel removes a downloaded model from disk.
-func (c *Controller) UninstallModel(ctx echo.Context) error {
+func (c *Handler) UninstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
 		return c.HandleError(ctx, nil, "catalog ID is required", http.StatusBadRequest)
@@ -310,7 +335,7 @@ func (c *Controller) UninstallModel(ctx echo.Context) error {
 
 // StreamInstallProgress streams model download progress as Server-Sent Events.
 // The stream closes automatically when the download completes or fails.
-func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
+func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
 		return c.HandleError(ctx, nil, "catalog ID is required", http.StatusBadRequest)
@@ -321,7 +346,7 @@ func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
 	}
 
 	// Set SSE headers.
-	setSSEHeaders(ctx)
+	apicore.SetSSEHeaders(ctx)
 
 	// Flush helper for the response writer.
 	flusher, ok := ctx.Response().Writer.(http.Flusher)
@@ -329,7 +354,7 @@ func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "streaming not supported", http.StatusInternalServerError)
 	}
 
-	ticker := time.NewTicker(sseHeartbeatInterval)
+	ticker := time.NewTicker(apicore.SSEHeartbeatInterval)
 	defer ticker.Stop()
 
 	reqCtx := ctx.Request().Context()
@@ -386,7 +411,7 @@ func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
 
 				// No download and not installed: nothing to report yet.
 				// Wait briefly before re-checking.
-				time.Sleep(sseEventLoopSleep)
+				time.Sleep(apicore.SSEEventLoopSleep)
 				continue
 			}
 
@@ -405,7 +430,7 @@ func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
 			}
 
 			// Small sleep to avoid busy-waiting.
-			time.Sleep(sseEventLoopSleep)
+			time.Sleep(apicore.SSEEventLoopSleep)
 		}
 	}
 }

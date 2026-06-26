@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -446,7 +447,7 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 // setupNotificationSSEClient initializes the SSE client and establishes connection
 func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*NotificationClient, *notification.Service, error) {
 	// Set SSE headers
-	setSSEHeaders(ctx)
+	apicore.SetSSEHeaders(ctx)
 
 	// Generate client ID
 	clientID := uuid.New().String()
