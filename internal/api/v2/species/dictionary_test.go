@@ -1,5 +1,5 @@
-// species_dictionary_test.go: Package api tests for the species dictionary endpoint.
-package api
+// dictionary_test.go: tests for the species dictionary endpoint.
+package species
 
 import (
 	"compress/gzip"
@@ -16,15 +16,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
 )
 
-// newDictController creates an Echo + Controller and registers the species routes
-// through the production initSpeciesRoutes path, so these tests exercise the real
-// route registration (public mount, no auth middleware) rather than a hand-mounted
-// route. No auth middleware is injected, matching the public endpoint's contract.
-func newDictController(t *testing.T) (*echo.Echo, *Controller) {
+// newDictController creates an Echo + species Handler and registers the species
+// routes through the production RegisterRoutes path, so these tests exercise the
+// real route registration (public mount, no auth middleware) rather than a
+// hand-mounted route. No auth middleware is injected, matching the public
+// endpoint's contract.
+func newDictController(t *testing.T) (*echo.Echo, *Handler) {
 	t.Helper()
 	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
-	controller.initSpeciesRoutes()
+	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+	controller.RegisterRoutes(controller.Group)
 	return e, controller
 }
 
@@ -108,7 +109,7 @@ func TestSpeciesDictionary_UnknownLocale(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 
 	// Assert the standardized error payload contract, not just the status code.
-	var body ErrorResponse
+	var body apicore.ErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, http.StatusNotFound, body.Code)
 	assert.NotEmpty(t, body.Error)

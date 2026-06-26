@@ -174,6 +174,17 @@ func (c *Core) HandleErrorWithKey(ctx echo.Context, err error, message string, c
 	return c.handleErrorInternal(ctx, err, message, code, errorKey, errorParams)
 }
 
+// HandleErrorWithNotFound handles errors that may be not-found errors.
+// If the error is an EnhancedError with CategoryNotFound, returns a 404.
+// Otherwise returns a 500 internal server error.
+func (c *Core) HandleErrorWithNotFound(ctx echo.Context, err error, notFoundMsg, fallbackMsg string) error {
+	var enhancedErr *errors.EnhancedError
+	if errors.As(err, &enhancedErr) && enhancedErr.Category == errors.CategoryNotFound {
+		return c.HandleError(ctx, err, notFoundMsg, http.StatusNotFound)
+	}
+	return c.HandleError(ctx, err, fallbackMsg, http.StatusInternalServerError)
+}
+
 // RequireDatastore writes a 503 Service Unavailable response and returns the non-nil
 // errDatastoreUnavailable when the controller has no datastore, so handlers can guard with:
 //

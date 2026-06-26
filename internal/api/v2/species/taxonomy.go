@@ -1,5 +1,4 @@
-// internal/api/v2/species_taxonomy.go
-package api
+package species
 
 import (
 	"net/http"
@@ -56,7 +55,7 @@ func titleFirst(s string) string {
 
 // GetGenusSpecies retrieves all species in a given genus
 // GET /api/v2/taxonomy/genus/:genus
-func (c *Controller) GetGenusSpecies(ctx echo.Context) error {
+func (c *Handler) GetGenusSpecies(ctx echo.Context) error {
 	genus := ctx.Param("genus")
 	if genus == "" {
 		return c.HandleError(ctx, errors.Newf("genus parameter is required").
@@ -107,7 +106,7 @@ func (c *Controller) GetGenusSpecies(ctx echo.Context) error {
 
 // GetFamilySpecies retrieves all species in a given family
 // GET /api/v2/taxonomy/family/:family
-func (c *Controller) GetFamilySpecies(ctx echo.Context) error {
+func (c *Handler) GetFamilySpecies(ctx echo.Context) error {
 	family := ctx.Param("family")
 	if family == "" {
 		return c.HandleError(ctx, errors.Newf("family parameter is required").
@@ -164,7 +163,7 @@ func (c *Controller) GetFamilySpecies(ctx echo.Context) error {
 
 // GetSpeciesTree retrieves the complete taxonomic tree for a species
 // GET /api/v2/taxonomy/tree/:scientific_name
-func (c *Controller) GetSpeciesTree(ctx echo.Context) error {
+func (c *Handler) GetSpeciesTree(ctx echo.Context) error {
 	scientificName := ctx.Param("scientific_name")
 	if scientificName == "" {
 		return c.HandleError(ctx, errors.Newf("scientific_name parameter is required").

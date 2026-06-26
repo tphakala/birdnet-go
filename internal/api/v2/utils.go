@@ -12,7 +12,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -882,15 +881,4 @@ func (c *Controller) handleBatchResponse(ctx echo.Context, result any, successCo
 		logger.String("path", urlPath))
 
 	return ctx.JSON(http.StatusOK, result)
-}
-
-// handleErrorWithNotFound handles errors that may be not-found errors.
-// If the error is an EnhancedError with CategoryNotFound, returns a 404.
-// Otherwise returns a 500 internal server error.
-func (c *Controller) handleErrorWithNotFound(ctx echo.Context, err error, notFoundMsg, fallbackMsg string) error {
-	var enhancedErr *errors.EnhancedError
-	if errors.As(err, &enhancedErr) && enhancedErr.Category == errors.CategoryNotFound {
-		return c.HandleError(ctx, err, notFoundMsg, http.StatusNotFound)
-	}
-	return c.HandleError(ctx, err, fallbackMsg, http.StatusInternalServerError)
 }

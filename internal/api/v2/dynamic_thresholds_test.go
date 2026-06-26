@@ -165,7 +165,7 @@ func TestGetMergedThresholdData_DatabaseOnlySpecies(t *testing.T) {
 }
 
 // TestGetDynamicThreshold_NotFoundStatus pins both sides of the handler's not-found
-// classification boundary that #1068 turned on. handleErrorWithNotFound maps
+// classification boundary that #1068 turned on. HandleErrorWithNotFound maps
 // a CategoryNotFound EnhancedError to 404 but an unclassified error (a bare sentinel)
 // to 500. The v2only datastore used to return the bare ErrDynamicThresholdNotFound
 // sentinel, so a missing threshold fell through to 500 while the legacy backend

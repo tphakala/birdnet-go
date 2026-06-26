@@ -1,5 +1,23 @@
-// internal/api/v2/species.go
-package api
+// Package species is the api/v2 species domain handler. It owns the
+// /api/v2/species/* and /api/v2/taxonomy/* endpoints (species info, rarity, the
+// all-species picker list, the species dictionary, thumbnails, and genus/family/
+// tree taxonomy lookups). The Handler embeds *apicore.Core by pointer so the
+// shared dependencies and helpers (Processor, TaxonomyDB, EBirdClient,
+// BirdImageCache, CurrentLocale, HandleError, the logging helpers) promote onto
+// it; the facade constructs one Handler and calls RegisterRoutes to wire the
+// routes in their existing order.
+//
+// Two dependencies the species handlers need are owned by other parts of the
+// monolith that have not been extracted yet, so the facade injects them as
+// function values (the tls-domain facade-dependency-injection precedent):
+//   - commonNameMap: a read accessor over the shared scientific-to-common name
+//     map. The name-map plumbing (UpdateCommonNameMap/SetNameResolver) stays in
+//     the facade package because control_monitor drives it and several domains
+//     share it; species only needs read access.
+//   - serveImageProxy: the media domain's bird-image proxy handler, which the
+//     species thumbnail endpoint delegates to. When media is extracted this can
+//     point at the media handler instead.
+package species
 
 import (
 	"context"
@@ -9,13 +27,63 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// hoursPerDay is the number of hours in a day, used to truncate a timestamp to
+// the start of the local day. Defined locally so the species package does not
+// depend on a package-api constant; a physical constant with no need to stay in
+// sync with anything else.
+const hoursPerDay = 24
+
+// Handler serves the species domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members promote onto it without re-wiring; Core
+// carries atomic/lock-bearing fields and must never be copied by value.
+type Handler struct {
+	*apicore.Core
+
+	// commonNameMap returns the current scientific-to-common lookup map, owned by
+	// the facade's name-map plumbing and injected so species stays read-only over
+	// it. Always returns a non-nil map.
+	commonNameMap func() map[string]string
+
+	// serveImageProxy is the media domain's species-image proxy handler. The
+	// thumbnail endpoint resolves a species code to a scientific name and then
+	// delegates to it.
+	serveImageProxy echo.HandlerFunc
+}
+
+// New builds a species Handler around the shared core and the two facade-owned
+// dependencies the species handlers delegate to (the common-name map accessor
+// and the media image-proxy handler).
+func New(core *apicore.Core, commonNameMap func() map[string]string, serveImageProxy echo.HandlerFunc) *Handler {
+	return &Handler{Core: core, commonNameMap: commonNameMap, serveImageProxy: serveImageProxy}
+}
+
+// RegisterRoutes registers all species-related API endpoints on the supplied API
+// v2 group, preserving the exact routes and order the facade used before the
+// species domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+	// Public endpoints for species information
+	g.GET("/species", c.GetSpeciesInfo)
+	g.GET("/species/all", c.GetAllSpecies)
+	g.GET("/species/taxonomy", c.GetSpeciesTaxonomy)
+	g.GET("/species/dictionary/:locale", c.ServeSpeciesDictionary)
+
+	// RESTful thumbnail endpoint - uses species code from path
+	g.GET("/species/:code/thumbnail", c.GetSpeciesThumbnail)
+
+	// New taxonomy endpoints using local database
+	g.GET("/taxonomy/genus/:genus", c.GetGenusSpecies)
+	g.GET("/taxonomy/family/:family", c.GetFamilySpecies)
+	g.GET("/taxonomy/tree/:scientific_name", c.GetSpeciesTree)
+}
 
 // RarityStatus represents the rarity classification of a species
 type RarityStatus string
@@ -65,7 +133,7 @@ type taxonomyLookupResult struct {
 
 // lookupTaxonomyTree attempts to find taxonomy for a species, trying local DB first then eBird.
 // Returns nil result (not error) if taxonomy is unavailable from both sources.
-func (c *Controller) lookupTaxonomyTree(ctx context.Context, scientificName string) *taxonomyLookupResult {
+func (c *Handler) lookupTaxonomyTree(ctx context.Context, scientificName string) *taxonomyLookupResult {
 	// Try local taxonomy database first (fast, no network)
 	if c.TaxonomyDB != nil {
 		tree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
@@ -89,27 +157,10 @@ func (c *Controller) lookupTaxonomyTree(ctx context.Context, scientificName stri
 	return nil
 }
 
-// initSpeciesRoutes registers all species-related API endpoints
-func (c *Controller) initSpeciesRoutes() {
-	// Public endpoints for species information
-	c.Group.GET("/species", c.GetSpeciesInfo)
-	c.Group.GET("/species/all", c.GetAllSpecies)
-	c.Group.GET("/species/taxonomy", c.GetSpeciesTaxonomy)
-	c.Group.GET("/species/dictionary/:locale", c.ServeSpeciesDictionary)
-
-	// RESTful thumbnail endpoint - uses species code from path
-	c.Group.GET("/species/:code/thumbnail", c.GetSpeciesThumbnail)
-
-	// New taxonomy endpoints using local database
-	c.Group.GET("/taxonomy/genus/:genus", c.GetGenusSpecies)
-	c.Group.GET("/taxonomy/family/:family", c.GetFamilySpecies)
-	c.Group.GET("/taxonomy/tree/:scientific_name", c.GetSpeciesTree)
-}
-
 // AllSpeciesResponse represents the response for the all species endpoint
 type AllSpeciesResponse struct {
-	Species []rangeapi.RangeFilterSpecies `json:"species"`
-	Count   int                           `json:"count"`
+	Species []dto.RangeFilterSpecies `json:"species"`
+	Count   int                      `json:"count"`
 }
 
 // GetAllSpecies returns all known BirdNET species labels regardless of location or range filter.
@@ -122,7 +173,7 @@ type AllSpeciesResponse struct {
 // @Success 200 {object} AllSpeciesResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/species/all [get]
-func (c *Controller) GetAllSpecies(ctx echo.Context) error {
+func (c *Handler) GetAllSpecies(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 	c.LogDebugIfEnabled("Retrieving all BirdNET species labels",
@@ -130,7 +181,7 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
-	speciesList := buildAllSpeciesList(c.loadCommonNameMap(), c.allModelLabels())
+	speciesList := buildAllSpeciesList(c.commonNameMap(), c.allModelLabels())
 
 	c.LogInfoIfEnabled("All species labels retrieved successfully",
 		logger.Int("count", len(speciesList)),
@@ -158,11 +209,11 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 // orchestrator's AllLabels union there (not just the primary BirdNET labels), so the
 // picker still includes secondary-model species during that window; the fallback
 // preserves input order and the original label string.
-func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string) []rangeapi.RangeFilterSpecies {
+func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string) []dto.RangeFilterSpecies {
 	if len(sciToCommon) > 0 {
-		speciesList := make([]rangeapi.RangeFilterSpecies, 0, len(sciToCommon))
+		speciesList := make([]dto.RangeFilterSpecies, 0, len(sciToCommon))
 		for sci, common := range sciToCommon {
-			speciesList = append(speciesList, rangeapi.RangeFilterSpecies{
+			speciesList = append(speciesList, dto.RangeFilterSpecies{
 				Label:          sci + "_" + common,
 				ScientificName: sci,
 				CommonName:     common,
@@ -174,7 +225,7 @@ func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string)
 		return speciesList
 	}
 
-	speciesList := make([]rangeapi.RangeFilterSpecies, 0, len(fallbackLabels))
+	speciesList := make([]dto.RangeFilterSpecies, 0, len(fallbackLabels))
 	seen := make(map[string]struct{}, len(fallbackLabels))
 	for _, label := range fallbackLabels {
 		sp := detection.ParseSpeciesString(label)
@@ -186,7 +237,7 @@ func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string)
 			continue
 		}
 		seen[key] = struct{}{}
-		speciesList = append(speciesList, rangeapi.RangeFilterSpecies{
+		speciesList = append(speciesList, dto.RangeFilterSpecies{
 			Label:          label,
 			ScientificName: sp.ScientificName,
 			CommonName:     sp.CommonName,
@@ -199,7 +250,7 @@ func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string)
 // secondary models such as the bat and Perch classifiers) from the orchestrator,
 // falling back to the primary BirdNET labels from settings when the orchestrator is
 // not yet available (e.g. early startup before the audio pipeline builds it).
-func (c *Controller) allModelLabels() []string {
+func (c *Handler) allModelLabels() []string {
 	if proc := c.Processor; proc != nil {
 		if bn := proc.GetBirdNET(); bn != nil {
 			if labels := bn.AllLabels(); len(labels) > 0 {
@@ -214,7 +265,7 @@ func (c *Controller) allModelLabels() []string {
 }
 
 // GetSpeciesInfo retrieves extended information about a bird species
-func (c *Controller) GetSpeciesInfo(ctx echo.Context) error {
+func (c *Handler) GetSpeciesInfo(ctx echo.Context) error {
 	// Get scientific name from query parameter
 	scientificName := ctx.QueryParam("scientific_name")
 	if scientificName == "" {
@@ -237,14 +288,14 @@ func (c *Controller) GetSpeciesInfo(ctx echo.Context) error {
 	// Get species info
 	speciesInfo, err := c.getSpeciesInfo(ctx.Request().Context(), scientificName)
 	if err != nil {
-		return c.handleErrorWithNotFound(ctx, err, "Species not found", "Failed to get species information")
+		return c.HandleErrorWithNotFound(ctx, err, "Species not found", "Failed to get species information")
 	}
 
 	return ctx.JSON(http.StatusOK, speciesInfo)
 }
 
 // getSpeciesInfo retrieves species information including rarity status
-func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) (*SpeciesInfo, error) {
+func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*SpeciesInfo, error) {
 	// Snapshot to avoid TOCTOU race on c.Processor
 	proc := c.Processor
 	if proc == nil || proc.Bn == nil {
@@ -331,9 +382,9 @@ func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName stri
 	return false
 }
 
-func (c *Controller) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
+func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
 	// Get current date
-	today := time.Now().Truncate(HoursPerDay * time.Hour)
+	today := time.Now().Truncate(hoursPerDay * time.Hour)
 	settings := bn.CurrentSettings()
 
 	// Rarity is the geomodel occurrence probability, so use the geomodel-backed
@@ -444,7 +495,7 @@ type SubspeciesInfo struct {
 }
 
 // GetSpeciesTaxonomy retrieves detailed taxonomy information for a species
-func (c *Controller) GetSpeciesTaxonomy(ctx echo.Context) error {
+func (c *Handler) GetSpeciesTaxonomy(ctx echo.Context) error {
 	// Get parameters from query
 	scientificName := ctx.QueryParam("scientific_name")
 	if scientificName == "" {
@@ -472,7 +523,7 @@ func (c *Controller) GetSpeciesTaxonomy(ctx echo.Context) error {
 	// Get taxonomy info
 	taxonomyInfo, err := c.getDetailedTaxonomy(ctx.Request().Context(), scientificName, locale, includeSubspecies, includeHierarchy)
 	if err != nil {
-		return c.handleErrorWithNotFound(ctx, err, "Species not found", "Failed to get taxonomy information")
+		return c.HandleErrorWithNotFound(ctx, err, "Species not found", "Failed to get taxonomy information")
 	}
 
 	return ctx.JSON(http.StatusOK, taxonomyInfo)
@@ -480,7 +531,7 @@ func (c *Controller) GetSpeciesTaxonomy(ctx echo.Context) error {
 
 // getDetailedTaxonomy retrieves detailed taxonomy information
 // Tries local database first, falls back to eBird API if needed
-func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
+func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
 	// Try local taxonomy database first
 	if info := c.tryLocalTaxonomy(ctx, scientificName, locale, includeSubspecies, includeHierarchy); info != nil {
 		return info, nil
@@ -502,7 +553,7 @@ func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, lo
 
 // tryLocalTaxonomy attempts to retrieve taxonomy from the local database.
 // Returns nil if local DB is unavailable or lookup fails.
-func (c *Controller) tryLocalTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) *TaxonomyInfo {
+func (c *Handler) tryLocalTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) *TaxonomyInfo {
 	if c.TaxonomyDB == nil {
 		return nil
 	}
@@ -548,7 +599,7 @@ func convertToTaxonomyHierarchy(tree *ebird.TaxonomyTree) *TaxonomyHierarchy {
 }
 
 // enhanceWithEBirdData adds subspecies and locale data from eBird API to local taxonomy info.
-func (c *Controller) enhanceWithEBirdData(ctx context.Context, info *TaxonomyInfo, scientificName, locale string, includeSubspecies bool) {
+func (c *Handler) enhanceWithEBirdData(ctx context.Context, info *TaxonomyInfo, scientificName, locale string, includeSubspecies bool) {
 	if c.EBirdClient == nil || (!includeSubspecies && locale == "") {
 		return
 	}
@@ -572,7 +623,7 @@ func (c *Controller) enhanceWithEBirdData(ctx context.Context, info *TaxonomyInf
 }
 
 // getEBirdTaxonomy retrieves taxonomy information from eBird API
-func (c *Controller) getEBirdTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies bool) (*TaxonomyInfo, error) {
+func (c *Handler) getEBirdTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies bool) (*TaxonomyInfo, error) {
 	// Get full taxonomy data with locale if specified
 	taxonomyData, err := c.EBirdClient.GetTaxonomy(ctx, locale)
 	if err != nil {
@@ -638,7 +689,7 @@ func (c *Controller) getEBirdTaxonomy(ctx context.Context, scientificName, local
 }
 
 // findDetailedSubspecies finds all subspecies with detailed information
-func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, speciesCode string) []SubspeciesInfo {
+func (c *Handler) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, speciesCode string) []SubspeciesInfo {
 	var subspecies []SubspeciesInfo
 
 	for i := range taxonomy {
@@ -668,7 +719,7 @@ func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, spec
 
 // GetSpeciesThumbnail retrieves a bird thumbnail image by species code
 // GET /api/v2/species/:code/thumbnail
-func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
+func (c *Handler) GetSpeciesThumbnail(ctx echo.Context) error {
 	speciesCode := ctx.Param("code")
 	if speciesCode == "" {
 		return c.HandleError(ctx, errors.Newf("species code parameter is required").
@@ -728,5 +779,5 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	// Delegate to the image proxy handler
 	ctx.SetParamNames("scientific_name")
 	ctx.SetParamValues(scientificName)
-	return c.ServeSpeciesImageProxy(ctx)
+	return c.serveImageProxy(ctx)
 }

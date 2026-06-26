@@ -1,6 +1,7 @@
-// species_test.go: Package api provides tests for species-related functions and endpoints.
+// species_test.go: tests for species-related functions and endpoints in the
+// api/v2 species domain package.
 
-package api
+package species
 
 import (
 	"encoding/json"
@@ -12,9 +13,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// newSpeciesHandler builds a minimal species Handler with valid default settings
+// for validation tests. The injected facade dependencies (commonNameMap,
+// serveImageProxy) are left nil because the validation paths exercised here never
+// reach them.
+func newSpeciesHandler() *Handler {
+	h := &Handler{Core: &apicore.Core{}}
+	h.Settings.Store(apitest.NewValidTestSettings())
+	return h
+}
 
 // TestCalculateRarityStatus tests the calculateRarityStatus helper function.
 func TestCalculateRarityStatus(t *testing.T) {
@@ -169,46 +181,46 @@ func TestSpeciesAPIValidation(t *testing.T) {
 		url            string
 		paramNames     []string
 		paramValues    []string
-		handler        func(*Controller) func(echo.Context) error
+		handler        func(*Handler) func(echo.Context) error
 		expectedStatus int
 		expectedBody   string
 	}{
 		// Missing parameter tests
 		{"GetSpeciesInfo missing param", "/api/v2/species", nil, nil,
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesInfo },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesInfo },
 			http.StatusBadRequest, "Missing required parameter"},
 		{"GetSpeciesTaxonomy missing param", "/api/v2/species/taxonomy", nil, nil,
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesTaxonomy },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTaxonomy },
 			http.StatusBadRequest, "Missing required parameter"},
 		{"GetSpeciesThumbnail missing code", "/api/v2/species//thumbnail", []string{"code"}, []string{""},
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesThumbnail },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesThumbnail },
 			http.StatusBadRequest, "Missing species code"},
 
 		// Invalid format tests - GetSpeciesInfo
 		{"GetSpeciesInfo too short", "/api/v2/species?scientific_name=Ab", nil, nil,
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesInfo },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesInfo },
 			http.StatusBadRequest, "Invalid scientific name format"},
 		{"GetSpeciesInfo no space", "/api/v2/species?scientific_name=Turdusmigratorius", nil, nil,
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesInfo },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesInfo },
 			http.StatusBadRequest, "Invalid scientific name format"},
 		{"GetSpeciesInfo single word", "/api/v2/species?scientific_name=Turdus", nil, nil,
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesInfo },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesInfo },
 			http.StatusBadRequest, "Invalid scientific name format"},
 
 		// Invalid format tests - GetSpeciesTaxonomy
 		{"GetSpeciesTaxonomy too short", "/api/v2/species/taxonomy?scientific_name=Ab", nil, nil,
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesTaxonomy },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTaxonomy },
 			http.StatusBadRequest, "Invalid scientific name format"},
 		{"GetSpeciesTaxonomy no space", "/api/v2/species/taxonomy?scientific_name=Turdusmigratorius", nil, nil,
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesTaxonomy },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTaxonomy },
 			http.StatusBadRequest, "Invalid scientific name format"},
 		{"GetSpeciesTaxonomy single word", "/api/v2/species/taxonomy?scientific_name=Turdus", nil, nil,
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesTaxonomy },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTaxonomy },
 			http.StatusBadRequest, "Invalid scientific name format"},
 
 		// Error handling - nil processor
 		{"GetSpeciesThumbnail nil processor", "/api/v2/species/amro/thumbnail", []string{"code"}, []string{"amro"},
-			func(c *Controller) func(echo.Context) error { return c.GetSpeciesThumbnail },
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesThumbnail },
 			http.StatusServiceUnavailable, "BirdNET service unavailable"},
 	}
 
@@ -225,7 +237,7 @@ func TestSpeciesAPIValidation(t *testing.T) {
 				ctx.SetParamValues(tt.paramValues...)
 			}
 
-			c := newMinimalController()
+			c := newSpeciesHandler()
 			err := tt.handler(c)(ctx)
 
 			require.NoError(t, err, tt.name)
@@ -416,40 +428,44 @@ func TestTaxonomyInfoJSONSerialization(t *testing.T) {
 }
 
 // TestGetAllSpecies_LocalizedSecondaryModel verifies that GetAllSpecies serves
-// secondary-model species (a scientific-only bat label resolved via the batch
-// localizer) with their localized common name, sourced from the controller's
-// cached resolver-built maps rather than the raw primary BirdNET.Labels.
+// secondary-model species (a scientific-only bat label) with their localized
+// common name, sourced from the injected scientific-to-common name map rather
+// than the raw primary BirdNET.Labels.
+//
+// In production the name map is seeded by control_monitor (UpdateCommonNameMap
+// with the orchestrator's AllLabels union, localized through the batch resolver);
+// that construction lives in the facade's name-map plumbing, not the species
+// domain. Here the already-localized map is injected directly so the test
+// isolates the species handler's own behavior: building the list from the cached
+// map, carrying the localized common name, and sorting by scientific name.
 func TestGetAllSpecies_LocalizedSecondaryModel(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "species")
 	t.Attr("feature", "localized-name-resolution")
 
 	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
-	controller.Settings.Store(&conf.Settings{})
-
-	// Wire a batch-capable resolver so the scientific-only bat label gets a
-	// Finnish localized name, then populate the cached maps the way production
-	// does (control_monitor -> UpdateCommonNameMap with the AllLabels union).
-	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
-		"Barbastella barbastellus": "mopsilepakko",
-	}})
-	controller.UpdateCommonNameMap([]string{
-		"Parus major_Great Tit",
-		"Barbastella barbastellus",
-	})
+	handler := &Handler{
+		Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")},
+		commonNameMap: func() map[string]string {
+			return map[string]string{
+				"Barbastella barbastellus": "mopsilepakko", // localized bat name (secondary model)
+				"Parus major":              "Great Tit",
+			}
+		},
+	}
+	handler.Settings.Store(&conf.Settings{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/all", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	require.NoError(t, controller.GetAllSpecies(ctx))
+	require.NoError(t, handler.GetAllSpecies(ctx))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var response AllSpeciesResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
-	byScientific := make(map[string]rangeapi.RangeFilterSpecies, len(response.Species))
+	byScientific := make(map[string]dto.RangeFilterSpecies, len(response.Species))
 	for _, s := range response.Species {
 		byScientific[s.ScientificName] = s
 	}
@@ -470,7 +486,8 @@ func TestGetAllSpecies_LocalizedSecondaryModel(t *testing.T) {
 	assert.Equal(t, len(response.Species), response.Count)
 }
 
-// TestGetAllSpecies tests the GetAllSpecies endpoint returns all BirdNET labels.
+// TestGetAllSpecies tests the GetAllSpecies endpoint returns all BirdNET labels
+// via the fallback path (empty cached name map; labels read from settings).
 func TestGetAllSpecies(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "species")
@@ -511,14 +528,20 @@ func TestGetAllSpecies(t *testing.T) {
 			settings := &conf.Settings{}
 			settings.BirdNET.Labels = tt.labels
 
-			controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
-			controller.Settings.Store(settings)
+			// Empty injected name map forces the fallback path that parses
+			// allModelLabels() (which reads settings.BirdNET.Labels here, since
+			// Processor is nil).
+			handler := &Handler{
+				Core:          &apicore.Core{Echo: e, Group: e.Group("/api/v2")},
+				commonNameMap: func() map[string]string { return nil },
+			}
+			handler.Settings.Store(settings)
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/species/all", http.NoBody)
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(req, rec)
 
-			err := controller.GetAllSpecies(ctx)
+			err := handler.GetAllSpecies(ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedStatus, rec.Code)
 

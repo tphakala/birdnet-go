@@ -1,6 +1,6 @@
-// species_taxonomy_test.go: Package api provides tests for taxonomy API endpoints.
+// taxonomy_test.go: tests for taxonomy API endpoints.
 
-package api
+package species
 
 import (
 	"encoding/json"
@@ -26,7 +26,7 @@ func TestGetGenusSpecies(t *testing.T) {
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	// Create a minimal controller with taxonomy DB
-	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
 	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
@@ -124,7 +124,7 @@ func TestGetFamilySpecies(t *testing.T) {
 	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
-	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
 	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
@@ -203,7 +203,7 @@ func TestGetSpeciesTree(t *testing.T) {
 	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
-	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
 	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
@@ -306,7 +306,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
-	c := &Controller{Core: &apicore.Core{TaxonomyDB: taxonomyDB, EBirdClient: nil}}
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB, EBirdClient: nil}}
 	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
@@ -359,7 +359,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 func TestGetSpeciesTaxonomyWithoutLocalDB(t *testing.T) {
 	t.Parallel()
 
-	c := &Controller{Core: &apicore.Core{TaxonomyDB: nil, EBirdClient: nil}}
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: nil, EBirdClient: nil}}
 	c.Settings.Store(apitest.NewValidTestSettings())
 
 	// This should fail gracefully
