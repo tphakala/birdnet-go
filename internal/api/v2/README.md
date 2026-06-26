@@ -72,13 +72,14 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 }
 ```
 
-### Authentication (`auth.go`)
+### Authentication (`auth/auth.go`)
 
-| Method | Route          | Handler         | Auth | Description                 |
-| ------ | -------------- | --------------- | ---- | --------------------------- |
-| POST   | `/auth/login`  | `Login`         | ❌   | User authentication         |
-| POST   | `/auth/logout` | `Logout`        | ✅   | End user session            |
-| GET    | `/auth/status` | `GetAuthStatus` | ✅   | Check authentication status |
+| Method | Route            | Handler         | Auth | Description                 |
+| ------ | ---------------- | --------------- | ---- | --------------------------- |
+| POST   | `/auth/login`    | `Login`         | ❌   | User authentication         |
+| GET    | `/auth/callback` | `OAuthCallback` | ❌   | Complete OAuth login flow   |
+| POST   | `/auth/logout`   | `Logout`        | ✅   | End user session            |
+| GET    | `/auth/status`   | `GetAuthStatus` | ✅   | Check authentication status |
 
 ### Analytics (`analytics.go`)
 

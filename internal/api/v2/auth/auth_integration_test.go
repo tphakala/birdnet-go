@@ -1,6 +1,9 @@
 // auth_integration_test.go: Integration tests for V2 authentication flow.
-// Tests the complete login flow using /api/v2/auth endpoints.
-package api
+// Tests the complete login flow using the /api/v2/auth handlers. After the
+// auth domain split these build the auth Handler directly from an apitest core
+// plus a real auth service (SecurityAdapter), rather than the full facade
+// Controller, and invoke the handlers directly.
+package authapi
 
 import (
 	"encoding/json"
@@ -15,29 +18,23 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
-	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
-	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
-// setupAuthIntegrationTest creates a test environment with real OAuth2Server for integration tests.
-func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Settings) {
+// setupAuthIntegrationTest creates a test environment with a real OAuth2Server
+// for integration tests. It builds the auth Handler around an apitest core and
+// a SecurityAdapter auth service, mirroring the facade wiring
+// (authapi.New(core, authService)) without constructing the full Controller.
+func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Handler, *conf.Settings) {
 	t.Helper()
 
 	// Create Echo instance
 	e := echo.New()
-
-	// Create mock datastore
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	// Create settings with BasicAuth enabled
 	settings := &conf.Settings{
@@ -63,45 +60,19 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Sett
 		},
 	}
 
-	// Create mock ImageProvider
-	mockImageProvider := &apitest.MockImageProvider{}
-	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
-
-	// Create bird image cache with mock provider
-	birdImageCache := &imageprovider.BirdImageCache{}
-	birdImageCache.SetImageProvider(mockImageProvider)
-
-	// Create sun calculator
-	sunCalc := suncalc.NewSunCalc(60.1699, 24.9384)
-
-	// Create control channel
-	controlChan := make(chan string, 10)
-
-	// Create mock metrics
-	mockMetrics, _ := observability.NewMetrics()
-
-	// Create OAuth2Server with test settings
+	// Create OAuth2Server with test settings, then the auth service the handler uses.
 	oauth2Server := createTestOAuth2Server(t, settings)
-
-	// Create auth service and middleware for testing
 	authService := auth.NewSecurityAdapter(oauth2Server)
-	authMw := auth.NewMiddleware(authService)
 
 	// Initialize gothic session store for testing (required for session operations)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	// Create API controller with OAuth2Server via functional options
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, true,
-		WithAuthMiddleware(authMw.Authenticate), WithAuthService(authService))
-	require.NoError(t, err, "Failed to create test API controller")
+	// Build the shared core (the auth handlers reach the logging helpers through
+	// it) and construct the auth Handler exactly as the facade does.
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithSettings(settings))
+	h := New(core, authService)
 
-	// Register cleanup
-	t.Cleanup(func() {
-		controller.Shutdown()
-		close(controlChan)
-	})
-
-	return e, controller, settings
+	return e, h, settings
 }
 
 // createTestOAuth2Server creates an OAuth2Server with the provided settings for testing.
@@ -112,7 +83,7 @@ func createTestOAuth2Server(tb testing.TB, settings *conf.Settings) *security.OA
 
 // TestV2AuthFlow_CompleteLogin tests the complete V2 login flow end-to-end.
 func TestV2AuthFlow_CompleteLogin(t *testing.T) {
-	e, controller, settings := setupAuthIntegrationTest(t)
+	e, h, settings := setupAuthIntegrationTest(t)
 
 	t.Run("complete login flow with V2 callback", func(t *testing.T) {
 		// Step 1: POST /api/v2/auth/login with valid credentials
@@ -128,7 +99,7 @@ func TestV2AuthFlow_CompleteLogin(t *testing.T) {
 		c := e.NewContext(req, rec)
 
 		// Execute login handler
-		err := controller.Login(c)
+		err := h.Login(c)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -155,7 +126,7 @@ func TestV2AuthFlow_CompleteLogin(t *testing.T) {
 		callbackCtx := e.NewContext(callbackReq, callbackRec)
 
 		// Execute callback handler
-		err = controller.OAuthCallback(callbackCtx)
+		err = h.OAuthCallback(callbackCtx)
 		require.NoError(t, err)
 
 		// Should redirect (302) to final destination
@@ -181,7 +152,7 @@ func TestV2AuthFlow_CompleteLogin(t *testing.T) {
 // back to the base path. Regression guard for the query-aware redirect fix:
 // path-traversal heuristics must only apply to the path, not to the query.
 func TestV2AuthFlow_FilterQueryRedirectSurvives(t *testing.T) {
-	e, controller, _ := setupAuthIntegrationTest(t)
+	e, h, _ := setupAuthIntegrationTest(t)
 
 	const filteredRedirect = "/detections?queryType=species&q=a..b//c"
 	const wantFinalRedirect = "/ui/detections?queryType=species&q=a..b//c"
@@ -198,7 +169,7 @@ func TestV2AuthFlow_FilterQueryRedirectSurvives(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	require.NoError(t, controller.Login(c))
+	require.NoError(t, h.Login(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var loginResp AuthResponse
@@ -215,7 +186,7 @@ func TestV2AuthFlow_FilterQueryRedirectSurvives(t *testing.T) {
 	// Following the callback must 302 to the filtered view with the query intact.
 	callbackReq := httptest.NewRequest(http.MethodGet, loginResp.RedirectURL, http.NoBody)
 	callbackRec := httptest.NewRecorder()
-	require.NoError(t, controller.OAuthCallback(e.NewContext(callbackReq, callbackRec)))
+	require.NoError(t, h.OAuthCallback(e.NewContext(callbackReq, callbackRec)))
 
 	assert.Equal(t, http.StatusFound, callbackRec.Code)
 	assert.Equal(t, wantFinalRedirect, callbackRec.Header().Get("Location"),
@@ -228,7 +199,7 @@ func TestV2AuthFlow_FilterQueryRedirectSurvives(t *testing.T) {
 // rather than dropped to the default base path. Regression guard for the
 // proxy-aware base-path handling.
 func TestV2AuthFlow_ProxyPrefixedBasePathRedirect(t *testing.T) {
-	e, controller, _ := setupAuthIntegrationTest(t)
+	e, h, _ := setupAuthIntegrationTest(t)
 
 	// HA Ingress tokens are base64url (alphanumeric, '-', '_'), accepted by the
 	// backend basePath regex.
@@ -246,7 +217,7 @@ func TestV2AuthFlow_ProxyPrefixedBasePathRedirect(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	require.NoError(t, controller.Login(e.NewContext(req, rec)))
+	require.NoError(t, h.Login(e.NewContext(req, rec)))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var loginResp AuthResponse
@@ -261,7 +232,7 @@ func TestV2AuthFlow_ProxyPrefixedBasePathRedirect(t *testing.T) {
 
 // TestV2AuthFlow_InvalidCredentials tests login with wrong password.
 func TestV2AuthFlow_InvalidCredentials(t *testing.T) {
-	e, controller, _ := setupAuthIntegrationTest(t)
+	e, h, _ := setupAuthIntegrationTest(t)
 
 	t.Run("login fails with wrong password", func(t *testing.T) {
 		loginPayload := `{
@@ -274,7 +245,7 @@ func TestV2AuthFlow_InvalidCredentials(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
-		err := controller.Login(c)
+		err := h.Login(c)
 		require.NoError(t, err) // Handler should not return error, but set appropriate response
 
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -292,8 +263,6 @@ func TestV2AuthFlow_InvalidCredentials(t *testing.T) {
 func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 	// Create custom test environment with empty ClientID
 	e := echo.New()
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	settings := &conf.Settings{
 		WebServer: conf.WebServerSettings{Debug: true},
@@ -314,27 +283,12 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 		},
 	}
 
-	mockImageProvider := &apitest.MockImageProvider{}
-	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
-	birdImageCache := &imageprovider.BirdImageCache{}
-	birdImageCache.SetImageProvider(mockImageProvider)
-	sunCalc := suncalc.NewSunCalc(60.1699, 24.9384)
-	controlChan := make(chan string, 10)
-	mockMetrics, _ := observability.NewMetrics()
 	oauth2Server := createTestOAuth2Server(t, settings)
-
-	// Create auth service and middleware for testing
 	authService := auth.NewSecurityAdapter(oauth2Server)
-	authMw := auth.NewMiddleware(authService)
+	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, true,
-		WithAuthMiddleware(authMw.Authenticate), WithAuthService(authService))
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		controller.Shutdown()
-		close(controlChan)
-	})
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithSettings(settings))
+	h := New(core, authService)
 
 	t.Run("empty ClientID allows any username (V1 compatible)", func(t *testing.T) {
 		// Any username should work when ClientID is empty
@@ -348,7 +302,7 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
-		err := controller.Login(c)
+		err := h.Login(c)
 		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
@@ -365,7 +319,7 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 
 // TestV2AuthFlow_CallbackErrors tests callback error scenarios.
 func TestV2AuthFlow_CallbackErrors(t *testing.T) {
-	e, controller, _ := setupAuthIntegrationTest(t)
+	e, h, _ := setupAuthIntegrationTest(t)
 
 	testCases := []struct {
 		name           string
@@ -393,7 +347,7 @@ func TestV2AuthFlow_CallbackErrors(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
-			err := controller.OAuthCallback(c)
+			err := h.OAuthCallback(c)
 			require.NoError(t, err)
 
 			assert.Equal(t, tc.expectedStatus, rec.Code)
@@ -483,7 +437,7 @@ func TestV2AuthFlow_OpenRedirectPrevention(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := validateAndSanitizeRedirect(tc.maliciousURL)
+			result := ValidateAndSanitizeRedirect(tc.maliciousURL)
 			assert.Equal(t, tc.expectedResult, result,
 				"Redirect sanitization failed for: %s", tc.maliciousURL)
 		})
@@ -492,7 +446,7 @@ func TestV2AuthFlow_OpenRedirectPrevention(t *testing.T) {
 
 // TestV2AuthFlow_MissingCredentials tests login with missing username or password.
 func TestV2AuthFlow_MissingCredentials(t *testing.T) {
-	e, controller, _ := setupAuthIntegrationTest(t)
+	e, h, _ := setupAuthIntegrationTest(t)
 
 	testCases := []struct {
 		name    string
@@ -519,7 +473,7 @@ func TestV2AuthFlow_MissingCredentials(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
-			err := controller.Login(c)
+			err := h.Login(c)
 			require.NoError(t, err)
 
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -536,7 +490,7 @@ func TestV2AuthFlow_MissingCredentials(t *testing.T) {
 
 // TestV2AuthFlow_WrongUsername tests login with wrong username when ClientID is set.
 func TestV2AuthFlow_WrongUsername(t *testing.T) {
-	e, controller, _ := setupAuthIntegrationTest(t)
+	e, h, _ := setupAuthIntegrationTest(t)
 
 	t.Run("login fails with wrong username when ClientID is set", func(t *testing.T) {
 		loginPayload := `{
@@ -549,7 +503,7 @@ func TestV2AuthFlow_WrongUsername(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
-		err := controller.Login(c)
+		err := h.Login(c)
 		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -565,7 +519,7 @@ func TestV2AuthFlow_WrongUsername(t *testing.T) {
 
 // TestV2AuthFlow_RedirectURLInResponse tests that the login response contains V2 callback URL.
 func TestV2AuthFlow_RedirectURLInResponse(t *testing.T) {
-	e, controller, _ := setupAuthIntegrationTest(t)
+	e, h, _ := setupAuthIntegrationTest(t)
 
 	t.Run("login response contains V2 callback URL", func(t *testing.T) {
 		loginPayload := `{
@@ -578,7 +532,7 @@ func TestV2AuthFlow_RedirectURLInResponse(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
-		err := controller.Login(c)
+		err := h.Login(c)
 		require.NoError(t, err)
 
 		var resp AuthResponse

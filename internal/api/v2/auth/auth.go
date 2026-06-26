@@ -1,5 +1,22 @@
-// internal/api/v2/auth.go
-package api
+// Package authapi is the api/v2 auth domain handler. It owns the
+// /api/v2/auth/* endpoints (login, OAuth callback, logout, and auth status).
+// The Handler embeds *apicore.Core by pointer so the shared dependencies and
+// helpers (HandleError, HandleErrorWithKey, the logging/security-logging
+// helpers, and the AuthMiddleware field) promote onto it.
+//
+// One domain member differs from the Core-only leaf domains:
+//   - authService is the authentication/OAuth service. It is injected from the
+//     facade because it is supplied via the WithAuthService functional option
+//     (applied after the other handlers are constructed). The facade keeps the
+//     authService field as the injection source and hands the same value to the
+//     auth Handler. The handler nil-guards authService exactly as the monolith
+//     did, so an unconfigured auth service degrades identically.
+//
+// The auth MIDDLEWARE (GetAuthMiddleware, PrivateModeAuth, the trusted-proxy IP
+// extractor, the AuthMiddleware field) lives in apicore and is NOT part of this
+// package; this package only registers the auth domain endpoints and reuses the
+// AuthMiddleware via promotion from the embedded Core.
+package authapi
 
 import (
 	"context"
@@ -16,10 +33,18 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
+
+// apiV2Prefix is the base path prefix for all v2 API routes (the Echo group the
+// facade mounts the domain handlers under). It is used to compose the
+// client-facing OAuth callback URL so the redirect matches the actual mounted
+// route. It mirrors the facade's own apiV2Prefix; this package cannot import
+// package api to share the literal.
+const apiV2Prefix = "/api/v2"
 
 // Auth constants (file-local)
 const (
@@ -62,20 +87,46 @@ type AuthStatus struct {
 }
 
 // Auth route path fragments, registered relative to the v2 API group in
-// initAuthRoutes. They are reused by isPrivateModeExempt so the PrivateMode
-// exempt allow-list cannot drift from the registered routes.
+// RegisterRoutes. They are exported so the facade's PrivateMode exempt
+// allow-list (isPrivateModeExempt in audio_hls.go) composes the exempt auth
+// paths from the same constants the routes register with, so the allow-list
+// cannot drift from the registered routes.
 const (
-	authGroupPath    = "/auth"
-	authLoginPath    = "/login"
-	authCallbackPath = "/callback"
-	authLogoutPath   = "/logout"
-	authStatusPath   = "/status"
+	AuthGroupPath    = "/auth"
+	AuthLoginPath    = "/login"
+	AuthCallbackPath = "/callback"
+	AuthLogoutPath   = "/logout"
+	AuthStatusPath   = "/status"
 )
 
-// initAuthRoutes registers all authentication-related API endpoints
-func (c *Controller) initAuthRoutes() {
+// Handler serves the api/v2 auth domain endpoints. It embeds the shared
+// *apicore.Core (by pointer) and additionally holds the authService injected
+// from the facade.
+type Handler struct {
+	*apicore.Core
+
+	// authService is the authentication service injected from the facade (set
+	// there via the WithAuthService functional option). The handlers nil-guard
+	// it; an unconfigured service degrades exactly as in the monolith.
+	authService auth.Service
+}
+
+// New constructs the auth domain handler around the shared core and the
+// facade-injected auth service. The facade constructs this AFTER applying its
+// functional options so authService reflects WithAuthService.
+func New(core *apicore.Core, authService auth.Service) *Handler {
+	return &Handler{
+		Core:        core,
+		authService: authService,
+	}
+}
+
+// RegisterRoutes registers all authentication-related API endpoints on the
+// supplied v2 API group, preserving the exact routes, order, and per-route
+// middleware from the original initAuthRoutes.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Create auth API group
-	authGroup := c.Group.Group(authGroupPath)
+	authGroup := g.Group(AuthGroupPath)
 
 	// Create rate limiter for login endpoint to prevent brute force attacks
 	// Allow 5 login attempts per 15 minutes per IP address
@@ -113,20 +164,20 @@ func (c *Controller) initAuthRoutes() {
 	})
 
 	// Routes that don't require authentication (but are rate limited)
-	authGroup.POST(authLoginPath, c.Login, loginRateLimiter)
+	authGroup.POST(AuthLoginPath, c.Login, loginRateLimiter)
 
 	// OAuth callback endpoint - public, completes the OAuth flow
 	// This is the V2 replacement for /api/v1/oauth2/callback
-	authGroup.GET(authCallbackPath, c.OAuthCallback)
+	authGroup.GET(AuthCallbackPath, c.OAuthCallback)
 
 	// Routes that require authentication
 	protectedGroup := authGroup.Group("", c.AuthMiddleware)
-	protectedGroup.POST(authLogoutPath, c.Logout)
-	protectedGroup.GET(authStatusPath, c.GetAuthStatus)
+	protectedGroup.POST(AuthLogoutPath, c.Logout)
+	protectedGroup.GET(AuthStatusPath, c.GetAuthStatus)
 }
 
 // Login handles POST /api/v2/auth/login
-func (c *Controller) Login(ctx echo.Context) error {
+func (c *Handler) Login(ctx echo.Context) error {
 	// Parse login request
 	var req AuthRequest
 	if err := ctx.Bind(&req); err != nil {
@@ -262,9 +313,9 @@ func (c *Controller) Login(ctx echo.Context) error {
 		finalRedirect = ensurePathWithinBase(finalRedirect, requestBase+"/")
 	}
 	// Compose the callback path from the same constants used to register the
-	// route (see initAuthRoutes) so the client-facing redirect URL cannot drift
+	// route (see RegisterRoutes) so the client-facing redirect URL cannot drift
 	// from the actual route on a prefix or fragment rename.
-	callbackPath := apiV2Prefix + authGroupPath + authCallbackPath
+	callbackPath := apiV2Prefix + AuthGroupPath + AuthCallbackPath
 	redirectURL := fmt.Sprintf("%s%s?code=%s&redirect=%s", requestBase, callbackPath, url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
 
 	c.LogSecurityInfoIfEnabled("Returning successful login response with redirect",
@@ -284,7 +335,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 }
 
 // Logout handles POST /api/v2/auth/logout
-func (c *Controller) Logout(ctx echo.Context) error {
+func (c *Handler) Logout(ctx echo.Context) error {
 	// Use the stored auth service instance
 	authService := c.authService
 	if authService == nil {
@@ -329,7 +380,7 @@ func (c *Controller) Logout(ctx echo.Context) error {
 }
 
 // GetAuthStatus handles GET /api/v2/auth/status
-func (c *Controller) GetAuthStatus(ctx echo.Context) error {
+func (c *Handler) GetAuthStatus(ctx echo.Context) error {
 	// Read authentication status details set by the AuthMiddleware in the context.
 	// Use the auth.CtxKey* constants to ensure consistency with the middleware.
 	isAuthenticated := boolFromCtx(ctx, auth.CtxKeyIsAuthenticated, false)
@@ -404,9 +455,9 @@ func stringFromCtx(ctx echo.Context, key, defaultValue string) string {
 // 1. Explicit basePath from request
 // 2. Referer header analysis
 // 3. Default fallback
-func (c *Controller) extractBasePath(ctx echo.Context, req AuthRequest) string {
+func (c *Handler) extractBasePath(ctx echo.Context, req AuthRequest) string {
 	// 1. If explicitly provided and valid, use it
-	if req.BasePath != "" && isValidBasePath(req.BasePath) {
+	if req.BasePath != "" && IsValidBasePath(req.BasePath) {
 		c.LogDebugIfEnabled("Using explicit base path from request",
 			logger.String("basePath", req.BasePath),
 			logger.String("ip", ctx.RealIP()),
@@ -437,8 +488,10 @@ func (c *Controller) extractBasePath(ctx echo.Context, req AuthRequest) string {
 	return defaultBasePath
 }
 
-// isValidBasePath validates that a base path is safe to use
-func isValidBasePath(basePath string) bool {
+// IsValidBasePath validates that a base path is safe to use. It is exported so
+// the api/v2 security fuzz/invariant tests in package api can exercise it across
+// the package boundary after the auth domain split.
+func IsValidBasePath(basePath string) bool {
 	// Must start with /
 	if !strings.HasPrefix(basePath, "/") {
 		return false
@@ -504,7 +557,7 @@ func extractBasePathFromReferer(referer string) string {
 	for _, basePath := range commonBasePaths {
 		if strings.HasPrefix(path, basePath) {
 			// Validate before returning
-			if isValidBasePath(basePath) {
+			if IsValidBasePath(basePath) {
 				return basePath
 			}
 		}
@@ -534,7 +587,7 @@ func ensurePathWithinBase(redirectPath, basePath string) string {
 // OAuthCallback handles GET /api/v2/auth/callback
 // Completes the OAuth flow by exchanging auth code for access token and establishing session.
 // This endpoint is the V2 equivalent of /api/v1/oauth2/callback.
-func (c *Controller) OAuthCallback(ctx echo.Context) error {
+func (c *Handler) OAuthCallback(ctx echo.Context) error {
 	code := ctx.QueryParam("code")
 	redirect := ctx.QueryParam("redirect")
 
@@ -596,7 +649,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 	}
 
 	// 5. Validate redirect path (prevent open redirects)
-	safeRedirect := validateAndSanitizeRedirect(redirect)
+	safeRedirect := ValidateAndSanitizeRedirect(redirect)
 
 	c.LogSecurityInfoIfEnabled("Redirecting user to final destination",
 		logger.String("destination", safeRedirect),
@@ -607,8 +660,10 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 	return ctx.Redirect(http.StatusFound, safeRedirect)
 }
 
-// containsCRLFCharacters checks if a string contains CR/LF injection characters.
-func containsCRLFCharacters(s string) bool {
+// ContainsCRLFCharacters checks if a string contains CR/LF injection characters.
+// It is exported so the api/v2 security fuzz/invariant tests in package api can
+// exercise it across the package boundary after the auth domain split.
+func ContainsCRLFCharacters(s string) bool {
 	lower := strings.ToLower(s)
 	return strings.ContainsAny(s, "\r\n") ||
 		strings.Contains(lower, "%0d") ||
@@ -633,9 +688,11 @@ func isValidRelativePath(parsedURL *url.URL) bool {
 	return true
 }
 
-// validateAndSanitizeRedirect validates and sanitizes a redirect path to prevent open redirects.
-// Returns "/" if the path is invalid, otherwise returns the sanitized path.
-func validateAndSanitizeRedirect(redirect string) string {
+// ValidateAndSanitizeRedirect validates and sanitizes a redirect path to prevent open redirects.
+// Returns "/" if the path is invalid, otherwise returns the sanitized path. It is
+// exported so the api/v2 security fuzz/invariant tests in package api can
+// exercise it across the package boundary after the auth domain split.
+func ValidateAndSanitizeRedirect(redirect string) string {
 	if redirect == "" {
 		return "/"
 	}
