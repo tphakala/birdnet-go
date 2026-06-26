@@ -102,7 +102,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/analytics/confidence/distribution`  | `GetConfidenceDistribution` | ❌  | Confidence distribution per species: per-species normalized histogram of detection confidence scores (Review & Accuracy tab). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (single species filter; default is the top-N species by volume); `bins` optional (default 20, clamped to 5-50); `limit` optional (default 5, max 8) |
 | GET    | `/analytics/sources`                  | `GetAnalyticsSources`      | ❌   | Audio sources that have detections in range, powering the analytics hub's source/mic filter: each source's opaque id (string), display label, and in-range detection count (false positives excluded), most active first. `start_date`/`end_date` optional (omit both for all history). v2only (the legacy schema does not persist a detection's source; legacy returns an empty list). Source names are anonymized for unauthenticated clients; the opaque id is safe to expose. Returns `{sources[]}` (never null) |
 
-### Control Operations (`control.go`)
+### Control Operations (`control/control.go`)
 
 | Method | Route                         | Handler               | Auth | Description                            |
 | ------ | ----------------------------- | --------------------- | ---- | -------------------------------------- |
