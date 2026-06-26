@@ -69,6 +69,7 @@
     Info,
   } from '@lucide/svelte';
   import { api } from '$lib/utils/api';
+  import { type AudioDevice } from '$lib/utils/audioDevices';
   import { normalizeForLookup } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
@@ -282,8 +283,8 @@
   }
 
   // Audio source options - map to actual device names
-  // Note: v2 API returns lowercase field names (index, name, id)
-  let audioDevices = $state<ApiState<Array<{ index: number; name: string; id: string }>>>({
+  // Note: v2 API returns lowercase field names (index, name, id, stableId, busPath)
+  let audioDevices = $state<ApiState<AudioDevice[]>>({
     loading: true,
     error: null,
     data: [],
@@ -299,11 +300,6 @@
     audioDevices.error = null;
 
     try {
-      interface AudioDevice {
-        index: number;
-        name: string;
-        id: string;
-      }
       const data = await api.get<AudioDevice[]>('/api/v2/system/audio/devices');
       audioDevices.data = data || [];
     } catch (error) {

@@ -84,10 +84,19 @@ vi.mock('$lib/utils/audio/sampleRate', async importActual => ({
 }));
 
 describe('SoundCardManager sample rate probe (issue #3593)', () => {
-  function renderManager(audioDevices: Array<{ index: number; name: string; id: string }>) {
+  function renderManager(
+    audioDevices: Array<{
+      index: number;
+      name: string;
+      id: string;
+      stableId?: string;
+      busPath?: string;
+    }>,
+    sources: AudioSourceConfig[] = []
+  ) {
     return renderTyped(SoundCardManager, {
       props: {
-        sources: [] as AudioSourceConfig[],
+        sources,
         audioDevices,
         audioDevicesLoading: false,
         disabled: false,
@@ -125,6 +134,85 @@ describe('SoundCardManager sample rate probe (issue #3593)', () => {
       expect(rateSelect().querySelector(`option[value="${RATE_96K.value}"]`)).not.toBeNull();
     });
     expect(rateSelect().querySelector(`option[value="${RATE_192K.value}"]`)).not.toBeNull();
+  });
+
+  it('persists the stable USB token, not the unstable ALSA index (GH #3651)', async () => {
+    renderManager([
+      {
+        index: 0,
+        name: 'USB Audio Device',
+        id: ':1,0',
+        stableId: 'usb-path:usb-xhci-hcd.0-1',
+        busPath: 'usb-xhci-hcd.0-1',
+      },
+    ]);
+    await openAddForm();
+
+    const deviceSelect = await screen.findByTestId(DEVICE_SELECT_TESTID);
+    // The option value must be the reboot-stable token, not the unstable :1,0 index.
+    const opt = deviceSelect.querySelector('option[value="usb-path:usb-xhci-hcd.0-1"]');
+    expect(opt).not.toBeNull();
+    expect(deviceSelect.querySelector('option[value=":1,0"]')).toBeNull();
+    // A single uniquely-named device shows just its name, not the bus path jargon.
+    expect(opt?.textContent).toContain('USB Audio Device');
+    expect(opt?.textContent).not.toContain('usb-xhci-hcd.0-1');
+  });
+
+  it('appends the bus path only to disambiguate identical device names', async () => {
+    renderManager([
+      {
+        index: 0,
+        name: 'USB Audio Device',
+        id: ':1,0',
+        stableId: 'usb-path:portA',
+        busPath: 'portA',
+      },
+      {
+        index: 1,
+        name: 'USB Audio Device',
+        id: ':2,0',
+        stableId: 'usb-path:portB',
+        busPath: 'portB',
+      },
+    ]);
+    await openAddForm();
+
+    const deviceSelect = await screen.findByTestId(DEVICE_SELECT_TESTID);
+    const optA = deviceSelect.querySelector('option[value="usb-path:portA"]');
+    const optB = deviceSelect.querySelector('option[value="usb-path:portB"]');
+    expect(optA?.textContent).toContain('(portA)');
+    expect(optB?.textContent).toContain('(portB)');
+  });
+
+  it('hides a device already configured by either its legacy id or stable token', async () => {
+    renderManager(
+      [
+        {
+          index: 0,
+          name: 'USB Audio A',
+          id: ':1,0',
+          stableId: 'usb-path:portA',
+          busPath: 'portA',
+        },
+        {
+          index: 1,
+          name: 'USB Audio B',
+          id: ':2,0',
+          stableId: 'usb-path:portB',
+          busPath: 'portB',
+        },
+      ],
+      // A is configured under its legacy index; B is unconfigured.
+      [{ name: 'mic-a', device: ':1,0', gain: 1, models: [] } as AudioSourceConfig]
+    );
+    await openAddForm();
+
+    const deviceSelect = await screen.findByTestId(DEVICE_SELECT_TESTID);
+    // Device A is fully excluded under BOTH identifier forms (it must not reappear
+    // as its legacy id either), while the unconfigured B remains selectable.
+    expect(deviceSelect.querySelector('option[value="usb-path:portA"]')).toBeNull();
+    expect(deviceSelect.querySelector('option[value=":1,0"]')).toBeNull();
+    expect(deviceSelect.querySelector('option[value="usb-path:portB"]')).not.toBeNull();
   });
 
   it('ignores a stale probe that resolves after a newer device was selected', async () => {

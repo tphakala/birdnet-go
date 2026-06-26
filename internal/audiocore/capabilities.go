@@ -76,6 +76,12 @@ func ProbeAllDeviceCapabilities(log logger.Logger) {
 		}
 		capabilitiesCacheMu.Lock()
 		capabilitiesCache[dev.ID] = caps
+		// Also key by the stable USB token so a config persisted as "usb-path:..."
+		// hits this startup cache instead of falling through to a live exclusive-mode
+		// probe that contends with capture already holding the device (GH #3651).
+		if dev.StableID != "" {
+			capabilitiesCache[dev.StableID] = caps
+		}
 		capabilitiesCacheMu.Unlock()
 		log.Info("cached device capabilities",
 			logger.String("device", dev.Name),
@@ -101,9 +107,10 @@ func GetCachedCapabilities(deviceName string) *DeviceCapabilities {
 // probes the device live. The cache is populated at startup; live probing is
 // the fallback for devices plugged in after startup.
 func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabilities, error) {
-	// Check cache first (covers devices probed at startup).
-	// Direct lookup by ID, then iterate for name/substring match
-	// (same matching logic as matchesDevice in capture.go).
+	// Check cache first (covers devices probed at startup). The cache is keyed by
+	// both the decoded ALSA id and the stable USB token, so a direct lookup hits
+	// for a "usb-path:"/"usb-id:" config; the name-substring scan is a legacy
+	// fallback for name-based configs.
 	capabilitiesCacheMu.RLock()
 	if caps, ok := capabilitiesCache[deviceID]; ok {
 		capabilitiesCacheMu.RUnlock()
@@ -140,7 +147,7 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 			Component("audiocore.capabilities").
 			Category(errors.CategoryAudioSource).
 			Context("operation", "probe_context_init").
-			Context("device_id", deviceID).
+			Context("device_id", redactDeviceID(deviceID)).
 			Build()
 	}
 	defer uninitAndFreeContext(malgoCtx, log)
@@ -151,7 +158,7 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 			Component("audiocore.capabilities").
 			Category(errors.CategoryAudioSource).
 			Context("operation", "probe_enumerate_devices").
-			Context("device_id", deviceID).
+			Context("device_id", redactDeviceID(deviceID)).
 			Build()
 	}
 
@@ -159,6 +166,13 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 	var selectedInfo *malgo.DeviceInfo
 	var deviceName string
 
+	// Only a stable USB token needs the resolved USB identity to match; legacy
+	// id/name configs match without it. Parse the cards map once when needed.
+	needIdent := isUSBDeviceToken(deviceID)
+	var cards map[int]procCardEntry
+	if needIdent {
+		cards = readProcAsoundCards(defaultProcRoot)
+	}
 	for i := range infos {
 		decodedID, decErr := hexToASCII(infos[i].ID.String())
 		if decErr != nil {
@@ -167,7 +181,11 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 				logger.Error(decErr))
 			continue
 		}
-		if matchesDevice(decodedID, &infos[i], deviceID) {
+		var ident usbIdentity
+		if needIdent {
+			ident = usbIdentityForCard(parseALSACardNumber(decodedID), cards, defaultProcRoot)
+		}
+		if matchesDevice(decodedID, ident, infos[i].Name(), infos[i].IsDefault == 1, deviceID) {
 			selectedInfo = &infos[i]
 			deviceName = infos[i].Name()
 			break
@@ -186,7 +204,7 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 
 	if len(rates) > 0 && runtime.GOOS != captureOSLinux {
 		log.Debug("device capabilities from native formats",
-			logger.String("device_id", deviceID),
+			logger.String("device_id", redactDeviceID(deviceID)),
 			logger.String("device_name", deviceName),
 			logger.Any("sample_rates", rates))
 		return &DeviceCapabilities{
@@ -201,7 +219,7 @@ func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCap
 	// On other platforms, this is the fallback when formats are all zero.
 	if runtime.GOOS == captureOSLinux {
 		log.Info("probing device by init (ALSA zero-rate formats)",
-			logger.String("device_id", deviceID),
+			logger.String("device_id", redactDeviceID(deviceID)),
 			logger.String("device_name", deviceName))
 		rates = probeByInit(malgoCtx, selectedInfo, log)
 		if len(rates) > 0 {

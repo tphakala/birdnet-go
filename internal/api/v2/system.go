@@ -116,6 +116,17 @@ type AudioDeviceInfo struct {
 	Index int    `json:"index"`
 	Name  string `json:"name"`
 	ID    string `json:"id"`
+	// StableID is the reboot-stable identifier to persist for this device
+	// ("usb-path:..." / "usb-id:..."), empty when no stable USB identity exists.
+	// Clients should save this in preference to ID so the selection survives
+	// reboots (GH #3651).
+	StableID string `json:"stableId,omitempty"`
+	// BusPath is the USB bus path for display (e.g. "usb-0000:00:14.0-3"),
+	// empty for non-USB devices and non-Linux platforms.
+	BusPath string `json:"busPath,omitempty"`
+	// VendorID and ProductID are the 4-hex-digit USB ids, empty when unavailable.
+	VendorID  string `json:"vendorId,omitempty"`
+	ProductID string `json:"productId,omitempty"`
 }
 
 // ActiveAudioDevice represents the currently active audio device
@@ -858,9 +869,13 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 	apiDevices := make([]AudioDeviceInfo, len(devices))
 	for i, device := range devices {
 		apiDevices[i] = AudioDeviceInfo{
-			Index: device.Index,
-			Name:  device.Name,
-			ID:    device.ID,
+			Index:     device.Index,
+			Name:      device.Name,
+			ID:        device.ID,
+			StableID:  device.StableID,
+			BusPath:   device.BusPath,
+			VendorID:  device.VendorID,
+			ProductID: device.ProductID,
 		}
 	}
 
