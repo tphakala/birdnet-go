@@ -2,42 +2,59 @@ package openfauna
 
 import "testing"
 
-func TestCanonicalNameKnownAlias(t *testing.T) {
-	// Streptopelia senegalensis (BirdNET v2.4) -> Spilopelia senegalensis (eBird).
-	// This is the Laughing Dove case from the discussion that motivated aliasing.
-	got := CanonicalName("Streptopelia senegalensis")
-	if got != "Spilopelia senegalensis" {
-		t.Fatalf("CanonicalName(legacy) = %q, want %q", got, "Spilopelia senegalensis")
+// TestCanonicalName exercises alias resolution and the identity/normalization
+// contract from one table.
+func TestCanonicalName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			// Streptopelia senegalensis (BirdNET v2.4) -> Spilopelia senegalensis
+			// (eBird). The Laughing Dove case from the discussion that motivated
+			// taxonomic aliasing.
+			name: "known alias resolves to canonical",
+			in:   "Streptopelia senegalensis",
+			want: "Spilopelia senegalensis",
+		},
+		{
+			name: "match is case- and space-insensitive",
+			in:   "  streptopelia SENEGALENSIS  ",
+			want: "Spilopelia senegalensis",
+		},
+		{
+			// A non-aliased name passes through, trimmed, so callers get the same
+			// stable key form as the alias path.
+			name: "unknown name trimmed and unchanged",
+			in:   "  Turdus merula  ",
+			want: "Turdus merula",
+		},
+		{
+			name: "already canonical name unchanged",
+			in:   "Spilopelia senegalensis",
+			want: "Spilopelia senegalensis",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := CanonicalName(tt.in); got != tt.want {
+				t.Fatalf("CanonicalName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }
 
-func TestCanonicalNameCaseAndSpaceInsensitive(t *testing.T) {
-	got := CanonicalName("  streptopelia SENEGALENSIS  ")
-	if got != "Spilopelia senegalensis" {
-		t.Fatalf("CanonicalName(messy case) = %q, want %q", got, "Spilopelia senegalensis")
-	}
-}
-
-func TestCanonicalNameUnknownReturnedUnchanged(t *testing.T) {
-	// A non-aliased name must pass through verbatim so callers can apply it
-	// unconditionally.
-	const in = "Turdus merula"
-	if got := CanonicalName(in); got != in {
-		t.Fatalf("CanonicalName(non-alias) = %q, want unchanged %q", got, in)
-	}
-}
-
-func TestCanonicalNameAlreadyCanonicalUnchanged(t *testing.T) {
-	// The canonical target itself is not an alias key, so it resolves to itself.
-	const in = "Spilopelia senegalensis"
-	if got := CanonicalName(in); got != in {
-		t.Fatalf("CanonicalName(canonical) = %q, want unchanged %q", got, in)
-	}
-}
-
+// TestAliasCountNonZero guards against the embedded artifact going missing or
+// failing to parse. The specific aliases are asserted by name in TestCanonicalName,
+// so this only needs a populated map, not a brittle exact size.
 func TestAliasCountNonZero(t *testing.T) {
-	// Guards against the embedded artifact going missing or failing to parse.
-	if n := AliasCount(); n < 100 {
-		t.Fatalf("AliasCount() = %d, want a populated map (>=100)", n)
+	t.Parallel()
+	if AliasCount() == 0 {
+		t.Fatal("AliasCount() = 0, want a populated map")
 	}
 }

@@ -2,6 +2,7 @@ package openfauna
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -41,12 +42,18 @@ func loadAliases() {
 	}
 	m := make(map[string]string, len(raw))
 	for legacy, canonical := range raw {
-		// An empty key or value cannot drive a useful rewrite; a self-alias is a
-		// no-op. Skipping all three keeps CanonicalName's identity contract intact.
-		if legacy == "" || canonical == "" || legacy == canonical {
+		// Normalize both sides before validating. Using the normalized key for the
+		// guards means a whitespace-only legacy key (which normalizes to "") cannot
+		// map "" to a canonical name (which would make CanonicalName("") wrongly
+		// return that name), and a case- or whitespace-only "self alias" is skipped
+		// as the no-op it is. The stored value is trimmed so CanonicalName always
+		// returns a stable key form.
+		normLegacy := normalizeName(legacy)
+		canonical = strings.TrimSpace(canonical)
+		if normLegacy == "" || canonical == "" || normLegacy == normalizeName(canonical) {
 			continue
 		}
-		m[normalizeName(legacy)] = canonical
+		m[normLegacy] = canonical
 	}
 	aliasMap = m
 }
@@ -65,7 +72,10 @@ func CanonicalName(scientific string) string {
 	if canonical, ok := aliasMap[normalizeName(scientific)]; ok {
 		return canonical
 	}
-	return scientific
+	// Trim the identity path too, so an unaliased name returns the same stable key
+	// form as an aliased one (callers lowercasing the result for lookup keys must
+	// not have "  Spilopelia senegalensis  " miss the species it equals).
+	return strings.TrimSpace(scientific)
 }
 
 // AliasCount returns the number of taxonomic aliases loaded from the embedded

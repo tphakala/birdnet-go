@@ -21,6 +21,14 @@ import (
 // name resolves to itself, so this is a no-op for species without a
 // reclassification.
 func canonicalSci(label string) string {
+	// Mirror detection.ExtractScientificName's sanitization (trim, strip CR, then
+	// split on the first underscore) so this key matches the one the range-filter
+	// species mapping builds for the same label, including labels that arrive with
+	// trailing whitespace or CRLF line endings. The logic is duplicated rather than
+	// shared because internal/detection imports internal/conf, so conf importing
+	// detection would create an import cycle.
+	label = strings.TrimSpace(label)
+	label = strings.ReplaceAll(label, "\r", "")
 	sci := label
 	if idx := strings.IndexByte(label, '_'); idx >= 0 {
 		sci = label[:idx]

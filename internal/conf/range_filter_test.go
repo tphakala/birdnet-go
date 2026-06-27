@@ -339,6 +339,8 @@ func TestIsSpeciesIncluded_TaxonomicAlias(t *testing.T) {
 		{"legacy label resolves to canonical", "Streptopelia senegalensis_Laughing Dove", true},
 		{"legacy scientific only", "Streptopelia senegalensis", true},
 		{"canonical label matches directly", "Spilopelia senegalensis_Laughing Dove", true},
+		{"legacy label with surrounding whitespace", "  Streptopelia senegalensis  ", true},
+		{"legacy label with CRLF carriage return", "Streptopelia senegalensis\r", true},
 		{"unrelated species not included", "Ficedula hypoleuca", false},
 	}
 
