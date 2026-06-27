@@ -9,7 +9,7 @@
 // progress. The fix keys the in-memory queue on an immutable identifier (note ID
 // plus visual params) that does not depend on Export.Path, so enqueue, the worker,
 // and the status poll always agree.
-package api
+package media
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 
 	controllerCore := &apicore.Core{SFS: sfs, DS: mockDS}
 	controllerCore.SetTestContext(t.Context(), nil)
-	controller := &Controller{Core: controllerCore}
+	controller := &Handler{Core: controllerCore}
 	controller.Settings.Store(settings)
 	conftest.SetTestSettings(settings)
 
@@ -118,7 +118,7 @@ func TestGenerateSpectrogramFromRelRetainsFailedStatusForPolling(t *testing.T) {
 	settings := apitest.NewValidTestSettings()
 	controllerCore := &apicore.Core{SFS: sfs}
 	controllerCore.SetTestContext(ctx, nil)
-	controller := &Controller{Core: controllerCore}
+	controller := &Handler{Core: controllerCore}
 	controller.Settings.Store(settings)
 	conftest.SetTestSettings(settings)
 

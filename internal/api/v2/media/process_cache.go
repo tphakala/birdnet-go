@@ -1,4 +1,4 @@
-package api
+package media
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -61,7 +62,7 @@ func (c *processingCache) get(key string) []byte {
 	}
 	if time.Since(info.ModTime()) > processingCacheTTL {
 		if err := os.Remove(path); err != nil {
-			GetLogger().Debug("Processing cache: failed to remove expired entry on read",
+			apicore.GetLogger().Debug("Processing cache: failed to remove expired entry on read",
 				logger.String("path", path),
 				logger.Error(err))
 		}
@@ -112,7 +113,7 @@ func (c *processingCache) put(key string, data []byte) error {
 func (c *processingCache) evictIfNeeded() {
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
-		GetLogger().Debug("Processing cache: failed to read directory for eviction",
+		apicore.GetLogger().Debug("Processing cache: failed to read directory for eviction",
 			logger.String("dir", c.dir),
 			logger.Error(err))
 		return
@@ -132,7 +133,7 @@ func (c *processingCache) evictIfNeeded() {
 		}
 		info, err := e.Info()
 		if err != nil {
-			GetLogger().Debug("Processing cache: failed to stat entry during eviction",
+			apicore.GetLogger().Debug("Processing cache: failed to stat entry during eviction",
 				logger.String("name", e.Name()),
 				logger.Error(err))
 			continue
@@ -154,7 +155,7 @@ func (c *processingCache) evictIfNeeded() {
 	}
 	for i := range min(toRemove, len(files)) {
 		if err := os.Remove(files[i].path); err != nil {
-			GetLogger().Debug("Processing cache: failed to remove file during eviction",
+			apicore.GetLogger().Debug("Processing cache: failed to remove file during eviction",
 				logger.String("path", files[i].path),
 				logger.Error(err))
 		}
@@ -167,7 +168,7 @@ func (c *processingCache) cleanExpired() {
 	defer c.mu.Unlock()
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
-		GetLogger().Debug("Processing cache: failed to read directory for cleanup",
+		apicore.GetLogger().Debug("Processing cache: failed to read directory for cleanup",
 			logger.String("dir", c.dir),
 			logger.Error(err))
 		return
@@ -178,14 +179,14 @@ func (c *processingCache) cleanExpired() {
 		}
 		info, err := e.Info()
 		if err != nil {
-			GetLogger().Debug("Processing cache: failed to stat entry during cleanup",
+			apicore.GetLogger().Debug("Processing cache: failed to stat entry during cleanup",
 				logger.String("name", e.Name()),
 				logger.Error(err))
 			continue
 		}
 		if time.Since(info.ModTime()) > processingCacheTTL {
 			if err := os.Remove(filepath.Join(c.dir, e.Name())); err != nil {
-				GetLogger().Debug("Processing cache: failed to remove expired file",
+				apicore.GetLogger().Debug("Processing cache: failed to remove expired file",
 					logger.String("name", e.Name()),
 					logger.Error(err))
 			}

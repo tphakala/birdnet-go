@@ -1,5 +1,5 @@
-// internal/api/v2/media.go
-package api
+// internal/api/v2/media/media.go
+package media
 
 import (
 	"context"
@@ -30,9 +30,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// Non-standard HTTP status codes
+// Non-standard HTTP status codes. Aliased from apicore so this media handler and
+// the analytics handler (still in package api) share one source for the
+// client-closed status.
 const (
-	StatusClientClosedRequest = 499 // Nginx's non-standard status for client closed connection
+	StatusClientClosedRequest = apicore.StatusClientClosedRequest // Nginx's non-standard status for client closed connection
 )
 
 // Spectrogram size constants - FFT-friendly dimensions. Aliased from apicore so
@@ -54,6 +56,18 @@ const (
 	MimeTypeMP3  = "audio/mpeg"
 	MimeTypeM4A  = "audio/mp4"
 	MimeTypeOGG  = "audio/ogg"
+)
+
+// Cache duration in seconds for HTTP Cache-Control headers on media responses.
+const (
+	// ImageCacheSeconds is the cache duration for species images in seconds
+	ImageCacheSeconds = 2592000 // 30 days
+
+	// NotFoundCacheSeconds is the cache duration for 404 responses in seconds
+	NotFoundCacheSeconds = 86400 // 24 hours
+
+	// SpectrogramCacheSeconds is the cache duration for spectrograms in seconds
+	SpectrogramCacheSeconds = 2592000 // 30 days
 )
 
 // isClipNotFoundErr reports whether err indicates the audio clip or its parent
@@ -172,23 +186,32 @@ type ProcessAudioRequest struct {
 	GainDB    float64 `json:"gain_db"`
 }
 
-// Initialize media routes
-func (c *Controller) initMediaRoutes() {
+// RegisterRoutes registers the media domain routes. It is called by the facade
+// in the deterministic initRoutes order, at the same slot the former
+// initMediaRoutes occupied, so the registered route set stays byte-identical.
+//
+// The /media/* routes register on the passed v2 group g (== c.Group). The
+// ID-based routes register directly on c.Echo (the embedded core's Echo
+// instance), preserving the greedy GET /api/v2/audio/:id route documented in
+// internal/api/v2/CLAUDE.md: it is registered on the Echo instance (not the
+// group) and catches all /api/v2/audio/* paths. Registering it here, at the
+// media slot, keeps it on c.Echo at the exact same point in initialization.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	c.LogInfoIfEnabled("Initializing media routes")
 
 	// Datastore-independent media routes serve from SecureFS / BirdImageCache and do
 	// not touch c.DS, so they register regardless of datastore availability.
 	// Original filename-based routes (keep for backward compatibility if needed, but ensure they use SFS)
-	c.Group.GET("/media/audio/:filename", c.ServeAudioClip)
-	c.Group.GET("/media/spectrogram/:filename", c.ServeSpectrogram)
+	g.GET("/media/audio/:filename", c.ServeAudioClip)
+	g.GET("/media/spectrogram/:filename", c.ServeSpectrogram)
 
 	// Bird image endpoints
-	c.Group.GET("/media/species-image", c.GetSpeciesImage)
-	c.Group.GET("/media/species-image/info", c.GetSpeciesImageInfo)
+	g.GET("/media/species-image", c.GetSpeciesImage)
+	g.GET("/media/species-image/info", c.GetSpeciesImageInfo)
 
 	// Proxied bird image endpoints (serve cached files, solve CORS)
-	c.Group.GET("/media/image/:scientific_name", c.ServeSpeciesImageProxy)
-	c.Group.GET("/media/bird-image/:scientific_name", c.ServeSpeciesImageProxy) // backward-compat alias
+	g.GET("/media/image/:scientific_name", c.ServeSpeciesImageProxy)
+	g.GET("/media/bird-image/:scientific_name", c.ServeSpeciesImageProxy) // backward-compat alias
 
 	// The remaining ID-based media handlers dereference c.DS (clip/model lookups).
 	// Honor the constructor's "datastore disabled" mode (NewWithOptions permits a nil
@@ -200,7 +223,8 @@ func (c *Controller) initMediaRoutes() {
 		return
 	}
 
-	// ID-based routes using SFS
+	// ID-based routes using SFS. Registered on c.Echo (not the group); the
+	// GET /api/v2/audio/:id route is greedy and catches all /api/v2/audio/* paths.
 	c.Echo.GET("/api/v2/audio/:id", c.ServeAudioByID)
 	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID)
 	c.Echo.GET("/api/v2/spectrogram/:id/status", c.GetSpectrogramStatus)
@@ -216,7 +240,7 @@ func (c *Controller) initMediaRoutes() {
 	c.Echo.POST("/api/v2/spectrogram/:id/process", c.ProcessedSpectrogramByID, c.AuthMiddleware)
 
 	// Convenient combined endpoint (redirects to ID-based internally)
-	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
+	g.GET("/media/audio", c.ServeAudioByQueryID)
 
 	c.LogInfoIfEnabled("Media routes initialized successfully")
 }
@@ -224,7 +248,7 @@ func (c *Controller) initMediaRoutes() {
 // translateSecureFSError handles SecureFS errors consistently across handler methods.
 // It checks if the error is already an HTTPError from SecureFS and returns it directly,
 // or maps specific error types to appropriate HTTP status codes.
-func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg string) error {
+func (c *Handler) translateSecureFSError(ctx echo.Context, err error, userMsg string) error {
 	var httpErr *echo.HTTPError
 	if errors.As(err, &httpErr) {
 		// If it's already an HTTPError from SecureFS, just pass it through
@@ -361,7 +385,7 @@ func parseRawParameter(rawParam string) bool {
 // so a temp written by an older build mid-upgrade is handled. Returning the
 // concrete path lets a waiting caller poll that fixed name with StatRel instead
 // of re-scanning the directory on every tick.
-func (c *Controller) findEncodingTempPath(relClipPath string) (string, bool) {
+func (c *Handler) findEncodingTempPath(relClipPath string) (string, bool) {
 	dir := filepath.Dir(relClipPath)
 	entries, err := c.SFS.ReadDirRel(dir)
 	if err != nil {
@@ -418,14 +442,14 @@ func isExportTempFor(name, base string) bool {
 // exists for relClipPath. Callers that then wait for the clip should use
 // findEncodingTempPath directly so they can poll the temp's fixed name with
 // StatRel rather than re-scanning the directory each tick.
-func (c *Controller) isAudioBeingEncoded(relClipPath string) bool {
+func (c *Handler) isAudioBeingEncoded(relClipPath string) bool {
 	_, ok := c.findEncodingTempPath(relClipPath)
 	return ok
 }
 
 // handleAudioNotReady returns a 503 Service Unavailable response with a
 // Retry-After header, indicating that the audio file is still being encoded.
-func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
+func (c *Handler) handleAudioNotReady(ctx echo.Context) error {
 	ctx.Response().Header().Set("Retry-After", audioRetryAfterSeconds)
 	return c.HandleError(ctx, ffmpeg.ErrAudioFileNotReady,
 		"Audio file is still being processed, please retry",
@@ -437,7 +461,7 @@ func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
 // timeout, false if encoding is still ongoing or the temp file disappeared.
 // This reduces 503 responses by waiting server-side instead of requiring
 // the client to retry.
-func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath, tempPath string) bool {
+func (c *Handler) waitForAudioFile(ctx echo.Context, relClipPath, tempPath string) bool {
 	// Resolve the wait timeout. Production leaves the override at zero and uses the
 	// default constant; tests inject a short timeout to exercise the
 	// 503-after-timeout path without waiting the full default.
@@ -470,7 +494,7 @@ func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath, tempPath st
 		// Wait for the next event.
 		select {
 		case <-waitCtx.Done():
-			// Timeout or client disconnect — final check in case file appeared
+			// Timeout or client disconnect - final check in case file appeared
 			// between the last tick and the deadline.
 			_, err := c.SFS.StatRel(relClipPath)
 			return err == nil
@@ -485,7 +509,7 @@ func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath, tempPath st
 // detection DB record is committed but FFmpeg hasn't created the temp file
 // yet, or has already atomically renamed it to the final path.
 // Returns true if the file appeared within the grace period.
-func (c *Controller) waitForAudioFileGrace(ctx echo.Context, relClipPath string) bool {
+func (c *Handler) waitForAudioFileGrace(ctx echo.Context, relClipPath string) bool {
 	// Check immediately to avoid waiting one full poll interval when the file
 	// appears right after the initial 404.
 	if _, err := c.SFS.StatRel(relClipPath); err == nil {
@@ -517,13 +541,13 @@ func (c *Controller) waitForAudioFileGrace(ctx echo.Context, relClipPath string)
 // then falls back to a brief grace period for the race window where FFmpeg hasn't
 // created the temp file yet or already renamed it. Returns nil if the file was
 // successfully served, or the original/translated error otherwise.
-func (c *Controller) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, logFields ...logger.Field) error {
+func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, logFields ...logger.Field) error {
 	if tempPath, encoding := c.findEncodingTempPath(relClipPath); encoding {
 		// Wait server-side for the file to appear instead of immediately
 		// returning 503, reducing unnecessary client round-trips. Pass the
 		// concrete temp path so the wait loop polls it directly.
 		if c.waitForAudioFile(ctx, relClipPath, tempPath) {
-			// File appeared — serve it now
+			// File appeared - serve it now
 			if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
 				return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
 			}
@@ -534,12 +558,12 @@ func (c *Controller) handleAudio404WithWait(ctx echo.Context, relClipPath string
 		if c.isAudioBeingEncoded(relClipPath) {
 			return c.handleAudioNotReady(ctx)
 		}
-		// Temp file disappeared and final file is still missing —
+		// Temp file disappeared and final file is still missing -
 		// encoding failed, fall back to normal error translation.
 		return c.translateSecureFSError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
 	}
 
-	// No temp file visible — brief grace wait for the race window where
+	// No temp file visible - brief grace wait for the race window where
 	// FFmpeg hasn't created the temp file yet or already renamed it.
 	if c.waitForAudioFileGrace(ctx, relClipPath) {
 		if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
@@ -553,7 +577,7 @@ func (c *Controller) handleAudio404WithWait(ctx echo.Context, relClipPath string
 }
 
 // ServeAudioClip serves an audio clip file by filename using SecureFS
-func (c *Controller) ServeAudioClip(ctx echo.Context) error {
+func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 	if filename == "" {
 		c.LogErrorIfEnabled("Missing filename parameter for ServeAudioClip",
@@ -612,7 +636,7 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 }
 
 // ServeAudioByID serves an audio clip file based on note ID using SecureFS
-func (c *Controller) ServeAudioByID(ctx echo.Context) error {
+func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereference below anyway.
 	if err := c.RequireDatastore(ctx); err != nil {
@@ -709,7 +733,7 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 //
 // POST /api/v2/audio/:id/clip
 // Body: {"start": 1.5, "end": 4.2, "format": "mp3"}
-func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
+func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereference below anyway.
 	if err := c.RequireDatastore(ctx); err != nil {
@@ -863,7 +887,7 @@ func clipFileExtension(format string) string {
 //
 // POST /api/v2/audio/:id/process
 // Body: {"normalize": true, "denoise": "medium", "gain_db": 6.0}
-func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
+func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereference below anyway.
 	if err := c.RequireDatastore(ctx); err != nil {
@@ -983,7 +1007,7 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 // POST /api/v2/spectrogram/:id/process
 // Body: {"normalize": true, "denoise": "medium", "gain_db": 0}
 // Query: same as GET /api/v2/spectrogram/:id (size, raw)
-func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
+func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereference below anyway.
 	if err := c.RequireDatastore(ctx); err != nil {
@@ -1103,13 +1127,13 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to read spectrogram", http.StatusInternalServerError)
 	}
 
-	// No cache — processed spectrograms are ephemeral previews
+	// No cache - processed spectrograms are ephemeral previews
 	ctx.Response().Header().Set("Cache-Control", "no-store")
 	return ctx.Blob(http.StatusOK, "image/png", pngData)
 }
 
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
-func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
+func (c *Handler) spectrogramHTTPError(ctx echo.Context, err error) error {
 	switch {
 	case errors.Is(err, ffmpeg.ErrAudioFileNotReady) || errors.Is(err, ffmpeg.ErrAudioFileIncomplete):
 		// Audio file is not ready yet - client should retry
@@ -1166,7 +1190,7 @@ type spectrogramParameters struct {
 // Style and dynamic range are read from settings (not query params) because they are
 // global settings that affect the visual appearance of all spectrograms. Including them
 // in the filename prevents serving stale cached spectrograms when these settings change.
-func (c *Controller) parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
+func (c *Handler) parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
 	spec := c.CurrentSettings().Realtime.Dashboard.Spectrogram
 	params := spectrogramParameters{
 		width:        SpectrogramSizeLg, // Default width (lg) - single render size for all contexts
@@ -1197,7 +1221,7 @@ func (c *Controller) parseSpectrogramParameters(ctx echo.Context) spectrogramPar
 
 // validateNoteIDAndGetClipPath validates the note ID parameter and retrieves the clip path.
 // Returns the noteID and clipPath, or an error if validation fails.
-func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPath string, err error) {
+func (c *Handler) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPath string, err error) {
 	// Defense in depth: initMediaRoutes already skips registering the ID-based media
 	// handlers when the datastore is disabled, but guard the c.DS dereference below
 	// anyway.
@@ -1256,7 +1280,7 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 
 // handleUserRequestedMode handles spectrogram serving in user-requested mode.
 // Returns true if the request was handled (either success or error response sent).
-func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string) (bool, error) {
+func (c *Handler) handleUserRequestedMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string) (bool, error) {
 	// Normalize and validate the audio path
 	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
 	normalizedPath := apicore.NormalizeClipPath(clipPath, clipsPrefix)
@@ -1299,7 +1323,7 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 
 // returnSpectrogramNotGeneratedError returns a standardized 404 response for user-requested mode
 // when a spectrogram hasn't been generated yet.
-func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool, error) {
+func (c *Handler) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool, error) {
 	// Return JSON response with mode information using standard v2 error envelope.
 	// Flow: <img> element's onerror handler triggers -> frontend makes fetch() call to same URL
 	// -> this JSON response is parsed by frontend -> mode field triggers UI to show "Generate" button
@@ -1330,7 +1354,7 @@ func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool,
 }
 
 // handleAutoPreRenderMode handles spectrogram generation and serving in auto/prerender modes.
-func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string, extraOpts ...spectrogram.GenerateOption) error {
+func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string, extraOpts ...spectrogram.GenerateOption) error {
 	// Auto or prerender mode - generate on-demand if needed
 	generationStart := time.Now()
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, extraOpts...)
@@ -1365,7 +1389,7 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
 
-	// Set cache headers before serving — spectrograms are deterministic (same clip + params = same image)
+	// Set cache headers before serving - spectrograms are deterministic (same clip + params = same image)
 	// and never change once generated. This allows browsers to serve from disk cache on reload,
 	// avoiding HTTP/1.1 connection exhaustion when loading many detection cards simultaneously.
 	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
@@ -1448,7 +1472,7 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 //
 // The raw parameter defaults to true to maintain compatibility with existing cached
 // spectrograms from the old HTMX API which generated raw spectrograms by default.
-func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
+func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
 	if err != nil {
@@ -1493,7 +1517,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 }
 
 // ServeAudioByQueryID serves an audio clip using query parameter for ID
-func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
+func (c *Handler) ServeAudioByQueryID(ctx echo.Context) error {
 	noteID := ctx.QueryParam("id")
 	if noteID == "" {
 		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required as query parameter", http.StatusBadRequest)
@@ -1519,7 +1543,7 @@ func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
 //
 // The raw parameter defaults to true to maintain compatibility with existing cached
 // spectrograms from the old HTMX API which generated raw spectrograms by default.
-func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
+func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 
 	// Parse size parameter
@@ -1593,7 +1617,7 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 //   - "generated": Successfully generated (in queue cache)
 //   - "failed": Generation failed
 //   - "exists": Already exists on disk
-func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
+func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes already skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereferences below anyway.
 	if err := c.RequireDatastore(ctx); err != nil {
@@ -1723,7 +1747,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 //   - 404 Not Found: Audio file not found
 //   - 408 Request Timeout: Generation timed out
 //   - 500 Internal Server Error: Generation failed
-func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
+func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path using shared helper
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
 	if err != nil {
@@ -1881,8 +1905,8 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 }
 
 // maxConcurrentSpectrograms limits concurrent spectrogram generations to the number of CPU cores.
-// This adapts automatically to the deployment hardware — 4 on Raspberry Pi 4/5, fewer on Pi Zero/3,
-// more on multi-core desktops — preventing CPU contention while utilizing available resources.
+// This adapts automatically to the deployment hardware - 4 on Raspberry Pi 4/5, fewer on Pi Zero/3,
+// more on multi-core desktops - preventing CPU contention while utilizing available resources.
 var maxConcurrentSpectrograms = runtime.NumCPU()
 
 // semaphoreAcquireTimeout is the maximum time to wait for a semaphore slot before timing out
@@ -1977,7 +2001,7 @@ func getSpectrogramLogger() logger.Logger {
 // resolveDetectionFrequencyProfile resolves a detection's spectrogram frequency
 // profile from its model type, defaulting to the bird profile when the model
 // type cannot be looked up.
-func (c *Controller) resolveDetectionFrequencyProfile(noteID string) spectrogram.FrequencyProfile {
+func (c *Handler) resolveDetectionFrequencyProfile(noteID string) spectrogram.FrequencyProfile {
 	modelType, err := c.DS.GetNoteModelType(noteID)
 	if err != nil {
 		c.LogWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
@@ -1991,7 +2015,7 @@ func (c *Controller) resolveDetectionFrequencyProfile(noteID string) spectrogram
 // detection so by-ID spectrogram paths and queue keys do not collide with the
 // default bird-profile render. Returns "" (bird) when the model type cannot be
 // resolved.
-func (c *Controller) spectrogramProfileSuffix(noteID string) string {
+func (c *Handler) spectrogramProfileSuffix(noteID string) string {
 	return spectrogram.ProfileSuffix(c.resolveDetectionFrequencyProfile(noteID))
 }
 
@@ -2108,7 +2132,7 @@ type durationCacheEntry struct {
 
 // validateSpectrogramInputs validates that the audio file is complete and ready for spectrogram generation.
 // It returns the validation result and any error encountered during validation.
-func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, queueKey string) (*ffmpeg.ValidationResult, error) {
+func (c *Handler) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, queueKey string) (*ffmpeg.ValidationResult, error) {
 	// Check cache first
 	fileInfo, err := os.Stat(absAudioPath)
 	if err != nil {
@@ -2329,7 +2353,7 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 }
 
 // normalizeAndValidatePath handles path normalization and validation
-func (c *Controller) normalizeAndValidatePath(audioPath string) (string, error) {
+func (c *Handler) normalizeAndValidatePath(audioPath string) (string, error) {
 	// Pass nil since spectrogram context has its own logging via getSpectrogramLogger()
 	return c.normalizeAndValidatePathWithLogger(audioPath, nil)
 }
@@ -2342,7 +2366,7 @@ func (c *Controller) normalizeAndValidatePath(audioPath string) (string, error) 
 // 4. Validating with SecureFS
 //
 // This reduces duplication across the codebase where this pattern is used.
-func (c *Controller) normalizeAndValidatePathWithLogger(audioPath string, log logger.Logger) (string, error) {
+func (c *Handler) normalizeAndValidatePathWithLogger(audioPath string, log logger.Logger) (string, error) {
 	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
 	normalizedPath := apicore.NormalizeClipPath(audioPath, clipsPrefix)
 
@@ -2374,7 +2398,7 @@ func (c *Controller) normalizeAndValidatePathWithLogger(audioPath string, log lo
 }
 
 // checkSpectrogramExists performs fast path check for existing spectrogram
-func (c *Controller) checkSpectrogramExists(relSpectrogramPath, queueKey string, start time.Time) (bool, error) {
+func (c *Handler) checkSpectrogramExists(relSpectrogramPath, queueKey string, start time.Time) (bool, error) {
 	getSpectrogramLogger().Debug("Fast path check: checking if spectrogram exists",
 		logger.String("queue_key", queueKey),
 		logger.String("relative_spectrogram_path", relSpectrogramPath))
@@ -2430,7 +2454,7 @@ func (c *Controller) checkSpectrogramExists(relSpectrogramPath, queueKey string,
 }
 
 // updateQueueStatus updates the spectrogram generation queue status (thread-safe)
-func (c *Controller) updateQueueStatus(queueKey, status string, queuePos int, message string) {
+func (c *Handler) updateQueueStatus(queueKey, status string, queuePos int, message string) {
 	// Using sync.Map for lock-free lookups + struct mutex for safe updates
 	if statusValue, exists := spectrogramQueue.Load(queueKey); exists {
 		if queueStatus, ok := statusValue.(*SpectrogramQueueStatus); ok {
@@ -2444,7 +2468,7 @@ func (c *Controller) updateQueueStatus(queueKey, status string, queuePos int, me
 }
 
 // checkAudioFileExists verifies the audio file exists
-func (c *Controller) checkAudioFileExists(relAudioPath string) error {
+func (c *Handler) checkAudioFileExists(relAudioPath string) error {
 	getSpectrogramLogger().Debug("Checking if audio file exists",
 		logger.String("relative_audio_path", relAudioPath))
 
@@ -2474,8 +2498,8 @@ func (c *Controller) checkAudioFileExists(relAudioPath string) error {
 // It uses the same timeout and poll interval as the audio serving wait logic
 // (audioWaitTimeout / audioWaitPollInterval).
 // Returns nil if the file appeared, or the original not-found error otherwise.
-func (c *Controller) waitForAudioFileCtx(ctx context.Context, relAudioPath string) error {
-	// Immediate check — avoid waiting if file already exists.
+func (c *Handler) waitForAudioFileCtx(ctx context.Context, relAudioPath string) error {
+	// Immediate check - avoid waiting if file already exists.
 	if _, err := c.SFS.StatRel(relAudioPath); err == nil {
 		return nil
 	}
@@ -2489,7 +2513,7 @@ func (c *Controller) waitForAudioFileCtx(ctx context.Context, relAudioPath strin
 	for {
 		select {
 		case <-waitCtx.Done():
-			// Final check before giving up — the file may have appeared
+			// Final check before giving up - the file may have appeared
 			// between the last tick and the deadline.
 			if _, err := c.SFS.StatRel(relAudioPath); err == nil {
 				return nil
@@ -2510,7 +2534,7 @@ func (c *Controller) waitForAudioFileCtx(ctx context.Context, relAudioPath strin
 
 // initializeQueueStatus initializes the queue tracking for a spectrogram request
 // Optimized to minimize lock hold time - calculation done outside lock, only write is locked
-func (c *Controller) initializeQueueStatus(queueKey string) {
+func (c *Handler) initializeQueueStatus(queueKey string) {
 	// Step 1: Calculate queue position OUTSIDE the lock to minimize contention
 	currentSlotsInUse := len(spectrogramSemaphore)
 
@@ -2548,7 +2572,7 @@ func (c *Controller) initializeQueueStatus(queueKey string) {
 
 // cleanupQueueStatus removes the queue entry for a spectrogram request
 // Failed statuses are retained briefly (30s) so polling clients can see the error
-func (c *Controller) cleanupQueueStatus(queueKey string) {
+func (c *Handler) cleanupQueueStatus(queueKey string) {
 	// Check if this is a failed status that should be retained temporarily
 	if statusValue, ok := spectrogramQueue.Load(queueKey); ok {
 		if status, ok := statusValue.(*SpectrogramQueueStatus); ok {
@@ -2582,7 +2606,7 @@ func deleteFailedStatusIfUnchanged(queueKey string, original any) {
 
 // acquireSemaphoreSlot acquires a semaphore slot for spectrogram generation
 // With timeout handling to prevent indefinite blocking
-func (c *Controller) acquireSemaphoreSlot(ctx context.Context, queueKey string) error {
+func (c *Handler) acquireSemaphoreSlot(ctx context.Context, queueKey string) error {
 	slotsInUseBeforeAcquire := len(spectrogramSemaphore)
 	availableSlots := maxConcurrentSpectrograms - slotsInUseBeforeAcquire
 
@@ -2632,8 +2656,8 @@ func (c *Controller) acquireSemaphoreSlot(ctx context.Context, queueKey string) 
 }
 
 // performSpectrogramGeneration executes the actual spectrogram generation logic
-func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey string, width int, raw bool, validatedDuration float64, extraOpts ...spectrogram.GenerateOption) (any, error) {
-	// Fast path inside the group – now race-free
+func (c *Handler) performSpectrogramGeneration(ctx context.Context, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey string, width int, raw bool, validatedDuration float64, extraOpts ...spectrogram.GenerateOption) (any, error) {
+	// Fast path inside the group - now race-free
 	getSpectrogramLogger().Debug("Inside singleflight group, double-checking if spectrogram exists",
 		logger.String("queue_key", queueKey))
 
@@ -2706,7 +2730,7 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 
 // verifySpectrogramFile checks that a spectrogram file exists with retries for filesystem sync delays.
 // It tries direct filesystem and SecureFS checks with exponential backoff.
-func (c *Controller) verifySpectrogramFile(absPath, relPath string) error {
+func (c *Handler) verifySpectrogramFile(absPath, relPath string) error {
 	var statErr error
 	for i := range spectrogramVerifyRetries {
 		// Try direct filesystem check first (more reliable for newly created files)
@@ -2765,7 +2789,7 @@ func (c *Controller) verifySpectrogramFile(absPath, relPath string) error {
 }
 
 // generateWithFallback attempts to generate a spectrogram with SoX, falling back to FFmpeg on failure
-func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, queueKey string, width int, raw bool, validatedDuration float64, extraOpts ...spectrogram.GenerateOption) error {
+func (c *Handler) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, queueKey string, width int, raw bool, validatedDuration float64, extraOpts ...spectrogram.GenerateOption) error {
 	generationStart := time.Now()
 
 	getSpectrogramLogger().Debug("Starting spectrogram generation via shared generator",
@@ -2822,7 +2846,7 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 // the relative path at a request boundary (e.g. GenerateSpectrogramByID) must
 // call generateSpectrogramFromRel directly and thread that path in, so the queue
 // key cannot drift if Export.Path changes mid-flight.
-func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
+func (c *Handler) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
 	// Step 1: Normalize and validate path
 	relAudioPath, err := c.normalizeAndValidatePath(audioPath)
 	if err != nil {
@@ -2846,7 +2870,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 // buildSpectrogramKey, which is also used as the singleflight coalescing key so that
 // concurrent requests for the same on-disk file still share one generation pass.
 // audioPath is retained only for log and error context.
-func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPath, audioPath, queueKey string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
+func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, audioPath, queueKey string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
 	start := time.Now()
 	getSpectrogramLogger().Debug("Spectrogram generation requested",
 		logger.String("audio_path", audioPath),
@@ -3036,7 +3060,7 @@ func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPat
 // c.spectrogramGenerator.GenerateFromFile().
 
 // GetSpeciesImage serves an image for a bird species by scientific name
-func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
+func (c *Handler) GetSpeciesImage(ctx echo.Context) error {
 	scientificName := ctx.QueryParam("name")
 	if scientificName == "" {
 		return c.HandleError(ctx, fmt.Errorf("missing scientific name"), "Scientific name is required", http.StatusBadRequest)
@@ -3055,7 +3079,7 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 }
 
 // GetSpeciesImageInfo returns attribution metadata for a species image as JSON
-func (c *Controller) GetSpeciesImageInfo(ctx echo.Context) error {
+func (c *Handler) GetSpeciesImageInfo(ctx echo.Context) error {
 	scientificName := ctx.QueryParam("name")
 	if scientificName == "" {
 		return c.HandleError(ctx, fmt.Errorf("missing scientific name"), "Scientific name is required", http.StatusBadRequest)
@@ -3097,7 +3121,7 @@ func (c *Controller) GetSpeciesImageInfo(ctx echo.Context) error {
 // Falls back to 302 redirect to external URL if local fetch fails.
 // Route: GET /media/image/:scientific_name
 // Route: GET /media/bird-image/:scientific_name (alias)
-func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
+func (c *Handler) ServeSpeciesImageProxy(ctx echo.Context) error {
 	scientificName, err := url.PathUnescape(ctx.Param("scientific_name"))
 	if err != nil {
 		return c.HandleError(ctx, fmt.Errorf("invalid scientific name encoding"), "Invalid species name", http.StatusBadRequest)
@@ -3159,7 +3183,7 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 		return c.serveImageFile(ctx, cachedPath, contentType)
 	}
 
-	// File not cached or stale — download it
+	// File not cached or stale - download it
 	newPath, newCT, dlErr := fileCache.DownloadAndStore(ctx.Request().Context(), provider, scientificName, birdImage.URL)
 	if dlErr != nil {
 		// Graceful degradation: serve stale file if available, otherwise redirect
@@ -3186,7 +3210,7 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 
 // serveImageFile serves a cached image file with appropriate cache headers.
 // http.ServeContent handles Last-Modified, If-Modified-Since, and If-None-Match natively.
-func (c *Controller) serveImageFile(ctx echo.Context, filePath, contentType string) error {
+func (c *Handler) serveImageFile(ctx echo.Context, filePath, contentType string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to open cached image", http.StatusInternalServerError)
@@ -3212,4 +3236,5 @@ func (c *Controller) serveImageFile(ctx echo.Context, filePath, contentType stri
 	return nil
 }
 
-// HandleError method should exist on Controller, typically defined in controller.go or api.go
+// HandleError, CurrentSettings, and the logging helpers are promoted from the
+// embedded *apicore.Core; see internal/api/v2/apicore.

@@ -39,7 +39,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup := systemGroup.Group("", authMiddleware)
 
 	// External media status (media domain).
-	protectedGroup.GET("/external-media", c.GetExternalMedia)
+	protectedGroup.GET("/external-media", c.media.GetExternalMedia)
 
 	// Database overview (analytics domain).
 	c.initDatabaseOverviewRoutes()

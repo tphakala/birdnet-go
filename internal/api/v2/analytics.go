@@ -85,9 +85,9 @@ func (c *Controller) handleAnalyticsQueryError(ctx echo.Context, err error, opLa
 	case errors.Is(err, context.Canceled):
 		// Client disconnected (navigated away / closed the tab). An expected lifecycle
 		// event, not a server error: log at info and return the non-standard
-		// client-closed status, matching the convention in media.go.
+		// client-closed status, matching the convention in the media handler.
 		c.LogInfoIfEnabled(opLabel+" query canceled by client", fields...)
-		return c.HandleError(ctx, err, "Request canceled by client", StatusClientClosedRequest)
+		return c.HandleError(ctx, err, "Request canceled by client", apicore.StatusClientClosedRequest)
 	case errors.Is(err, context.DeadlineExceeded):
 		c.LogErrorIfEnabled(opLabel+" query timeout", fields...)
 		return c.HandleError(ctx, err, msgQueryTimeout, http.StatusRequestTimeout)

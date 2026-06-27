@@ -37,6 +37,13 @@ const (
 	SpectrogramSizeXl = 2050 // height=1025, DFT=2048
 )
 
+// StatusClientClosedRequest is Nginx's non-standard HTTP status code for a
+// client that closed the connection before the server responded. It is shared
+// across api/v2 domains: the media handler returns it when a client cancels an
+// audio/spectrogram request, and the analytics handler returns it when a client
+// cancels an analytics query, so the value lives on the shared substrate.
+const StatusClientClosedRequest = 499
+
 // GetBirdNETInstance returns the BirdNET orchestrator or an error if unavailable.
 // It snapshots the processor first to avoid a TOCTOU race. Shared by the range,
 // heatmap, and diagnostics handlers.

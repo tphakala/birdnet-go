@@ -1,6 +1,6 @@
 // media_test.go: Package api provides tests for API v2 media endpoints.
 
-package api
+package media
 
 import (
 	"errors"
@@ -23,7 +23,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/securefs"
 	"gorm.io/gorm"
 )
 
@@ -154,7 +153,7 @@ func TestInitMediaRoutesRegistration(t *testing.T) {
 	e, controller, _ := setupMediaTestEnvironment(t)
 
 	// Re-initialize the routes to ensure a clean state
-	controller.initMediaRoutes()
+	controller.RegisterRoutes(controller.Group)
 
 	// Get all routes from the Echo instance
 	routes := e.Routes()
@@ -407,43 +406,27 @@ func TestServeSpectrogram(t *testing.T) {
 	}
 }
 
-// Setup function to create a test environment with SecureFS
-func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
+// setupMediaTestEnvironment builds a media Handler wired to a test core (with an
+// isolated SecureFS export root) and registers the media routes. It returns the
+// echo instance, the handler, and the SecureFS root directory tests write their
+// fixture files into. A passthrough auth middleware is injected so the
+// authenticated ID-based routes (clip extraction / audio processing) register and
+// can be exercised without a real auth service.
+func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string) {
 	t.Helper()
 
-	// Create a temporary directory for test files (auto-cleaned by testing framework)
-	tempDir := t.TempDir()
+	e := echo.New()
+	core := apitest.NewCore(t, apitest.WithEcho(e))
+	// Passthrough auth so the authenticated clip/process routes register and run
+	// without a real auth service.
+	core.AuthMiddleware = passthroughMiddleware()
 
-	// Use the standard test setup which now initializes SFS
-	// We need the controller instance to reconfigure its SFS
-	e, _, controller := setupTestEnvironment(t)
+	h := New(core)
+	h.RegisterRoutes(core.Group)
 
-	// --- Crucially: Re-initialize SFS in the controller to use the *media test* tempDir ---
-	// Close the SFS created by setupTestEnvironment (if any)
-	if controller.SFS != nil {
-		require.NoError(t, controller.SFS.Close(), "Failed to close SFS")
-	}
-	// Create and assign the new SFS rooted in our tempDir
-	newSFS, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS for media test environment")
-	controller.SFS = newSFS
-	t.Cleanup(func() {
-		assert.NoError(t, controller.SFS.Close(), "Failed to close SFS")
-	}) // Ensure this one is closed too
-
-	// Assign the tempDir to settings just in case any *other* part relies on it
-	// (though SecureFS should make this less necessary)
-	controller.Settings.Load().Realtime.Audio.Export.Path = tempDir
-
-	// Inject passthrough auth middleware so authenticated routes (e.g. clip extraction)
-	// can be registered and tested without a real auth service
-	WithAuthMiddleware(passthroughMiddleware())(controller)
-
-	// Initialize media routes on the controller instance that has the correct SFS
-	controller.initMediaRoutes()
-
-	// Return the Echo instance, the *correctly configured* controller, and the tempDir path
-	return e, controller, tempDir
+	// The media SecureFS is rooted at the per-test export path apitest.NewCore
+	// provisions (a t.TempDir()); tests create their fixture files under it.
+	return e, h, core.SFS.BaseDir()
 }
 
 // TestMediaEndpointsIntegration tests the media endpoints in an integrated way
@@ -1011,7 +994,7 @@ func TestServeAudioByID_AudioFormats(t *testing.T) {
 				}
 			})
 
-			// Setup mock to return this filename — use numeric IDs since the handler
+			// Setup mock to return this filename - use numeric IDs since the handler
 			// validates that :id is a valid number
 			audioID := fmt.Sprintf("%d", i+1)
 			mockDS.On("GetNoteClipPath", audioID).Return(format.filename, nil).Once()
@@ -1255,8 +1238,9 @@ func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 	t.Attr("type", "regression")
 	t.Attr("issue", "2201")
 
-	// Setup test environment — the default mock provider returns images for any species
-	e, _, controller := setupTestEnvironment(t)
+	// Setup test environment - the default mock provider returns images for any species
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
 
 	// Replace the mock provider with one that returns ErrImageNotFound for unknown species
 	notFoundProvider := &apitest.TestImageProvider{
@@ -1401,7 +1385,7 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 		}
 	})
 
-	// Make the request — should wait for the file and serve it
+	// Make the request - should wait for the file and serve it
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
@@ -1509,7 +1493,7 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	audioFilename := "grace-wait-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
 
-	// No temp file — only the final file appears after a short delay.
+	// No temp file - only the final file appears after a short delay.
 	// This simulates the race window where FFmpeg hasn't started yet.
 	// Delay is derived from audioGracePeriod to stay aligned with production timing.
 	var wg sync.WaitGroup
@@ -1530,7 +1514,7 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 
 	handlerErr := controller.ServeAudioClip(ctx)
 
-	// Should succeed — grace wait should pick up the file
+	// Should succeed - grace wait should pick up the file
 	if handlerErr != nil {
 		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
 			assert.NotEqual(t, http.StatusNotFound, httpErr.Code,
