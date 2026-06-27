@@ -4865,7 +4865,8 @@
       "typesRequired": "Object type and trigger type are required",
       "duplicateName": "A rule with this name already exists",
       "invalidJSON": "Invalid JSON",
-      "invalidEscalation": "Escalation steps are invalid"
+      "invalidEscalation": "Escalation steps are invalid",
+      "engineUnavailable": "Alerting engine is unavailable"
     },
     "detection": {
       "invalidDate": "Invalid {paramName} format, use YYYY-MM-DD"

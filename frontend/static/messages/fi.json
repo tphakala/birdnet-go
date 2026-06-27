@@ -4865,7 +4865,8 @@
       "typesRequired": "Kohdetyyppi ja laukaisutyyppi ovat pakollisia",
       "duplicateName": "Tämänniminen sääntö on jo olemassa",
       "invalidJSON": "Virheellinen JSON",
-      "invalidEscalation": "Eskalaatioaskeleet ovat virheellisiä"
+      "invalidEscalation": "Eskalaatioaskeleet ovat virheellisiä",
+      "engineUnavailable": "Alerting engine is unavailable"
     },
     "detection": {
       "invalidDate": "Virheellinen {paramName}-muoto, käytä VVVV-KK-PP"

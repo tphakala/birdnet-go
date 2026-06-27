@@ -4865,7 +4865,8 @@
       "typesRequired": "Objekttype og utløsertype er obligatorisk",
       "duplicateName": "En regel med dette navnet finnes allerede",
       "invalidJSON": "Ugyldig JSON",
-      "invalidEscalation": "Eskaleringstrinn er ugyldige"
+      "invalidEscalation": "Eskaleringstrinn er ugyldige",
+      "engineUnavailable": "Alerting engine is unavailable"
     },
     "detection": {
       "invalidDate": "Ugyldig {paramName}-format, bruk ÅÅÅÅ-MM-DD"

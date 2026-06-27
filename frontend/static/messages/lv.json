@@ -4865,7 +4865,8 @@
       "typesRequired": "Objekta veids un aktivizēšanas veids ir obligāti",
       "duplicateName": "Noteikums ar šādu nosaukumu jau pastāv",
       "invalidJSON": "Nederīgs JSON",
-      "invalidEscalation": "Eskalācijas soļi nav derīgi"
+      "invalidEscalation": "Eskalācijas soļi nav derīgi",
+      "engineUnavailable": "Alerting engine is unavailable"
     },
     "detection": {
       "invalidDate": "Nederīgs {paramName} formāts, izmantojiet YYYY-MM-DD"

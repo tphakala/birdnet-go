@@ -3545,6 +3545,7 @@ export type TranslationKey =
   | 'errors.alert.duplicateName'
   | 'errors.alert.invalidJSON'
   | 'errors.alert.invalidEscalation'
+  | 'errors.alert.engineUnavailable'
   | 'errors.detection.invalidDate' // params: paramName
   | 'errors.backup.invalidType'
   | 'errors.backup.alreadyRunning'

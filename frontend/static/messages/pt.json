@@ -4865,7 +4865,8 @@
       "typesRequired": "O tipo de objeto e o tipo de ativação são obrigatórios",
       "duplicateName": "Já existe uma regra com este nome",
       "invalidJSON": "JSON inválido",
-      "invalidEscalation": "Os passos de escalação são inválidos"
+      "invalidEscalation": "Os passos de escalação são inválidos",
+      "engineUnavailable": "Alerting engine is unavailable"
     },
     "detection": {
       "invalidDate": "Formato de {paramName} inválido, utilize AAAA-MM-DD"
