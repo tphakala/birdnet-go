@@ -1,5 +1,5 @@
-// internal/api/v2/app.go
-package api
+// internal/api/v2/app/app.go
+package app
 
 import (
 	"context"
@@ -93,8 +93,10 @@ type AuthConfigDTO struct {
 	EnabledProviders []string `json:"enabledProviders"`
 }
 
-// initAppRoutes registers application-level API endpoints
-func (c *Controller) initAppRoutes() {
+// RegisterAppRoutes registers application-level API endpoints on the provided v2
+// API group, preserving the exact route order and middleware the monolithic
+// initAppRoutes used.
+func (c *Handler) RegisterAppRoutes(g *echo.Group) {
 	// Initialize app metadata repository from V2Manager if available
 	if c.V2Manager != nil {
 		var useV2Prefix bool
@@ -112,7 +114,7 @@ func (c *Controller) initAppRoutes() {
 	// App config endpoint - publicly accessible (no auth required)
 	// This endpoint provides the frontend with configuration data
 	// that was previously injected server-side into the HTML template.
-	c.Group.GET(AppConfigEndpoint, c.GetAppConfig)
+	g.GET(AppConfigEndpoint, c.GetAppConfig)
 
 	// Wizard dismiss endpoint - public in the default configuration.
 	// Only writes last_seen_version to app_metadata (no data exposure, no privilege
@@ -122,7 +124,7 @@ func (c *Controller) initAppRoutes() {
 	// login form rather than the wizard, so dismissing it pre-auth serves no
 	// purpose and it is intentionally NOT on the privateModeAuth exempt allow-list
 	// (see isPrivateModeExempt).
-	c.Group.POST(WizardDismissEndpoint, c.DismissWizard)
+	g.POST(WizardDismissEndpoint, c.DismissWizard)
 }
 
 // GetAppConfig handles GET /api/v2/app/config
@@ -131,7 +133,7 @@ func (c *Controller) initAppRoutes() {
 // 1. It provides data needed before authentication can occur
 // 2. The security.accessAllowed field tells the frontend if auth is needed
 // 3. CSRF token is needed for any subsequent authenticated requests
-func (c *Controller) GetAppConfig(ctx echo.Context) error {
+func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	// Prevent caching of this response (contains user-specific CSRF token)
 	ctx.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
 	ctx.Response().Header().Set("Pragma", "no-cache")
@@ -251,7 +253,7 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 //   - If last_seen_version is missing and isExistingInstall returns true: auto-seed and skip wizard.
 //   - If last_seen_version is missing and no install signals: freshInstall = true.
 //   - If last_seen_version differs from the current version: newVersion = true.
-func (c *Controller) determineWizardState(ctx context.Context, settings *conf.Settings) (freshInstall, newVersion bool, previousVersion string) {
+func (c *Handler) determineWizardState(ctx context.Context, settings *conf.Settings) (freshInstall, newVersion bool, previousVersion string) {
 	// Skip wizard triggers for dev builds
 	if isDevBuild(settings.Version) {
 		return false, false, ""
@@ -293,7 +295,7 @@ func (c *Controller) determineWizardState(ctx context.Context, settings *conf.Se
 // hasZeroDetections returns true if the V2 database contains no detections.
 // Used to distinguish a fresh install (no data) from an existing install
 // that predates wizard version tracking.
-func (c *Controller) hasZeroDetections(ctx context.Context) bool {
+func (c *Handler) hasZeroDetections(ctx context.Context) bool {
 	if c.V2Manager == nil {
 		return true
 	}
@@ -316,7 +318,7 @@ func (c *Controller) hasZeroDetections(ctx context.Context) bool {
 
 // isExistingInstall returns true if multiple signals indicate this is a configured
 // installation rather than a genuinely fresh one. Checks are ordered cheapest-first.
-func (c *Controller) isExistingInstall(ctx context.Context, settings *conf.Settings) bool {
+func (c *Handler) isExistingInstall(ctx context.Context, settings *conf.Settings) bool {
 	if settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0 {
 		return true
 	}
@@ -336,7 +338,7 @@ func (c *Controller) isExistingInstall(ctx context.Context, settings *conf.Setti
 }
 
 // hasNotes returns true if the notes table contains at least one row.
-func (c *Controller) hasNotes(ctx context.Context) bool {
+func (c *Handler) hasNotes(ctx context.Context) bool {
 	if c.V2Manager == nil {
 		return false
 	}
@@ -364,7 +366,7 @@ func isDevBuild(version string) bool {
 // DismissWizard handles POST /api/v2/app/wizard/dismiss
 // Updates the last_seen_version in app_metadata to the current application version,
 // preventing the wizard from showing again until the next upgrade.
-func (c *Controller) DismissWizard(ctx echo.Context) error {
+func (c *Handler) DismissWizard(ctx echo.Context) error {
 	if c.appMetadataRepo == nil {
 		return c.HandleError(ctx, nil, "App metadata not available", http.StatusServiceUnavailable)
 	}
@@ -384,7 +386,7 @@ func (c *Controller) DismissWizard(ctx echo.Context) error {
 // Returns true if:
 // - Security is disabled (no auth required)
 // - Auth service confirms the request is authenticated
-func (c *Controller) determineAccessAllowed(ctx echo.Context, securityEnabled bool) bool {
+func (c *Handler) determineAccessAllowed(ctx echo.Context, securityEnabled bool) bool {
 	// If security is not enabled, allow access
 	if !securityEnabled {
 		return true

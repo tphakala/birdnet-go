@@ -1,7 +1,7 @@
 // app_config_test.go: Tests for the requestBasePath helper that resolves
 // the effective base path prefix for reverse proxy / ingress support in API v2.
 
-package api
+package app
 
 import (
 	"net/http"

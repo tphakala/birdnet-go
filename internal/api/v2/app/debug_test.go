@@ -1,4 +1,4 @@
-package api
+package app
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -18,7 +19,7 @@ func TestDebugTriggerError(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
-	c := &Controller{Core: &apicore.Core{APILogger: nil}}
+	c := &Handler{Core: &apicore.Core{APILogger: nil}}
 	c.Settings.Store(&conf.Settings{Debug: true})
 
 	tests := []struct {
@@ -63,9 +64,9 @@ func TestDebugTriggerError(t *testing.T) {
 func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 	t.Parallel()
 
-	// Create controller with debug disabled
+	// Create handler with debug disabled
 	e := echo.New()
-	c := &Controller{Core: &apicore.Core{APILogger: nil}}
+	c := &Handler{Core: &apicore.Core{APILogger: nil}}
 	c.Settings.Store(&conf.Settings{Debug: false})
 
 	// Table-driven tests for all debug endpoints returning 403 when debug mode is disabled
@@ -119,7 +120,7 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusForbidden, rec.Code)
 
-			var resp ErrorResponse
+			var resp apicore.ErrorResponse
 			err = json.Unmarshal(rec.Body.Bytes(), &resp)
 			require.NoError(t, err)
 			assert.Equal(t, "Debug mode not enabled", resp.Message)
@@ -127,5 +128,29 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 			assert.NotEmpty(t, resp.CorrelationID)
 			assert.Equal(t, "errors.debug.notEnabled", resp.ErrorKey)
 		})
+	}
+}
+
+// TestRegisterDebugRoutesReadsSettingsNilSafely pins that RegisterDebugRoutes
+// reads the debug flag via the nil-safe ControllerSettings() snapshot (matching
+// requireDebugMode) instead of dereferencing a possibly-nil c.Settings on a
+// standalone/test handler, and that it registers no debug routes when debug mode
+// is off.
+func TestRegisterDebugRoutesReadsSettingsNilSafely(t *testing.T) {
+	e := echo.New()
+	g := e.Group("/api/v2")
+	settings := apitest.NewValidTestSettings()
+	settings.Debug = false // debug mode off -> RegisterDebugRoutes takes the skip path
+
+	h := &Handler{Core: &apicore.Core{Echo: e, Group: g}}
+	// RegisterDebugRoutes must read settings through the nil-safe ControllerSettings()
+	// accessor (an atomic Load), not assume a non-nil snapshot.
+	h.Settings.Store(settings)
+
+	require.NotPanics(t, func() { h.RegisterDebugRoutes(g) },
+		"RegisterDebugRoutes must not dereference a nil settings snapshot")
+	for _, r := range e.Routes() {
+		assert.NotContains(t, r.Path, "/debug",
+			"debug routes must not register when debug mode is off: %s %s", r.Method, r.Path)
 	}
 }

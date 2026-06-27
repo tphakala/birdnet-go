@@ -1,4 +1,4 @@
-package api
+package app
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 )
 
 // =============================================================================
-// mockAppMetadataRepo — simple mock for AppMetadataRepository
+// mockAppMetadataRepo - simple mock for AppMetadataRepository
 // =============================================================================
 
 // mockAppMetadataRepo implements repository.AppMetadataRepository for testing.
@@ -50,7 +50,7 @@ func (m *mockAppMetadataRepo) Set(_ context.Context, key, value string) error {
 }
 
 // =============================================================================
-// fakeV2Manager — minimal Manager that exposes a real *gorm.DB
+// fakeV2Manager - minimal Manager that exposes a real *gorm.DB
 // =============================================================================
 
 // fakeV2Manager implements the subset of datastoreV2.Manager used by
@@ -162,9 +162,9 @@ func TestDetermineWizardState(t *testing.T) {
 			// metadataRepo left nil
 		},
 		{
-			name:         "fresh install — no last_seen_version, zero detections",
+			name:         "fresh install - no last_seen_version, zero detections",
 			version:      "v0.9.0",
-			metadataRepo: newMockAppMetadataRepo(), // empty store → Get returns ""
+			metadataRepo: newMockAppMetadataRepo(), // empty store -> Get returns ""
 			v2Manager: func(t *testing.T) *fakeV2Manager {
 				t.Helper()
 				return newFakeV2ManagerWithDetections(t, 0)
@@ -172,7 +172,7 @@ func TestDetermineWizardState(t *testing.T) {
 			wantFresh: true,
 		},
 		{
-			name:         "existing install auto-seeds — no last_seen_version, has detections",
+			name:         "existing install auto-seeds - no last_seen_version, has detections",
 			version:      "v0.9.0",
 			metadataRepo: newMockAppMetadataRepo(),
 			v2Manager: func(t *testing.T) *fakeV2Manager {
@@ -193,7 +193,7 @@ func TestDetermineWizardState(t *testing.T) {
 			wantPrevVersion: "v0.8.0",
 		},
 		{
-			name:    "same version — no wizard needed",
+			name:    "same version - no wizard needed",
 			version: "v0.9.0",
 			metadataRepo: func() *mockAppMetadataRepo {
 				m := newMockAppMetadataRepo()
@@ -203,14 +203,14 @@ func TestDetermineWizardState(t *testing.T) {
 			wantPrevVersion: "v0.9.0",
 		},
 		{
-			name:         "fresh install — nil V2Manager treated as zero detections",
+			name:         "fresh install - nil V2Manager treated as zero detections",
 			version:      "v0.9.0",
 			metadataRepo: newMockAppMetadataRepo(),
-			// v2Manager left nil → hasZeroDetections returns true
+			// v2Manager left nil -> hasZeroDetections returns true
 			wantFresh: true,
 		},
 		{
-			name:    "metadata repo Get error — returns safe defaults",
+			name:    "metadata repo Get error - returns safe defaults",
 			version: "v0.9.0",
 			metadataRepo: func() *mockAppMetadataRepo {
 				m := newMockAppMetadataRepo()
@@ -223,14 +223,14 @@ func TestDetermineWizardState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := &Controller{Core: &apicore.Core{}}
+			c := &Handler{Core: &apicore.Core{}}
 			c.Settings.Store(&conf.Settings{Version: tt.version})
 			c.appMetadataRepo = tt.metadataRepo
 			if tt.v2Manager != nil {
 				c.V2Manager = tt.v2Manager(t)
 			}
 			// determineWizardState now takes the settings snapshot directly, so
-			// the subtest stays fully per-controller and parallel-safe.
+			// the subtest stays fully per-handler and parallel-safe.
 			freshInstall, newVersion, previousVersion := c.determineWizardState(t.Context(), c.Settings.Load())
 
 			assert.Equal(t, tt.wantFresh, freshInstall, "freshInstall mismatch")
@@ -248,7 +248,7 @@ func TestDismissWizard_Success(t *testing.T) {
 	// Not parallel: publishes settings to the process-wide global snapshot.
 	mockRepo := newMockAppMetadataRepo()
 	e := echo.New()
-	c := &Controller{Core: &apicore.Core{}, appMetadataRepo: mockRepo}
+	c := &Handler{Core: &apicore.Core{}, appMetadataRepo: mockRepo}
 	c.Settings.Store(&conf.Settings{Version: "v0.9.0"})
 	apitest.PublishTestSettings(t, c.Settings.Load())
 
@@ -268,7 +268,7 @@ func TestDismissWizard_NilRepo(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
-	c := &Controller{Core: &apicore.Core{}}
+	c := &Handler{Core: &apicore.Core{}}
 	c.Settings.Store(&conf.Settings{
 		Version:   "v0.9.0",
 		WebServer: conf.WebServerSettings{Debug: true},
@@ -292,7 +292,7 @@ func TestDismissWizard_SetError(t *testing.T) {
 	mockRepo.setErr = assert.AnError
 
 	e := echo.New()
-	c := &Controller{Core: &apicore.Core{}, appMetadataRepo: mockRepo}
+	c := &Handler{Core: &apicore.Core{}, appMetadataRepo: mockRepo}
 	c.Settings.Store(&conf.Settings{
 		Version:   "v0.9.0",
 		WebServer: conf.WebServerSettings{Debug: true},

@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
 	"github.com/tphakala/birdnet-go/internal/api/v2/analytics"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/app"
 	audioapi "github.com/tphakala/birdnet-go/internal/api/v2/audio"
 	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/control"
@@ -42,7 +43,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
-	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -200,14 +200,14 @@ type Controller struct {
 	// are applied so authService reflects WithAuthService (see NewWithOptions).
 	authHandler *authapi.Handler
 
-	// notificationService is the notification service this controller uses. It is
-	// nil in production, where getNotificationService() falls back to the
-	// process-global singleton (notification.GetService()). Tests inject an
-	// isolated per-test instance via WithNotificationService so each test gets its
-	// own config and store without touching the global singleton. The facade
-	// keeps this field because debug.go, migration.go and legacy_cleanup.go still
-	// resolve the service through getNotificationService(); the same value is
-	// handed to the notifications domain handler below.
+	// notificationService is the notification service the facade injects into the
+	// domain handlers. It is nil in production, where each handler's
+	// getNotificationService() accessor falls back to the process-global singleton
+	// (notification.GetService()). Tests inject an isolated per-test instance via
+	// WithNotificationService so each test gets its own config and store without
+	// touching the global singleton. The facade keeps this field because the toast
+	// helpers (toast_helpers.go) read it directly and the same value is handed to
+	// the notifications, imports, and app domain handlers below.
 	notificationService *notification.Service
 
 	// notifications serves the /api/v2/notifications/* endpoints (list, unread
@@ -248,8 +248,15 @@ type Controller struct {
 	// TODO: Consider moving to a dedicated audio manager
 	audioLevelChan chan audiocore.AudioLevelData
 
-	// Application metadata repository (initialized lazily in initAppRoutes)
-	appMetadataRepo repository.AppMetadataRepository
+	// appHandler serves the app/debug domain: the public /app/config bootstrap
+	// endpoint (which issues the frontend CSRF token via middleware.EnsureCSRFToken
+	// and returns the SPA configuration), the wizard dismiss endpoint, and the
+	// debug-mode-gated /debug/* endpoints. Beyond the shared *apicore.Core it
+	// receives the facade-injected authService and notificationService and owns the
+	// app-metadata repository (built lazily in RegisterAppRoutes). It is constructed
+	// AFTER the functional options are applied so both injected services reflect
+	// WithAuthService / WithNotificationService (see NewWithOptions).
+	appHandler *app.Handler
 
 	// Cached BirdNET name maps (facade-owned; see name_maps.go). They are shared
 	// infrastructure: the analytics, detections, and species domains read them via
@@ -311,20 +318,6 @@ func WithNotificationService(svc *notification.Service) Option {
 	return func(c *Controller) {
 		c.notificationService = svc
 	}
-}
-
-// getNotificationService returns the notification service this controller uses:
-// the injected instance when set (tests inject via WithNotificationService),
-// otherwise the process-global singleton (notification.GetService()). The
-// notifications domain handler holds its own injected copy; this facade accessor
-// serves the remaining package-api callers (debug.go, migration.go,
-// legacy_cleanup.go) that resolve the service outside that handler. The field is
-// nil in production, so it falls back to the singleton exactly as before.
-func (c *Controller) getNotificationService() *notification.Service {
-	if c.notificationService != nil {
-		return c.notificationService
-	}
-	return notification.GetService()
 }
 
 // WithMetricsStore sets the system metrics history store for the controller.
@@ -516,8 +509,10 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// the injected services (notificationService falls back to the global singleton
 	// when nil; authService is nil-guarded). Neither changes after this point, so
 	// capturing the post-option values is behaviorally identical to the monolith's
-	// per-request reads. The facade keeps c.notificationService for the other
-	// handlers that still resolve the service via getNotificationService().
+	// per-request reads. The facade keeps c.notificationService because the toast
+	// helpers read it directly and it is handed to the notifications, imports, and
+	// app domain handlers, each of which resolves the service via its own
+	// getNotificationService() accessor.
 	c.notifications = notifications.New(c.Core, c.notificationService, c.authService)
 
 	// Construct the import/migration domain handler AFTER the functional options
@@ -527,6 +522,17 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// notifications handler above. Its import lifecycle manager is created in New;
 	// the legacy-cleanup tracker is created lazily in RegisterLegacyCleanupRoutes.
 	c.imports = importsapi.New(c.Core, c.notificationService)
+
+	// Construct the app/debug domain handler AFTER the functional options are
+	// applied so it captures the post-option authService (the /app/config
+	// accessAllowed check reads it, nil-guarded) and notificationService (the debug
+	// trigger-notification/status handlers resolve the service through it, falling
+	// back to the process-global singleton when nil), mirroring the notifications
+	// and imports handlers above. Neither service changes after this point, so
+	// capturing the post-option values is behaviorally identical to the monolith's
+	// per-request reads. Its app-metadata repository is built lazily in
+	// RegisterAppRoutes from the V2Manager promoted off c.Core.
+	c.appHandler = app.New(c.Core, c.authService, c.notificationService)
 
 	// Construct the audio/streaming domain handler AFTER the functional options are
 	// applied so it captures the post-option authService (used by the public
@@ -607,7 +613,7 @@ func (c *Controller) initRoutes() {
 		name string
 		fn   func()
 	}{
-		{"app routes", c.initAppRoutes},
+		{"app routes", func() { c.appHandler.RegisterAppRoutes(c.Group) }},
 		{"search routes", func() { c.detections.RegisterSearchRoutes(c.Group) }},
 		{"detection routes", func() { c.detections.RegisterDetectionRoutes(c.Group) }},
 		{"analytics routes", func() { c.analytics.RegisterAnalyticsRoutes(c.Group) }},
@@ -634,7 +640,7 @@ func (c *Controller) initRoutes() {
 		{"metrics history routes", func() { c.system.RegisterMetricsHistoryRoutes(c.Group) }},
 		{"notification routes", func() { c.notifications.RegisterRoutes(c.Group) }},
 		{"support routes", func() { c.support.RegisterRoutes(c.Group) }},
-		{"debug routes", c.initDebugRoutes},
+		{"debug routes", func() { c.appHandler.RegisterDebugRoutes(c.Group) }},
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
 		{"dynamic threshold routes", func() { c.dynamicThresholds.RegisterRoutes(c.Group) }},
 		{"alert routes", func() { c.alerts.RegisterRoutes(c.Group) }},

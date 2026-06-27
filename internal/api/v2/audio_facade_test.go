@@ -2,8 +2,8 @@
 // Tests for the facade-side audio wiring: the PrivateMode exempt allow-list
 // (isPrivateModeExempt) which composes app-config, auth, and HLS route constants
 // and is injected into apicore.NewCore. These stay in package api because they
-// exercise the facade function and reference facade-owned constants; the HLS path
-// fragments come from the extracted audio domain package.
+// exercise the facade function; the app-config and HLS path fragments come from
+// the extracted app and audio domain packages.
 package api
 
 import (
@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/app"
 	audioapi "github.com/tphakala/birdnet-go/internal/api/v2/audio"
 	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 )
@@ -33,7 +34,7 @@ func TestIsPrivateModeExempt(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodGet, apiV2Prefix + AppConfigEndpoint},
+		{http.MethodGet, apiV2Prefix + app.AppConfigEndpoint},
 		{http.MethodPost, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthLoginPath},
 		{http.MethodGet, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthCallbackPath},
 		{http.MethodPost, apiV2Prefix + audioapi.HLSGroupPath + audioapi.HLSStartPath},
@@ -61,14 +62,14 @@ func TestIsPrivateModeExempt(t *testing.T) {
 		{http.MethodPost, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthLogoutPath},
 		{http.MethodGet, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthStatusPath},
 		{http.MethodPost, apiV2Prefix + audioapi.HLSGroupPath + audioapi.HLSStopPath}, // mutation, always auth-gated
-		{http.MethodPost, apiV2Prefix + WizardDismissEndpoint},                        // gated under PrivateMode by design
+		{http.MethodPost, apiV2Prefix + app.WizardDismissEndpoint},                    // gated under PrivateMode by design
 		{http.MethodGet, "/api/v2/streams/audio-level"},
 		{http.MethodGet, "/api/v2/streams/sources"},
 		{http.MethodGet, "/health"},
 		// Method mismatches must NOT match the allow-list.
 		{http.MethodGet, apiV2Prefix + authapi.AuthGroupPath + authapi.AuthLoginPath}, // login is POST-only
-		{http.MethodPost, apiV2Prefix + AppConfigEndpoint},                            // config is GET-only
-		{http.MethodDelete, apiV2Prefix + AppConfigEndpoint},
+		{http.MethodPost, apiV2Prefix + app.AppConfigEndpoint},                        // config is GET-only
+		{http.MethodDelete, apiV2Prefix + app.AppConfigEndpoint},
 	}
 	for _, tt := range notExempt {
 		t.Run("not_exempt/"+tt.method+"_"+tt.path, func(t *testing.T) {
@@ -94,9 +95,9 @@ func TestPrivateModeExemptPathsAreRegisteredRoutes(t *testing.T) {
 	e := echo.New()
 	g := e.Group(apiV2Prefix)
 
-	// App config (public bootstrap endpoint, registered in initAppRoutes).
-	g.GET(AppConfigEndpoint, noop)
-	g.POST(WizardDismissEndpoint, noop) // registered but NOT exempt under PrivateMode
+	// App config (public bootstrap endpoint, registered in RegisterAppRoutes).
+	g.GET(app.AppConfigEndpoint, noop)
+	g.POST(app.WizardDismissEndpoint, noop) // registered but NOT exempt under PrivateMode
 
 	// Auth flow (mirrors the auth domain's RegisterRoutes).
 	authGroup := g.Group(authapi.AuthGroupPath)
@@ -120,7 +121,7 @@ func TestPrivateModeExemptPathsAreRegisteredRoutes(t *testing.T) {
 	// Expected exempt set, with paths composed from the same constants the
 	// production code and isPrivateModeExempt use.
 	wantExempt := map[string]bool{
-		key(http.MethodGet, apiV2Prefix+AppConfigEndpoint):                                                         true,
+		key(http.MethodGet, apiV2Prefix+app.AppConfigEndpoint):                                                     true,
 		key(http.MethodPost, apiV2Prefix+authapi.AuthGroupPath+authapi.AuthLoginPath):                              true,
 		key(http.MethodGet, apiV2Prefix+authapi.AuthGroupPath+authapi.AuthCallbackPath):                            true,
 		key(http.MethodPost, apiV2Prefix+audioapi.HLSGroupPath+audioapi.HLSStartPath):                              true,
