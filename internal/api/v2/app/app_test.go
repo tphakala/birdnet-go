@@ -1,8 +1,8 @@
-// app_test.go: Package api provides tests for the app config endpoint.
+// app_test.go: Package app provides tests for the app config endpoint.
 // This file tests /api/v2/app/config which returns security configuration,
 // CSRF tokens, and version information to the frontend SPA.
 
-package api
+package app
 
 import (
 	"encoding/json"
@@ -28,24 +28,43 @@ import (
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
-	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
-	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // =============================================================================
 // Test Setup Helpers
 // =============================================================================
 
+// newAppMockDS builds the default mock datastore for app config tests. The
+// PruneAppEvents expectation is Maybe because the apicore startup goroutine
+// (launched by apitest.NewCore) may or may not call it before the test ends.
+func newAppMockDS(t *testing.T) *mocks.MockInterface {
+	t.Helper()
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
+	return mockDS
+}
+
+// newAppHandler builds an app Handler around a fully wired *apicore.Core for the
+// given settings (no auth/notification service injected). apitest.NewCore
+// publishes the settings to the process-global snapshot (restored on cleanup) so
+// GetAppConfig's CurrentSettings() observes them.
+func newAppHandler(t *testing.T, e *echo.Echo, settings *conf.Settings) *Handler {
+	t.Helper()
+	core := apitest.NewCore(t,
+		apitest.WithEcho(e),
+		apitest.WithDatastore(newAppMockDS(t)),
+		apitest.WithSettings(settings),
+	)
+	return New(core, nil, nil)
+}
+
 // setupAppConfigTest creates a test environment for app config tests.
-func setupAppConfigTest(t *testing.T, securityConfig *conf.Security) (*echo.Echo, *Controller) {
+func setupAppConfigTest(t *testing.T, securityConfig *conf.Security) (*echo.Echo, *Handler) {
 	t.Helper()
 
 	e := echo.New()
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	// Use empty security config if nil
 	secCfg := conf.Security{}
@@ -58,46 +77,17 @@ func setupAppConfigTest(t *testing.T, securityConfig *conf.Security) (*echo.Echo
 		WebServer: conf.WebServerSettings{
 			Debug: true,
 		},
-		Realtime: conf.RealtimeSettings{
-			Audio: conf.AudioSettings{
-				Export: conf.ExportSettings{
-					Path: t.TempDir(),
-				},
-			},
-		},
 		Security: secCfg,
 	}
 
-	mockImageProvider := &apitest.MockImageProvider{}
-	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
-
-	birdImageCache := &imageprovider.BirdImageCache{}
-	birdImageCache.SetImageProvider(mockImageProvider)
-
-	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
-	controlChan := make(chan string, testControlChannelBuf)
-	mockMetrics, _ := observability.NewMetrics()
-
-	apitest.PublishTestSettings(t, settings)
-
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)
-	require.NoError(t, err, "Failed to create test API controller")
-
-	t.Cleanup(func() {
-		controller.Shutdown()
-		close(controlChan)
-	})
-
-	return e, controller
+	return e, newAppHandler(t, e, settings)
 }
 
 // setupAppConfigTestWithAuth creates a test environment with full auth support.
-func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*echo.Echo, *Controller) {
+func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*echo.Echo, *Handler) {
 	t.Helper()
 
 	e := echo.New()
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	// Use empty security config if nil
 	secCfg := conf.Security{}
@@ -110,48 +100,23 @@ func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*e
 		WebServer: conf.WebServerSettings{
 			Debug: true,
 		},
-		Realtime: conf.RealtimeSettings{
-			Audio: conf.AudioSettings{
-				Export: conf.ExportSettings{
-					Path: t.TempDir(),
-				},
-			},
-		},
 		Security: secCfg,
 	}
 
-	mockImageProvider := &apitest.MockImageProvider{}
-	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
-
-	birdImageCache := &imageprovider.BirdImageCache{}
-	birdImageCache.SetImageProvider(mockImageProvider)
-
-	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
-	controlChan := make(chan string, testControlChannelBuf)
-	mockMetrics, _ := observability.NewMetrics()
-
-	// Publish settings to the global snapshot so GetAppConfig (which reads via
-	// currentSettings) observes this controller's settings, not a leaked snapshot.
-	apitest.PublishTestSettings(t, settings)
-
-	// Create OAuth2Server for auth
+	// Create OAuth2Server for auth before publishing settings so any session
+	// secret it defaults is captured in the published snapshot. Initialize the
+	// gothic session store the same way the monolithic setup did.
 	oauth2Server := securitytest.NewOAuth2ServerForTesting(t, settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
-	authMw := auth.NewMiddleware(authService)
-
-	// Initialize gothic session store
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, true,
-		WithAuthMiddleware(authMw.Authenticate), WithAuthService(authService))
-	require.NoError(t, err, "Failed to create test API controller with auth")
+	core := apitest.NewCore(t,
+		apitest.WithEcho(e),
+		apitest.WithDatastore(newAppMockDS(t)),
+		apitest.WithSettings(settings),
+	)
 
-	t.Cleanup(func() {
-		controller.Shutdown()
-		close(controlChan)
-	})
-
-	return e, controller
+	return e, New(core, authService, nil)
 }
 
 // =============================================================================
@@ -580,42 +545,18 @@ func TestGetAppConfig_Concurrent(t *testing.T) {
 // TestGetAppConfig_EmptyVersion tests with empty version string.
 func TestGetAppConfig_EmptyVersion(t *testing.T) {
 	e := echo.New()
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
-
 	settings := &conf.Settings{
 		Version: "", // Empty version
-		Realtime: conf.RealtimeSettings{
-			Audio: conf.AudioSettings{
-				Export: conf.ExportSettings{
-					Path: t.TempDir(),
-				},
-			},
-		},
 	}
 
-	mockImageProvider := &apitest.MockImageProvider{}
-	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
-	birdImageCache := &imageprovider.BirdImageCache{}
-	birdImageCache.SetImageProvider(mockImageProvider)
-	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
-	controlChan := make(chan string, testControlChannelBuf)
-	mockMetrics, _ := observability.NewMetrics()
-
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		controller.Shutdown()
-		close(controlChan)
-	})
+	controller := newAppHandler(t, e, settings)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/app/config")
 
-	err = controller.GetAppConfig(c)
+	err := controller.GetAppConfig(c)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -640,42 +581,18 @@ func TestGetAppConfig_VersionWithSpecialChars(t *testing.T) {
 	for _, version := range testVersions {
 		t.Run(version, func(t *testing.T) {
 			e := echo.New()
-			mockDS := mocks.NewMockInterface(t)
-			mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
-
 			settings := &conf.Settings{
 				Version: version,
-				Realtime: conf.RealtimeSettings{
-					Audio: conf.AudioSettings{
-						Export: conf.ExportSettings{
-							Path: t.TempDir(),
-						},
-					},
-				},
 			}
 
-			mockImageProvider := &apitest.MockImageProvider{}
-			mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
-			birdImageCache := &imageprovider.BirdImageCache{}
-			birdImageCache.SetImageProvider(mockImageProvider)
-			sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
-			controlChan := make(chan string, testControlChannelBuf)
-			mockMetrics, _ := observability.NewMetrics()
-
-			controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)
-			require.NoError(t, err)
-
-			t.Cleanup(func() {
-				controller.Shutdown()
-				close(controlChan)
-			})
+			controller := newAppHandler(t, e, settings)
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetPath("/api/v2/app/config")
 
-			err = controller.GetAppConfig(c)
+			err := controller.GetAppConfig(c)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -891,7 +808,7 @@ func TestGetAppConfig_ResponseConsistency(t *testing.T) {
 	}
 }
 
-// TestGetAppConfig_ResponseTiming tests that response time is reasonable.
+// TestGetAppConfig_ResponseTiming verifies the endpoint responds quickly.
 func TestGetAppConfig_ResponseTiming(t *testing.T) {
 	e, controller := setupAppConfigTest(t, nil)
 
@@ -1027,7 +944,7 @@ func FuzzGetAppConfig_Headers(f *testing.F) {
 			Version: "1.0.0-fuzz",
 		}
 
-		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
+		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 		apitest.PublishTestSettings(t, settings)
 
@@ -1087,8 +1004,9 @@ func FuzzGetAppConfig_QueryParams(f *testing.F) {
 			Version: "1.0.0-fuzz",
 		}
 
-		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
+		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
+		apitest.PublishTestSettings(t, settings)
 
 		// Build URL safely - query string must be URL-encoded
 		url := "/api/v2/app/config"
@@ -1149,7 +1067,7 @@ func FuzzGetAppConfig_CSRFToken(f *testing.F) {
 			Version: "1.0.0-fuzz",
 		}
 
-		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
+		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 		apitest.PublishTestSettings(t, settings)
 
@@ -1212,7 +1130,7 @@ func FuzzGetAppConfig_Version(f *testing.F) {
 			Version: version,
 		}
 
-		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
+		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 		apitest.PublishTestSettings(t, settings)
 
@@ -1363,7 +1281,7 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 			},
 		}
 
-		controller := &Controller{Core: &apicore.Core{DS: mockDS}, authService: nil}
+		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
 		controller.Settings.Store(settings)
 		apitest.PublishTestSettings(t, settings)
 

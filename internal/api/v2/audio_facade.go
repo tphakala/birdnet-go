@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/app"
 	audioapi "github.com/tphakala/birdnet-go/internal/api/v2/audio"
 	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -47,7 +48,7 @@ func isPrivateModeExempt(method, path string) bool {
 		hlsTokenBase = hlsBase + audioapi.HLSTokenGroupPath
 	)
 	switch {
-	case method == http.MethodGet && path == apiV2Prefix+AppConfigEndpoint:
+	case method == http.MethodGet && path == apiV2Prefix+app.AppConfigEndpoint:
 		return true
 	case method == http.MethodPost && path == authBase+authapi.AuthLoginPath:
 		return true
