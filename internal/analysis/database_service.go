@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	importsapi "github.com/tphakala/birdnet-go/internal/api/v2/imports"
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -200,7 +200,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 			// Set global enhanced database flag
 			datastoreV2.SetEnhancedDatabaseMode()
 			// Notify the API layer that we're in v2-only mode
-			apiv2.SetV2OnlyMode()
+			importsapi.SetV2OnlyMode()
 			// Set the v2 database manager
 			d.v2Manager = v2OnlyDatastore.Manager()
 		}
@@ -228,7 +228,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 			// Set global enhanced database flag
 			datastoreV2.SetEnhancedDatabaseMode()
 			// Notify the API layer that we're in v2-only mode
-			apiv2.SetV2OnlyMode()
+			importsapi.SetV2OnlyMode()
 			// Set the v2 database manager
 			d.v2Manager = v2OnlyDatastore.Manager()
 		}
@@ -305,7 +305,7 @@ func (d *DatabaseService) Stop(_ context.Context) error {
 	log := GetLogger()
 
 	// Stop the migration worker before closing databases.
-	apiv2.StopMigrationWorker()
+	importsapi.StopMigrationWorker()
 
 	// Close v2 database (only in migration mode, not v2-only).
 	if !d.v2OnlyMode {

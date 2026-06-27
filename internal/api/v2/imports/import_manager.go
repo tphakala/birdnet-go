@@ -1,5 +1,5 @@
-// Package api provides the HTTP API for BirdNET-Go.
-package api
+// internal/api/v2/imports/import_manager.go
+package importsapi
 
 import (
 	"context"

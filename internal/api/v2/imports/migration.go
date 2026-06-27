@@ -1,5 +1,5 @@
-// internal/api/v2/migration.go
-package api
+// internal/api/v2/imports/migration.go
+package importsapi
 
 import (
 	"context"
@@ -162,7 +162,7 @@ func getIsV2OnlyMode() bool {
 }
 
 // requireMigrationStateManager is middleware that returns 503 if the migration state manager is not available.
-func (c *Controller) requireMigrationStateManager(next echo.HandlerFunc) echo.HandlerFunc {
+func (c *Handler) requireMigrationStateManager(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		if getStateManager() == nil {
 			return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
@@ -172,12 +172,12 @@ func (c *Controller) requireMigrationStateManager(next echo.HandlerFunc) echo.Ha
 	}
 }
 
-// initMigrationRoutes registers the migration API routes.
-func (c *Controller) initMigrationRoutes() {
+// RegisterMigrationRoutes registers the migration API routes on the supplied v2 group.
+func (c *Handler) RegisterMigrationRoutes(g *echo.Group) {
 	c.LogInfoIfEnabled("Initializing migration routes")
 
 	// Create migration API group under system/database
-	migrationGroup := c.Group.Group("/system/database/migration")
+	migrationGroup := g.Group("/system/database/migration")
 
 	// Get the appropriate auth middleware
 	authMiddleware := c.AuthMiddleware
@@ -202,7 +202,7 @@ func (c *Controller) initMigrationRoutes() {
 }
 
 // GetMigrationStatus handles GET /api/v2/system/database/migration/status
-func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
+func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Getting migration status", logger.String("path", path), logger.String("ip", ip))
 
@@ -370,7 +370,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 }
 
 // StartMigration handles POST /api/v2/system/database/migration/start
-func (c *Controller) StartMigration(ctx echo.Context) error {
+func (c *Handler) StartMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Starting migration", logger.String("path", path), logger.String("ip", ip))
 
@@ -477,7 +477,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 }
 
 // PauseMigration handles POST /api/v2/system/database/migration/pause
-func (c *Controller) PauseMigration(ctx echo.Context) error {
+func (c *Handler) PauseMigration(ctx echo.Context) error {
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
 	worker := getMigrationWorker()
@@ -500,7 +500,7 @@ func (c *Controller) PauseMigration(ctx echo.Context) error {
 }
 
 // ResumeMigration handles POST /api/v2/system/database/migration/resume
-func (c *Controller) ResumeMigration(ctx echo.Context) error {
+func (c *Handler) ResumeMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Resuming migration", logger.String("path", path), logger.String("ip", ip))
 
@@ -555,7 +555,7 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 }
 
 // RetryValidation handles POST /api/v2/system/database/migration/retry-validation
-func (c *Controller) RetryValidation(ctx echo.Context) error {
+func (c *Handler) RetryValidation(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Retrying migration validation", logger.String("path", path), logger.String("ip", ip))
 
@@ -601,7 +601,7 @@ func (c *Controller) RetryValidation(ctx echo.Context) error {
 }
 
 // CancelMigration handles POST /api/v2/system/database/migration/cancel
-func (c *Controller) CancelMigration(ctx echo.Context) error {
+func (c *Handler) CancelMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Cancelling migration", logger.String("path", path), logger.String("ip", ip))
 
@@ -669,7 +669,7 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 
 // RollbackMigration handles POST /api/v2/system/database/migration/rollback
 // Rolls back a completed migration to use the legacy database.
-func (c *Controller) RollbackMigration(ctx echo.Context) error {
+func (c *Handler) RollbackMigration(ctx echo.Context) error {
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
 	worker := getMigrationWorker()
@@ -688,7 +688,7 @@ func (c *Controller) RollbackMigration(ctx echo.Context) error {
 
 // runPreflightChecks verifies the system is ready for migration.
 // This runs the same critical checks as GetPrerequisites and fails if any are not passed.
-func (c *Controller) runPreflightChecks() error {
+func (c *Handler) runPreflightChecks() error {
 	// Run all critical prerequisite checks
 	checks := c.runCriticalPrerequisiteChecks()
 
@@ -704,7 +704,7 @@ func (c *Controller) runPreflightChecks() error {
 
 // runCriticalPrerequisiteChecks runs all critical checks that must pass before migration.
 // This is used by both GetPrerequisites and runPreflightChecks to ensure consistency.
-func (c *Controller) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
+func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 	checks := make([]PrerequisiteCheck, 0, 6)
 
 	// Common critical checks
@@ -751,7 +751,7 @@ type migrationActionParams struct {
 
 // executeMigrationAction handles common migration action logic.
 // All callers are behind the requireMigrationStateManager middleware.
-func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationActionParams) error {
+func (c *Handler) executeMigrationAction(ctx echo.Context, params *migrationActionParams) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled(params.logStart, logger.String("path", path), logger.String("ip", ip))
 
