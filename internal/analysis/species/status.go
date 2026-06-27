@@ -42,6 +42,10 @@ func (t *SpeciesTracker) GetSpeciesStatus(scientificName string, currentTime tim
 		return warmingSpeciesStatus(currentTime)
 	}
 
+	// Collapse taxonomic aliases so the status (and its cache entry) keys this taxon
+	// identically to its loaded history regardless of which name the caller passed.
+	scientificName = canonicalSpeciesName(scientificName)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -302,9 +306,11 @@ func (t *SpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, current
 	// Pre-allocate result map with exact capacity
 	results := make(map[string]SpeciesStatus, len(scientificNames))
 
-	// Process each species using the cached season information
+	// Process each species using the cached season information. The result map is
+	// keyed by the caller's input name; only the internal lookup is canonicalized so
+	// an alias and its canonical name resolve to the same tracked history.
 	for _, scientificName := range scientificNames {
-		status := t.buildSpeciesStatusLocked(scientificName, currentTime, currentSeason)
+		status := t.buildSpeciesStatusLocked(canonicalSpeciesName(scientificName), currentTime, currentSeason)
 		results[scientificName] = status
 	}
 
