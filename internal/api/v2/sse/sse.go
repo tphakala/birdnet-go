@@ -1,9 +1,13 @@
-// internal/api/v2/sse.go
-package api
+// Package sse implements the Server-Sent Events ENDPOINT handlers for the v2
+// API (the real-time detection and sound-level streams plus the SSE status
+// endpoint). The SSE hub itself (SSEManager, broadcasters, SSEClient, the wire
+// structs and the low-level write primitives) lives in apicore and is shared by
+// every SSE producer; this package only owns the stream endpoints and their
+// per-request event loops.
+package sse
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -16,9 +20,6 @@ import (
 
 // SSE connection configuration
 const (
-	// Connection timeouts
-	maxSSEStreamDuration = 30 * time.Minute // Maximum stream duration to prevent resource leaks
-
 	// Endpoints
 	detectionStreamEndpoint  = "/api/v2/detections/stream"
 	soundLevelStreamEndpoint = "/api/v2/soundlevels/stream"
@@ -35,20 +36,23 @@ const (
 	sseRateLimitWindow   = 1 * time.Minute // SSE rate limit time window
 )
 
-// SSEEvent represents a generic SSE event that can contain different data types
-type SSEEvent struct {
-	Type      string    `json:"type"`
-	Data      any       `json:"data"`
-	Timestamp time.Time `json:"timestamp"`
+// Handler serves the SSE stream endpoints. It embeds *apicore.Core by pointer so
+// the shared SSE hub (SSEManager), write primitives (SendSSEMessage,
+// RecordSSE*), stream scaffolding (SendSSEHeartbeat, LogSSEConnection,
+// SendConnectionMessage) and logging helpers promote directly onto it.
+type Handler struct {
+	*apicore.Core
 }
 
-// initSSERoutes registers SSE-related API endpoints
-func (c *Controller) initSSERoutes() {
-	// Initialize SSE manager if not already done
-	if c.SSEManager == nil {
-		c.SSEManager = apicore.NewSSEManager()
-	}
+// New constructs the SSE endpoint handler from the shared core.
+func New(core *apicore.Core) *Handler {
+	return &Handler{Core: core}
+}
 
+// RegisterRoutes registers the SSE-related API endpoints on the given group,
+// preserving the exact routes, order and per-route middleware (the SSE rate
+// limiter on the two stream endpoints) from the original initSSERoutes.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Create rate limiter for SSE connections (10 requests per minute per IP)
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
@@ -71,18 +75,18 @@ func (c *Controller) initSSERoutes() {
 	}
 
 	// SSE endpoint for detection stream with rate limiting
-	c.Group.GET("/detections/stream", c.StreamDetections, middleware.RateLimiterWithConfig(rateLimiterConfig))
+	g.GET("/detections/stream", c.StreamDetections, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// SSE endpoint for sound level stream with rate limiting
-	c.Group.GET("/soundlevels/stream", c.StreamSoundLevels, middleware.RateLimiterWithConfig(rateLimiterConfig))
+	g.GET("/soundlevels/stream", c.StreamSoundLevels, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// SSE status endpoint - shows connected client count
-	c.Group.GET("/sse/status", c.GetSSEStatus)
+	g.GET("/sse/status", c.GetSSEStatus)
 }
 
 // createSSEClient creates a new SSE client with common settings
-func createSSEClient(clientID string, ctx echo.Context, streamType string) *SSEClient {
-	return &SSEClient{
+func createSSEClient(clientID string, ctx echo.Context, streamType string) *apicore.SSEClient {
+	return &apicore.SSEClient{
 		ID:         clientID,
 		Request:    ctx.Request(),
 		Response:   ctx.Response(),
@@ -91,63 +95,17 @@ func createSSEClient(clientID string, ctx echo.Context, streamType string) *SSEC
 	}
 }
 
-// sendConnectionMessage sends the initial connection message to the client
-func (c *Controller) sendConnectionMessage(ctx echo.Context, clientID, message, streamType string) error {
-	data := map[string]string{
-		"clientId": clientID,
-		"message":  message,
-	}
-	if streamType != "" {
-		data["type"] = streamType
-	}
-	return c.SendSSEMessage(ctx, SSEStatusConnected, data)
-}
-
-// logSSEConnection logs SSE client connection/disconnection events
-func (c *Controller) logSSEConnection(clientID, ip, userAgent, streamType string, connected bool) {
-	action := SSEStatusConnected
-	if !connected {
-		action = SSEStatusDisconnected
-	}
-
-	c.LogInfoIfEnabled(fmt.Sprintf("SSE %s client %s", streamType, action),
-		logger.String("client_id", clientID),
-		logger.String("ip", ip),
-		logger.String("user_agent", userAgent),
-	)
-}
-
-// sendSSEHeartbeat sends a heartbeat message to keep the connection alive
-func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType string) error {
-	data := map[string]any{
-		"timestamp": time.Now().Unix(),
-		"clients":   c.SSEManager.GetClientCount(),
-	}
-	if streamType != "" {
-		data["type"] = streamType
-	}
-
-	if err := c.SendSSEMessage(ctx, "heartbeat", data); err != nil {
-		c.LogDebugIfEnabled("SSE heartbeat failed, client likely disconnected",
-			logger.String("client_id", clientID),
-			logger.Error(err),
-		)
-		return err
-	}
-	return nil
-}
-
 // handleSSEStream handles the common SSE stream setup and teardown with timeout protection
-func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logPrefix string, setupFunc func(*SSEClient), eventLoop func(echo.Context, *SSEClient, string) error) error {
+func (c *Handler) handleSSEStream(ctx echo.Context, streamType, message, logPrefix string, setupFunc func(*apicore.SSEClient), eventLoop func(echo.Context, *apicore.SSEClient, string) error) error {
 	// Track connection start time for metrics
 	connectionStartTime := time.Now()
 
 	// Track metrics if available
 	endpoint := ""
 	switch streamType {
-	case streamTypeDetections:
+	case apicore.StreamTypeDetections:
 		endpoint = detectionStreamEndpoint
-	case streamTypeSoundLevels:
+	case apicore.StreamTypeSoundLevels:
 		endpoint = soundLevelStreamEndpoint
 	}
 
@@ -166,7 +124,7 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 	}
 
 	// Create a context with timeout for maximum connection duration
-	timeoutCtx, cancel := context.WithTimeout(ctx.Request().Context(), maxSSEStreamDuration)
+	timeoutCtx, cancel := context.WithTimeout(ctx.Request().Context(), apicore.MaxSSEStreamDuration)
 	defer cancel()
 
 	// Override the request context with timeout context
@@ -193,18 +151,18 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 	}
 
 	// Send initial connection message
-	if err := c.sendConnectionMessage(ctx, clientID, message, streamType); err != nil {
+	if err := c.SendConnectionMessage(ctx, clientID, message, streamType); err != nil {
 		c.SSEManager.RemoveClient(clientID)
 		return err
 	}
 
 	// Log the connection
-	c.logSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), logPrefix, true)
+	c.LogSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), logPrefix, true)
 
 	// Handle the SSE connection
 	defer func() {
 		c.SSEManager.RemoveClient(clientID)
-		c.logSSEConnection(clientID, ctx.RealIP(), "", logPrefix, false)
+		c.LogSSEConnection(clientID, ctx.RealIP(), "", logPrefix, false)
 	}()
 
 	// Run the event loop
@@ -212,27 +170,27 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 }
 
 // StreamDetections handles the SSE connection for real-time detection streaming
-func (c *Controller) StreamDetections(ctx echo.Context) error {
-	return c.handleSSEStream(ctx, streamTypeDetections, "Connected to detection stream", "detection",
-		func(client *SSEClient) {
-			client.Channel = make(chan SSEDetectionData, sseDetectionBufferSize) // Buffer for high detection periods
-			client.PendingChan = make(chan any, ssePendingBufferSize)            // Buffer for pending detection snapshots
+func (c *Handler) StreamDetections(ctx echo.Context) error {
+	return c.handleSSEStream(ctx, apicore.StreamTypeDetections, "Connected to detection stream", "detection",
+		func(client *apicore.SSEClient) {
+			client.Channel = make(chan apicore.SSEDetectionData, sseDetectionBufferSize) // Buffer for high detection periods
+			client.PendingChan = make(chan any, ssePendingBufferSize)                    // Buffer for pending detection snapshots
 		},
-		func(ctx echo.Context, client *SSEClient, clientID string) error {
+		func(ctx echo.Context, client *apicore.SSEClient, clientID string) error {
 			return c.runSSEEventLoopMulti(ctx, client, clientID, detectionStreamEndpoint)
 		})
 }
 
 // runSSEEventLoopMulti handles the SSE event loop for detection streams,
 // which receive both detection events and pending detection snapshots.
-func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, clientID, endpoint string) error {
+func (c *Handler) runSSEEventLoopMulti(ctx echo.Context, client *apicore.SSEClient, clientID, endpoint string) error {
 	ticker := time.NewTicker(apicore.SSEHeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			if err := c.sendSSEHeartbeat(ctx, clientID, ""); err != nil {
+			if err := c.SendSSEHeartbeat(ctx, clientID, ""); err != nil {
 				c.RecordSSEError(endpoint, "heartbeat_failed")
 				return err
 			}
@@ -297,13 +255,13 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 }
 
 // StreamSoundLevels handles the SSE connection for real-time sound level streaming
-func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
-	return c.handleSSEStream(ctx, streamTypeSoundLevels, "Connected to sound level stream", "sound level",
-		func(client *SSEClient) {
-			client.Channel = make(chan SSEDetectionData, sseMinimalBufferSize)            // Minimal buffer, not used for sound levels
-			client.SoundLevelChan = make(chan SSESoundLevelData, sseSoundLevelBufferSize) // Buffer for sound level data
+func (c *Handler) StreamSoundLevels(ctx echo.Context) error {
+	return c.handleSSEStream(ctx, apicore.StreamTypeSoundLevels, "Connected to sound level stream", "sound level",
+		func(client *apicore.SSEClient) {
+			client.Channel = make(chan apicore.SSEDetectionData, sseMinimalBufferSize)            // Minimal buffer, not used for sound levels
+			client.SoundLevelChan = make(chan apicore.SSESoundLevelData, sseSoundLevelBufferSize) // Buffer for sound level data
 		},
-		func(ctx echo.Context, client *SSEClient, clientID string) error {
+		func(ctx echo.Context, client *apicore.SSEClient, clientID string) error {
 			return c.runSSEEventLoop(ctx, client, clientID, soundLevelStreamEndpoint,
 				func() (any, bool) {
 					select {
@@ -317,13 +275,13 @@ func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
 					}
 				},
 				"soundlevel",
-				streamTypeSoundLevels,
+				apicore.StreamTypeSoundLevels,
 			)
 		})
 }
 
 // runSSEEventLoop handles the common SSE event loop pattern for all stream types
-func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, clientID string, endpoint string,
+func (c *Handler) runSSEEventLoop(ctx echo.Context, client *apicore.SSEClient, clientID string, endpoint string,
 	dataReceiver func() (any, bool), eventType string, heartbeatType string) error {
 
 	ticker := time.NewTicker(apicore.SSEHeartbeatInterval)
@@ -333,7 +291,7 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 		select {
 		case <-ticker.C:
 			// Send heartbeat
-			if err := c.sendSSEHeartbeat(ctx, clientID, heartbeatType); err != nil {
+			if err := c.SendSSEHeartbeat(ctx, clientID, heartbeatType); err != nil {
 				c.RecordSSEError(endpoint, "heartbeat_failed")
 				return err
 			}
@@ -370,7 +328,7 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 }
 
 // GetSSEStatus returns information about SSE connections
-func (c *Controller) GetSSEStatus(ctx echo.Context) error {
+func (c *Handler) GetSSEStatus(ctx echo.Context) error {
 	if c.SSEManager == nil {
 		return ctx.JSON(http.StatusOK, map[string]any{
 			"connected_clients": 0,

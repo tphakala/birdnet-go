@@ -478,7 +478,7 @@ func convertErrorContextToResponse(errCtx *ffmpeg.ErrorContext) *ErrorContextRes
 
 // handleStreamHealthHeartbeat sends a heartbeat and returns true if client disconnected.
 func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID string) error {
-	if err := c.sendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
+	if err := c.SendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
 		c.LogDebugIfEnabled("Stream health SSE heartbeat failed, client likely disconnected",
 			logger.String("client_id", clientID),
 			logger.Error(err))
@@ -552,10 +552,10 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	apicore.SetSSEHeaders(ctx)
 	clientID := apicore.GenerateCorrelationID()
 
-	c.logSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), "stream-health", true)
-	defer c.logSSEConnection(clientID, ctx.RealIP(), "", "stream-health", false)
+	c.LogSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), "stream-health", true)
+	defer c.LogSSEConnection(clientID, ctx.RealIP(), "", "stream-health", false)
 
-	if err := c.sendConnectionMessage(ctx, clientID, "Connected to stream health updates", "stream_health"); err != nil {
+	if err := c.SendConnectionMessage(ctx, clientID, "Connected to stream health updates", "stream_health"); err != nil {
 		return err
 	}
 

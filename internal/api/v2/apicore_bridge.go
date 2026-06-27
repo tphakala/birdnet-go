@@ -24,10 +24,17 @@ type (
 	ShutdownRequester = apicore.ShutdownRequester
 )
 
-// Stream-type identifiers re-declared from apicore so the SSE stream handlers in
-// package api keep using the short, unexported names.
+// SSE stream scaffolding re-declared from apicore so the remaining SSE producers
+// still in package api (streams_health.go, import.go) and the dashboard public
+// endpoint test keep referring to them by their short names. The canonical
+// definitions and the SendSSEHeartbeat/LogSSEConnection/SendConnectionMessage
+// helpers live in apicore and are promoted onto *Controller via the embedded
+// *apicore.Core.
 const (
-	streamTypeDetections  = apicore.StreamTypeDetections
-	streamTypeSoundLevels = apicore.StreamTypeSoundLevels
-	streamTypeAll         = apicore.StreamTypeAll
+	// maxSSEStreamDuration is the maximum lifetime of a single SSE stream.
+	maxSSEStreamDuration = apicore.MaxSSEStreamDuration
+	// SSEStatusConnected marks an established SSE client connection.
+	SSEStatusConnected = apicore.SSEStatusConnected
+	// SSEStatusDisconnected marks a torn-down SSE client connection.
+	SSEStatusDisconnected = apicore.SSEStatusDisconnected
 )
