@@ -45,3 +45,11 @@ packages:
         config:
           filename: "mock_ErrorEvent.go"
           mockname: "MockErrorEvent"
+
+  github.com/tphakala/birdnet-go/internal/datastore/v2/repository:
+    interfaces:
+      # Alert rule CRUD and history repository - used by the api/v2 alerts domain tests
+      AlertRuleRepository:
+        config:
+          filename: "mock_AlertRuleRepository.go"
+          mockname: "MockAlertRuleRepository"

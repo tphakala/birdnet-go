@@ -4865,7 +4865,8 @@
       "typesRequired": "Objekttyp och utlösartyp krävs",
       "duplicateName": "En regel med detta namn finns redan",
       "invalidJSON": "Ogiltig JSON",
-      "invalidEscalation": "Eskaleringsstegen är ogiltiga"
+      "invalidEscalation": "Eskaleringsstegen är ogiltiga",
+      "engineUnavailable": "Alerting engine is unavailable"
     },
     "detection": {
       "invalidDate": "Ogiltigt {paramName}-format, använd ÅÅÅÅ-MM-DD"
