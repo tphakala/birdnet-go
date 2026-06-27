@@ -13,7 +13,7 @@
 // 4. For benchmark loops, use b.Loop() instead of manual for i := 0; i < b.N; i++
 // 5. Avoid testing/synctest.Test() if code creates background goroutines with time.Sleep
 
-package api
+package sse
 
 import (
 	"bufio"
@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -95,7 +96,8 @@ func attemptSSEConnection(t *testing.T, serverURL, endpoint string, connID int, 
 
 // Common test configurations for different SSE endpoints
 var sseTestConfigs = []SSETestConfig{
-	// Note: /notifications/stream endpoint requires authentication and is tested separately
+	// Note: /notifications/stream endpoint requires authentication and lives in
+	// the notifications domain; it is tested there separately.
 	{
 		endpoint:          "/detections/stream",
 		maxConnections:    3,
@@ -131,11 +133,7 @@ func TestSSEConnectionCleanup(t *testing.T) {
 func testSSEEndpointCleanup(t *testing.T, config SSETestConfig) {
 	t.Helper()
 	// Create test server
-	server, controller := setupSSETestServer(t)
-	t.Cleanup(func() {
-		controller.Shutdown()
-		server.Close()
-	})
+	server, _ := setupSSETestServer(t)
 
 	t.Run("single_connection_manual_disconnect", func(t *testing.T) {
 		testSingleConnectionManualDisconnect(t, server, config)
@@ -322,9 +320,7 @@ func TestSSEUnbufferedChannelFix(t *testing.T) {
 	t.Attr("issue", "unbuffered-channel-fix")
 
 	// Test the detections endpoint to verify the critical unbuffered channel fix
-	server, controller := setupSSETestServer(t)
-	defer server.Close()
-	defer controller.Shutdown()
+	server, _ := setupSSETestServer(t)
 
 	client := apitest.NewTestHTTPClient(3 * time.Second)
 
@@ -360,9 +356,7 @@ func TestSSERateLimiting(t *testing.T) {
 	t.Attr("component", "sse")
 	t.Attr("feature", "rate-limiting")
 
-	server, controller := setupSSETestServer(t)
-	defer server.Close()
-	defer controller.Shutdown()
+	server, _ := setupSSETestServer(t)
 
 	client := apitest.NewTestHTTPClient(2 * time.Second)
 
@@ -403,63 +397,38 @@ func TestSSERateLimiting(t *testing.T) {
 	// Cleanup is immediate with DisableKeepAlives=true
 }
 
-// setupSSETestServer creates a test server with SSE endpoints configured
-func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
+// setupSSETestServer creates a test server with the SSE endpoints registered.
+// It builds an apicore.Core via apitest (mock datastore, per-test t.TempDir
+// media path, in-memory Echo), wires only this domain's handler, and serves it
+// over httptest. The core's lifecycle (SSE client teardown, context cancel, SFS
+// close) is torn down by apitest.NewCore's own t.Cleanup; this helper adds a
+// cleanup that closes lingering clients and the httptest server first (LIFO) so
+// a blocked streaming handler is released before the server is closed. Settings
+// are not published to the process-global snapshot (the SSE endpoints never read
+// it) so the parallel endpoint subtests do not contend on the global.
+func setupSSETestServer(t *testing.T) (*httptest.Server, *apicore.Core) {
 	t.Helper()
-	// Create Echo instance
 	e := echo.New()
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
 
-	// Create mock datastore
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
+	h := New(core)
+	h.RegisterRoutes(core.Group)
 
-	// Create settings with required paths
-	settings := &conf.Settings{
-		WebServer: conf.WebServerSettings{
-			Debug: true,
-		},
-		Realtime: conf.RealtimeSettings{
-			Audio: conf.AudioSettings{
-				Export: conf.ExportSettings{
-					Path: t.TempDir(),
-				},
-			},
-		},
-	}
-
-	// Create control channel
-	controlChan := make(chan string, 10)
-
-	// Create mock metrics
-	mockMetrics, err := observability.NewMetrics()
-	require.NoError(t, err, "Failed to initialize metrics")
-
-	// Create controller WITH route initialization
-	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, mockMetrics, true)
-	require.NoError(t, err)
-
-	// Wait for goroutines to start
-	if controller.goroutinesStarted != nil {
-		select {
-		case <-controller.goroutinesStarted:
-			// Controller is ready
-		case <-time.After(2 * time.Second):
-			require.Fail(t, "Controller failed to start within timeout")
-		}
-	}
-
-	// Create test server
 	server := httptest.NewServer(e)
+	t.Cleanup(func() {
+		if core.SSEManager != nil {
+			core.SSEManager.CloseAllClients()
+		}
+		server.Close()
+	})
 
-	return server, controller
+	return server, core
 }
 
 // Benchmark for SSE connection performance
 // Uses Go 1.25's b.Loop() for iteration
 func BenchmarkSSEConnectionSetup(b *testing.B) {
-	server, controller := setupSSETestServerForBench(b)
-	defer server.Close()
-	defer controller.Shutdown()
+	server, _ := setupSSETestServerForBench(b)
 
 	client := apitest.NewTestHTTPClient(5 * time.Second)
 	defer client.CloseIdleConnections()
@@ -469,7 +438,7 @@ func BenchmarkSSEConnectionSetup(b *testing.B) {
 
 	// Use b.Loop() for benchmark iteration (Go 1.25)
 	for b.Loop() {
-		req, err := http.NewRequest("GET", server.URL+"/api/v2/notifications/stream", http.NoBody)
+		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", http.NoBody)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -493,8 +462,11 @@ func BenchmarkSSEConnectionSetup(b *testing.B) {
 	}
 }
 
-// setupSSETestServerForBench creates a test server for benchmarking
-func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
+// setupSSETestServerForBench creates a test server for benchmarking. apitest.NewCore
+// requires a *testing.T, so the benchmark composes the core directly via
+// apicore.NewCore (the datastore mock accepts a testing.TB) and tears it down in
+// b.Cleanup, mirroring apitest's Core-level teardown order.
+func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *apicore.Core) {
 	b.Helper()
 	e := echo.New()
 	mockDS := mocks.NewMockInterface(b)
@@ -507,22 +479,39 @@ func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
 			},
 		},
 	}
-	controlChan := make(chan string, 10)
-	mockMetrics, _ := observability.NewMetrics()
-
-	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, mockMetrics, true)
+	mockMetrics, err := observability.NewMetrics()
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	if controller.goroutinesStarted != nil {
-		select {
-		case <-controller.goroutinesStarted:
-			// Controller is ready
-		case <-time.After(2 * time.Second):
-			b.Fatal("Controller failed to start within timeout")
-		}
+	core, err := apicore.NewCore(e, mockDS, settings, nil, nil, mockMetrics,
+		func(_, _ string) bool { return false })
+	if err != nil {
+		b.Fatal(err)
 	}
+	// apicore.NewCore leaves Group nil (the facade owns it); play the facade's
+	// role so the handler registers under /api/v2.
+	core.Group = e.Group("/api/v2")
 
-	return httptest.NewServer(e), controller
+	h := New(core)
+	h.RegisterRoutes(core.Group)
+
+	server := httptest.NewServer(e)
+	b.Cleanup(func() {
+		// Close lingering SSE clients first so a blocked streaming handler is
+		// released, then close the server: server.Close must run so its accept
+		// goroutine is not left alive for the package goleak gate when the
+		// benchmark is exercised with -bench.
+		if core.SSEManager != nil {
+			core.SSEManager.CloseAllClients()
+		}
+		server.Close()
+		core.Cancel()
+		core.Wait()
+		if core.SFS != nil {
+			_ = core.SFS.Close()
+		}
+	})
+
+	return server, core
 }

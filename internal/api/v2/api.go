@@ -28,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/notifications"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
+	"github.com/tphakala/birdnet-go/internal/api/v2/sse"
 	"github.com/tphakala/birdnet-go/internal/api/v2/support"
 	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
 	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
@@ -195,6 +196,13 @@ type Controller struct {
 	// both services reflect WithNotificationService / WithAuthService (see
 	// NewWithOptions).
 	notifications *notifications.Handler
+
+	// sse serves the SSE stream endpoints (/api/v2/detections/stream,
+	// /api/v2/soundlevels/stream, /api/v2/sse/status). It needs only the shared
+	// *apicore.Core: the SSE hub (SSEManager), the write primitives and the stream
+	// scaffolding (SendSSEHeartbeat/LogSSEConnection/SendConnectionMessage) all
+	// promote from the embedded core. The hub itself stays in apicore.
+	sse *sse.Handler
 
 	// Audio processing fields
 	processingCache     *processingCache
@@ -398,6 +406,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// *apicore.Core pointer and register their routes in initRoutes.
 	c.weather = weather.New(c.Core)
 	c.rangeHandler = rangeapi.New(c.Core)
+	c.sse = sse.New(c.Core)
 	// The TLS handler needs the facade's settings-save machinery: the shared
 	// settingsMutex (passed by pointer so TLS certificate writes serialize against
 	// the main settings update handlers) and the bound method values for reading,
@@ -588,7 +597,7 @@ func (c *Controller) initRoutes() {
 		{"media routes", c.initMediaRoutes},
 		{"range routes", func() { c.rangeHandler.RegisterRoutes(c.Group) }},
 		{"heatmap routes", c.initHeatmapRoutes},
-		{"sse routes", c.initSSERoutes},
+		{"sse routes", func() { c.sse.RegisterRoutes(c.Group) }},
 		{"diagnostics routes", c.initDiagnosticsRoutes},
 		{"metrics history routes", c.initMetricsHistoryRoutes},
 		{"notification routes", func() { c.notifications.RegisterRoutes(c.Group) }},

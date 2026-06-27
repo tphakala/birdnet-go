@@ -58,11 +58,8 @@ const (
 	SettingsSectionSpecies   = "species"
 )
 
-// SSE connection status constants
-const (
-	SSEStatusConnected    = "connected"
-	SSEStatusDisconnected = "disconnected"
-)
+// SSE connection status constants are defined in apicore and re-exported via
+// apicore_bridge.go (SSEStatusConnected / SSEStatusDisconnected).
 
 // Toast notification type constants
 const (
