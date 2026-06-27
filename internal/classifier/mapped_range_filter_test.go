@@ -49,6 +49,27 @@ func TestBuildSpeciesMapping_CaseInsensitive(t *testing.T) {
 	assert.Equal(t, 0, mapping[0], "case-insensitive match should succeed")
 }
 
+func TestBuildSpeciesMapping_TaxonomicAlias(t *testing.T) {
+	t.Parallel()
+
+	// The classifier (BirdNET v2.4) emits the legacy name; the geomodel uses the
+	// current eBird name for the same taxon. Without alias resolution these are
+	// different strings and the species is treated as unmapped (and filtered out
+	// when PassUnmappedSpecies is off). With the OpenFauna alias map applied to
+	// both sides, they collapse to one canonical key and match.
+	classifierLabels := []string{
+		"Streptopelia senegalensis_Laughing Dove", // legacy (BirdNET v2.4)
+	}
+	geomodelLabels := []string{
+		"Spilopelia senegalensis_Laughing Dove", // current (eBird/geomodel)
+	}
+
+	mapping := buildSpeciesMapping(classifierLabels, geomodelLabels)
+
+	require.Len(t, mapping, 1)
+	assert.Equal(t, 0, mapping[0], "legacy classifier name should map to the geomodel's canonical synonym")
+}
+
 func TestBuildSpeciesMapping_EmptyInputs(t *testing.T) {
 	t.Parallel()
 

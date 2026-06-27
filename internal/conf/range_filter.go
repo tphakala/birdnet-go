@@ -7,7 +7,26 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
+
+// canonicalSci extracts the scientific-name portion of a species label
+// ("ScientificName_CommonName" or scientific-name only), resolves it through the
+// OpenFauna taxonomic alias map, and lowercases it. Building and querying the
+// included-species set through the same canonical key lets a legacy classifier
+// label (e.g. "Streptopelia senegalensis") match a geomodel that lists the
+// species under its current name ("Spilopelia senegalensis"): the range filter
+// maps the two by alias, so the inclusion gate must too, or the reclassified
+// species would be dropped here after passing the range filter. A non-aliased
+// name resolves to itself, so this is a no-op for species without a
+// reclassification.
+func canonicalSci(label string) string {
+	sci := label
+	if idx := strings.IndexByte(label, '_'); idx >= 0 {
+		sci = label[:idx]
+	}
+	return strings.ToLower(openfauna.CanonicalName(sci))
+}
 
 // speciesListMutex serializes clone-mutate-publish operations on range filter
 // fields (Species, LastUpdated) so that concurrent writers do not lose each
@@ -33,11 +52,7 @@ func UpdateIncludedSpecies(species []string) {
 
 	sciNames := make(map[string]struct{}, len(species))
 	for _, label := range species {
-		sci := label
-		if idx := strings.IndexByte(label, '_'); idx >= 0 {
-			sci = label[:idx]
-		}
-		sciNames[strings.ToLower(sci)] = struct{}{}
+		sciNames[canonicalSci(label)] = struct{}{}
 	}
 	updated.BirdNET.RangeFilter.IncludedScientificNames = sciNames
 
@@ -59,11 +74,9 @@ func (s *Settings) GetIncludedSpecies() []string {
 // when the map is empty (e.g. for snapshots loaded before this feature).
 func (s *Settings) IsSpeciesIncluded(result string) bool {
 	if len(s.BirdNET.RangeFilter.IncludedScientificNames) > 0 {
-		sci := result
-		if idx := strings.IndexByte(result, '_'); idx >= 0 {
-			sci = result[:idx]
-		}
-		_, found := s.BirdNET.RangeFilter.IncludedScientificNames[strings.ToLower(sci)]
+		// Query through the same canonical key the set was built with, so a legacy
+		// detection label resolves to its current name and matches.
+		_, found := s.BirdNET.RangeFilter.IncludedScientificNames[canonicalSci(result)]
 		return found
 	}
 	for _, fullSpeciesString := range s.BirdNET.RangeFilter.Species {
