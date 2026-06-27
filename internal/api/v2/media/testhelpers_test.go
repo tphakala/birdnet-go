@@ -32,6 +32,6 @@ func passthroughMiddleware() echo.MiddlewareFunc {
 // into sibling tests.
 func withRestoredGlobalSettings(t *testing.T) {
 	t.Helper()
-	orig := conf.GetSettings()
+	orig := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(orig) })
 }
