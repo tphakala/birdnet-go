@@ -157,7 +157,15 @@ func (c *Core) reportErrorToTelemetry(ctx echo.Context, err error, message strin
 
 	var builder *errors.ErrorBuilder
 	if err != nil {
-		builder = errors.New(err)
+		// Sanitize the error at the source before it becomes the telemetry
+		// message: privacy.WrapError returns a SanitizedError whose Error() is
+		// ScrubMessage(err.Error()), while Unwrap() preserves the original chain
+		// so errors.Is/As still work. The telemetry pipeline also scrubs the
+		// message downstream when a privacy scrubber is registered, but that
+		// scrubber can be unset (it then falls back to a weaker URL-only scrub),
+		// so wrapping here guarantees credential-bearing error text never reaches
+		// Sentry regardless.
+		builder = errors.New(privacy.WrapError(err))
 	} else {
 		builder = errors.Newf("%s", message)
 	}

@@ -67,6 +67,28 @@ func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 	assert.Equal(t, http.MethodGet, ee.Context["method"])
 }
 
+// TestHandleError_5xxTelemetryErrorIsScrubbed verifies the error that reaches the
+// telemetry pipeline has its message sanitized at the source (privacy.WrapError),
+// so credential-bearing error text never reaches Sentry even when the global
+// telemetry privacy scrubber is unset.
+// Note: Not parallel; modifies global error-hook state.
+func TestHandleError_5xxTelemetryErrorIsScrubbed(t *testing.T) {
+	captured := captureHook(t)
+
+	c := &Controller{Core: &apicore.Core{}}
+	c.Settings.Store(getTestSettings(t))
+	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/streams")
+
+	credErr := fmt.Errorf("failed to dial rtsp://user:pass@192.168.1.50:554/stream")
+	err := c.HandleError(ctx, credErr, "Internal server error", http.StatusInternalServerError)
+	require.NoError(t, err)
+
+	require.Len(t, *captured, 1, "expected one telemetry event for the 5xx error")
+	telemetryMsg := (*captured)[0].Error()
+	assert.NotContains(t, telemetryMsg, "user:pass", "credentials must be scrubbed from the telemetry error")
+	assert.NotContains(t, telemetryMsg, "192.168.1.50", "the IP must be scrubbed from the telemetry error")
+}
+
 // TestHandleError_4xxNotReportedToTelemetry verifies that a 4xx HandleError call
 // produces no telemetry events (4xx errors are client mistakes, not server bugs).
 // Note: Not parallel; modifies global error-hook state.

@@ -162,6 +162,16 @@ func TestScrubQueryForLog(t *testing.T) {
 			wantPresent: []string{"[TOKEN]"},
 		},
 		{
+			// A literal '+' in a base64 token must stay part of the token value:
+			// decoding with url.QueryUnescape would turn it into a space and split
+			// the value, leaking the tail past the scrubber. url.PathUnescape
+			// preserves the '+', so the whole value is redacted.
+			name:        "literal plus in token value is redacted not split on a space",
+			rawQuery:    "token=ab+cd1234567890",
+			wantAbsent:  []string{"ab+cd1234567890", "ab cd1234567890", "1234567890"},
+			wantPresent: []string{"[TOKEN]"},
+		},
+		{
 			name:        "api_key value is redacted",
 			rawQuery:    "api_key=SUPERSECRETKEY123",
 			wantAbsent:  []string{"SUPERSECRETKEY123"},
