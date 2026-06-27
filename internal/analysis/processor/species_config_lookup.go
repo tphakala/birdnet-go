@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 // lookupSpeciesConfig looks up a species configuration by either common name or scientific name.
@@ -35,11 +36,22 @@ func lookupSpeciesConfig(configMap map[string]conf.SpeciesConfig, commonName, sc
 		}
 	}
 
-	// Fallback: O(n) iteration checking scientific name (case-insensitive)
-	// This allows users to configure species by scientific name in config files
+	// Scientific-name lookup. Try an exact match first as an O(1) map lookup (keys are
+	// normalized to lowercase, same as the common-name fast path above). The exact
+	// match also wins deterministically over the canonical-alias fallback when the
+	// config holds both a legacy name and its canonical replacement (Go map iteration
+	// order is randomized).
 	if scientificName != "" {
+		if config, exists := configMap[strings.ToLower(scientificName)]; exists {
+			return config, true
+		}
+		// Canonical-alias fallback: match a config entry keyed on a legacy/alias
+		// scientific name against the canonical name the detection now carries.
+		// CanonicalName is identity for non-aliased names, so this preserves existing
+		// behavior for species without a reclassification.
+		canonicalSci := openfauna.CanonicalName(scientificName)
 		for key, config := range configMap {
-			if strings.EqualFold(key, scientificName) {
+			if strings.EqualFold(openfauna.CanonicalName(key), canonicalSci) {
 				return config, true
 			}
 		}

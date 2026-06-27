@@ -50,7 +50,7 @@ func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 			result := p.createDetectionResult(p.Settings,
 				time.Now(),
 				time.Now(), time.Now().Add(3*time.Second),
-				"Parus major", "Great Tit", "gretit1",
+				"Parus major", "Great Tit", "gretit1", "",
 				0.95,
 				datastore.AudioSource{ID: "test", DisplayName: "Test"},
 				"clip.wav",

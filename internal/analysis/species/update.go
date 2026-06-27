@@ -146,6 +146,10 @@ func (t *SpeciesTracker) UpdateSpecies(scientificName string, detectionTime time
 		return false
 	}
 
+	// Collapse taxonomic aliases so this taxon keys identically to its history,
+	// regardless of which name (legacy or canonical) the caller passed.
+	scientificName = canonicalSpeciesName(scientificName)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -171,6 +175,8 @@ func (t *SpeciesTracker) IsNewSpecies(scientificName string) bool {
 	if t.warming.Load() {
 		return false
 	}
+
+	scientificName = canonicalSpeciesName(scientificName)
 
 	t.mu.RLock()
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
@@ -252,6 +258,11 @@ func (t *SpeciesTracker) CheckAndUpdateSpeciesWithNovelty(scientificName string,
 	if t.warming.Load() {
 		return false, 0, inactiveNoveltyStatus(inactiveNoveltyValue)
 	}
+
+	// Collapse taxonomic aliases so the lookup and recording below key this taxon
+	// identically to its loaded history (canonical names) regardless of which name
+	// the detection carried.
+	scientificName = canonicalSpeciesName(scientificName)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
