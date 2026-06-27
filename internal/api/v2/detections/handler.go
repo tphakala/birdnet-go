@@ -105,6 +105,15 @@ func New(
 // Search is registered as its own ordered initializer (preceding the detection
 // routes), mirroring the facade's previous initSearchRoutes entry.
 func (c *Handler) RegisterSearchRoutes(g *echo.Group) {
+	// HandleSearch dereferences c.DS (SearchDetections). Honor the constructor's
+	// "datastore disabled" mode (NewWithOptions permits a nil datastore) by not
+	// registering the search route when there is no datastore, instead of
+	// registering a handler that would panic. This mirrors RegisterDetectionRoutes.
+	if c.DS == nil {
+		c.LogWarnIfEnabled("Skipping search routes: datastore is not available")
+		return
+	}
+
 	c.LogInfoIfEnabled("Initializing search routes")
 
 	// Search endpoints - publicly accessible

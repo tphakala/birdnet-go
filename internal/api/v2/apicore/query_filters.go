@@ -31,7 +31,8 @@ type ConfidenceFilterResult struct {
 }
 
 // ParseConfidenceFilter parses a confidence filter parameter with operator support.
-// Supports operators: >=, <=, >, <, = (default)
+// Supports operators: >=, <=, >, <, =. Equality may be written either as an
+// explicit "=50" or as a bare "50" (both parse to operator "=", value 50).
 // Returns nil if the parameter is empty.
 func ParseConfidenceFilter(param string) *ConfidenceFilterResult {
 	if param == "" {
@@ -54,7 +55,13 @@ func ParseConfidenceFilter(param string) *ConfidenceFilterResult {
 	case strings.HasPrefix(param, "<"):
 		operator = "<"
 		value = param[1:]
+	case strings.HasPrefix(param, "="):
+		// Explicit equality, e.g. "=50". A lone "=" yields value "", which
+		// strconv.ParseFloat rejects below, so the filter correctly returns nil.
+		operator = "="
+		value = param[1:]
 	default:
+		// Bare number, e.g. "50", treated as equality.
 		operator = "="
 		value = param
 	}
