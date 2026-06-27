@@ -1,4 +1,4 @@
-package api
+package analytics
 
 import (
 	"context"
@@ -58,8 +58,10 @@ func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, _ int64, tzOffset
 	return m.dashboardKPIs, m.err
 }
 
-// setupInsightsTestController creates a minimal controller with a mock insights repo.
-func setupInsightsTestController(t *testing.T, mock *mockInsightsRepo) (*echo.Echo, *Controller) {
+// setupInsightsTestController creates a minimal analytics handler with a mock
+// insights repo and the name maps pre-seeded to match the two test labels (the
+// facade name-map plumbing is exercised in its own package-api tests).
+func setupInsightsTestController(t *testing.T, mock *mockInsightsRepo) (*echo.Echo, *Handler) {
 	t.Helper()
 	e := echo.New()
 	settingsVal := &conf.Settings{
@@ -70,10 +72,21 @@ func setupInsightsTestController(t *testing.T, mock *mockInsightsRepo) (*echo.Ec
 			},
 		},
 	}
-	controller := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2")}, insightsRepo: mock}
-	controller.Settings.Store(settingsVal)
-	controller.UpdateCommonNameMap(controller.Settings.Load().BirdNET.Labels)
-	return e, controller
+	core := &apicore.Core{Group: e.Group("/api/v2")}
+	core.Settings.Store(settingsVal)
+	// Pre-seed the cached name maps the way UpdateCommonNameMap would from the two
+	// labels above (ScientificName_CommonName).
+	sciToCommon := map[string]string{
+		"Turdus merula": "Eurasian Blackbird",
+		"Parus major":   "Great Tit",
+	}
+	commonToSci := map[string]string{
+		apicore.NormalizeForLookup("Eurasian Blackbird"): "Turdus merula",
+		apicore.NormalizeForLookup("Great Tit"):          "Parus major",
+	}
+	h := newTestHandlerWithMaps(core, sciToCommon, commonToSci)
+	h.insightsRepo = mock
+	return e, h
 }
 
 func TestGetPhantomSpecies_Handler(t *testing.T) {
@@ -196,32 +209,32 @@ func TestInsightsEndpointContextErrors(t *testing.T) {
 	endpoints := []struct {
 		name   string
 		path   string
-		invoke func(*Controller, echo.Context) error
+		invoke func(*Handler, echo.Context) error
 	}{
 		{
 			name:   "expected today",
 			path:   "/api/v2/insights/expected-today",
-			invoke: func(c *Controller, ctx echo.Context) error { return c.getExpectedTodayImpl(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.getExpectedTodayImpl(ctx) },
 		},
 		{
 			name:   "phantom species",
 			path:   "/api/v2/insights/phantom-species",
-			invoke: func(c *Controller, ctx echo.Context) error { return c.getPhantomSpeciesImpl(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.getPhantomSpeciesImpl(ctx) },
 		},
 		{
 			name:   "dawn chorus",
 			path:   "/api/v2/insights/dawn-chorus",
-			invoke: func(c *Controller, ctx echo.Context) error { return c.getDawnChorusImpl(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.getDawnChorusImpl(ctx) },
 		},
 		{
 			name:   "migration",
 			path:   "/api/v2/insights/migration",
-			invoke: func(c *Controller, ctx echo.Context) error { return c.getMigrationImpl(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.getMigrationImpl(ctx) },
 		},
 		{
 			name:   "dashboard kpis",
 			path:   "/api/v2/dashboard/kpis",
-			invoke: func(c *Controller, ctx echo.Context) error { return c.getDashboardKPIsImpl(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.getDashboardKPIsImpl(ctx) },
 		},
 	}
 
@@ -370,25 +383,6 @@ func TestBuildYearRanges(t *testing.T) {
 			tt.checkFunc(t, ranges)
 		})
 	}
-}
-
-func TestBuildCommonNameMap(t *testing.T) {
-	t.Parallel()
-	labels := []string{
-		"Turdus merula_Eurasian Blackbird",
-		"Parus major_Great Tit",
-		"Invalid Label Without Separator",
-		"_EmptyScientificName",
-	}
-
-	m := buildNameMaps(labels, nil).sciToCommon
-	assert.Equal(t, "Eurasian Blackbird", m["Turdus merula"])
-	assert.Equal(t, "Great Tit", m["Parus major"])
-	assert.Len(t, m, 2) // invalid entries excluded
-
-	// Test resolveCommonName fallback
-	assert.Equal(t, "Eurasian Blackbird", apicore.ResolveCommonName(m, "Turdus merula"))
-	assert.Equal(t, "Unknown species", apicore.ResolveCommonName(m, "Unknown species"))
 }
 
 func TestSecondsToTimeString(t *testing.T) {

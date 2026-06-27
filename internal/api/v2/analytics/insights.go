@@ -1,4 +1,4 @@
-package api
+package analytics
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -21,7 +20,7 @@ import (
 // response if not. Shared by the insights handlers in this file. The alerts
 // domain (now its own package) keeps its own copy of this guard; consolidating
 // the two is deferred so this extraction stays behavior-preserving.
-func (c *Controller) requireV2(ctx echo.Context) error {
+func (c *Handler) requireV2(ctx echo.Context) error {
 	return c.HandleErrorWithKey(ctx, nil,
 		"Alert rules require the enhanced (v2) database", http.StatusConflict, notification.MsgErrAlertV2Required, nil)
 }
@@ -159,119 +158,15 @@ type StreakInfo struct {
 
 // --- Helper functions ---
 
-// nameMaps holds the bidirectional BirdNET label lookup maps. Grouping them
-// into one struct lets a single atomic.Value Store swap both maps together,
-// avoiding any window where readers could see a partially updated pair.
-type nameMaps struct {
-	// sciToCommon maps scientific name -> common name.
-	sciToCommon map[string]string
-	// commonToSci maps NFC-normalised, lowercased common name -> scientific name.
-	commonToSci map[string]string
-}
-
-// buildNameMaps parses a BirdNET label list ("ScientificName_CommonName")
-// and builds both lookup maps in a single pass. If two or more labels share
-// the same normalised common name but map to different scientific names,
-// the common-name key is removed from commonToSci so that search queries
-// matching an ambiguous common name pass through untranslated; resolving
-// them to an arbitrary species based on label order would silently hide
-// valid matches. sciToCommon is not affected because scientific names are
-// unique per label.
-// When resolver is non-nil, each label's common name is overridden by the
-// resolver (authoritative/localized), so insights display (sciToCommon) and
-// search (commonToSci) both reflect the localized name. Labels the resolver does
-// not cover keep their embedded common name.
-func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nameMaps {
-	nm := &nameMaps{
-		sciToCommon: make(map[string]string, len(labels)),
-		commonToSci: make(map[string]string, len(labels)),
-	}
-	ambiguous := make(map[string]struct{})
-	for _, sn := range datastore.ResolveLabelNames(labels, resolver) {
-		nm.sciToCommon[sn.Scientific] = sn.Common
-
-		key := apicore.NormalizeForLookup(sn.Common)
-		if _, seen := ambiguous[key]; seen {
-			continue
-		}
-		if existing, exists := nm.commonToSci[key]; exists && existing != sn.Scientific {
-			ambiguous[key] = struct{}{}
-			delete(nm.commonToSci, key)
-			continue
-		}
-		nm.commonToSci[key] = sn.Scientific
-	}
-	return nm
-}
-
-// emptyNameMaps is returned by loadNameMaps when the atomic.Value has not been
-// populated yet (a narrow startup window before initInsightsRoutes runs). It
-// avoids allocating a fresh struct and two empty maps on every cold-path call.
-var emptyNameMaps = &nameMaps{
-	sciToCommon: map[string]string{},
-	commonToSci: map[string]string{},
-}
-
-// loadNameMaps returns the current name-maps struct. Always returns a non-nil
-// struct with non-nil inner maps so callers can index without guards.
-func (c *Controller) loadNameMaps() *nameMaps {
-	if nm, ok := c.nameMaps.Load().(*nameMaps); ok && nm != nil {
-		return nm
-	}
-	return emptyNameMaps
-}
-
-// loadCommonToScientificMap returns the current common-to-scientific lookup map.
-// Always returns a non-nil map.
-func (c *Controller) loadCommonToScientificMap() map[string]string {
-	return c.loadNameMaps().commonToSci
-}
-
 // resolveSpeciesToScientific resolves a (possibly localized common) name to its
-// scientific name using this controller's common->scientific name map. It is a thin
-// facade wrapper over apicore.ResolveSpeciesToScientific so the analytics species
-// filter and the detections search resolver share one implementation. The
-// detections domain has its own wrapper over the same apicore helper.
-func (c *Controller) resolveSpeciesToScientific(input string) (resolved string, hit bool) {
+// scientific name using the facade-injected common->scientific name map. It is a
+// thin wrapper over apicore.ResolveSpeciesToScientific so the analytics species
+// filter and the detections search resolver share one implementation (the
+// detections domain has its own wrapper over the same apicore helper). The name
+// maps themselves are facade-owned (see internal/api/v2/name_maps.go); this
+// handler only reads the current common->scientific snapshot.
+func (c *Handler) resolveSpeciesToScientific(input string) (resolved string, hit bool) {
 	return apicore.ResolveSpeciesToScientific(c.loadCommonToScientificMap(), input)
-}
-
-// canonicalizeExcludeList canonicalizes the species exclude list (resolve each
-// entry to its scientific name, drop blanks, de-duplicate case-insensitively). It
-// is a thin facade wrapper over apicore.CanonicalizeExcludeList so the settings
-// save flow and the detections ignore/review handlers keep the stored list in a
-// single canonical form. Returns nil for an empty/all-blank input.
-func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
-	return apicore.CanonicalizeExcludeList(c.loadCommonToScientificMap(), exclude)
-}
-
-// UpdateCommonNameMap rebuilds both cached name maps from updated BirdNET labels.
-// Called after locale or model changes to keep insights and search endpoints current.
-func (c *Controller) UpdateCommonNameMap(labels []string) {
-	c.nameMaps.Store(buildNameMaps(labels, c.loadNameResolver()))
-}
-
-// SetNameResolver installs the authoritative localized name resolver, shared with
-// the classifier orchestrator. A nil resolver is ignored.
-func (c *Controller) SetNameResolver(r datastore.SpeciesNameResolver) {
-	if datastore.IsNilResolver(r) {
-		return
-	}
-	c.nameResolver.Store(&r)
-}
-
-// loadNameResolver returns the installed resolver, or nil if none has been set.
-func (c *Controller) loadNameResolver() datastore.SpeciesNameResolver {
-	if p := c.nameResolver.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// loadCommonNameMap returns the current scientific-to-common lookup map.
-// Always returns a non-nil map.
-func (c *Controller) loadCommonNameMap() map[string]string {
-	return c.loadNameMaps().sciToCommon
 }
 
 // buildThumbnailURL returns the proxy image URL for a species.
@@ -387,48 +282,17 @@ func secondsToTimeString(seconds int) string {
 	return fmt.Sprintf("%02d:%02d", h, m)
 }
 
-// --- Route registration ---
-
-// initInsightsRoutes lazily initializes the insights repository and registers
-// insight API endpoints.
-func (c *Controller) initInsightsRoutes() {
-	if c.V2Manager == nil {
-		return
-	}
-	db := c.V2Manager.DB()
-	isMySQL := c.V2Manager.IsMySQL()
-	var useV2Prefix bool
-	if tp, ok := c.V2Manager.(interface{ TablePrefix() string }); ok {
-		useV2Prefix = tp.TablePrefix() != ""
-	}
-	c.insightsRepo = repository.NewInsightsRepository(db, useV2Prefix, isMySQL)
-
-	// Build both name maps once and cache on Controller
-	if s := c.ControllerSettings(); s != nil {
-		c.UpdateCommonNameMap(s.BirdNET.Labels)
-	}
-
-	insightsGroup := c.Group.Group("/insights")
-	insightsGroup.GET("/expected-today", c.GetExpectedToday)
-	insightsGroup.GET("/expected-today/regional", c.GetExpectedTodayRegional)
-	insightsGroup.GET("/phantom-species", c.GetPhantomSpecies)
-	insightsGroup.GET("/dawn-chorus", c.GetDawnChorus)
-	insightsGroup.GET("/migration", c.GetMigration)
-
-	c.Group.GET("/dashboard/kpis", c.GetDashboardKPIs)
-}
-
 // --- Handlers ---
 
 // GetExpectedToday returns species expected today based on historical day-of-year data.
-func (c *Controller) GetExpectedToday(ctx echo.Context) error {
+func (c *Handler) GetExpectedToday(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
 	return c.getExpectedTodayImpl(ctx)
 }
 
-func (c *Controller) getExpectedTodayImpl(ctx echo.Context) error {
+func (c *Handler) getExpectedTodayImpl(ctx echo.Context) error {
 	now := time.Now()
 	yearRanges := buildYearRanges(now, expectedTodayWindowDays)
 	if len(yearRanges) == 0 {
@@ -473,14 +337,14 @@ func (c *Controller) getExpectedTodayImpl(ctx echo.Context) error {
 }
 
 // GetExpectedTodayRegional returns regionally expected species from eBird.
-func (c *Controller) GetExpectedTodayRegional(ctx echo.Context) error {
+func (c *Handler) GetExpectedTodayRegional(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
 	return c.getExpectedTodayRegionalImpl(ctx)
 }
 
-func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
+func (c *Handler) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 	if c.EBirdClient == nil {
 		return ctx.JSON(http.StatusOK, ExpectedTodayRegionalResponse{
 			Species:   []RegionalSpeciesItem{},
@@ -551,14 +415,14 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 }
 
 // GetPhantomSpecies returns species with frequent but low-confidence detections.
-func (c *Controller) GetPhantomSpecies(ctx echo.Context) error {
+func (c *Handler) GetPhantomSpecies(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
 	return c.getPhantomSpeciesImpl(ctx)
 }
 
-func (c *Controller) getPhantomSpeciesImpl(ctx echo.Context) error {
+func (c *Handler) getPhantomSpeciesImpl(ctx echo.Context) error {
 	since := time.Now().AddDate(0, 0, -phantomPeriodDays).Unix()
 
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
@@ -592,14 +456,14 @@ func (c *Controller) getPhantomSpeciesImpl(ctx echo.Context) error {
 }
 
 // GetDawnChorus returns species ranked by average earliest detection time.
-func (c *Controller) GetDawnChorus(ctx echo.Context) error {
+func (c *Handler) GetDawnChorus(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
 	return c.getDawnChorusImpl(ctx)
 }
 
-func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
+func (c *Handler) getDawnChorusImpl(ctx echo.Context) error {
 	since := time.Now().AddDate(0, 0, -dawnChorusPeriodDays).Unix()
 
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
@@ -671,14 +535,14 @@ func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
 }
 
 // GetMigration returns new arrivals and gone-quiet species.
-func (c *Controller) GetMigration(ctx echo.Context) error {
+func (c *Handler) GetMigration(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
 	return c.getMigrationImpl(ctx)
 }
 
-func (c *Controller) getMigrationImpl(ctx echo.Context) error {
+func (c *Handler) getMigrationImpl(ctx echo.Context) error {
 	now := time.Now()
 	recentSince := now.AddDate(0, 0, -migrationRecentDays).Unix()
 
@@ -733,14 +597,14 @@ func (c *Controller) getMigrationImpl(ctx echo.Context) error {
 }
 
 // GetDashboardKPIs returns headline metrics for the dashboard.
-func (c *Controller) GetDashboardKPIs(ctx echo.Context) error {
+func (c *Handler) GetDashboardKPIs(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
 		return c.requireV2(ctx)
 	}
 	return c.getDashboardKPIsImpl(ctx)
 }
 
-func (c *Controller) getDashboardKPIsImpl(ctx echo.Context) error {
+func (c *Handler) getDashboardKPIsImpl(ctx echo.Context) error {
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 

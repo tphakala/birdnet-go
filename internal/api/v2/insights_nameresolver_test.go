@@ -32,6 +32,25 @@ func TestBuildNameMaps_NilResolverKeepsLabel(t *testing.T) {
 	assert.Equal(t, "LabelName", nm.sciToCommon["Turdus merula"])
 }
 
+func TestBuildCommonNameMap(t *testing.T) {
+	t.Parallel()
+	labels := []string{
+		"Turdus merula_Eurasian Blackbird",
+		"Parus major_Great Tit",
+		"Invalid Label Without Separator",
+		"_EmptyScientificName",
+	}
+
+	m := buildNameMaps(labels, nil).sciToCommon
+	assert.Equal(t, "Eurasian Blackbird", m["Turdus merula"])
+	assert.Equal(t, "Great Tit", m["Parus major"])
+	assert.Len(t, m, 2) // invalid entries excluded
+
+	// Test resolveCommonName fallback
+	assert.Equal(t, "Eurasian Blackbird", apicore.ResolveCommonName(m, "Turdus merula"))
+	assert.Equal(t, "Unknown species", apicore.ResolveCommonName(m, "Unknown species"))
+}
+
 func TestBuildNameMaps_ScientificOnlyLabelSearchable(t *testing.T) {
 	// A scientific-only label (no "_", e.g. Perch v2 / bat labels) has no embedded
 	// common name; when the resolver provides one, the species must become

@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
@@ -34,27 +33,6 @@ func newMinimalController() *Controller {
 	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(apitest.NewValidTestSettings())
 	return c
-}
-
-// setupAnalyticsTestEnvironment creates a test environment with Echo, mocks.MockInterface, and Controller
-// for analytics tests
-func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
-	t.Helper()
-	// Create a new Echo instance
-	e := echo.New()
-
-	// Create a test datastore
-	mockDS := mocks.NewMockInterface(t)
-
-	// Create a controller with the test datastore and default settings
-	// to prevent nil pointer panics if a handler accesses c.Settings.
-	controller := &Controller{Core: &apicore.Core{Group: e.Group(apiV2Prefix), DS: mockDS}}
-	controller.Settings.Store(apitest.NewValidTestSettings())
-
-	// Don't initialize routes as it causes nil pointer dereference in tests
-	// controller.initRoutes()
-
-	return e, mockDS, controller
 }
 
 // setupTestEnvironment creates a complete facade test environment.
@@ -128,31 +106,4 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	})
 
 	return e, mockDS, controller
-}
-
-// SpeciesDailySummaryExpected contains expected values for species daily summary assertions.
-type SpeciesDailySummaryExpected struct {
-	CommonName          string
-	SpeciesCode         string
-	Count               int
-	HourlyCounts        []int
-	FirstHeard          string
-	LatestHeard         string
-	HighConfidence      bool
-	ThumbnailURLContain string // Substring that ThumbnailURL should contain
-}
-
-// assertSpeciesDailySummary verifies that a SpeciesDailySummary matches expected values.
-// This reduces duplication in tests that verify species summary fields.
-func assertSpeciesDailySummary(t *testing.T, species *SpeciesDailySummary, expected *SpeciesDailySummaryExpected) {
-	t.Helper()
-
-	assert.Equal(t, expected.CommonName, species.CommonName, "%s common name mismatch", expected.CommonName)
-	assert.Equal(t, expected.SpeciesCode, species.SpeciesCode, "%s species code mismatch", expected.CommonName)
-	assert.Equal(t, expected.Count, species.Count, "%s count mismatch", expected.CommonName)
-	assert.Equal(t, expected.HourlyCounts, species.HourlyCounts, "%s hourly counts mismatch", expected.CommonName)
-	assert.Equal(t, expected.FirstHeard, species.FirstHeard, "%s first heard time mismatch", expected.CommonName)
-	assert.Equal(t, expected.LatestHeard, species.LatestHeard, "%s latest heard time mismatch", expected.CommonName)
-	assert.Equal(t, expected.HighConfidence, species.HighConfidence, "%s high confidence mismatch", expected.CommonName)
-	assert.Contains(t, species.ThumbnailURL, expected.ThumbnailURLContain, "%s thumbnail URL mismatch", expected.CommonName)
 }

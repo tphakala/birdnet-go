@@ -1,6 +1,6 @@
 // analytics_test.go: Package api provides tests for API v2 analytics endpoints.
 
-package api
+package analytics
 
 import (
 	"context"
@@ -207,7 +207,7 @@ func TestAnalyticsEndpointContextErrors(t *testing.T) {
 		name      string
 		path      string
 		setupMock func(*mocks.MockInterface, error)
-		invoke    func(*Controller, echo.Context) error
+		invoke    func(*Handler, echo.Context) error
 	}{
 		{
 			name: "species summary",
@@ -216,7 +216,7 @@ func TestAnalyticsEndpointContextErrors(t *testing.T) {
 				m.On("GetSpeciesSummaryData", mock.Anything, "", "").
 					Return([]datastore.SpeciesSummaryData{}, queryErr)
 			},
-			invoke: func(c *Controller, ctx echo.Context) error { return c.GetSpeciesSummary(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.GetSpeciesSummary(ctx) },
 		},
 		{
 			name: "time of day distribution",
@@ -225,7 +225,7 @@ func TestAnalyticsEndpointContextErrors(t *testing.T) {
 				m.On("GetHourlyDistribution", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.HourlyDistributionData{}, queryErr)
 			},
-			invoke: func(c *Controller, ctx echo.Context) error { return c.GetTimeOfDayDistribution(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.GetTimeOfDayDistribution(ctx) },
 		},
 		{
 			name: "new species detections",
@@ -234,7 +234,7 @@ func TestAnalyticsEndpointContextErrors(t *testing.T) {
 				m.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, queryErr)
 			},
-			invoke: func(c *Controller, ctx echo.Context) error { return c.GetNewSpeciesDetections(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.GetNewSpeciesDetections(ctx) },
 		},
 		{
 			// Exercises the now-context-bounded GetTopBirdsData query.
@@ -244,7 +244,7 @@ func TestAnalyticsEndpointContextErrors(t *testing.T) {
 				m.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.Note{}, queryErr)
 			},
-			invoke: func(c *Controller, ctx echo.Context) error { return c.GetDailySpeciesSummary(ctx) },
+			invoke: func(c *Handler, ctx echo.Context) error { return c.GetDailySpeciesSummary(ctx) },
 		},
 	}
 
@@ -631,14 +631,14 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			controller := &Controller{Core: &apicore.Core{DS: mockDS, BirdImageCache: mockImageCache}}
+			controller := newTestHandler(&apicore.Core{DS: mockDS, BirdImageCache: mockImageCache})
 			controller.Settings.Store(appSettings)
 
 			e := echo.New()
 			// Register routes needed for this test run
-			controller.Group = e.Group("/api/v2") // Assign group for proper route initialization
+			controller.Group = e.Group("/api/v2") // Assign group for proper route registration
 			controller.Echo = e                   // Set Echo instance for the controller
-			controller.initAnalyticsRoutes()      // Initialize routes using the actual method
+			controller.RegisterAnalyticsRoutes(controller.Group)
 
 			req := httptest.NewRequest(tc.method, tc.path, http.NoBody)
 			rec := httptest.NewRecorder()
@@ -787,7 +787,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	})
 
 	// Create a controller with our mocks
-	controller := &Controller{Core: &apicore.Core{DS: mockDS, BirdImageCache: imageCache}}
+	controller := newTestHandler(&apicore.Core{DS: mockDS, BirdImageCache: imageCache})
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v2/analytics/species/daily?date=%s", testDate), http.NoBody)
@@ -929,7 +929,7 @@ func TestGetDailySpeciesSummary_LocalizedNonPrimarySpecies(t *testing.T) {
 			sciEurasianBlackbird: blackbirdHourly,
 		}, nil)
 
-	controller := &Controller{Core: &apicore.Core{DS: mockDS}}
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date="+testDate, http.NoBody)
 	rec := httptest.NewRecorder()
@@ -1044,7 +1044,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	imageCache := imageprovider.InitCache("test", mockImageProvider, apitest.NewTestMetrics(t), mockDS)
 
 	// Create a controller with our mocks
-	controller := &Controller{Core: &apicore.Core{DS: mockDS, BirdImageCache: imageCache}}
+	controller := newTestHandler(&apicore.Core{DS: mockDS, BirdImageCache: imageCache})
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
@@ -1096,7 +1096,7 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	// Expect GetBatchHourlyOccurrences not to be called since there are no birds
 
 	// Create a controller with our mock
-	controller := &Controller{Core: &apicore.Core{DS: mockDS}}
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
@@ -1178,7 +1178,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	}, nil)
 
 	// Create a controller with our mock
-	controller := &Controller{Core: &apicore.Core{DS: mockDS}}
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
@@ -1260,7 +1260,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	}, nil)
 
 	// Create a controller with our mock
-	controller := &Controller{Core: &apicore.Core{DS: mockDS}}
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Test with a confidence threshold of "70"
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07&min_confidence=70", http.NoBody)
@@ -1344,7 +1344,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	}, nil)
 
 	// Create a controller with our mock
-	controller := &Controller{Core: &apicore.Core{DS: mockDS}}
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with a limit of 2
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07&limit=2", http.NoBody)
@@ -1456,25 +1456,6 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// analyticsBatchFakeResolver is a test resolver that satisfies SpeciesNameResolver
-// and the optional batchLocalizer interface. This is distinct from the fakeResolver
-// in insights_nameresolver_test.go, which covers the forward (sci->common) path only.
-// Here we need the batch capability so that scientific-only bat labels (no embedded
-// common name) reach the commonToSci reverse map and become resolvable.
-type analyticsBatchFakeResolver struct{ batch map[string]string }
-
-func (a *analyticsBatchFakeResolver) Resolve(string, string) string      { return "" }
-func (a *analyticsBatchFakeResolver) ResolveLocal(string) (string, bool) { return "", false }
-func (a *analyticsBatchFakeResolver) ResolveLocalizedBatch(names []string) map[string]string {
-	out := make(map[string]string, len(names))
-	for _, n := range names {
-		if v, ok := a.batch[n]; ok {
-			out[n] = v
-		}
-	}
-	return out
-}
-
 // TestAnalytics_ResolvesLocalizedCommonNameToScientific verifies that after wiring a
 // batch-capable resolver and calling UpdateCommonNameMap, the reverse lookup for a
 // localized bat name (which has no embedded common name in the label) returns the
@@ -1484,18 +1465,11 @@ func TestAnalytics_ResolvesLocalizedCommonNameToScientific(t *testing.T) {
 	t.Attr("component", "analytics")
 	t.Attr("feature", "localized-name-resolution")
 
-	e := echo.New()
-	c := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2")}}
-	c.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
-		"Barbastella barbastellus": "mopsilepakko",
-	}})
-	// "Barbastella barbastellus" is a scientific-only label (no underscore separator),
-	// which triggers the batchLocalizer path in ResolveLabelNames.
-	c.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+	_, _, c := setupAnalyticsTestEnvironmentWithBatName(t)
 
-	got, hit := c.resolveSpeciesToScientific("mopsilepakko")
+	got, hit := c.resolveSpeciesToScientific(batCommonName)
 	require.True(t, hit, "expected a reverse-map hit for the Finnish bat name")
-	assert.Equal(t, "Barbastella barbastellus", got)
+	assert.Equal(t, batScientificName, got)
 }
 
 // TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore verifies that when
@@ -1507,13 +1481,7 @@ func TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore(t *testing.T) {
 	t.Attr("component", "analytics")
 	t.Attr("feature", "localized-name-resolution")
 
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	// Wire the resolver so "mopsilepakko" reverse-maps to the scientific name.
-	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
-		"Barbastella barbastellus": "mopsilepakko",
-	}})
-	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+	e, mockDS, controller := setupAnalyticsTestEnvironmentWithBatName(t)
 
 	const (
 		localizedName  = "mopsilepakko"
@@ -1556,12 +1524,7 @@ func TestAnalytics_TimeOfDayDistributionResolvesLocalizedSpecies(t *testing.T) {
 	t.Attr("component", "analytics")
 	t.Attr("feature", "localized-name-resolution")
 
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
-		"Barbastella barbastellus": "mopsilepakko",
-	}})
-	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+	e, mockDS, controller := setupAnalyticsTestEnvironmentWithBatName(t)
 
 	const (
 		startDate      = "2023-01-01"
@@ -1603,12 +1566,7 @@ func TestAnalytics_BatchDailySpeciesResolvesLocalizedSpecies(t *testing.T) {
 	t.Attr("component", "analytics")
 	t.Attr("feature", "localized-name-resolution")
 
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
-		"Barbastella barbastellus": "mopsilepakko",
-	}})
-	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+	e, mockDS, controller := setupAnalyticsTestEnvironmentWithBatName(t)
 
 	const (
 		startDate      = "2023-01-01"

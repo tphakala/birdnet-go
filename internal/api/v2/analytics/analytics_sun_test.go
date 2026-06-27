@@ -1,4 +1,4 @@
-package api
+package analytics
 
 import (
 	"encoding/json"
@@ -234,9 +234,9 @@ func TestGetAnalyticsSun_LoneEndDateRejected(t *testing.T) {
 }
 
 // TestHourlyDistribution_BackCompatUnchanged guards the API backward-compatibility constraint for
-// the nocturnal activity clock (Forgejo #1161): the clock reuses the existing hourly-distribution
-// endpoint, which must keep returning a 24-element [{hour, count}] array. This fails if a future
-// change alters that shape.
+// the nocturnal activity clock: the clock reuses the existing hourly-distribution endpoint, which
+// must keep returning a 24-element [{hour, count}] array. This fails if a future change alters that
+// shape.
 func TestHourlyDistribution_BackCompatUnchanged(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
