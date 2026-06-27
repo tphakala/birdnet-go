@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/dynamicthresholds"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
 	"github.com/tphakala/birdnet-go/internal/api/v2/integrations"
+	mediaapi "github.com/tphakala/birdnet-go/internal/api/v2/media"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	"github.com/tphakala/birdnet-go/internal/api/v2/notifications"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
@@ -47,9 +47,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
-	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 // apiV2Prefix is the base path prefix for all v2 API routes (the Echo group
@@ -177,8 +175,18 @@ type Controller struct {
 	isGlobalOwner       bool         // true when this controller owns the global settings singleton
 	settingsMutex       sync.RWMutex // Serializes the read-modify-write in settings update handlers; reads are lock-free via the atomic Settings pointer
 
-	startTime            *time.Time
-	spectrogramGenerator *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
+	startTime *time.Time
+
+	// media serves the media domain: media-file serving (audio clips and
+	// spectrogram images from the SecureFS sandbox), on-demand spectrogram
+	// generation, the ID-based audio/spectrogram endpoints (including the greedy
+	// GET /api/v2/audio/:id route on c.Echo), clip extraction and audio
+	// processing, the cached bird-image proxy (ServeSpeciesImageProxy, injected
+	// into the species handler), and the external-media mount-status endpoint.
+	// Beyond the shared *apicore.Core it owns the audio-processing cache and
+	// concurrency limiter and the spectrogram generator. It is constructed BEFORE
+	// the species handler because species injects c.media.ServeSpeciesImageProxy.
+	media *mediaapi.Handler
 
 	// authService is the authentication service injected from server (via the
 	// WithAuthService functional option). The facade keeps it as the injection
@@ -217,10 +225,6 @@ type Controller struct {
 	// promote from the embedded core. The hub itself stays in apicore.
 	sse *sse.Handler
 
-	// Audio processing fields
-	processingCache     *processingCache
-	processingSemaphore chan struct{}
-
 	// Legacy cleanup state tracker
 	cleanupStatus *CleanupStatus
 
@@ -229,12 +233,6 @@ type Controller struct {
 	// This is primarily used in testing to ensure proper setup before assertions.
 	// Only created when routes are initialized (production mode or specific tests).
 	goroutinesStarted chan struct{} // signals when all background goroutines have started (nil if routes not initialized)
-
-	// externalMediaEnv and externalMediaProbe are injectable dependencies for
-	// the GET /api/v2/system/external-media endpoint. Both default to the real
-	// sysinfo implementations at request time when nil.
-	externalMediaEnv   sysinfo.EnvGetter
-	externalMediaProbe sysinfo.MountProber
 
 	// importMgr manages the one-at-a-time import lifecycle.
 	importMgr *importManager
@@ -246,12 +244,6 @@ type Controller struct {
 	// importSourceFactory builds an import Source from a resolved path.
 	// Defaults to a BirdNET-Pi adapter when nil. Overridable in tests.
 	importSourceFactory func(path string) (imports.Source, error)
-
-	// audioWaitTimeoutOverride overrides the server-side wait for an in-progress
-	// audio encoding used by waitForAudioFile. Zero in production, where the wait
-	// uses audioWaitTimeout. Tests set a short timeout to exercise the
-	// 503-after-timeout path without waiting the full default.
-	audioWaitTimeoutOverride time.Duration
 
 	// Audio level channel for SSE streaming
 	// TODO: Consider moving to a dedicated audio manager
@@ -451,12 +443,18 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.detections = detections.New(c.Core, &c.settingsMutex,
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges,
 		c.isClientAuthenticated, c.loadCommonNameMap, c.loadCommonToScientificMap)
-	// The species handler delegates to two facade-owned dependencies that have not
-	// been extracted into their own domains yet: loadCommonNameMap (the shared
-	// name-map read accessor) and ServeSpeciesImageProxy (the media image proxy the
-	// thumbnail endpoint forwards to). They are passed as bound method values; c is
-	// fully constructed here, so the method values are stable for its lifetime.
-	c.species = species.New(c.Core, c.loadCommonNameMap, c.ServeSpeciesImageProxy)
+	// The media handler owns the audio-processing cache, the spectrogram
+	// generator, and the cache-cleanup goroutine (all built from the shared
+	// SecureFS in mediaapi.New). It is constructed BEFORE the species handler
+	// because species injects c.media.ServeSpeciesImageProxy (a method value on
+	// the media handler) for its thumbnail endpoint.
+	c.media = mediaapi.New(c.Core)
+	// The species handler delegates to two dependencies: loadCommonNameMap (the
+	// shared name-map read accessor, still facade-owned until insights is
+	// extracted) and the media domain's species-image proxy handler
+	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
+	// is fully constructed here, so the method values are stable for its lifetime.
+	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
 	// The models handler needs only the shared core (ModelManager and the
 	// settings/error/log/goroutine helpers all promote from it).
 	c.models = models.New(c.Core)
@@ -481,28 +479,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// internal/analysis owns. The remaining deps (Engine, ShutdownRequester, and
 	// the error/log helpers) all promote from the shared core.
 	c.control = control.New(c.Core, c.controlChan)
-
-	// Initialize audio processing cache and concurrency limiter
-	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
-	c.processingCache = newProcessingCache(cacheDir, processingCacheMaxFiles)
-	c.processingSemaphore = make(chan struct{}, 2)
-
-	// Start cache cleanup goroutine (tracked by the core wait group)
-	c.Go(func() {
-		ticker := time.NewTicker(processingCacheTickerInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-c.Context().Done():
-				return
-			case <-ticker.C:
-				c.processingCache.cleanExpired()
-			}
-		}
-	})
-
-	// Spectrogram generator (needs the media SecureFS)
-	c.spectrogramGenerator = spectrogram.NewGenerator(settings, c.SFS, getSpectrogramLogger())
 
 	// Apply functional options (auth middleware and service injected from server)
 	for _, opt := range opts {
@@ -628,7 +604,7 @@ func (c *Controller) initRoutes() {
 		{"integration routes", func() { c.integrations.RegisterRoutes(c.Group) }},
 		{"control routes", func() { c.control.RegisterRoutes(c.Group) }},
 		{"auth routes", func() { c.authHandler.RegisterRoutes(c.Group) }},
-		{"media routes", c.initMediaRoutes},
+		{"media routes", func() { c.media.RegisterRoutes(c.Group) }},
 		{"range routes", func() { c.rangeHandler.RegisterRoutes(c.Group) }},
 		{"heatmap routes", c.initHeatmapRoutes},
 		{"sse routes", func() { c.sse.RegisterRoutes(c.Group) }},

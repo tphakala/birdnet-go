@@ -21,18 +21,6 @@ const (
 	SpectrogramCacheDuration = 30 * 24 * time.Hour
 )
 
-// Cache duration in seconds for HTTP headers
-const (
-	// ImageCacheSeconds is the cache duration for species images in seconds
-	ImageCacheSeconds = 2592000 // 30 days
-
-	// NotFoundCacheSeconds is the cache duration for 404 responses in seconds
-	NotFoundCacheSeconds = 86400 // 24 hours
-
-	// SpectrogramCacheSeconds is the cache duration for spectrograms in seconds
-	SpectrogramCacheSeconds = 2592000 // 30 days
-)
-
 // Log level constants
 const (
 	LogLevelError   = "error"

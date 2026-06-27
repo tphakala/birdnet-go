@@ -1,4 +1,4 @@
-package api
+package media
 
 import (
 	"net/http"
@@ -45,7 +45,7 @@ type ExternalMediaResponse struct {
 // It reports whether the external-media bind-mount is reachable from the
 // running application, and when it is not, provides deployment-specific setup
 // instructions for the detected container runtime.
-func (c *Controller) GetExternalMedia(ctx echo.Context) error {
+func (c *Handler) GetExternalMedia(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting external media status")
 
 	envGetter := c.externalMediaEnv

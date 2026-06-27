@@ -9,7 +9,7 @@
 // the worker run under a different key, orphaning the handler's queued entry and
 // making GET /spectrogram/:id/status miss the in-flight job. The fix threads the
 // handler-validated relative path into generateSpectrogramFromRel.
-package api
+package media
 
 import (
 	"os"
@@ -45,7 +45,7 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 
 	controllerCore := &apicore.Core{SFS: sfs}
 	controllerCore.SetTestContext(ctx, nil)
-	controller := &Controller{Core: controllerCore}
+	controller := &Handler{Core: controllerCore}
 	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	const (

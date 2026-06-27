@@ -190,7 +190,7 @@ func TestInsightsEndpointContextErrors(t *testing.T) {
 		wantMsg    string
 	}{
 		{"deadline exceeded", context.DeadlineExceeded, http.StatusRequestTimeout, "Query timeout"},
-		{"client canceled", context.Canceled, StatusClientClosedRequest, "Request canceled by client"},
+		{"client canceled", context.Canceled, apicore.StatusClientClosedRequest, "Request canceled by client"},
 	}
 
 	endpoints := []struct {

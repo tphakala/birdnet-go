@@ -1,4 +1,4 @@
-package api
+package media
 
 import (
 	"encoding/json"
@@ -21,16 +21,16 @@ func newExternalMediaController(
 	t *testing.T,
 	envGetter sysinfo.EnvGetter,
 	prober sysinfo.MountProber,
-) (*echo.Echo, *Controller) {
+) (*echo.Echo, *Handler) {
 	t.Helper()
 	e := echo.New()
-	c := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}, externalMediaEnv: envGetter, externalMediaProbe: prober}
+	c := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}, externalMediaEnv: envGetter, externalMediaProbe: prober}
 	return e, c
 }
 
 // callExternalMediaEndpoint fires the GET /api/v2/system/external-media handler
 // and returns the parsed response.
-func callExternalMediaEndpoint(t *testing.T, ctrl *Controller) (resp ExternalMediaResponse, statusCode int) {
+func callExternalMediaEndpoint(t *testing.T, ctrl *Handler) (resp ExternalMediaResponse, statusCode int) {
 	t.Helper()
 	e := ctrl.Echo
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/external-media", http.NoBody)

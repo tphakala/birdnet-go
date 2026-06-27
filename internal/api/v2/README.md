@@ -156,7 +156,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/integrations/weather/test`                 | `TestWeatherConnection`         | ✅   | Test weather provider connection               |
 | POST   | `/integrations/ebird/test`                   | `TestEBirdConnection`           | ✅   | Test eBird API connectivity and authentication |
 
-### Media (`media.go`)
+### Media (`media/media.go`)
 
 | Method | Route                                | Handler                  | Auth | Description                        |
 | ------ | ------------------------------------ | ------------------------ | ---- | ---------------------------------- |
