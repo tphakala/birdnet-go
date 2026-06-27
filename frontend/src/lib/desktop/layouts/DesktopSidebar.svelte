@@ -417,6 +417,13 @@ Performance Optimizations:
     // Capture the full current location (path + query) at click time so the
     // post-login redirect returns the user to the exact filtered view (#3306).
     loginRedirectUrl = getCurrentPathWithQuery();
+    // Close the mobile drawer before opening the modal so the modal renders
+    // above the sidebar rather than behind it (modal z-index < drawer z-index).
+    const drawer = document.getElementById('my-drawer') as HTMLInputElement | null;
+    if (drawer?.checked) {
+      drawer.checked = false;
+      drawer.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     showLoginModal = true;
   }
 
@@ -450,7 +457,7 @@ Performance Optimizations:
 
 <aside
   class={cn(
-    'drawer-side z-[200] transition-all duration-200 ease-in-out overflow-visible',
+    'drawer-side z-[200] lg:z-10 transition-all duration-200 ease-in-out overflow-visible',
     isCollapsed ? 'lg:w-16' : 'lg:w-64',
     className
   )}
