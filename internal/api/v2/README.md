@@ -255,7 +255,7 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 | Method | Route                 | Handler             | Auth | Description                  |
 | ------ | --------------------- | ------------------- | ---- | ---------------------------- |
-| GET    | `/detections/stream`  | `StreamDetections`  | ❌⚡ | Real-time detection stream   |
+| GET    | `/detections/stream`  | `StreamDetections`  | ❌⚡ | Real-time detection stream. Source display names are anonymized for unauthenticated clients (only the stable source id is exposed, on both the `detection` and `pending` events); authenticated clients receive the full display name |
 | GET    | `/soundlevels/stream` | `StreamSoundLevels` | ❌⚡ | Real-time audio level stream |
 | GET    | `/sse/status`         | `GetSSEStatus`      | ❌   | SSE connection status        |
 
