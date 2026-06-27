@@ -28,14 +28,9 @@ const (
 	LogLevelInfo    = "info"
 )
 
-// Notification type constants (for mapping to notification.Type)
-const (
-	NotificationTypeError     = "error"
-	NotificationTypeWarning   = "warning"
-	NotificationTypeInfo      = "info"
-	NotificationTypeDetection = "detection"
-	NotificationTypeSystem    = "system"
-)
+// Notification type constants moved with the debug domain to
+// internal/api/v2/app (app.NotificationType*); they were only used by debug.go's
+// mapNotificationType.
 
 // Settings section name constants
 const (

@@ -1,16 +1,26 @@
-// internal/api/v2/debug.go
-package api
+// internal/api/v2/app/debug.go
+package app
 
 import (
 	"net/http"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
+)
+
+// Notification type constants (for mapping to notification.Type)
+const (
+	NotificationTypeError     = "error"
+	NotificationTypeWarning   = "warning"
+	NotificationTypeInfo      = "info"
+	NotificationTypeDetection = "detection"
+	NotificationTypeSystem    = "system"
 )
 
 // DebugErrorRequest represents the request for triggering a test error
@@ -45,8 +55,8 @@ type DebugSystemStatus struct {
 }
 
 // requireDebugMode is middleware that returns 403 if debug mode is not enabled.
-// This is defense-in-depth — debug routes are already conditionally registered.
-func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
+// This is defense-in-depth - debug routes are already conditionally registered.
+func (c *Handler) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		if s := c.ControllerSettings(); s == nil || !s.Debug {
 			return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
@@ -55,28 +65,30 @@ func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-// initDebugRoutes registers debug-related routes
-func (c *Controller) initDebugRoutes() {
+// RegisterDebugRoutes registers debug-related routes on the provided v2 API
+// group, preserving the exact route order, middleware, and the debug-mode gate
+// the monolithic initDebugRoutes used.
+func (c *Handler) RegisterDebugRoutes(g *echo.Group) {
 	// Only register debug routes if debug mode is enabled. Read via ControllerSettings()
 	// (a nil-safe atomic Load) to match requireDebugMode; it returns nil when no
 	// snapshot has been stored (standalone/test controllers), which the guard handles.
 	if s := c.ControllerSettings(); s == nil || !s.Debug {
-		GetLogger().Debug("Debug mode not enabled, skipping debug routes")
+		apicore.GetLogger().Debug("Debug mode not enabled, skipping debug routes")
 		return
 	}
 
 	// Debug endpoints require authentication and debug mode (defense-in-depth)
-	debugGroup := c.Group.Group("/debug", c.AuthMiddleware, c.requireDebugMode)
+	debugGroup := g.Group("/debug", c.AuthMiddleware, c.requireDebugMode)
 
 	debugGroup.POST("/trigger-error", c.DebugTriggerError)
 	debugGroup.POST("/trigger-notification", c.DebugTriggerNotification)
 	debugGroup.GET("/status", c.DebugSystemStatus)
 
-	GetLogger().Info("Debug routes initialized")
+	apicore.GetLogger().Info("Debug routes initialized")
 }
 
 // DebugTriggerError triggers a test error for telemetry testing
-func (c *Controller) DebugTriggerError(ctx echo.Context) error {
+func (c *Handler) DebugTriggerError(ctx echo.Context) error {
 	var req DebugErrorRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
@@ -132,7 +144,7 @@ func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 }
 
 // DebugTriggerNotification triggers a test notification
-func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
+func (c *Handler) DebugTriggerNotification(ctx echo.Context) error {
 	var req DebugNotificationRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
@@ -186,7 +198,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 }
 
 // DebugSystemStatus returns current system status for debugging
-func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
+func (c *Handler) DebugSystemStatus(ctx echo.Context) error {
 	settings := c.ControllerSettings()
 	debug := false
 	if settings != nil {

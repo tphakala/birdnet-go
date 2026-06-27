@@ -115,7 +115,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/control/restart-source/:id` | `RestartAudioSource`  | ✅   | Restart a single audio source by ID    |
 | GET    | `/control/actions`            | `GetAvailableActions` | ✅   | List available control actions         |
 
-### Debug (`debug.go`)
+### Debug (`app/debug.go`)
 
 | Method | Route                         | Handler                    | Auth | Description               |
 | ------ | ----------------------------- | -------------------------- | ---- | ------------------------- |
