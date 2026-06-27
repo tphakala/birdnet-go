@@ -35,15 +35,16 @@ const (
 	StatusClientClosedRequest = 499 // Nginx's non-standard status for client closed connection
 )
 
-// Spectrogram size constants - FFT-friendly dimensions.
-// Heights are 2^n + 1 so sox DFT size (2*(height-1)) is a power of 2,
-// enabling fast FFT instead of brute-force DFT (~20x speedup).
-// Widths are 2× height to maintain ~2:1 aspect ratio.
+// Spectrogram size constants - FFT-friendly dimensions. Aliased from apicore so
+// the media renderer here and the detections clip-deletion file matching share
+// one source. Heights are 2^n + 1 so sox DFT size (2*(height-1)) is a power of 2,
+// enabling fast FFT instead of brute-force DFT (~20x speedup). Widths are 2x
+// height to maintain ~2:1 aspect ratio.
 const (
-	SpectrogramSizeSm = 258  // height=129, DFT=256
-	SpectrogramSizeMd = 514  // height=257, DFT=512
-	SpectrogramSizeLg = 1026 // height=513, DFT=1024 (default render size)
-	SpectrogramSizeXl = 2050 // height=1025, DFT=2048
+	SpectrogramSizeSm = apicore.SpectrogramSizeSm // height=129, DFT=256
+	SpectrogramSizeMd = apicore.SpectrogramSizeMd // height=257, DFT=512
+	SpectrogramSizeLg = apicore.SpectrogramSizeLg // height=513, DFT=1024 (default render size)
+	SpectrogramSizeXl = apicore.SpectrogramSizeXl // height=1025, DFT=2048
 )
 
 // Audio MIME type constants for consistent handling across endpoints
@@ -1258,7 +1259,7 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string) (bool, error) {
 	// Normalize and validate the audio path
 	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
-	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
+	normalizedPath := apicore.NormalizeClipPath(clipPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
 
 	if err == nil {
@@ -1647,7 +1648,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	// stored), so this resolution uses the live settings snapshot.
 	audioPath := detection.ClipName
 	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
-	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
+	normalizedPath := apicore.NormalizeClipPath(audioPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
 	if err != nil {
 		// Path validation failed - return not_started status
@@ -1745,7 +1746,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Check if spectrogram already exists (fast path)
 	// Also compute the immutable queue key for status tracking
 	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
-	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
+	normalizedPath := apicore.NormalizeClipPath(clipPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
 	if err != nil {
 		// Path validation failed - return error immediately before spawning goroutine
@@ -2343,7 +2344,7 @@ func (c *Controller) normalizeAndValidatePath(audioPath string) (string, error) 
 // This reduces duplication across the codebase where this pattern is used.
 func (c *Controller) normalizeAndValidatePathWithLogger(audioPath string, log logger.Logger) (string, error) {
 	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
-	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
+	normalizedPath := apicore.NormalizeClipPath(audioPath, clipsPrefix)
 
 	if log != nil && normalizedPath != audioPath {
 		log.Debug("Normalized audio path",

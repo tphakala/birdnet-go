@@ -12,6 +12,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 
 	"github.com/stretchr/testify/assert"
@@ -64,7 +65,7 @@ func FuzzNormalizeClipPathStrict(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, path, prefix string) {
 		// Should never panic
-		result, valid := NormalizeClipPathStrict(path, prefix)
+		result, valid := apicore.NormalizeClipPathStrict(path, prefix)
 
 		if valid {
 			// Valid results should not contain path traversal
@@ -77,7 +78,7 @@ func FuzzNormalizeClipPathStrict(f *testing.F) {
 		}
 
 		// Consistency check
-		result2, valid2 := NormalizeClipPathStrict(path, prefix)
+		result2, valid2 := apicore.NormalizeClipPathStrict(path, prefix)
 		assert.Equal(t, result, result2, "Inconsistent result")
 		assert.Equal(t, valid, valid2, "Inconsistent validity")
 	})
@@ -102,14 +103,14 @@ func FuzzNormalizeClipPath(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, path string) {
 		// Should never panic
-		result := NormalizeClipPath(path, "clips/")
+		result := apicore.NormalizeClipPath(path, "clips/")
 
 		// Result should match the strict version (just without the bool)
-		strictResult, _ := NormalizeClipPathStrict(path, "clips/")
+		strictResult, _ := apicore.NormalizeClipPathStrict(path, "clips/")
 		assert.Equal(t, strictResult, result, "NormalizeClipPath should match NormalizeClipPathStrict result")
 
 		// Consistency check
-		result2 := NormalizeClipPath(path, "clips/")
+		result2 := apicore.NormalizeClipPath(path, "clips/")
 		assert.Equal(t, result, result2, "Inconsistent results")
 	})
 }
@@ -161,7 +162,7 @@ func FuzzParseConfidenceFilter(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, input string) {
 		// Should never panic
-		result := parseConfidenceFilter(input)
+		result := apicore.ParseConfidenceFilter(input)
 
 		if result != nil {
 			// Valid operator
@@ -177,7 +178,7 @@ func FuzzParseConfidenceFilter(f *testing.F) {
 		}
 
 		// Consistency check
-		result2 := parseConfidenceFilter(input)
+		result2 := apicore.ParseConfidenceFilter(input)
 		if result == nil {
 			assert.Nil(t, result2, "Inconsistent nil result")
 		} else {
@@ -228,7 +229,7 @@ func FuzzParseHourFilter(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, input string) {
 		// Should never panic
-		result := parseHourFilter(input)
+		result := apicore.ParseHourFilter(input)
 
 		if result != nil {
 			// Hours must be in valid range
@@ -242,7 +243,7 @@ func FuzzParseHourFilter(f *testing.F) {
 		}
 
 		// Consistency check
-		result2 := parseHourFilter(input)
+		result2 := apicore.ParseHourFilter(input)
 		if result == nil {
 			assert.Nil(t, result2, "Inconsistent nil result")
 		} else {
@@ -288,7 +289,7 @@ func FuzzParseDateRangeFilter(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, single, start, end string) {
 		// Should never panic
-		result := parseDateRangeFilter(single, start, end)
+		result := apicore.ParseDateRangeFilter(single, start, end)
 
 		if result != nil {
 			// Start must not be after End
@@ -296,7 +297,7 @@ func FuzzParseDateRangeFilter(f *testing.F) {
 		}
 
 		// Consistency check
-		result2 := parseDateRangeFilter(single, start, end)
+		result2 := apicore.ParseDateRangeFilter(single, start, end)
 		if result == nil {
 			assert.Nil(t, result2, "Inconsistent nil result")
 		} else {
@@ -374,21 +375,21 @@ func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
 		t.Run(fmt.Sprintf("parseConfidenceFilter/%d", idx), func(t *testing.T) {
 			t.Parallel()
 			// Should not panic
-			_ = parseConfidenceFilter(input)
+			_ = apicore.ParseConfidenceFilter(input)
 		})
 
 		// Test parseHourFilter
 		t.Run(fmt.Sprintf("parseHourFilter/%d", idx), func(t *testing.T) {
 			t.Parallel()
 			// Should not panic
-			_ = parseHourFilter(input)
+			_ = apicore.ParseHourFilter(input)
 		})
 
 		// Test NormalizeClipPathStrict
 		t.Run(fmt.Sprintf("NormalizeClipPathStrict/%d", idx), func(t *testing.T) {
 			t.Parallel()
 			// Should not panic
-			_, _ = NormalizeClipPathStrict(input, "clips/")
+			_, _ = apicore.NormalizeClipPathStrict(input, "clips/")
 		})
 	}
 }
@@ -416,7 +417,7 @@ func TestInvalidUTF8Handling(t *testing.T) {
 			_ = authapi.IsValidBasePath(input)
 			_ = authapi.ValidateAndSanitizeRedirect(input)
 			_ = authapi.ContainsCRLFCharacters(input)
-			_, _ = NormalizeClipPathStrict(input, "clips/")
+			_, _ = apicore.NormalizeClipPathStrict(input, "clips/")
 		})
 	}
 }
@@ -451,7 +452,7 @@ func TestAdvancedPathTraversalAttacksAPIv2(t *testing.T) {
 	for _, tc := range attacks {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, valid := NormalizeClipPathStrict(tc.path, "clips/")
+			_, valid := apicore.NormalizeClipPathStrict(tc.path, "clips/")
 			assert.Equal(t, tc.expected, valid, "Path: %q", tc.path)
 		})
 	}

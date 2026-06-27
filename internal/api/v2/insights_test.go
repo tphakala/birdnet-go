@@ -387,8 +387,8 @@ func TestBuildCommonNameMap(t *testing.T) {
 	assert.Len(t, m, 2) // invalid entries excluded
 
 	// Test resolveCommonName fallback
-	assert.Equal(t, "Eurasian Blackbird", resolveCommonName(m, "Turdus merula"))
-	assert.Equal(t, "Unknown species", resolveCommonName(m, "Unknown species"))
+	assert.Equal(t, "Eurasian Blackbird", apicore.ResolveCommonName(m, "Turdus merula"))
+	assert.Equal(t, "Unknown species", apicore.ResolveCommonName(m, "Unknown species"))
 }
 
 func TestSecondsToTimeString(t *testing.T) {

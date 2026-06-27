@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 )
 
 // TestNormalizeClipPathStrict tests the NormalizeClipPathStrict function
@@ -205,7 +206,7 @@ func TestNormalizeClipPathStrict(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result, ok := NormalizeClipPathStrict(tt.path, tt.clipsPrefix)
+			result, ok := apicore.NormalizeClipPathStrict(tt.path, tt.clipsPrefix)
 			assert.Equal(t, tt.expectedOK, ok, "Validity flag mismatch for path %q", tt.path)
 			if tt.expectedOK {
 				assert.Equal(t, tt.expectedPath, result, "Normalized path mismatch")
@@ -250,7 +251,7 @@ func TestNormalizeClipPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := NormalizeClipPath(tt.path, tt.clipsPrefix)
+			result := apicore.NormalizeClipPath(tt.path, tt.clipsPrefix)
 			assert.Equal(t, tt.expectedPath, result)
 		})
 	}
@@ -281,7 +282,7 @@ func TestNormalizeClipPathStrict_SecurityCritical(t *testing.T) {
 	for _, tc := range mustRejectPaths {
 		t.Run(tc.path, func(t *testing.T) {
 			t.Parallel()
-			result, ok := NormalizeClipPathStrict(tc.path, "clips/")
+			result, ok := apicore.NormalizeClipPathStrict(tc.path, "clips/")
 			assert.False(t, ok, "Path %q should be rejected (%s)", tc.path, tc.reason)
 			if ok {
 				assert.Failf(t, "SECURITY", "Path %q was accepted and normalized to %q", tc.path, result)
@@ -300,7 +301,7 @@ func TestNormalizeClipPathStrict_EdgeCases(t *testing.T) {
 	// Bare parent directory reference must be rejected (fixed bug)
 	t.Run("Bare parent directory reference rejected", func(t *testing.T) {
 		t.Parallel()
-		_, ok := NormalizeClipPathStrict("../", "clips/")
+		_, ok := apicore.NormalizeClipPathStrict("../", "clips/")
 		assert.False(t, ok, "'../' should be rejected as path traversal")
 	})
 
@@ -309,28 +310,28 @@ func TestNormalizeClipPathStrict_EdgeCases(t *testing.T) {
 	// processing chain, making these paths dangerous. Defense in depth requires rejection.
 	t.Run("URL-encoded traversal patterns rejected", func(t *testing.T) {
 		t.Parallel()
-		_, ok := NormalizeClipPathStrict("..%2f..%2fetc/passwd", "clips/")
+		_, ok := apicore.NormalizeClipPathStrict("..%2f..%2fetc/passwd", "clips/")
 		assert.False(t, ok, "URL-encoded paths with '..' should be rejected for security")
 	})
 
 	// Paths with URL-encoded slashes are rejected as they could enable traversal after decoding
 	t.Run("URL-encoded slashes rejected", func(t *testing.T) {
 		t.Parallel()
-		_, ok := NormalizeClipPathStrict("path%2fto%2ffile.wav", "clips/")
+		_, ok := apicore.NormalizeClipPathStrict("path%2fto%2ffile.wav", "clips/")
 		assert.False(t, ok, "Paths with encoded slashes should be rejected for security")
 	})
 
 	// Paths with multiple dots that look like traversal are rejected
 	t.Run("Paths starting with double dots rejected", func(t *testing.T) {
 		t.Parallel()
-		_, ok := NormalizeClipPathStrict("..../test.wav", "clips/")
+		_, ok := apicore.NormalizeClipPathStrict("..../test.wav", "clips/")
 		assert.False(t, ok, "Paths containing '..' anywhere should be rejected")
 	})
 
 	// Valid paths with dots in filenames are still accepted
 	t.Run("Dots in filenames are valid", func(t *testing.T) {
 		t.Parallel()
-		result, ok := NormalizeClipPathStrict("file.name.with.dots.wav", "clips/")
+		result, ok := apicore.NormalizeClipPathStrict("file.name.with.dots.wav", "clips/")
 		assert.True(t, ok, "Dots in filenames are valid")
 		assert.Equal(t, "file.name.with.dots.wav", result)
 	})
