@@ -1,15 +1,23 @@
 package apicore
 
 import (
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// goListTimeout bounds the nested `go list` invocation so the guard fails fast
+// instead of hanging indefinitely if the toolchain stalls (e.g. a wedged module
+// fetch). The dependency resolution of an already-built package is sub-second, so
+// 60s is generous headroom.
+const goListTimeout = 60 * time.Second
 
 // This guard locks in the acyclic dependency direction the api/v2 split is built
 // on (epic design 2.2/2.7): domains depend on apicore and dto; the facade
@@ -51,10 +59,16 @@ func listDeps(t *testing.T, pkg string) []string {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skipf("go toolchain not available, skipping import guard: %v", err)
 	}
+	ctx, cancel := context.WithTimeout(t.Context(), goListTimeout)
+	defer cancel()
 	// Output() captures stdout only (the dep list); on failure stderr is carried on
 	// the *exec.ExitError, so diagnostics never leak into the parsed import set.
-	out, err := exec.Command("go", "list", "-deps", pkg).Output() //nolint:gosec // fixed args, no user input
+	out, err := exec.CommandContext(ctx, "go", "list", "-deps", pkg).Output() //nolint:gosec // fixed args, no user input
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			require.Failf(t, "go list timed out",
+				"go list -deps %s did not finish within %s", pkg, goListTimeout)
+		}
 		var exitErr *exec.ExitError
 		var stderr []byte
 		if errors.As(err, &exitErr) {

@@ -662,7 +662,7 @@ c.log.Info("operation completed",
 
 ### Authentication
 
-- Use `c.getEffectiveAuthMiddleware()` for protected endpoints
+- Apply the promoted `c.AuthMiddleware` field to protected endpoints
 - Consider IP bypass rules for local access
 - Use proper HTTP status codes (401 vs 403)
 
