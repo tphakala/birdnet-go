@@ -1,5 +1,5 @@
-// internal/api/v2/inference_status_test.go
-package api
+// internal/api/v2/system/inference_status_test.go
+package system
 
 import (
 	"encoding/json"
@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
@@ -207,11 +208,12 @@ func TestApplyRuntimeBackend(t *testing.T) {
 
 // TestGetInferenceStatus_HTTP200 verifies that GetInferenceStatus returns HTTP
 // 200 and a valid InferenceStatusResponse with TFLite marked available. It uses
-// the shared setupTestEnvironment harness (minimalController + Echo) to exercise
-// the handler over httptest without starting any background goroutines.
+// an apitest.NewCore-backed Handler over httptest to exercise the handler
+// without starting any background goroutines.
 func TestGetInferenceStatus_HTTP200(t *testing.T) {
-	// NOT parallel: apitest.PublishTestSettings in setupTestEnvironment mutates global state.
-	e, _, controller := setupTestEnvironment(t)
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
+	e := echo.New()
+	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -230,48 +232,13 @@ func TestGetInferenceStatus_HTTP200(t *testing.T) {
 // the SSE event name stays the single source of truth shared with the frontend.
 const eventInferenceTopologyChangedName = "system.inference_topology_changed"
 
-// TestBroadcastInferenceTopologyChanged_ReachesConsumer verifies that the
-// controller broadcast reaches a topology subscriber on the wired metrics store.
-func TestBroadcastInferenceTopologyChanged_ReachesConsumer(t *testing.T) {
-	t.Parallel()
-
-	// Constant matches the shared event-name contract.
-	assert.Equal(t, eventInferenceTopologyChangedName, eventInferenceTopologyChanged)
-
-	store := observability.NewMemoryStore(10)
-	controller := &Controller{Core: &apicore.Core{MetricsStore: store}}
-
-	topoCh, cancel := store.SubscribeTopology()
-	t.Cleanup(cancel)
-
-	controller.BroadcastInferenceTopologyChanged()
-
-	select {
-	case <-topoCh:
-		// Expected: broadcast reached the subscriber.
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for topology broadcast to reach the subscriber")
-	}
-}
-
-// TestBroadcastInferenceTopologyChanged_NilSafe verifies the broadcast is a
-// no-op (no panic) when the controller or its metrics store is nil.
-func TestBroadcastInferenceTopologyChanged_NilSafe(t *testing.T) {
-	t.Parallel()
-
-	var nilController *Controller
-	assert.NotPanics(t, nilController.BroadcastInferenceTopologyChanged)
-
-	noStore := &Controller{Core: &apicore.Core{}}
-	assert.NotPanics(t, noStore.BroadcastInferenceTopologyChanged)
-}
-
 // TestGetInferenceStatus_AudioBlock verifies that GetInferenceStatus returns an
 // audio block with the expected metric key for queue depth and a non-negative
 // queue capacity matching RouteInboxCapacity.
 func TestGetInferenceStatus_AudioBlock(t *testing.T) {
-	// NOT parallel: apitest.PublishTestSettings in setupTestEnvironment mutates global state.
-	e, _, controller := setupTestEnvironment(t)
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
+	e := echo.New()
+	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -443,4 +410,11 @@ func TestSortInferenceModelsByName(t *testing.T) {
 	got := []string{models[0].ID, models[1].ID, models[2].ID}
 	// "alpha" and "Alpha" tie case-insensitively; tie broken by ID (a before c).
 	require.Equal(t, []string{"a", "c", "b"}, got)
+}
+
+// TestEventInferenceTopologyChangedNameContract pins the SSE event name constant
+// shared with the frontend so the metrics-stream contract stays stable.
+func TestEventInferenceTopologyChangedNameContract(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, eventInferenceTopologyChangedName, eventInferenceTopologyChanged)
 }

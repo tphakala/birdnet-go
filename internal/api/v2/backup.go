@@ -18,6 +18,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -392,7 +393,7 @@ func (c *Controller) initBackupRoutes() {
 // StartBackupJob handles POST /api/v2/system/database/backup/jobs
 func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	dbType := ctx.QueryParam("type")
-	if dbType != dbTypeLegacy && dbType != dbTypeV2 {
+	if dbType != apicore.DBTypeLegacy && dbType != apicore.DBTypeV2 {
 		return c.HandleErrorWithKey(ctx, nil,
 			"Type must be 'legacy' or 'v2'", http.StatusBadRequest,
 			notification.MsgErrBackupInvalidType, nil)
@@ -433,8 +434,8 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
 	requiredSpace := uint64(dbSize) + backupDiskBuffer
 	if usage.Free < requiredSpace {
-		neededStr := formatBytesUint64(requiredSpace)
-		availableStr := formatBytesUint64(usage.Free)
+		neededStr := apicore.FormatBytesUint64(requiredSpace)
+		availableStr := apicore.FormatBytesUint64(usage.Free)
 		return c.HandleErrorWithKey(ctx, nil,
 			fmt.Sprintf("Not enough disk space. Need %s, have %s", neededStr, availableStr),
 			http.StatusInsufficientStorage,
@@ -636,7 +637,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 
 // getBackupDBInfo returns the database path and GORM DB for the given type.
 func (c *Controller) getBackupDBInfo(dbType string) (string, *gorm.DB, error) {
-	if dbType == dbTypeLegacy {
+	if dbType == apicore.DBTypeLegacy {
 		settings := c.CurrentSettings()
 		if settings == nil || settings.Output.SQLite.Path == "" {
 			return "", nil, fmt.Errorf("backup only available for SQLite databases")

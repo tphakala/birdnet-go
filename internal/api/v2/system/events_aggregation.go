@@ -1,5 +1,5 @@
-// internal/api/v2/events_aggregation.go
-package api
+// internal/api/v2/system/events_aggregation.go
+package system
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ const topDiscardedCount = 3
 // bucketKeyFormat is the time format used for hourly bucket keys (e.g., "2006-01-02T15").
 const bucketKeyFormat = "2006-01-02T15"
 
-// bucketLabelFormat is the human-readable label for buckets (e.g., "15:00–16:00").
+// bucketLabelFormat is the human-readable label for buckets (e.g., "15:00-16:00").
 const bucketLabelFormat = "15:00"
 
 // speciesIndex tracks species entries within a bucket for O(1) lookup during construction.
@@ -26,7 +26,7 @@ type speciesIndex struct {
 // aggregateDetectionEvents processes raw log entries into hourly bucketed detection data.
 // Events are assigned to buckets based on their resolution timestamp (approve/discard/flush),
 // not the pending creation time. The returned buckets are sorted newest-first.
-func (c *Controller) aggregateDetectionEvents(entries []reader.LogEntry, _ time.Time) DetectionEventsResponse {
+func (c *Handler) aggregateDetectionEvents(entries []reader.LogEntry, _ time.Time) DetectionEventsResponse {
 	bucketMap := make(map[string]*DetectionBucket)
 	speciesIdxMap := make(map[string]*speciesIndex) // bucket key → species index
 	var hourlyPending [24]int

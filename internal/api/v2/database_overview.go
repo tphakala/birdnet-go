@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -31,8 +32,8 @@ const (
 )
 
 // metricsCollectorIntervalSec is the collector interval in seconds, derived from
-// metricsCollectorInterval to guarantee consistency.
-var metricsCollectorIntervalSec = metricsCollectorInterval.Seconds()
+// apicore.MetricsCollectorInterval to guarantee consistency.
+var metricsCollectorIntervalSec = apicore.MetricsCollectorInterval.Seconds()
 
 // samplesPerHour is how many ring buffer entries cover one hour at the collector interval.
 var samplesPerHour = int(3600 / metricsCollectorIntervalSec)

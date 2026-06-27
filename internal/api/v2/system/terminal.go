@@ -1,5 +1,5 @@
-// terminal.go — platform-agnostic terminal WebSocket handler.
-package api
+// terminal.go - platform-agnostic terminal WebSocket handler.
+package system
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 const (
 	terminalWriteWait  = 10 * time.Second
 	terminalPongWait   = 60 * time.Second
-	terminalPingPeriod = (terminalPongWait * 9) / 10 // 54s — must be < pongWait
+	terminalPingPeriod = (terminalPongWait * 9) / 10 // 54s - must be < pongWait
 	terminalMaxMsgSize = 32 * 1024                   // 32KB max message
 )
 
@@ -37,7 +37,7 @@ var terminalUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		// Validate Origin against Host to prevent Cross-Site WebSocket Hijacking (CSWSH).
 		// Browsers set Origin on WebSocket upgrade; non-browser clients (curl, wscat) may
-		// omit it — we allow those through to support local tooling and API testing.
+		// omit it - we allow those through to support local tooling and API testing.
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			return true // non-browser client; auth middleware still enforces authentication
@@ -51,20 +51,9 @@ var terminalUpgrader = websocket.Upgrader{
 	},
 }
 
-// initTerminalRoutes registers the terminal WebSocket endpoint.
-func (c *Controller) initTerminalRoutes() {
-	c.LogInfoIfEnabled("Initializing terminal routes")
-
-	terminalGroup := c.Group.Group("/terminal")
-	protectedGroup := terminalGroup.Group("", c.AuthMiddleware)
-	protectedGroup.GET("/ws", c.HandleTerminalWS)
-
-	c.LogInfoIfEnabled("Terminal routes initialized successfully")
-}
-
 // HandleTerminalWS handles WebSocket connections for the browser terminal.
 // The terminal is only available when EnableTerminal is set in config.
-func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
+func (c *Handler) HandleTerminalWS(ctx echo.Context) error {
 	settings := conf.Setting()
 	if settings == nil || !settings.WebServer.EnableTerminal {
 		return c.HandleErrorWithKey(ctx, nil, "Terminal is disabled. Enable it in settings.", http.StatusForbidden, notification.MsgErrTerminalDisabled, nil)
@@ -90,7 +79,7 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 	}
 	defer cleanup()
 
-	// writeMu serializes all WebSocket writes — gorilla/websocket requires
+	// writeMu serializes all WebSocket writes - gorilla/websocket requires
 	// at most one concurrent writer; we have both a PTY goroutine and a ping
 	// goroutine that write, so they must share this mutex.
 	var writeMu sync.Mutex

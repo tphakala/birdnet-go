@@ -95,12 +95,6 @@ const (
 
 	// SecondsPerMinute is the number of seconds in a minute
 	SecondsPerMinute = 60
-
-	// SecondsPerHour is the number of seconds in an hour
-	SecondsPerHour = 3600
-
-	// MillisecondsPerSecond converts seconds to milliseconds
-	MillisecondsPerSecond = 1000
 )
 
 // Timeout and duration constants
