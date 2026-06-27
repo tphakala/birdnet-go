@@ -24,12 +24,12 @@ type (
 	ShutdownRequester = apicore.ShutdownRequester
 )
 
-// SSE stream scaffolding re-declared from apicore so the remaining SSE producers
-// still in package api (streams_health.go, import.go) and the dashboard public
-// endpoint test keep referring to them by their short names. The canonical
-// definitions and the SendSSEHeartbeat/LogSSEConnection/SendConnectionMessage
-// helpers live in apicore and are promoted onto *Controller via the embedded
-// *apicore.Core.
+// SSE stream scaffolding re-declared from apicore so the SSE contract and
+// dashboard-public-endpoint tests still resident in package api keep referring to
+// them by their short names (the SSE producers themselves now live in the sse,
+// audio, notifications and imports domains). The canonical definitions and the
+// SendSSEHeartbeat/LogSSEConnection/SendConnectionMessage helpers live in apicore
+// and are promoted onto *Controller via the embedded *apicore.Core.
 const (
 	// maxSSEStreamDuration is the maximum lifetime of a single SSE stream.
 	maxSSEStreamDuration = apicore.MaxSSEStreamDuration
