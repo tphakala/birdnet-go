@@ -22,23 +22,23 @@ func TestIsSpeciesExcluded_CanonicalAliasMatch(t *testing.T) {
 	}{
 		{
 			name:           "canonical detection matches legacy exclude entry",
-			commonName:     "Laughing Dove",
-			scientificName: "Spilopelia senegalensis", // canonical (stored after ingestion)
-			excludeList:    []string{"Streptopelia senegalensis"},
+			commonName:     testCommonDove,
+			scientificName: testSciCanonical, // canonical (stored after ingestion)
+			excludeList:    []string{testSciLegacy},
 			want:           true,
 		},
 		{
 			name:           "legacy detection matches canonical exclude entry",
-			commonName:     "Laughing Dove",
-			scientificName: "Streptopelia senegalensis",
-			excludeList:    []string{"Spilopelia senegalensis"},
+			commonName:     testCommonDove,
+			scientificName: testSciLegacy,
+			excludeList:    []string{testSciCanonical},
 			want:           true,
 		},
 		{
 			name:           "unrelated species not excluded by alias",
 			commonName:     "American Robin",
 			scientificName: "Turdus migratorius",
-			excludeList:    []string{"Streptopelia senegalensis"},
+			excludeList:    []string{testSciLegacy},
 			want:           false,
 		},
 	}
@@ -61,7 +61,7 @@ func TestLookupSpeciesConfig_CanonicalAliasMatch(t *testing.T) {
 		"streptopelia senegalensis": {Threshold: 0.42}, // user keyed config on the legacy name
 	}
 
-	got, found := lookupSpeciesConfig(cfg, "Laughing Dove", "Spilopelia senegalensis")
+	got, found := lookupSpeciesConfig(cfg, testCommonDove, testSciCanonical)
 	assert.True(t, found, "config keyed on a legacy name must match the canonical detection")
 	assert.InDelta(t, 0.42, got.Threshold, 1e-9)
 }

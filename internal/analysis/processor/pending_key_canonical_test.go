@@ -23,14 +23,14 @@ func detectionFor(scientific, common string) *Detections {
 func TestPendingKeyForDetection_KeysOnScientificName(t *testing.T) {
 	t.Parallel()
 
-	det := detectionFor("Spilopelia senegalensis", "Laughing Dove")
+	det := detectionFor(testSciCanonical, testCommonDove)
 	got := pendingKeyForDetection("src", det)
 	assert.Equal(t, pendingDetectionKey("src", "spilopelia senegalensis"), got)
 }
 
 // TestPendingKeyForDetection_CanonicalizationDrivesMerge composes the real ingestion
 // steps that run before a pending key is built: canonicalizeSpecies collapses a
-// legacy alias ("Streptopelia senegalensis") to the canonical scientific name, then
+// legacy alias (testSciLegacy) to the canonical scientific name, then
 // pendingKeyForDetection keys on that name. A legacy-labelled and a canonical-labelled
 // detection of one taxon therefore land on the same pending key and merge, even though
 // their model-emitted scientific names and common names differ. This exercises the
@@ -41,13 +41,13 @@ func TestPendingKeyForDetection_CanonicalizationDrivesMerge(t *testing.T) {
 	// The resolver stands in for the taxonomy/OpenFauna chain; only the alias branch
 	// of canonicalizeSpecies consults it.
 	resolver := fakeTaxonomyResolver{fn: func(string) (string, string, string) {
-		return "Spilopelia senegalensis", "Laughing Dove", "laudov1"
+		return testSciCanonical, testCommonDove, testCodeDove
 	}}
 
-	legacySci, _, _, _ := canonicalizeSpecies(resolver, "Streptopelia senegalensis", "Laughing Dove", "legacycode")
-	canonicalSci, _, _, _ := canonicalizeSpecies(resolver, "Spilopelia senegalensis", "Laughing Dove", "laudov1")
+	legacySci, _, _, _ := canonicalizeSpecies(resolver, testSciLegacy, testCommonDove, "legacycode")
+	canonicalSci, _, _, _ := canonicalizeSpecies(resolver, testSciCanonical, testCommonDove, testCodeDove)
 
-	legacy := detectionFor(legacySci, "Laughing Dove")
+	legacy := detectionFor(legacySci, testCommonDove)
 	canonical := detectionFor(canonicalSci, "Palm Dove") // intentionally different common name
 	assert.Equal(t, pendingKeyForDetection("src", legacy), pendingKeyForDetection("src", canonical),
 		"a taxon detected under a legacy and a canonical name must share a pending key (merge)")
