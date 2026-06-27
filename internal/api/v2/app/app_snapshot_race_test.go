@@ -26,7 +26,10 @@ import (
 // conftest.SetTestSettings does not leak into sibling tests.
 func withRestoredGlobalSettings(t *testing.T) {
 	t.Helper()
-	orig := conf.GetSettings()
+	// Clone the snapshot so a test that mutates the live global settings struct
+	// does not corrupt the value we restore on cleanup (the pointer would
+	// otherwise alias the mutated struct). CloneSettings is nil-safe.
+	orig := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(orig) })
 }
 
