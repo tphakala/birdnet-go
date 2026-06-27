@@ -315,6 +315,43 @@ func TestIsSpeciesIncluded_ScientificNameMap(t *testing.T) {
 	}
 }
 
+// TestIsSpeciesIncluded_TaxonomicAlias verifies that a legacy classifier label is
+// matched against a canonical included-species key via the OpenFauna alias map.
+// The v3 geomodel lists the species under its current eBird name, so the included
+// set holds the canonical key; a BirdNET v2.4 detection arrives under the legacy
+// name and must still resolve to "included", or the range-filtered species would
+// be dropped by the inclusion gate.
+func TestIsSpeciesIncluded_TaxonomicAlias(t *testing.T) {
+	t.Parallel()
+
+	settings := &Settings{}
+	// Included set keyed by the canonical (geomodel) name, as BuildRangeFilter
+	// would produce from the geomodel's labels.
+	settings.BirdNET.RangeFilter.IncludedScientificNames = map[string]struct{}{
+		"spilopelia senegalensis": {},
+	}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{"legacy label resolves to canonical", "Streptopelia senegalensis_Laughing Dove", true},
+		{"legacy scientific only", "Streptopelia senegalensis", true},
+		{"canonical label matches directly", "Spilopelia senegalensis_Laughing Dove", true},
+		{"legacy label with surrounding whitespace", "  Streptopelia senegalensis  ", true},
+		{"legacy label with CRLF carriage return", "Streptopelia senegalensis\r", true},
+		{"unrelated species not included", "Ficedula hypoleuca", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, settings.IsSpeciesIncluded(tt.input))
+		})
+	}
+}
+
 // TestUpdateIncludedSpecies_BuildsScientificNameMap verifies that
 // UpdateIncludedSpecies populates IncludedScientificNames with lowercased
 // scientific names extracted from BirdNET-style labels.
