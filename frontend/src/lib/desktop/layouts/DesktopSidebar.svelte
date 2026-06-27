@@ -450,7 +450,7 @@ Performance Optimizations:
 
 <aside
   class={cn(
-    'drawer-side z-10 transition-all duration-200 ease-in-out overflow-visible',
+    'drawer-side z-[200] transition-all duration-200 ease-in-out overflow-visible',
     isCollapsed ? 'lg:w-16' : 'lg:w-64',
     className
   )}
