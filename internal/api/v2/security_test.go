@@ -733,7 +733,7 @@ func TestRateLimiting(t *testing.T) {
 			name:     "GetSpeciesSummary should be rate limited",
 			method:   http.MethodGet,
 			path:     "/api/v2/analytics/species",
-			handler:  controller.GetSpeciesSummary,
+			handler:  controller.analytics.GetSpeciesSummary,
 			requests: 100,
 		},
 	}

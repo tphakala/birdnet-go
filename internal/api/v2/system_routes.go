@@ -42,7 +42,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/external-media", c.media.GetExternalMedia)
 
 	// Database overview (analytics domain).
-	c.initDatabaseOverviewRoutes()
+	c.analytics.RegisterDatabaseOverviewRoutes(c.Group)
 
 	// Migration, async backup and legacy cleanup routes (import domain).
 	c.initMigrationRoutes()

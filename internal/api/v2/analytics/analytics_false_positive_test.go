@@ -1,6 +1,6 @@
 // analytics_false_positive_test.go: Tests for false positive filtering in analytics endpoints.
 // These tests verify that analytics queries correctly exclude false_positive detections.
-package api
+package analytics
 
 import (
 	"encoding/json"

@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
+	"github.com/tphakala/birdnet-go/internal/api/v2/analytics"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	audioapi "github.com/tphakala/birdnet-go/internal/api/v2/audio"
 	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
@@ -252,12 +253,21 @@ type Controller struct {
 	// Application metadata repository (initialized lazily in initAppRoutes)
 	appMetadataRepo repository.AppMetadataRepository
 
-	// Insights fields (initialized lazily in initInsightsRoutes)
-	insightsRepo repository.InsightsRepository
-	nameMaps     atomic.Value // stores *nameMaps; see internal/api/v2/insights.go
+	// Cached BirdNET name maps (facade-owned; see name_maps.go). They are shared
+	// infrastructure: the analytics, detections, and species domains read them via
+	// injected accessors, and internal/analysis drives them through
+	// UpdateCommonNameMap/SetNameResolver on *Controller.
+	nameMaps atomic.Value // stores *nameMaps; see internal/api/v2/name_maps.go
 	// nameResolver is the authoritative localized name source shared with the
 	// classifier orchestrator. Overrides label-derived names in the cached maps.
 	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
+
+	// analytics serves the /api/v2/analytics/* species/time/confidence/sun/sources
+	// endpoints, the geographic /range/heatmap endpoint, the /insights/* +
+	// /dashboard/kpis endpoints, and the auth-protected /system/database/overview
+	// endpoint. It owns the insights repository; the facade keeps the name-map
+	// plumbing (name_maps.go) and seeds the maps before registering insights routes.
+	analytics *analytics.Handler
 
 	// healthErrorBuf is the optional shared ErrorRingBuffer seed injected via
 	// WithHealthErrorBuffer. It is handed to the system domain handler at
@@ -443,6 +453,13 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.detections = detections.New(c.Core, &c.settingsMutex,
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges,
 		c.isClientAuthenticated, c.loadCommonNameMap, c.loadCommonToScientificMap)
+	// The analytics handler is injected the same facade-owned dependencies as
+	// detections: the auth check (isClientAuthenticated, read per request so the
+	// public /analytics/sources response anonymizes source names) and the cached
+	// name-map accessors (loadCommonNameMap / loadCommonToScientificMap). It owns
+	// the insights repository, which it builds lazily in RegisterInsightsRoutes.
+	c.analytics = analytics.New(c.Core,
+		c.isClientAuthenticated, c.loadCommonNameMap, c.loadCommonToScientificMap)
 	// The media handler owns the audio-processing cache, the spectrogram
 	// generator, and the cache-cleanup goroutine (all built from the shared
 	// SecureFS in mediaapi.New). It is constructed BEFORE the species handler
@@ -450,8 +467,8 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// the media handler) for its thumbnail endpoint.
 	c.media = mediaapi.New(c.Core)
 	// The species handler delegates to two dependencies: loadCommonNameMap (the
-	// shared name-map read accessor, still facade-owned until insights is
-	// extracted) and the media domain's species-image proxy handler
+	// shared name-map read accessor, facade-owned in name_maps.go) and the media
+	// domain's species-image proxy handler
 	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
 	// is fully constructed here, so the method values are stable for its lifetime.
 	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
@@ -588,7 +605,7 @@ func (c *Controller) initRoutes() {
 		{"app routes", c.initAppRoutes},
 		{"search routes", func() { c.detections.RegisterSearchRoutes(c.Group) }},
 		{"detection routes", func() { c.detections.RegisterDetectionRoutes(c.Group) }},
-		{"analytics routes", c.initAnalyticsRoutes},
+		{"analytics routes", func() { c.analytics.RegisterAnalyticsRoutes(c.Group) }},
 		{"weather routes", func() { c.weather.RegisterRoutes(c.Group) }},
 		{"system routes", c.initSystemRoutes},
 		{"audio device routes", func() { c.audio.RegisterAudioDeviceRoutes(c.Group) }},
@@ -606,7 +623,7 @@ func (c *Controller) initRoutes() {
 		{"auth routes", func() { c.authHandler.RegisterRoutes(c.Group) }},
 		{"media routes", func() { c.media.RegisterRoutes(c.Group) }},
 		{"range routes", func() { c.rangeHandler.RegisterRoutes(c.Group) }},
-		{"heatmap routes", c.initHeatmapRoutes},
+		{"heatmap routes", func() { c.analytics.RegisterHeatmapRoutes(c.Group) }},
 		{"sse routes", func() { c.sse.RegisterRoutes(c.Group) }},
 		{"diagnostics routes", func() { c.system.RegisterDiagnosticsRoutes(c.Group) }},
 		{"metrics history routes", func() { c.system.RegisterMetricsHistoryRoutes(c.Group) }},

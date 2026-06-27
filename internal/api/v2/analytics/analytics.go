@@ -1,5 +1,5 @@
 // internal/api/v2/analytics.go
-package api
+package analytics
 
 import (
 	"context"
@@ -79,7 +79,7 @@ func withAnalyticsTimeout(ctx echo.Context) (context.Context, context.CancelFunc
 // becomes 500 with genericMsg. opLabel names the operation in the structured log
 // (" query timeout" / " query failed" is appended); the query error is logged
 // alongside the supplied fields. The returned error is what the handler returns.
-func (c *Controller) handleAnalyticsQueryError(ctx echo.Context, err error, opLabel, genericMsg string, fields ...logger.Field) error {
+func (c *Handler) handleAnalyticsQueryError(ctx echo.Context, err error, opLabel, genericMsg string, fields ...logger.Field) error {
 	fields = append(fields, logger.Error(err))
 	switch {
 	case errors.Is(err, context.Canceled):
@@ -101,7 +101,7 @@ func (c *Controller) handleAnalyticsQueryError(ctx echo.Context, err error, opLa
 // right level: a client cancellation (context.Canceled) is an expected disconnect
 // logged at debug, any other error is a real failure logged at error. It returns
 // true for a cancellation so the caller can stop the batch instead of continuing.
-func (c *Controller) logBatchQueryError(msg string, err error, fields ...logger.Field) (canceled bool) {
+func (c *Handler) logBatchQueryError(msg string, err error, fields ...logger.Field) (canceled bool) {
 	fields = append(fields, logger.Error(err))
 	if errors.Is(err, context.Canceled) {
 		c.LogDebugIfEnabled(msg+": client canceled request", fields...)
@@ -190,51 +190,8 @@ type aggregatedBirdInfo struct {
 	Latest         string
 }
 
-// initAnalyticsRoutes registers all analytics-related API endpoints
-func (c *Controller) initAnalyticsRoutes() {
-	// Create analytics API group - publicly accessible
-	analyticsGroup := c.Group.Group("/analytics")
-
-	// Species analytics routes
-	speciesGroup := analyticsGroup.Group("/species")
-	speciesGroup.GET("/daily", c.GetDailySpeciesSummary)
-	speciesGroup.GET("/daily/batch", c.GetBatchDailySpeciesSummary) // Batch daily summaries endpoint
-	speciesGroup.GET("/summary", c.GetSpeciesSummary)
-	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
-	speciesGroup.GET("/thumbnails", c.GetSpeciesThumbnails)        // Batch thumbnail endpoint
-	speciesGroup.GET("/diversity", c.GetSpeciesDiversity)          // Species diversity over time
-	speciesGroup.GET("/accumulation", c.GetSpeciesAccumulation)    // Species accumulation curve (biodiversity collector's curve)
-	speciesGroup.GET("/phenology", c.GetSpeciesPhenology)          // Arrival/departure phenology (residency-bar Gantt)
-
-	// Time analytics routes (can be implemented later)
-	timeGroup := analyticsGroup.Group("/time")
-	timeGroup.GET("/hourly", c.GetHourlyAnalytics)
-	timeGroup.GET("/hourly/batch", c.GetBatchHourlySpeciesData) // Batch hourly data for multiple species
-	timeGroup.GET("/daily", c.GetDailyAnalytics)
-	timeGroup.GET("/daily/batch", c.GetBatchDailySpeciesData)              // Batch daily trends for multiple species
-	timeGroup.GET("/distribution/hourly", c.GetTimeOfDayDistribution)      // Renamed endpoint for time-of-day distribution
-	timeGroup.GET("/distribution/species", c.GetSpeciesHourlyDistribution) // Who-sings-when ridgeline (top-N species hour-of-day)
-	timeGroup.GET("/heatmap", c.GetActivityHeatmap)                        // Seasonal density heatmap (date x intra-day slot)
-	timeGroup.GET("/dawn-onset", c.GetDawnChorusOnset)                     // Dawn-chorus onset tracker (daily onset vs civil dawn)
-	timeGroup.GET("/succession", c.GetAcousticSuccession)                  // Acoustic succession streamgraph (top-N species hour-of-day, stacked)
-	timeGroup.GET("/year-over-year", c.GetYearOverYear)                    // Year-over-year tracker (this year-to-date vs same span last year, cumulative)
-
-	// Confidence analytics routes
-	confidenceGroup := analyticsGroup.Group("/confidence")
-	confidenceGroup.GET("/distribution", c.GetConfidenceDistribution) // Confidence distribution per species (Review & Accuracy)
-
-	// Sun times for the nocturnal activity clock's day/night shading. Additive: the clock's counts
-	// come from the existing /time/distribution/hourly endpoint (unchanged); only this sun endpoint
-	// is new (design spec section 6.4).
-	analyticsGroup.GET("/sun", c.GetAnalyticsSun)
-
-	// Audio sources that have detections in range, powering the analytics hub's source/mic filter.
-	// Additive and read-only; names are anonymized for unauthenticated clients (the page is public).
-	analyticsGroup.GET("/sources", c.GetAnalyticsSources)
-}
-
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
-func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
+func (c *Handler) GetDailySpeciesSummary(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 
@@ -309,7 +266,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 
 // GetBatchDailySpeciesSummary handles GET /api/v2/analytics/species/daily/batch
 // Returns daily species summaries for multiple dates in a single request
-func (c *Controller) GetBatchDailySpeciesSummary(ctx echo.Context) error {
+func (c *Handler) GetBatchDailySpeciesSummary(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 
@@ -336,7 +293,7 @@ func (c *Controller) GetBatchDailySpeciesSummary(ctx echo.Context) error {
 }
 
 // parseBatchDailySummaryParams parses and validates parameters for batch daily summary requests
-func (c *Controller) parseBatchDailySummaryParams(ctx echo.Context) (dates []string, minConfidence float64, limit int, err error) {
+func (c *Handler) parseBatchDailySummaryParams(ctx echo.Context) (dates []string, minConfidence float64, limit int, err error) {
 	const maxBatchSize = 7
 
 	// Parse and validate dates using shared helper
@@ -346,7 +303,7 @@ func (c *Controller) parseBatchDailySummaryParams(ctx echo.Context) (dates []str
 	}
 
 	// Parse min_confidence using shared helper
-	minConfidence = c.parseOptionalFloat(ctx, "min_confidence", 0.0, PercentageMultiplier)
+	minConfidence = c.parseOptionalFloat(ctx, "min_confidence", 0.0, apicore.PercentageMultiplier)
 
 	// Parse limit using shared helper (0 means no limit)
 	limit = c.parseOptionalPositiveInt(ctx, "limit", 0)
@@ -355,7 +312,7 @@ func (c *Controller) parseBatchDailySummaryParams(ctx echo.Context) (dates []str
 }
 
 // processBatchDates processes multiple dates and returns results and errors
-func (c *Controller) processBatchDates(ctx context.Context, dates []string, minConfidence float64, limit int, ip, path string) (batchResults map[string][]SpeciesDailySummary, processingErrors []string) {
+func (c *Handler) processBatchDates(ctx context.Context, dates []string, minConfidence float64, limit int, ip, path string) (batchResults map[string][]SpeciesDailySummary, processingErrors []string) {
 	batchResults = make(map[string][]SpeciesDailySummary)
 	processingErrors = make([]string, 0)
 
@@ -390,7 +347,7 @@ func (c *Controller) processBatchDates(ctx context.Context, dates []string, minC
 }
 
 // processSingleDateForBatch processes a single date using the same logic as the regular endpoint
-func (c *Controller) processSingleDateForBatch(ctx context.Context, selectedDate string, minConfidence float64, limit int, ip, path string) ([]SpeciesDailySummary, error) {
+func (c *Handler) processSingleDateForBatch(ctx context.Context, selectedDate string, minConfidence float64, limit int, ip, path string) ([]SpeciesDailySummary, error) {
 	// Get data for the date (limit applied at database level)
 	notes, err := c.DS.GetTopBirdsData(ctx, selectedDate, minConfidence, limit)
 	if err != nil {
@@ -432,12 +389,12 @@ func (c *Controller) processSingleDateForBatch(ctx context.Context, selectedDate
 }
 
 // handleBatchResults handles the final response and error cases for batch requests
-func (c *Controller) handleBatchResults(ctx echo.Context, batchResults map[string][]SpeciesDailySummary, processingErrors []string, totalRequested int, ip, path string) error {
+func (c *Handler) handleBatchResults(ctx echo.Context, batchResults map[string][]SpeciesDailySummary, processingErrors []string, totalRequested int, ip, path string) error {
 	return c.handleBatchResponse(ctx, batchResults, len(batchResults), totalRequested, processingErrors, "batch daily species summary", ip, path)
 }
 
 // parseDailySpeciesSummaryParams parses and validates query parameters for the daily summary.
-func (c *Controller) parseDailySpeciesSummaryParams(ctx echo.Context) (selectedDate string, minConfidence float64, limit int, err error) {
+func (c *Handler) parseDailySpeciesSummaryParams(ctx echo.Context) (selectedDate string, minConfidence float64, limit int, err error) {
 	// Parse and validate date (defaults to today if not provided)
 	selectedDate = ctx.QueryParam("date")
 	if selectedDate == "" {
@@ -448,14 +405,14 @@ func (c *Controller) parseDailySpeciesSummaryParams(ctx echo.Context) (selectedD
 	}
 
 	// Parse optional parameters with defaults
-	minConfidence = c.parseOptionalFloat(ctx, "min_confidence", 0.0, PercentageMultiplier)
+	minConfidence = c.parseOptionalFloat(ctx, "min_confidence", 0.0, apicore.PercentageMultiplier)
 	limit = c.parseOptionalPositiveInt(ctx, "limit", 0)
 
 	return
 }
 
 // aggregateDailySpeciesData processes raw notes, fetches hourly counts, and aggregates results.
-func (c *Controller) aggregateDailySpeciesData(ctx context.Context, notes []datastore.Note, selectedDate string, minConfidence float64) (map[string]aggregatedBirdInfo, error) {
+func (c *Handler) aggregateDailySpeciesData(ctx context.Context, notes []datastore.Note, selectedDate string, minConfidence float64) (map[string]aggregatedBirdInfo, error) {
 	aggregatedData := make(map[string]aggregatedBirdInfo)
 
 	if len(notes) == 0 {
@@ -504,7 +461,7 @@ func (c *Controller) aggregateDailySpeciesData(ctx context.Context, notes []data
 }
 
 // updateAggregatedData updates the aggregated map with note data
-func (c *Controller) updateAggregatedData(aggregatedData map[string]aggregatedBirdInfo, note *datastore.Note, hourlyCounts *[24]int) {
+func (c *Handler) updateAggregatedData(aggregatedData map[string]aggregatedBirdInfo, note *datastore.Note, hourlyCounts *[24]int) {
 	birdKey := note.ScientificName
 
 	totalCount := 0
@@ -541,7 +498,7 @@ func (c *Controller) updateAggregatedData(aggregatedData map[string]aggregatedBi
 }
 
 // buildDailySpeciesSummaryResponse converts aggregated data into the final API response slice.
-func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]aggregatedBirdInfo, selectedDate string) ([]SpeciesDailySummary, error) {
+func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]aggregatedBirdInfo, selectedDate string) ([]SpeciesDailySummary, error) {
 	// Collect species names with detections
 	scientificNames := collectSpeciesWithDetections(aggregatedData)
 
@@ -581,7 +538,7 @@ func collectSpeciesWithDetections(aggregatedData map[string]aggregatedBirdInfo) 
 }
 
 // batchFetchCachedThumbnails fetches thumbnail URLs from cache only
-func (c *Controller) batchFetchCachedThumbnails(scientificNames []string) map[string]string {
+func (c *Handler) batchFetchCachedThumbnails(scientificNames []string) map[string]string {
 	thumbnailURLs := make(map[string]string)
 	cache := c.BirdImageCache
 	if cache == nil || len(scientificNames) == 0 {
@@ -611,7 +568,7 @@ func parseStatusTimeFromDate(selectedDate string) time.Time {
 }
 
 // batchFetchSpeciesStatus fetches species tracking status to avoid N+1 queries
-func (c *Controller) batchFetchSpeciesStatus(scientificNames []string, statusTime time.Time) map[string]species.SpeciesStatus {
+func (c *Handler) batchFetchSpeciesStatus(scientificNames []string, statusTime time.Time) map[string]species.SpeciesStatus {
 	// Snapshot processor and tracker to avoid TOCTOU race
 	proc := c.Processor
 	if proc == nil || len(scientificNames) == 0 {
@@ -683,7 +640,7 @@ func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.S
 
 // GetSpeciesSummary handles GET /api/v2/analytics/species/summary
 // This provides an overall summary of species detections
-func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
+func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
@@ -738,7 +695,7 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 }
 
 // fetchSpeciesSummaryData fetches species summary data with timing
-func (c *Controller) fetchSpeciesSummaryData(ctx echo.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, time.Duration, error) {
+func (c *Handler) fetchSpeciesSummaryData(ctx echo.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, time.Duration, error) {
 	dbStart := time.Now()
 	queryCtx, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
@@ -756,7 +713,7 @@ func extractScientificNames(summaryData []datastore.SpeciesSummaryData) []string
 }
 
 // batchFetchThumbnailsWithLogging fetches thumbnails with debug logging
-func (c *Controller) batchFetchThumbnailsWithLogging(scientificNames []string, ip, path string) map[string]imageprovider.BirdImage {
+func (c *Handler) batchFetchThumbnailsWithLogging(scientificNames []string, ip, path string) map[string]imageprovider.BirdImage {
 	cache := c.BirdImageCache
 	if cache == nil || len(scientificNames) == 0 {
 		return nil
@@ -782,7 +739,7 @@ func (c *Controller) batchFetchThumbnailsWithLogging(scientificNames []string, i
 }
 
 // convertSummaryDataToResponse converts datastore models to API response
-func (c *Controller) convertSummaryDataToResponse(summaryData []datastore.SpeciesSummaryData, thumbnailURLs map[string]imageprovider.BirdImage) []SpeciesSummary {
+func (c *Handler) convertSummaryDataToResponse(summaryData []datastore.SpeciesSummaryData, thumbnailURLs map[string]imageprovider.BirdImage) []SpeciesSummary {
 	response := make([]SpeciesSummary, 0, len(summaryData))
 
 	for i := range summaryData {
@@ -823,7 +780,7 @@ func getThumbnailURLFromBirdImage(thumbnailURLs map[string]imageprovider.BirdIma
 }
 
 // applyOptionalLimit parses and applies limit parameter
-func (c *Controller) applyOptionalLimit(ctx echo.Context, response []SpeciesSummary, ip, path string) (result []SpeciesSummary, appliedLimit int) {
+func (c *Handler) applyOptionalLimit(ctx echo.Context, response []SpeciesSummary, ip, path string) (result []SpeciesSummary, appliedLimit int) {
 	limitStr := ctx.QueryParam("limit")
 	if limitStr == "" {
 		return response, 0
@@ -848,7 +805,7 @@ func (c *Controller) applyOptionalLimit(ctx echo.Context, response []SpeciesSumm
 
 // GetHourlyAnalytics handles GET /api/v2/analytics/time/hourly
 // This provides hourly detection patterns
-func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
+func (c *Handler) GetHourlyAnalytics(ctx echo.Context) error {
 	const operation = "hourly analytics"
 
 	// Validate required parameters
@@ -933,7 +890,7 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 
 // GetDailyAnalytics handles GET /api/v2/analytics/time/daily
 // This provides daily detection patterns
-func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
+func (c *Handler) GetDailyAnalytics(ctx echo.Context) error {
 	const operation = "daily analytics"
 
 	// Validate required parameter
@@ -1042,7 +999,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 
 // GetSpeciesDiversity handles GET /api/v2/analytics/species/diversity
 // Returns the number of unique species detected per day over a date range
-func (c *Controller) GetSpeciesDiversity(ctx echo.Context) error {
+func (c *Handler) GetSpeciesDiversity(ctx echo.Context) error {
 	const operation = "species diversity"
 
 	// Validate required parameter
@@ -1178,7 +1135,7 @@ func newActivityHeatmapResponse(data *datastore.ActivityHeatmapData) activityHea
 // GetActivityHeatmap handles GET /api/v2/analytics/time/heatmap
 // Returns detection counts bucketed by (station-local date, intra-day slot) over the date range
 // as a columnar sparse payload. With ?format=csv it streams the non-zero cells as CSV instead.
-func (c *Controller) GetActivityHeatmap(ctx echo.Context) error {
+func (c *Handler) GetActivityHeatmap(ctx echo.Context) error {
 	const operation = "activity heatmap"
 
 	// Validate required parameter
@@ -1258,7 +1215,7 @@ func (c *Controller) GetActivityHeatmap(ctx echo.Context) error {
 
 // writeActivityHeatmapCSV streams the heatmap's non-zero cells as CSV. Each row is one cell:
 // the calendar date, the slot index, the slot's wall-clock start time, and the detection count.
-func (c *Controller) writeActivityHeatmapCSV(ctx echo.Context, data *datastore.ActivityHeatmapData) error {
+func (c *Handler) writeActivityHeatmapCSV(ctx echo.Context, data *datastore.ActivityHeatmapData) error {
 	ctx.Response().Header().Set(echo.HeaderContentType, "text/csv; charset=utf-8")
 	ctx.Response().Header().Set(echo.HeaderContentDisposition, `attachment; filename="activity-heatmap.csv"`)
 	ctx.Response().WriteHeader(http.StatusOK)
@@ -1346,7 +1303,7 @@ func newDawnChorusOnsetResponse(data []datastore.DailyActivityOnset) []dawnChoru
 // GetDawnChorusOnset handles GET /api/v2/analytics/time/dawn-onset
 // Returns, per calendar day in the range, the dawn-chorus onset relative to civil dawn (in minutes;
 // negative = before civil dawn), powering the dawn-chorus onset tracker (design spec section 6.3).
-func (c *Controller) GetDawnChorusOnset(ctx echo.Context) error {
+func (c *Handler) GetDawnChorusOnset(ctx echo.Context) error {
 	const operation = "dawn chorus onset"
 
 	// Validate required parameter
@@ -1482,7 +1439,7 @@ func resolveSunRepresentativeDate(dateParam, startDate, endDate string) string {
 // section 6.4). Accepts ?date for a single day or ?start_date&end_date for a range (collapsed to
 // its midpoint); defaults to today. Sun data is separate from the (unchanged) hourly-distribution
 // endpoint so that endpoint's response shape stays backward compatible.
-func (c *Controller) GetAnalyticsSun(ctx echo.Context) error {
+func (c *Handler) GetAnalyticsSun(ctx echo.Context) error {
 	const operation = "analytics sun times"
 
 	dateParam := ctx.QueryParam("date")
@@ -1594,7 +1551,7 @@ func (c *Controller) GetAnalyticsSun(ctx echo.Context) error {
 // array. The endpoints differ only in their limit bounds, the datastore query, and the response
 // shape, which are passed in; operation names the endpoint in validation/error messages and logs.
 func serveTopNHourlyChart[T any](
-	c *Controller,
+	c *Handler,
 	ctx echo.Context,
 	operation string,
 	defaultLimit, maxLimit int,
@@ -1667,7 +1624,7 @@ func serveTopNHourlyChart[T any](
 // GetSpeciesHourlyDistribution handles GET /api/v2/analytics/time/distribution/species
 // Returns the normalized hour-of-day activity distribution for the top N species by detection
 // volume over the date range, powering the who-sings-when ridgeline (design spec section 6.2).
-func (c *Controller) GetSpeciesHourlyDistribution(ctx echo.Context) error {
+func (c *Handler) GetSpeciesHourlyDistribution(ctx echo.Context) error {
 	return serveTopNHourlyChart(c, ctx, "species hourly distribution",
 		defaultSpeciesRidgelineLimit, maxSpeciesRidgelineLimit,
 		c.DS.GetHourlyDistributionBySpecies,
@@ -1706,7 +1663,7 @@ func newAcousticSuccessionResponse(data []datastore.SpeciesHourlyCounts) []acous
 // the acoustic succession streamgraph in the Activity Patterns tab (design spec #1155, Tier-2). The
 // counts are unnormalized so the frontend can stack them into a streamgraph whose band width is
 // detection volume.
-func (c *Controller) GetAcousticSuccession(ctx echo.Context) error {
+func (c *Handler) GetAcousticSuccession(ctx echo.Context) error {
 	return serveTopNHourlyChart(c, ctx, "acoustic succession",
 		defaultSpeciesSuccessionLimit, maxSpeciesSuccessionLimit,
 		c.DS.GetAcousticSuccession,
@@ -1765,7 +1722,7 @@ func clampConfidenceBins(value string) int {
 // in the Review & Accuracy tab (design spec section 6.5). The datastore method is named
 // GetConfidenceHistogram (it computes a per-species histogram); this endpoint and the chart present
 // it as a distribution, hence the route/handler naming.
-func (c *Controller) GetConfidenceDistribution(ctx echo.Context) error {
+func (c *Handler) GetConfidenceDistribution(ctx echo.Context) error {
 	const operation = "confidence distribution"
 
 	// Validate required parameter
@@ -1870,7 +1827,7 @@ func newSpeciesAccumulationResponse(data []datastore.SpeciesAccumulationPoint) [
 // cumulative count of distinct species first detected within the selected range, powering the
 // accumulation chart in the Biodiversity tab. The metric is inherently all-species, so there is no
 // species filter; "first seen" is bounded to the queried window, not lifetime.
-func (c *Controller) GetSpeciesAccumulation(ctx echo.Context) error {
+func (c *Handler) GetSpeciesAccumulation(ctx echo.Context) error {
 	const operation = "species accumulation"
 
 	// Validate required parameter
@@ -1994,7 +1951,7 @@ func analyticsSourceLabel(src *datastore.AudioSourceSummary, authenticated bool)
 // (the legacy schema does not persist a detection's source); the legacy datastore returns an empty
 // list. Source names are anonymized for unauthenticated clients (the analytics page is public); the
 // opaque numeric id is safe to expose and is what the source filter round-trips in the URL.
-func (c *Controller) GetAnalyticsSources(ctx echo.Context) error {
+func (c *Handler) GetAnalyticsSources(ctx echo.Context) error {
 	const operation = "analytics sources"
 
 	startDate := ctx.QueryParam("start_date")
@@ -2102,7 +2059,7 @@ func newYearOverYearResponse(data datastore.YearOverYearResult) yearOverYearResp
 // earlier, with a per-day delta, powering the year-over-year tracker in the Trends tab. The single
 // optional `date` query param (station-local YYYY-MM-DD, default today) sets the inclusive end of both
 // windows; the metric is inherently all-species, so there is no species filter.
-func (c *Controller) GetYearOverYear(ctx echo.Context) error {
+func (c *Handler) GetYearOverYear(ctx echo.Context) error {
 	const operation = "year over year"
 
 	// date is optional (defaults to today in the station timezone). Validate both the YYYY-MM-DD shape
@@ -2178,7 +2135,7 @@ func newSpeciesPhenologyResponse(data []datastore.SpeciesPhenologyPoint) []speci
 // volume within the selected range: per species, the first and last detection date plus the in-range
 // detection count, powering the residency-bar Gantt in the Biodiversity tab. The metric is inherently
 // all-species top-N, so there is no species filter; spans are bounded to the queried window.
-func (c *Controller) GetSpeciesPhenology(ctx echo.Context) error {
+func (c *Handler) GetSpeciesPhenology(ctx echo.Context) error {
 	const operation = "species phenology"
 
 	// Validate required parameter
@@ -2245,7 +2202,7 @@ func (c *Controller) GetSpeciesPhenology(ctx echo.Context) error {
 
 // GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution/hourly
 // Returns an aggregated count of detections by hour of day across the given date range
-func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
+func (c *Handler) GetTimeOfDayDistribution(ctx echo.Context) error {
 	const operation = "time of day distribution"
 
 	// Get query parameters with defaults
@@ -2299,7 +2256,7 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 
 // GetNewSpeciesDetections handles GET /api/v2/analytics/species/new
 // Returns species whose absolute first detection occurred within the specified date range.
-func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
+func (c *Handler) GetNewSpeciesDetections(ctx echo.Context) error {
 	const operation = "GetNewSpeciesDetections"
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 
@@ -2356,7 +2313,7 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 }
 
 // validateNewSpeciesDateParams validates date formats and chronological order
-func (c *Controller) validateNewSpeciesDateParams(ctx echo.Context, startDate, endDate, operation string) error {
+func (c *Handler) validateNewSpeciesDateParams(ctx echo.Context, startDate, endDate, operation string) error {
 	if err := c.validateDateFormatWithResponse(ctx, startDate, "start_date", operation); err != nil {
 		return err
 	}
@@ -2367,7 +2324,7 @@ func (c *Controller) validateNewSpeciesDateParams(ctx echo.Context, startDate, e
 }
 
 // convertNewSpeciesToResponse converts new species data to API response format
-func (c *Controller) convertNewSpeciesToResponse(newSpeciesData []datastore.NewSpeciesData) []NewSpeciesResponse {
+func (c *Handler) convertNewSpeciesToResponse(newSpeciesData []datastore.NewSpeciesData) []NewSpeciesResponse {
 	scientificNames := extractNewSpeciesNames(newSpeciesData)
 	thumbnailURLs := c.batchFetchThumbnailURLs(scientificNames)
 
@@ -2394,7 +2351,7 @@ func extractNewSpeciesNames(data []datastore.NewSpeciesData) []string {
 }
 
 // batchFetchThumbnailURLs fetches thumbnail URLs from cache
-func (c *Controller) batchFetchThumbnailURLs(scientificNames []string) map[string]string {
+func (c *Handler) batchFetchThumbnailURLs(scientificNames []string) map[string]string {
 	thumbnailURLs := make(map[string]string)
 	cache := c.BirdImageCache
 	if cache == nil {
@@ -2459,7 +2416,7 @@ func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 // The operation parameter is used for log context (e.g., "species summary", "time of day distribution").
 // Returns nil if validation passes, or ErrResponseHandled if an error response was sent to the client.
 // Callers should check: if err := c.validateDateRangeWithResponse(...); err != nil { return err }
-func (c *Controller) validateDateRangeWithResponse(ctx echo.Context, startDate, endDate, operation string) error {
+func (c *Handler) validateDateRangeWithResponse(ctx echo.Context, startDate, endDate, operation string) error {
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
 		// Check if it's a known date validation error
 		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
@@ -2495,7 +2452,7 @@ func sortAndLimitSpeciesSummary(result []SpeciesDailySummary, limit int) []Speci
 
 // GetSpeciesThumbnails handles GET /api/v2/analytics/species/thumbnails
 // Returns thumbnail URLs for multiple species in a single request
-func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
+func (c *Handler) GetSpeciesThumbnails(ctx echo.Context) error {
 	speciesParams := ctx.QueryParams()["species"]
 	if len(speciesParams) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "No species provided")
@@ -2506,7 +2463,7 @@ func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
 }
 
 // buildThumbnailMap creates a map of species names to thumbnail URLs.
-func (c *Controller) buildThumbnailMap(speciesParams []string) map[string]string {
+func (c *Handler) buildThumbnailMap(speciesParams []string) map[string]string {
 	result := make(map[string]string)
 
 	cache := c.BirdImageCache
@@ -2540,7 +2497,7 @@ func (c *Controller) buildThumbnailMap(speciesParams []string) map[string]string
 
 // GetBatchHourlySpeciesData handles GET /api/v2/analytics/time/hourly/batch
 // Returns hourly detection patterns for multiple species in a single request
-func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
+func (c *Handler) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	const operation = "GetBatchHourlySpeciesData"
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 
@@ -2550,7 +2507,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 		return err
 	}
 
-	minConfidence := c.parseOptionalFloat(ctx, "min_confidence", 0.0, PercentageMultiplier)
+	minConfidence := c.parseOptionalFloat(ctx, "min_confidence", 0.0, apicore.PercentageMultiplier)
 	c.LogInfoIfEnabled("Retrieving batch hourly species data",
 		logger.String("date", date),
 		logger.Int("species_count", len(speciesParams)),
@@ -2567,7 +2524,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 }
 
 // validateBatchHourlyParams validates and returns batch hourly parameters
-func (c *Controller) validateBatchHourlyParams(ctx echo.Context, operation string) (speciesParams []string, date string, err error) {
+func (c *Handler) validateBatchHourlyParams(ctx echo.Context, operation string) (speciesParams []string, date string, err error) {
 	speciesParams = ctx.QueryParams()["species"]
 	date = ctx.QueryParam("date")
 
@@ -2588,7 +2545,7 @@ func (c *Controller) validateBatchHourlyParams(ctx echo.Context, operation strin
 }
 
 // processHourlyBatchSpecies processes each species for batch hourly data
-func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams []string, date, ip, path string) (results map[string][]HourlyDistribution, processingErrors []string) {
+func (c *Handler) processHourlyBatchSpecies(ctx echo.Context, speciesParams []string, date, ip, path string) (results map[string][]HourlyDistribution, processingErrors []string) {
 	results = make(map[string][]HourlyDistribution)
 	processingErrors = make([]string, 0)
 	seen := make(map[string]bool)
@@ -2647,7 +2604,7 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 }
 
 // handleBatchHourlyResults logs and returns batch hourly results
-func (c *Controller) handleBatchHourlyResults(ctx echo.Context, results map[string][]HourlyDistribution, processingErrors []string, requestedCount int, ip, path string) error {
+func (c *Handler) handleBatchHourlyResults(ctx echo.Context, results map[string][]HourlyDistribution, processingErrors []string, requestedCount int, ip, path string) error {
 	return c.handleBatchResponse(ctx, results, len(results), requestedCount, processingErrors, "batch hourly species data", ip, path)
 }
 
@@ -2668,7 +2625,7 @@ type SpeciesDailyData struct {
 
 // GetBatchDailySpeciesData handles GET /api/v2/analytics/time/daily/batch
 // Returns daily trend data for multiple species in a single request
-func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
+func (c *Handler) GetBatchDailySpeciesData(ctx echo.Context) error {
 	const operation = "GetBatchDailySpeciesData"
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 
@@ -2695,7 +2652,7 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 }
 
 // validateBatchDailyParams validates and returns batch daily parameters
-func (c *Controller) validateBatchDailyParams(ctx echo.Context, operation string) (speciesParams, uniqueSpecies []string, startDate, endDate string, err error) {
+func (c *Handler) validateBatchDailyParams(ctx echo.Context, operation string) (speciesParams, uniqueSpecies []string, startDate, endDate string, err error) {
 	speciesParams = ctx.QueryParams()["species"]
 	startDate = ctx.QueryParam("start_date")
 	endDate = ctx.QueryParam("end_date")
@@ -2725,7 +2682,7 @@ func (c *Controller) validateBatchDailyParams(ctx echo.Context, operation string
 }
 
 // processDailyBatchSpecies processes each species for batch daily data
-func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []string, startDate, endDate, ip, path string) (results map[string]SpeciesDailyData, processingErrors []string) {
+func (c *Handler) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []string, startDate, endDate, ip, path string) (results map[string]SpeciesDailyData, processingErrors []string) {
 	results = make(map[string]SpeciesDailyData)
 	processingErrors = make([]string, 0)
 
@@ -2794,7 +2751,7 @@ func buildSpeciesDailyData(speciesName, startDate, endDate string, dailyData []d
 }
 
 // handleBatchDailyResults logs and returns batch daily results
-func (c *Controller) handleBatchDailyResults(ctx echo.Context, results map[string]SpeciesDailyData, processingErrors []string, requestedCount, uniqueCount int, ip, path string) error {
+func (c *Handler) handleBatchDailyResults(ctx echo.Context, results map[string]SpeciesDailyData, processingErrors []string, requestedCount, uniqueCount int, ip, path string) error {
 	if len(processingErrors) > 0 && len(results) > 0 {
 		c.LogWarnIfEnabled("Batch daily species data completed with partial failures",
 			logger.Int("successful", len(results)),

@@ -1,4 +1,4 @@
-package api
+package analytics
 
 import (
 	"container/list"
@@ -235,7 +235,7 @@ type heatmapParams struct {
 }
 
 // validateHeatmapParams parses and validates heatmap query parameters.
-func (c *Controller) validateHeatmapParams(ctx echo.Context) (*heatmapParams, error) {
+func (c *Handler) validateHeatmapParams(ctx echo.Context) (*heatmapParams, error) {
 	species := ctx.QueryParam("species")
 	if species == "" {
 		return nil, fmt.Errorf("species parameter is required")
@@ -312,7 +312,7 @@ func (c *Controller) validateHeatmapParams(ctx echo.Context) (*heatmapParams, er
 // computeHeatmapGrid generates the heatmap data by running batch geomodel inference
 // for each week across all grid points, then extracting the target species scores.
 // Returns float32[weeks][rows][cols] in flat layout.
-func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params *heatmapParams, speciesIdx, numGeoSpecies int) ([]float32, error) {
+func (c *Handler) computeHeatmapGrid(birdnet *classifier.Orchestrator, params *heatmapParams, speciesIdx, numGeoSpecies int) ([]float32, error) {
 	totalCells := params.rows * params.cols
 	result := make([]float32, bnhmWeeks*totalCells)
 
@@ -369,7 +369,7 @@ func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params
 
 // computeHeatmapGridOptimized generates heatmap data using the dedicated
 // HeatmapInferenceService with IoBinding for tensor reuse across all weeks.
-func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *classifier.HeatmapInferenceService, params *heatmapParams) ([]float32, error) {
+func (c *Handler) computeHeatmapGridOptimized(ctx context.Context, service *classifier.HeatmapInferenceService, params *heatmapParams) ([]float32, error) {
 	totalCells := params.rows * params.cols
 	weeksToCompute := (bnhmWeeks + params.stride - 1) / params.stride
 	result := make([]float32, weeksToCompute*totalCells)
@@ -391,19 +391,6 @@ func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *c
 	}
 
 	return result, nil
-}
-
-// initHeatmapRoutes registers the heatmap grid endpoint and hooks up
-// cache invalidation and service rebuild for range filter reloads.
-func (c *Controller) initHeatmapRoutes() {
-	c.Group.GET("/range/heatmap", c.GetHeatmapGrid)
-
-	classifier.OnRangeFilterReload(func() {
-		InvalidateHeatmapCache()
-		// Close the dedicated heatmap service so it gets re-created with the
-		// new model on the next request (lazy init in GetHeatmapService).
-		classifier.CloseHeatmapService()
-	})
 }
 
 // heatmapCache is the module-level LRU cache for heatmap responses.
@@ -428,7 +415,7 @@ func InvalidateHeatmapCache() {
 
 // GetHeatmapGrid returns a compact binary grid of species probability across
 // a map viewport for BirdNET weeks (stride-configurable).
-func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
+func (c *Handler) GetHeatmapGrid(ctx echo.Context) error {
 	params, err := c.validateHeatmapParams(ctx)
 	if err != nil {
 		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
@@ -467,7 +454,7 @@ func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 
 // getHeatmapOptimized uses the dedicated HeatmapInferenceService with
 // singleflight deduplication and concurrency limiting.
-func (c *Controller) getHeatmapOptimized(ctx echo.Context, service *classifier.HeatmapInferenceService, params *heatmapParams, cache *heatmapLRU, cacheKey string) error {
+func (c *Handler) getHeatmapOptimized(ctx echo.Context, service *classifier.HeatmapInferenceService, params *heatmapParams, cache *heatmapLRU, cacheKey string) error {
 	reqCtx := ctx.Request().Context()
 
 	// Use singleflight to deduplicate concurrent identical requests.
@@ -512,7 +499,7 @@ func (c *Controller) getHeatmapOptimized(ctx echo.Context, service *classifier.H
 }
 
 // getHeatmapFallback uses the original shared BatchRangeFilterInference path.
-func (c *Controller) getHeatmapFallback(ctx echo.Context, birdnet *classifier.Orchestrator, params *heatmapParams, cache *heatmapLRU, cacheKey string) error {
+func (c *Handler) getHeatmapFallback(ctx echo.Context, birdnet *classifier.Orchestrator, params *heatmapParams, cache *heatmapLRU, cacheKey string) error {
 	speciesIdx, numGeoSpecies, found := birdnet.GeomodelSpeciesInfo(params.species)
 	if !found {
 		return c.HandleError(ctx, nil, "Species not found in geomodel", http.StatusBadRequest)
