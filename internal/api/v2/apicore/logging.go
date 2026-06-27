@@ -59,9 +59,11 @@ func (c *Core) LogAPIRequest(ctx echo.Context, level logger.LogLevel, msg string
 		return // Do nothing if logger isn't initialized
 	}
 
-	// Extract common context info
+	// Extract common context info. Log the matched route pattern rather than the
+	// raw URL path so secrets embedded in path segments (HLS stream tokens, note
+	// IDs) are never persisted; see RoutePattern.
 	ip := ctx.RealIP()
-	path := ctx.Request().URL.Path
+	path := RoutePattern(ctx)
 
 	// Create base fields with preallocated capacity
 	baseFields := make([]logger.Field, 0, 2+len(fields))

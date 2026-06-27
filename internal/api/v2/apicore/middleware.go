@@ -2,16 +2,60 @@ package apicore
 
 import (
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // tunnelProviderUnknown is the tunnel provider label for unknown providers.
 const tunnelProviderUnknown = "unknown"
+
+// unmatchedRoutePattern is the placeholder logged for the request route when echo
+// has not matched the request to a registered route. echo populates ctx.Path()
+// (the matched route pattern) only after routing, so an unmatched request (a 404,
+// or any log emitted before routing completes) has an empty Path.
+const unmatchedRoutePattern = "<unmatched>"
+
+// RoutePattern returns the matched echo route pattern for ctx (for example
+// "/api/v2/audio/:id") instead of the raw request URL path. Logging the pattern
+// rather than req.URL.Path keeps secrets that live in path segments out of logs
+// and telemetry: an HLS stream token in
+// /api/v2/streams/hls/t/:streamToken/playlist.m3u8 and a note :id collapse to
+// their route placeholders, so neither value is ever persisted. echo sets
+// ctx.Path() only after routing, so an unmatched request yields
+// unmatchedRoutePattern.
+func RoutePattern(ctx echo.Context) string {
+	if pattern := ctx.Path(); pattern != "" {
+		return pattern
+	}
+	return unmatchedRoutePattern
+}
+
+// scrubQueryForLog redacts credential-bearing values from a raw URL query string
+// before it is logged. It percent-decodes the query first because privacy's token
+// scrubber pattern does not span percent-escapes, so an encoded token value (for
+// example token=ab%2Bcd1234) would otherwise slip through unredacted; on a decode
+// error it falls back to scrubbing the raw string. url.PathUnescape is used rather
+// than url.QueryUnescape because the latter turns a literal '+' into a space, which
+// would split a base64 token value (token=ab+cd...) and leak its tail past the
+// scrubber; PathUnescape still decodes %2B to '+' but preserves a literal '+', so
+// the whole token value stays a single matchable run. privacy.ScrubMessage also
+// redacts URLs, emails, UUIDs, IPs, coordinates, and file paths.
+func scrubQueryForLog(rawQuery string) string {
+	if rawQuery == "" {
+		return ""
+	}
+	decoded, err := url.PathUnescape(rawQuery)
+	if err != nil {
+		decoded = rawQuery
+	}
+	return privacy.ScrubMessage(decoded)
+}
 
 // Echo context keys set by TunnelDetectionMiddleware and read by
 // LoggingMiddleware, handleErrorInternal, and domain handlers (e.g. media). They
@@ -100,8 +144,8 @@ func (c *Core) LoggingMiddleware() echo.MiddlewareFunc {
 			// Log the request with structured data
 			fields := []logger.Field{
 				logger.String("method", req.Method),
-				logger.String("path", req.URL.Path),
-				logger.String("query", req.URL.RawQuery),
+				logger.String("path", RoutePattern(ctx)),
+				logger.String("query", scrubQueryForLog(req.URL.RawQuery)),
 				logger.Int("status", status),
 				logger.String("ip", ctx.RealIP()), // Uses custom extractor
 				logger.Bool("tunneled", isTunneled),
@@ -110,7 +154,12 @@ func (c *Core) LoggingMiddleware() echo.MiddlewareFunc {
 				logger.Int64("latency_ms", time.Since(start).Milliseconds()),
 			}
 			if err != nil {
-				fields = append(fields, logger.Error(err))
+				// Scrub the handler error the same way handleErrorInternal does: a
+				// handler that returns an error directly (instead of routing it
+				// through HandleError) would otherwise persist raw err.Error() text,
+				// which can carry credentials (e.g. an RTSP/HTTP URL with embedded
+				// user:pass or a token).
+				fields = append(fields, logger.String("error", privacy.ScrubMessage(err.Error())))
 			}
 
 			c.APILogger.Info("API Request", fields...)
