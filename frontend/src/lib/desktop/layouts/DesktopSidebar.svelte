@@ -457,6 +457,7 @@ Performance Optimizations:
 
 <aside
   class={cn(
+    // z-[200] matches Z_INDEX.SIDEBAR_DRAWER; lg:z-10 restores desktop stacking
     'drawer-side z-[200] lg:z-10 transition-all duration-200 ease-in-out overflow-visible',
     isCollapsed ? 'lg:w-16' : 'lg:w-64',
     className
