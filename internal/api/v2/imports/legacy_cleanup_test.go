@@ -1,5 +1,5 @@
-// internal/api/v2/legacy_cleanup_test.go
-package api
+// internal/api/v2/imports/legacy_cleanup_test.go
+package importsapi
 
 import (
 	"database/sql"
@@ -29,13 +29,13 @@ func createTestSettings(legacyPath string) *conf.Settings {
 	return settings
 }
 
-// createLegacyTestController creates a controller with initialized cleanupStatus for testing.
-func createLegacyTestController(tb testing.TB, e *echo.Echo, settings *conf.Settings) *Controller {
+// createLegacyTestHandler creates a controller with initialized cleanupStatus for testing.
+func createLegacyTestHandler(tb testing.TB, e *echo.Echo, settings *conf.Settings) *Handler {
 	tb.Helper()
 	// Handlers read the live snapshot via currentSettings(); publish the test's
 	// settings so the read resolves to them (restored on cleanup).
 	apitest.PublishTestSettings(tb, settings)
-	c := &Controller{Core: &apicore.Core{Echo: e}, cleanupStatus: NewCleanupStatus()}
+	c := &Handler{Core: &apicore.Core{Echo: e}, cleanupStatus: NewCleanupStatus()}
 	c.Settings.Store(settings)
 	return c
 }
@@ -51,7 +51,7 @@ func TestGetLegacyStatus_V2OnlyMode_NoLegacy(t *testing.T) {
 
 	// Create settings with non-existent legacy path
 	settings := createTestSettings(filepath.Join(tmpDir, "nonexistent.db"))
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -89,7 +89,7 @@ func TestGetLegacyStatus_V2OnlyMode_WithLegacy(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -127,7 +127,7 @@ func TestGetLegacyStatus_NotV2OnlyMode(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 
 	// NOT in v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -164,7 +164,7 @@ func TestStartLegacyCleanup_NotV2OnlyMode(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 
 	// NOT in v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -207,7 +207,7 @@ func TestStartLegacyCleanup_SQLite_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -288,7 +288,7 @@ func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
 	require.NoError(t, db.Close())
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 
 	prevV2OnlyMode := isV2OnlyMode
 	isV2OnlyMode = true
@@ -331,7 +331,7 @@ func TestStartLegacyCleanup_AlreadyInProgress(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 
 	prevV2OnlyMode := isV2OnlyMode
 	isV2OnlyMode = true
@@ -372,7 +372,7 @@ func TestGetLegacyStatus_MySQL_NoDBProvider(t *testing.T) {
 
 	e := echo.New()
 	settings := createMySQLTestSettings()
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 	// Repo is nil, so gormDBProvider cast will fail
 
 	prevV2OnlyMode := isV2OnlyMode
@@ -403,7 +403,7 @@ func TestStartLegacyCleanup_MySQL_NoDBProvider(t *testing.T) {
 
 	e := echo.New()
 	settings := createMySQLTestSettings()
-	controller := createLegacyTestController(t, e, settings)
+	controller := createLegacyTestHandler(t, e, settings)
 	// Repo is nil, so gormDBProvider cast will fail
 
 	prevV2OnlyMode := isV2OnlyMode

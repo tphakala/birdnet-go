@@ -1,5 +1,5 @@
-// Package api provides tests for the import API endpoints.
-package api
+// internal/api/v2/imports/import_test.go: tests for the import API endpoints.
+package importsapi
 
 import (
 	"bufio"
@@ -115,14 +115,14 @@ func (f *fakeSource) Iterate(ctx context.Context, _ int, fn func([]imports.Sourc
 
 func (f *fakeSource) Close() error { return nil }
 
-// newImportController creates a lightweight Controller for import tests.
-func newImportController(t *testing.T) (*echo.Echo, *Controller) {
+// newImportHandler creates a lightweight Handler for import tests.
+func newImportHandler(t *testing.T) (*echo.Echo, *Handler) {
 	t.Helper()
 	e := echo.New()
 	ctx, cancel := context.WithCancel(t.Context())
 	cCore := &apicore.Core{Group: e.Group(apiV2Prefix), AuthMiddleware: func(next echo.HandlerFunc) echo.HandlerFunc { return next }}
 	cCore.SetTestContext(ctx, cancel)
-	c := &Controller{Core: cCore, importMgr: newImportManager()}
+	c := &Handler{Core: cCore, importMgr: newImportManager()}
 	c.Settings.Store(apitest.NewValidTestSettings())
 	t.Cleanup(func() {
 		cancel()
@@ -253,7 +253,7 @@ func TestImportManager_GetByID(t *testing.T) {
 // TestStartBirdNETPiImport_NoRepo_Returns503 verifies 503 when no datastore.
 func TestStartBirdNETPiImport_NoRepo_Returns503(t *testing.T) {
 	e := echo.New()
-	c := &Controller{Core: &apicore.Core{Group: e.Group(apiV2Prefix)}, importMgr: newImportManager()}
+	c := &Handler{Core: &apicore.Core{Group: e.Group(apiV2Prefix)}, importMgr: newImportManager()}
 	c.Settings.Store(apitest.NewValidTestSettings())
 
 	body := testDBOnlyBody
@@ -271,7 +271,7 @@ func TestStartBirdNETPiImport_NoRepo_Returns503(t *testing.T) {
 
 // TestStartBirdNETPiImport_BadJSON_Returns400 verifies 400 on malformed JSON.
 func TestStartBirdNETPiImport_BadJSON_Returns400(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	c.Repo = mocks.NewMockDetectionRepository(t)
@@ -298,7 +298,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	mockRepo := mocks.NewMockDetectionRepository(t)
@@ -357,7 +357,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400(t *testing.T) 
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	c.Repo = mocks.NewMockDetectionRepository(t)
@@ -459,8 +459,8 @@ func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
 	)
 	clipContent := []byte("fake source audio content")
 
-	e, c := newImportController(t)
-	c.initImportRoutes()
+	e, c := newImportHandler(t)
+	c.RegisterImportRoutes(c.Group)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	mockRepo := mocks.NewMockDetectionRepository(t)
@@ -535,7 +535,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
 
 // TestStartBirdNETPiImport_UnknownMode_Returns400 verifies unknown modes are rejected.
 func TestStartBirdNETPiImport_UnknownMode_Returns400(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	c.Repo = mocks.NewMockDetectionRepository(t)
@@ -555,7 +555,7 @@ func TestStartBirdNETPiImport_UnknownMode_Returns400(t *testing.T) {
 
 // TestStartBirdNETPiImport_TraversalPath_Returns400 verifies path traversal is blocked.
 func TestStartBirdNETPiImport_TraversalPath_Returns400(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	c.Repo = mocks.NewMockDetectionRepository(t)
@@ -624,7 +624,7 @@ func TestResolveImportSourcePath_SymlinkEscape(t *testing.T) {
 
 // TestStartBirdNETPiImport_MissingFile_Returns400 verifies missing file returns 400.
 func TestStartBirdNETPiImport_MissingFile_Returns400(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	c.Repo = mocks.NewMockDetectionRepository(t)
@@ -644,7 +644,7 @@ func TestStartBirdNETPiImport_MissingFile_Returns400(t *testing.T) {
 
 // TestStartBirdNETPiImport_FakeValidationFailure_Returns400 verifies validation errors return 400.
 func TestStartBirdNETPiImport_FakeValidationFailure_Returns400(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	c.Repo = mocks.NewMockDetectionRepository(t)
@@ -679,7 +679,7 @@ func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	mockRepo := mocks.NewMockDetectionRepository(t)
@@ -727,7 +727,7 @@ func TestStartBirdNETPiImport_ConflictWhileRunning_Returns409(t *testing.T) {
 		goleak.IgnoreTopFunction("runtime.gopark"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	mockRepo := mocks.NewMockDetectionRepository(t)
@@ -779,7 +779,7 @@ func TestStartBirdNETPiImport_ConflictWhileRunning_Returns409(t *testing.T) {
 
 // TestStreamImportProgress_JobNotFound_Returns404 verifies 404 for unknown job.
 func TestStreamImportProgress_JobNotFound_Returns404(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/import/jobs/notexist/progress", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -793,7 +793,7 @@ func TestStreamImportProgress_JobNotFound_Returns404(t *testing.T) {
 
 // TestStreamImportProgress_DoneJob_EmitsCompleteEvent verifies complete event is emitted.
 func TestStreamImportProgress_DoneJob_EmitsCompleteEvent(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 
 	jobCtx, jobCancel := context.WithCancel(t.Context())
 	jobCancel()
@@ -832,7 +832,7 @@ func TestStreamImportProgress_DoneJob_EmitsCompleteEvent(t *testing.T) {
 // This test covers the connect-after-done path (terminal-only event), complementing
 // TestStreamImportProgress_LiveStreaming which covers the live multi-event path.
 func TestStreamImportProgress_EventIDsMonotonic(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 
 	_, jobCancel := context.WithCancel(t.Context())
 	defer jobCancel()
@@ -884,7 +884,7 @@ func TestStreamImportProgress_EventIDsMonotonic(t *testing.T) {
 
 // TestCancelImport_JobNotFound_Returns404 verifies 404 for unknown job.
 func TestCancelImport_JobNotFound_Returns404(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -906,7 +906,7 @@ func TestCancelImport_RunningJob_Returns200Cancelling(t *testing.T) {
 		goleak.IgnoreTopFunction("runtime.gopark"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	mockRepo := mocks.NewMockDetectionRepository(t)
@@ -962,7 +962,7 @@ func TestCancelImport_RunningJob_Returns200Cancelling(t *testing.T) {
 
 // TestGetImportStatus_NoJob_ReturnsIdle verifies idle status when no job exists.
 func TestGetImportStatus_NoJob_ReturnsIdle(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -979,7 +979,7 @@ func TestGetImportStatus_NoJob_ReturnsIdle(t *testing.T) {
 
 // TestGetImportStatus_RunningJob verifies running status with progress.
 func TestGetImportStatus_RunningJob(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 
 	_, jobCancel := context.WithCancel(t.Context())
 	defer jobCancel()
@@ -1007,7 +1007,7 @@ func TestGetImportStatus_RunningJob(t *testing.T) {
 
 // TestGetImportStatus_DoneJob verifies done status after completion.
 func TestGetImportStatus_DoneJob(t *testing.T) {
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 
 	_, jobCancel := context.WithCancel(t.Context())
 	jobCancel()
@@ -1032,8 +1032,8 @@ func TestGetImportStatus_DoneJob(t *testing.T) {
 
 // TestImportRoutes_Registered verifies all import routes are registered.
 func TestImportRoutes_Registered(t *testing.T) {
-	e, c := newImportController(t)
-	c.initImportRoutes()
+	e, c := newImportHandler(t)
+	c.RegisterImportRoutes(c.Group)
 
 	expected := []string{
 		"POST " + apiV2Prefix + "/import/birdnet-pi",
@@ -1048,9 +1048,9 @@ func TestImportRoutes_Registered(t *testing.T) {
 // with no auth middleware configured it denies access with 401 rather than
 // registering the state-changing endpoints unprotected.
 func TestImportRoutes_FailClosedWhenNoAuth(t *testing.T) {
-	e, c := newImportController(t)
+	e, c := newImportHandler(t)
 	c.AuthMiddleware = nil // exercise the fail-closed path: no auth middleware configured
-	c.initImportRoutes()
+	c.RegisterImportRoutes(c.Group)
 
 	req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/import/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -1074,7 +1074,7 @@ func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
 
 	dir, _ := makeTempDB(t, rowCount)
 
-	_, c := newImportController(t)
+	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	mockRepo := mocks.NewMockDetectionRepository(t)
@@ -1171,8 +1171,8 @@ func TestStreamImportProgress_LiveStreaming(t *testing.T) {
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
-	e, c := newImportController(t)
-	c.initImportRoutes()
+	e, c := newImportHandler(t)
+	c.RegisterImportRoutes(c.Group)
 
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
@@ -1307,8 +1307,8 @@ func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
-	e, c := newImportController(t)
-	c.initImportRoutes()
+	e, c := newImportHandler(t)
+	c.RegisterImportRoutes(c.Group)
 
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
@@ -1422,8 +1422,8 @@ func TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats(t *testing.T
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
-	e, c := newImportController(t)
-	c.initImportRoutes()
+	e, c := newImportHandler(t)
+	c.RegisterImportRoutes(c.Group)
 
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS

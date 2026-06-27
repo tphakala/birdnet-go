@@ -45,9 +45,9 @@ func (c *Controller) initSystemRoutes() {
 	c.analytics.RegisterDatabaseOverviewRoutes(c.Group)
 
 	// Migration, async backup and legacy cleanup routes (import domain).
-	c.initMigrationRoutes()
-	c.initBackupRoutes()
-	c.initLegacyCleanupRoutes()
+	c.imports.RegisterMigrationRoutes(c.Group)
+	c.imports.RegisterBackupRoutes(c.Group)
+	c.imports.RegisterLegacyCleanupRoutes(c.Group)
 }
 
 // BroadcastInferenceTopologyChanged signals all metrics-stream SSE clients that

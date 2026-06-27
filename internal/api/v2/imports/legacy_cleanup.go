@@ -1,5 +1,5 @@
-// internal/api/v2/legacy_cleanup.go
-package api
+// internal/api/v2/imports/legacy_cleanup.go
+package importsapi
 
 import (
 	"context"
@@ -68,7 +68,7 @@ var legacyTables = []string{
 }
 
 // tableExistsMySQL checks if a table exists in the MySQL database.
-func (c *Controller) tableExistsMySQL(db *gorm.DB, tableName string) (bool, error) {
+func (c *Handler) tableExistsMySQL(db *gorm.DB, tableName string) (bool, error) {
 	var count int64
 	err := db.Raw(
 		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
@@ -137,15 +137,15 @@ func (cs *CleanupStatus) TryStart() bool {
 	return true
 }
 
-// initLegacyCleanupRoutes registers the legacy cleanup API routes.
-func (c *Controller) initLegacyCleanupRoutes() {
+// RegisterLegacyCleanupRoutes registers the legacy cleanup API routes on the supplied v2 group.
+func (c *Handler) RegisterLegacyCleanupRoutes(g *echo.Group) {
 	c.LogInfoIfEnabled("Initializing legacy cleanup routes")
 
 	// Initialize cleanup status tracker
 	c.cleanupStatus = NewCleanupStatus()
 
 	// Create legacy API group under system/database
-	legacyGroup := c.Group.Group("/system/database/legacy")
+	legacyGroup := g.Group("/system/database/legacy")
 
 	// Get the appropriate auth middleware
 	authMiddleware := c.AuthMiddleware
@@ -162,7 +162,7 @@ func (c *Controller) initLegacyCleanupRoutes() {
 
 // GetLegacyStatus handles GET /api/v2/system/database/legacy/status
 // Returns information about the legacy database for the cleanup UI.
-func (c *Controller) GetLegacyStatus(ctx echo.Context) error {
+func (c *Handler) GetLegacyStatus(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Getting legacy database status", logger.String("path", path), logger.String("ip", ip))
 
@@ -179,7 +179,7 @@ func (c *Controller) GetLegacyStatus(ctx echo.Context) error {
 }
 
 // getLegacyStatusSQLite handles legacy status for SQLite deployments.
-func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatusResponse) error {
+func (c *Handler) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatusResponse) error {
 	legacyPath := c.CurrentSettings().Output.SQLite.Path
 	response.Location = legacyPath
 
@@ -248,7 +248,7 @@ func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacySta
 }
 
 // getLegacyStatusMySQL handles legacy status for MySQL deployments.
-func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusResponse) error {
+func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusResponse) error {
 	response.Location = c.CurrentSettings().Output.MySQL.Database
 
 	// Check if we're in v2-only mode (required for cleanup)
@@ -350,7 +350,7 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 
 // StartLegacyCleanup handles POST /api/v2/system/database/legacy/cleanup
 // Initiates asynchronous legacy database cleanup.
-func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
+func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Starting legacy database cleanup", logger.String("path", path), logger.String("ip", ip))
 
@@ -419,7 +419,7 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 }
 
 // cleanupSQLiteLegacy deletes the legacy SQLite database files.
-func (c *Controller) cleanupSQLiteLegacy(ctx context.Context) error {
+func (c *Handler) cleanupSQLiteLegacy(ctx context.Context) error {
 	// Check for cancellation before starting
 	select {
 	case <-ctx.Done():
@@ -462,7 +462,7 @@ func (c *Controller) cleanupSQLiteLegacy(ctx context.Context) error {
 }
 
 // cleanupMySQLLegacy drops legacy tables from MySQL.
-func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
+func (c *Handler) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 	c.LogInfoIfEnabled("Starting MySQL legacy tables cleanup",
 		logger.Int("total_tables", len(legacyTables)))
 
@@ -525,7 +525,7 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 }
 
 // getSQLiteLegacySize returns the total size of SQLite legacy files.
-func (c *Controller) getSQLiteLegacySize() int64 {
+func (c *Handler) getSQLiteLegacySize() int64 {
 	legacyPath := c.CurrentSettings().Output.SQLite.Path
 	var totalSize int64
 
@@ -545,7 +545,7 @@ func (c *Controller) getSQLiteLegacySize() int64 {
 // getMySQLLegacySize returns the total size of MySQL legacy tables. ctx (the
 // request context) bounds the information_schema queries so they abort if the
 // caller disconnects instead of running unbounded on the request thread.
-func (c *Controller) getMySQLLegacySize(ctx context.Context) int64 {
+func (c *Handler) getMySQLLegacySize(ctx context.Context) int64 {
 	dbProvider, ok := c.Repo.(gormDBProvider)
 	if !ok {
 		return 0
@@ -589,7 +589,7 @@ func (c *Controller) getMySQLLegacySize(ctx context.Context) int64 {
 }
 
 // sendCleanupNotification sends a notification about cleanup status.
-func (c *Controller) sendCleanupNotification(success bool, spaceReclaimed int64, errMsg string) {
+func (c *Handler) sendCleanupNotification(success bool, spaceReclaimed int64, errMsg string) {
 	notifService := c.getNotificationService()
 	if notifService == nil {
 		return

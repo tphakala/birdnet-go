@@ -1,5 +1,5 @@
-// internal/api/v2/prerequisites.go
-package api
+// internal/api/v2/imports/prerequisites.go
+package importsapi
 
 import (
 	"context"
@@ -82,7 +82,7 @@ const MinMySQLWaitTimeout = 600
 
 // GetPrerequisites handles GET /api/v2/system/database/migration/prerequisites
 // Returns the status of all prerequisite checks before migration can start.
-func (c *Controller) GetPrerequisites(ctx echo.Context) error {
+func (c *Handler) GetPrerequisites(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Checking migration prerequisites", logger.String("path", path), logger.String("ip", ip))
 
@@ -138,7 +138,7 @@ func (c *Controller) GetPrerequisites(ctx echo.Context) error {
 }
 
 // isUsingMySQL returns true if the application is configured to use MySQL.
-func (c *Controller) isUsingMySQL() bool {
+func (c *Handler) isUsingMySQL() bool {
 	settings := c.CurrentSettings()
 	if settings == nil {
 		return false
@@ -147,7 +147,7 @@ func (c *Controller) isUsingMySQL() bool {
 }
 
 // checkStateIdle verifies the migration is in IDLE state.
-func (c *Controller) checkStateIdle() PrerequisiteCheck {
+func (c *Handler) checkStateIdle() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "state_idle",
 		Name:        "Migration State",
@@ -186,7 +186,7 @@ func (c *Controller) checkStateIdle() PrerequisiteCheck {
 
 // checkDiskSpace verifies there is sufficient free disk space for migration.
 // Required space is the greater of: 1GB minimum or 50% of existing database size.
-func (c *Controller) checkDiskSpace() PrerequisiteCheck {
+func (c *Handler) checkDiskSpace() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "disk_space",
 		Name:        "Disk Space",
@@ -253,7 +253,7 @@ func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 // getDatabaseDirectoryResolved returns the database directory with symlinks resolved.
 // Returns an error if the directory cannot be determined or verified.
 // For MySQL, returns empty string with nil error (disk space check not applicable to remote DB).
-func (c *Controller) getDatabaseDirectoryResolved() (string, error) {
+func (c *Handler) getDatabaseDirectoryResolved() (string, error) {
 	settings := c.CurrentSettings()
 	if settings == nil {
 		return "", fmt.Errorf("settings not available")
@@ -295,7 +295,7 @@ func (c *Controller) getDatabaseDirectoryResolved() (string, error) {
 }
 
 // checkLegacyAccessible verifies the legacy database is accessible for reading.
-func (c *Controller) checkLegacyAccessible() PrerequisiteCheck {
+func (c *Handler) checkLegacyAccessible() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "legacy_accessible",
 		Name:        "Legacy Database",
@@ -330,7 +330,7 @@ func (c *Controller) checkLegacyAccessible() PrerequisiteCheck {
 
 // checkSQLiteIntegrity runs PRAGMA quick_check on the SQLite database.
 // Scans all result rows since quick_check can return multiple errors.
-func (c *Controller) checkSQLiteIntegrity() PrerequisiteCheck {
+func (c *Handler) checkSQLiteIntegrity() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "sqlite_integrity",
 		Name:        "Database Integrity",
@@ -373,7 +373,7 @@ func (c *Controller) checkSQLiteIntegrity() PrerequisiteCheck {
 }
 
 // checkWritePermission verifies write access to the database directory.
-func (c *Controller) checkWritePermission() PrerequisiteCheck {
+func (c *Handler) checkWritePermission() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "write_permission",
 		Name:        "Write Permission",
@@ -411,7 +411,7 @@ func (c *Controller) checkWritePermission() PrerequisiteCheck {
 }
 
 // checkMySQLTableHealth runs CHECK TABLE on legacy MySQL tables.
-func (c *Controller) checkMySQLTableHealth() PrerequisiteCheck {
+func (c *Handler) checkMySQLTableHealth() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "mysql_table_health",
 		Name:        "MySQL Table Health",
@@ -462,7 +462,7 @@ func (c *Controller) checkMySQLTableHealth() PrerequisiteCheck {
 
 // checkMySQLPermissions verifies CREATE, INSERT, UPDATE, DELETE, DROP permissions.
 // Uses a unique table name with timestamp to prevent concurrent request collisions.
-func (c *Controller) checkMySQLPermissions() PrerequisiteCheck {
+func (c *Handler) checkMySQLPermissions() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "mysql_permissions",
 		Name:        "MySQL Permissions",
@@ -527,7 +527,7 @@ func (c *Controller) checkMySQLPermissions() PrerequisiteCheck {
 }
 
 // checkMySQLConfiguration checks MySQL configuration for potential issues.
-func (c *Controller) checkMySQLConfiguration() []PrerequisiteCheck {
+func (c *Handler) checkMySQLConfiguration() []PrerequisiteCheck {
 	checks := make([]PrerequisiteCheck, 0, 2)
 
 	db := c.getLegacyGormDB()
@@ -577,7 +577,7 @@ func (c *Controller) checkMySQLConfiguration() []PrerequisiteCheck {
 }
 
 // checkRecordCount verifies we can count legacy records.
-func (c *Controller) checkRecordCount() PrerequisiteCheck {
+func (c *Handler) checkRecordCount() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "record_count",
 		Name:        "Record Count",
@@ -615,7 +615,7 @@ func (c *Controller) checkRecordCount() PrerequisiteCheck {
 }
 
 // checkExistingV2Data warns if migration target tables already have data.
-func (c *Controller) checkExistingV2Data() PrerequisiteCheck {
+func (c *Handler) checkExistingV2Data() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "existing_v2_data",
 		Name:        "Existing Migration Data",
@@ -661,7 +661,7 @@ func (c *Controller) checkExistingV2Data() PrerequisiteCheck {
 }
 
 // checkMemoryAvailable checks if there's enough free memory for migration.
-func (c *Controller) checkMemoryAvailable() PrerequisiteCheck {
+func (c *Handler) checkMemoryAvailable() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "memory_available",
 		Name:        "Available Memory",
@@ -690,7 +690,7 @@ func (c *Controller) checkMemoryAvailable() PrerequisiteCheck {
 
 // getLegacyGormDB returns the GORM database instance from the legacy datastore.
 // Returns nil if the datastore doesn't implement gormDBProvider.
-func (c *Controller) getLegacyGormDB() *gorm.DB {
+func (c *Handler) getLegacyGormDB() *gorm.DB {
 	if c.DS == nil {
 		return nil
 	}

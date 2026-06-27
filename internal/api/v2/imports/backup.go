@@ -1,6 +1,6 @@
-// internal/api/v2/backup.go
+// internal/api/v2/imports/backup.go
 // Async database backup with progress tracking.
-package api
+package importsapi
 
 import (
 	"context"
@@ -349,13 +349,13 @@ func (job *BackupJob) setDownloadURL(url string) {
 	job.DownloadURL = url
 }
 
-// Controller methods for backup endpoints
+// Handler methods for backup endpoints
 
 // backupJobManager is the singleton job manager (initialized in initBackupRoutes).
 var backupJobManager *BackupJobManager
 
-// initBackupRoutes initializes backup-related routes.
-func (c *Controller) initBackupRoutes() {
+// RegisterBackupRoutes registers the async backup-job routes on the supplied v2 group.
+func (c *Handler) RegisterBackupRoutes(g *echo.Group) {
 	// Initialize job manager if not already done
 	if backupJobManager == nil {
 		backupJobManager = NewBackupJobManager()
@@ -374,7 +374,7 @@ func (c *Controller) initBackupRoutes() {
 	}
 
 	// Create backup API group under system/database
-	backupGroup := c.Group.Group("/system/database/backup/jobs")
+	backupGroup := g.Group("/system/database/backup/jobs")
 
 	// Get the appropriate auth middleware
 	authMiddleware := c.AuthMiddleware
@@ -391,7 +391,7 @@ func (c *Controller) initBackupRoutes() {
 }
 
 // StartBackupJob handles POST /api/v2/system/database/backup/jobs
-func (c *Controller) StartBackupJob(ctx echo.Context) error {
+func (c *Handler) StartBackupJob(ctx echo.Context) error {
 	dbType := ctx.QueryParam("type")
 	if dbType != apicore.DBTypeLegacy && dbType != apicore.DBTypeV2 {
 		return c.HandleErrorWithKey(ctx, nil,
@@ -475,7 +475,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 }
 
 // ListBackupJobs handles GET /api/v2/system/database/backup/jobs
-func (c *Controller) ListBackupJobs(ctx echo.Context) error {
+func (c *Handler) ListBackupJobs(ctx echo.Context) error {
 	dbType := ctx.QueryParam("type")
 
 	var jobs []*BackupJob
@@ -501,7 +501,7 @@ func (c *Controller) ListBackupJobs(ctx echo.Context) error {
 }
 
 // GetBackupJobStatus handles GET /api/v2/system/database/backup/jobs/:id
-func (c *Controller) GetBackupJobStatus(ctx echo.Context) error {
+func (c *Handler) GetBackupJobStatus(ctx echo.Context) error {
 	jobID := ctx.Param("id")
 
 	job, exists := backupJobManager.GetJob(jobID)
@@ -525,7 +525,7 @@ func (c *Controller) GetBackupJobStatus(ctx echo.Context) error {
 }
 
 // DownloadBackupFile handles GET /api/v2/system/database/backup/jobs/:id/download
-func (c *Controller) DownloadBackupFile(ctx echo.Context) error {
+func (c *Handler) DownloadBackupFile(ctx echo.Context) error {
 	jobID := ctx.Param("id")
 
 	job, exists := backupJobManager.GetJob(jobID)
@@ -563,7 +563,7 @@ func (c *Controller) DownloadBackupFile(ctx echo.Context) error {
 }
 
 // CancelBackupJob handles DELETE /api/v2/system/database/backup/jobs/:id
-func (c *Controller) CancelBackupJob(ctx echo.Context) error {
+func (c *Handler) CancelBackupJob(ctx echo.Context) error {
 	jobID := ctx.Param("id")
 
 	if !backupJobManager.DeleteJob(jobID) {
@@ -581,7 +581,7 @@ func (c *Controller) CancelBackupJob(ctx echo.Context) error {
 }
 
 // runBackupJob executes the VACUUM INTO operation in a goroutine.
-func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
+func (c *Handler) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 	job.setStatus(BackupStatusInProgress, "")
 
 	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", job.tempPath)
@@ -636,7 +636,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 }
 
 // getBackupDBInfo returns the database path and GORM DB for the given type.
-func (c *Controller) getBackupDBInfo(dbType string) (string, *gorm.DB, error) {
+func (c *Handler) getBackupDBInfo(dbType string) (string, *gorm.DB, error) {
 	if dbType == apicore.DBTypeLegacy {
 		settings := c.CurrentSettings()
 		if settings == nil || settings.Output.SQLite.Path == "" {

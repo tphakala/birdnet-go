@@ -1,5 +1,5 @@
-// migration_test.go: Package api provides tests for migration API endpoints.
-package api
+// migration_test.go: tests for the migration API endpoints.
+package importsapi
 
 import (
 	"encoding/json"
@@ -64,7 +64,7 @@ func setupMigrationTestDB(t *testing.T) *gorm.DB {
 
 // setupMigrationTestEnvironment creates a test environment for migration API tests.
 // Note: Tests using this function must NOT be run in parallel due to global state.
-func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *datastoreV2.StateManager) {
+func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Handler, *datastoreV2.StateManager) {
 	t.Helper()
 
 	// Lock to prevent parallel tests from interfering
@@ -118,7 +118,7 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *data
 		db:            db,
 	}
 
-	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: testDS, Repo: mockRepo}}
+	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: testDS, Repo: mockRepo}}
 	controller.Settings.Store(getTestSettings(t))
 	apitest.PublishTestSettings(t, controller.Settings.Load())
 
@@ -570,7 +570,7 @@ func TestGetMigrationStatus_NoStateManager(t *testing.T) {
 	t.Attr("feature", "error-handling")
 
 	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(getTestSettings(t))
 
 	// Save and clear the global state manager
