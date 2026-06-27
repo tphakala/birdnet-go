@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // ErrorResponse is the API error response structure.
@@ -99,13 +100,17 @@ func (c *Core) handleErrorInternal(ctx echo.Context, err error, message string, 
 		errorStr = message
 	}
 
-	// Build log fields
+	// Build log fields. The error string is scrubbed because a raw err.Error()
+	// can carry credentials (e.g. an RTSP/HTTP URL with embedded user:pass or an
+	// API token); the route pattern replaces the raw URL path so HLS stream
+	// tokens and note IDs are never persisted. The message field is the
+	// developer-supplied, already-sanitized text and is logged as-is.
 	fields := []logger.Field{
 		logger.String("correlation_id", errorResp.CorrelationID),
 		logger.String("message", message),
-		logger.String("error", errorStr),
+		logger.String("error", privacy.ScrubMessage(errorStr)),
 		logger.Int("code", code),
-		logger.String("path", ctx.Request().URL.Path),
+		logger.String("path", RoutePattern(ctx)),
 		logger.String("method", ctx.Request().Method),
 		logger.String("ip", ip),
 		logger.Bool("tunneled", isTunneled),
@@ -144,12 +149,23 @@ func (c *Core) reportErrorToTelemetry(ctx echo.Context, err error, message strin
 		return
 	}
 
-	path := ctx.Request().URL.Path
+	// Use the matched route pattern (not the raw URL path) for the telemetry
+	// endpoint so HLS stream tokens and note IDs embedded in the path are never
+	// sent to Sentry.
+	path := RoutePattern(ctx)
 	method := ctx.Request().Method
 
 	var builder *errors.ErrorBuilder
 	if err != nil {
-		builder = errors.New(err)
+		// Sanitize the error at the source before it becomes the telemetry
+		// message: privacy.WrapError returns a SanitizedError whose Error() is
+		// ScrubMessage(err.Error()), while Unwrap() preserves the original chain
+		// so errors.Is/As still work. The telemetry pipeline also scrubs the
+		// message downstream when a privacy scrubber is registered, but that
+		// scrubber can be unset (it then falls back to a weaker URL-only scrub),
+		// so wrapping here guarantees credential-bearing error text never reaches
+		// Sentry regardless.
+		builder = errors.New(privacy.WrapError(err))
 	} else {
 		builder = errors.Newf("%s", message)
 	}
