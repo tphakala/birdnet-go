@@ -1,5 +1,14 @@
-// internal/api/v2/integrations.go
-package api
+// Package integrations is the api/v2 integrations domain handler. It owns the
+// /api/v2/integrations/* endpoints (MQTT status/test plus its TLS certificate
+// management, BirdWeather, weather-provider, and eBird connectivity tests). The
+// Handler embeds *apicore.Core by pointer so the shared dependencies and helpers
+// (Metrics, Processor, HandleError, CurrentSettings, AuthMiddleware, the logging
+// helpers) promote onto it. Like the TLS domain, the MQTT TLS certificate writes
+// mutate persisted settings, so the Handler also holds the facade's settings-save
+// machinery (the shared settings mutex and the publish/save/change helpers)
+// injected as function fields; the facade constructs one Handler and calls
+// RegisterRoutes to wire the routes in their existing order.
+package integrations
 
 import (
 	"context"
@@ -13,6 +22,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -20,6 +30,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
+)
+
+// Weather provider identifiers used by the weather test-connection handler. These
+// are owned by the integrations domain (the only consumer) and name the provider
+// the settings UI selects.
+const (
+	WeatherProviderOpenWeather  = "openweather"
+	WeatherProviderWunderground = "wunderground"
+	WeatherProviderYrno         = "yrno"
 )
 
 // Integration constants (file-local)
@@ -30,6 +49,81 @@ const (
 	integrationLongTimeout    = 30  // Long timeout in seconds
 	integrationStageDelay     = 200 // Delay between stages in milliseconds
 )
+
+// Handler serves the integrations domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members promote onto it without re-wiring; Core
+// carries atomic/lock-bearing fields and must never be copied by value. The four
+// settings-save members are injected from the facade (the settings domain still
+// owns them): the shared *sync.RWMutex serializes MQTT TLS certificate writes
+// against the main settings update handlers, and the function fields are bound
+// method values of the facade Controller, named identically to the originals so
+// the moved handler bodies stay verbatim.
+type Handler struct {
+	*apicore.Core
+
+	settingsMutex          *sync.RWMutex
+	getSettingsOrFallback  func() *conf.Settings
+	publishAndSaveSettings func(current, updated *conf.Settings) error
+	handleSettingsChanges  func(oldSettings, currentSettings *conf.Settings) error
+}
+
+// New builds an integrations Handler around the shared core and the facade's
+// settings-save machinery. settingsMutex MUST be the same *sync.RWMutex the
+// settings update handlers lock, so MQTT TLS certificate writes serialize against
+// them; the function arguments are the facade's getSettingsOrFallback/
+// publishAndSaveSettings/handleSettingsChanges method values.
+func New(
+	core *apicore.Core,
+	settingsMutex *sync.RWMutex,
+	getSettingsOrFallback func() *conf.Settings,
+	publishAndSaveSettings func(current, updated *conf.Settings) error,
+	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
+) *Handler {
+	return &Handler{
+		Core:                   core,
+		settingsMutex:          settingsMutex,
+		getSettingsOrFallback:  getSettingsOrFallback,
+		publishAndSaveSettings: publishAndSaveSettings,
+		handleSettingsChanges:  handleSettingsChanges,
+	}
+}
+
+// RegisterRoutes registers all integration-related API endpoints on the supplied
+// API v2 group, preserving the exact routes, per-route middleware, and order the
+// facade used before the integrations domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+	c.LogInfoIfEnabled("Initializing integrations routes")
+
+	// Create integrations API group with auth middleware
+	integrationsGroup := g.Group("/integrations", c.AuthMiddleware)
+
+	// MQTT routes
+	mqttGroup := integrationsGroup.Group("/mqtt")
+	mqttGroup.GET("/status", c.GetMQTTStatus)
+	mqttGroup.POST("/test", c.TestMQTTConnection)
+	mqttGroup.POST("/homeassistant/discovery", c.TriggerHomeAssistantDiscovery)
+
+	// MQTT TLS certificate management
+	mqttTLSGroup := mqttGroup.Group("/tls", c.AuthMiddleware)
+	mqttTLSGroup.GET("/certificate", c.GetMQTTTLSCertificate)
+	mqttTLSGroup.POST("/certificate", c.UploadMQTTTLSCertificate)
+	mqttTLSGroup.DELETE("/certificate", c.DeleteMQTTTLSCertificate)
+
+	// BirdWeather routes
+	bwGroup := integrationsGroup.Group("/birdweather")
+	bwGroup.GET("/status", c.GetBirdWeatherStatus)
+	bwGroup.POST("/test", c.TestBirdWeatherConnection)
+
+	// Weather routes
+	weatherGroup := integrationsGroup.Group("/weather")
+	weatherGroup.POST("/test", c.TestWeatherConnection)
+
+	// eBird routes
+	ebirdGroup := integrationsGroup.Group("/ebird")
+	ebirdGroup.POST("/test", c.TestEBirdConnection)
+
+	c.LogInfoIfEnabled("Integrations routes initialized successfully")
+}
 
 // IntegrationTestClient defines the interface for integration test clients.
 // Both MQTT and BirdWeather clients implement this interface.
@@ -77,7 +171,7 @@ func (a *birdweatherTestAdapter) Cleanup() {
 // - Streaming results to HTTP client
 // - Handling client disconnection
 func runStreamingIntegrationTest[T any](
-	c *Controller,
+	c *Handler,
 	ctx echo.Context,
 	resultChan chan T,
 	client IntegrationTestClient[T],
@@ -133,7 +227,7 @@ func runStreamingIntegrationTest[T any](
 			}
 
 			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
-				GetLogger().Error("Error writing final test result",
+				apicore.GetLogger().Error("Error writing final test result",
 					logger.String("integration", integrationName),
 					logger.Error(err),
 				)
@@ -158,7 +252,7 @@ func runStreamingIntegrationTest[T any](
 	for result := range resultChan {
 		writeMu.Lock()
 		if err := encoder.Encode(result); err != nil {
-			GetLogger().Error("Error encoding test result",
+			apicore.GetLogger().Error("Error encoding test result",
 				logger.String("integration", integrationName),
 				logger.Error(err),
 			)
@@ -212,43 +306,8 @@ type BirdWeatherStatus struct {
 	LastError        string  `json:"last_error,omitempty"` // Most recent error message, if any issues occurred
 }
 
-// initIntegrationsRoutes registers all integration-related API endpoints
-func (c *Controller) initIntegrationsRoutes() {
-	c.LogInfoIfEnabled("Initializing integrations routes")
-
-	// Create integrations API group with auth middleware
-	integrationsGroup := c.Group.Group("/integrations", c.AuthMiddleware)
-
-	// MQTT routes
-	mqttGroup := integrationsGroup.Group("/mqtt")
-	mqttGroup.GET("/status", c.GetMQTTStatus)
-	mqttGroup.POST("/test", c.TestMQTTConnection)
-	mqttGroup.POST("/homeassistant/discovery", c.TriggerHomeAssistantDiscovery)
-
-	// MQTT TLS certificate management
-	mqttTLSGroup := mqttGroup.Group("/tls", c.AuthMiddleware)
-	mqttTLSGroup.GET("/certificate", c.GetMQTTTLSCertificate)
-	mqttTLSGroup.POST("/certificate", c.UploadMQTTTLSCertificate)
-	mqttTLSGroup.DELETE("/certificate", c.DeleteMQTTTLSCertificate)
-
-	// BirdWeather routes
-	bwGroup := integrationsGroup.Group("/birdweather")
-	bwGroup.GET("/status", c.GetBirdWeatherStatus)
-	bwGroup.POST("/test", c.TestBirdWeatherConnection)
-
-	// Weather routes
-	weatherGroup := integrationsGroup.Group("/weather")
-	weatherGroup.POST("/test", c.TestWeatherConnection)
-
-	// eBird routes
-	ebirdGroup := integrationsGroup.Group("/ebird")
-	ebirdGroup.POST("/test", c.TestEBirdConnection)
-
-	c.LogInfoIfEnabled("Integrations routes initialized successfully")
-}
-
 // GetMQTTStatus handles GET /api/v2/integrations/mqtt/status
-func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
+func (c *Handler) GetMQTTStatus(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Getting MQTT status",
@@ -298,7 +357,7 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 // checkMQTTConnectionStatus attempts to connect to the MQTT broker using a temporary client
 // to determine the current connection status.
 // Returns true if connected, false otherwise, along with any error message encountered.
-func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context, settings *conf.Settings) (connected bool, lastError string) {
+func (c *Handler) checkMQTTConnectionStatus(parentCtx context.Context, settings *conf.Settings) (connected bool, lastError string) {
 	// Use the injected metrics instance
 	if c.Metrics == nil {
 		c.LogErrorIfEnabled("Metrics instance not available for MQTT status check")
@@ -340,7 +399,7 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context, settin
 }
 
 // GetBirdWeatherStatus handles GET /api/v2/integrations/birdweather/status
-func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
+func (c *Handler) GetBirdWeatherStatus(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Getting BirdWeather status",
@@ -372,7 +431,7 @@ func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 }
 
 // TestMQTTConnection handles POST /api/v2/integrations/mqtt/test
-func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
+func (c *Handler) TestMQTTConnection(ctx echo.Context) error {
 	// Get MQTT configuration from fresh settings
 	settings := c.CurrentSettings()
 	mqttConfig := settings.Realtime.MQTT
@@ -422,7 +481,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 }
 
 // TestBirdWeatherConnection handles POST /api/v2/integrations/birdweather/test
-func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
+func (c *Handler) TestBirdWeatherConnection(ctx echo.Context) error {
 	var request BirdWeatherTestRequest
 	if err := ctx.Bind(&request); err != nil {
 		return c.HandleError(ctx, err, "Invalid BirdWeather test request", http.StatusBadRequest)
@@ -513,7 +572,7 @@ type WeatherTestStage struct {
 }
 
 // TestWeatherConnection handles POST /api/v2/integrations/weather/test
-func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
+func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
 	var request WeatherTestRequest
 	if err := ctx.Bind(&request); err != nil {
 		return c.HandleError(ctx, err, "Invalid weather test request", http.StatusBadRequest)
@@ -521,13 +580,13 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 
 	// Restore redacted API keys before validation so the test runs against the
 	// real saved secret. The settings UI returns secrets as a redacted
-	// placeholder (redactedValue); if the user clicks Test without re-entering
+	// placeholder (RedactedValue); if the user clicks Test without re-entering
 	// the key, the request carries that placeholder instead of the real key.
 	// Restoring here (and not only in the save flow) prevents the test from
 	// failing with a bogus "authentication failed".
 	current := c.CurrentSettings()
-	restoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
-	restoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
+	apicore.RestoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
+	apicore.RestoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
 
 	// Validate provider
 	if request.Provider == "" || request.Provider == "none" {
@@ -636,7 +695,7 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 }
 
 // testWeatherAPIConnectivity tests basic connectivity to the weather API
-func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *conf.Settings) (string, error) {
+func (c *Handler) testWeatherAPIConnectivity(ctx context.Context, settings *conf.Settings) (string, error) {
 	var testURL string
 	provider := settings.Realtime.Weather.Provider
 
@@ -664,7 +723,7 @@ func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *c
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			GetLogger().Warn("Failed to close response body", logger.Error(err))
+			apicore.GetLogger().Warn("Failed to close response body", logger.Error(err))
 		}
 	}()
 
@@ -672,7 +731,7 @@ func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *c
 }
 
 // testWeatherAuthentication tests authentication with the weather API
-func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *conf.Settings) (string, error) {
+func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.Settings) (string, error) {
 	provider := settings.Realtime.Weather.Provider
 
 	switch provider {
@@ -701,7 +760,7 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 		}
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
-				GetLogger().Warn("Failed to close response body", logger.Error(err))
+				apicore.GetLogger().Warn("Failed to close response body", logger.Error(err))
 			}
 		}()
 
@@ -722,7 +781,7 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 }
 
 // testWeatherDataFetch tests fetching actual weather data
-func (c *Controller) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
+func (c *Handler) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
 	var provider weather.Provider
 	switch settings.Realtime.Weather.Provider {
 	case WeatherProviderYrno:
@@ -774,7 +833,7 @@ func getProviderDisplayName(provider string) string {
 
 // TriggerHomeAssistantDiscovery handles POST /api/v2/integrations/mqtt/homeassistant/discovery
 // It manually triggers Home Assistant MQTT discovery message publishing.
-func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
+func (c *Handler) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Triggering Home Assistant discovery",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
@@ -813,13 +872,13 @@ func formatClientError(prefix string, err error, settings *conf.Settings) string
 // writeJSONResponse writes a JSON response to the client
 // NOTE: For most cases, consider using Echo's built-in ctx.JSON(httpStatus, data) instead
 // This function is primarily useful for streaming or special encoding scenarios
-func (c *Controller) writeJSONResponse(ctx echo.Context, data any) error {
+func (c *Handler) writeJSONResponse(ctx echo.Context, data any) error {
 	encoder := json.NewEncoder(ctx.Response())
 	return encoder.Encode(data)
 }
 
 // TestEBirdConnection handles POST /api/v2/integrations/ebird/test
-func (c *Controller) TestEBirdConnection(ctx echo.Context) error {
+func (c *Handler) TestEBirdConnection(ctx echo.Context) error {
 	var request EBirdTestRequest
 	if err := ctx.Bind(&request); err != nil {
 		return c.HandleError(ctx, err, "Invalid eBird test request", http.StatusBadRequest)
@@ -827,10 +886,10 @@ func (c *Controller) TestEBirdConnection(ctx echo.Context) error {
 
 	// Restore the redacted API key before validation so the test runs against
 	// the real saved secret. The settings UI returns the key as a redacted
-	// placeholder (redactedValue); if the user clicks Test without re-entering
+	// placeholder (RedactedValue); if the user clicks Test without re-entering
 	// it, the request carries that placeholder instead of the real key, which
 	// would otherwise fail authentication.
-	restoreRedactedSecret(c.CurrentSettings().Realtime.EBird.APIKey, &request.APIKey)
+	apicore.RestoreRedactedSecret(c.CurrentSettings().Realtime.EBird.APIKey, &request.APIKey)
 
 	if !request.Enabled {
 		return ctx.JSON(http.StatusOK, map[string]any{
@@ -920,7 +979,7 @@ func (c *Controller) TestEBirdConnection(ctx echo.Context) error {
 }
 
 // testEBirdConnectivity tests basic connectivity to the eBird API
-func (c *Controller) testEBirdConnectivity(ctx context.Context) (string, error) {
+func (c *Handler) testEBirdConnectivity(ctx context.Context) (string, error) {
 	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "HEAD", "https://api.ebird.org/v2/ref/taxonomy/ebird", http.NoBody)
 	if err != nil {
@@ -936,7 +995,7 @@ func (c *Controller) testEBirdConnectivity(ctx context.Context) (string, error) 
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
+			apicore.GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
 		}
 	}()
 
@@ -949,7 +1008,7 @@ func (c *Controller) testEBirdConnectivity(ctx context.Context) (string, error) 
 }
 
 // testEBirdAuthentication tests authentication with the eBird API using a small taxonomy request
-func (c *Controller) testEBirdAuthentication(ctx context.Context, apiKey, locale string) (string, error) {
+func (c *Handler) testEBirdAuthentication(ctx context.Context, apiKey, locale string) (string, error) {
 	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
 
 	url := fmt.Sprintf("https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species&maxResults=1&locale=%s", neturl.QueryEscape(locale))
@@ -971,7 +1030,7 @@ func (c *Controller) testEBirdAuthentication(ctx context.Context, apiKey, locale
 		// Drain body to allow connection reuse before closing
 		_, _ = io.Copy(io.Discard, resp.Body)
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
+			apicore.GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
 		}
 	}()
 

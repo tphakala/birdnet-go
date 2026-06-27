@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -1728,7 +1729,10 @@ func validatePassword(value any) error {
 
 // redactedValue is the placeholder used for secret fields in API responses.
 // The frontend can check for this value to show a "secret is set" indicator.
-const redactedValue = "**********"
+// It aliases apicore.RedactedValue (the shared substrate sentinel) so the
+// settings save flow and the integrations test-connection handlers match the
+// exact same value and cannot drift apart.
+const redactedValue = apicore.RedactedValue
 
 // sanitizeSettingsForAPI returns a shallow copy of Settings with all secret
 // fields replaced by a redacted placeholder. This prevents the GET endpoints
@@ -1835,21 +1839,6 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 	s.Notification.Push.Providers = providersCopy
 }
 
-// restoreRedactedSecret replaces a single incoming secret value with the
-// current (real) value when the incoming value is the redacted placeholder.
-// It is the canonical single-field restore primitive shared by the settings
-// save flow (restoreRedactedSecrets) and the integration test-connection
-// handlers, so both paths match the same sentinel against the same private
-// redactedValue constant and cannot drift apart.
-func restoreRedactedSecret(current string, incoming *string) {
-	if incoming == nil {
-		return
-	}
-	if *incoming == redactedValue {
-		*incoming = current
-	}
-}
-
 // restoreRedactedSecrets replaces redacted placeholder values in the incoming
 // settings with the current (real) values so that an update round-trip
 // (GET → modify → PUT) does not overwrite real secrets with the placeholder.
@@ -1862,7 +1851,7 @@ func restoreRedactedSecret(current string, incoming *string) {
 // error is returned listing all affected fields.
 func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	restore := func(cur, inc *string) {
-		restoreRedactedSecret(*cur, inc)
+		apicore.RestoreRedactedSecret(*cur, inc)
 	}
 
 	// Security — defense-in-depth: restore even though SessionSecret is
