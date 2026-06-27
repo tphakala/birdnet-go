@@ -1,5 +1,5 @@
-// internal/api/v2/quiet_hours.go
-package api
+// internal/api/v2/audio/quiet_hours.go
+package audio
 
 import (
 	"fmt"
@@ -22,14 +22,14 @@ type QuietHoursStatusResponse struct {
 	SuppressedStreams map[string]bool `json:"suppressedStreams"`
 }
 
-// initQuietHoursRoutes registers quiet hours API routes.
-func (c *Controller) initQuietHoursRoutes() {
+// RegisterQuietHoursRoutes registers quiet hours API routes.
+func (c *Handler) RegisterQuietHoursRoutes(g *echo.Group) {
 	// Public read-only endpoint: the dashboard's "Currently Hearing" card
 	// polls this to show whether any source is in a quiet-hours window.
 	// Stream URLs are sanitized via privacy.SanitizeStreamUrl before the
 	// response is serialized, so raw RTSP credentials are never leaked.
 	// Mirrors the PR #2763 pattern for other dashboard read-only endpoints.
-	c.Group.GET("/streams/quiet-hours/status", c.GetQuietHoursStatus)
+	g.GET("/streams/quiet-hours/status", c.GetQuietHoursStatus)
 }
 
 // GetQuietHoursStatus returns the current quiet hours suppression state for
@@ -39,7 +39,7 @@ func (c *Controller) initQuietHoursRoutes() {
 // preserved true/false values still let the dashboard "Currently Hearing"
 // indicator count active suppressions. Authenticated requests (e.g. the
 // StreamManager settings form) continue to receive the sanitized URL map.
-func (c *Controller) GetQuietHoursStatus(ctx echo.Context) error {
+func (c *Handler) GetQuietHoursStatus(ctx echo.Context) error {
 	// Read the live global snapshot (race-free, hot-reloading) via
 	// CurrentSettings() so out-of-band republishes are seen and the read never
 	// races the Settings.Store in UpdateSettings.

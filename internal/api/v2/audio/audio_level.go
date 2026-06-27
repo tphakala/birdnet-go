@@ -1,5 +1,5 @@
-// internal/api/v2/audio_level.go
-package api
+// internal/api/v2/audio/audio_level.go
+package audio
 
 import (
 	"context"
@@ -80,7 +80,7 @@ type audioLevelManager struct {
 const maxStreamAnonymMapSize = 100
 
 // Global audio level manager instance
-// TODO: Consider moving to Controller struct for better encapsulation
+// TODO: Consider moving to Handler struct for better encapsulation
 var audioLevelMgr = &audioLevelManager{
 	streamAnonymMap: make(map[string]string),
 	subscribers:     make(map[chan audiocore.AudioLevelData]struct{}),
@@ -97,7 +97,7 @@ var audioLevelMgr = &audioLevelManager{
 // requests may result in data races.
 //
 // This connects the audio capture system to the SSE endpoint.
-func (c *Controller) SetAudioLevelChan(ch chan audiocore.AudioLevelData) {
+func (c *Handler) SetAudioLevelChan(ch chan audiocore.AudioLevelData) {
 	c.audioLevelChan = ch
 	c.LogInfoIfEnabled("Audio level channel connected to API v2 controller")
 
@@ -216,20 +216,20 @@ func cacheStreamAnonymName(sourceID, displayName string) {
 	audioLevelMgr.streamAnonymMap[sourceID] = displayName
 }
 
-// initAudioLevelRoutes registers audio level SSE endpoints
-func (c *Controller) initAudioLevelRoutes() {
+// RegisterAudioLevelRoutes registers audio level SSE endpoints
+func (c *Handler) RegisterAudioLevelRoutes(g *echo.Group) {
 	// Audio level SSE endpoint - public, no rate limiting
 	// The per-IP connection limit (audioLevelMaxConnectionsPerIP) still applies
 	// Authentication is checked within the handler to control data anonymization
-	c.Group.GET("/streams/audio-level", c.StreamAudioLevel)
+	g.GET("/streams/audio-level", c.StreamAudioLevel)
 
 	// Stream sources listing - public, returns active stream sources
-	c.Group.GET("/streams/sources", c.ListStreamSources)
+	g.GET("/streams/sources", c.ListStreamSources)
 }
 
 // StreamAudioLevel handles SSE connections for real-time audio level streaming
 // This provides simple audio level data (0-100 with clipping detection) for UI indicators
-func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
+func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 	// Early nil check for audio level channel
 	if c.audioLevelChan == nil {
 		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Audio level stream unavailable - channel not configured")
@@ -350,7 +350,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	for {
 		select {
 		case <-c.Context().Done():
-			// Controller shutting down
+			// handler shutting down
 			c.LogAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE connection closed",
 				logger.String("reason", "shutdown"))
 			return nil
@@ -401,15 +401,6 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	}
 }
 
-// isClientAuthenticated checks if the current request is authenticated
-// by delegating to the auth service's centralized IsAuthenticated method.
-func (c *Controller) isClientAuthenticated(ctx echo.Context) bool {
-	if c.authService == nil {
-		return false
-	}
-	return c.authService.IsAuthenticated(ctx)
-}
-
 // createAudioLevelEntry creates an AudioLevelData entry for a source with appropriate display name.
 func createAudioLevelEntry(sourceID, displayName string) audiocore.AudioLevelData {
 	return audiocore.AudioLevelData{
@@ -420,7 +411,7 @@ func createAudioLevelEntry(sourceID, displayName string) audiocore.AudioLevelDat
 }
 
 // initializeAudioLevels creates the initial levels map with configured sources
-func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audiocore.AudioLevelData {
+func (c *Handler) initializeAudioLevels(isAuthenticated bool) map[string]audiocore.AudioLevelData {
 	levels := make(map[string]audiocore.AudioLevelData)
 	eng := c.Engine.Load()
 	if eng == nil {
@@ -447,7 +438,7 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audi
 }
 
 // getAudioCardSources retrieves all configured audio card sources from the registry.
-func (c *Controller) getAudioCardSources(registry *audiocore.SourceRegistry) []*audiocore.AudioSource {
+func (c *Handler) getAudioCardSources(registry *audiocore.SourceRegistry) []*audiocore.AudioSource {
 	var sources []*audiocore.AudioSource
 	settings := c.CurrentSettings()
 	if settings == nil {
@@ -466,7 +457,7 @@ func (c *Controller) getAudioCardSources(registry *audiocore.SourceRegistry) []*
 }
 
 // addStreamSourcesToLevels adds all configured stream sources to the levels map.
-func (c *Controller) addStreamSourcesToLevels(registry *audiocore.SourceRegistry, levels map[string]audiocore.AudioLevelData, isAuthenticated bool) {
+func (c *Handler) addStreamSourcesToLevels(registry *audiocore.SourceRegistry, levels map[string]audiocore.AudioLevelData, isAuthenticated bool) {
 	settings := c.CurrentSettings()
 	if settings == nil {
 		return
@@ -486,7 +477,7 @@ func (c *Controller) addStreamSourcesToLevels(registry *audiocore.SourceRegistry
 }
 
 // updateAudioLevel processes incoming audio data and updates the levels map
-func (c *Controller) updateAudioLevel(
+func (c *Handler) updateAudioLevel(
 	audioData audiocore.AudioLevelData,
 	levels map[string]audiocore.AudioLevelData,
 	lastUpdateTime, lastNonZeroTime map[string]time.Time,
@@ -529,7 +520,7 @@ func (c *Controller) updateAudioLevel(
 }
 
 // getAnonymizedSourceName returns an anonymized name for a source
-func (c *Controller) getAnonymizedSourceName(source *audiocore.AudioSource) string {
+func (c *Handler) getAnonymizedSourceName(source *audiocore.AudioSource) string {
 	switch source.Type {
 	case audiocore.SourceTypeAudioCard:
 		return audioSourceDefaultName
@@ -556,7 +547,7 @@ func (c *Controller) getAnonymizedSourceName(source *audiocore.AudioSource) stri
 }
 
 // getAnonymizedSourceNameFallback returns anonymized name when registry is unavailable
-func (c *Controller) getAnonymizedSourceNameFallback(sourceID string) string {
+func (c *Handler) getAnonymizedSourceNameFallback(sourceID string) string {
 	// Check for audio card source
 	if strings.HasPrefix(sourceID, "audio_card_") {
 		return audioSourceDefaultName
@@ -590,7 +581,7 @@ func (c *Controller) getAnonymizedSourceNameFallback(sourceID string) string {
 }
 
 // isSourceInactive checks if a source should be considered inactive
-func (c *Controller) isSourceInactive(
+func (c *Handler) isSourceInactive(
 	source string,
 	now time.Time,
 	lastUpdateTime, lastNonZeroTime map[string]time.Time,
@@ -611,7 +602,7 @@ func (c *Controller) isSourceInactive(
 // pruneRemovedSources removes sources from the levels map that are no longer
 // present in the registry (e.g. a stream was disabled and torn down mid-session).
 // Returns true if any sources were pruned so the caller can send an update.
-func (c *Controller) pruneRemovedSources(
+func (c *Handler) pruneRemovedSources(
 	registry *audiocore.SourceRegistry,
 	levels map[string]audiocore.AudioLevelData,
 	lastUpdateTime, lastNonZeroTime map[string]time.Time,
@@ -629,7 +620,7 @@ func (c *Controller) pruneRemovedSources(
 }
 
 // checkSourceActivity checks all sources for inactivity
-func (c *Controller) checkSourceActivity(
+func (c *Handler) checkSourceActivity(
 	levels map[string]audiocore.AudioLevelData,
 	lastUpdateTime, lastNonZeroTime map[string]time.Time,
 ) bool {
@@ -650,7 +641,7 @@ func (c *Controller) checkSourceActivity(
 // extractRemoteAddr extracts the IP address from RemoteAddr, stripping port if present.
 // This is used for rate limiting and duplicate connection detection where we want
 // the actual connection address rather than proxy-provided headers which can be spoofed.
-func (c *Controller) extractRemoteAddr(ctx echo.Context) string {
+func (c *Handler) extractRemoteAddr(ctx echo.Context) string {
 	remoteAddr := ctx.Request().RemoteAddr
 	// RemoteAddr is typically "IP:port", extract just the IP
 	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
@@ -662,7 +653,7 @@ func (c *Controller) extractRemoteAddr(ctx echo.Context) string {
 
 // resetAudioLevelWriteDeadline resets the write deadline for the SSE connection.
 // This prevents the server's WriteTimeout from terminating long-lived SSE connections.
-func (c *Controller) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
+func (c *Handler) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
 	if conn, ok := ctx.Response().Writer.(apicore.WriteDeadlineSetter); ok {
 		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
 			c.LogDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
@@ -671,7 +662,7 @@ func (c *Controller) resetAudioLevelWriteDeadline(ctx echo.Context, operation st
 }
 
 // sendAudioLevelUpdate sends the current levels to the client
-func (c *Controller) sendAudioLevelUpdate(ctx echo.Context, levels map[string]audiocore.AudioLevelData) error {
+func (c *Handler) sendAudioLevelUpdate(ctx echo.Context, levels map[string]audiocore.AudioLevelData) error {
 	message := AudioLevelSSEData{
 		Type:   "audio-level",
 		Levels: levels,
@@ -695,7 +686,7 @@ func (c *Controller) sendAudioLevelUpdate(ctx echo.Context, levels map[string]au
 
 // sendAudioLevelHeartbeat sends a heartbeat comment to keep the SSE connection alive.
 // It resets the write deadline before writing to prevent server WriteTimeout.
-func (c *Controller) sendAudioLevelHeartbeat(ctx echo.Context) error {
+func (c *Handler) sendAudioLevelHeartbeat(ctx echo.Context) error {
 	// Reset write deadline to prevent server WriteTimeout from closing connection.
 	c.resetAudioLevelWriteDeadline(ctx, "heartbeat")
 

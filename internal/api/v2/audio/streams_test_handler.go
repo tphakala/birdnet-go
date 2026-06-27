@@ -1,4 +1,4 @@
-package api
+package audio
 
 import (
 	"context"
@@ -57,20 +57,20 @@ var blockedHosts = map[string]bool{
 }
 
 // probeStreamInfoFunc probes a live stream for its audio characteristics.
-// Controller.probeStreamInfo defaults to ffmpeg.ProbeStreamInfo (used when the
+// Handler.probeStreamInfo defaults to ffmpeg.ProbeStreamInfo (used when the
 // field is nil) and is overridden in tests to stub probing without ffprobe.
 type probeStreamInfoFunc func(ctx context.Context, url string) (*ffmpeg.StreamInfo, error)
 
-// initStreamTestRoutes registers stream testing endpoints.
-func (c *Controller) initStreamTestRoutes() {
-	c.Group.POST("/streams/test", c.TestStream, c.AuthMiddleware)
-	c.Group.POST("/streams/analyze-channels", c.AnalyzeChannels, c.AuthMiddleware)
+// RegisterStreamTestRoutes registers stream testing endpoints.
+func (c *Handler) RegisterStreamTestRoutes(g *echo.Group) {
+	g.POST("/streams/test", c.TestStream, c.AuthMiddleware)
+	g.POST("/streams/analyze-channels", c.AnalyzeChannels, c.AuthMiddleware)
 }
 
 // TestStream tests a stream URL to discover its audio properties.
 // Used by the frontend to verify connectivity and check model compatibility
 // before saving a stream configuration.
-func (c *Controller) TestStream(ctx echo.Context) error {
+func (c *Handler) TestStream(ctx echo.Context) error {
 	var req testStreamRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleErrorWithKey(ctx, err, "invalid request body",
@@ -132,7 +132,7 @@ func (c *Controller) TestStream(ctx echo.Context) error {
 
 // AnalyzeChannels captures a short stereo sample and returns per-channel
 // energy levels with a recommendation for which channel to use.
-func (c *Controller) AnalyzeChannels(ctx echo.Context) error {
+func (c *Handler) AnalyzeChannels(ctx echo.Context) error {
 	var req analyzeChannelsRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleErrorWithKey(ctx, err, "invalid request body",

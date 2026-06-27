@@ -1,6 +1,6 @@
-// internal/api/v2/audio_level_test.go
+// internal/api/v2/audio/audio_level_test.go
 // Tests for audio level SSE endpoint functionality
-package api
+package audio
 
 import (
 	"fmt"
@@ -69,7 +69,7 @@ func TestAudioLevelSSEDataFormat(t *testing.T) {
 // TestIsSourceInactive tests the source inactivity detection logic
 func TestIsSourceInactive(t *testing.T) {
 	// Create a minimal controller for testing
-	controller := &Controller{Core: &apicore.Core{}}
+	controller := &Handler{Core: &apicore.Core{}}
 	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	t.Run("new source is active", func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestIsSourceInactive(t *testing.T) {
 
 // TestCheckSourceActivity tests the source activity checking for multiple sources
 func TestCheckSourceActivity(t *testing.T) {
-	controller := &Controller{Core: &apicore.Core{}}
+	controller := &Handler{Core: &apicore.Core{}}
 	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	t.Run("no inactive sources", func(t *testing.T) {
@@ -180,7 +180,7 @@ func TestCheckSourceActivity(t *testing.T) {
 
 // TestGetAnonymizedSourceNameFallback tests the fallback source name anonymization
 func TestGetAnonymizedSourceNameFallback(t *testing.T) {
-	controller := &Controller{Core: &apicore.Core{}}
+	controller := &Handler{Core: &apicore.Core{}}
 	controller.Settings.Store(apitest.NewValidTestSettings())
 
 	t.Run("audio card source", func(t *testing.T) {

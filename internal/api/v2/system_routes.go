@@ -19,10 +19,12 @@ const MetricsHistoryMaxPoints = system.MetricsHistoryMaxPoints
 // share the /system namespace but belong to domains not yet extracted into their
 // own packages; they stay here until their own phase:
 //   - GET /system/external-media -> media domain (external_media.go)
-//   - the /system/audio/* device routes -> audio/streaming domain (audio_devices.go,
-//     audio_sources.go)
 //   - /system/database/overview -> analytics domain (database_overview.go)
 //   - /system/database/{migration,backup,legacy} -> import domain
+//
+// The /system/audio/* device routes have moved to the audio/streaming domain and
+// are registered by c.audio.RegisterAudioDeviceRoutes (its own ordered initRoutes
+// entry), which recreates its own /system group.
 //
 // Recreating the /system group and its auth-protected subgroup here (in addition
 // to the one RegisterSystemRoutes creates) is safe: Echo deduplicates the group
@@ -38,14 +40,6 @@ func (c *Controller) initSystemRoutes() {
 
 	// External media status (media domain).
 	protectedGroup.GET("/external-media", c.GetExternalMedia)
-
-	// Audio device routes (audio/streaming domain).
-	audioGroup := protectedGroup.Group("/audio")
-	audioGroup.GET("/devices", c.GetAudioDevices)
-	audioGroup.GET("/devices/capabilities", c.GetDeviceCapabilities)
-	audioGroup.GET("/active", c.GetActiveAudioDevice)
-	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
-	audioGroup.GET("/sources", c.ListAudioSources)
 
 	// Database overview (analytics domain).
 	c.initDatabaseOverviewRoutes()

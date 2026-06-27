@@ -1,6 +1,6 @@
 // audio_devices_test.go: tests for the /system/audio/* device handlers that
 // stay in package api until the audio/streaming domain is extracted.
-package api
+package audio
 
 import (
 	"encoding/json"
@@ -16,7 +16,7 @@ import (
 )
 
 // setupSystemTestEnvironment creates a test environment for system API tests
-func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller) {
+func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler) {
 	t.Helper()
 
 	e := echo.New()
@@ -29,7 +29,7 @@ func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller) {
 		},
 	}
 
-	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(settings)
 
 	return e, controller
@@ -100,7 +100,7 @@ func TestGetActiveAudioDevice(t *testing.T) {
 				},
 			},
 		}
-		controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+		controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 		controller.Settings.Store(settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/active", http.NoBody)

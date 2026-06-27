@@ -1,4 +1,4 @@
-package api
+package audio
 
 import (
 	"context"
@@ -90,13 +90,13 @@ func TestTestStreamHandler_ValidationErrors(t *testing.T) {
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(req, rec)
 
-			ctrl := &Controller{Core: &apicore.Core{}}
+			ctrl := &Handler{Core: &apicore.Core{}}
 			ctrl.Settings.Store(&conf.Settings{})
 			err := ctrl.TestStream(ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.status, rec.Code)
 
-			var resp ErrorResponse
+			var resp apicore.ErrorResponse
 			require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
 			assert.Equal(t, tt.errorKey, resp.ErrorKey)
 		})
@@ -114,7 +114,7 @@ func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	ctrl := &Controller{Core: &apicore.Core{}, probeStreamInfo: func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
+	ctrl := &Handler{Core: &apicore.Core{}, probeStreamInfo: func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
 		return nil, ffmpeg.ErrNoAudioStreamsFound
 	}}
 	ctrl.Settings.Store(&conf.Settings{})
@@ -123,7 +123,7 @@ func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 
-	var resp ErrorResponse
+	var resp apicore.ErrorResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
 	assert.Equal(t, "errors.streams.test.noAudioTrack", resp.ErrorKey)
 	assert.Equal(t, "stream has no audio track", resp.Message)

@@ -1,5 +1,5 @@
-// internal/api/v2/streams_health_test.go
-package api
+// internal/api/v2/audio/streams_health_test.go
+package audio
 
 import (
 	"errors"
