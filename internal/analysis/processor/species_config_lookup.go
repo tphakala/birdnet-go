@@ -36,15 +36,23 @@ func lookupSpeciesConfig(configMap map[string]conf.SpeciesConfig, commonName, sc
 		}
 	}
 
-	// Fallback: O(n) iteration checking scientific name (case-insensitive),
-	// canonicalizing both sides so a config entry keyed on a legacy/alias scientific
-	// name matches the canonical name the detection now carries. CanonicalName is
-	// identity for non-aliased names, so this preserves existing behavior for species
-	// without a reclassification.
+	// Fallback: O(n) iteration checking scientific name (case-insensitive). Run an
+	// exact-key pass first so an exact scientific-name match always wins
+	// deterministically, even when the config holds both a legacy name and its
+	// canonical replacement (Go map iteration order is randomized). Only when no exact
+	// key matches do we fall back to canonical-alias matching, so a config entry keyed
+	// on a legacy/alias scientific name still matches the canonical name the detection
+	// now carries. CanonicalName is identity for non-aliased names, so this preserves
+	// existing behavior for species without a reclassification.
 	if scientificName != "" {
+		for key, config := range configMap {
+			if strings.EqualFold(key, scientificName) {
+				return config, true
+			}
+		}
 		canonicalSci := openfauna.CanonicalName(scientificName)
 		for key, config := range configMap {
-			if strings.EqualFold(key, scientificName) || strings.EqualFold(openfauna.CanonicalName(key), canonicalSci) {
+			if strings.EqualFold(openfauna.CanonicalName(key), canonicalSci) {
 				return config, true
 			}
 		}

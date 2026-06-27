@@ -741,11 +741,11 @@ func TestCalculateDaysSince_EdgeCases(t *testing.T) {
 }
 
 // ============================================================================
-// Test: allSeasonsEmpty helper
-// Target: database.go:253
+// Test: seasonDataEmpty helper
+// Target: database.go
 // ============================================================================
 
-func TestAllSeasonsEmpty(t *testing.T) {
+func TestSeasonDataEmpty(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -793,11 +793,7 @@ func TestAllSeasonsEmpty(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			tracker := &SpeciesTracker{
-				speciesBySeason: tt.seasons,
-			}
-
-			result := tracker.allSeasonsEmpty()
+			result := seasonDataEmpty(tt.seasons)
 
 			assert.Equal(t, tt.expected, result)
 		})

@@ -460,9 +460,11 @@ func (t *SpeciesTracker) loadSingleSeasonData(ctx context.Context, seasonName st
 	return seasonMap, nil
 }
 
-// allSeasonsEmpty checks if all season maps are empty.
-func (t *SpeciesTracker) allSeasonsEmpty() bool {
-	for _, seasonMap := range t.speciesBySeason {
+// seasonDataEmpty reports whether every season map in the set is empty. It returns
+// false as soon as any season holds at least one species (it does not stop early on
+// an empty season).
+func seasonDataEmpty(seasonData map[string]map[string]time.Time) bool {
+	for _, seasonMap := range seasonData {
 		if len(seasonMap) > 0 {
 			return false
 		}
@@ -472,12 +474,13 @@ func (t *SpeciesTracker) allSeasonsEmpty() bool {
 
 // loadSeasonalDataFromDatabase loads first detection data for each season in the current year
 func (t *SpeciesTracker) loadSeasonalDataFromDatabase(ctx context.Context, now time.Time) error {
-	// Preserve existing seasonal maps if we have them
-	existingSeasonData := t.speciesBySeason
-	hasExistingData := len(existingSeasonData) > 0
+	hasExistingData := len(t.speciesBySeason) > 0
 
-	// Initialize seasonal maps
-	t.speciesBySeason = make(map[string]map[string]time.Time)
+	// Build into a local map and publish to t.speciesBySeason only on full success,
+	// so a partial load failure (e.g. a transient DB error during a background
+	// SyncIfNeeded) leaves the in-memory seasonal history untouched rather than
+	// half-built or empty. This avoids any rollback bookkeeping.
+	newSeasonData := make(map[string]map[string]time.Time, len(t.seasons))
 
 	getLog().Debug("Loading seasonal data from database",
 		logger.Int("total_seasons", len(t.seasons)),
@@ -486,23 +489,19 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(ctx context.Context, now t
 	for seasonName := range t.seasons {
 		seasonMap, err := t.loadSingleSeasonData(ctx, seasonName, now)
 		if err != nil {
-			// Restore the prior seasonal maps on a partial load failure so a transient
-			// DB error during a background SyncIfNeeded does not wipe in-memory seasonal
-			// history (this function re-initialized t.speciesBySeason above).
-			if hasExistingData {
-				t.speciesBySeason = existingSeasonData
-			}
 			return err
 		}
-		t.speciesBySeason[seasonName] = seasonMap
+		newSeasonData[seasonName] = seasonMap
 	}
 
-	// If all seasons returned empty and we had existing data, restore it
-	if t.allSeasonsEmpty() && hasExistingData {
-		getLog().Debug("All seasons returned empty data, restoring existing seasonal tracking data")
-		t.speciesBySeason = existingSeasonData
+	// If every season came back empty but we already had data, keep the existing
+	// data instead of overwriting it with an empty set.
+	if hasExistingData && seasonDataEmpty(newSeasonData) {
+		getLog().Debug("All seasons returned empty data, preserving existing seasonal tracking data")
+		return nil
 	}
 
+	t.speciesBySeason = newSeasonData
 	return nil
 }
 
