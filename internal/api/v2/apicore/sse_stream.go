@@ -28,6 +28,21 @@ const (
 	// SSEWriteDeadline bounds how long a single SSE message write may block on a
 	// slow or disconnected client before it is abandoned.
 	SSEWriteDeadline = 10 * time.Second
+
+	// MaxSSEStreamDuration is the maximum lifetime of a single SSE stream
+	// connection before it is closed to prevent resource leaks. It is shared by
+	// every SSE endpoint (detection/sound-level streams, stream health, import
+	// progress) so the timeout cannot drift between domains.
+	MaxSSEStreamDuration = 30 * time.Minute
+)
+
+// SSE connection status strings used in connection/heartbeat log lines and the
+// initial connection event. Shared by every SSE endpoint.
+const (
+	// SSEStatusConnected marks an established SSE client connection.
+	SSEStatusConnected = "connected"
+	// SSEStatusDisconnected marks a torn-down SSE client connection.
+	SSEStatusDisconnected = "disconnected"
 )
 
 // WriteDeadlineSetter is implemented by response writers that support a write
@@ -115,4 +130,53 @@ func (c *Core) RecordSSEMessage(endpoint, messageType string) {
 	if c.Metrics != nil && c.Metrics.HTTP != nil {
 		c.Metrics.HTTP.RecordSSEMessageSent(endpoint, messageType)
 	}
+}
+
+// SendConnectionMessage sends the initial connection message to an SSE client.
+// Shared by every SSE endpoint (detection/sound-level streams, stream health).
+func (c *Core) SendConnectionMessage(ctx echo.Context, clientID, message, streamType string) error {
+	data := map[string]string{
+		"clientId": clientID,
+		"message":  message,
+	}
+	if streamType != "" {
+		data["type"] = streamType
+	}
+	return c.SendSSEMessage(ctx, SSEStatusConnected, data)
+}
+
+// LogSSEConnection logs SSE client connection/disconnection events. Shared by
+// every SSE endpoint.
+func (c *Core) LogSSEConnection(clientID, ip, userAgent, streamType string, connected bool) {
+	action := SSEStatusConnected
+	if !connected {
+		action = SSEStatusDisconnected
+	}
+
+	c.LogInfoIfEnabled(fmt.Sprintf("SSE %s client %s", streamType, action),
+		logger.String("client_id", clientID),
+		logger.String("ip", ip),
+		logger.String("user_agent", userAgent),
+	)
+}
+
+// SendSSEHeartbeat sends a heartbeat message to keep an SSE connection alive.
+// Shared by every SSE endpoint.
+func (c *Core) SendSSEHeartbeat(ctx echo.Context, clientID, streamType string) error {
+	data := map[string]any{
+		"timestamp": time.Now().Unix(),
+		"clients":   c.SSEManager.GetClientCount(),
+	}
+	if streamType != "" {
+		data["type"] = streamType
+	}
+
+	if err := c.SendSSEMessage(ctx, "heartbeat", data); err != nil {
+		c.LogDebugIfEnabled("SSE heartbeat failed, client likely disconnected",
+			logger.String("client_id", clientID),
+			logger.Error(err),
+		)
+		return err
+	}
+	return nil
 }
