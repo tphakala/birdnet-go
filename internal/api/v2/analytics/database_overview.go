@@ -1,4 +1,4 @@
-package api
+package analytics
 
 import (
 	"net/http"
@@ -41,7 +41,7 @@ var samplesPerHour = int(3600 / metricsCollectorIntervalSec)
 // GetDatabaseOverview handles GET /api/v2/system/database/overview.
 // It assembles engine metadata, table stats, performance metrics, and detection rates
 // into a single response.
-func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
+func (c *Handler) GetDatabaseOverview(ctx echo.Context) error {
 	// Get basic database stats from the store
 	basicStats, err := c.DS.GetDatabaseStats(ctx.Request().Context())
 	if err != nil || basicStats == nil {
@@ -89,7 +89,7 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 			resp.TotalTables = len(tables)
 		}
 
-		// Detection rate (24h hourly histogram) — cached to avoid repeated queries
+		// Detection rate (24h hourly histogram) - cached to avoid repeated queries
 		if rates, err := c.DetectionRateCache.GetHourly(inspector.GetDetectionRate24h); err != nil {
 			c.LogDebugIfEnabled("Failed to get detection rate", logger.Error(err))
 		} else {
@@ -105,7 +105,7 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 
 // assemblePerformanceStats builds a PerformanceStats from the latest ring buffer
 // values and cumulative atomic counters.
-func (c *Controller) assemblePerformanceStats() datastore.PerformanceStats {
+func (c *Handler) assemblePerformanceStats() datastore.PerformanceStats {
 	stats := datastore.PerformanceStats{}
 
 	if c.MetricsStore == nil {
@@ -150,17 +150,4 @@ func (c *Controller) assemblePerformanceStats() datastore.PerformanceStats {
 	}
 
 	return stats
-}
-
-// initDatabaseOverviewRoutes registers the database overview endpoint.
-func (c *Controller) initDatabaseOverviewRoutes() {
-	// Create a database group under system
-	dbGroup := c.Group.Group("/system/database")
-
-	// Get the appropriate auth middleware
-	authMiddleware := c.AuthMiddleware
-
-	dbGroup.GET("/overview", c.GetDatabaseOverview, authMiddleware)
-
-	c.LogInfoIfEnabled("Database overview route initialized")
 }

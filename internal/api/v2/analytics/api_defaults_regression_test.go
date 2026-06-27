@@ -5,7 +5,7 @@
 // Pattern: call endpoint with no/minimal query params → assert datastore receives
 // valid fallback values → assert non-empty response.
 
-package api
+package analytics
 
 import (
 	"encoding/json"
@@ -60,11 +60,11 @@ func executeRequest(t *testing.T, e *echo.Echo, method, path string, handler ech
 	err := handler(c)
 	// Some handlers return ErrResponseHandled when they write the response directly
 	if err != nil && !errors.Is(err, ErrResponseHandled) {
-		// Handler returned an error — check if it wrote an HTTP error response
+		// Handler returned an error - check if it wrote an HTTP error response
 		if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok {
 			rec.Code = httpErr.Code
 		} else {
-			// Unexpected non-HTTP error — fail the test immediately
+			// Unexpected non-HTTP error - fail the test immediately
 			require.NoError(t, err, "handler returned an unexpected error")
 		}
 	}
@@ -78,7 +78,7 @@ func TestDailySpeciesSummary_DefaultParams(t *testing.T) {
 	t.Attr("type", "regression")
 	t.Attr("issue", "2361")
 
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	today := time.Now().Format(time.DateOnly)
 	notes := testNotes()
@@ -254,11 +254,11 @@ func TestRequiredParams_ReturnBadRequest(t *testing.T) {
 // setupPostMigrationTestEnvironment creates a test environment where
 // MigrateDashboardLayout() has been called, zeroing Dashboard.SummaryLimit.
 // This reproduces the exact scenario from #2352.
-func setupPostMigrationTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
+func setupPostMigrationTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Handler) {
 	t.Helper()
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	// Run migration — moves SummaryLimit into layout element, zeros deprecated field
+	// Run migration - moves SummaryLimit into layout element, zeros deprecated field
 	migrated := controller.Settings.Load().MigrateDashboardLayout()
 	require.True(t, migrated, "migration should have occurred (no pre-existing layout)")
 

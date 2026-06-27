@@ -81,7 +81,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/auth/logout`   | `Logout`        | ✅   | End user session            |
 | GET    | `/auth/status`   | `GetAuthStatus` | ✅   | Check authentication status |
 
-### Analytics (`analytics.go`)
+### Analytics (`analytics/analytics.go`)
 
 | Method | Route                                 | Handler                    | Auth | Description                        |
 | ------ | ------------------------------------- | -------------------------- | ---- | ---------------------------------- |
@@ -485,7 +485,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 - `GET /alerts/rules`: `object_type`, `enabled` (true/false), `built_in` (true/false)
 - `GET /alerts/history`: `rule_id`, `limit` (default 50), `offset`
 
-### Insights (`insights.go`)
+### Insights (`analytics/insights.go`)
 
 Requires enhanced (v2) database. Returns 409 Conflict if not available.
 

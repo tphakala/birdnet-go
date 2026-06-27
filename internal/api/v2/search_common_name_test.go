@@ -14,6 +14,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// analyticsBatchFakeResolver is a test resolver that satisfies SpeciesNameResolver
+// and the optional batchLocalizer interface. It is distinct from the fakeResolver in
+// insights_nameresolver_test.go, which covers the forward (sci->common) path only.
+// Here the batch capability lets scientific-only labels (no embedded common name)
+// reach the commonToSci reverse map and become resolvable. Shared by the facade
+// name-map and exclude-list canonicalization tests.
+type analyticsBatchFakeResolver struct{ batch map[string]string }
+
+func (a *analyticsBatchFakeResolver) Resolve(string, string) string      { return "" }
+func (a *analyticsBatchFakeResolver) ResolveLocal(string) (string, bool) { return "", false }
+func (a *analyticsBatchFakeResolver) ResolveLocalizedBatch(names []string) map[string]string {
+	out := make(map[string]string, len(names))
+	for _, n := range names {
+		if v, ok := a.batch[n]; ok {
+			out[n] = v
+		}
+	}
+	return out
+}
+
 // TestUpdateCommonNameMap_PopulatesBothMaps verifies that UpdateCommonNameMap
 // populates both the scientific-to-common map and the common-to-scientific map
 // from the same label input, keeping them consistent.
