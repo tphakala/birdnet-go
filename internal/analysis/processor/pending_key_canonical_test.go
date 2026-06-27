@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 func detectionFor(scientific, common string) *Detections {
@@ -29,19 +28,29 @@ func TestPendingKeyForDetection_KeysOnScientificName(t *testing.T) {
 	assert.Equal(t, pendingDetectionKey("src", "spilopelia senegalensis"), got)
 }
 
-// TestPendingKeyForDetection_AliasAndCanonicalShareKey verifies the end-to-end
-// collapse mechanism: ingestion canonicalizes the model-emitted name (via
-// openfauna.CanonicalName) before the pending key is built, so a legacy v2.4 label
-// ("Streptopelia senegalensis") and the modern eBird name ("Spilopelia senegalensis")
-// for one taxon resolve to the same scientific name and share a pending key. This
-// asserts the real alias resolution, not a tautology of two identical strings.
-func TestPendingKeyForDetection_AliasAndCanonicalShareKey(t *testing.T) {
+// TestPendingKeyForDetection_CanonicalizationDrivesMerge composes the real ingestion
+// steps that run before a pending key is built: canonicalizeSpecies collapses a
+// legacy alias ("Streptopelia senegalensis") to the canonical scientific name, then
+// pendingKeyForDetection keys on that name. A legacy-labelled and a canonical-labelled
+// detection of one taxon therefore land on the same pending key and merge, even though
+// their model-emitted scientific names and common names differ. This exercises the
+// production canonicalization (not a tautology of two pre-canonicalized strings).
+func TestPendingKeyForDetection_CanonicalizationDrivesMerge(t *testing.T) {
 	t.Parallel()
 
-	legacy := detectionFor(openfauna.CanonicalName("Streptopelia senegalensis"), "Laughing Dove")
-	canonical := detectionFor(openfauna.CanonicalName("Spilopelia senegalensis"), "Palm Dove")
+	// The resolver stands in for the taxonomy/OpenFauna chain; only the alias branch
+	// of canonicalizeSpecies consults it.
+	resolver := fakeTaxonomyResolver{fn: func(string) (string, string, string) {
+		return "Spilopelia senegalensis", "Laughing Dove", "laudov1"
+	}}
+
+	legacySci, _, _, _ := canonicalizeSpecies(resolver, "Streptopelia senegalensis", "Laughing Dove", "legacycode")
+	canonicalSci, _, _, _ := canonicalizeSpecies(resolver, "Spilopelia senegalensis", "Laughing Dove", "laudov1")
+
+	legacy := detectionFor(legacySci, "Laughing Dove")
+	canonical := detectionFor(canonicalSci, "Palm Dove") // intentionally different common name
 	assert.Equal(t, pendingKeyForDetection("src", legacy), pendingKeyForDetection("src", canonical),
-		"alias and canonical names of one taxon must share a pending key (merge)")
+		"a taxon detected under a legacy and a canonical name must share a pending key (merge)")
 }
 
 // TestPendingKeyForDetection_DistinctSpeciesSharingCommonNameDoNotMerge verifies
