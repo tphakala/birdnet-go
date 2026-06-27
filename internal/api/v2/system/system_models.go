@@ -1,4 +1,4 @@
-package api
+package system
 
 import (
 	"net/http"
@@ -18,7 +18,7 @@ type ActiveModelResponse struct {
 
 // GetActiveModels returns metadata for all currently loaded models.
 // GET /api/v2/system/models
-func (c *Controller) GetActiveModels(ctx echo.Context) error {
+func (c *Handler) GetActiveModels(ctx echo.Context) error {
 	if c.ModelManager == nil {
 		return ctx.JSON(http.StatusOK, []ActiveModelResponse{})
 	}

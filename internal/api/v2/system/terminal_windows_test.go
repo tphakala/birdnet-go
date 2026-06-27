@@ -1,6 +1,6 @@
 //go:build windows
 
-package api
+package system
 
 import (
 	"testing"

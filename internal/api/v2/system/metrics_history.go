@@ -1,5 +1,5 @@
-// internal/api/v2/metrics_history.go
-package api
+// internal/api/v2/system/metrics_history.go
+package system
 
 import (
 	"fmt"
@@ -33,7 +33,7 @@ type MetricsHistoryResponse struct {
 // GetMetricsHistory returns historical metric data for sparkline rendering.
 //
 //	GET /api/v2/system/metrics/history?metrics=cpu.total,memory.used_percent&points=60
-func (c *Controller) GetMetricsHistory(ctx echo.Context) error {
+func (c *Handler) GetMetricsHistory(ctx echo.Context) error {
 	if c.MetricsStore == nil {
 		return c.HandleError(ctx, nil, "Metrics history not available", http.StatusServiceUnavailable)
 	}
@@ -76,7 +76,7 @@ func (c *Controller) GetMetricsHistory(ctx echo.Context) error {
 // StreamMetrics provides an SSE stream of live metric updates.
 //
 //	GET /api/v2/system/metrics/stream?metrics=cpu.total,memory.used_percent
-func (c *Controller) StreamMetrics(ctx echo.Context) error {
+func (c *Handler) StreamMetrics(ctx echo.Context) error {
 	if c.MetricsStore == nil {
 		return c.HandleError(ctx, nil, "Metrics stream not available", http.StatusServiceUnavailable)
 	}
@@ -190,8 +190,10 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 	}
 }
 
-// initMetricsHistoryRoutes registers the metrics history endpoints.
-func (c *Controller) initMetricsHistoryRoutes() {
+// RegisterMetricsHistoryRoutes registers the metrics history endpoints,
+// preserving the exact routes, rate limiter and auth middleware from the
+// original initMetricsHistoryRoutes.
+func (c *Handler) RegisterMetricsHistoryRoutes(g *echo.Group) {
 	if c.MetricsStore == nil {
 		c.LogWarnIfEnabled("Metrics store not configured, skipping metrics history routes")
 		return
@@ -199,7 +201,7 @@ func (c *Controller) initMetricsHistoryRoutes() {
 
 	c.LogInfoIfEnabled("Initializing metrics history routes")
 
-	systemGroup := c.Group.Group("/system")
+	systemGroup := g.Group("/system")
 	authMiddleware := c.AuthMiddleware
 
 	// Rate limiter for metrics SSE connections (10 requests per minute per IP)
@@ -231,7 +233,7 @@ func (c *Controller) initMetricsHistoryRoutes() {
 	c.Go(func() {
 		collector := observability.NewCollector(
 			c.MetricsStore,
-			metricsCollectorInterval,
+			apicore.MetricsCollectorInterval,
 			c.getCPUUsageFunc(),
 		)
 
@@ -271,16 +273,13 @@ func (c *Controller) initMetricsHistoryRoutes() {
 		collector.Start(c.Context())
 	})
 
-	c.LogInfoIfEnabled(fmt.Sprintf("Metrics history routes initialized (collector interval: %s)", metricsCollectorInterval))
+	c.LogInfoIfEnabled(fmt.Sprintf("Metrics history routes initialized (collector interval: %s)", apicore.MetricsCollectorInterval))
 }
 
-// metricsCollectorInterval is the time between metric collection ticks.
-const metricsCollectorInterval = 5 * time.Second
-
 // getCPUUsageFunc returns a function that reads from the existing CPUCache.
-func (c *Controller) getCPUUsageFunc() observability.CPUUsageFunc {
+func (c *Handler) getCPUUsageFunc() observability.CPUUsageFunc {
 	return func() float64 {
-		values := GetCachedCPUUsage()
+		values := apicore.GetCachedCPUUsage()
 		if len(values) > 0 {
 			return values[0]
 		}

@@ -417,7 +417,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/support/download/:id` | `DownloadSupportDump` | ✅   | Download support dump            |
 | GET    | `/support/status`       | `GetSupportStatus`    | ✅   | Support system status            |
 
-### System Information (`system.go`)
+### System Information (`system/system.go`)
 
 | Method | Route                            | Handler                   | Auth | Description                          |
 | ------ | -------------------------------- | ------------------------- | ---- | ------------------------------------ |
@@ -435,7 +435,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/system/models`                 | `GetActiveModels`         | ✅   | Active model metadata                |
 | GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats/RAM/source attachment, audio pipeline metrics, per-model error rate, load failures, last detection, and metric key names for time-series lookups. |
 
-### Events (`events.go`, `events_aggregation.go`)
+### Events (`system/events.go`, `system/events_aggregation.go`)
 
 Registered under the system route group. All endpoints require authentication.
 
@@ -555,7 +555,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 }
 ```
 
-### Diagnostics (`diagnostics.go`)
+### Diagnostics (`system/diagnostics.go`)
 
 | Method | Route                            | Handler                  | Auth | Description                    |
 | ------ | -------------------------------- | ------------------------ | ---- | ------------------------------ |

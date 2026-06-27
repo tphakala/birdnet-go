@@ -1,6 +1,6 @@
-// events_test.go: Package api provides tests for API v2 events endpoints.
+// events_test.go: system-domain events endpoint tests (extracted from package api).
 
-package api
+package system
 
 import (
 	"testing"
@@ -43,7 +43,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("empty entries returns empty response", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		result := c.aggregateDetectionEvents(nil, baseTime)
@@ -59,7 +59,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("single approve creates one bucket and one species", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -98,7 +98,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("multiple operations same bucket same species accumulate", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -128,7 +128,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("multiple species same bucket grouped correctly", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -145,7 +145,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("multiple buckets separated by hour and sorted newest first", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		hour10 := time.Date(2024, 6, 15, 10, 15, 0, 0, time.UTC)
@@ -166,7 +166,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("pre-filters counted in bucket but not in species", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -192,7 +192,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("pending count from create_pending_detection hourly array", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -210,7 +210,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("species sorting approved first then by total descending", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -238,7 +238,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("top discarded species top 3", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -272,7 +272,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("audio clip matching attached to correct species", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -305,7 +305,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("peak confidence tracks highest value", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -323,7 +323,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("max match count tracks highest value", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -341,7 +341,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("empty species name entries are skipped", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{
@@ -362,7 +362,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("approved per hour metric calculated correctly", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		hour10 := time.Date(2024, 6, 15, 10, 15, 0, 0, time.UTC)
@@ -383,7 +383,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("timestamps are recorded for approve and discard", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		approveTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
@@ -405,7 +405,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("species summary sorted by total descending", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{Core: &apicore.Core{}}
+		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
 		entries := []reader.LogEntry{

@@ -1,4 +1,4 @@
-package api
+package system
 
 import (
 	"encoding/json"
@@ -10,16 +10,18 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-// setupDiagnosticsTest creates a test Controller wired for diagnostics
+// setupDiagnosticsTest creates a test system Handler wired for diagnostics
 // tests with the given health metrics store and optional event buffer.
-func setupDiagnosticsTest(t *testing.T, store *observability.HealthMetricsStore, eventBuf *observability.HealthEventBuffer) (*echo.Echo, *Controller) {
+func setupDiagnosticsTest(t *testing.T, store *observability.HealthMetricsStore, eventBuf *observability.HealthEventBuffer) (*echo.Echo, *Handler) {
 	t.Helper()
-	e, _, controller := setupTestEnvironment(t)
+	e := echo.New()
+	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
 	controller.healthMetricsStore = store
 	if eventBuf != nil {
 		controller.healthEvents = eventBuf

@@ -1,5 +1,5 @@
-// internal/api/v2/inference_status.go
-package api
+// internal/api/v2/system/inference_status.go
+package system
 
 import (
 	"cmp"
@@ -318,7 +318,7 @@ func applyRuntimeBackend(status *InferenceModelStatus, backend, precision string
 // models with per-model stats and memory, source attachment, and audio pipeline
 // metrics. The snapshot is assembled from live sources on every request so it
 // reflects hot-reload changes without any caching.
-func (c *Controller) GetInferenceStatus(ctx echo.Context) error {
+func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 
 	resp := InferenceStatusResponse{
@@ -529,18 +529,4 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 		attach(st.Name, st.Type, st.Models)
 	}
 	return out
-}
-
-// BroadcastInferenceTopologyChanged signals all metrics-stream SSE clients that
-// the inference topology (models or source attachment) changed so they re-fetch
-// the /api/v2/system/inference snapshot. Safe to call when the controller, its
-// core, or its metrics store is nil. It stays on the facade (rather than moving
-// to apicore with the other broadcasters) to preserve its nil-*Controller-safe
-// contract: promotion of a *Core method would dereference the embedded core on a
-// nil *Controller before the guard could run.
-func (c *Controller) BroadcastInferenceTopologyChanged() {
-	if c == nil || c.Core == nil || c.MetricsStore == nil {
-		return
-	}
-	c.MetricsStore.BroadcastTopologyChanged()
 }
