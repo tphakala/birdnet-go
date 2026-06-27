@@ -1,7 +1,7 @@
-// internal/api/v2/audio_level_write_deadline_test.go
+// internal/api/v2/audio/audio_level_write_deadline_test.go
 // Tests for SSE write deadline handling to prevent WriteTimeout disconnections
 // This test suite verifies the fix for GitHub issue #1673
-package api
+package audio
 
 import (
 	"net/http"
@@ -69,7 +69,7 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 		ctx.Response().Writer = mockWriter
 
 		// Create minimal controller
-		controller := &Controller{Core: &apicore.Core{}}
+		controller := &Handler{Core: &apicore.Core{}}
 		controller.Settings.Store(apitest.NewValidTestSettings())
 
 		// Create test audio level data
@@ -110,7 +110,7 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 		ctx := e.NewContext(req, rec)
 		ctx.Response().Writer = mockWriter
 
-		controller := &Controller{Core: &apicore.Core{}}
+		controller := &Handler{Core: &apicore.Core{}}
 		controller.Settings.Store(apitest.NewValidTestSettings())
 		levels := map[string]audiocore.AudioLevelData{
 			"test_source": {Level: 50, Name: "Test Source", Source: "test_source"},
@@ -143,7 +143,7 @@ func TestSendAudioLevelHeartbeatSetsWriteDeadline(t *testing.T) {
 		ctx.Response().Writer = mockWriter
 
 		// Create minimal controller
-		controller := &Controller{Core: &apicore.Core{}}
+		controller := &Handler{Core: &apicore.Core{}}
 		controller.Settings.Store(apitest.NewValidTestSettings())
 
 		// Call sendAudioLevelHeartbeat

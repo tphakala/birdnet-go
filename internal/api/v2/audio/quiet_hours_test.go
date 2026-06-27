@@ -1,4 +1,4 @@
-// quiet_hours_test.go: Unit tests for buildSuppressedStreamsPayload — the
+// quiet_hours_test.go: Unit tests for buildSuppressedStreamsPayload - the
 // helper that powers the /api/v2/streams/quiet-hours/status response.
 //
 // The guest-facing path replaces raw URLs with opaque "stream-N"
@@ -12,7 +12,7 @@
 //   - that the authenticated path passes URLs through privacy.SanitizeStreamUrl
 //     without leaking credentials.
 
-package api
+package audio
 
 import (
 	"maps"
@@ -98,7 +98,7 @@ func TestBuildSuppressedStreamsPayload_GuestStableWithinResponse(t *testing.T) {
 
 // TestBuildSuppressedStreamsPayload_GuestShiftsWhenPrependingSort documents
 // the current behavior: adding a URL that sorts before existing ones shifts
-// every existing placeholder index by one. Today this is benign — the
+// every existing placeholder index by one. Today this is benign - the
 // "Currently Hearing" dashboard card only counts true values and does not
 // key UI state on placeholder names. If a future consumer needs hash-stable
 // placeholders, this test will fail and force a deliberate refactor.
@@ -143,7 +143,7 @@ func TestBuildSuppressedStreamsPayload_GuestShiftsWhenPrependingSort(t *testing.
 }
 
 // TestBuildSuppressedStreamsPayload_AuthenticatedSanitizesURLs asserts the
-// non-guest path passes URLs through privacy.SanitizeStreamUrl — credentials
+// non-guest path passes URLs through privacy.SanitizeStreamUrl - credentials
 // are stripped but host/port remain visible to the settings UI.
 func TestBuildSuppressedStreamsPayload_AuthenticatedSanitizesURLs(t *testing.T) {
 	t.Parallel()

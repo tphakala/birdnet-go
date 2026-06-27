@@ -252,7 +252,7 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 | GET    | `/soundlevels/stream` | `StreamSoundLevels` | ❌⚡ | Real-time audio level stream |
 | GET    | `/sse/status`         | `GetSSEStatus`      | ❌   | SSE connection status        |
 
-### Audio Level SSE (`audio_level.go`) and Stream Sources (`audio_sources.go`)
+### Audio Level SSE (`audio/audio_level.go`) and Stream Sources (`audio/audio_sources.go`)
 
 | Method | Route                  | Handler             | Auth | Description                              |
 | ------ | ---------------------- | ------------------- | ---- | ---------------------------------------- |
@@ -300,7 +300,7 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 Returns an empty `sources` array when no sources are configured. The `type` field is one of: `rtsp`, `http`, `hls`, `rtmp`, `udp`, `audio_card`, `file`. The `state` field is one of: `inactive`, `starting`, `running`, `error`, `stopped`. The `/streams/sources` endpoint returns only stream types (excludes `audio_card` and `file`).
 
-### HLS Streaming (`audio_hls.go`)
+### HLS Streaming (`audio/audio_hls.go`)
 
 | Method | Route                                       | Handler            | Auth               | Description                   |
 | ------ | ------------------------------------------- | ------------------ | ------------------ | ----------------------------- |
@@ -377,7 +377,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 - `SegmentLength`: HLS segment duration in seconds (default: 2, range: 1-30)
 - `FfmpegLogLevel`: FFmpeg log level (default: "warning")
 
-### Stream Health Monitoring (`streams_health.go`)
+### Stream Health Monitoring (`audio/streams_health.go`)
 
 | Method | Route                    | Handler                   | Auth | Description                                                                          |
 | ------ | ------------------------ | ------------------------- | ---- | ------------------------------------------------------------------------------------ |
@@ -387,7 +387,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)               |
 | POST   | `/streams/test`          | `TestStream`              | ✅   | Test a stream URL to verify connectivity and discover audio properties (sample rate, codec, bat compatibility) |
 
-### Quiet Hours Status (`quiet_hours.go`)
+### Quiet Hours Status (`audio/quiet_hours.go`)
 
 | Method | Route                         | Handler               | Auth | Description                                                                                                             |
 | ------ | ----------------------------- | --------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------- |
