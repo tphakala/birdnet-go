@@ -1,5 +1,5 @@
 // audio_sources_test.go - Tests for audio source listing endpoints.
-package api
+package audio
 
 import (
 	"encoding/json"
@@ -16,11 +16,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// setupAudioSourcesTestEnv creates a Controller with an AudioEngine whose
+// setupAudioSourcesTestEnv creates a Handler with an AudioEngine whose
 // registry contains the given sources. Sources are registered directly in the
 // registry to avoid requiring real audio hardware or network streams.
 // The engine is stopped automatically when the test completes.
-func setupAudioSourcesTestEnv(t *testing.T, sources []*audiocore.SourceConfig) (*echo.Echo, *Controller) {
+func setupAudioSourcesTestEnv(t *testing.T, sources []*audiocore.SourceConfig) (*echo.Echo, *Handler) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -38,7 +38,7 @@ func setupAudioSourcesTestEnv(t *testing.T, sources []*audiocore.SourceConfig) (
 	}
 
 	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(&conf.Settings{})
 	controller.Engine.Store(eng)
 	return e, controller
@@ -52,7 +52,7 @@ func TestListAudioSources(t *testing.T) {
 
 	t.Run("No engine returns empty list", func(t *testing.T) {
 		e := echo.New()
-		controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+		controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 		controller.Settings.Store(&conf.Settings{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/sources", http.NoBody)
@@ -119,7 +119,7 @@ func TestListStreamSources(t *testing.T) {
 
 	t.Run("No engine returns empty list", func(t *testing.T) {
 		e := echo.New()
-		controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+		controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 		controller.Settings.Store(&conf.Settings{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/sources", http.NoBody)

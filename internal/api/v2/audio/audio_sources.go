@@ -1,5 +1,5 @@
 // audio_sources.go - Handlers for audio source listing endpoints.
-package api
+package audio
 
 import (
 	"net/http"
@@ -50,7 +50,7 @@ func isStreamSourceType(t audiocore.SourceType) bool {
 // When filter is nil, all sources are included. When anonymize is true,
 // source names are replaced with anonymized values for unauthenticated
 // clients, matching the behavior of the audio-level SSE stream.
-func (c *Controller) listSources(ctx echo.Context, label string, filter func(audiocore.SourceType) bool, anonymize bool) error {
+func (c *Handler) listSources(ctx echo.Context, label string, filter func(audiocore.SourceType) bool, anonymize bool) error {
 	c.LogInfoIfEnabled("Listing "+label,
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -93,13 +93,13 @@ func (c *Controller) listSources(ctx echo.Context, label string, filter func(aud
 
 // ListAudioSources handles GET /api/v2/system/audio/sources.
 // Returns all active audio sources from the engine registry (sound cards + streams).
-func (c *Controller) ListAudioSources(ctx echo.Context) error {
+func (c *Handler) ListAudioSources(ctx echo.Context) error {
 	return c.listSources(ctx, "audio sources", nil, false)
 }
 
 // ListStreamSources handles GET /api/v2/streams/sources.
 // Returns only stream-type audio sources (RTSP, HTTP, HLS, RTMP, UDP).
 // Source names are anonymized for unauthenticated clients.
-func (c *Controller) ListStreamSources(ctx echo.Context) error {
+func (c *Handler) ListStreamSources(ctx echo.Context) error {
 	return c.listSources(ctx, "stream sources", isStreamSourceType, true)
 }

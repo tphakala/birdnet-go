@@ -1,5 +1,5 @@
-// internal/api/v2/audio_devices.go
-package api
+// internal/api/v2/audio/audio_devices.go
+package audio
 
 import (
 	goerrors "errors"
@@ -18,9 +18,24 @@ import (
 // This file holds the /api/v2/system/audio/* device-management handlers
 // (GetAudioDevices, GetDeviceCapabilities, GetActiveAudioDevice,
 // GetEqualizerConfig). They physically lived in system.go but belong to the
-// audio/streaming domain; they stay in package api until that domain is
-// extracted in its own phase. They are registered by the trimmed initSystemRoutes
-// in system_routes.go.
+// audio/streaming domain; they moved here with the audio domain extraction and
+// are registered by RegisterAudioDeviceRoutes.
+
+// RegisterAudioDeviceRoutes registers the /api/v2/system/audio/* device-management
+// endpoints. It recreates the /system group and its auth-protected subgroup; the
+// system domain handler and the facade's /system/external-media registration each
+// create their own /system group too, and Echo deduplicates the resulting group
+// not-found stubs by method+path, so the registered route set is unchanged.
+func (c *Handler) RegisterAudioDeviceRoutes(g *echo.Group) {
+	systemGroup := g.Group("/system")
+	protectedGroup := systemGroup.Group("", c.AuthMiddleware)
+	audioGroup := protectedGroup.Group("/audio")
+	audioGroup.GET("/devices", c.GetAudioDevices)
+	audioGroup.GET("/devices/capabilities", c.GetDeviceCapabilities)
+	audioGroup.GET("/active", c.GetActiveAudioDevice)
+	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
+	audioGroup.GET("/sources", c.ListAudioSources)
+}
 
 // Audio device constants
 const (
@@ -56,7 +71,7 @@ type ActiveAudioDevice struct {
 }
 
 // GetAudioDevices handles GET /api/v2/system/audio/devices
-func (c *Controller) GetAudioDevices(ctx echo.Context) error {
+func (c *Handler) GetAudioDevices(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Getting audio devices",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -115,7 +130,7 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 
 // GetDeviceCapabilities handles GET /api/v2/system/audio/devices/capabilities
 // Probes a specific audio device to discover supported sample rates.
-func (c *Controller) GetDeviceCapabilities(ctx echo.Context) error {
+func (c *Handler) GetDeviceCapabilities(ctx echo.Context) error {
 	deviceID := ctx.QueryParam("deviceId")
 	if deviceID == "" {
 		return c.HandleError(ctx, nil, "deviceId query parameter is required", http.StatusBadRequest)
@@ -150,7 +165,7 @@ func (c *Controller) GetDeviceCapabilities(ctx echo.Context) error {
 }
 
 // GetActiveAudioDevice handles GET /api/v2/system/audio/active
-func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
+func (c *Handler) GetActiveAudioDevice(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Getting active audio device",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -205,11 +220,11 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 
 		// OS-specific additional checks
 		switch runtime.GOOS {
-		case OSWindows:
+		case osWindows:
 			diagnostics["note"] = "On Windows, check that audio drivers are properly installed and the device is not disabled in Sound settings"
-		case OSDarwin:
+		case osDarwin:
 			diagnostics["note"] = "On macOS, check System Preferences > Sound and ensure the device has proper permissions"
-		case OSLinux:
+		case osLinux:
 			diagnostics["note"] = "On Linux, check if PulseAudio/ALSA is running and the user has proper permissions"
 		}
 
@@ -299,7 +314,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 }
 
 // GetEqualizerConfig handles GET /api/v2/system/audio/equalizer/config
-func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
+func (c *Handler) GetEqualizerConfig(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Getting equalizer filter configuration",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),

@@ -1,5 +1,5 @@
-// internal/api/v2/streams_health.go
-package api
+// internal/api/v2/audio/streams_health.go
+package audio
 
 import (
 	"context"
@@ -108,7 +108,7 @@ type StreamSummaryResponse struct {
 	TimeSinceData *float64 `json:"time_since_data_seconds,omitempty"` // Seconds since last data
 }
 
-// initStreamHealthRoutes registers all stream health monitoring endpoints.
+// RegisterStreamHealthRoutes registers all stream health monitoring endpoints.
 // These endpoints are consumed exclusively by the StreamManager component on
 // the (auth-protected) settings page; the dashboard does NOT use them. They
 // therefore remain auth-protected to avoid leaking stream topology, target
@@ -116,21 +116,21 @@ type StreamSummaryResponse struct {
 // Output is still sanitized defensively (sanitizeFFmpegError / sanitizeStreamUrls)
 // so that if a handler is ever carved out in the future, raw RTSP credentials
 // cannot leak.
-func (c *Controller) initStreamHealthRoutes() {
+func (c *Handler) RegisterStreamHealthRoutes(g *echo.Group) {
 	authMiddleware := c.AuthMiddleware
 
-	// REST endpoints — authenticated
-	c.Group.GET("/streams/health", c.GetAllStreamsHealth, authMiddleware)
-	c.Group.GET("/streams/health/:url", c.GetStreamHealth, authMiddleware)
-	c.Group.GET("/streams/status", c.GetStreamsStatusSummary, authMiddleware)
+	// REST endpoints - authenticated
+	g.GET("/streams/health", c.GetAllStreamsHealth, authMiddleware)
+	g.GET("/streams/health/:url", c.GetStreamHealth, authMiddleware)
+	g.GET("/streams/status", c.GetStreamsStatusSummary, authMiddleware)
 
-	// SSE endpoint for real-time stream health updates — authenticated and
+	// SSE endpoint for real-time stream health updates - authenticated and
 	// rate-limited to 5 connections per minute with burst of 5 to tolerate
 	// page-refresh reconnects.
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      rate.Limit(float64(streamHealthRateLimitRequests) / float64(SecondsPerMinute)), // 5 per 60 seconds
+				Rate:      rate.Limit(float64(streamHealthRateLimitRequests) / float64(secondsPerMinute)), // 5 per 60 seconds
 				Burst:     streamHealthRateLimitRequests,                                                  // Allow 5 immediate connections
 				ExpiresIn: streamHealthRateLimitWindow,
 			},
@@ -148,7 +148,7 @@ func (c *Controller) initStreamHealthRoutes() {
 		},
 	}
 
-	c.Group.GET("/streams/health/stream", c.StreamHealthUpdates,
+	g.GET("/streams/health/stream", c.StreamHealthUpdates,
 		authMiddleware,
 		middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
@@ -157,7 +157,7 @@ func (c *Controller) initStreamHealthRoutes() {
 // registry. Returns an empty string if the source is not found. The raw URL
 // is needed for matching against config entries; callers that expose the URL
 // to API clients MUST sanitize it first (privacy.SanitizeStreamUrl).
-func (c *Controller) resolveSourceURL(registry *audiocore.SourceRegistry, sourceID string) string {
+func (c *Handler) resolveSourceURL(registry *audiocore.SourceRegistry, sourceID string) string {
 	if registry == nil {
 		return ""
 	}
@@ -178,7 +178,7 @@ type streamInfo struct {
 // Returns empty values if stream is not found in config.
 // Reads the controller's lock-free settings snapshot, so a hot-reload that
 // republishes settings is visible on the next call.
-func (c *Controller) getStreamInfo(rawURL string) streamInfo {
+func (c *Handler) getStreamInfo(rawURL string) streamInfo {
 	settings := c.ControllerSettings()
 	if settings == nil {
 		return streamInfo{}
@@ -202,7 +202,7 @@ func (c *Controller) getStreamInfo(rawURL string) streamInfo {
 // @Success 200 {array} StreamHealthResponse "Array of stream health information"
 // @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/health [get]
-func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
+func (c *Handler) GetAllStreamsHealth(ctx echo.Context) error {
 	eng := c.Engine.Load()
 	if eng == nil {
 		// No engine - we cannot report real stream health. Signal the
@@ -247,8 +247,8 @@ func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 // @Failure 404 {object} ErrorResponse "Stream not found"
 // @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/health/{url} [get]
-func (c *Controller) GetStreamHealth(ctx echo.Context) error {
-	// Get URL parameter (URL-encoded) — may be a sourceID or a stream URL
+func (c *Handler) GetStreamHealth(ctx echo.Context) error {
+	// Get URL parameter (URL-encoded) - may be a sourceID or a stream URL
 	encodedURL := ctx.Param("url")
 	if encodedURL == "" {
 		return c.HandleError(ctx, nil, "URL parameter is required", http.StatusBadRequest)
@@ -316,7 +316,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 // @Success 200 {object} StreamsStatusSummaryResponse "Streams status summary"
 // @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/status [get]
-func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
+func (c *Handler) GetStreamsStatusSummary(ctx echo.Context) error {
 	eng := c.Engine.Load()
 	if eng == nil {
 		// Zero counts would be technically accurate but misleading: clients
@@ -477,7 +477,7 @@ func convertErrorContextToResponse(errCtx *ffmpeg.ErrorContext) *ErrorContextRes
 }
 
 // handleStreamHealthHeartbeat sends a heartbeat and returns true if client disconnected.
-func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID string) error {
+func (c *Handler) handleStreamHealthHeartbeat(ctx echo.Context, clientID string) error {
 	if err := c.SendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
 		c.LogDebugIfEnabled("Stream health SSE heartbeat failed, client likely disconnected",
 			logger.String("client_id", clientID),
@@ -488,7 +488,7 @@ func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID stri
 }
 
 // handleStreamHealthPoll polls for stream health changes and processes updates.
-func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, previousState map[string]streamHealthSnapshot) error {
+func (c *Handler) handleStreamHealthPoll(ctx echo.Context, clientID string, previousState map[string]streamHealthSnapshot) error {
 	eng := c.Engine.Load()
 	if eng == nil {
 		return nil
@@ -505,7 +505,7 @@ func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, p
 // handleStreamStatsUpdate sends periodic stats updates for all active streams.
 // This enables real-time bandwidth and bytes display in the UI regardless of state changes.
 // Note: This sends a lightweight payload without history arrays to reduce bandwidth.
-func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) error {
+func (c *Handler) handleStreamStatsUpdate(ctx echo.Context, clientID string) error {
 	eng := c.Engine.Load()
 	if eng == nil {
 		return nil
@@ -536,14 +536,14 @@ func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) 
 // @Failure 429 {object} ErrorResponse "Too many requests"
 // @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/health/stream [get]
-func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
+func (c *Handler) StreamHealthUpdates(ctx echo.Context) error {
 	eng := c.Engine.Load()
 	if eng == nil {
 		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
 	}
 
 	// Create a context with timeout for maximum connection duration
-	timeoutCtx, cancel := context.WithTimeout(ctx.Request().Context(), maxSSEStreamDuration)
+	timeoutCtx, cancel := context.WithTimeout(ctx.Request().Context(), apicore.MaxSSEStreamDuration)
 	defer cancel()
 
 	// Override the request context with timeout context
@@ -572,7 +572,7 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	for {
 		select {
 		case <-c.Context().Done():
-			// Controller shutting down
+			// handler shutting down
 			c.LogInfoIfEnabled("stream health SSE client disconnected due to shutdown",
 				logger.String("client_id", clientID),
 			)
@@ -663,7 +663,7 @@ func determineEventType(prev, current *streamHealthSnapshot) string {
 }
 
 // processStreamHealthUpdates processes health updates for all active streams.
-func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, registry *audiocore.SourceRegistry, previousState map[string]streamHealthSnapshot) error {
+func (c *Handler) processStreamHealthUpdates(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, registry *audiocore.SourceRegistry, previousState map[string]streamHealthSnapshot) error {
 
 	for sourceID, health := range healthData {
 		// Resolve the connection URL for SSE events (sourceID is an internal key, not a URL)
@@ -704,7 +704,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 }
 
 // processRemovedStreams checks for and processes streams that have been removed
-func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
+func (c *Handler) processRemovedStreams(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
 	for prevSourceID, prevSnapshot := range previousState {
 		if _, exists := healthData[prevSourceID]; exists {
 			continue
@@ -742,7 +742,7 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 }
 
 // sendStreamHealthUpdate sends a stream health update via SSE.
-func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, health *ffmpeg.StreamHealth, eventType string) error {
+func (c *Handler) sendStreamHealthUpdate(ctx echo.Context, rawURL string, health *ffmpeg.StreamHealth, eventType string) error {
 	response := convertStreamHealthToResponse(rawURL, health)
 
 	// Add stream name and type from config
@@ -771,7 +771,7 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 // sendStreamStatsUpdate sends a lightweight stats-only update via SSE.
 // This excludes history arrays (ErrorHistory, StateHistory) to reduce bandwidth
 // for frequent periodic updates.
-func (c *Controller) sendStreamStatsUpdate(ctx echo.Context, rawURL string, health *ffmpeg.StreamHealth) error {
+func (c *Handler) sendStreamStatsUpdate(ctx echo.Context, rawURL string, health *ffmpeg.StreamHealth) error {
 	// Build lightweight response with only essential stats fields
 	var timeSinceData *float64
 	if !health.LastDataReceived.IsZero() {

@@ -1,4 +1,4 @@
-package api
+package audio
 
 import (
 	"net/http"
@@ -12,18 +12,18 @@ type AudioHealthResponse struct {
 	Sources []audiocore.SourceHealthSnapshot `json:"sources"`
 }
 
-// initAudioHealthRoutes registers the audio liveness health endpoints.
-func (c *Controller) initAudioHealthRoutes() {
-	c.Group.GET("/health/audio", c.GetAudioHealth, c.AuthMiddleware)
+// RegisterAudioHealthRoutes registers the audio liveness health endpoints.
+func (c *Handler) RegisterAudioHealthRoutes(g *echo.Group) {
+	g.GET("/health/audio", c.GetAudioHealth, c.AuthMiddleware)
 }
 
 // SetAudioWatchdog injects the liveness watchdog for the health endpoint.
-func (c *Controller) SetAudioWatchdog(w *audiocore.LivenessWatchdog) {
+func (c *Handler) SetAudioWatchdog(w *audiocore.LivenessWatchdog) {
 	c.AudioWatchdog.Store(w)
 }
 
 // GetAudioHealth returns the current liveness state for all monitored audio sources.
-func (c *Controller) GetAudioHealth(ctx echo.Context) error {
+func (c *Handler) GetAudioHealth(ctx echo.Context) error {
 	w := c.AudioWatchdog.Load()
 	if w == nil {
 		return ctx.JSON(http.StatusOK, AudioHealthResponse{

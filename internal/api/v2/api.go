@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	audioapi "github.com/tphakala/birdnet-go/internal/api/v2/audio"
 	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/control"
 	"github.com/tphakala/birdnet-go/internal/api/v2/detections"
@@ -155,6 +156,17 @@ type Controller struct {
 	// internal/analysis owns and closes it).
 	control *control.Handler
 
+	// audio serves the audio/streaming domain: the live audio-level SSE stream and
+	// stream-source listing, the HLS streaming endpoints (incl. the bespoke
+	// stream-token playlist/segment serving and the publicLiveAudio dynamic auth
+	// gate), the stream health/test endpoints, quiet-hours status, the audio
+	// liveness health endpoint, and the /system/audio device/source endpoints.
+	// Beyond the shared *apicore.Core it owns the HLS manager and audio-level
+	// broadcaster singletons; the facade exposes RestartHLSStreams/SetAudioWatchdog/
+	// SetAudioLevelChan delegators for the internal/analysis and parent-server
+	// callers.
+	audio *audioapi.Handler
+
 	controlChan chan string
 
 	// DisableSaveSettings prevents persisting settings changes to disk.
@@ -208,11 +220,6 @@ type Controller struct {
 	// Audio processing fields
 	processingCache     *processingCache
 	processingSemaphore chan struct{}
-
-	// probeStreamInfo probes a live stream's audio characteristics for the
-	// stream-test endpoint. Nil in production, where TestStream falls back to
-	// ffmpeg.ProbeStreamInfo; tests set it to stub probing without ffprobe.
-	probeStreamInfo probeStreamInfoFunc
 
 	// Legacy cleanup state tracker
 	cleanupStatus *CleanupStatus
@@ -523,6 +530,16 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// handlers that still resolve the service via getNotificationService().
 	c.notifications = notifications.New(c.Core, c.notificationService, c.authService)
 
+	// Construct the audio/streaming domain handler AFTER the functional options are
+	// applied so it captures the post-option authService (used by the public
+	// audio-level stream and quiet-hours status to anonymize source names / stream
+	// URLs for unauthenticated callers; nil-guarded). authService never changes
+	// after this point, so capturing it is behaviorally identical to the monolith's
+	// per-request reads. The audio Engine/AudioWatchdog atomic pointers and the
+	// Settings/AuthMiddleware helpers promote from c.Core; the live audio-level
+	// channel is wired later via SetAudioLevelChan.
+	c.audio = audioapi.New(c.Core, c.authService)
+
 	// Log auth configuration status
 	log := GetLogger()
 	if c.AuthMiddleware != nil {
@@ -557,7 +574,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// c.startTime is set (the diagnostics uptime check captures the pointer). It
 	// owns the diagnostics health infrastructure; its routes are registered in
 	// initRoutes below.
-	c.system = system.New(c.Core, c.startTime, c.healthErrorBuf, LatestAudioLevels)
+	c.system = system.New(c.Core, c.startTime, c.healthErrorBuf, audioapi.LatestAudioLevels)
 
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
 	if initializeRoutes {
@@ -598,15 +615,16 @@ func (c *Controller) initRoutes() {
 		{"analytics routes", c.initAnalyticsRoutes},
 		{"weather routes", func() { c.weather.RegisterRoutes(c.Group) }},
 		{"system routes", c.initSystemRoutes},
+		{"audio device routes", func() { c.audio.RegisterAudioDeviceRoutes(c.Group) }},
 		{"terminal routes", func() { c.system.RegisterTerminalRoutes(c.Group) }},
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", func() { c.filesystem.RegisterRoutes(c.Group) }},
-		{"stream health routes", c.initStreamHealthRoutes},
-		{"stream test routes", c.initStreamTestRoutes},
-		{"audio health routes", c.initAudioHealthRoutes},
-		{"quiet hours routes", c.initQuietHoursRoutes},
-		{"audio level routes", c.initAudioLevelRoutes},
-		{"hls streaming routes", c.initHLSRoutes},
+		{"stream health routes", func() { c.audio.RegisterStreamHealthRoutes(c.Group) }},
+		{"stream test routes", func() { c.audio.RegisterStreamTestRoutes(c.Group) }},
+		{"audio health routes", func() { c.audio.RegisterAudioHealthRoutes(c.Group) }},
+		{"quiet hours routes", func() { c.audio.RegisterQuietHoursRoutes(c.Group) }},
+		{"audio level routes", func() { c.audio.RegisterAudioLevelRoutes(c.Group) }},
+		{"hls streaming routes", func() { c.audio.RegisterHLSRoutes(c.Group) }},
 		{"integration routes", func() { c.integrations.RegisterRoutes(c.Group) }},
 		{"control routes", func() { c.control.RegisterRoutes(c.Group) }},
 		{"auth routes", func() { c.authHandler.RegisterRoutes(c.Group) }},
