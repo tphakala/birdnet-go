@@ -43,11 +43,20 @@ const queryValueTrue = "true"
 // alertEngine are owned by this handler: they are nil until RegisterRoutes
 // constructs them (only when the enhanced v2 database schema is active), and the
 // facade calls Shutdown to stop them on teardown.
+//
+// alertEngineErr records a non-nil error ONLY when alerting.Initialize was
+// attempted (the enhanced v2 schema is active) and failed. It stays nil both when
+// the engine initialized successfully and when initialization was deliberately
+// skipped (alerting disabled / legacy / migration DB). Engine-dependent handlers
+// gate a 503 response on alertEngineErr != nil so an init failure surfaces instead
+// of silently no-opping; the "alerting disabled" case is handled separately by the
+// 409 group middleware.
 type Handler struct {
 	*apicore.Core
 
-	alertRuleRepo repository.AlertRuleRepository
-	alertEngine   *alerting.Engine
+	alertRuleRepo  repository.AlertRuleRepository
+	alertEngine    *alerting.Engine
+	alertEngineErr error
 }
 
 // New builds an alerts Handler around the shared core. The alert-rule repository
@@ -57,17 +66,22 @@ func New(core *apicore.Core) *Handler {
 }
 
 // RegisterRoutes registers alert rule API endpoints and starts the alerting engine.
-// Routes are registered when V2Manager is available (handlers check v2 mode
-// per-request), but the alerting engine is only started when the v2 schema is
-// active - preventing background operations (rule seeding, history cleanup)
-// against missing tables. The routes, per-route middleware, and order match the
-// facade's old initAlertRoutes exactly.
+//
+// The routes register UNCONDITIONALLY so the documented behavior holds on every
+// deployment: when the enhanced (v2) database is unavailable the alert endpoints
+// answer 409 Conflict (not 404). The requireV2 group middleware enforces that 409
+// for every alert route, and because it keys on alertsAvailable() - the exact
+// condition under which alertRuleRepo/alertEngine get built - no registered route
+// can ever reach a handler that dereferences a nil repository or manager.
+//
+// The alerting engine is started only when alertsAvailable() is true, preventing
+// background operations (rule seeding, history cleanup) against missing tables on
+// legacy/migration databases. The routes, per-route middleware, and order match
+// the facade's old initAlertRoutes exactly.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
-	if c.V2Manager == nil {
-		return
-	}
-
-	alerts := g.Group("/alerts")
+	// Gate every alert route on v2 availability via group middleware so the routes
+	// register even when the enhanced DB is absent (answering 409, never 404).
+	alerts := g.Group("/alerts", c.requireV2Middleware)
 
 	// Public read endpoints
 	alerts.GET("/schema", c.GetAlertSchema)
@@ -75,7 +89,8 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	alerts.GET("/rules/:id", c.GetAlertRule)
 	alerts.GET("/history", c.ListAlertHistory)
 
-	// Protected endpoints
+	// Protected endpoints. The protected subgroup inherits requireV2Middleware from
+	// its parent, so v2-unavailable requests get 409 before AuthMiddleware runs.
 	protected := alerts.Group("", c.AuthMiddleware)
 	protected.GET("/rules/export", c.ExportAlertRules)
 	protected.POST("/rules", c.CreateAlertRule)
@@ -87,10 +102,12 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	protected.POST("/rules/import", c.ImportAlertRules)
 	protected.DELETE("/history", c.ClearAlertHistory)
 
-	// Only initialize the alerting engine when v2 schema is active.
-	// On legacy databases the alert tables do not exist, so starting the
-	// engine would fail during rule seeding and history cleanup.
-	if !datastoreV2.IsEnhancedDatabase() {
+	// Only initialize the alerting engine when the enhanced v2 schema is active and
+	// the v2 manager is present. On legacy/migration databases the alert tables do
+	// not exist, so starting the engine would fail during rule seeding and history
+	// cleanup. Keying on alertsAvailable() (rather than IsEnhancedDatabase() alone)
+	// also guarantees c.V2Manager is non-nil before the c.V2Manager.DB() deref below.
+	if !c.alertsAvailable() {
 		apicore.GetLogger().Info("alerting engine skipped: v2 database schema not active")
 		return
 	}
@@ -105,9 +122,37 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	if err != nil {
 		apicore.GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
 		eventBus.Stop() // Stop the bus goroutine since Initialize didn't set it as global
-		// Continue without engine - CRUD routes still work, but events won't fire
+		// Record the failure so engine-dependent handlers surface 503 instead of
+		// silently no-opping. CRUD reads still work, but engine actions cannot.
+		c.alertEngineErr = err
 	} else {
 		c.alertEngine = engine
+	}
+}
+
+// alertsAvailable reports whether the enhanced (v2) database backing the
+// alert-rule repository and engine is available. It is the single source of truth
+// for "alerts can do real work": the requireV2 group middleware and the lazy
+// repo/engine initialization both consult it, so no registered alert route can
+// reach a handler whose repository was never built, and the c.V2Manager.DB() deref
+// in RegisterRoutes can never nil-panic. It is stricter than IsEnhancedDatabase()
+// alone (which can be true with a nil V2Manager only in pathological test states);
+// in every real deployment the two agree because Start sets the enhanced-mode flag
+// and the v2 manager together.
+func (c *Handler) alertsAvailable() bool {
+	return c.V2Manager != nil && datastoreV2.IsEnhancedDatabase()
+}
+
+// requireV2Middleware returns 409 Conflict for every alert route when the enhanced
+// (v2) database is unavailable, allowing the routes to register unconditionally
+// (answering 409, never 404) while guaranteeing no handler runs against a nil
+// alert-rule repository.
+func (c *Handler) requireV2Middleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		if !c.alertsAvailable() {
+			return c.requireV2(ctx)
+		}
+		return next(ctx)
 	}
 }
 
@@ -172,26 +217,33 @@ func (c *Handler) bindAndValidateAlertRule(ctx echo.Context) (*entities.AlertRul
 	return &rule, nil
 }
 
-// requireV2 checks that the enhanced database is available and returns an error response if not.
+// requireV2 writes the 409 Conflict response used when the enhanced (v2) database
+// is unavailable. It is the body of requireV2Middleware, which gates every alert
+// route on alertsAvailable().
 func (c *Handler) requireV2(ctx echo.Context) error {
 	return c.HandleErrorWithKey(ctx, nil,
 		"Alert rules require the enhanced (v2) database", http.StatusConflict, notification.MsgErrAlertV2Required, nil)
 }
 
-// GetAlertSchema returns the alerting schema for the UI.
+// engineUnavailable writes a 503 Service Unavailable response carrying the recorded
+// alerting-engine initialization error. Engine-dependent handlers call it (guarded
+// by alertEngineErr != nil) so a failed alerting.Initialize surfaces as an explicit
+// 503 instead of a silent no-op. It is reached only when alertsAvailable() is true
+// (the requireV2 middleware already returned 409 otherwise) and alertEngineErr was
+// set, i.e. init was attempted and failed - never when alerting is simply disabled.
+func (c *Handler) engineUnavailable(ctx echo.Context) error {
+	return c.HandleErrorWithKey(ctx, c.alertEngineErr,
+		"Alerting engine is unavailable", http.StatusServiceUnavailable, notification.MsgErrAlertEngineUnavailable, nil)
+}
+
+// GetAlertSchema returns the alerting schema for the UI. v2 availability is
+// enforced by requireV2Middleware on the alert route group.
 func (c *Handler) GetAlertSchema(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
-	}
 	return ctx.JSON(http.StatusOK, alerting.GetSchema())
 }
 
 // ListAlertRules returns all alert rules, optionally filtered.
 func (c *Handler) ListAlertRules(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
-	}
-
 	filter := repository.AlertRuleFilter{
 		ObjectType: ctx.QueryParam("object_type"),
 	}
@@ -218,10 +270,6 @@ func (c *Handler) ListAlertRules(ctx echo.Context) error {
 
 // GetAlertRule returns a single alert rule by ID.
 func (c *Handler) GetAlertRule(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
-	}
-
 	id, err := parseUintParam(ctx, "id")
 	if err != nil {
 		return c.HandleErrorWithKey(ctx, err, "Invalid rule ID", http.StatusBadRequest, notification.MsgErrAlertInvalidID, nil)
@@ -241,8 +289,10 @@ func (c *Handler) GetAlertRule(ctx echo.Context) error {
 
 // CreateAlertRule creates a new alert rule.
 func (c *Handler) CreateAlertRule(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
+	// A created rule must become active via the engine; refuse with 503 if the
+	// engine failed to initialize rather than persisting an inert rule.
+	if c.alertEngineErr != nil {
+		return c.engineUnavailable(ctx)
 	}
 
 	rule, err := c.bindAndValidateAlertRule(ctx)
@@ -277,8 +327,10 @@ func (c *Handler) CreateAlertRule(ctx echo.Context) error {
 
 // UpdateAlertRule replaces an existing alert rule.
 func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
+	// The updated rule must be refreshed into the engine; refuse with 503 if the
+	// engine failed to initialize rather than silently persisting an inert change.
+	if c.alertEngineErr != nil {
+		return c.engineUnavailable(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -315,8 +367,10 @@ func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 
 // ToggleAlertRule enables or disables an alert rule.
 func (c *Handler) ToggleAlertRule(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
+	// Toggling enabled state must be refreshed into the engine; refuse with 503 if
+	// the engine failed to initialize rather than silently no-opping the refresh.
+	if c.alertEngineErr != nil {
+		return c.engineUnavailable(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -346,8 +400,10 @@ func (c *Handler) ToggleAlertRule(ctx echo.Context) error {
 
 // DeleteAlertRule deletes an alert rule.
 func (c *Handler) DeleteAlertRule(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
+	// The deletion must be refreshed out of the engine cache; refuse with 503 if
+	// the engine failed to initialize rather than leaving a deleted rule live.
+	if c.alertEngineErr != nil {
+		return c.engineUnavailable(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -370,8 +426,11 @@ func (c *Handler) DeleteAlertRule(ctx echo.Context) error {
 
 // TestAlertRule simulates firing a rule for testing purposes.
 func (c *Handler) TestAlertRule(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
+	// Test-firing is impossible without the engine, so surface its init failure as
+	// 503 up front instead of reporting a false "test fired" success. Checked before
+	// parsing/fetching the rule so the unavailability is reported regardless of input.
+	if c.alertEngineErr != nil {
+		return c.engineUnavailable(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -387,18 +446,19 @@ func (c *Handler) TestAlertRule(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get alert rule", http.StatusInternalServerError)
 	}
 
-	// Fire the rule's actions directly, bypassing condition evaluation
-	if c.alertEngine != nil {
-		c.alertEngine.TestFireRule(rule)
-	}
+	// Fire the rule's actions directly, bypassing condition evaluation. The engine
+	// is guaranteed non-nil here: alertEngineErr is nil, so Initialize succeeded.
+	c.alertEngine.TestFireRule(rule)
 
 	return ctx.JSON(http.StatusOK, map[string]string{"status": "test fired"})
 }
 
 // ResetDefaultAlertRules deletes all built-in rules and re-seeds them.
 func (c *Handler) ResetDefaultAlertRules(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
+	// Re-seeded defaults must be refreshed into the engine; refuse with 503 if the
+	// engine failed to initialize rather than leaving the engine cache stale.
+	if c.alertEngineErr != nil {
+		return c.engineUnavailable(ctx)
 	}
 
 	reqCtx := ctx.Request().Context()
@@ -425,10 +485,6 @@ func (c *Handler) ResetDefaultAlertRules(ctx echo.Context) error {
 
 // ListAlertHistory returns paginated alert firing history.
 func (c *Handler) ListAlertHistory(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
-	}
-
 	filter := repository.AlertHistoryFilter{}
 
 	if ruleIDParam := ctx.QueryParam("rule_id"); ruleIDParam != "" {
@@ -472,10 +528,6 @@ func (c *Handler) ListAlertHistory(ctx echo.Context) error {
 
 // ClearAlertHistory deletes all alert history records.
 func (c *Handler) ClearAlertHistory(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
-	}
-
 	deleted, err := c.alertRuleRepo.DeleteHistory(ctx.Request().Context())
 	if err != nil {
 		c.LogErrorIfEnabled("failed to clear alert history", logger.Error(err))
@@ -487,10 +539,6 @@ func (c *Handler) ClearAlertHistory(ctx echo.Context) error {
 
 // ExportAlertRules exports all rules as JSON.
 func (c *Handler) ExportAlertRules(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
-	}
-
 	rules, err := c.alertRuleRepo.ListRules(ctx.Request().Context(), repository.AlertRuleFilter{})
 	if err != nil {
 		c.LogErrorIfEnabled("failed to export alert rules", logger.Error(err))
@@ -506,8 +554,10 @@ func (c *Handler) ExportAlertRules(ctx echo.Context) error {
 
 // ImportAlertRules imports rules from JSON.
 func (c *Handler) ImportAlertRules(ctx echo.Context) error {
-	if !datastoreV2.IsEnhancedDatabase() {
-		return c.requireV2(ctx)
+	// Imported rules must be refreshed into the engine; refuse with 503 if the
+	// engine failed to initialize rather than importing inert rules.
+	if c.alertEngineErr != nil {
+		return c.engineUnavailable(ctx)
 	}
 
 	var payload struct {

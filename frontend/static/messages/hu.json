@@ -4865,7 +4865,8 @@
       "typesRequired": "Az objektum típus és trigger típus kötelező",
       "duplicateName": "Ezzel a névvel már létezik szabály",
       "invalidJSON": "Érvénytelen JSON",
-      "invalidEscalation": "Az eszkalációs lépések érvénytelenek"
+      "invalidEscalation": "Az eszkalációs lépések érvénytelenek",
+      "engineUnavailable": "Alerting engine is unavailable"
     },
     "detection": {
       "invalidDate": "Érvénytelen {paramName} formátum, használja az ÉÉÉÉ-HH-NN formátumot"

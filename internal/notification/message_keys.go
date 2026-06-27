@@ -94,6 +94,7 @@ const (
 	MsgErrAlertDuplicateName     = "errors.alert.duplicateName"
 	MsgErrAlertInvalidJSON       = "errors.alert.invalidJSON"
 	MsgErrAlertInvalidEscalation = "errors.alert.invalidEscalation"
+	MsgErrAlertEngineUnavailable = "errors.alert.engineUnavailable"
 
 	// Detection errors
 	MsgErrDetectionInvalidDate = "errors.detection.invalidDate"

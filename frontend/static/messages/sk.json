@@ -4865,7 +4865,8 @@
       "typesRequired": "Typ objektu a typ spúšťača sú povinné",
       "duplicateName": "Pravidlo s týmto názvom už existuje",
       "invalidJSON": "Neplatný JSON",
-      "invalidEscalation": "Eskalačné kroky sú neplatné"
+      "invalidEscalation": "Eskalačné kroky sú neplatné",
+      "engineUnavailable": "Alerting engine is unavailable"
     },
     "detection": {
       "invalidDate": "Neplatný formát {paramName}, použite RRRR-MM-DD"
