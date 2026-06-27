@@ -1,5 +1,5 @@
-// Package api provides the HTTP API for BirdNET-Go.
-package api
+// internal/api/v2/imports/import.go
+package importsapi
 
 import (
 	"context"
@@ -176,7 +176,8 @@ func isContained(root, target string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// initImportRoutes registers all import-related API routes.
+// RegisterImportRoutes registers all import-related API routes on the supplied
+// v2 group.
 //
 // These endpoints start, cancel, and inspect a database import, so the group
 // must fail closed. c.AuthMiddleware is non-nil in every real deployment: the
@@ -185,7 +186,7 @@ func isContained(root, target string) bool {
 // in unit tests or a misconfiguration; in that case install a middleware that
 // denies access with 401 rather than registering the routes unprotected (Echo's
 // applyMiddleware would also panic on a literal nil entry).
-func (c *Controller) initImportRoutes() {
+func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 	authMiddleware := c.AuthMiddleware
 	if authMiddleware == nil {
 		authMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
@@ -194,16 +195,16 @@ func (c *Controller) initImportRoutes() {
 			}
 		}
 	}
-	g := c.Group.Group("/import", authMiddleware)
-	g.POST("/birdnet-pi", c.StartBirdNETPiImport)
-	g.GET("/jobs/:jobId/progress", c.StreamImportProgress)
-	g.POST("/jobs/:jobId/cancel", c.CancelImport)
-	g.GET("/status", c.GetImportStatus)
+	importGroup := g.Group("/import", authMiddleware)
+	importGroup.POST("/birdnet-pi", c.StartBirdNETPiImport)
+	importGroup.GET("/jobs/:jobId/progress", c.StreamImportProgress)
+	importGroup.POST("/jobs/:jobId/cancel", c.CancelImport)
+	importGroup.GET("/status", c.GetImportStatus)
 }
 
 // StartBirdNETPiImport validates a BirdNET-Pi SQLite source and starts a DB-only import.
 // Returns 202 Accepted with a job_id on success.
-func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
+func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 	// Verify datastore is available.
 	if err := c.RequireDatastore(ctx); err != nil {
 		return err
@@ -332,7 +333,7 @@ func (c *Controller) StartBirdNETPiImport(ctx echo.Context) error {
 
 // StreamImportProgress streams import progress as Server-Sent Events.
 // Closing the SSE connection does NOT cancel the import; use the cancel endpoint.
-func (c *Controller) StreamImportProgress(ctx echo.Context) error {
+func (c *Handler) StreamImportProgress(ctx echo.Context) error {
 	id := ctx.Param("jobId")
 	job := c.importMgr.get(id)
 	if job == nil {
@@ -342,7 +343,7 @@ func (c *Controller) StreamImportProgress(ctx echo.Context) error {
 	apicore.SetSSEHeaders(ctx)
 
 	// Bound the stream lifetime independently of the import itself.
-	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), maxSSEStreamDuration)
+	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), apicore.MaxSSEStreamDuration)
 	defer cancel()
 
 	// Send initial snapshot before entering the event loop. If the job already
@@ -401,7 +402,7 @@ func (c *Controller) StreamImportProgress(ctx echo.Context) error {
 
 // CancelImport requests cancellation of a running import job.
 // Returns 200 with status "cancelling" (or "done" if already finished).
-func (c *Controller) CancelImport(ctx echo.Context) error {
+func (c *Handler) CancelImport(ctx echo.Context) error {
 	id := ctx.Param("jobId")
 	job := c.importMgr.get(id)
 	if job == nil {
@@ -416,7 +417,7 @@ func (c *Controller) CancelImport(ctx echo.Context) error {
 }
 
 // GetImportStatus returns the current import state for polling UIs.
-func (c *Controller) GetImportStatus(ctx echo.Context) error {
+func (c *Handler) GetImportStatus(ctx echo.Context) error {
 	job := c.importMgr.active()
 	if job == nil {
 		return ctx.JSON(http.StatusOK, importStatusResponse{
@@ -447,7 +448,7 @@ func (c *Controller) GetImportStatus(ctx echo.Context) error {
 }
 
 // sendImportEvent sends a single SSE event with a monotonic id field.
-func (c *Controller) sendImportEvent(ctx echo.Context, id uint64, event string, data any) error {
+func (c *Handler) sendImportEvent(ctx echo.Context, id uint64, event string, data any) error {
 	payload, err := c.SafeMarshalJSON(event, data)
 	if err != nil {
 		return fmt.Errorf("marshal import event: %w", err)
@@ -470,12 +471,12 @@ func (c *Controller) sendImportEvent(ctx echo.Context, id uint64, event string, 
 }
 
 // sendImportHeartbeat sends a lightweight SSE event to keep the connection alive.
-func (c *Controller) sendImportHeartbeat(ctx echo.Context) error {
+func (c *Handler) sendImportHeartbeat(ctx echo.Context) error {
 	return c.SendSSEMessage(ctx, importEventHeartbeat, map[string]int64{"ts": time.Now().Unix()})
 }
 
 // sendImportTerminal sends the final SSE event based on the import outcome.
-func (c *Controller) sendImportTerminal(ctx echo.Context, seq uint64, stats imports.ImportStats, runErr error) error {
+func (c *Handler) sendImportTerminal(ctx echo.Context, seq uint64, stats imports.ImportStats, runErr error) error {
 	switch {
 	case runErr == nil:
 		return c.sendImportEvent(ctx, seq, importEventComplete, toImportProgress(stats))

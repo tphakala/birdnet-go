@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	importsapi "github.com/tphakala/birdnet-go/internal/api/v2/imports"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -167,8 +167,8 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 	}
 
 	// Inject dependencies into the API layer
-	apiv2.SetMigrationDependencies(stateManager, worker)
-	apiv2.SetMigrationTelemetry(migrationTelemetry)
+	importsapi.SetMigrationDependencies(stateManager, worker)
+	importsapi.SetMigrationTelemetry(migrationTelemetry)
 
 	// Check for state recovery - resume migration if it was in progress
 	state, err := stateManager.GetState()
@@ -195,7 +195,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			// Create cancellable context for the worker - this allows graceful shutdown
 			// to stop the worker by cancelling this context
 			workerCtx, workerCancel := context.WithCancel(context.Background())
-			apiv2.SetMigrationWorkerCancel(workerCancel)
+			importsapi.SetMigrationWorkerCancel(workerCancel)
 			if startErr := worker.Start(workerCtx); startErr != nil {
 				workerCancel() // Clean up on failure
 				migrationLogger.Warn("failed to resume migration worker",

@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/detections"
 	"github.com/tphakala/birdnet-go/internal/api/v2/dynamicthresholds"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
+	importsapi "github.com/tphakala/birdnet-go/internal/api/v2/imports"
 	"github.com/tphakala/birdnet-go/internal/api/v2/integrations"
 	mediaapi "github.com/tphakala/birdnet-go/internal/api/v2/media"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
@@ -44,7 +45,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -226,25 +226,23 @@ type Controller struct {
 	// promote from the embedded core. The hub itself stays in apicore.
 	sse *sse.Handler
 
-	// Legacy cleanup state tracker
-	cleanupStatus *CleanupStatus
+	// imports serves the import/migration domain: the BirdNET-Pi import endpoints,
+	// the legacy->v2 migration endpoints and the background migration-worker control
+	// surface, the migration prerequisite checks, the async SQLite backup-job
+	// endpoints, and the legacy-database cleanup endpoints. Beyond the shared
+	// *apicore.Core it owns the import lifecycle manager, the import source-path
+	// root/factory, the legacy-cleanup tracker, and the facade-injected notification
+	// service. The facade calls c.imports.Shutdown() during teardown to stop the
+	// backup job manager's cleanup goroutine. The migration-worker package-level
+	// funcs (importsapi.SetMigration*/StopMigrationWorker) are driven by
+	// internal/analysis.
+	imports *importsapi.Handler
 
 	// Test synchronization fields (only populated when initializeRoutes is true)
 	// goroutinesStarted signals when all background goroutines have successfully started.
 	// This is primarily used in testing to ensure proper setup before assertions.
 	// Only created when routes are initialized (production mode or specific tests).
 	goroutinesStarted chan struct{} // signals when all background goroutines have started (nil if routes not initialized)
-
-	// importMgr manages the one-at-a-time import lifecycle.
-	importMgr *importManager
-
-	// importSourceRoot is the directory under which import source paths must resolve.
-	// Defaults to sysinfo.DefaultExternalMountPath when empty.
-	importSourceRoot string
-
-	// importSourceFactory builds an import Source from a resolved path.
-	// Defaults to a BirdNET-Pi adapter when nil. Overridable in tests.
-	importSourceFactory func(path string) (imports.Source, error)
 
 	// Audio level channel for SSE streaming
 	// TODO: Consider moving to a dedicated audio manager
@@ -417,7 +415,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		Core:          core,
 		controlChan:   controlChan,
 		isGlobalOwner: settings == conf.GetSettings(),
-		importMgr:     newImportManager(),
 	}
 
 	// Construct domain handlers around the shared core. They hold the same
@@ -522,6 +519,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// per-request reads. The facade keeps c.notificationService for the other
 	// handlers that still resolve the service via getNotificationService().
 	c.notifications = notifications.New(c.Core, c.notificationService, c.authService)
+
+	// Construct the import/migration domain handler AFTER the functional options
+	// are applied so it captures the post-option notificationService (the migration
+	// and legacy-cleanup completion notifications resolve the service through it,
+	// falling back to the process-global singleton when nil), mirroring the
+	// notifications handler above. Its import lifecycle manager is created in New;
+	// the legacy-cleanup tracker is created lazily in RegisterLegacyCleanupRoutes.
+	c.imports = importsapi.New(c.Core, c.notificationService)
 
 	// Construct the audio/streaming domain handler AFTER the functional options are
 	// applied so it captures the post-option authService (used by the public
@@ -636,7 +641,7 @@ func (c *Controller) initRoutes() {
 		{"model routes", func() { c.models.RegisterRoutes(c.Group) }},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", func() { c.tlsHandler.RegisterRoutes(c.Group) }},
-		{"import routes", c.initImportRoutes},
+		{"import routes", func() { c.imports.RegisterImportRoutes(c.Group) }},
 	}
 
 	for _, initializer := range routeInitializers {
@@ -794,9 +799,11 @@ func (c *Controller) Shutdown() {
 		}
 	}
 
-	// Shutdown the backup job manager to stop its cleanup goroutine
-	if backupJobManager != nil {
-		backupJobManager.Shutdown()
+	// Shut down the import/migration domain (stops the backup job manager's cleanup
+	// goroutine). The migration worker is stopped separately by internal/analysis as
+	// part of the datastore lifecycle.
+	if c.imports != nil {
+		c.imports.Shutdown()
 	}
 
 	// Flush all log writers (the main writer plus every module writer, including
