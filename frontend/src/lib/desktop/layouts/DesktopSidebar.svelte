@@ -383,19 +383,23 @@ Performance Optimizations:
     },
   ]);
 
+  // Close the mobile drawer by unchecking the toggle. Dispatch a synthetic
+  // change event so Svelte's bind:checked binding stays in sync.
+  function closeMobileDrawer() {
+    const drawer = document.getElementById('my-drawer');
+    if (drawer instanceof HTMLInputElement && drawer.checked) {
+      drawer.checked = false;
+      drawer.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
   function navigate(url: string) {
     if (url === navigationUrls.dashboard) {
       resetDateToToday();
     }
     // Close flyouts on navigation
     activeFlyout = null;
-    // Close the mobile drawer on navigation by unchecking the toggle.
-    // Dispatch a synthetic event so Svelte's bind:checked stays in sync.
-    const drawer = document.getElementById('my-drawer') as HTMLInputElement | null;
-    if (drawer?.checked) {
-      drawer.checked = false;
-      drawer.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    closeMobileDrawer();
     if (onNavigate) {
       onNavigate(url);
     } else {
@@ -418,11 +422,7 @@ Performance Optimizations:
     // post-login redirect returns the user to the exact filtered view (#3306).
     loginRedirectUrl = getCurrentPathWithQuery();
     // Close the mobile drawer before opening the modal to ensure a clean transition.
-    const drawer = document.getElementById('my-drawer') as HTMLInputElement | null;
-    if (drawer?.checked) {
-      drawer.checked = false;
-      drawer.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    closeMobileDrawer();
     showLoginModal = true;
   }
 
