@@ -411,7 +411,7 @@ func setupSSETestServer(t *testing.T) (*httptest.Server, *apicore.Core) {
 	e := echo.New()
 	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
 
-	h := New(core)
+	h := New(core, func(echo.Context) bool { return false })
 	h.RegisterRoutes(core.Group)
 
 	server := httptest.NewServer(e)
@@ -493,7 +493,7 @@ func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *apicore.Core) 
 	// role so the handler registers under /api/v2.
 	core.Group = e.Group("/api/v2")
 
-	h := New(core)
+	h := New(core, func(echo.Context) bool { return false })
 	h.RegisterRoutes(core.Group)
 
 	server := httptest.NewServer(e)
