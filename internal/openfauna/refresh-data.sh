@@ -9,8 +9,9 @@
 #
 # It rebuilds the CSVs with the openfauna compiler, gzips them deterministically
 # (gzip -n: no name/timestamp, so identical data produces an identical blob and a
-# clean git diff) into ./data/, regenerates the locale list, and records the source
-# commit in ./data/SOURCE.txt. Commit the resulting ./data/ changes.
+# clean git diff) into ./data/, copies the small aliases.json verbatim, regenerates
+# the locale list, and records the source commit in ./data/SOURCE.txt. Commit the
+# resulting ./data/ changes.
 set -euo pipefail
 
 OF_DIR="${1:?usage: refresh-data.sh /path/to/openfauna/checkout}"
@@ -24,6 +25,9 @@ GEN_DATE="$(date -u +%Y-%m-%d)"
 
 gzip -9 -n -c build/translations.csv >"$DEST/translations.csv.gz"
 gzip -9 -n -c build/metadata.csv >"$DEST/metadata.csv.gz"
+# aliases.json (taxonomic legacy -> canonical map) is small, so it is vendored
+# uncompressed and verbatim for a reviewable diff. Added in openfauna schema 2.1.0.
+cp build/aliases.json "$DEST/aliases.json"
 tail -n +2 build/translations.csv | cut -d, -f2 | sort -u >"$DEST/locales.txt"
 printf 'openfauna@%s %s\n' "$OF_SHA" "$GEN_DATE" >"$DEST/SOURCE.txt"
 
