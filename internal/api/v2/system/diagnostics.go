@@ -1,5 +1,5 @@
-// internal/api/v2/diagnostics.go
-package api
+// internal/api/v2/system/diagnostics.go
+package system
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/host"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
@@ -38,9 +39,10 @@ type diagnosticsStatusResponse struct {
 	LastRun    *time.Time                        `json:"last_run"`
 }
 
-// initDiagnosticsRoutes initializes health check infrastructure and registers
-// the diagnostics API endpoints.
-func (c *Controller) initDiagnosticsRoutes() {
+// RegisterDiagnosticsRoutes initializes health check infrastructure and registers
+// the diagnostics API endpoints, preserving the exact routes and auth middleware
+// from the original initDiagnosticsRoutes.
+func (c *Handler) RegisterDiagnosticsRoutes(g *echo.Group) {
 	c.healthReports = health.NewReportStore(10)
 	if c.healthErrors == nil {
 		c.healthErrors = health.NewErrorRingBuffer(health.DefaultErrorBufferSize)
@@ -51,7 +53,7 @@ func (c *Controller) initDiagnosticsRoutes() {
 
 	c.registerHealthChecks()
 
-	diagnosticsGroup := c.Group.Group("/system/diagnostics", c.AuthMiddleware)
+	diagnosticsGroup := g.Group("/system/diagnostics", c.AuthMiddleware)
 	diagnosticsGroup.GET("/status", c.GetDiagnosticsStatus)
 	diagnosticsGroup.POST("/run", c.RunDiagnostics)
 	diagnosticsGroup.GET("/report/:id", c.GetDiagnosticsReport)
@@ -62,19 +64,19 @@ func (c *Controller) initDiagnosticsRoutes() {
 // the diagnostics subsystem has not been initialized. It lets other subsystems
 // (e.g. the analysis pipeline) record health counters into the same store the
 // health checks read, avoiding an import cycle on internal/api/v2.
-func (c *Controller) HealthMetricsStore() *observability.HealthMetricsStore {
+func (c *Handler) HealthMetricsStore() *observability.HealthMetricsStore {
 	return c.healthMetricsStore
 }
 
 // HealthEventBuffer returns the diagnostics health event buffer, or nil if the
 // diagnostics subsystem has not been initialized. Paired with HealthMetricsStore
 // so recorded counters can also surface as recent events on the System Health page.
-func (c *Controller) HealthEventBuffer() *observability.HealthEventBuffer {
+func (c *Handler) HealthEventBuffer() *observability.HealthEventBuffer {
 	return c.healthEvents
 }
 
 // registerHealthChecks registers all health checks with dependency injection closures.
-func (c *Controller) registerHealthChecks() {
+func (c *Handler) registerHealthChecks() {
 	snapshotProvider := func() []audiocore.SourceHealthSnapshot {
 		w := c.AudioWatchdog.Load()
 		if w == nil {
@@ -89,7 +91,7 @@ func (c *Controller) registerHealthChecks() {
 		// System checks
 		checks.NewDiskSpaceCheck(c.getDataPaths()),
 		checks.NewMemoryCheck(),
-		checks.NewCPULoadCheck(GetCachedCPUUsage),
+		checks.NewCPULoadCheck(apicore.GetCachedCPUUsage),
 		checks.NewTemperatureCheck(func() (float64, error) {
 			temps, err := host.SensorsTemperatures()
 			// gopsutil returns partial results with warnings when some sensors
@@ -289,7 +291,7 @@ func (c *Controller) registerHealthChecks() {
 
 // buildModelLoadInfoProvider returns a closure that queries the orchestrator for
 // all loaded models and converts them to the health check's ModelLoadInfo format.
-func (c *Controller) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
+func (c *Handler) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
 	return func() []checks.ModelLoadInfo {
 		p := c.Processor
 		if p == nil {
@@ -321,7 +323,7 @@ func (c *Controller) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo 
 // inference counters and model specs to produce per-model latency stats.
 // Each model's analysis window is derived from its own BufferInterval
 // (ClipLength / 2), not from a global setting.
-func (c *Controller) buildPerModelInferenceProvider() func() []checks.ModelInferenceInfo {
+func (c *Handler) buildPerModelInferenceProvider() func() []checks.ModelInferenceInfo {
 	return func() []checks.ModelInferenceInfo {
 		p := c.Processor
 		if p == nil {
@@ -371,7 +373,7 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 			name = mi.DisplayName()
 			windowMS = float64(mi.Spec.BufferInterval().Milliseconds())
 		} else {
-			GetLogger().Warn("inference counter has no matching model info; surfacing raw id",
+			apicore.GetLogger().Warn("inference counter has no matching model info; surfacing raw id",
 				logger.String("model_id", modelID))
 		}
 		result = append(result, checks.ModelInferenceInfo{
@@ -391,7 +393,7 @@ var errNoTempSensors = errors.NewStd("no temperature sensors found")
 // buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
 // stream health data to the checks.StreamHealthInfo format. The closure
 // atomically loads c.Engine at call time because it is set after Controller init.
-func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
+func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 	return func() []checks.StreamHealthInfo {
 		eng := c.Engine.Load()
 		if eng == nil {
@@ -432,7 +434,7 @@ func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInf
 
 // buildAudioRouterSnapshotProvider returns a closure that reads cumulative
 // audio counter values from the audio router for the health metrics collector.
-func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.AudioRouterSnapshot {
+func (c *Handler) buildAudioRouterSnapshotProvider() func() []observability.AudioRouterSnapshot {
 	return func() []observability.AudioRouterSnapshot {
 		eng := c.Engine.Load()
 		if eng == nil {
@@ -473,7 +475,7 @@ func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.A
 
 // buildStreamHealthSnapshotProvider returns a closure that reads cumulative
 // stream restart counts for the health metrics collector.
-func (c *Controller) buildStreamHealthSnapshotProvider() func() []observability.StreamHealthSnapshot {
+func (c *Handler) buildStreamHealthSnapshotProvider() func() []observability.StreamHealthSnapshot {
 	return func() []observability.StreamHealthSnapshot {
 		eng := c.Engine.Load()
 		if eng == nil {
@@ -500,9 +502,12 @@ func (c *Controller) buildStreamHealthSnapshotProvider() func() []observability.
 
 // buildAudioLevelProvider returns a closure that reads the latest audio level
 // per source from the global audio level manager, filtered to active sources.
-func (c *Controller) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
+func (c *Handler) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
 	return func() []checks.AudioLevelInfo {
-		levels := LatestAudioLevels()
+		if c.audioLevelProvider == nil {
+			return nil
+		}
+		levels := c.audioLevelProvider()
 		if len(levels) == 0 {
 			return nil
 		}
@@ -545,7 +550,7 @@ func (c *Controller) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
 
 // buildCaptureBufferHealthProvider returns a closure that reads capture buffer
 // utilization from the buffer manager.
-func (c *Controller) buildCaptureBufferHealthProvider() func() []checks.CaptureBufferInfo {
+func (c *Handler) buildCaptureBufferHealthProvider() func() []checks.CaptureBufferInfo {
 	return func() []checks.CaptureBufferInfo {
 		eng := c.Engine.Load()
 		if eng == nil {
@@ -572,7 +577,7 @@ func (c *Controller) buildCaptureBufferHealthProvider() func() []checks.CaptureB
 }
 
 // getDataPaths returns filesystem paths that should be monitored for disk space.
-func (c *Controller) getDataPaths() []string {
+func (c *Handler) getDataPaths() []string {
 	settings := c.CurrentSettings()
 	seen := make(map[string]struct{})
 	var paths []string
@@ -596,7 +601,7 @@ func (c *Controller) getDataPaths() []string {
 }
 
 // GetDiagnosticsStatus returns a quick health summary from the latest stored report.
-func (c *Controller) GetDiagnosticsStatus(ctx echo.Context) error {
+func (c *Handler) GetDiagnosticsStatus(ctx echo.Context) error {
 	latest := c.healthReports.Latest()
 	if latest == nil {
 		return ctx.JSON(http.StatusOK, diagnosticsStatusResponse{
@@ -637,7 +642,7 @@ func parseWindow(s string) (time.Duration, error) {
 }
 
 // RunDiagnostics executes all registered health checks and stores the report.
-func (c *Controller) RunDiagnostics(ctx echo.Context) error {
+func (c *Handler) RunDiagnostics(ctx echo.Context) error {
 	window, err := parseWindow(ctx.QueryParam("window"))
 	if err != nil {
 		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
@@ -654,7 +659,7 @@ func (c *Controller) RunDiagnostics(ctx echo.Context) error {
 }
 
 // GetDiagnosticsReport retrieves a stored diagnostics report by ID.
-func (c *Controller) GetDiagnosticsReport(ctx echo.Context) error {
+func (c *Handler) GetDiagnosticsReport(ctx echo.Context) error {
 	id := ctx.Param("id")
 	report, ok := c.healthReports.Get(id)
 	if !ok {
@@ -664,7 +669,7 @@ func (c *Controller) GetDiagnosticsReport(ctx echo.Context) error {
 }
 
 // GetRecentErrors returns recent error log entries from the error ring buffer.
-func (c *Controller) GetRecentErrors(ctx echo.Context) error {
+func (c *Handler) GetRecentErrors(ctx echo.Context) error {
 	const defaultLimit = 50
 	const maxLimit = 200
 

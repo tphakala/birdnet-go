@@ -1,6 +1,5 @@
-// system_test.go: Package api provides tests for API v2 system endpoints.
-
-package api
+// system_test.go: system-domain endpoint tests (extracted from package api).
+package system
 
 import (
 	"encoding/json"
@@ -19,7 +18,7 @@ import (
 )
 
 // setupSystemTestEnvironment creates a test environment for system API tests
-func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller) {
+func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler) {
 	t.Helper()
 
 	e := echo.New()
@@ -32,7 +31,7 @@ func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller) {
 		},
 	}
 
-	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(settings)
 
 	return e, controller
@@ -335,25 +334,6 @@ func TestMapProcessStatus(t *testing.T) {
 	}
 }
 
-// TestGetCachedCPUUsage tests the GetCachedCPUUsage function
-func TestGetCachedCPUUsage(t *testing.T) {
-	t.Attr("component", "system")
-	t.Attr("type", "unit")
-	t.Attr("feature", "cpu-cache")
-
-	// The cache is initialized with [0], so we should get at least that
-	result := GetCachedCPUUsage()
-	require.NotNil(t, result, "CPU cache should not be nil")
-	require.Len(t, result, 1, "CPU cache should have at least 1 value")
-
-	// Verify it returns a copy (modifying result shouldn't affect cache)
-	originalValue := result[0]
-	result[0] = 999.0
-
-	newResult := GetCachedCPUUsage()
-	assert.InDelta(t, originalValue, newResult[0], 0.001, "Cache should return a copy, not the original slice")
-}
-
 // TestGetSystemInfo tests the GetSystemInfo endpoint
 func TestGetSystemInfo(t *testing.T) {
 	t.Parallel()
@@ -513,97 +493,6 @@ func TestGetProcessInfo(t *testing.T) {
 
 		// With all=true, should have more processes
 		assert.Greater(t, len(response), 1, "Should have multiple processes with all=true")
-	})
-}
-
-// TestGetEqualizerConfig tests the GetEqualizerConfig endpoint
-func TestGetEqualizerConfig(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "system")
-	t.Attr("type", "integration")
-	t.Attr("feature", "equalizer-config")
-
-	e, controller := setupSystemTestEnvironment(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/equalizer/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/system/audio/equalizer/config")
-
-	err := controller.GetEqualizerConfig(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify cache headers are set
-	assert.Contains(t, rec.Header().Get("Cache-Control"), "public", "Should have public cache header")
-
-	// Response should be valid JSON
-	var response any
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err, "Response should be valid JSON")
-}
-
-// TestGetActiveAudioDevice tests the GetActiveAudioDevice endpoint
-func TestGetActiveAudioDevice(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "system")
-	t.Attr("type", "integration")
-	t.Attr("feature", "audio-device")
-
-	t.Run("With configured device", func(t *testing.T) {
-		e, controller := setupSystemTestEnvironment(t)
-		// Settings already have a device configured
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/active", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/system/audio/active")
-
-		err := controller.GetActiveAudioDevice(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response map[string]any
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-
-		// Should have device info
-		assert.Contains(t, response, "device", "Response should contain device")
-		assert.Contains(t, response, "active", "Response should contain active flag")
-	})
-
-	t.Run("No device configured", func(t *testing.T) {
-		e := echo.New()
-		settings := &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Audio: conf.AudioSettings{
-					Source: "", // No device configured
-				},
-			},
-		}
-		controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
-		controller.Settings.Store(settings)
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/active", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/system/audio/active")
-
-		err := controller.GetActiveAudioDevice(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response map[string]any
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-
-		// Should indicate no device active
-		active, ok := response["active"].(bool)
-		require.True(t, ok, "response should have 'active' field as bool")
-		assert.False(t, active, "Should not be active when no device configured")
-		msg, ok := response["message"].(string)
-		require.True(t, ok, "response should have 'message' field as string")
-		assert.Contains(t, msg, "No audio device", "Should have appropriate message")
 	})
 }
 

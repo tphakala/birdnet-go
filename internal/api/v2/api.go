@@ -30,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
 	"github.com/tphakala/birdnet-go/internal/api/v2/sse"
 	"github.com/tphakala/birdnet-go/internal/api/v2/support"
+	"github.com/tphakala/birdnet-go/internal/api/v2/system"
 	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
 	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -259,16 +260,23 @@ type Controller struct {
 	// classifier orchestrator. Overrides label-derived names in the cached maps.
 	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
 
-	// Health check infrastructure for the diagnostics endpoints (initialized lazily
-	// in initDiagnosticsRoutes; healthErrors may be injected via WithHealthErrorBuffer).
-	// These stay on the facade: the diagnostics and metrics-history handlers own
-	// them, and HealthMetricsStore()/HealthEventBuffer() expose them to the analysis
-	// pipeline as exported accessor methods (which would collide with exported fields).
-	healthRegistry     *health.Registry
-	healthReports      *health.ReportStore
-	healthErrors       *health.ErrorRingBuffer
-	healthMetricsStore *observability.HealthMetricsStore
-	healthEvents       *observability.HealthEventBuffer
+	// healthErrorBuf is the optional shared ErrorRingBuffer seed injected via
+	// WithHealthErrorBuffer. It is handed to the system domain handler at
+	// construction; the system handler owns the live diagnostics health
+	// infrastructure (registry, report store, error buffer, metrics store, event
+	// buffer) and exposes the metrics store / event buffer to the analysis pipeline
+	// through the HealthMetricsStore()/HealthEventBuffer() facade delegators.
+	healthErrorBuf *health.ErrorRingBuffer
+
+	// system serves the /api/v2/system/* information endpoints plus the events,
+	// diagnostics, metrics-history and terminal endpoints. Beyond the shared
+	// *apicore.Core it owns the diagnostics health infrastructure and receives the
+	// controller start time and the optional health-error-buffer seed by injection.
+	// The facade keeps the genuine-system route registration plus the cross-domain
+	// /system routes (audio devices, external-media, database overview/migration/
+	// backup/legacy) in initSystemRoutes (system_routes.go) until those domains are
+	// extracted.
+	system *system.Handler
 }
 
 // Option is a functional option for configuring the Controller.
@@ -347,11 +355,12 @@ func WithModelManager(mm *classifier.ModelManager) Option {
 }
 
 // WithHealthErrorBuffer injects a shared ErrorRingBuffer created at startup.
-// When set, initDiagnosticsRoutes uses this buffer instead of creating its own,
-// enabling the logger to feed errors into the same buffer the health checks read.
+// When set, the system handler's diagnostics initializer uses this buffer instead
+// of creating its own, enabling the logger to feed errors into the same buffer the
+// health checks read.
 func WithHealthErrorBuffer(buf *health.ErrorRingBuffer) Option {
 	return func(c *Controller) {
-		c.healthErrors = buf
+		c.healthErrorBuf = buf
 	}
 }
 
@@ -543,6 +552,13 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	now := time.Now()
 	c.startTime = &now
 
+	// Construct the system domain handler AFTER the functional options are applied
+	// (so the WithHealthErrorBuffer seed in c.healthErrorBuf is observed) and after
+	// c.startTime is set (the diagnostics uptime check captures the pointer). It
+	// owns the diagnostics health infrastructure; its routes are registered in
+	// initRoutes below.
+	c.system = system.New(c.Core, c.startTime, c.healthErrorBuf, LatestAudioLevels)
+
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
 	if initializeRoutes {
 		// Initialize synchronization channel for testing
@@ -582,7 +598,7 @@ func (c *Controller) initRoutes() {
 		{"analytics routes", c.initAnalyticsRoutes},
 		{"weather routes", func() { c.weather.RegisterRoutes(c.Group) }},
 		{"system routes", c.initSystemRoutes},
-		{"terminal routes", c.initTerminalRoutes},
+		{"terminal routes", func() { c.system.RegisterTerminalRoutes(c.Group) }},
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", func() { c.filesystem.RegisterRoutes(c.Group) }},
 		{"stream health routes", c.initStreamHealthRoutes},
@@ -598,8 +614,8 @@ func (c *Controller) initRoutes() {
 		{"range routes", func() { c.rangeHandler.RegisterRoutes(c.Group) }},
 		{"heatmap routes", c.initHeatmapRoutes},
 		{"sse routes", func() { c.sse.RegisterRoutes(c.Group) }},
-		{"diagnostics routes", c.initDiagnosticsRoutes},
-		{"metrics history routes", c.initMetricsHistoryRoutes},
+		{"diagnostics routes", func() { c.system.RegisterDiagnosticsRoutes(c.Group) }},
+		{"metrics history routes", func() { c.system.RegisterMetricsHistoryRoutes(c.Group) }},
 		{"notification routes", func() { c.notifications.RegisterRoutes(c.Group) }},
 		{"support routes", func() { c.support.RegisterRoutes(c.Group) }},
 		{"debug routes", c.initDebugRoutes},
@@ -693,7 +709,7 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	systemMetrics := make(map[string]any)
 
 	// CPU usage from cached background sampler
-	cpuPercent := GetCachedCPUUsage()
+	cpuPercent := apicore.GetCachedCPUUsage()
 	if len(cpuPercent) > 0 {
 		systemMetrics["cpu_usage"] = cpuPercent[0]
 	} else {

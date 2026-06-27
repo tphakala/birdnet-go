@@ -1,5 +1,5 @@
-// internal/api/v2/diagnostics_test.go
-package api
+// internal/api/v2/system/diagnostics_test.go
+package system
 
 import (
 	"testing"

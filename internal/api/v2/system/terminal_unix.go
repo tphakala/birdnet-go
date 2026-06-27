@@ -1,7 +1,7 @@
 //go:build !windows
 
-// terminal_unix.go — Unix PTY implementation for the browser terminal.
-package api
+// terminal_unix.go - Unix PTY implementation for the browser terminal.
+package system
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 )
 
 // unixPTY wraps a Unix PTY file descriptor to satisfy ptyHandle.
-// Close is guarded by sync.Once for parity with windowsPTY —
+// Close is guarded by sync.Once for parity with windowsPTY -
 // double-closing a Unix fd can close a recycled fd belonging to
 // another goroutine.
 type unixPTY struct {

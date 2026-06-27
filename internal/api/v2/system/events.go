@@ -1,5 +1,5 @@
-// internal/api/v2/events.go
-package api
+// internal/api/v2/system/events.go
+package system
 
 import (
 	"encoding/binary"
@@ -155,7 +155,7 @@ type SystemMetrics struct {
 
 // registerEventsRoutes registers the /events sub-routes on the given parent group.
 // Called from initSystemRoutes so events are under /system/events/* with auth middleware.
-func (c *Controller) registerEventsRoutes(parent *echo.Group) {
+func (c *Handler) registerEventsRoutes(parent *echo.Group) {
 	eventsGroup := parent.Group("/events")
 	eventsGroup.GET("/detections", c.GetDetectionEvents)
 	eventsGroup.GET("/operational", c.GetOperationalEvents)
@@ -165,7 +165,7 @@ func (c *Controller) registerEventsRoutes(parent *echo.Group) {
 
 // GetDetectionEvents returns detection lifecycle events aggregated into hourly buckets
 // for the requested date (defaults to today).
-func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
+func (c *Handler) GetDetectionEvents(ctx echo.Context) error {
 	date := ctx.QueryParam("date")
 	if date == "" {
 		date = time.Now().Format(time.DateOnly)
@@ -213,7 +213,7 @@ func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
 
 // GetOperationalEvents returns operational log events for the requested date and minimum level.
 // Defaults to today and INFO level.
-func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
+func (c *Handler) GetOperationalEvents(ctx echo.Context) error {
 	date := ctx.QueryParam("date")
 	if date == "" {
 		date = time.Now().Format(time.DateOnly)
@@ -265,7 +265,7 @@ func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 		}
 	}
 
-	// Sort all entries by timestamp (descending — newest first)
+	// Sort all entries by timestamp (descending - newest first)
 	slices.SortFunc(allEntries, func(a, b reader.LogEntry) int {
 		return b.Time.Compare(a.Time) // reverse order
 	})

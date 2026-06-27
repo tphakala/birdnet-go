@@ -1,7 +1,7 @@
 //go:build windows
 
-// terminal_windows.go — Windows ConPTY implementation for the browser terminal.
-package api
+// terminal_windows.go - Windows ConPTY implementation for the browser terminal.
+package system
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 // windowsPTY wraps a Windows ConPTY to satisfy ptyHandle.
 // Close is guarded by sync.Once because ConPty.Close() calls
-// windows.CloseHandle on raw handles — double-closing a Windows
+// windows.CloseHandle on raw handles - double-closing a Windows
 // handle is undefined behavior (it can close a recycled handle
 // belonging to another subsystem).
 type windowsPTY struct {
