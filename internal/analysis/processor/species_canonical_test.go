@@ -15,6 +15,7 @@ const (
 	testSciLegacy    = "Streptopelia senegalensis"
 	testCommonDove   = "Laughing Dove"
 	testCodeDove     = "laudov1"
+	testCodeLegacy   = "legacycode"
 )
 
 // fakeTaxonomyResolver is a test double for the taxonomyResolver interface that
@@ -27,26 +28,28 @@ func (f fakeTaxonomyResolver) EnrichResultWithTaxonomy(label string) (scientific
 	return f.fn(label)
 }
 
-// TestCanonicalizeSpecies_AliasReResolvesCommonAndCode verifies that when a model
+// TestCanonicalizeSpecies_AliasReResolvesCommonKeepsCode verifies that when a model
 // emits a legacy scientific name, canonicalizeSpecies collapses it to the canonical
-// name, preserves the legacy name as raw, and re-resolves the common name and
-// taxonomy code for the canonical name (never pairing the canonical name with the
-// legacy name's common/code).
-func TestCanonicalizeSpecies_AliasReResolvesCommonAndCode(t *testing.T) {
+// name, preserves the legacy name as raw, re-resolves the common name for the
+// canonical name, and KEEPS the original eBird code. The code is stable across a pure
+// rename and the frozen eBird taxonomy holds only the legacy name, so re-resolving it
+// would degrade the real code to a placeholder.
+func TestCanonicalizeSpecies_AliasReResolvesCommonKeepsCode(t *testing.T) {
 	t.Parallel()
 
 	resolver := fakeTaxonomyResolver{fn: func(label string) (string, string, string) {
 		require.Equal(t, testSciCanonical, label,
 			"re-resolution must use the canonical scientific name")
+		// The resolver's code is intentionally ignored; the original code is kept.
 		return testSciCanonical, testCommonDove, testCodeDove
 	}}
 
 	sci, common, code, raw := canonicalizeSpecies(resolver,
-		testSciLegacy, "Legacy Common", "legacycode")
+		testSciLegacy, "Legacy Common", testCodeLegacy)
 
 	assert.Equal(t, testSciCanonical, sci, "scientific name should be canonical")
 	assert.Equal(t, testCommonDove, common, "common name should be re-resolved for canonical")
-	assert.Equal(t, testCodeDove, code, "code should be re-resolved for canonical")
+	assert.Equal(t, testCodeLegacy, code, "original eBird code should be preserved (stable across the rename)")
 	assert.Equal(t, testSciLegacy, raw, "raw should preserve the legacy name")
 }
 
@@ -64,12 +67,12 @@ func TestCanonicalizeSpecies_AliasKeepsOriginalCommonWhenCanonicalUnresolved(t *
 	}}
 
 	sci, common, code, raw := canonicalizeSpecies(resolver,
-		testSciLegacy, testCommonDove, "legacycode")
+		testSciLegacy, testCommonDove, testCodeLegacy)
 
 	assert.Equal(t, testSciCanonical, sci)
 	assert.Equal(t, testCommonDove, common,
 		"should keep the original common name when the canonical name resolves none")
-	assert.Equal(t, testCodeDove, code)
+	assert.Equal(t, testCodeLegacy, code, "original eBird code should be preserved")
 	assert.Equal(t, testSciLegacy, raw)
 }
 

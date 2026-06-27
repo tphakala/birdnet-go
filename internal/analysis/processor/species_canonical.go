@@ -20,22 +20,30 @@ type taxonomyResolver interface {
 
 // canonicalizeSpecies resolves a model-emitted scientific name to its canonical
 // form via the OpenFauna taxonomic alias map. When an alias applies it returns the
-// canonical scientific name, re-resolves the common name and taxonomy code FOR THE
-// CANONICAL NAME (so the canonical identity is never paired with the legacy name's
-// common name or code), and returns the legacy name as raw so nothing is lost. When
-// no alias applies, the inputs pass through unchanged and raw is empty; the resolver
-// is not consulted, so the hot path pays only one alias-map lookup per detection.
+// canonical scientific name, re-resolves the common name for the canonical name, and
+// returns the legacy name as raw so nothing is lost. When no alias applies, the
+// inputs pass through unchanged and raw is empty; the resolver is not consulted, so
+// the hot path pays only one alias-map lookup per detection.
+//
+// The eBird code is deliberately NOT re-resolved: the embedded eBird taxonomy is a
+// frozen 2021 snapshot keyed on the legacy name, and eBird species codes are stable
+// across a pure rename (the only kind aliases.json contains), so the legacy name's
+// code IS the canonical taxon's real code. Re-resolving by the canonical name would
+// miss the frozen snapshot and degrade the real code to a synthetic placeholder. The
+// common name, by contrast, IS re-resolved: OpenFauna localizes both the legacy and
+// canonical names, so the canonical resolution is reliable (and equals the legacy
+// one for a genuine alias).
 func canonicalizeSpecies(resolver taxonomyResolver, scientificName, commonName, speciesCode string) (canonicalSci, common, code, raw string) {
 	canonical := openfauna.CanonicalName(scientificName)
 	if canonical == scientificName {
 		return scientificName, commonName, speciesCode, ""
 	}
-	// Re-resolve common name and code for the canonical name. EnrichResultWithTaxonomy
-	// re-runs the same taxonomy/OpenFauna resolution path used for the original label,
-	// keyed on the canonical scientific name. The orchestrator fills the common name via
-	// its name-resolver chain (the bare scientific name carries no "_Common" suffix for
-	// SplitSpeciesName to split), so this is normally non-empty for a genuine alias.
-	_, canonicalCommon, canonicalCode := resolver.EnrichResultWithTaxonomy(canonical)
+	// Re-resolve the common name for the canonical name. EnrichResultWithTaxonomy
+	// re-runs the taxonomy/OpenFauna resolution path keyed on the canonical scientific
+	// name; the orchestrator fills the common name via its name-resolver chain (the
+	// bare scientific name carries no "_Common" suffix for SplitSpeciesName to split),
+	// so this is normally non-empty for a genuine alias.
+	_, canonicalCommon, _ := resolver.EnrichResultWithTaxonomy(canonical)
 	// Defensive: if the canonical name has no resolvable common name (rare: a
 	// reclassified taxon the active locale/dataset does not localize), keep the model's
 	// original common name rather than emitting an empty one. For a genuine alias the
@@ -44,5 +52,5 @@ func canonicalizeSpecies(resolver taxonomyResolver, scientificName, commonName, 
 	if canonicalCommon == "" {
 		canonicalCommon = commonName
 	}
-	return canonical, canonicalCommon, canonicalCode, scientificName
+	return canonical, canonicalCommon, speciesCode, scientificName
 }

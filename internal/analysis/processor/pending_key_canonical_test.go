@@ -44,7 +44,7 @@ func TestPendingKeyForDetection_CanonicalizationDrivesMerge(t *testing.T) {
 		return testSciCanonical, testCommonDove, testCodeDove
 	}}
 
-	legacySci, _, _, _ := canonicalizeSpecies(resolver, testSciLegacy, testCommonDove, "legacycode")
+	legacySci, _, _, _ := canonicalizeSpecies(resolver, testSciLegacy, testCommonDove, testCodeLegacy)
 	canonicalSci, _, _, _ := canonicalizeSpecies(resolver, testSciCanonical, testCommonDove, testCodeDove)
 
 	legacy := detectionFor(legacySci, testCommonDove)
