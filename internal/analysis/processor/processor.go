@@ -1247,7 +1247,12 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 	seen := make(map[string]int, len(results)) // scientificName → index in additional
 	for _, r := range results {
 		sp := detection.ParseSpeciesString(r.Species)
-		if sp.ScientificName == primaryScientificName {
+		// Canonicalize the candidate's scientific name so the primary species is
+		// excluded even when this prediction carries it under a legacy/alias name.
+		// primaryScientificName is the canonical name from parseAndValidateSpecies;
+		// without this the aliased primary would leak into the additional results under
+		// its legacy name and the same taxon would be stored twice for one detection.
+		if openfauna.CanonicalName(sp.ScientificName) == primaryScientificName {
 			continue
 		}
 		if idx, exists := seen[sp.ScientificName]; exists {
