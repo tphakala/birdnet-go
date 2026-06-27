@@ -45,12 +45,10 @@ const (
 	NotificationTypeSystem    = "system"
 )
 
-// Weather provider constants
+// Weather unit constants. The weather provider identifiers moved to the
+// integrations domain package (its only consumer) when that domain was extracted.
 const (
-	WeatherProviderOpenWeather  = "openweather"
-	WeatherProviderWunderground = "wunderground"
-	WeatherProviderYrno         = "yrno"
-	WeatherUnitMetric           = "metric"
+	WeatherUnitMetric = "metric"
 )
 
 // Verification status constants for detections

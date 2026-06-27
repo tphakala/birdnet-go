@@ -141,7 +141,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/detections/batch/lock`      | `BatchLockDetections`   | ✅   | Bulk lock or unlock detections             |
 | POST   | `/detections/batch/resolve`   | `BatchResolveDetections`| ✅   | Resolve query params to detection IDs      |
 
-### Integrations (`integrations.go`)
+### Integrations (`integrations/integrations.go`)
 
 | Method | Route                                        | Handler                         | Auth | Description                                    |
 | ------ | -------------------------------------------- | ------------------------------- | ---- | ---------------------------------------------- |

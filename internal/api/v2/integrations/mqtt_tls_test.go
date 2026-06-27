@@ -1,4 +1,4 @@
-package api
+package integrations
 
 import (
 	"encoding/json"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -377,19 +376,4 @@ func TestDeleteMQTTTLSCertificate_ExternalPaths(t *testing.T) {
 
 	// Settings path should be cleared
 	assert.Empty(t, controller.Settings.Load().Realtime.MQTT.TLS.CACert, "settings path should be cleared")
-}
-
-// TestMQTTTLSRouteRegistration verifies that all three MQTT TLS routes are registered
-// when initIntegrationsRoutes is called.
-func TestMQTTTLSRouteRegistration(t *testing.T) {
-	e, _, controller := setupTestEnvironment(t)
-
-	controller.initIntegrationsRoutes()
-
-	expectedRoutes := []string{
-		"GET /api/v2/integrations/mqtt/tls/certificate",
-		"POST /api/v2/integrations/mqtt/tls/certificate",
-		"DELETE /api/v2/integrations/mqtt/tls/certificate",
-	}
-	apitest.AssertRoutesRegistered(t, e, expectedRoutes)
 }

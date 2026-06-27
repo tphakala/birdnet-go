@@ -1,6 +1,6 @@
-// integrations_test.go: Package api provides tests for API v2 integration endpoints.
+// integrations_test.go: tests for the api/v2 integrations domain endpoints.
 
-package api
+package integrations
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -28,9 +28,9 @@ const (
 )
 
 // runIntegrationConnectionHandlerTest runs table-driven tests for integration connection handlers
-func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, testCases []struct {
+func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Handler, echo.Context) error, endpoint string, testCases []struct {
 	name           string
-	setupSettings  func(*Controller)
+	setupSettings  func(*Handler)
 	expectedStatus int
 	expectedBody   string
 }) {
@@ -40,7 +40,7 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Control
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			e, _, controller := setupTestEnvironment(t)
+			e, controller := newIntegrationsTestHandler(t)
 
 			// Configure settings
 			tc.setupSettings(controller)
@@ -78,14 +78,14 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Control
 // runIntegrationConnectionWithDisconnectionTest runs integration connection handlers test with client disconnection.
 // This helper is preserved for future use when mock injection becomes available in the test framework.
 // Currently skipped because it requires mocking package-level functions for network operations.
-func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, setupSettings func(*Controller)) {
+func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc func(*Handler, echo.Context) error, endpoint string, setupSettings func(*Handler)) {
 	t.Helper()
 
 	// Skip this test since we can't override package-level functions in our test environment
 	t.Skip("This test requires mocking package-level functions - preserved for future implementation")
 
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, controller := newIntegrationsTestHandler(t)
 
 	// Configure settings
 	setupSettings(controller)
@@ -117,88 +117,6 @@ func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc fun
 	}
 
 	// Verify the handler completed gracefully despite the client disconnection
-}
-
-// TestInitIntegrationsRoutesRegistration tests the registration of integration-related API endpoints
-func TestInitIntegrationsRoutesRegistration(t *testing.T) {
-	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Re-initialize the routes to ensure a clean state
-	controller.initIntegrationsRoutes()
-
-	// Verify expected integration routes are registered
-	apitest.AssertRoutesRegistered(t, e, []string{
-		"GET /api/v2/integrations/mqtt/status",
-		"POST /api/v2/integrations/mqtt/test",
-		"GET /api/v2/integrations/birdweather/status",
-		"POST /api/v2/integrations/birdweather/test",
-		"POST /api/v2/integrations/ebird/test",
-	})
-}
-
-// MockMQTTClient is a mock implementation for MQTT client testing
-type MockMQTTClient struct {
-	mock.Mock
-	ConnectFunc     func(ctx context.Context) error
-	DisconnectFunc  func()
-	IsConnectedFunc func() bool
-	TestConnectFunc func(ctx context.Context, resultChan chan<- map[string]any)
-}
-
-func (m *MockMQTTClient) Connect(ctx context.Context) error {
-	if m.ConnectFunc != nil {
-		return m.ConnectFunc(ctx)
-	}
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
-func (m *MockMQTTClient) Disconnect() {
-	if m.DisconnectFunc != nil {
-		m.DisconnectFunc()
-		return
-	}
-	m.Called()
-}
-
-func (m *MockMQTTClient) IsConnected() bool {
-	if m.IsConnectedFunc != nil {
-		return m.IsConnectedFunc()
-	}
-	args := m.Called()
-	return args.Bool(0)
-}
-
-func (m *MockMQTTClient) TestConnection(ctx context.Context, resultChan chan<- map[string]any) {
-	if m.TestConnectFunc != nil {
-		m.TestConnectFunc(ctx, resultChan)
-		return
-	}
-	m.Called(ctx, resultChan)
-}
-
-// MockBirdWeatherClient is a mock implementation for BirdWeather client testing
-type MockBirdWeatherClient struct {
-	mock.Mock
-	TestConnectFunc func(ctx context.Context, resultChan chan<- map[string]any)
-	CloseFunc       func()
-}
-
-func (m *MockBirdWeatherClient) TestConnection(ctx context.Context, resultChan chan<- map[string]any) {
-	if m.TestConnectFunc != nil {
-		m.TestConnectFunc(ctx, resultChan)
-		return
-	}
-	m.Called(ctx, resultChan)
-}
-
-func (m *MockBirdWeatherClient) Close() {
-	if m.CloseFunc != nil {
-		m.CloseFunc()
-		return
-	}
-	m.Called()
 }
 
 // TestGetMQTTStatus tests the GetMQTTStatus handler
@@ -245,7 +163,7 @@ func TestGetMQTTStatus(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			e, _, controller := setupTestEnvironment(t)
+			e, controller := newIntegrationsTestHandler(t)
 
 			// Configure settings
 			controller.Settings.Load().Realtime.MQTT.Enabled = tc.mqttEnabled
@@ -323,7 +241,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			e, _, controller := setupTestEnvironment(t)
+			e, controller := newIntegrationsTestHandler(t)
 
 			// Configure settings for the test case
 			controller.Settings.Load().Realtime.Birdweather.Enabled = tc.bwEnabled
@@ -359,13 +277,13 @@ func TestTestMQTTConnection(t *testing.T) {
 	// Define test cases
 	testCases := []struct {
 		name           string
-		setupSettings  func(*Controller)
+		setupSettings  func(*Handler)
 		expectedStatus int
 		expectedBody   string
 	}{
 		{
 			name: "MQTT Not Enabled",
-			setupSettings: func(controller *Controller) {
+			setupSettings: func(controller *Handler) {
 				controller.Settings.Load().Realtime.MQTT.Enabled = false
 				controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
 			},
@@ -374,7 +292,7 @@ func TestTestMQTTConnection(t *testing.T) {
 		},
 		{
 			name: "Broker Not Configured",
-			setupSettings: func(controller *Controller) {
+			setupSettings: func(controller *Handler) {
 				controller.Settings.Load().Realtime.MQTT.Enabled = true
 				controller.Settings.Load().Realtime.MQTT.Broker = ""
 			},
@@ -383,7 +301,7 @@ func TestTestMQTTConnection(t *testing.T) {
 		},
 	}
 
-	runIntegrationConnectionHandlerTest(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", testCases)
+	runIntegrationConnectionHandlerTest(t, (*Handler).TestMQTTConnection, "/api/v2/integrations/mqtt/test", testCases)
 }
 
 // TestTestBirdWeatherConnection tests the TestBirdWeatherConnection handler
@@ -391,13 +309,13 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 	// Define test cases
 	testCases := []struct {
 		name           string
-		setupSettings  func(*Controller)
+		setupSettings  func(*Handler)
 		expectedStatus int
 		expectedBody   string
 	}{
 		{
 			name: "BirdWeather Not Enabled",
-			setupSettings: func(controller *Controller) {
+			setupSettings: func(controller *Handler) {
 				controller.Settings.Load().Realtime.Birdweather.Enabled = false
 				controller.Settings.Load().Realtime.Birdweather.ID = "ABC123"
 			},
@@ -406,7 +324,7 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 		},
 		{
 			name: "Station ID Not Configured",
-			setupSettings: func(controller *Controller) {
+			setupSettings: func(controller *Handler) {
 				controller.Settings.Load().Realtime.Birdweather.Enabled = true
 				controller.Settings.Load().Realtime.Birdweather.ID = ""
 			},
@@ -415,7 +333,7 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 		},
 	}
 
-	runIntegrationConnectionHandlerTest(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", testCases)
+	runIntegrationConnectionHandlerTest(t, (*Handler).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", testCases)
 }
 
 // TestTestEBirdConnection tests the TestEBirdConnection handler
@@ -470,7 +388,7 @@ func TestTestEBirdConnection(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			e, _, controller := setupTestEnvironment(t)
+			e, controller := newIntegrationsTestHandler(t)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/ebird/test",
 				strings.NewReader(tc.requestBody))
@@ -498,7 +416,7 @@ func TestTestEBirdConnection(t *testing.T) {
 // TestWriteJSONResponse tests the writeJSONResponse helper function
 func TestWriteJSONResponse(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, controller := newIntegrationsTestHandler(t)
 
 	// Create request context
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
@@ -539,7 +457,7 @@ func TestWriteJSONResponse(t *testing.T) {
 
 // Advanced test for MQTT connection with client disconnection
 func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
-	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", func(controller *Controller) {
+	runIntegrationConnectionWithDisconnectionTest(t, (*Handler).TestMQTTConnection, "/api/v2/integrations/mqtt/test", func(controller *Handler) {
 		controller.Settings.Load().Realtime.MQTT.Enabled = true
 		controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
 	})
@@ -547,26 +465,24 @@ func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
 
 // Advanced test for BirdWeather connection with client disconnection
 func TestBirdWeatherConnectionWithClientDisconnection(t *testing.T) {
-	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", func(controller *Controller) {
+	runIntegrationConnectionWithDisconnectionTest(t, (*Handler).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", func(controller *Handler) {
 		controller.Settings.Load().Realtime.Birdweather.Enabled = true
 		controller.Settings.Load().Realtime.Birdweather.ID = "ABC123"
 	})
 }
 
-// Test MQTT status with control channel
-func TestGetMQTTStatusWithControlChannel(t *testing.T) {
+// TestGetMQTTStatusEnabled exercises GetMQTTStatus with MQTT enabled and verifies
+// the broker/topic are reported back. The connection check runs against an
+// unreachable broker, so connected stays false.
+func TestGetMQTTStatusEnabled(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, controller := newIntegrationsTestHandler(t)
 
 	// Configure settings
 	controller.Settings.Load().Realtime.MQTT.Enabled = true
 	controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
 	controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
 	controller.Settings.Load().Main.Name = testBirdNetName
-
-	// Create a mock control channel
-	controlChan := make(chan string, 1)
-	controller.controlChan = controlChan
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)
@@ -589,9 +505,6 @@ func TestGetMQTTStatusWithControlChannel(t *testing.T) {
 	assert.Contains(t, result, "connected")
 	assert.Equal(t, testMQTTBroker, result["broker"])
 	assert.Equal(t, "birdnet/detections", result["topic"])
-
-	// Close the control channel
-	close(controlChan)
 }
 
 // TestErrorHandlingForIntegrations tests error handling for both MQTT and BirdWeather integrations
@@ -599,7 +512,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 	// Test error handling for MQTT and BirdWeather integrations
 	t.Run("MQTT Client Creation Error", func(t *testing.T) {
 		// Setup
-		e, _, controller := setupTestEnvironment(t)
+		e, controller := newIntegrationsTestHandler(t)
 
 		// Configure settings to enable MQTT
 		controller.Settings.Load().Realtime.MQTT.Enabled = true
@@ -622,7 +535,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 
 	t.Run("BirdWeather Client Creation Error", func(t *testing.T) {
 		// Setup
-		e, _, controller := setupTestEnvironment(t)
+		e, controller := newIntegrationsTestHandler(t)
 
 		// Configure settings to enable BirdWeather but with invalid configuration
 		controller.Settings.Load().Realtime.Birdweather.Enabled = true
@@ -653,7 +566,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 
 	t.Run("MQTT Connection Context Cancellation", func(t *testing.T) {
 		// Setup
-		e, _, controller := setupTestEnvironment(t)
+		e, controller := newIntegrationsTestHandler(t)
 
 		// Configure settings to enable MQTT
 		controller.Settings.Load().Realtime.MQTT.Enabled = true
@@ -681,7 +594,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 
 	t.Run("BirdWeather Connection Context Cancellation", func(t *testing.T) {
 		// Setup
-		e, _, controller := setupTestEnvironment(t)
+		e, controller := newIntegrationsTestHandler(t)
 
 		// Configure settings to enable BirdWeather
 		controller.Settings.Load().Realtime.Birdweather.Enabled = true
@@ -717,7 +630,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 
 	t.Run("MQTT Status Error Handling", func(t *testing.T) {
 		// Setup
-		e, _, controller := setupTestEnvironment(t)
+		e, controller := newIntegrationsTestHandler(t)
 
 		// Configure settings to enable MQTT with an invalid broker
 		controller.Settings.Load().Realtime.MQTT.Enabled = true
@@ -750,10 +663,10 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 }
 
 // redactedSecretPlaceholder is the sentinel the settings UI returns in place of
-// stored secrets; it aliases the production redactedValue constant so the tests
-// and the handlers agree on the exact value a client sends when the user has not
-// re-entered a secret.
-const redactedSecretPlaceholder = redactedValue
+// stored secrets; it aliases the shared apicore.RedactedValue constant so the
+// tests and the handlers agree on the exact value a client sends when the user
+// has not re-entered a secret.
+const redactedSecretPlaceholder = apicore.RedactedValue
 
 // TestRestoreRedactedSecret verifies the canonical single-field restore
 // primitive shared by the settings save flow and the integration
@@ -797,19 +710,19 @@ func TestRestoreRedactedSecret(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			incoming := tt.incoming
-			restoreRedactedSecret(tt.current, &incoming)
+			apicore.RestoreRedactedSecret(tt.current, &incoming)
 			assert.Equal(t, tt.want, incoming)
 		})
 	}
 }
 
 // publishWeatherTestSettings sets the saved weather provider config the handler
-// reads via currentSettings() and returns the controller. It re-publishes the
-// settings so currentSettings() (which reads the global snapshot first) observes
+// reads via CurrentSettings() and returns the handler. It re-publishes the
+// settings so CurrentSettings() (which reads the global snapshot first) observes
 // the saved keys/endpoint.
-func publishWeatherTestSettings(t *testing.T, mutate func(*conf.Settings)) (*echo.Echo, *Controller) {
+func publishWeatherTestSettings(t *testing.T, mutate func(*conf.Settings)) (*echo.Echo, *Handler) {
 	t.Helper()
-	e, _, controller := setupTestEnvironment(t)
+	e, controller := newIntegrationsTestHandler(t)
 	settings := controller.Settings.Load()
 	mutate(settings)
 	apitest.PublishTestSettings(t, settings)
@@ -878,8 +791,8 @@ func TestTestWeatherConnection_RestoresRedactedAPIKey(t *testing.T) {
 
 		// Reproduce the handler's restore sequence using the production helper.
 		current := controller.CurrentSettings()
-		restoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
-		restoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
+		apicore.RestoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
+		apicore.RestoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
 
 		testSettings := conf.CloneSettings(current)
 		testSettings.Realtime.Weather = conf.WeatherSettings{
@@ -933,7 +846,7 @@ func TestTestEBirdConnection_RestoresRedactedAPIKey(t *testing.T) {
 		})
 
 		apiKey := redactedSecretPlaceholder
-		restoreRedactedSecret(controller.CurrentSettings().Realtime.EBird.APIKey, &apiKey)
+		apicore.RestoreRedactedSecret(controller.CurrentSettings().Realtime.EBird.APIKey, &apiKey)
 		assert.Equal(t, realKey, apiKey,
 			"eBird test must use the real saved key, not the redacted placeholder")
 	})

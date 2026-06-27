@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/control"
 	"github.com/tphakala/birdnet-go/internal/api/v2/dynamicthresholds"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
+	"github.com/tphakala/birdnet-go/internal/api/v2/integrations"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	"github.com/tphakala/birdnet-go/internal/api/v2/notifications"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
@@ -74,6 +75,15 @@ type Controller struct {
 	// the facade's settings-save machinery (see NewWithOptions) because TLS writes
 	// mutate persisted settings.
 	tlsHandler *tlsapi.Handler
+
+	// integrations serves the /api/v2/integrations/* endpoints (MQTT status/test,
+	// MQTT TLS certificate management, BirdWeather/weather-provider/eBird
+	// connectivity tests, and the Home Assistant discovery trigger). Like the TLS
+	// handler it also holds the facade's settings-save machinery (see
+	// NewWithOptions) because the MQTT TLS certificate writes mutate persisted
+	// settings; the remaining deps (Metrics, Processor, settings accessors, and the
+	// error/log helpers) all promote from the shared *apicore.Core.
+	integrations *integrations.Handler
 
 	// rangeHandler serves the /api/v2/range/* endpoints (range-filter status,
 	// species scores/count/list/CSV, test, rebuild). It is named rangeHandler
@@ -387,6 +397,15 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// stable for the controller's lifetime.
 	c.tlsHandler = tlsapi.New(c.Core, &c.settingsMutex,
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+	// The integrations handler needs the same facade settings-save machinery as the
+	// TLS handler: the MQTT TLS certificate writes mutate persisted settings, so it
+	// receives the shared &c.settingsMutex (so those writes serialize against the
+	// main settings update handlers) plus the bound publish/save/change method
+	// values. c is fully constructed here and these deps are stable for its
+	// lifetime, so this can be wired before the functional options loop (it needs no
+	// option-set dependency).
+	c.integrations = integrations.New(c.Core, &c.settingsMutex,
+		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
 	// The species handler delegates to two facade-owned dependencies that have not
 	// been extracted into their own domains yet: loadCommonNameMap (the shared
 	// name-map read accessor) and ServeSpeciesImageProxy (the media image proxy the
@@ -543,7 +562,7 @@ func (c *Controller) initRoutes() {
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
 		{"hls streaming routes", c.initHLSRoutes},
-		{"integration routes", c.initIntegrationsRoutes},
+		{"integration routes", func() { c.integrations.RegisterRoutes(c.Group) }},
 		{"control routes", func() { c.control.RegisterRoutes(c.Group) }},
 		{"auth routes", func() { c.authHandler.RegisterRoutes(c.Group) }},
 		{"media routes", c.initMediaRoutes},
