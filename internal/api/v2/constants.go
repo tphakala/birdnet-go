@@ -1,6 +1,10 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+)
 
 // Cache duration constants for HTTP responses
 const (
@@ -45,19 +49,6 @@ const (
 	NotificationTypeSystem    = "system"
 )
 
-// Weather unit constants. The weather provider identifiers moved to the
-// integrations domain package (its only consumer) when that domain was extracted.
-const (
-	WeatherUnitMetric = "metric"
-)
-
-// Verification status constants for detections
-const (
-	VerificationStatusCorrect       = "correct"
-	VerificationStatusFalsePositive = "false_positive"
-	VerificationStatusUnverified    = "unverified"
-)
-
 // Settings section name constants
 const (
 	SettingsSectionBirdnet   = "birdnet"
@@ -83,7 +74,6 @@ const (
 
 // Query parameter value constants
 const (
-	QueryValueAny  = "any"
 	QueryValueTrue = "true"
 )
 
@@ -101,8 +91,10 @@ const (
 
 // Numeric constants for calculations
 const (
-	// PercentageMultiplier is used for converting fractions to percentages
-	PercentageMultiplier = 100.0
+	// PercentageMultiplier is used for converting fractions to percentages.
+	// Aliased from apicore so the detections/search confidence parsing (now in
+	// apicore) and the analytics percentage parsing here share one source.
+	PercentageMultiplier = apicore.PercentageMultiplier
 
 	// SecondsPerMinute is the number of seconds in a minute
 	SecondsPerMinute = 60

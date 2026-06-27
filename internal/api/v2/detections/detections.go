@@ -1,5 +1,5 @@
 // internal/api/v2/detections.go
-package api
+package detections
 
 import (
 	"fmt"
@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/patrickmn/go-cache"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -40,7 +41,6 @@ const (
 	defaultNumResults     = 100  // Default number of results
 	maxNumResults         = 1000 // Maximum number of results
 	sunEventWindowMinutes = 30   // Minutes before/after sunrise/sunset
-	minHourRangeParts     = 2    // Minimum parts for hour range parsing
 
 	// queryType values for detection queries
 	queryTypeHourly  = "hourly"
@@ -109,7 +109,7 @@ func parseVerificationStatus(status string) (verificationStatus, error) {
 
 // checkDetectionNotLocked verifies a detection is not locked, checking both in-memory and database.
 // Returns true if locked (error response already sent), false if unlocked.
-func (c *Controller) checkDetectionNotLocked(ctx echo.Context, idStr string, inMemoryLocked bool) bool {
+func (c *Handler) checkDetectionNotLocked(ctx echo.Context, idStr string, inMemoryLocked bool) bool {
 	// Check in-memory lock state first
 	if inMemoryLocked {
 		_ = c.HandleError(ctx, fmt.Errorf("detection is locked"),
@@ -130,45 +130,6 @@ func (c *Controller) checkDetectionNotLocked(ctx echo.Context, idStr string, inM
 	}
 
 	return false
-}
-
-// initDetectionRoutes registers all detection-related API endpoints
-func (c *Controller) initDetectionRoutes() {
-	// Detection handlers dereference c.DS. Honor the constructor's "datastore disabled"
-	// mode (NewWithOptions permits a nil datastore) by not registering this route group
-	// when there is no datastore, instead of registering handlers that would panic.
-	if c.DS == nil {
-		c.LogWarnIfEnabled("Skipping detection routes: datastore is not available")
-		return
-	}
-
-	// DetectionCache is already initialized by the constructor (NewWithOptions); do not
-	// re-create it here, which would orphan the constructor's cache (and its janitor).
-
-	// Detection endpoints - publicly accessible
-	//
-	// Note: Detection data is decoupled from weather data by design.
-	// To get weather information for a specific detection, use the
-	// /api/v2/weather/detection/:id endpoint after fetching the detection.
-	c.Group.GET("/detections", c.GetDetections)
-	c.Group.GET("/detections/:id", c.GetDetection)
-	c.Group.GET("/detections/recent", c.GetRecentDetections)
-	c.Group.GET("/detections/:id/time-of-day", c.GetDetectionTimeOfDay)
-
-	// Protected detection management endpoints
-	detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
-	detectionGroup.DELETE("/:id", c.DeleteDetection)
-	detectionGroup.POST("/:id/review", c.ReviewDetection)
-	detectionGroup.POST("/:id/lock", c.LockDetection)
-	detectionGroup.POST("/ignore", c.IgnoreSpecies)
-	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
-
-	// Batch operation endpoints
-	batchGroup := detectionGroup.Group("/batch")
-	batchGroup.POST("/delete", c.BatchDeleteDetections)
-	batchGroup.POST("/review", c.BatchReviewDetections)
-	batchGroup.POST("/lock", c.BatchLockDetections)
-	batchGroup.POST("/resolve", c.BatchResolveDetections)
 }
 
 // CommentResponse represents a comment on a detection in the API response
@@ -293,7 +254,7 @@ func (p *detectionQueryParams) advancedSearchCacheKey() string {
 }
 
 // parseDetectionQueryParams extracts and validates query parameters from the request
-func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryParams, error) {
+func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryParams, error) {
 	params := &detectionQueryParams{
 		Date:      ctx.QueryParam("date"),
 		Hour:      ctx.QueryParam("hour"),
@@ -312,7 +273,7 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 		// Sorting
 		SortBy: ctx.QueryParam("sortBy"),
 		// Include weather data
-		IncludeWeather: ctx.QueryParam("includeWeather") == QueryValueTrue,
+		IncludeWeather: ctx.QueryParam("includeWeather") == queryValueTrue,
 	}
 
 	// Parse duration
@@ -392,7 +353,7 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 		}
 	} else if params.Hour != "" {
 		// Other query types: hour is optional, but if present must be valid (ranges OK)
-		if parseHourFilter(params.Hour) == nil {
+		if apicore.ParseHourFilter(params.Hour) == nil {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid hour parameter: must be a valid hour (0-23) or hour range (e.g. 6-9)")
 		}
 	}
@@ -401,7 +362,7 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 }
 
 // validateDateParameters validates start_date and end_date parameters
-func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx echo.Context) error {
+func (c *Handler) validateDateParameters(startDateStr, endDateStr string, ctx echo.Context) error {
 	// Validate individual date formats
 	for _, dp := range []struct{ value, name string }{{startDateStr, "start_date"}, {endDateStr, "end_date"}} {
 		if err := validateDateParam(dp.value, dp.name); err != nil {
@@ -428,7 +389,7 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 }
 
 // parseNumResults parses and validates the numResults parameter
-func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
+func (c *Handler) parseNumResults(numResultsStr string) (int, error) {
 	if numResultsStr == "" {
 		return defaultNumResults, nil // Default value
 	}
@@ -490,7 +451,7 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 }
 
 // parseOffset parses and validates the offset parameter
-func (c *Controller) parseOffset(offsetStr string) (int, error) {
+func (c *Handler) parseOffset(offsetStr string) (int, error) {
 	if offsetStr == "" {
 		return 0, nil // Default value
 	}
@@ -551,7 +512,7 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 }
 
 // GetDetections handles GET requests for detections
-func (c *Controller) GetDetections(ctx echo.Context) error {
+func (c *Handler) GetDetections(ctx echo.Context) error {
 	// Parse and validate query parameters
 	params, err := c.parseDetectionQueryParams(ctx)
 	if err != nil {
@@ -653,7 +614,7 @@ func (p *detectionQueryParams) needsAdvancedRouting() bool {
 }
 
 // getDetectionsByQueryType retrieves detections based on the query type
-func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
+func (c *Handler) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
 	// Resolve locale common names to scientific names before routing so every
 	// query type benefits without per-case duplication.
 	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
@@ -692,7 +653,7 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 // private data: they can reveal internal hostnames, IPs, stream paths, and
 // user-chosen labels. This matches the anonymization done by the audio source
 // listing endpoints and the search endpoint.
-func (c *Controller) stripSourceForUnauthenticated(ctx echo.Context, detections []DetectionResponse) {
+func (c *Handler) stripSourceForUnauthenticated(ctx echo.Context, detections []DetectionResponse) {
 	if c.isClientAuthenticated(ctx) {
 		return
 	}
@@ -702,7 +663,7 @@ func (c *Controller) stripSourceForUnauthenticated(ctx echo.Context, detections 
 }
 
 // convertNotesToDetectionResponses converts datastore notes to API detection responses
-func (c *Controller) convertNotesToDetectionResponses(notes []datastore.Note, includeWeather bool) []DetectionResponse {
+func (c *Handler) convertNotesToDetectionResponses(notes []datastore.Note, includeWeather bool) []DetectionResponse {
 	detections := make([]DetectionResponse, 0, len(notes))
 
 	// Create a map to cache weather data if needed
@@ -717,7 +678,7 @@ func (c *Controller) convertNotesToDetectionResponses(notes []datastore.Note, in
 }
 
 // noteToDetectionResponse converts a single note to a detection response
-func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeather bool, weatherCache map[string][]datastore.HourlyWeather) DetectionResponse {
+func (c *Handler) noteToDetectionResponse(note *datastore.Note, includeWeather bool, weatherCache map[string][]datastore.HourlyWeather) DetectionResponse {
 	detection := DetectionResponse{
 		ID:             note.ID,
 		Date:           note.Date,
@@ -775,7 +736,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 // detection was the first sighting of the species (ever, this year, or this season).
 // Without this, all detections of a recently-first-seen species would incorrectly
 // show isNewSpecies=true instead of only the actual first detection.
-func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, scientificName, detectionDate string) {
+func (c *Handler) applySpeciesTrackingMetadata(detection *DetectionResponse, scientificName, detectionDate string) {
 	// Snapshot processor and tracker to avoid TOCTOU race
 	proc := c.Processor
 	if proc == nil {
@@ -828,7 +789,7 @@ func extractNoteComments(noteComments []datastore.NoteComment) []CommentResponse
 }
 
 // populateWeatherData adds weather and time of day info to detection response
-func (c *Controller) populateWeatherData(detection *DetectionResponse, note *datastore.Note, weatherCache map[string][]datastore.HourlyWeather) {
+func (c *Handler) populateWeatherData(detection *DetectionResponse, note *datastore.Note, weatherCache map[string][]datastore.HourlyWeather) {
 	// Parse detection time (database stores local time strings)
 	detectionTimeStr := note.Date + " " + note.Time
 	detectionTime, err := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, time.Local)
@@ -844,7 +805,7 @@ func (c *Controller) populateWeatherData(detection *DetectionResponse, note *dat
 }
 
 // calculateDetectionTimeOfDay calculates time of day based on sun position
-func (c *Controller) calculateDetectionTimeOfDay(detectionTime time.Time) string {
+func (c *Handler) calculateDetectionTimeOfDay(detectionTime time.Time) string {
 	if c.SunCalc == nil {
 		return ""
 	}
@@ -856,7 +817,7 @@ func (c *Controller) calculateDetectionTimeOfDay(detectionTime time.Time) string
 }
 
 // getWeatherForDetectionTime retrieves weather data for a detection time
-func (c *Controller) getWeatherForDetectionTime(detectionTime time.Time, date string, weatherCache map[string][]datastore.HourlyWeather) *WeatherInfo {
+func (c *Handler) getWeatherForDetectionTime(detectionTime time.Time, date string, weatherCache map[string][]datastore.HourlyWeather) *WeatherInfo {
 	if weatherCache == nil {
 		return nil
 	}
@@ -896,7 +857,7 @@ func (c *Controller) getWeatherForDetectionTime(detectionTime time.Time, date st
 }
 
 // ensureWeatherCached fetches weather data for a date if not already cached
-func (c *Controller) ensureWeatherCached(date string, weatherCache map[string][]datastore.HourlyWeather) {
+func (c *Handler) ensureWeatherCached(date string, weatherCache map[string][]datastore.HourlyWeather) {
 	if _, exists := weatherCache[date]; exists {
 		return
 	}
@@ -907,7 +868,7 @@ func (c *Controller) ensureWeatherCached(date string, weatherCache map[string][]
 }
 
 // mapVerificationStatus maps the database verification status to API response format
-func (c *Controller) mapVerificationStatus(status string) string {
+func (c *Handler) mapVerificationStatus(status string) string {
 	switch status {
 	case VerificationStatusCorrect:
 		return VerificationStatusCorrect
@@ -919,7 +880,7 @@ func (c *Controller) mapVerificationStatus(status string) string {
 }
 
 // createPaginatedResponse creates a paginated response structure
-func (c *Controller) createPaginatedResponse(detections []DetectionResponse, totalResults int64, numResults, offset int) PaginatedResponse {
+func (c *Handler) createPaginatedResponse(detections []DetectionResponse, totalResults int64, numResults, offset int) PaginatedResponse {
 	currentPage := (offset / numResults) + 1
 	totalPages := int((totalResults + int64(numResults) - 1) / int64(numResults))
 
@@ -934,7 +895,7 @@ func (c *Controller) createPaginatedResponse(detections []DetectionResponse, tot
 }
 
 // getHourlyDetections handles hourly query type logic
-func (c *Controller) getHourlyDetections(date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
+func (c *Handler) getHourlyDetections(date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
 	// Generate a cache key based on parameters
 	cacheKey := fmt.Sprintf("hourly:%s:%s:%d:%d:%d", date, hour, duration, numResults, offset)
 
@@ -990,7 +951,7 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 }
 
 // getSpeciesDetections handles species query type logic
-func (c *Controller) getSpeciesDetections(species, date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
+func (c *Handler) getSpeciesDetections(species, date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
 	// Generate a cache key based on parameters
 	cacheKey := fmt.Sprintf("species:%s:%s:%s:%d:%d:%d", species, date, hour, duration, numResults, offset)
 
@@ -1049,7 +1010,7 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 }
 
 // getSearchDetectionsAdvanced handles advanced search with filters
-func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]datastore.Note, int64, error) {
+func (c *Handler) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]datastore.Note, int64, error) {
 	cacheKey := params.advancedSearchCacheKey()
 
 	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
@@ -1080,7 +1041,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 }
 
 // buildAdvancedSearchFilters constructs search filters from query parameters
-func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) datastore.AdvancedSearchFilters {
+func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datastore.AdvancedSearchFilters {
 	filters := datastore.AdvancedSearchFilters{
 		TextQuery:     params.Search,
 		Limit:         params.NumResults,
@@ -1089,7 +1050,7 @@ func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) da
 	}
 
 	// Apply confidence filter using shared helper
-	if confFilter := parseConfidenceFilter(params.Confidence); confFilter != nil {
+	if confFilter := apicore.ParseConfidenceFilter(params.Confidence); confFilter != nil {
 		filters.Confidence = &datastore.ConfidenceFilter{
 			Operator: confFilter.Operator,
 			Value:    confFilter.Value,
@@ -1106,7 +1067,7 @@ func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) da
 	if hourParam == "" {
 		hourParam = params.Hour
 	}
-	if hourFilter := parseHourFilter(hourParam); hourFilter != nil {
+	if hourFilter := apicore.ParseHourFilter(hourParam); hourFilter != nil {
 		endHour := hourFilter.End
 		if hourFilter.Start == hourFilter.End && params.Duration > 1 {
 			endHour = (hourFilter.Start + params.Duration - 1) % 24
@@ -1118,7 +1079,7 @@ func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) da
 	}
 
 	// Apply date range filter using shared helper
-	if dateRange := parseDateRangeFilter(params.Date, params.StartDate, params.EndDate); dateRange != nil {
+	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate); dateRange != nil {
 		filters.DateRange = &datastore.DateRange{
 			Start: dateRange.Start,
 			End:   dateRange.End,
@@ -1135,11 +1096,11 @@ func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) da
 
 	// Apply boolean filters
 	if params.Verified != "" {
-		verified := params.Verified == QueryValueTrue || params.Verified == "human"
+		verified := params.Verified == queryValueTrue || params.Verified == "human"
 		filters.Verified = &verified
 	}
 	if params.Locked != "" {
-		locked := params.Locked == QueryValueTrue
+		locked := params.Locked == queryValueTrue
 		filters.Locked = &locked
 	}
 
@@ -1150,7 +1111,7 @@ func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) da
 }
 
 // getSearchDetections handles search query type logic
-func (c *Controller) getSearchDetections(search string, numResults, offset int) ([]datastore.Note, int64, error) {
+func (c *Handler) getSearchDetections(search string, numResults, offset int) ([]datastore.Note, int64, error) {
 	// Generate a cache key based on parameters
 	cacheKey := fmt.Sprintf("search:%s:%d:%d", search, numResults, offset)
 
@@ -1191,7 +1152,7 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 }
 
 // getAllDetections handles default/all query type logic
-func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note, int64, error) {
+func (c *Handler) getAllDetections(numResults, offset int) ([]datastore.Note, int64, error) {
 	// Generate a cache key based on parameters
 	cacheKey := fmt.Sprintf("all:%d:%d", numResults, offset)
 
@@ -1230,7 +1191,7 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 }
 
 // GetDetection returns a single detection by ID
-func (c *Controller) GetDetection(ctx echo.Context) error {
+func (c *Handler) GetDetection(ctx echo.Context) error {
 	id := ctx.Param("id")
 	note, err := c.DS.Get(id)
 	if err != nil {
@@ -1250,14 +1211,14 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 // Query parameters:
 // - limit: number of detections to return (default: 10)
 // - includeWeather: whether to include weather data (default: false)
-func (c *Controller) GetRecentDetections(ctx echo.Context) error {
+func (c *Handler) GetRecentDetections(ctx echo.Context) error {
 	limit, _ := strconv.Atoi(ctx.QueryParam("limit"))
 	if limit <= 0 {
 		limit = 10
 	}
 
 	// Check if weather data should be included
-	includeWeather := ctx.QueryParam("includeWeather") == QueryValueTrue
+	includeWeather := ctx.QueryParam("includeWeather") == queryValueTrue
 
 	notes, err := c.DS.GetLastDetections(limit)
 	if err != nil {
@@ -1270,7 +1231,7 @@ func (c *Controller) GetRecentDetections(ctx echo.Context) error {
 }
 
 // DeleteDetection deletes a detection by ID
-func (c *Controller) DeleteDetection(ctx echo.Context) error {
+func (c *Handler) DeleteDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 	note, err := c.DS.Get(idStr)
 	if err != nil {
@@ -1305,22 +1266,22 @@ func (c *Controller) DeleteDetection(ctx echo.Context) error {
 // spectrogramWidths lists all valid spectrogram widths used for file naming.
 // These correspond to the size constants: sm=258, md=514, lg=1026, xl=2050.
 var spectrogramWidths = []int{
-	SpectrogramSizeSm,
-	SpectrogramSizeMd,
-	SpectrogramSizeLg,
-	SpectrogramSizeXl,
+	apicore.SpectrogramSizeSm,
+	apicore.SpectrogramSizeMd,
+	apicore.SpectrogramSizeLg,
+	apicore.SpectrogramSizeXl,
 }
 
 // removeDetectionFiles removes the audio clip and all associated spectrogram
 // files from disk. Deletions are best-effort: files that are already missing
 // are silently ignored, and other errors are logged as warnings without
 // affecting the caller.
-func (c *Controller) removeDetectionFiles(clipName string) {
+func (c *Handler) removeDetectionFiles(clipName string) {
 	log := c.APILogger
 
 	// Normalize the clip path to get a relative path within SecureFS
 	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
-	normalized := NormalizeClipPath(clipName, clipsPrefix)
+	normalized := apicore.NormalizeClipPath(clipName, clipsPrefix)
 	if normalized == "" {
 		log.Warn("Cannot remove detection files: empty normalized clip path",
 			logger.String("clip_name", clipName))
@@ -1412,14 +1373,14 @@ func isSpectrogramFileFor(pngName, baseFilename string) bool {
 // invalidateDetectionCache clears the detection cache to ensure fresh data
 // is fetched on subsequent requests. This should be called after any
 // operation that modifies detection data.
-func (c *Controller) invalidateDetectionCache() {
+func (c *Handler) invalidateDetectionCache() {
 	// Clear all cached detection data to ensure fresh results
 	c.DetectionCache.Flush()
 }
 
 // checkAndHandleLock verifies if a detection is locked and manages lock state
 // Returns the note and error if any
-func (c *Controller) checkAndHandleLock(idStr string, shouldLock bool) (*datastore.Note, error) {
+func (c *Handler) checkAndHandleLock(idStr string, shouldLock bool) (*datastore.Note, error) {
 	// Get the note
 	note, err := c.DS.Get(idStr)
 	if err != nil {
@@ -1451,7 +1412,7 @@ func (c *Controller) checkAndHandleLock(idStr string, shouldLock bool) (*datasto
 }
 
 // ReviewDetection updates a detection with verification status and optional comment
-func (c *Controller) ReviewDetection(ctx echo.Context) error {
+func (c *Handler) ReviewDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 
 	// Get the note directly - allow reviewing locked detections
@@ -1530,7 +1491,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 }
 
 // LockDetection locks or unlocks a detection
-func (c *Controller) LockDetection(ctx echo.Context) error {
+func (c *Handler) LockDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 
 	// Parse request first to determine if we're locking or unlocking
@@ -1584,7 +1545,7 @@ type ExcludedSpeciesResponse struct {
 }
 
 // IgnoreSpecies toggles a species in the ignored list (adds if not present, removes if present)
-func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
+func (c *Handler) IgnoreSpecies(ctx echo.Context) error {
 	// Parse request body
 	req := &IgnoreSpeciesRequest{}
 	if err := ctx.Bind(req); err != nil {
@@ -1632,12 +1593,12 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 // entry here keeps that badge state correct after a reload; entries with no
 // scientific->common mapping (legacy common-name entries, unresolvable names)
 // pass through unchanged.
-func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
+func (c *Handler) GetExcludedSpecies(ctx echo.Context) error {
 	excluded := c.getSettingsOrFallback().Realtime.Species.Exclude
 	nameMap := c.loadCommonNameMap()
 	species := make([]string, len(excluded))
 	for i, name := range excluded {
-		species[i] = resolveCommonName(nameMap, name)
+		species[i] = apicore.ResolveCommonName(nameMap, name)
 	}
 
 	return ctx.JSON(http.StatusOK, ExcludedSpeciesResponse{
@@ -1652,11 +1613,8 @@ func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
 // name) works regardless of the UI locale. Input that does not map to a known
 // common name (already a scientific name, unknown, or an ambiguous common name
 // shared by multiple species) is returned unchanged.
-func (c *Controller) resolveExcludeName(name string) string {
-	if resolved, hit := c.resolveSpeciesToScientific(name); hit {
-		return resolved
-	}
-	return name
+func (c *Handler) resolveExcludeName(name string) string {
+	return apicore.ResolveExcludeName(c.loadCommonToScientificMap(), name)
 }
 
 // excludeEntryMatches reports whether an existing exclude-list entry refers to
@@ -1665,14 +1623,8 @@ func (c *Controller) resolveExcludeName(name string) string {
 // entry too, so an entry persisted under a localized or common name (legacy data,
 // or a name typed into Settings) reconciles with the scientific-name form on
 // toggle/dedup instead of leaving an orphan that can never be removed.
-func (c *Controller) excludeEntryMatches(entry, target string) bool {
-	if strings.EqualFold(entry, target) {
-		return true
-	}
-	if resolved, hit := c.resolveSpeciesToScientific(entry); hit {
-		return strings.EqualFold(resolved, target)
-	}
-	return false
+func (c *Handler) excludeEntryMatches(entry, target string) bool {
+	return apicore.ExcludeEntryMatches(c.loadCommonToScientificMap(), entry, target)
 }
 
 // canonicalizeExcludeList returns a copy of the species exclude list with every
@@ -1696,38 +1648,12 @@ func (c *Controller) excludeEntryMatches(entry, target string) bool {
 // matters because rangeFilterSettingsChanged compares with reflect.DeepEqual and
 // DeepEqual(nil, []string{}) is false: returning a non-nil empty slice would spuriously
 // differ from a nil stored list and trigger a range-filter rebuild on an empty save.
-func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
-	if len(exclude) == 0 {
-		return nil
-	}
-	canonical := make([]string, 0, len(exclude))
-	for _, entry := range exclude {
-		trimmed := strings.TrimSpace(entry)
-		if trimmed == "" {
-			continue
-		}
-		resolved := c.resolveExcludeName(trimmed)
-		// Dedup with EqualFold for parity with excludeEntryMatches (both operands are
-		// already resolved here, so no second resolution is needed). Uses the same
-		// slices.ContainsFunc idiom the exclude-list toggle/add paths use; lists are
-		// small, so the linear scan is fine.
-		if slices.ContainsFunc(canonical, func(existing string) bool {
-			return strings.EqualFold(existing, resolved)
-		}) {
-			continue
-		}
-		canonical = append(canonical, resolved)
-	}
-	if len(canonical) == 0 {
-		// Every entry was whitespace; collapse to nil (see the doc comment) so an
-		// empty result matches a nil stored list under reflect.DeepEqual.
-		return nil
-	}
-	return canonical
+func (c *Handler) canonicalizeExcludeList(exclude []string) []string {
+	return apicore.CanonicalizeExcludeList(c.loadCommonToScientificMap(), exclude)
 }
 
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
-func (c *Controller) addToIgnoredSpecies(verified, ignoreSpecies string) error {
+func (c *Handler) addToIgnoredSpecies(verified, ignoreSpecies string) error {
 	if verified == "false_positive" && ignoreSpecies != "" {
 		return c.addSpeciesToIgnoredList(c.resolveExcludeName(ignoreSpecies))
 	}
@@ -1737,7 +1663,7 @@ func (c *Controller) addToIgnoredSpecies(verified, ignoreSpecies string) error {
 // toggleSpeciesInIgnoredList toggles a species in the ignore list with proper concurrency control.
 // If the species is already excluded, it removes it. If not excluded, it adds it.
 // Returns the action taken ("added" or "removed"), the new excluded state, and any error.
-func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, isExcluded bool, err error) {
+func (c *Handler) toggleSpeciesInIgnoredList(species string) (action string, isExcluded bool, err error) {
 	if species == "" {
 		return "", false, nil
 	}
@@ -1776,7 +1702,7 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 	// Trigger side-effects (range filter rebuild, etc.) so the include list
 	// reflects the updated exclude list without waiting for the daily rebuild.
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
-		GetLogger().Warn("Failed to trigger settings side-effects after species exclusion change",
+		apicore.GetLogger().Warn("Failed to trigger settings side-effects after species exclusion change",
 			logger.Error(handleErr),
 			logger.String("species", species),
 			logger.String("action", action))
@@ -1787,7 +1713,7 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 
 // addSpeciesToIgnoredList adds a species to the ignore list (used by review endpoint).
 // This is a simplified version that only adds, used when marking as false positive.
-func (c *Controller) addSpeciesToIgnoredList(species string) error {
+func (c *Handler) addSpeciesToIgnoredList(species string) error {
 	if species == "" {
 		return nil
 	}
@@ -1810,7 +1736,7 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	}
 
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
-		GetLogger().Warn("Failed to trigger settings side-effects after species exclusion change",
+		apicore.GetLogger().Warn("Failed to trigger settings side-effects after species exclusion change",
 			logger.Error(handleErr),
 			logger.String("species", species))
 	}
@@ -1819,7 +1745,7 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 }
 
 // AddComment creates a comment for a note
-func (c *Controller) AddComment(noteID uint, commentText string) error {
+func (c *Handler) AddComment(noteID uint, commentText string) error {
 	if commentText == "" {
 		return nil // No comment to add
 	}
@@ -1835,7 +1761,7 @@ func (c *Controller) AddComment(noteID uint, commentText string) error {
 }
 
 // AddReview creates or updates a review for a note
-func (c *Controller) AddReview(noteID uint, verified bool) error {
+func (c *Handler) AddReview(noteID uint, verified bool) error {
 	// Convert bool to string value
 	verifiedStr := map[bool]string{
 		true:  "correct",
@@ -1853,7 +1779,7 @@ func (c *Controller) AddReview(noteID uint, verified bool) error {
 }
 
 // AddLock creates or removes a lock for a note
-func (c *Controller) AddLock(noteID uint, locked bool) error {
+func (c *Handler) AddLock(noteID uint, locked bool) error {
 	noteIDStr := strconv.FormatUint(uint64(noteID), 10)
 
 	if locked {
@@ -1864,7 +1790,7 @@ func (c *Controller) AddLock(noteID uint, locked bool) error {
 }
 
 // GetDetectionTimeOfDay calculates and returns the time of day for a detection
-func (c *Controller) GetDetectionTimeOfDay(ctx echo.Context) error {
+func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	id := ctx.Param("id")
 
 	// Get the detection from the database
@@ -1930,7 +1856,7 @@ func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTime
 // getWeatherUnits returns the temperature display unit based on user preference.
 // All temperatures are stored in Celsius internally; this determines display format.
 // Returns "imperial" for Fahrenheit or "metric" for Celsius to match frontend expectations.
-func (c *Controller) getWeatherUnits() string {
+func (c *Handler) getWeatherUnits() string {
 	// Use dashboard temperature unit preference for display. Read the live
 	// snapshot (race-free, hot-reloading) via CurrentSettings() so out-of-band
 	// global republishes are picked up, matching the rest of the Dashboard reads.
@@ -1939,9 +1865,9 @@ func (c *Controller) getWeatherUnits() string {
 	case conf.TemperatureUnitFahrenheit:
 		return "imperial"
 	case conf.TemperatureUnitCelsius:
-		return WeatherUnitMetric
+		return weatherUnitMetric
 	default:
 		// Default to Celsius if not set
-		return WeatherUnitMetric
+		return weatherUnitMetric
 	}
 }

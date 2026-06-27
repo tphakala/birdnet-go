@@ -13,11 +13,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -157,15 +155,4 @@ func assertSpeciesDailySummary(t *testing.T, species *SpeciesDailySummary, expec
 	assert.Equal(t, expected.LatestHeard, species.LatestHeard, "%s latest heard time mismatch", expected.CommonName)
 	assert.Equal(t, expected.HighConfidence, species.HighConfidence, "%s high confidence mismatch", expected.CommonName)
 	assert.Contains(t, species.ThumbnailURL, expected.ThumbnailURLContain, "%s thumbnail URL mismatch", expected.CommonName)
-}
-
-// setupValidReviewMock configures mock expectations for a valid review operation.
-// This is used for detection review tests where the note is not locked and saves succeed.
-func setupValidReviewMock(m *mock.Mock, id string, noteID uint, withComment bool) {
-	m.On("Get", id).Return(datastore.Note{ID: noteID, Locked: false}, nil)
-	m.On("IsNoteLocked", id).Return(false, nil)
-	if withComment {
-		m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
-	}
-	m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 }

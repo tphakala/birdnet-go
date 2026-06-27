@@ -1,4 +1,4 @@
-package api
+package detections
 
 import (
 	"context"
@@ -23,16 +23,6 @@ const defaultPerPage = 20
 // lookup, so this bounds the work an anonymous caller can request. A reverse
 // dictionary match for an ambiguous or substring name stays well under this.
 const maxSearchSpeciesScientific = 100
-
-// initSearchRoutes registers the search-related routes
-func (c *Controller) initSearchRoutes() {
-	c.LogInfoIfEnabled("Initializing search routes")
-
-	// Search endpoints - publicly accessible
-	c.Group.POST("/search", c.HandleSearch)
-
-	c.LogInfoIfEnabled("Search routes initialized successfully")
-}
 
 // SearchRequest defines the structure of the search API request
 type SearchRequest struct {
@@ -63,7 +53,7 @@ type SearchResponse struct {
 }
 
 // HandleSearch processes search requests
-func (c *Controller) HandleSearch(ctx echo.Context) error {
+func (c *Handler) HandleSearch(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Handling search request", logger.String("path", path), logger.String("ip", ip))
@@ -148,7 +138,7 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 }
 
 // logValidatedRequest logs the validated parameters for debugging.
-func (c *Controller) logValidatedRequest(path, ip string, req *SearchRequest) {
+func (c *Handler) logValidatedRequest(path, ip string, req *SearchRequest) {
 	c.Debug("Validated Search request: Species='%s', DateStart='%s', DateEnd='%s', ConfidenceMin=%f, ConfidenceMax=%f, VerifiedStatus='%s', LockedStatus='%s', TimeOfDay='%s', Page=%d, SortBy='%s'",
 		req.Species, req.DateStart, req.DateEnd, req.ConfidenceMin, req.ConfidenceMax, req.VerifiedStatus,
 		req.LockedStatus, req.TimeOfDay, req.Page, req.SortBy)
@@ -170,7 +160,7 @@ func (c *Controller) logValidatedRequest(path, ip string, req *SearchRequest) {
 }
 
 // buildSearchFilters creates the datastore search filters from the request.
-func (c *Controller) buildSearchFilters(req *SearchRequest, ctxTimeout context.Context) datastore.SearchFilters {
+func (c *Handler) buildSearchFilters(req *SearchRequest, ctxTimeout context.Context) datastore.SearchFilters {
 	return datastore.SearchFilters{
 		Species:           req.Species,
 		SpeciesScientific: req.SpeciesScientific,
@@ -222,7 +212,7 @@ func sanitizeSpeciesScientific(in []string) []string {
 }
 
 // buildSearchResponse constructs the API response from search results.
-func (c *Controller) buildSearchResponse(req *SearchRequest, results []datastore.DetectionRecord, total, perPage int) SearchResponse {
+func (c *Handler) buildSearchResponse(req *SearchRequest, results []datastore.DetectionRecord, total, perPage int) SearchResponse {
 	totalPages := 1
 	if total > 0 && perPage > 0 {
 		totalPages = (total + perPage - 1) / perPage
@@ -245,7 +235,7 @@ func (c *Controller) buildSearchResponse(req *SearchRequest, results []datastore
 // applies default values, and normalizes ranges.
 // It modifies the passed SearchRequest pointer directly.
 // Returns an error suitable for user display if validation fails.
-func (c *Controller) validateAndNormalizeSearchRequest(ctx echo.Context, req *SearchRequest) error {
+func (c *Handler) validateAndNormalizeSearchRequest(ctx echo.Context, req *SearchRequest) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 
@@ -285,7 +275,7 @@ func (c *Controller) validateAndNormalizeSearchRequest(ctx echo.Context, req *Se
 }
 
 // validateSearchDates validates the DateStart and DateEnd parameters.
-func (c *Controller) validateSearchDates(path, ip string, req *SearchRequest) error {
+func (c *Handler) validateSearchDates(path, ip string, req *SearchRequest) error {
 	if err := validateDateFormat(req.DateStart, "start date"); err != nil {
 		c.LogErrorIfEnabled("Invalid start date format", logger.String("dateStart", req.DateStart), logger.String("path", path), logger.String("ip", ip))
 		return err
@@ -302,28 +292,28 @@ func (c *Controller) validateSearchDates(path, ip string, req *SearchRequest) er
 }
 
 // validateSearchStatusEnums validates VerifiedStatus and LockedStatus.
-func (c *Controller) validateSearchStatusEnums(path, ip string, req *SearchRequest) error {
+func (c *Handler) validateSearchStatusEnums(path, ip string, req *SearchRequest) error {
 	validVerifiedStatus := map[string]bool{
-		QueryValueAny:                   true,
+		queryValueAny:                   true,
 		VerificationStatusCorrect:       true,
 		VerificationStatusUnverified:    true,
 		VerificationStatusFalsePositive: true,
 	}
 	if req.VerifiedStatus == "" {
-		req.VerifiedStatus = QueryValueAny
+		req.VerifiedStatus = queryValueAny
 	} else if !validVerifiedStatus[req.VerifiedStatus] {
 		c.LogErrorIfEnabled("Invalid verified status parameter", logger.String("verifiedStatus", req.VerifiedStatus), logger.String("path", path), logger.String("ip", ip))
 		return fmt.Errorf("invalid verified status %q. Use %q, %q, %q, or %q",
 			req.VerifiedStatus,
-			QueryValueAny,
+			queryValueAny,
 			VerificationStatusCorrect,
 			VerificationStatusUnverified,
 			VerificationStatusFalsePositive)
 	}
 
-	validLockedStatus := map[string]bool{QueryValueAny: true, "locked": true, "unlocked": true}
+	validLockedStatus := map[string]bool{queryValueAny: true, "locked": true, "unlocked": true}
 	if req.LockedStatus == "" {
-		req.LockedStatus = QueryValueAny
+		req.LockedStatus = queryValueAny
 	} else if !validLockedStatus[req.LockedStatus] {
 		c.LogErrorIfEnabled("Invalid locked status parameter", logger.String("lockedStatus", req.LockedStatus), logger.String("path", path), logger.String("ip", ip))
 		return fmt.Errorf("invalid locked status '%s'. Use 'any', 'locked', or 'unlocked'", req.LockedStatus)
@@ -332,10 +322,10 @@ func (c *Controller) validateSearchStatusEnums(path, ip string, req *SearchReque
 }
 
 // validateSearchTimeOfDay validates the TimeOfDay parameter.
-func (c *Controller) validateSearchTimeOfDay(path, ip string, req *SearchRequest) error {
-	validTimeOfDay := map[string]bool{QueryValueAny: true, "day": true, "night": true, "sunrise": true, "sunset": true}
+func (c *Handler) validateSearchTimeOfDay(path, ip string, req *SearchRequest) error {
+	validTimeOfDay := map[string]bool{queryValueAny: true, "day": true, "night": true, "sunrise": true, "sunset": true}
 	if req.TimeOfDay == "" {
-		req.TimeOfDay = QueryValueAny
+		req.TimeOfDay = queryValueAny
 	} else if !validTimeOfDay[req.TimeOfDay] {
 		c.LogErrorIfEnabled("Invalid time of day parameter", logger.String("timeOfDay", req.TimeOfDay), logger.String("path", path), logger.String("ip", ip))
 		return fmt.Errorf("invalid time of day '%s'. Use 'any', 'day', 'night', 'sunrise', or 'sunset'", req.TimeOfDay)
@@ -344,7 +334,7 @@ func (c *Controller) validateSearchTimeOfDay(path, ip string, req *SearchRequest
 }
 
 // validateSearchConfidenceRange validates and normalizes ConfidenceMin and ConfidenceMax.
-func (c *Controller) validateSearchConfidenceRange(path, ip string, req *SearchRequest) error {
+func (c *Handler) validateSearchConfidenceRange(path, ip string, req *SearchRequest) error {
 	// Clamp confidenceMin to [0, 1]
 	if req.ConfidenceMin < 0 {
 		c.logConfidenceAdjustment("confidenceMin", req.ConfidenceMin, 0, path, ip)
@@ -363,7 +353,7 @@ func (c *Controller) validateSearchConfidenceRange(path, ip string, req *SearchR
 }
 
 // normalizeConfidenceMax clamps and normalizes the confidence max value
-func (c *Controller) normalizeConfidenceMax(minConf, maxConf float64, path, ip string) float64 {
+func (c *Handler) normalizeConfidenceMax(minConf, maxConf float64, path, ip string) float64 {
 	switch {
 	case maxConf > 1:
 		c.logConfidenceAdjustment("confidenceMax", maxConf, 1, path, ip)
@@ -380,18 +370,18 @@ func (c *Controller) normalizeConfidenceMax(minConf, maxConf float64, path, ip s
 }
 
 // logConfidenceAdjustment logs when a confidence value is adjusted
-func (c *Controller) logConfidenceAdjustment(field string, original, adjusted float64, path, ip string) {
+func (c *Handler) logConfidenceAdjustment(field string, original, adjusted float64, path, ip string) {
 	c.LogWarnIfEnabled("Invalid "+field+", adjusted", logger.Float64("original", original), logger.Float64("adjusted", adjusted), logger.String("path", path), logger.String("ip", ip))
 }
 
 // logConfidenceSwap logs when min/max values are swapped
-func (c *Controller) logConfidenceSwap(minConf, maxConf float64, path, ip string) {
+func (c *Handler) logConfidenceSwap(minConf, maxConf float64, path, ip string) {
 	c.LogWarnIfEnabled("ConfidenceMin > ConfidenceMax after normalization, swapping values",
 		logger.Float64("normalizedConfidenceMin", minConf), logger.Float64("normalizedConfidenceMax", maxConf), logger.String("path", path), logger.String("ip", ip))
 }
 
 // validateSearchSortBy validates the SortBy parameter.
-func (c *Controller) validateSearchSortBy(path, ip string, req *SearchRequest) error {
+func (c *Handler) validateSearchSortBy(path, ip string, req *SearchRequest) error {
 	allowedSortBy := map[string]struct{}{ // Use struct{} for memory efficiency
 		"date_desc":       {},
 		"date_asc":        {},
@@ -428,14 +418,6 @@ func (c *Controller) validateSearchSortBy(path, ip string, req *SearchRequest) e
 //
 // This is an interim fix; the proper long-term fix is a persistent species_common_names
 // table that decouples common-name storage from the active model's label file.
-func (c *Controller) resolveSpeciesToScientific(input string) (resolved string, hit bool) {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "" {
-		return "", false
-	}
-	lookup := c.loadCommonToScientificMap()
-	if scientific, ok := lookup[apicore.NormalizeForLookup(trimmed)]; ok {
-		return scientific, true
-	}
-	return trimmed, false
+func (c *Handler) resolveSpeciesToScientific(input string) (resolved string, hit bool) {
+	return apicore.ResolveSpeciesToScientific(c.loadCommonToScientificMap(), input)
 }

@@ -76,18 +76,6 @@ func TestInitMediaRoutesSkippedWhenDatastoreDisabled(t *testing.T) {
 
 // TestInitDetectionRoutesSkippedWhenDatastoreDisabled pins that the detection route group
 // is not registered when the controller has no datastore.
-func TestInitDetectionRoutesSkippedWhenDatastoreDisabled(t *testing.T) {
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: nil}}
-
-	controller.initDetectionRoutes()
-
-	for _, r := range e.Routes() {
-		assert.NotContains(t, r.Path, "/detections",
-			"detection routes must not register when the datastore is disabled: %s %s", r.Method, r.Path)
-	}
-}
-
 // TestInitDebugRoutesReadsSettingsNilSafely pins that initDebugRoutes reads the debug
 // flag via the nil-safe controllerSettings() snapshot (matching requireDebugMode) instead
 // of dereferencing a possibly-nil c.Settings on a standalone/test controller.

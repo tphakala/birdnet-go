@@ -223,7 +223,7 @@ func TestInputValidation(t *testing.T) {
 			method: http.MethodGet,
 			path:   "/api/v2/detections/1%3BDROP%20TABLE%20notes", // URL-encoded version of "1;DROP TABLE notes"
 			handler: func(c echo.Context) error {
-				return controller.GetDetection(c)
+				return controller.detections.GetDetection(c)
 			},
 			mockSetup: func(m *mock.Mock) {
 				// Setup all possible method calls
@@ -241,7 +241,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "<script>alert('XSS')</script>",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup: func(m *mock.Mock) {
 				// Capture the actual sanitized parameter passed to SearchNotes
@@ -287,7 +287,7 @@ func TestInputValidation(t *testing.T) {
 				"offset":     "0",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup: func(m *mock.Mock) {
 				// No mock calls expected as validation should fail early
@@ -301,7 +301,7 @@ func TestInputValidation(t *testing.T) {
 			path:   "/api/v2/detections/1/review",
 			body:   `{"verified": "correct", "comment": "}\n{\"malicious\":true"}`,
 			handler: func(c echo.Context) error {
-				return controller.ReviewDetection(c)
+				return controller.detections.ReviewDetection(c)
 			},
 			mockSetup:      reviewDetectionMock("1"),
 			expectedStatus: http.StatusOK,
@@ -335,7 +335,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "bird; rm -rf /",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -349,7 +349,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     strings.Repeat("A", 100000), // Very long string
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK, // Should handle it gracefully
@@ -363,7 +363,7 @@ func TestInputValidation(t *testing.T) {
 				"offset":    "0",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup: func(m *mock.Mock) {
 				// Only mock what's actually being called
@@ -377,7 +377,7 @@ func TestInputValidation(t *testing.T) {
 			path:   "/api/v2/detections/1/review",
 			body:   `{"verified": "correct", "comment": "test"`, // Missing closing brace
 			handler: func(c echo.Context) error {
-				return controller.ReviewDetection(c)
+				return controller.detections.ReviewDetection(c)
 			},
 			mockSetup: func(m *mock.Mock) {
 				// Need to mock Get since it's called before JSON validation
@@ -396,7 +396,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "bird\u0000.mp3", // Null byte injection
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -411,7 +411,7 @@ func TestInputValidation(t *testing.T) {
 				"offset":     "-10", // Negative value
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup: func(m *mock.Mock) {
 				// No mock calls should be needed as validation should fail first
@@ -432,7 +432,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "bird' onmouseover='alert(1)",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -446,7 +446,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "&#x3C;script&#x3E;alert(1)&#x3C;/script&#x3E;",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -460,7 +460,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "javascript:alert(document.cookie)",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -474,7 +474,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "bird</style><style>body{background-image:url('javascript:alert(1)')}</style>",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -488,7 +488,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "<svg><animate onbegin=alert(1) attributeName=x dur=1s>",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -502,7 +502,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0D%0A//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//\\x3e",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -513,7 +513,7 @@ func TestInputValidation(t *testing.T) {
 			path:   "/api/v2/detections/1/review",
 			body:   `{"verified": "correct", "comment": "\" onmouseover=\"alert(1)"}`,
 			handler: func(c echo.Context) error {
-				return controller.ReviewDetection(c)
+				return controller.detections.ReviewDetection(c)
 			},
 			mockSetup:      reviewDetectionMock("1"),
 			expectedStatus: http.StatusOK,
@@ -527,7 +527,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "${alert(1)}",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -541,7 +541,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "＜script＞alert(1)＜/script＞", // Full-width characters
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -555,7 +555,7 @@ func TestInputValidation(t *testing.T) {
 				"query":     "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
 			},
 			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
+				return controller.detections.GetDetections(c)
 			},
 			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
@@ -650,7 +650,7 @@ func TestDDoSProtection(t *testing.T) {
 			startTime := time.Now()
 
 			// Call handler
-			if err := controller.GetDetections(c); err != nil {
+			if err := controller.detections.GetDetections(c); err != nil {
 				assert.NoError(t, err, "GetDetections failed")
 			}
 
@@ -726,7 +726,7 @@ func TestRateLimiting(t *testing.T) {
 			name:     "GetDetections should be rate limited",
 			method:   http.MethodGet,
 			path:     "/api/v2/detections",
-			handler:  controller.GetDetections,
+			handler:  controller.detections.GetDetections,
 			requests: 100,
 		},
 		{
@@ -808,7 +808,7 @@ func TestCSRFProtection(t *testing.T) {
 		}
 
 		// Apply the middleware to the handler
-		handler := csrfMiddleware(controller.ReviewDetection)
+		handler := csrfMiddleware(controller.detections.ReviewDetection)
 
 		err := handler(c)
 		assertCSRFError(t, err, "CSRF token missing")

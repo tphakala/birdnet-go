@@ -1,7 +1,7 @@
 // Package api_test contains tests for timezone handling fixes in search and detection APIs
 // These tests demonstrate and validate the fix for issue #982 where database-stored local
 // time strings were incorrectly parsed as UTC, causing timezone conversion bugs.
-package api
+package detections
 
 import (
 	"testing"

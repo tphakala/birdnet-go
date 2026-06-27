@@ -24,6 +24,19 @@ const (
 	HoursPerDay   = 24                 // Hours in a day
 )
 
+// Spectrogram render sizes (image width in pixels) shared across api/v2 domains.
+// Widths are DFT_size + 2 (enabling fast FFT instead of brute-force DFT, ~20x
+// speedup) and are 2x height to maintain a ~2:1 aspect ratio. The media handler
+// renders spectrograms at these sizes and the detections handler matches
+// spectrogram PNG filenames against them when deleting a clip, so the contract
+// lives on the shared substrate to stay in sync.
+const (
+	SpectrogramSizeSm = 258  // height=129, DFT=256
+	SpectrogramSizeMd = 514  // height=257, DFT=512
+	SpectrogramSizeLg = 1026 // height=513, DFT=1024 (default render size)
+	SpectrogramSizeXl = 2050 // height=1025, DFT=2048
+)
+
 // GetBirdNETInstance returns the BirdNET orchestrator or an error if unavailable.
 // It snapshots the processor first to avoid a TOCTOU race. Shared by the range,
 // heatmap, and diagnostics handlers.
