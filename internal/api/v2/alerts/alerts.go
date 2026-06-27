@@ -226,11 +226,15 @@ func (c *Handler) requireV2(ctx echo.Context) error {
 }
 
 // engineUnavailable writes a 503 Service Unavailable response carrying the recorded
-// alerting-engine initialization error. Engine-dependent handlers call it (guarded
-// by alertEngineErr != nil) so a failed alerting.Initialize surfaces as an explicit
-// 503 instead of a silent no-op. It is reached only when alertsAvailable() is true
-// (the requireV2 middleware already returned 409 otherwise) and alertEngineErr was
-// set, i.e. init was attempted and failed - never when alerting is simply disabled.
+// alerting-engine initialization error when one is present. Engine-dependent
+// handlers call it when they cannot act: the mutating handlers guard on
+// alertEngineErr != nil (init attempted and failed), while TestAlertRule guards on
+// alertEngine == nil (absent for any reason) because it dereferences the engine
+// directly. Either way the 503 surfaces a real failure instead of a silent no-op or
+// a false success. alertEngineErr may be nil here (the defensive engine-nil case),
+// in which case HandleErrorWithKey falls back to the generic message. For a
+// deployment where alerting is simply disabled, the requireV2 group middleware
+// returns 409 before any handler runs, so this 503 never fires for that case.
 func (c *Handler) engineUnavailable(ctx echo.Context) error {
 	return c.HandleErrorWithKey(ctx, c.alertEngineErr,
 		"Alerting engine is unavailable", http.StatusServiceUnavailable, notification.MsgErrAlertEngineUnavailable, nil)
@@ -426,10 +430,15 @@ func (c *Handler) DeleteAlertRule(ctx echo.Context) error {
 
 // TestAlertRule simulates firing a rule for testing purposes.
 func (c *Handler) TestAlertRule(ctx echo.Context) error {
-	// Test-firing is impossible without the engine, so surface its init failure as
-	// 503 up front instead of reporting a false "test fired" success. Checked before
-	// parsing/fetching the rule so the unavailability is reported regardless of input.
-	if c.alertEngineErr != nil {
+	// Test-firing dereferences the engine directly, so return 503 up front whenever
+	// it is absent for ANY reason: init was attempted and failed (alertEngineErr
+	// set), or init never ran (engine nil with err nil, e.g. a direct call that
+	// bypasses the requireV2 middleware). Gating on the engine pointer rather than
+	// only alertEngineErr prevents both a nil-deref of TestFireRule below and a false
+	// "test fired" success. Checked before parsing/fetching the rule so unavailability
+	// is reported regardless of input; engineUnavailable carries the recorded init
+	// error when set and a generic message otherwise.
+	if c.alertEngine == nil {
 		return c.engineUnavailable(ctx)
 	}
 
@@ -447,7 +456,7 @@ func (c *Handler) TestAlertRule(ctx echo.Context) error {
 	}
 
 	// Fire the rule's actions directly, bypassing condition evaluation. The engine
-	// is guaranteed non-nil here: alertEngineErr is nil, so Initialize succeeded.
+	// is guaranteed non-nil here by the c.alertEngine == nil guard above.
 	c.alertEngine.TestFireRule(rule)
 
 	return ctx.JSON(http.StatusOK, map[string]string{"status": "test fired"})

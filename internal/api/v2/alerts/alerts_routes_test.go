@@ -157,6 +157,29 @@ func TestTestAlertRuleReturns503WhenEngineInitFailed(t *testing.T) {
 		"503 body should carry the engine-unavailable error key")
 }
 
+// TestTestAlertRuleReturns503WhenEngineNilWithoutError covers the defensive case:
+// the engine is nil but no init error was recorded (init was skipped, or a direct
+// call that bypasses the requireV2 middleware). TestAlertRule must return 503 and
+// must NOT nil-deref the engine or falsely report "test fired". No repo is wired,
+// so the guard must also fire before any repository access.
+func TestTestAlertRuleReturns503WhenEngineNilWithoutError(t *testing.T) {
+	// NOT parallel: apitest.NewCore publishes to the process-global settings snapshot.
+	core := apitest.NewCore(t)
+	h := New(core)
+	// Defensive state: engine absent AND no recorded init error, no repo wired.
+	require.Nil(t, h.alertEngine)
+	require.NoError(t, h.alertEngineErr)
+
+	ctx, rec := newContextForRouteParam(t, http.MethodPost, "/api/v2/alerts/rules/1/test", "id", "1")
+
+	var err error
+	require.NotPanics(t, func() { err = h.TestAlertRule(ctx) }, "a nil engine must not panic")
+
+	apitest.AssertControllerError(t, err, rec, http.StatusServiceUnavailable, "Alerting engine is unavailable")
+	assert.Equal(t, notification.MsgErrAlertEngineUnavailable, decodeErrorKey(t, rec.Body.Bytes()),
+		"503 body should carry the engine-unavailable error key")
+}
+
 // TestTestAlertRuleReturns200WithWorkingEngine is the counter-test: with a healthy
 // engine (alertEngineErr nil) TestAlertRule fires the rule and returns 200.
 func TestTestAlertRuleReturns200WithWorkingEngine(t *testing.T) {
