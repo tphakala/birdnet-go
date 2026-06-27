@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/control"
+	"github.com/tphakala/birdnet-go/internal/api/v2/detections"
 	"github.com/tphakala/birdnet-go/internal/api/v2/dynamicthresholds"
 	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
 	"github.com/tphakala/birdnet-go/internal/api/v2/integrations"
@@ -84,6 +85,14 @@ type Controller struct {
 	// settings; the remaining deps (Metrics, Processor, settings accessors, and the
 	// error/log helpers) all promote from the shared *apicore.Core.
 	integrations *integrations.Handler
+
+	// detections serves the /api/v2/detections/* CRUD/review/lock/ignore/batch
+	// endpoints and POST /api/v2/search. Besides the shared *apicore.Core it holds
+	// the facade's settings-save machinery (the exclude-list mutation persists
+	// settings) plus facade-owned function dependencies still owned by package api
+	// until their domains are extracted: the auth check (isClientAuthenticated) and
+	// the cached name-map accessors (loadCommonNameMap/loadCommonToScientificMap).
+	detections *detections.Handler
 
 	// rangeHandler serves the /api/v2/range/* endpoints (range-filter status,
 	// species scores/count/list/CSV, test, rebuild). It is named rangeHandler
@@ -406,6 +415,17 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// option-set dependency).
 	c.integrations = integrations.New(c.Core, &c.settingsMutex,
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+	// The detections handler needs the same facade settings-save machinery as the
+	// integrations/TLS handlers (the review/ignore exclude-list mutation persists
+	// settings) plus three more facade-owned function dependencies whose subsystems
+	// are not extracted yet: the auth check (isClientAuthenticated) and the cached
+	// name-map accessors (loadCommonNameMap/loadCommonToScientificMap). c is fully
+	// constructed here and these deps are stable for its lifetime; the method values
+	// read their backing fields at call time (so the post-option authService is
+	// observed), so this is wired before the functional options loop.
+	c.detections = detections.New(c.Core, &c.settingsMutex,
+		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges,
+		c.isClientAuthenticated, c.loadCommonNameMap, c.loadCommonToScientificMap)
 	// The species handler delegates to two facade-owned dependencies that have not
 	// been extracted into their own domains yet: loadCommonNameMap (the shared
 	// name-map read accessor) and ServeSpeciesImageProxy (the media image proxy the
@@ -548,8 +568,8 @@ func (c *Controller) initRoutes() {
 		fn   func()
 	}{
 		{"app routes", c.initAppRoutes},
-		{"search routes", c.initSearchRoutes},
-		{"detection routes", c.initDetectionRoutes},
+		{"search routes", func() { c.detections.RegisterSearchRoutes(c.Group) }},
+		{"detection routes", func() { c.detections.RegisterDetectionRoutes(c.Group) }},
 		{"analytics routes", c.initAnalyticsRoutes},
 		{"weather routes", func() { c.weather.RegisterRoutes(c.Group) }},
 		{"system routes", c.initSystemRoutes},

@@ -1,4 +1,4 @@
-package api
+package detections
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func TestSanitizeSpeciesScientific(t *testing.T) {
 func TestBuildSearchFilters_ThreadsSpeciesScientific(t *testing.T) {
 	t.Parallel()
 
-	c := &Controller{Core: &apicore.Core{}}
+	c := &Handler{Core: &apicore.Core{}}
 	req := &SearchRequest{
 		Species:           "Corvus",
 		SpeciesScientific: []string{"Barbastella barbastellus", "Myotis daubentonii"},

@@ -227,6 +227,24 @@ func (c *Controller) loadCommonToScientificMap() map[string]string {
 	return c.loadNameMaps().commonToSci
 }
 
+// resolveSpeciesToScientific resolves a (possibly localized common) name to its
+// scientific name using this controller's common->scientific name map. It is a thin
+// facade wrapper over apicore.ResolveSpeciesToScientific so the analytics species
+// filter and the detections search resolver share one implementation. The
+// detections domain has its own wrapper over the same apicore helper.
+func (c *Controller) resolveSpeciesToScientific(input string) (resolved string, hit bool) {
+	return apicore.ResolveSpeciesToScientific(c.loadCommonToScientificMap(), input)
+}
+
+// canonicalizeExcludeList canonicalizes the species exclude list (resolve each
+// entry to its scientific name, drop blanks, de-duplicate case-insensitively). It
+// is a thin facade wrapper over apicore.CanonicalizeExcludeList so the settings
+// save flow and the detections ignore/review handlers keep the stored list in a
+// single canonical form. Returns nil for an empty/all-blank input.
+func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
+	return apicore.CanonicalizeExcludeList(c.loadCommonToScientificMap(), exclude)
+}
+
 // UpdateCommonNameMap rebuilds both cached name maps from updated BirdNET labels.
 // Called after locale or model changes to keep insights and search endpoints current.
 func (c *Controller) UpdateCommonNameMap(labels []string) {
@@ -254,18 +272,6 @@ func (c *Controller) loadNameResolver() datastore.SpeciesNameResolver {
 // Always returns a non-nil map.
 func (c *Controller) loadCommonNameMap() map[string]string {
 	return c.loadNameMaps().sciToCommon
-}
-
-// resolveCommonName looks up the common name for a scientific name in the cached
-// map. That map is already localized at build time (buildNameMaps applies the
-// OpenFauna resolver override), so this is a plain lookup that returns the
-// scientific name itself as fallback. This differs from the datastore's
-// resolveCommonName method, which consults the live resolver per call.
-func resolveCommonName(nameMap map[string]string, scientificName string) string {
-	if cn, ok := nameMap[scientificName]; ok {
-		return cn
-	}
-	return scientificName
 }
 
 // buildThumbnailURL returns the proxy image URL for a species.
@@ -452,7 +458,7 @@ func (c *Controller) getExpectedTodayImpl(ctx echo.Context) error {
 	for _, r := range results {
 		species = append(species, ExpectedSpeciesItem{
 			ScientificName: r.ScientificName,
-			CommonName:     resolveCommonName(nameMap, r.ScientificName),
+			CommonName:     apicore.ResolveCommonName(nameMap, r.ScientificName),
 			YearsSeen:      r.YearsSeen,
 			LastSeenDate:   r.LastSeenDate,
 			ThumbnailURL:   buildThumbnailURL(r.ScientificName),
@@ -569,7 +575,7 @@ func (c *Controller) getPhantomSpeciesImpl(ctx echo.Context) error {
 	for _, r := range results {
 		species = append(species, PhantomSpeciesItem{
 			ScientificName: r.ScientificName,
-			CommonName:     resolveCommonName(nameMap, r.ScientificName),
+			CommonName:     apicore.ResolveCommonName(nameMap, r.ScientificName),
 			DetectionCount: r.DetectionCount,
 			AvgConfidence:  r.AvgConfidence,
 			MaxConfidence:  r.MaxConfidence,
@@ -644,7 +650,7 @@ func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
 		avgSeconds := sd.secondsSum / sd.daysObserved
 		items = append(items, DawnChorusItem{
 			ScientificName:    sd.scientificName,
-			CommonName:        resolveCommonName(nameMap, sd.scientificName),
+			CommonName:        apicore.ResolveCommonName(nameMap, sd.scientificName),
 			AvgFirstDetection: secondsToTimeString(avgSeconds),
 			EarliestDetection: secondsToTimeString(sd.earliestSeconds),
 			DaysObserved:      sd.daysObserved,
@@ -695,7 +701,7 @@ func (c *Controller) getMigrationImpl(ctx echo.Context) error {
 	for _, a := range arrivals {
 		arrivalItems = append(arrivalItems, NewArrivalItem{
 			ScientificName: a.ScientificName,
-			CommonName:     resolveCommonName(nameMap, a.ScientificName),
+			CommonName:     apicore.ResolveCommonName(nameMap, a.ScientificName),
 			FirstDetected:  time.Unix(a.FirstDetected, 0).In(now.Location()).Format(time.DateOnly),
 			DetectionCount: a.DetectionCount,
 			ThumbnailURL:   buildThumbnailURL(a.ScientificName),
@@ -710,7 +716,7 @@ func (c *Controller) getMigrationImpl(ctx echo.Context) error {
 		daysSince := int(todayDate.Sub(lastDate).Hours() / 24)
 		quietItems = append(quietItems, GoneQuietItem{
 			ScientificName:  q.ScientificName,
-			CommonName:      resolveCommonName(nameMap, q.ScientificName),
+			CommonName:      apicore.ResolveCommonName(nameMap, q.ScientificName),
 			LastDetected:    lastDetectedLocal.Format(time.DateOnly),
 			DaysSince:       daysSince,
 			TotalDetections: q.TotalDetections,

@@ -1,4 +1,4 @@
-package api
+package detections
 
 import (
 	"fmt"
@@ -65,7 +65,7 @@ type BatchResolveResult struct {
 }
 
 // BatchDeleteDetections deletes multiple detections by ID, skipping locked ones.
-func (c *Controller) BatchDeleteDetections(ctx echo.Context) error {
+func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 	var req BatchIDsRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
@@ -119,7 +119,7 @@ func (c *Controller) BatchDeleteDetections(ctx echo.Context) error {
 }
 
 // BatchReviewDetections sets the verification status on multiple detections, skipping locked ones.
-func (c *Controller) BatchReviewDetections(ctx echo.Context) error {
+func (c *Handler) BatchReviewDetections(ctx echo.Context) error {
 	var req BatchReviewRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
@@ -178,7 +178,7 @@ func (c *Controller) BatchReviewDetections(ctx echo.Context) error {
 
 // BatchLockDetections locks or unlocks multiple detections. Already-locked detections
 // are skipped when locking; all detections are processed when unlocking.
-func (c *Controller) BatchLockDetections(ctx echo.Context) error {
+func (c *Handler) BatchLockDetections(ctx echo.Context) error {
 	var req BatchLockRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
@@ -229,7 +229,7 @@ func (c *Controller) BatchLockDetections(ctx echo.Context) error {
 
 // BatchResolveDetections resolves a query to a list of detection IDs without modifying any data.
 // Returns an error if the matching set exceeds maxBatchSize.
-func (c *Controller) BatchResolveDetections(ctx echo.Context) error {
+func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 	var req BatchResolveRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)

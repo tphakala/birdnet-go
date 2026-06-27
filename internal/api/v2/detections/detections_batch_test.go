@@ -1,6 +1,6 @@
 // detections_batch_test.go: Package api provides tests for API v2 batch detection endpoints.
 
-package api
+package detections
 
 import (
 	"bytes"
@@ -383,7 +383,7 @@ func TestBatchResolveDetections(t *testing.T) {
 // TestBatchRoutes verifies that all batch endpoints are correctly registered.
 func TestBatchRoutes(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
-	controller.initDetectionRoutes()
+	controller.RegisterDetectionRoutes(controller.Group)
 
 	apitest.AssertRoutesRegistered(t, e, []string{
 		"POST /api/v2/detections/batch/delete",

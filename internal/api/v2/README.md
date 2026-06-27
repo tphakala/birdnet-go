@@ -123,7 +123,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/debug/trigger-notification` | `DebugTriggerNotification` | ✅   | Trigger test notification |
 | GET    | `/debug/status`               | `DebugSystemStatus`        | ✅   | System debug information  |
 
-### Detections (`detections.go`)
+### Detections (`detections/detections.go`)
 
 | Method | Route                         | Handler                 | Auth | Description                                |
 | ------ | ----------------------------- | ----------------------- | ---- | ------------------------------------------ |
@@ -197,7 +197,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter; returns the active set (range-filtered birds plus always-active secondary models) |
 | POST   | `/range/rebuild`        | `RebuildRangeFilter`          | ❌   | Rebuild range filter data                                   |
 
-### Search (`search.go`)
+### Search (`detections/search.go`)
 
 | Method | Route     | Handler        | Auth | Description                    |
 | ------ | --------- | -------------- | ---- | ------------------------------ |

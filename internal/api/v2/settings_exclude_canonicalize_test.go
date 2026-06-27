@@ -14,6 +14,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// clearExcludedSpeciesList resets the species exclude list for a clean test start.
+func clearExcludedSpeciesList(t *testing.T, settings *conf.Settings) {
+	t.Helper()
+	settings.Realtime.Species.Exclude = []string{}
+}
+
 // Shared fixture names so the resolver map and the assertions cannot drift apart:
 // the localized common name resolves to the scientific name.
 const (
