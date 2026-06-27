@@ -9,6 +9,11 @@ type Species struct {
 	ScientificName string // e.g., "Turdus merula"
 	CommonName     string // e.g., "Common Blackbird"
 	Code           string // eBird species code (may be empty for custom models)
+	// RawScientificName preserves the exact scientific name the model emitted when
+	// canonical-name normalization replaced ScientificName with the canonical form.
+	// Empty when no taxonomic alias was applied (raw equals ScientificName). Carried
+	// to the datastore's raw_scientific_name column; json:"-" keeps it out of payloads.
+	RawScientificName string `json:"-"`
 }
 
 // ParseSpeciesString extracts the scientific name, common name, and species code

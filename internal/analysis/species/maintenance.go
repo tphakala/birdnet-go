@@ -216,6 +216,7 @@ func (t *SpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time.Ti
 // based on when the last notification was sent for this species.
 // Returns true if notification should be suppressed, false if it should be sent.
 func (t *SpeciesTracker) ShouldSuppressNotification(scientificName string, currentTime time.Time) bool {
+	scientificName = canonicalSpeciesName(scientificName)
 	t.mu.RLock()
 	lastSent, exists := t.notificationLastSent[scientificName]
 	window := t.notificationSuppressionWindow
@@ -247,6 +248,10 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	if t.notificationSuppressionWindow <= 0 {
 		return
 	}
+
+	// Record and persist under the canonical name so suppression survives a restart
+	// and matches a later detection under either the legacy or canonical name.
+	scientificName = canonicalSpeciesName(scientificName)
 
 	t.mu.Lock()
 	// Initialize map if needed

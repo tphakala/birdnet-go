@@ -141,6 +141,10 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(ctx context.Context, now t
 		t.speciesFirstSeen = make(map[string]time.Time, len(newSpeciesData))
 		t.speciesLastSeen = make(map[string]time.Time, len(newSpeciesData))
 		for _, species := range newSpeciesData {
+			// Canonicalize so a detection later arriving under the canonical name
+			// matches this history, and so two aliased names collapse onto one
+			// identity instead of being tracked as separate species.
+			key := canonicalSpeciesName(species.ScientificName)
 			if species.FirstSeenDate != "" {
 				firstSeen, err := time.Parse(time.DateOnly, species.FirstSeenDate)
 				if err != nil {
@@ -150,8 +154,9 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(ctx context.Context, now t
 						logger.Error(err))
 					continue
 				}
-				t.speciesFirstSeen[species.ScientificName] = firstSeen
-				t.speciesLastSeen[species.ScientificName] = firstSeen
+				// Keep the earliest first-seen and latest last-seen when aliases collapse.
+				keepEarliest(t.speciesFirstSeen, key, firstSeen)
+				keepLatest(t.speciesLastSeen, key, firstSeen)
 			}
 			if species.LastSeenDate != "" {
 				lastSeen, err := time.Parse(time.DateOnly, species.LastSeenDate)
@@ -162,7 +167,7 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(ctx context.Context, now t
 						logger.Error(err))
 					continue
 				}
-				t.speciesLastSeen[species.ScientificName] = lastSeen
+				keepLatest(t.speciesLastSeen, key, lastSeen)
 			}
 		}
 		getLog().Debug("Loaded species data from database",
@@ -215,7 +220,10 @@ func (t *SpeciesTracker) loadNoveltyEpisodesFromDatabase(ctx context.Context, no
 				logger.Error(parseErr))
 			continue
 		}
-		datesBySpecies[detection.ScientificName] = append(datesBySpecies[detection.ScientificName], detectionDate)
+		// Canonicalize so legacy- and canonical-named detections of one taxon merge
+		// into a single novelty-episode date series.
+		key := canonicalSpeciesName(detection.ScientificName)
+		datesBySpecies[key] = append(datesBySpecies[key], detectionDate)
 	}
 
 	episodes := make(map[string]NoveltyStatus, len(datesBySpecies))
@@ -263,6 +271,13 @@ func (t *SpeciesTracker) loadNoveltyEpisodesFromDatabase(ctx context.Context, no
 	return nil
 }
 
+// restoredNoveltyEpisodeDays computes the absence gap that opened a restored novelty
+// episode. scientificName is the canonical name (the datesBySpecies key). The
+// prior-detection lookup queries notes by that canonical name, so for a reclassified
+// taxon whose pre-window detections are stored under a legacy name the query may
+// return nothing and the episode is not restored (a known limitation: targeted
+// species-history queries on the canonical name do not reach legacy-named rows). It
+// is non-fatal and self-heals from the next live detection.
 func (t *SpeciesTracker) restoredNoveltyEpisodeDays(ctx context.Context, history speciesDetectionHistoryDatastore, scientificName string, runStart time.Time) (episodeDays int, restored bool, err error) {
 	if firstSeen, exists := t.speciesFirstSeen[scientificName]; exists && sameTrackerDate(firstSeen, runStart) {
 		return firstEverNoveltyEpisodeDays, true, nil
@@ -373,7 +388,8 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(ctx context.Context, now tim
 						logger.Error(err))
 					continue
 				}
-				t.speciesThisYear[species.ScientificName] = firstSeen
+				// Canonicalize and keep the earliest first-seen when aliases collapse.
+				keepEarliest(t.speciesThisYear, canonicalSpeciesName(species.ScientificName), firstSeen)
 			}
 		}
 		getLog().Debug("Loaded yearly species data from database",
@@ -432,7 +448,8 @@ func (t *SpeciesTracker) loadSingleSeasonData(ctx context.Context, seasonName st
 				logger.Error(parseErr))
 			continue
 		}
-		seasonMap[species.ScientificName] = firstSeen
+		// Canonicalize and keep the earliest first-seen when aliases collapse.
+		keepEarliest(seasonMap, canonicalSpeciesName(species.ScientificName), firstSeen)
 	}
 
 	getLog().Debug("Season loading complete",
@@ -443,9 +460,11 @@ func (t *SpeciesTracker) loadSingleSeasonData(ctx context.Context, seasonName st
 	return seasonMap, nil
 }
 
-// allSeasonsEmpty checks if all season maps are empty.
-func (t *SpeciesTracker) allSeasonsEmpty() bool {
-	for _, seasonMap := range t.speciesBySeason {
+// seasonDataEmpty reports whether every season map in the set is empty. It returns
+// false as soon as any season holds at least one species (it does not stop early on
+// an empty season).
+func seasonDataEmpty(seasonData map[string]map[string]time.Time) bool {
+	for _, seasonMap := range seasonData {
 		if len(seasonMap) > 0 {
 			return false
 		}
@@ -455,12 +474,13 @@ func (t *SpeciesTracker) allSeasonsEmpty() bool {
 
 // loadSeasonalDataFromDatabase loads first detection data for each season in the current year
 func (t *SpeciesTracker) loadSeasonalDataFromDatabase(ctx context.Context, now time.Time) error {
-	// Preserve existing seasonal maps if we have them
-	existingSeasonData := t.speciesBySeason
-	hasExistingData := len(existingSeasonData) > 0
+	hasExistingData := len(t.speciesBySeason) > 0
 
-	// Initialize seasonal maps
-	t.speciesBySeason = make(map[string]map[string]time.Time)
+	// Build into a local map and publish to t.speciesBySeason only on full success,
+	// so a partial load failure (e.g. a transient DB error during a background
+	// SyncIfNeeded) leaves the in-memory seasonal history untouched rather than
+	// half-built or empty. This avoids any rollback bookkeeping.
+	newSeasonData := make(map[string]map[string]time.Time, len(t.seasons))
 
 	getLog().Debug("Loading seasonal data from database",
 		logger.Int("total_seasons", len(t.seasons)),
@@ -471,15 +491,17 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(ctx context.Context, now t
 		if err != nil {
 			return err
 		}
-		t.speciesBySeason[seasonName] = seasonMap
+		newSeasonData[seasonName] = seasonMap
 	}
 
-	// If all seasons returned empty and we had existing data, restore it
-	if t.allSeasonsEmpty() && hasExistingData {
-		getLog().Debug("All seasons returned empty data, restoring existing seasonal tracking data")
-		t.speciesBySeason = existingSeasonData
+	// If every season came back empty but we already had data, keep the existing
+	// data instead of overwriting it with an empty set.
+	if hasExistingData && seasonDataEmpty(newSeasonData) {
+		getLog().Debug("All seasons returned empty data, preserving existing seasonal tracking data")
+		return nil
 	}
 
+	t.speciesBySeason = newSeasonData
 	return nil
 }
 
@@ -535,8 +557,10 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(ctx context.Context
 			continue
 		}
 
-		// Store the most recent notification time for each species
-		t.notificationLastSent[histories[i].ScientificName] = histories[i].LastSent
+		// Store the most recent notification time for each species, canonicalizing so
+		// suppression keyed under a legacy name still matches a canonical detection
+		// and keeping the latest time when aliases collapse onto one key.
+		keepLatest(t.notificationLastSent, canonicalSpeciesName(histories[i].ScientificName), histories[i].LastSent)
 
 		getLog().Debug("Loaded notification history",
 			logger.String("species", histories[i].ScientificName),

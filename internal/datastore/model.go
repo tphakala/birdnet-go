@@ -34,17 +34,27 @@ type Note struct {
 	EndTime     time.Time
 	SpeciesCode string
 	// ScientificName includes optimized index (scientific_name, date) for new species tracking performance
-	ScientificName string  `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:1"`
-	CommonName     string  `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`
-	Confidence     float64 `gorm:"index:idx_notes_date_commonname_confidence"`
-	Latitude       float64
-	Longitude      float64
-	Threshold      float64
-	Sensitivity    float64
-	ClipName       string
-	ProcessingTime time.Duration
-	Unlikely       bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
-	Occurrence     float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
+	ScientificName string `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:1"`
+	CommonName     string `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`
+	// RawScientificName preserves the exact scientific name the model emitted before
+	// canonical-name normalization collapsed it into ScientificName. Nullable column:
+	// NULL/empty means the raw name equals ScientificName (no taxonomic alias applied).
+	// Persisted so a future re-split can un-merge; json:"-" keeps it out of API/MQTT/SSE
+	// payloads while GORM maps it to the raw_scientific_name column.
+	// NOTE: only the legacy notes datastore persists this column. The v2only normalized
+	// datastore (the default for fresh installs and migrated databases) drops it; the
+	// canonical ScientificName still flows there, so de-duplication works, but the raw
+	// name is not retained on that path. See PR discussion / follow-up for v2 support.
+	RawScientificName string  `json:"-"`
+	Confidence        float64 `gorm:"index:idx_notes_date_commonname_confidence"`
+	Latitude          float64
+	Longitude         float64
+	Threshold         float64
+	Sensitivity       float64
+	ClipName          string
+	ProcessingTime    time.Duration
+	Unlikely          bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
+	Occurrence        float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
 	// not persisted. Used at Save time to classify non-bird sound classes correctly.
 	RawLabel string        `gorm:"-"`
