@@ -1,6 +1,10 @@
 package openfauna
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 // TestCanonicalName exercises alias resolution and the identity/normalization
 // contract from one table.
@@ -42,9 +46,7 @@ func TestCanonicalName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := CanonicalName(tt.in); got != tt.want {
-				t.Fatalf("CanonicalName(%q) = %q, want %q", tt.in, got, tt.want)
-			}
+			require.Equal(t, tt.want, CanonicalName(tt.in))
 		})
 	}
 }
@@ -54,7 +56,5 @@ func TestCanonicalName(t *testing.T) {
 // so this only needs a populated map, not a brittle exact size.
 func TestAliasCountNonZero(t *testing.T) {
 	t.Parallel()
-	if AliasCount() == 0 {
-		t.Fatal("AliasCount() = 0, want a populated map")
-	}
+	require.NotZero(t, AliasCount(), "embedded alias map should be populated")
 }
