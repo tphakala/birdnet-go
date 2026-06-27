@@ -417,8 +417,7 @@ Performance Optimizations:
     // Capture the full current location (path + query) at click time so the
     // post-login redirect returns the user to the exact filtered view (#3306).
     loginRedirectUrl = getCurrentPathWithQuery();
-    // Close the mobile drawer before opening the modal so the modal renders
-    // above the sidebar rather than behind it (modal z-index < drawer z-index).
+    // Close the mobile drawer before opening the modal to ensure a clean transition.
     const drawer = document.getElementById('my-drawer') as HTMLInputElement | null;
     if (drawer?.checked) {
       drawer.checked = false;
