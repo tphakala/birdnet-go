@@ -171,6 +171,15 @@ type SSEClient struct {
 	Done           chan struct{} // Signal-only buffered channel to prevent blocking
 	StreamType     string        // StreamTypeDetections, StreamTypeSoundLevels, or StreamTypeAll
 
+	// Authenticated records the client's authentication state, captured ONCE at
+	// connect time (mirroring StreamAudioLevel, which checks isClientAuthenticated
+	// per connection). The detection stream reads this to decide whether to expose
+	// the raw audio source DisplayName: unauthenticated subscribers receive only
+	// the stable Source.ID, since DisplayName can embed internal host details for
+	// stream sources without a user-configured name. Set before the read loop runs
+	// and never mutated afterwards, so concurrent broadcasts read it race-free.
+	Authenticated bool
+
 	// Health tracking for auto-disconnect of slow/blocked clients
 	// Uses atomic operations for thread-safe access during concurrent broadcasts
 	consecutiveDrops atomic.Int32 // Count of consecutive failed message sends

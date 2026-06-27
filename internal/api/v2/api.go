@@ -414,7 +414,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// *apicore.Core pointer and register their routes in initRoutes.
 	c.weather = weather.New(c.Core)
 	c.rangeHandler = rangeapi.New(c.Core)
-	c.sse = sse.New(c.Core)
+	// The SSE handler receives the facade-owned auth check (isClientAuthenticated)
+	// so the public detection stream can anonymize the source DisplayName for
+	// unauthenticated subscribers (matching detections/analytics and the
+	// StreamAudioLevel precedent). The bound method value reads c.authService at
+	// call time, so the post-functional-option authService is observed per request.
+	c.sse = sse.New(c.Core, c.isClientAuthenticated)
 	// The TLS handler needs the facade's settings-save machinery: the shared
 	// settingsMutex (passed by pointer so TLS certificate writes serialize against
 	// the main settings update handlers) and the bound method values for reading,
