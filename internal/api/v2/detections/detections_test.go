@@ -2501,7 +2501,8 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 
 // TestApplySpeciesTrackingMetadata_NoveltyFlags verifies that the isNewSpecies,
 // isNewThisYear, and isNewThisSeason flags are true only when the detection date
-// matches the species' first-seen date for each period. Regression test for Forgejo #98.
+// matches the species' first-seen date for each period. Regression test for the
+// species-tracking novelty-flag bug.
 func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "detections")
