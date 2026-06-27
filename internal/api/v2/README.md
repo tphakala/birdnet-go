@@ -6,21 +6,25 @@ The API v2 provides comprehensive access to BirdNET-Go's bird detection and moni
 
 ## Endpoint Registration Pattern
 
-### Standard Registration
+> Architecture and the "add a new endpoint / add a new domain" recipes live in
+> `internal/api/v2/CLAUDE.md`. The summary below is the registration mechanics.
 
-All endpoints follow this registration pattern in their respective `init*Routes()` functions:
+### Per-domain registration
+
+`internal/api/v2` is a thin facade (package `api`) plus one subpackage per domain.
+Each domain package exposes `type Handler struct{ *apicore.Core }`, a
+`New(core *apicore.Core)` constructor, and a `RegisterRoutes(g *echo.Group)` method
+that wires its own routes on the `/api/v2` group:
 
 ```go
-func (c *Controller) initExampleRoutes() {
+// internal/api/v2/example/example.go
+func (c *Handler) RegisterRoutes(g *echo.Group) {
     // Public endpoints (no authentication required)
-    c.Group.GET("/path", c.HandlerFunction)
-    c.Group.POST("/path", c.HandlerFunction)
+    g.GET("/path", c.HandlerFunction)
+    g.POST("/path", c.HandlerFunction)
 
-    // Protected endpoints (authentication required)
-    c.Group.POST("/protected-path", c.HandlerFunction, c.getEffectiveAuthMiddleware())
-
-    // Alternative auth pattern (deprecated, use above)
-    c.Group.POST("/legacy-auth", c.HandlerFunction, c.AuthMiddleware)
+    // Protected endpoints: apply the promoted c.AuthMiddleware field
+    g.POST("/protected-path", c.HandlerFunction, c.AuthMiddleware)
 
     // Rate-limited endpoints (typically for streams)
     rateLimiterConfig := middleware.RateLimiterConfig{
@@ -29,25 +33,28 @@ func (c *Controller) initExampleRoutes() {
             middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(1), Burst: 5},
         ),
     }
-    c.Group.GET("/stream", c.StreamHandler, middleware.RateLimiterWithConfig(rateLimiterConfig))
+    g.GET("/stream", c.StreamHandler, middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
 ```
 
 ### Authentication Middleware
 
-Use `c.getEffectiveAuthMiddleware()` for new protected endpoints. This automatically selects the appropriate authentication method.
+Apply the promoted `c.AuthMiddleware` field (injected from the parent server via
+the `WithAuthMiddleware` option) to protected routes and groups.
+`c.GetAuthMiddleware()` returns the same value for callers that prefer an accessor.
 
 ### Route Initialization
 
-All route initialization functions are called from `api.go:initRoutes()`:
+The facade constructs each domain Handler in `NewWithOptions` and calls every
+`RegisterRoutes` from `api.go:initRoutes()` in a deterministic ordered list:
 
 ```go
 routeInitializers := []struct {
     name string
     fn   func()
 }{
-    {"example routes", c.initExampleRoutes},
-    // Add new route groups here
+    {"example routes", func() { c.example.RegisterRoutes(c.Group) }},
+    // Add a new domain's RegisterRoutes here, preserving the existing order
 }
 ```
 
@@ -185,7 +192,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/notifications/test/new-species`  | `CreateTestNewSpeciesNotification` | ✅   | Create test new-species notification                                                                                |
 | GET    | `/notifications/check-ntfy-server` | `CheckNtfyServer`                  | ✅   | Probe NTFY host for HTTPS/HTTP connectivity (authenticated to prevent SSRF relay). Query: `host=<hostname[:port]>`. |
 
-### Range Filter (`range.go`)
+### Range Filter (`range/range.go`)
 
 | Method | Route                   | Handler                       | Auth | Description                                                 |
 | ------ | ----------------------- | ----------------------------- | ---- | ----------------------------------------------------------- |
@@ -460,7 +467,7 @@ Registered under the system route group. All endpoints require authentication.
 | GET    | `/weather/latest`             | `GetLatestWeather`        | ❌   | Latest weather data                 |
 | GET    | `/weather/sun/:date`          | `GetSunTimes`             | ❌   | Sun times (sunrise/sunset) for date |
 
-### Alert Rules (`alerts.go`)
+### Alert Rules (`alerts/alerts.go`)
 
 Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
@@ -502,7 +509,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 - All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
 
-### Models (`models.go`)
+### Models (`models/models.go`)
 
 | Method | Route                          | Handler                 | Auth | Description                                           |
 | ------ | ------------------------------ | ----------------------- | ---- | ----------------------------------------------------- |
@@ -514,7 +521,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | DELETE | `/models/installed/:id`        | `UninstallModel`        | ✅   | Remove an installed model from disk                   |
 | GET    | `/models/install/:id/progress` | `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress             |
 
-**GET /api/v2/models** — Returns all classifier models registered in the model registry. Each entry includes a config alias (used in audio source configuration) and a human-readable display name.
+**GET /api/v2/models** - Returns all classifier models registered in the model registry. Each entry includes a config alias (used in audio source configuration) and a human-readable display name.
 
 **Response:**
 
@@ -535,9 +542,9 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | POST   | `/tls/certificate/generate` | `GenerateSelfSignedCertificate` | ✅   | Generate self-signed certificate           |
 | GET    | `/tls/certificate/download` | `DownloadTLSCertificate`        | ✅   | Download installed certificate as PEM file |
 
-**GET /api/v2/tls/certificate** — Returns `{"installed": false}` when no certificate is installed, or full certificate metadata (subject, issuer, SANs, expiry, fingerprint) when one is present.
+**GET /api/v2/tls/certificate** - Returns `{"installed": false}` when no certificate is installed, or full certificate metadata (subject, issuer, SANs, expiry, fingerprint) when one is present.
 
-**POST /api/v2/tls/certificate** — Upload a PEM-encoded certificate and private key. The pair is validated before saving. Sets TLS mode to `manual`.
+**POST /api/v2/tls/certificate** - Upload a PEM-encoded certificate and private key. The pair is validated before saving. Sets TLS mode to `manual`.
 
 ```json
 {
@@ -547,7 +554,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 }
 ```
 
-**POST /api/v2/tls/certificate/generate** — Generate a self-signed certificate. Validity accepts duration strings like `30d`, `1y`, `8760h` (default: `365d`, min: `1d`, max: `10y`). SANs are auto-collected from configured host, base URL, and local network interfaces.
+**POST /api/v2/tls/certificate/generate** - Generate a self-signed certificate. Validity accepts duration strings like `30d`, `1y`, `8760h` (default: `365d`, min: `1d`, max: `10y`). SANs are auto-collected from configured host, base URL, and local network interfaces.
 
 ```json
 {
@@ -564,7 +571,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | GET    | `/system/diagnostics/report/:id` | `GetDiagnosticsReport`   | ✅   | Retrieve completed report      |
 | GET    | `/system/diagnostics/errors`     | `GetRecentErrors`        | ✅   | Recent error log entries       |
 
-### Import (`import.go`)
+### Import (`imports/import.go`)
 
 | Method | Route                          | Handler              | Auth | Description                              |
 | ------ | ------------------------------ | -------------------- | ---- | ---------------------------------------- |
@@ -585,52 +592,43 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 - ✅ = Authentication required
 - ✅ publicLiveAudio = Authentication required unless `PublicAccess.LiveAudio` is enabled (dynamic per-request check)
-- 🔑 token = Token-based access — the crypto-random `stream_token` returned by `/start` acts as the credential
+- 🔑 token = Token-based access - the crypto-random `stream_token` returned by `/start` acts as the credential
 - ❌ = No authentication required
 - ⚡ = Rate limited
 - 🔒 = Admin only (subset of authenticated)
 
 ## Adding New Endpoints
 
-### 1. Create Handler Function
+See `internal/api/v2/CLAUDE.md` for the full architecture and the "add a new
+domain" recipe. To add an endpoint to an EXISTING domain:
+
+### 1. Create the Handler method (on the domain's `*Handler`)
 
 ```go
+// internal/api/v2/<domain>/<domain>.go
 // HandlerName handles the endpoint description
-func (c *Controller) HandlerName(ctx echo.Context) error {
+func (c *Handler) HandlerName(ctx echo.Context) error {
     // Validate input
-    // Process request
-    // Return response
+    // Process request, using c.HandleError / c.CurrentSettings / dto.* etc.
     return ctx.JSON(http.StatusOK, response)
 }
 ```
 
-### 2. Register Route
-
-Add to appropriate `init*Routes()` function:
+### 2. Register the route in that domain's `RegisterRoutes`
 
 ```go
-func (c *Controller) initExampleRoutes() {
-    // Choose appropriate pattern based on authentication needs
-    c.Group.GET("/path", c.HandlerName)                                    // Public
-    c.Group.POST("/path", c.HandlerName, c.getEffectiveAuthMiddleware())   // Protected
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+    // Choose the pattern based on authentication needs
+    g.GET("/path", c.HandlerName)                       // Public
+    g.POST("/path", c.HandlerName, c.AuthMiddleware)    // Protected
 }
 ```
 
-### 3. Add to Route Initializers
+No facade change is needed for a new endpoint in an existing domain. A brand-new
+domain additionally needs a `Controller` field, a `New(...)` call, and one ordered
+`RegisterRoutes` entry in `api.go:initRoutes()` (see CLAUDE.md Recipe B).
 
-Update `api.go:initRoutes()` if creating a new route category:
-
-```go
-routeInitializers := []struct {
-    name string
-    fn   func()
-}{
-    // ... existing routes ...
-    {"new category routes", c.initNewCategoryRoutes},
-}
-```
-
-### 4. Update Documentation
+### 3. Update Documentation
 
 - Add endpoint to this README.md
 - Add usage examples if complex
@@ -719,8 +717,8 @@ The `/notifications/stream` endpoint provides both notifications and toast messa
 
 **Event Types:**
 
-- `notification` - System notifications (errors, warnings, info — delivered to authenticated subscribers)
-- `toast` - Temporary UI messages (success, info, warning, error — authenticated only)
+- `notification` - System notifications (errors, warnings, info - delivered to authenticated subscribers)
+- `toast` - Temporary UI messages (success, info, warning, error - authenticated only)
 - `connected` - Connection established
 - `heartbeat` - Keep-alive signal
 
@@ -746,7 +744,7 @@ The `/notifications/stream` endpoint provides both notifications and toast messa
 
 ## Stream Health Monitoring API
 
-The Stream Health API provides comprehensive real-time monitoring of RTSP stream status, leveraging the FFmpeg error detection system from PR #1380. These endpoints are **settings-page only** — they are consumed by the `StreamManager` component in the audio settings page and all require authentication, so the example `curl` calls below must be accompanied by the usual session cookie or bearer token. They are not called from the public dashboard.
+The Stream Health API provides comprehensive real-time monitoring of RTSP stream status, leveraging the FFmpeg error detection system from PR #1380. These endpoints are **settings-page only** - they are consumed by the `StreamManager` component in the audio settings page and all require authentication, so the example `curl` calls below must be accompanied by the usual session cookie or bearer token. They are not called from the public dashboard.
 
 ### Key Features
 
@@ -999,7 +997,7 @@ Updates are sent only when changes are detected, reducing bandwidth compared to 
 
 ### Integration Tips
 
-1. **Choose the Right Endpoint** (all require authentication — settings page only):
+1. **Choose the Right Endpoint** (all require authentication - settings page only):
    - Use SSE (`/streams/health/stream`) for real-time settings-page monitoring
    - Use REST polling (`/streams/status`) for periodic background checks on the settings page
    - Use REST (`/streams/health/:url`) for on-demand detailed diagnostics

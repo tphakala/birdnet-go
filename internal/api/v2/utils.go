@@ -8,24 +8,6 @@ import (
 )
 
 // =============================================================================
-// SSE Metrics Helpers
-// =============================================================================
-
-// recordSSEConnectionStart records an SSE connection start if metrics are available
-func (c *Controller) recordSSEConnectionStart(endpoint string) {
-	if c.Metrics != nil && c.Metrics.HTTP != nil {
-		c.Metrics.HTTP.SSEConnectionStarted(endpoint)
-	}
-}
-
-// recordSSEConnectionClose records an SSE connection close if metrics are available
-func (c *Controller) recordSSEConnectionClose(endpoint string, duration float64, reason string) {
-	if c.Metrics != nil && c.Metrics.HTTP != nil {
-		c.Metrics.HTTP.SSEConnectionClosed(endpoint, duration, reason)
-	}
-}
-
-// =============================================================================
 // Settings Validation Helpers
 // =============================================================================
 
