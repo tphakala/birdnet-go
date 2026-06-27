@@ -81,3 +81,23 @@ func ParsePaginationLimit(value string, defaultVal, maxVal int) int {
 	}
 	return limit
 }
+
+// RedactedValue is the placeholder the settings API returns in place of stored
+// secrets. It lives on the shared substrate so the settings save flow (package
+// api) and the integrations test-connection handlers match the same sentinel and
+// cannot drift apart.
+const RedactedValue = "**********"
+
+// RestoreRedactedSecret replaces a redacted placeholder in an incoming secret
+// field with the current (real) value. It is the canonical single-field restore
+// primitive shared by the settings save flow (restoreRedactedSecrets) and the
+// integration test-connection handlers, so both paths match the same sentinel
+// against the same RedactedValue constant. A nil incoming pointer is a no-op.
+func RestoreRedactedSecret(current string, incoming *string) {
+	if incoming == nil {
+		return
+	}
+	if *incoming == RedactedValue {
+		*incoming = current
+	}
+}

@@ -1,4 +1,4 @@
-package api
+package integrations
 
 import (
 	"net/http"
@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -30,7 +31,7 @@ type MQTTTLSCertificateUpload struct {
 
 // getMQTTCertPath returns the path to an MQTT certificate, checking settings paths first,
 // then falling back to TLSManager's managed directory.
-func (c *Controller) getMQTTCertPath(certType conf.TLSCertificateType) string {
+func (c *Handler) getMQTTCertPath(certType conf.TLSCertificateType) string {
 	// Check settings-configured paths first (covers manually configured certs).
 	// ControllerSettings() can be nil on a standalone/test controller that never
 	// stored a snapshot; in that case skip the configured paths and still allow
@@ -67,7 +68,7 @@ func (c *Controller) getMQTTCertPath(certType conf.TLSCertificateType) string {
 }
 
 // GetMQTTTLSCertificate handles GET /api/v2/integrations/mqtt/tls/certificate.
-func (c *Controller) GetMQTTTLSCertificate(ctx echo.Context) error {
+func (c *Handler) GetMQTTTLSCertificate(ctx echo.Context) error {
 	result := &MQTTTLSCertificateInfo{
 		CA:     &tlsapi.TLSCertificateInfo{Installed: false},
 		Client: &tlsapi.TLSCertificateInfo{Installed: false},
@@ -102,7 +103,7 @@ func (c *Controller) GetMQTTTLSCertificate(ctx echo.Context) error {
 //   - nil pointer (field omitted from JSON) = preserve existing
 //   - empty string = clear/remove that certificate
 //   - non-empty string = save new certificate
-func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
+func (c *Handler) UploadMQTTTLSCertificate(ctx echo.Context) error {
 	var req MQTTTLSCertificateUpload
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
@@ -219,7 +220,7 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 			http.StatusInternalServerError)
 	}
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
-		GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
+		apicore.GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
 			logger.Error(handleErr))
 	}
 
@@ -242,7 +243,7 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 // DeleteMQTTTLSCertificate handles DELETE /api/v2/integrations/mqtt/tls/certificate.
 // Removes managed certificates and clears settings paths.
 // External certificate files (manually configured) are not deleted.
-func (c *Controller) DeleteMQTTTLSCertificate(ctx echo.Context) error {
+func (c *Handler) DeleteMQTTTLSCertificate(ctx echo.Context) error {
 	tlsMgr := conf.GetTLSManager()
 
 	// Serialise the entire backup-remove-save sequence so concurrent
@@ -271,7 +272,7 @@ func (c *Controller) DeleteMQTTTLSCertificate(ctx echo.Context) error {
 			http.StatusInternalServerError)
 	}
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
-		GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
+		apicore.GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
 			logger.Error(handleErr))
 	}
 	tlsMgr.CleanupBackups(mqttTLSServiceName)
