@@ -1494,3 +1494,104 @@ func TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats(t *testing.T
 	defer func() { _ = startResp2.Body.Close() }()
 	assert.Equal(t, http.StatusAccepted, startResp2.StatusCode, "slot must be freed after panic recovery")
 }
+
+// writeMinimalBirdNetPiDB creates a minimal valid BirdNET-Pi SQLite db at path.
+func writeMinimalBirdNetPiDB(t *testing.T, path string) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
+	require.NoError(t, db.Exec(`CREATE TABLE detections (
+		Date TEXT, Time TEXT, Sci_Name TEXT, Com_Name TEXT, Confidence REAL,
+		Lat REAL, Lon REAL, Cutoff REAL, Sens REAL, File_Name TEXT)`).Error)
+}
+
+func TestResolveNativeImportSourcePath_Valid(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "birds.db")
+	writeMinimalBirdNetPiDB(t, db)
+
+	got, err := resolveNativeImportSourcePath(db)
+	require.NoError(t, err)
+	assert.Equal(t, db, got)
+}
+
+func TestResolveNativeImportSourcePath_RejectsRelative(t *testing.T) {
+	_, err := resolveNativeImportSourcePath("relative/birds.db")
+	require.ErrorIs(t, err, errInvalidSourcePath)
+}
+
+func TestResolveNativeImportSourcePath_RejectsMissing(t *testing.T) {
+	_, err := resolveNativeImportSourcePath("/nonexistent/birds.db")
+	require.Error(t, err)
+}
+
+func TestResolveNativeImportSourcePath_RejectsNonSQLite(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "birds.db")
+	require.NoError(t, os.WriteFile(bad, []byte("nope"), 0o600))
+	_, err := resolveNativeImportSourcePath(bad)
+	require.Error(t, err)
+}
+
+// TestStartBirdNETPiImport_NativeDispatch_AcceptsAbsolutePath verifies that
+// when isContainerEnv returns false, an absolute path to a valid SQLite db is
+// accepted (native branch).
+func TestStartBirdNETPiImport_NativeDispatch_AcceptsAbsolutePath(t *testing.T) {
+	_, c := newImportHandler(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+	// Force native branch.
+	c.isContainerEnv = func() bool { return false }
+	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
+
+	dbPath := filepath.Join(t.TempDir(), "birds.db")
+	writeMinimalBirdNetPiDB(t, dbPath)
+
+	body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, dbPath)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+}
+
+// TestStartBirdNETPiImport_ContainerDispatch_AcceptsRelativePath verifies that
+// when isContainerEnv returns true, a relative path (existing under the import
+// root) is accepted (container branch unchanged).
+func TestStartBirdNETPiImport_ContainerDispatch_AcceptsRelativePath(t *testing.T) {
+	_, c := newImportHandler(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+	// Force container branch.
+	c.isContainerEnv = func() bool { return true }
+	root := t.TempDir()
+	c.importSourceRoot = root
+	// Place a real file under root so the resolver succeeds.
+	dbPath := filepath.Join(root, "birds.db")
+	writeMinimalBirdNetPiDB(t, dbPath)
+	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
+
+	body := `{"mode":"db-only","source_path":"birds.db"}`
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+}

@@ -20,6 +20,34 @@ import (
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
+// resolveNativeImportSourcePath validates an absolute path to a BirdNET-Pi
+// birds.db on a native install. Unlike the container branch there is no root
+// confinement: reading any file the service user can read is no privilege
+// escalation. The path must be absolute, exist as a regular file, and be a
+// valid BirdNET-Pi SQLite database.
+func resolveNativeImportSourcePath(userPath string) (string, error) {
+	if userPath == "" || !filepath.IsAbs(userPath) {
+		return "", errInvalidSourcePath
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Clean(userPath))
+	if err != nil {
+		return "", errInvalidSourcePath
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", errInvalidSourcePath
+	}
+	src, err := birdnetpi.New(resolved)
+	if err != nil {
+		return "", errInvalidSourcePath
+	}
+	defer func() { _ = src.Close() }()
+	if err := src.Validate(context.Background()); err != nil {
+		return "", errInvalidSourcePath
+	}
+	return resolved, nil
+}
+
 // Import mode constants.
 const (
 	importModeDBOnly  = "db-only"
@@ -229,18 +257,31 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "unsupported import mode", http.StatusBadRequest)
 	}
 
-	// Resolve and validate source path.
-	root := c.importSourceRoot
-	if root == "" {
-		root = sysinfo.DefaultExternalMountPath
-	}
-	resolvedPath, err := resolveImportSourcePath(root, req.SourcePath)
-	if err != nil {
-		return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
-	}
-	info, statErr := os.Stat(resolvedPath)
-	if statErr != nil || !info.Mode().IsRegular() {
-		return c.HandleError(ctx, statErr, "source file not found or not a regular file", http.StatusBadRequest)
+	// Resolve and validate source path. Dispatch depends on whether we run in a
+	// container (relative path under an external mount root) or natively (absolute
+	// path validated on the spot by the service user).
+	var (
+		resolvedPath string
+		err          error
+	)
+	if c.isContainerEnv == nil || c.isContainerEnv() {
+		root := c.importSourceRoot
+		if root == "" {
+			root = sysinfo.DefaultExternalMountPath
+		}
+		resolvedPath, err = resolveImportSourcePath(root, req.SourcePath)
+		if err != nil {
+			return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
+		}
+		info, statErr := os.Stat(resolvedPath)
+		if statErr != nil || !info.Mode().IsRegular() {
+			return c.HandleError(ctx, statErr, "source file not found or not a regular file", http.StatusBadRequest)
+		}
+	} else {
+		resolvedPath, err = resolveNativeImportSourcePath(req.SourcePath)
+		if err != nil {
+			return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
+		}
 	}
 
 	// Parse optional timezone.

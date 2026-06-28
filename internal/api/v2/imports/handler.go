@@ -33,6 +33,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 // apiV2Prefix is the v2 API path prefix. It mirrors the facade's apiV2Prefix; the
@@ -58,6 +59,10 @@ type Handler struct {
 	// a BirdNET-Pi adapter when nil. Overridable in tests.
 	importSourceFactory func(path string) (imports.Source, error)
 
+	// isContainerEnv reports whether BirdNET-Go runs in a container. Defaults to
+	// sysinfo.IsContainer; overridable in tests to exercise the native branch.
+	isContainerEnv func() bool
+
 	// cleanupStatus tracks the state of legacy database cleanup. It is initialized
 	// lazily in RegisterLegacyCleanupRoutes; the migration status handler reads it
 	// nil-guarded.
@@ -80,6 +85,7 @@ func New(core *apicore.Core, notificationService *notification.Service) *Handler
 		Core:                core,
 		notificationService: notificationService,
 		importMgr:           newImportManager(),
+		isContainerEnv:      sysinfo.IsContainer,
 	}
 }
 
