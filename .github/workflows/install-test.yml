@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: ShellCheck install.sh and the test harness
         # ubuntu-24.04 ships shellcheck preinstalled. Gate on errors only; the existing
