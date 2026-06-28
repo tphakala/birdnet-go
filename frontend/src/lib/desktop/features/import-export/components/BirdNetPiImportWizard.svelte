@@ -51,11 +51,12 @@
   let showManualEntry = $state(false);
   let manualPath = $state('');
   let validateResp = $state<ValidateSourceResponse | null>(null);
-  let validateStatus = $state<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
+  // C14: removed dead 'valid' variant
+  let validateStatus = $state<'idle' | 'validating' | 'invalid'>('idle');
 
-  // Elevation state (for unreadable candidates)
+  // Elevation state (for unreadable candidates, panel lives at confirm step)
+  let needsElevation = $state(false);
   let elevating = $state(false);
-  let elevationFor = $state('');
   let showPasswordPanel = $state(false);
   let sudoPassword = $state('');
   let fallbackCommands = $state<string[]>([]);
@@ -165,6 +166,13 @@
     manualPath = '';
     validateStatus = 'idle';
     validateResp = null;
+    // C12: reset elevation state to prevent stale panel flashing back
+    needsElevation = false;
+    elevating = false;
+    showPasswordPanel = false;
+    fallbackCommands = [];
+    elevationError = null;
+    sourceStepState = null;
     currentStep = 'source';
     void loadSources();
   }
@@ -195,8 +203,19 @@
     }
   }
 
+  /**
+   * Called when any candidate (readable or unreadable) is selected. Sets
+   * `needsElevation` based on whether the candidate is permission-denied, then
+   * advances to the mode step. No network call is made here.
+   */
   function selectCandidate(cand: SourceCandidate) {
     sourcePath = cand.path;
+    needsElevation = isUnreadable(cand);
+    // Reset elevation sub-state for the new candidate
+    showPasswordPanel = false;
+    fallbackCommands = [];
+    elevationError = null;
+    elevating = false;
     goToStep('mode');
   }
 
@@ -212,6 +231,7 @@
       validateResp = resp;
       if (resp.valid) {
         sourcePath = manualPath.trim();
+        needsElevation = false;
         validateStatus = 'idle';
         goToStep('mode');
       } else {
@@ -237,37 +257,40 @@
       }
       const resp = await api.post<ElevateResponse>('/api/v2/import/elevate', body);
       if (destroyed) return;
+
+      if (resp.method === 'password_required') {
+        // Passwordless elevation failed and no password was supplied; prompt the user.
+        showPasswordPanel = true;
+        return;
+      }
+
       if (resp.method === 'fallback') {
         fallbackCommands = resp.fallback_commands ?? [];
         showPasswordPanel = false;
         return;
       }
-      if (resp.job_id) {
-        sourcePath = path;
-        jobId = resp.job_id;
-        currentStep = 'progress';
-        connectEventSource(resp.job_id);
+
+      // direct or sudo: must have a job_id
+      // C13: guard against a contract violation where job_id is absent
+      if (!resp.job_id) {
+        elevationError = t('system.importExport.source.elevation.failed');
+        return;
       }
+
+      sourcePath = path;
+      jobId = resp.job_id;
+      currentStep = 'progress';
+      connectEventSource(resp.job_id);
     } catch (err) {
       if (destroyed) return;
-      // Reveal the password panel so the user can retry with their sudo password.
-      showPasswordPanel = true;
-      elevationError = t('system.importExport.source.elevation.failed');
+      // Genuine HTTP/network error: show the error and allow retry.
       // NEVER log sudoPassword or any part of the request body containing it.
+      elevationError = t('system.importExport.source.elevation.failed');
       logger.error('Elevation request failed', err instanceof ApiError ? err.status : 'unknown');
     } finally {
       elevating = false;
       sudoPassword = ''; // clear on every return path; single-use memory
     }
-  }
-
-  function startElevation(cand: SourceCandidate) {
-    elevationFor = cand.path;
-    showPasswordPanel = false;
-    fallbackCommands = [];
-    elevationError = null;
-    // Try without a password first: covers direct read access and passwordless sudo.
-    void elevate(cand.path, false);
   }
 
   function connectEventSource(id: string) {
@@ -411,6 +434,13 @@
     currentStep = step;
   }
 
+  /** Label for a candidate's location kind. */
+  function kindLabel(cand: SourceCandidate): string {
+    if (cand.kind === 'removable') return t('system.importExport.source.kindRemovable');
+    if (cand.kind === 'network') return t('system.importExport.source.kindNetwork');
+    return t('system.importExport.source.kindLocal');
+  }
+
   onDestroy(() => {
     destroyed = true;
     closeEventSource();
@@ -489,27 +519,33 @@
               label={t('system.importExport.source.manualEntryLabel')}
               bind:value={manualPath}
               placeholder="/home/pi/BirdNET-Pi/birds.db"
+              aria-describedby={validateStatus === 'invalid' ? 'manual-path-error' : undefined}
             />
-            {#if validateStatus === 'validating'}
-              <p class="text-sm text-[var(--color-base-content)]/60">
-                {t('system.importExport.source.manualValidating')}
-              </p>
-            {:else if validateStatus === 'invalid'}
-              <p class="text-sm text-[var(--color-error)]">
-                {validateResp?.reason === 'not_found'
-                  ? t('system.importExport.source.manualNotFound')
-                  : validateResp?.reason === 'permission_denied'
-                    ? t('system.importExport.source.manualUnreadable')
-                    : t('system.importExport.source.manualInvalid')}
-              </p>
-            {/if}
+            <!-- C18: persistent aria-live container for validation status -->
+            <div aria-live="polite">
+              {#if validateStatus === 'validating'}
+                <p class="text-sm text-[var(--color-base-content)]/60">
+                  {t('system.importExport.source.manualValidating')}
+                </p>
+              {:else if validateStatus === 'invalid'}
+                <p id="manual-path-error" role="alert" class="text-sm text-[var(--color-error)]">
+                  {validateResp?.reason === 'not_found'
+                    ? t('system.importExport.source.manualNotFound')
+                    : validateResp?.reason === 'permission_denied'
+                      ? t('system.importExport.source.manualUnreadable')
+                      : t('system.importExport.source.manualInvalid')}
+                </p>
+              {/if}
+            </div>
             <Button
               variant="default"
               onclick={useManualPath}
               disabled={!manualPath.trim() || validateStatus === 'validating'}
               title={!manualPath.trim()
                 ? t('system.importExport.sourceAccess.pathRequiredReason')
-                : undefined}
+                : validateStatus === 'validating'
+                  ? t('system.importExport.source.manualValidating')
+                  : undefined}
             >
               {t('system.importExport.source.useThisButton')}
             </Button>
@@ -520,7 +556,12 @@
           <div class="space-y-3">
             <ErrorAlert message={sourcesLoadError} type="error" />
             <div>
-              <Button variant="default" onclick={recheckSources} disabled={isLoading}>
+              <Button
+                variant="default"
+                onclick={recheckSources}
+                disabled={isLoading}
+                title={isLoading ? t('system.importExport.loading') : undefined}
+              >
                 {t('system.importExport.source.checkAgainButton')}
               </Button>
             </div>
@@ -528,6 +569,9 @@
         {:else if sourceStepState === 'candidates'}
           <!-- At least one candidate found -->
           <div class="space-y-4">
+            <p class="text-sm font-medium text-[var(--color-base-content)]">
+              {t('system.importExport.source.title')}
+            </p>
             <p class="text-sm text-[var(--color-base-content)]/80">
               {t('system.importExport.source.candidatesIntro')}
             </p>
@@ -538,6 +582,10 @@
                   class="flex items-start justify-between gap-4 p-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)]"
                 >
                   <div class="min-w-0 flex-1">
+                    <!-- Kind label -->
+                    <p class="text-xs text-[var(--color-base-content)]/50 mb-0.5">
+                      {kindLabel(cand)}
+                    </p>
                     <p class="font-mono text-sm text-[var(--color-base-content)] break-all">
                       {cand.path}
                     </p>
@@ -550,7 +598,10 @@
                       </p>
                     {/if}
                     {#if isUnreadable(cand)}
-                      <p class="text-xs text-[var(--color-warning)] mt-1">
+                      <p class="text-xs font-medium text-[var(--color-warning)] mt-1">
+                        {t('system.importExport.source.unreadableTitle')}
+                      </p>
+                      <p class="text-xs text-[var(--color-base-content)]/60 mt-0.5">
                         {t('system.importExport.source.unreadableOwner', {
                           owner: cand.owner_name,
                         })}
@@ -558,97 +609,28 @@
                     {/if}
                   </div>
                   {#if isUnreadable(cand)}
-                    <Button
-                      variant="default"
-                      onclick={() => startElevation(cand)}
-                      disabled={elevating}
-                    >
-                      {t('system.importExport.source.useThisButton')}
-                    </Button>
+                    {#if sourcesResponse?.containerized}
+                      <!-- B3: container unreadable - no elevation button, show host hint -->
+                      <p
+                        class="text-xs text-[var(--color-base-content)]/70 max-w-[14rem] text-right"
+                        aria-live="polite"
+                      >
+                        {t('system.importExport.source.containerUnreadableHint', {
+                          uid: String(sourcesResponse.run_as_uid),
+                        })}
+                      </p>
+                    {:else}
+                      <!-- B3: native unreadable - show elevation entry button -->
+                      <Button variant="default" onclick={() => selectCandidate(cand)}>
+                        {t('system.importExport.source.useThisButton')}
+                      </Button>
+                    {/if}
                   {:else}
                     <Button variant="primary" onclick={() => selectCandidate(cand)}>
                       {t('system.importExport.source.selectButton')}
                     </Button>
                   {/if}
                 </div>
-
-                <!-- Elevation panel shown beneath the unreadable candidate being elevated -->
-                {#if isUnreadable(cand) && elevationFor === cand.path}
-                  <div
-                    class="p-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] space-y-3"
-                  >
-                    {#if elevating}
-                      <div class="flex items-center gap-2">
-                        <LoadingSpinner size="sm" aria-hidden="true" />
-                        <span class="text-sm text-[var(--color-base-content)]">
-                          {t('system.importExport.source.elevation.copying')}
-                        </span>
-                      </div>
-                    {:else if showPasswordPanel}
-                      {#if isPlainHttp}
-                        <div
-                          class="p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)] text-sm text-[var(--color-base-content)]/80"
-                        >
-                          {t('system.importExport.source.elevation.httpWarning')}
-                        </div>
-                      {/if}
-                      <p class="font-medium text-[var(--color-base-content)]">
-                        {t('system.importExport.source.elevation.passwordTitle')}
-                      </p>
-                      <p class="text-sm text-[var(--color-base-content)]/70">
-                        {t('system.importExport.source.elevation.passwordDescription')}
-                      </p>
-                      <div>
-                        <label
-                          for="elevation-password"
-                          class="block text-sm font-medium text-[var(--color-base-content)]/70 mb-1"
-                        >
-                          {t('system.importExport.source.elevation.passwordLabel')}
-                        </label>
-                        <input
-                          id="elevation-password"
-                          type="password"
-                          bind:value={sudoPassword}
-                          class="block w-full px-3 py-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-sm text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-                          autocomplete="current-password"
-                        />
-                      </div>
-                      {#if elevationError}
-                        <ErrorAlert message={elevationError} type="error" />
-                      {/if}
-                      <Button
-                        variant="primary"
-                        onclick={() => elevate(elevationFor, true)}
-                        disabled={!sudoPassword.trim() || elevating}
-                        title={!sudoPassword.trim()
-                          ? t('system.importExport.sourceAccess.pathRequiredReason')
-                          : undefined}
-                      >
-                        {t('system.importExport.source.elevation.submitButton')}
-                      </Button>
-                    {:else if fallbackCommands.length > 0}
-                      <p class="font-medium text-[var(--color-base-content)]">
-                        {t('system.importExport.source.elevation.fallbackTitle')}
-                      </p>
-                      <p class="text-sm text-[var(--color-base-content)]/70">
-                        {t('system.importExport.source.elevation.fallbackDescription')}
-                      </p>
-                      <ol class="space-y-2">
-                        {#each fallbackCommands as cmd (cmd)}
-                          <li class="flex items-start gap-2">
-                            <code
-                              class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
-                              >{cmd}</code
-                            >
-                          </li>
-                        {/each}
-                      </ol>
-                      <Button variant="default" onclick={recheckSources}>
-                        {t('system.importExport.source.checkAgainButton')}
-                      </Button>
-                    {/if}
-                  </div>
-                {/if}
               </div>
             {/each}
             <button
@@ -820,6 +802,99 @@
               <ErrorAlert message={errorMessage} type="error" />
             {/if}
           </div>
+
+          <!-- Elevation sub-panel (only when the selected source needs permission elevation) -->
+          {#if needsElevation}
+            <div
+              class="p-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] space-y-3"
+            >
+              {#if elevating}
+                <!-- C18: role="status" so the loading announcement reaches screen readers -->
+                <div role="status" class="flex items-center gap-2">
+                  <LoadingSpinner size="sm" aria-hidden="true" />
+                  <span class="text-sm text-[var(--color-base-content)]">
+                    {t('system.importExport.source.elevation.copying')}
+                  </span>
+                </div>
+              {:else if showPasswordPanel}
+                {#if isPlainHttp}
+                  <div
+                    class="p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)] text-sm text-[var(--color-base-content)]/80"
+                  >
+                    {t('system.importExport.source.elevation.httpWarning')}
+                  </div>
+                {/if}
+                <p class="font-medium text-[var(--color-base-content)]">
+                  {t('system.importExport.source.elevation.passwordTitle')}
+                </p>
+                <p class="text-sm text-[var(--color-base-content)]/70">
+                  {t('system.importExport.source.elevation.passwordDescription')}
+                </p>
+                <div>
+                  <label
+                    for="elevation-password"
+                    class="block text-sm font-medium text-[var(--color-base-content)]/70 mb-1"
+                  >
+                    {t('system.importExport.source.elevation.passwordLabel')}
+                  </label>
+                  <input
+                    id="elevation-password"
+                    type="password"
+                    bind:value={sudoPassword}
+                    class="block w-full px-3 py-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-sm text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+                    autocomplete="current-password"
+                  />
+                </div>
+                {#if elevationError}
+                  <ErrorAlert message={elevationError} type="error" />
+                {/if}
+                <!-- C17: use passwordRequiredReason instead of the wrong pathRequiredReason key -->
+                <Button
+                  variant="primary"
+                  onclick={() => elevate(sourcePath, true)}
+                  disabled={!sudoPassword.trim() || elevating}
+                  title={!sudoPassword.trim()
+                    ? t('system.importExport.source.elevation.passwordRequiredReason')
+                    : undefined}
+                >
+                  {t('system.importExport.source.elevation.submitButton')}
+                </Button>
+              {:else if fallbackCommands.length > 0}
+                <p class="font-medium text-[var(--color-base-content)]">
+                  {t('system.importExport.source.elevation.fallbackTitle')}
+                </p>
+                <p class="text-sm text-[var(--color-base-content)]/70">
+                  {t('system.importExport.source.elevation.fallbackDescription')}
+                </p>
+                <p class="text-sm text-[var(--color-base-content)]/60 italic">
+                  {t('system.importExport.source.elevation.disabledNote')}
+                </p>
+                <!-- C19: showCommandsLabel as a <details> collapsible around fallback commands -->
+                <details class="space-y-2">
+                  <summary
+                    class="cursor-pointer text-sm font-medium text-[var(--color-primary)] hover:underline"
+                  >
+                    {t('system.importExport.source.showCommandsLabel')}
+                  </summary>
+                  <ol class="space-y-2 mt-2">
+                    {#each fallbackCommands as cmd (cmd)}
+                      <li class="flex items-start gap-2">
+                        <code
+                          class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
+                          >{cmd}</code
+                        >
+                      </li>
+                    {/each}
+                  </ol>
+                </details>
+                <Button variant="default" onclick={recheckSources}>
+                  {t('system.importExport.source.checkAgainButton')}
+                </Button>
+              {:else if elevationError}
+                <ErrorAlert message={elevationError} type="error" />
+              {/if}
+            </div>
+          {/if}
         </div>
       {:else if currentStep === 'progress'}
         <!-- Progress/run step -->
@@ -1004,7 +1079,16 @@
             {t('common.buttons.back')}
           </Button>
         {:else if currentStep === 'confirm'}
-          <Button variant="ghost" onclick={() => goToStep('mode')}>
+          <Button
+            variant="ghost"
+            onclick={() => {
+              // Reset elevation sub-state when going back (user may change mode and retry)
+              showPasswordPanel = false;
+              fallbackCommands = [];
+              elevationError = null;
+              goToStep('mode');
+            }}
+          >
             <ArrowLeft class="size-4" />
             {t('common.buttons.back')}
           </Button>
@@ -1029,26 +1113,35 @@
           <Button variant="default" onclick={onClose}>
             {t('common.buttons.cancel')}
           </Button>
-          <Button
-            variant="primary"
-            onclick={startImport}
-            disabled={isLoading || !sourcePath.trim()}
-            title={isLoading
-              ? t('system.importExport.loading')
-              : !sourcePath.trim()
-                ? t('system.importExport.sourceAccess.pathRequiredReason')
-                : undefined}
-            aria-busy={isLoading}
-          >
-            {#if isLoading}
-              <LoadingSpinner
-                size="xs"
-                color="text-[var(--color-primary-content)]"
-                aria-hidden="true"
-              />
-            {/if}
-            {t('system.importExport.confirm.startButton')}
-          </Button>
+          <!-- Hide the start button when the password panel or fallback panel is active -->
+          {#if !(needsElevation && (showPasswordPanel || fallbackCommands.length > 0))}
+            <Button
+              variant="primary"
+              onclick={() => {
+                if (needsElevation) {
+                  void elevate(sourcePath, false);
+                } else {
+                  void startImport();
+                }
+              }}
+              disabled={isLoading || elevating || !sourcePath.trim()}
+              title={isLoading || elevating
+                ? t('system.importExport.loading')
+                : !sourcePath.trim()
+                  ? t('system.importExport.sourceAccess.pathRequiredReason')
+                  : undefined}
+              aria-busy={isLoading || elevating}
+            >
+              {#if isLoading || elevating}
+                <LoadingSpinner
+                  size="xs"
+                  color="text-[var(--color-primary-content)]"
+                  aria-hidden="true"
+                />
+              {/if}
+              {t('system.importExport.confirm.startButton')}
+            </Button>
+          {/if}
         {:else if currentStep === 'progress'}
           {#if !importComplete && !importCancelled && !importError}
             <Button
