@@ -932,6 +932,37 @@ export type TranslationKey =
   | 'system.importExport.sourceAccess.setupStepsLabel'
   | 'system.importExport.sourceAccess.recheckButton'
   | 'system.importExport.sourceAccess.recheckHint'
+  | 'system.importExport.source.title'
+  | 'system.importExport.source.candidatesIntro'
+  | 'system.importExport.source.selectButton'
+  | 'system.importExport.source.useThisButton'
+  | 'system.importExport.source.detectionsSummary' // params: count, date
+  | 'system.importExport.source.kindLocal'
+  | 'system.importExport.source.kindRemovable'
+  | 'system.importExport.source.kindNetwork'
+  | 'system.importExport.source.unreadableTitle'
+  | 'system.importExport.source.unreadableOwner' // params: owner
+  | 'system.importExport.source.manualEntryLink'
+  | 'system.importExport.source.manualEntryLabel'
+  | 'system.importExport.source.manualValidating'
+  | 'system.importExport.source.manualValid' // params: count
+  | 'system.importExport.source.manualNotFound'
+  | 'system.importExport.source.manualUnreadable'
+  | 'system.importExport.source.manualInvalid'
+  | 'system.importExport.source.zeroTitle'
+  | 'system.importExport.source.zeroDescription'
+  | 'system.importExport.source.checkAgainButton'
+  | 'system.importExport.source.showCommandsLabel'
+  | 'system.importExport.source.elevation.copying'
+  | 'system.importExport.source.elevation.passwordTitle'
+  | 'system.importExport.source.elevation.passwordDescription'
+  | 'system.importExport.source.elevation.passwordLabel'
+  | 'system.importExport.source.elevation.httpWarning'
+  | 'system.importExport.source.elevation.submitButton'
+  | 'system.importExport.source.elevation.fallbackTitle'
+  | 'system.importExport.source.elevation.fallbackDescription'
+  | 'system.importExport.source.elevation.disabledNote'
+  | 'system.importExport.source.elevation.failed'
   | 'system.importExport.mode.label'
   | 'system.importExport.mode.dbOnly.label'
   | 'system.importExport.mode.dbOnly.description'
@@ -4072,6 +4103,9 @@ export type TranslationParams = {
     total: string | number;
     name: string | number;
   };
+  'system.importExport.source.detectionsSummary': { count: string | number; date: string | number };
+  'system.importExport.source.unreadableOwner': { owner: string | number };
+  'system.importExport.source.manualValid': { count: string | number };
   'system.importExport.progress.progressLabel': { percent: string | number };
   'system.importExport.done.partialInserted': { count: string | number };
   'system.database.legacy.cleanup.success': { size: string | number };
