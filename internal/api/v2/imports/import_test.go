@@ -1514,9 +1514,14 @@ func TestResolveNativeImportSourcePath_Valid(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "birds.db")
 	writeMinimalBirdNetPiDB(t, db)
 
+	// The resolver returns the symlink-resolved path; resolve the expected value
+	// the same way so the comparison holds on macOS (where /tmp -> /private/tmp).
+	wantDB, err := filepath.EvalSymlinks(db)
+	require.NoError(t, err)
+
 	got, err := resolveNativeImportSourcePath(db)
 	require.NoError(t, err)
-	assert.Equal(t, db, got)
+	assert.Equal(t, wantDB, got)
 }
 
 func TestResolveNativeImportSourcePath_RejectsRelative(t *testing.T) {
@@ -1529,11 +1534,21 @@ func TestResolveNativeImportSourcePath_RejectsMissing(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestResolveNativeImportSourcePath_RejectsNonSQLite(t *testing.T) {
-	bad := filepath.Join(t.TempDir(), "birds.db")
-	require.NoError(t, os.WriteFile(bad, []byte("nope"), 0o600))
-	_, err := resolveNativeImportSourcePath(bad)
-	require.Error(t, err)
+// TestResolveNativeImportSourcePath_AcceptsRegularFile documents that the
+// resolver is path-only: it accepts any absolute, existing, regular file and
+// defers schema validation to the shared factory + Validate step in the handler
+// (mirroring the container branch). A non-BirdNET-Pi file is rejected there, not
+// here; see TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB.
+func TestResolveNativeImportSourcePath_AcceptsRegularFile(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "birds.db")
+	require.NoError(t, os.WriteFile(f, []byte("not sqlite"), 0o600))
+
+	wantF, err := filepath.EvalSymlinks(f)
+	require.NoError(t, err)
+
+	got, err := resolveNativeImportSourcePath(f)
+	require.NoError(t, err)
+	assert.Equal(t, wantF, got)
 }
 
 // TestStartBirdNETPiImport_NativeDispatch_AcceptsAbsolutePath verifies that
@@ -1563,6 +1578,34 @@ func TestStartBirdNETPiImport_NativeDispatch_AcceptsAbsolutePath(t *testing.T) {
 
 	require.NoError(t, c.StartBirdNETPiImport(ctx))
 	assert.Equal(t, http.StatusAccepted, rec.Code)
+}
+
+// TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB verifies that a
+// native absolute path to a regular file that is NOT a BirdNET-Pi database is
+// rejected with 400 by the shared factory + Validate step (the resolver is
+// path-only and no longer validates schema itself).
+func TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB(t *testing.T) {
+	_, c := newImportHandler(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	c.Repo = mockRepo
+	c.isContainerEnv = func() bool { return false }
+	// Use the real factory (birdnetpi.New) so the bad file fails open/validate.
+	c.importSourceFactory = nil
+
+	bad := filepath.Join(t.TempDir(), "birds.db")
+	require.NoError(t, os.WriteFile(bad, []byte("not a sqlite database"), 0o600))
+
+	body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, bad)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 // TestStartBirdNETPiImport_ContainerDispatch_AcceptsRelativePath verifies that

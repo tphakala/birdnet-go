@@ -41,6 +41,17 @@ func TestPasswordRedactedInSlog(t *testing.T) {
 	assert.Contains(t, buf.String(), "[REDACTED]")
 }
 
+func TestPasswordUnmarshalRejectsBadEscape(t *testing.T) {
+	// Call UnmarshalJSON directly with a malformed token: encoding/json validates
+	// string escapes itself and would reject this before our decoder runs, so a
+	// direct call is the only way to exercise the decoder's error path (which
+	// zeroes the partial decode before returning).
+	var p Password
+	err := p.UnmarshalJSON([]byte(`"a\x"`))
+	require.Error(t, err)
+	assert.Empty(t, p.Bytes())
+}
+
 func TestPasswordUnmarshalHandlesEscapes(t *testing.T) {
 	var body struct {
 		Password Password `json:"password"`

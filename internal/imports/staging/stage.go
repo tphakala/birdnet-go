@@ -9,9 +9,9 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -36,8 +36,9 @@ var (
 	ErrUnsupportedPlatform = errors.NewStd("import staging is only supported on Linux")
 	// ErrNotSQLite is returned when the source is not a SQLite database.
 	ErrNotSQLite = errors.NewStd("source is not a SQLite database")
-	// ErrDstNotEmpty is returned when the destination is missing or not empty.
-	ErrDstNotEmpty = errors.NewStd("destination must be an existing empty directory")
+	// ErrDstExists is returned when the destination already exists. Stage creates
+	// the staging directory itself, so it must not pre-exist.
+	ErrDstExists = errors.NewStd("destination must not already exist")
 	// ErrInvalidOptions is returned for malformed inputs.
 	ErrInvalidOptions = errors.NewStd("invalid staging options")
 )
@@ -57,32 +58,50 @@ type Result struct {
 	StagedAudio string
 }
 
-// Stage validates and copies the source database (and optional audio) into Dst,
-// chowns the copies to UID:GID, and verifies SQLite integrity. On integrity
-// failure it rolls back the staged contents.
+// Stage validates the source, then copies the source database (and optional
+// audio) into a staging directory that this process CREATES and owns, verifies
+// SQLite integrity, and finally chowns the staged copies to UID:GID. On any
+// failure it rolls back by removing the staging directory.
+//
+// Stage creates opts.Dst itself with mode 0700 (it must not already exist). This
+// is essential: when invoked as root via sudo, a staging directory pre-created
+// by the unprivileged service user would be writable by that user during the
+// copy, letting them swap a parent component for a symlink and redirect root's
+// writes/chowns to an arbitrary path. A root-owned 0700 directory the service
+// user cannot write into closes that whole class of races; the per-file
+// O_NOFOLLOW/O_EXCL/Lchown guards remain as defense in depth on the source side,
+// which is owned by the service user and therefore still attacker-controllable.
 func Stage(ctx context.Context, opts Options) (Result, error) {
 	if err := validateOptions(opts); err != nil {
 		return Result{}, err
 	}
 
+	// Create the staging directory as this process (root under sudo), 0700, so
+	// the service user cannot tamper with its contents during staging. os.Mkdir
+	// fails if opts.Dst already exists (including a pre-planted symlink, EEXIST).
+	if err := os.Mkdir(opts.Dst, 0o700); err != nil {
+		return Result{}, errors.New(err).Component("imports").
+			Category(errors.CategoryFileIO).Context("op", "mkdir-staging").Build()
+	}
+
 	srcFile, err := openNoFollow(opts.Src)
 	if err != nil {
-		return Result{}, errors.New(err).Component("imports").
-			Category(errors.CategoryFileIO).Context("op", "open-src").Build()
+		return Result{}, rollback(opts.Dst, errors.New(err).Component("imports").
+			Category(errors.CategoryFileIO).Context("op", "open-src").Build())
 	}
 	defer func() { _ = srcFile.Close() }()
 
 	info, err := srcFile.Stat()
 	if err != nil {
-		return Result{}, errors.New(err).Component("imports").
-			Category(errors.CategoryFileIO).Context("op", "fstat-src").Build()
+		return Result{}, rollback(opts.Dst, errors.New(err).Component("imports").
+			Category(errors.CategoryFileIO).Context("op", "fstat-src").Build())
 	}
 	if !info.Mode().IsRegular() {
-		return Result{}, ErrInvalidOptions
+		return Result{}, rollback(opts.Dst, ErrInvalidOptions)
 	}
 
 	if err := verifySQLiteMagic(srcFile); err != nil {
-		return Result{}, err
+		return Result{}, rollback(opts.Dst, err)
 	}
 
 	stagedDB := filepath.Join(opts.Dst, stagedDBName)
@@ -99,11 +118,13 @@ func Stage(ctx context.Context, opts Options) (Result, error) {
 		res.StagedAudio = dstAudio
 	}
 
-	if err := chownTree(opts.Dst, opts.UID, opts.GID); err != nil {
+	// Verify integrity BEFORE handing ownership to the service user, so the user
+	// only ever receives a verified copy.
+	if err := verifyIntegrity(ctx, stagedDB); err != nil {
 		return Result{}, rollback(opts.Dst, err)
 	}
 
-	if err := verifyIntegrity(ctx, stagedDB); err != nil {
+	if err := chownTree(opts.Dst, opts.UID, opts.GID); err != nil {
 		return Result{}, rollback(opts.Dst, err)
 	}
 
@@ -119,26 +140,42 @@ func validateOptions(opts Options) error {
 	if opts.Dst == "" || !filepath.IsAbs(opts.Dst) {
 		return ErrInvalidOptions
 	}
-
-	// Dst must exist, be a directory, and be empty.
-	entries, err := os.ReadDir(opts.Dst)
-	if err != nil {
-		return ErrDstNotEmpty
+	// UID/GID must be real ids: lchown(2) treats -1 as "leave unchanged", so a
+	// negative value would silently leave staged files owned by root and unreadable
+	// by the service user, while Stage still reports success.
+	if opts.UID < 0 || opts.GID < 0 {
+		return ErrInvalidOptions
 	}
-	if len(entries) > 0 {
-		return ErrDstNotEmpty
+
+	// Dst must NOT already exist; Stage creates it itself (root-owned 0700) so the
+	// service user cannot tamper with it during staging. The parent must exist and
+	// be a directory so the create can succeed.
+	if _, err := os.Lstat(opts.Dst); err == nil {
+		return ErrDstExists
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return errors.New(err).Component("imports").
+			Category(errors.CategoryFileIO).Context("op", "lstat-dst").Build()
+	}
+	parent := filepath.Dir(opts.Dst)
+	if info, err := os.Stat(parent); err != nil || !info.IsDir() {
+		return ErrInvalidOptions
 	}
 
 	// Audio, if set, must be absolute and a strict sibling of Src (same parent
 	// directory). This blocks the arbitrary-directory-copy attack where an attacker
 	// provides a valid birds.db but --audio=/root/.ssh to extract privileged data.
+	// It must also differ from Src, else the audio tree copy would collide with the
+	// staged birds.db path.
 	if opts.Audio != "" {
 		if !filepath.IsAbs(opts.Audio) {
 			return ErrInvalidOptions
 		}
-		srcDir := filepath.Dir(filepath.Clean(opts.Src))
-		audioDir := filepath.Dir(filepath.Clean(opts.Audio))
-		if audioDir != srcDir {
+		cleanSrc := filepath.Clean(opts.Src)
+		cleanAudio := filepath.Clean(opts.Audio)
+		if cleanAudio == cleanSrc {
+			return ErrInvalidOptions
+		}
+		if filepath.Dir(cleanAudio) != filepath.Dir(cleanSrc) {
 			return ErrInvalidOptions
 		}
 	}
@@ -210,7 +247,15 @@ func copyTree(src, dst string) error {
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o700)
 		}
-		// Not a dir: open with O_NOFOLLOW to reject symlinks.
+		// Skip non-regular entries (symlinks, FIFOs, sockets, devices) by their
+		// Lstat-based type: a symlink must not be copied (and would otherwise abort
+		// the whole import on ELOOP), and a FIFO/device would block openNoFollow.
+		// The O_NOFOLLOW + fstat-regular re-check below still guards the TOCTOU case
+		// where a regular entry is swapped for a symlink after this Lstat.
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		// Open with O_NOFOLLOW to reject a symlink raced in after the Lstat above.
 		f, err := openNoFollow(path)
 		if err != nil {
 			return errors.New(err).Component("imports").
@@ -247,7 +292,11 @@ func chownTree(root string, uid, gid int) error {
 // verifyIntegrity opens the staged db read-only and runs PRAGMA integrity_check.
 // The database must report "ok" for the stage to be considered valid.
 func verifyIntegrity(ctx context.Context, dbPath string) error {
-	dsn := fmt.Sprintf("file:%s?mode=ro", dbPath)
+	// Build the DSN via url.URL so a path containing a URI-special character
+	// (space, ?, #, %) is percent-encoded and cannot corrupt the query string.
+	// Mirrors internal/imports/birdnetpi/source.go (which cannot be imported here
+	// without pulling in GORM + cgo).
+	dsn := (&url.URL{Scheme: "file", OmitHost: true, Path: dbPath, RawQuery: "mode=ro"}).String()
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return errors.New(err).Component("imports").
@@ -267,17 +316,15 @@ func verifyIntegrity(ctx context.Context, dbPath string) error {
 	return nil
 }
 
-// rollback removes all contents staged under dst (but not dst itself, which we
-// did not create) and returns cause wrapped with rollback context.
+// rollback removes the staging directory we created and returns cause wrapped
+// with rollback context. If the removal itself fails, that is recorded in the
+// returned error context so the leftover directory (which would make the next
+// attempt fail with ErrDstExists) is not silently swallowed.
 func rollback(dst string, cause error) error {
-	entries, err := os.ReadDir(dst)
-	if err != nil {
-		return errors.New(cause).Component("imports").
-			Category(errors.CategoryFileIO).Context("op", "rollback").Build()
+	b := errors.New(cause).Component("imports").
+		Category(errors.CategoryFileIO).Context("op", "rollback")
+	if rmErr := os.RemoveAll(dst); rmErr != nil {
+		b = b.Context("rollback_cleanup_error", rmErr.Error())
 	}
-	for _, e := range entries {
-		_ = os.RemoveAll(filepath.Join(dst, e.Name()))
-	}
-	return errors.New(cause).Component("imports").
-		Category(errors.CategoryFileIO).Context("op", "rollback").Build()
+	return b.Build()
 }

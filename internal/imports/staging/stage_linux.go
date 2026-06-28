@@ -10,9 +10,11 @@ import (
 // openNoFollow opens path read-only, failing if the final component is a
 // symlink. This re-validates the source after the unprivileged API-side check,
 // closing the TOCTOU window where a symlink to a sensitive file (e.g.
-// /etc/shadow) is swapped in before the root subcommand reads it.
+// /etc/shadow) is swapped in before the root subcommand reads it. O_NONBLOCK
+// ensures a named pipe (FIFO) or device source returns immediately instead of
+// blocking the open forever; the caller's fstat-regular check then rejects it.
 func openNoFollow(path string) (*os.File, error) {
-	return os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	return os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 }
 
 // createNoFollow creates path for writing, failing if it already exists

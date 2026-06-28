@@ -33,7 +33,7 @@ func writeMinimalSQLite(t *testing.T, path string) {
 func TestImportStageCommandStages(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "birds.db")
 	writeMinimalSQLite(t, src)
-	dst := t.TempDir()
+	dst := filepath.Join(t.TempDir(), "staging") // must not pre-exist; Stage creates it
 
 	cmd := Command(&conf.Settings{})
 	cmd.SetArgs([]string{
@@ -46,11 +46,10 @@ func TestImportStageCommandStages(t *testing.T) {
 	require.FileExists(t, filepath.Join(dst, "birds.db"))
 }
 
-func TestImportStageCommandRejectsNonEmptyDst(t *testing.T) {
+func TestImportStageCommandRejectsExistingDst(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "birds.db")
 	writeMinimalSQLite(t, src)
-	dst := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dst, "existing"), []byte("x"), 0o600))
+	dst := t.TempDir() // already exists, so Stage must reject it
 
 	cmd := Command(&conf.Settings{})
 	cmd.SetArgs([]string{

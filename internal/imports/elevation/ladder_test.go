@@ -20,8 +20,13 @@ type fakeRunner struct {
 func (f *fakeRunner) Run(_ context.Context, stdin []byte, name string, args ...string) error {
 	f.calls = append(f.calls, append([]string{name}, args...))
 	f.stdins = append(f.stdins, bytes.Clone(stdin))
-	if len(args) > 0 && f.failOn[args[0]] {
-		return errSudoFailed
+	// Fail if any arg is registered in failOn. Matching on any arg (not just
+	// args[0]) lets a test target a specific invocation: "-n" matches the
+	// passwordless probe, "import-stage" matches a staging command, etc.
+	for _, a := range args {
+		if f.failOn[a] {
+			return errSudoFailed
+		}
 	}
 	return nil
 }
@@ -179,5 +184,29 @@ func TestLadderFallbackWhenNoSudo(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, MethodFallback, out.Method)
-	assert.NotEmpty(t, out.FallbackCommands)
+	require.NotEmpty(t, out.FallbackCommands)
+	// The remediation command must reference the (shell-quoted) source path so a
+	// regression that drops argument interpolation is caught.
+	assert.Contains(t, out.FallbackCommands[0], "'/data/birds.db'")
+}
+
+func TestLadderSudoStagingFailsFallsThrough(t *testing.T) {
+	// Passwordless probe succeeds (`sudo -n true`) but the staging command is
+	// refused (`import-stage`). The ladder must log a warning and fall through to
+	// the fallback rung (no password supplied).
+	r := &fakeRunner{failOn: map[string]bool{"import-stage": true}}
+	var logBuf bytes.Buffer
+	l := &Ladder{
+		Runner:  r,
+		Direct:  fakeDirect{},
+		SelfExe: "/bin/birdnet",
+		Log:     slog.New(slog.NewTextHandler(&logBuf, nil)),
+	}
+	out, err := l.Stage(t.Context(), &StageRequest{
+		Src: "/data/birds.db", Dst: "/stg", Owner: "pi", AllowElevation: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, MethodFallback, out.Method)
+	// The probe passed but staging failed, so the rung-2 failure must be logged.
+	assert.Contains(t, logBuf.String(), "passwordless sudo staging failed")
 }

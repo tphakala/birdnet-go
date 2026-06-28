@@ -36,5 +36,10 @@ func Command(_ *conf.Settings) *cobra.Command {
 	cmd.Flags().IntVar(&opts.GID, "gid", -1, "service-user gid to chown staged files to")
 	_ = cmd.MarkFlagRequired("src")
 	_ = cmd.MarkFlagRequired("dst")
+	// uid/gid are required: lchown(2) treats -1 (the flag default) as "leave
+	// unchanged", which would silently leave staged files root-owned and
+	// unreadable by the service user while Stage still reported success.
+	_ = cmd.MarkFlagRequired("uid")
+	_ = cmd.MarkFlagRequired("gid")
 	return cmd
 }

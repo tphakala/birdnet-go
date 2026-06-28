@@ -37,14 +37,12 @@ func resolveNativeImportSourcePath(userPath string) (string, error) {
 	if err != nil || !info.Mode().IsRegular() {
 		return "", errInvalidSourcePath
 	}
-	src, err := birdnetpi.New(resolved)
-	if err != nil {
-		return "", errInvalidSourcePath
-	}
-	defer func() { _ = src.Close() }()
-	if err := src.Validate(context.Background()); err != nil {
-		return "", errInvalidSourcePath
-	}
+	// Path-only resolution: confirm it is an absolute, existing, regular file.
+	// Schema validation (open + BirdNET-Pi schema check) is done once by the
+	// shared factory + Validate path in StartBirdNETPiImport, using the request
+	// context and surfacing distinct "failed to open" vs "validation failed"
+	// errors. Mirrors the container branch (resolveImportSourcePath), which also
+	// defers schema validation to that shared step.
 	return resolved, nil
 }
 
@@ -89,7 +87,7 @@ var errInvalidSourcePath = errors.NewStd("invalid source path")
 // startImportRequest is the JSON body for POST /import/birdnet-pi.
 type startImportRequest struct {
 	Mode       string `json:"mode"`        // accepted values: "db-only", "db-audio"
-	SourcePath string `json:"source_path"` // path relative to the external mount root
+	SourcePath string `json:"source_path"` // container: relative to the external mount root; native: absolute path to the source birds.db
 	Location   string `json:"location"`    // optional IANA timezone name e.g. "Europe/Helsinki"
 }
 

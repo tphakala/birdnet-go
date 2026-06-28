@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // stagedDBName is the fixed filename import-stage writes the staged database as.
@@ -141,6 +142,12 @@ func (l *Ladder) Stage(ctx context.Context, req *StageRequest) (Outcome, error) 
 			)
 			return stagedOutcome(MethodSudoNonInteractive, req), nil
 		}
+		// Probe succeeded but the staging command was refused (e.g. sudoers allows
+		// `true` but not `birdnet-go import-stage`). Log before falling through,
+		// mirroring the password-rung failure log.
+		l.Log.Warn("import: passwordless sudo staging failed",
+			slog.String("src", req.Src),
+		)
 	}
 
 	// Rung 3: in-app sudo password.
@@ -178,7 +185,9 @@ func (l *Ladder) Stage(ctx context.Context, req *StageRequest) (Outcome, error) 
 // sudo. Using --flag=value form means a value that looks like a flag (e.g.
 // --src=-rf) is bound to its flag, not treated as a new option.
 func buildStageCommand(selfExe string, req *StageRequest) []string {
-	args := make([]string, 0, 7)
+	// selfExe + "import-stage" + 4 required flags + optional --audio = 7 max.
+	const maxStageArgs = 7
+	args := make([]string, 0, maxStageArgs)
 	args = append(args,
 		selfExe,
 		"import-stage",
@@ -211,13 +220,24 @@ func fallbackCommands(req *StageRequest) []string {
 	if owner == "" {
 		owner = "birdnet-go"
 	}
+	// Shell-quote every interpolated value: these are copy-paste commands the user
+	// runs in a shell, so a path or owner containing spaces or shell metacharacters
+	// (e.g. $(...), ;, backtick) must not be interpretable. shellQuote single-quotes
+	// the value so it is always a single literal argument.
 	cmds := []string{
-		fmt.Sprintf("sudo setfacl -R -m u:%s:rX %s", owner, req.Src),
+		fmt.Sprintf("sudo setfacl -R -m u:%s:rX %s", shellQuote(owner), shellQuote(req.Src)),
 	}
 	if req.Audio != "" {
-		cmds = append(cmds, fmt.Sprintf("sudo setfacl -R -m u:%s:rX %s", owner, req.Audio))
+		cmds = append(cmds, fmt.Sprintf("sudo setfacl -R -m u:%s:rX %s", shellQuote(owner), shellQuote(req.Audio)))
 	}
 	return cmds
+}
+
+// shellQuote wraps s in single quotes for safe copy-paste into a POSIX shell,
+// escaping any embedded single quote as '\”. The result is always exactly one
+// shell word, so spaces and metacharacters in s cannot be interpreted.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // execRunner is the real SudoRunner that uses os/exec.
@@ -237,6 +257,13 @@ func (e *execRunner) Run(ctx context.Context, stdin []byte, name string, args ..
 type osDirectReader struct{}
 
 func (r *osDirectReader) CanRead(path string) bool {
+	// Stat first (does not block) so a named pipe or device source is rejected
+	// without os.Open blocking on it forever. Only a regular file is a readable
+	// import source.
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
 	f, err := os.Open(path) //nolint:gosec // path is caller-controlled and validated upstream
 	if err != nil {
 		return false

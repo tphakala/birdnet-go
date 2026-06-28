@@ -31,8 +31,22 @@ type Password []byte
 // string unescape (the standard escapes plus \uXXXX) into a fresh byte buffer so
 // the only cleartext bytes live in a slice Clear() can wipe.
 func (p *Password) UnmarshalJSON(b []byte) error {
+	out, err := decodeJSONString(b)
+	if err != nil {
+		// Zero any partially-decoded cleartext before discarding it.
+		clear(out)
+		return err
+	}
+	*p = out
+	return nil
+}
+
+// decodeJSONString decodes a JSON string token into a fresh byte slice, handling
+// the standard escapes plus \uXXXX. On error it returns whatever was decoded so
+// far so the caller can zero it.
+func decodeJSONString(b []byte) ([]byte, error) {
 	if len(b) < 2 || b[0] != '"' || b[len(b)-1] != '"' {
-		return errBadPassword
+		return nil, errBadPassword
 	}
 	body := b[1 : len(b)-1]
 	out := make([]byte, 0, len(body))
@@ -48,7 +62,7 @@ func (p *Password) UnmarshalJSON(b []byte) error {
 			continue
 		}
 		if i >= len(body) {
-			return errBadPassword
+			return out, errBadPassword
 		}
 		escaped := body[i]
 		i++
@@ -67,13 +81,13 @@ func (p *Password) UnmarshalJSON(b []byte) error {
 			out = append(out, '\t')
 		case 'u':
 			if i+4 > len(body) {
-				return errBadPassword
+				return out, errBadPassword
 			}
 			var r rune
 			for j := range 4 {
 				d, ok := hexVal(body[i+j])
 				if !ok {
-					return errBadPassword
+					return out, errBadPassword
 				}
 				r = r<<4 | rune(d)
 			}
@@ -82,11 +96,10 @@ func (p *Password) UnmarshalJSON(b []byte) error {
 			n := utf8.EncodeRune(enc[:], r)
 			out = append(out, enc[:n]...)
 		default:
-			return errBadPassword
+			return out, errBadPassword
 		}
 	}
-	*p = out
-	return nil
+	return out, nil
 }
 
 // hexVal returns the numeric value of a single hex digit and whether it was valid.
