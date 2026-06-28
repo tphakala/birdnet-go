@@ -74,11 +74,26 @@ import BirdNetPiImportWizard from './BirdNetPiImportWizard.svelte';
 import { api } from '$lib/utils/api';
 import { flushSync } from 'svelte';
 
-const defaultExternalMedia = {
-  environment: 'docker',
+// Default sources response: one readable candidate in a container environment.
+const defaultSourcesResponse = {
+  environment: 'Docker',
   containerized: true,
-  mount_path: '/external',
-  mount_present: true,
+  run_as_user: 'birdnet',
+  run_as_uid: 1000,
+  candidates: [
+    {
+      path: '/external/birdnet-pi/birds.db',
+      kind: 'local' as const,
+      detection_count: 100,
+      latest_date: '2026-06-20',
+      audio_dir_guess: '',
+      size: 1000,
+      valid: true,
+      reason: '',
+      owner_uid: 1000,
+      owner_name: 'birdnet',
+    },
+  ],
   guidance: null,
 };
 
@@ -118,12 +133,23 @@ function setupDefaultMocks() {
     if (url === '/api/v2/import/status') {
       return Promise.resolve({ running: false, status: 'idle' });
     }
-    if (url === '/api/v2/system/external-media') {
-      return Promise.resolve(defaultExternalMedia);
+    if (url === '/api/v2/import/sources') {
+      return Promise.resolve(defaultSourcesResponse);
     }
     return Promise.reject(new Error(`Unmocked URL: ${url}`));
   });
   vi.mocked(api.post).mockResolvedValue({ job_id: 'test-job-123', status: 'started' });
+}
+
+/**
+ * Click the "Select" button on the first candidate card to advance from the
+ * source step to the mode step. Waits for the button to appear first.
+ */
+async function navigatePastSource() {
+  const selectBtn = await screen.findByRole('button', {
+    name: /system.importExport.source.selectButton/,
+  });
+  await fireEvent.click(selectBtn);
 }
 
 describe('BirdNetPiImportWizard', () => {
@@ -163,50 +189,41 @@ describe('BirdNetPiImportWizard', () => {
     });
   });
 
-  // ---- Source access state derivation ----
+  // ---- Source step: candidate-driven ----
 
-  it('shows container-mount UI when mount_present is true', async () => {
+  it('shows candidate cards when sources are found', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
+    // The default mock returns one candidate; the Select button should appear.
+    expect(
+      await screen.findByRole('button', { name: /system.importExport.source.selectButton/ })
+    ).toBeInTheDocument();
+    // The candidate path should be shown
+    expect(screen.getByText('/external/birdnet-pi/birds.db')).toBeInTheDocument();
   });
 
-  it('shows native informational panel when not containerized', async () => {
+  it('shows zero-candidates title when no sources found', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/api/v2/import/status') {
         return Promise.resolve({ running: false, status: 'idle' });
       }
-      if (url === '/api/v2/system/external-media') {
-        return Promise.resolve({
-          environment: '',
-          containerized: false,
-          mount_path: '',
-          mount_present: false,
-          guidance: null,
-        });
+      if (url === '/api/v2/import/sources') {
+        return Promise.resolve({ ...defaultSourcesResponse, candidates: [], guidance: null });
       }
       return Promise.reject(new Error(`Unmocked: ${url}`));
     });
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(screen.getByText('system.importExport.sourceAccess.nativeTitle')).toBeInTheDocument();
-    });
+    expect(await screen.findByText('system.importExport.source.zeroTitle')).toBeInTheDocument();
   });
 
-  it('shows guided-setup panel when containerized but mount missing', async () => {
+  it('shows guidance steps in zero-candidates state', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/api/v2/import/status') {
         return Promise.resolve({ running: false, status: 'idle' });
       }
-      if (url === '/api/v2/system/external-media') {
+      if (url === '/api/v2/import/sources') {
         return Promise.resolve({
-          environment: 'docker',
-          containerized: true,
-          mount_path: '',
-          mount_present: false,
+          ...defaultSourcesResponse,
+          candidates: [],
           guidance: {
             environment: 'docker',
             steps: ['docker run --mount type=bind,src=/data,dst=/external ...'],
@@ -217,35 +234,29 @@ describe('BirdNetPiImportWizard', () => {
     });
     render(BirdNetPiImportWizard, { props: { onClose } });
     await waitFor(() => {
-      expect(screen.getByText('system.importExport.sourceAccess.missingTitle')).toBeInTheDocument();
-      // The guided step text should be rendered
       expect(
         screen.getByText('docker run --mount type=bind,src=/data,dst=/external ...')
       ).toBeInTheDocument();
     });
   });
 
-  it('renders the path input on container-mount state', async () => {
+  it('shows manual entry form when link is clicked', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByLabelText(/system.importExport.sourceAccess.pathLabel/)
-      ).toBeInTheDocument();
-    });
+    // Wait for candidate cards to appear, then click the manual entry link
+    await screen.findByRole('button', { name: /system.importExport.source.selectButton/ });
+    const manualLink = screen.getByText('system.importExport.source.manualEntryLink');
+    await fireEvent.click(manualLink);
+    expect(
+      screen.getByLabelText(/system.importExport.source.manualEntryLabel/)
+    ).toBeInTheDocument();
   });
 
   // ---- Mode step ----
 
   it('mode step shows both db-only and db-audio radios enabled', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    // Navigate to mode step
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
-    const nextButton = screen.getByRole('button', { name: /common.buttons.next/ });
-    await fireEvent.click(nextButton);
+    // Navigate to mode step by selecting a candidate
+    await navigatePastSource();
 
     await waitFor(() => {
       expect(screen.getByText('system.importExport.mode.label')).toBeInTheDocument();
@@ -268,13 +279,7 @@ describe('BirdNetPiImportWizard', () => {
 
   it('db-audio disabled reason is not shown', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
-    const nextButton = screen.getByRole('button', { name: /common.buttons.next/ });
-    await fireEvent.click(nextButton);
+    await navigatePastSource();
 
     await waitFor(() => {
       expect(screen.getByText('system.importExport.mode.label')).toBeInTheDocument();
@@ -290,14 +295,9 @@ describe('BirdNetPiImportWizard', () => {
 
   it('confirm step shows the chosen source path and mode', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
     // Step 1: source -> mode
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => {
       expect(screen.getByText('system.importExport.mode.label')).toBeInTheDocument();
     });
@@ -308,8 +308,8 @@ describe('BirdNetPiImportWizard', () => {
       expect(screen.getByText('system.importExport.confirm.description')).toBeInTheDocument();
     });
 
-    // Should show source path
-    expect(screen.getByText('birdnet-pi/birds.db')).toBeInTheDocument();
+    // Should show the candidate path that was selected
+    expect(screen.getByText('/external/birdnet-pi/birds.db')).toBeInTheDocument();
     // Should show mode
     expect(screen.getByText('system.importExport.mode.dbOnly.label')).toBeInTheDocument();
   });
@@ -318,14 +318,9 @@ describe('BirdNetPiImportWizard', () => {
 
   it('start import posts correct body to the API', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
     // Navigate to confirm
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -339,21 +334,16 @@ describe('BirdNetPiImportWizard', () => {
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith('/api/v2/import/birdnet-pi', {
         mode: 'db-only',
-        source_path: 'birdnet-pi/birds.db',
+        source_path: '/external/birdnet-pi/birds.db',
       });
     });
   });
 
   it('selecting db-audio posts mode db-audio to the API', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
     // Navigate to the mode step.
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
 
     // Select the db-audio mode.
@@ -372,7 +362,7 @@ describe('BirdNetPiImportWizard', () => {
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith('/api/v2/import/birdnet-pi', {
         mode: 'db-audio',
-        source_path: 'birdnet-pi/birds.db',
+        source_path: '/external/birdnet-pi/birds.db',
       });
     });
   });
@@ -384,14 +374,9 @@ describe('BirdNetPiImportWizard', () => {
     );
 
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
     // Navigate to confirm
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -413,13 +398,8 @@ describe('BirdNetPiImportWizard', () => {
     );
 
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -437,14 +417,9 @@ describe('BirdNetPiImportWizard', () => {
 
   it('progress events update the progress bar and counters', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
     // Navigate to confirm and start
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -472,13 +447,8 @@ describe('BirdNetPiImportWizard', () => {
 
   it('complete event transitions to done step with success state', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -514,13 +484,8 @@ describe('BirdNetPiImportWizard', () => {
 
   it('error event transitions to done step with error state', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -546,13 +511,8 @@ describe('BirdNetPiImportWizard', () => {
 
   it('native error event (no data) does not terminate the import', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -583,13 +543,8 @@ describe('BirdNetPiImportWizard', () => {
 
   it('server error event with JSON data transitions to done with localized error', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -620,13 +575,8 @@ describe('BirdNetPiImportWizard', () => {
 
   it('cancelled event transitions to done step with cancelled state', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -661,13 +611,8 @@ describe('BirdNetPiImportWizard', () => {
     });
 
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -700,13 +645,8 @@ describe('BirdNetPiImportWizard', () => {
 
   it('run in background calls onClose without posting to cancel endpoint', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -787,7 +727,7 @@ describe('BirdNetPiImportWizard', () => {
     expect(MockReconnectingEventSource).not.toHaveBeenCalled();
     // Should NOT fall through to source discovery
     expect(
-      screen.queryByText('system.importExport.sourceAccess.mountDescription')
+      screen.queryByText('system.importExport.source.candidatesIntro')
     ).not.toBeInTheDocument();
   });
 
@@ -824,8 +764,8 @@ describe('BirdNetPiImportWizard', () => {
           error: undefined,
         });
       }
-      if (url === '/api/v2/system/external-media') {
-        return Promise.resolve(defaultExternalMedia);
+      if (url === '/api/v2/import/sources') {
+        return Promise.resolve(defaultSourcesResponse);
       }
       return Promise.reject(new Error(`Unmocked: ${url}`));
     });
@@ -841,11 +781,10 @@ describe('BirdNetPiImportWizard', () => {
     });
     await fireEvent.click(importAnotherButton);
 
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
+    // After reset, should show candidate cards
+    expect(
+      await screen.findByRole('button', { name: /system.importExport.source.selectButton/ })
+    ).toBeInTheDocument();
     // Done step should no longer be visible
     expect(screen.queryByText('system.importExport.done.successTitle')).not.toBeInTheDocument();
   });
@@ -888,20 +827,15 @@ describe('BirdNetPiImportWizard', () => {
           error: undefined,
         });
       }
-      if (url === '/api/v2/system/external-media') {
-        return Promise.resolve(defaultExternalMedia);
+      if (url === '/api/v2/import/sources') {
+        return Promise.resolve(defaultSourcesResponse);
       }
       return Promise.reject(new Error(`Unmocked GET: ${url}`));
     });
 
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -954,20 +888,15 @@ describe('BirdNetPiImportWizard', () => {
         statusGetCalls.push(url);
         return Promise.resolve({ running: false, status: 'idle' });
       }
-      if (url === '/api/v2/system/external-media') {
-        return Promise.resolve(defaultExternalMedia);
+      if (url === '/api/v2/import/sources') {
+        return Promise.resolve(defaultSourcesResponse);
       }
       return Promise.reject(new Error(`Unmocked GET: ${url}`));
     });
 
     render(BirdNetPiImportWizard, { props: { onClose } });
-    await waitFor(() => {
-      expect(
-        screen.getByText('system.importExport.sourceAccess.mountDescription')
-      ).toBeInTheDocument();
-    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await navigatePastSource();
     await waitFor(() => screen.getByText('system.importExport.mode.label'));
     await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
     await waitFor(() => screen.getByText('system.importExport.confirm.description'));
@@ -1012,5 +941,54 @@ describe('BirdNetPiImportWizard', () => {
     expect(statusGetCalls).toHaveLength(0);
     // Must NOT show success
     expect(screen.queryByText('system.importExport.done.successTitle')).not.toBeInTheDocument();
+  });
+
+  // ---- Task 9: candidate-driven source step ----
+
+  it('renders candidate cards when sources are found', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ running: false, status: 'idle' });
+    vi.mocked(api.get).mockResolvedValueOnce({
+      environment: 'Bare Metal',
+      containerized: false,
+      run_as_user: 'birdnet',
+      run_as_uid: 1000,
+      candidates: [
+        {
+          path: '/home/pi/BirdNET-Pi/birds.db',
+          kind: 'local',
+          detection_count: 42,
+          latest_date: '2026-06-20',
+          audio_dir_guess: '',
+          size: 1000,
+          valid: true,
+          reason: '',
+          owner_uid: 1000,
+          owner_name: 'pi',
+        },
+      ],
+      guidance: null,
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    expect(
+      await screen.findByRole('button', { name: /system.importExport.source.selectButton/ })
+    ).toBeInTheDocument();
+  });
+
+  it('renders guidance and Check again when zero candidates', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ running: false, status: 'idle' });
+    vi.mocked(api.get).mockResolvedValueOnce({
+      environment: 'Bare Metal',
+      containerized: false,
+      run_as_user: 'birdnet',
+      run_as_uid: 1000,
+      candidates: [],
+      guidance: { environment: 'Bare Metal', steps: ['lsblk'] },
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    expect(
+      await screen.findByRole('button', { name: /system.importExport.source.checkAgainButton/ })
+    ).toBeInTheDocument();
   });
 });

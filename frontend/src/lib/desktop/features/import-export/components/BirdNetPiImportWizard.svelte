@@ -11,10 +11,12 @@
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import ProgressBar from '$lib/desktop/components/ui/ProgressBar.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { CheckCircle2, XCircle, AlertTriangle, ArrowLeft, ArrowRight } from '@lucide/svelte';
+  import { CheckCircle2, XCircle, ArrowLeft, ArrowRight } from '@lucide/svelte';
   import type {
-    ExternalMediaResponse,
-    SourceAccessState,
+    ImportSourcesResponse,
+    SourceCandidate,
+    SourceStepState,
+    ValidateSourceResponse,
     StartImportRequest,
     StartImportResponse,
     ImportProgress,
@@ -23,7 +25,7 @@
     ImportStatusResponse,
     WizardStep,
   } from '../types';
-  import { deriveSourceAccessState, buildDetectionsFilterUrl } from '../utils';
+  import { deriveSourceStepState, buildDetectionsFilterUrl } from '../utils';
   import { formatNumber } from '$lib/utils/formatters';
 
   const logger = loggers.ui;
@@ -39,13 +41,19 @@
   let isLoading = $state(false);
   let errorMessage = $state<string | null>(null);
 
-  // Source access state
-  let mediaResponse = $state<ExternalMediaResponse | null>(null);
-  let sourceAccessState = $state<SourceAccessState | null>(null);
-  let mediaLoadError = $state<string | null>(null);
+  // Source discovery state
+  let sourcesResponse = $state<ImportSourcesResponse | null>(null);
+  let sourceStepState = $state<SourceStepState | null>(null);
+  let sourcesLoadError = $state<string | null>(null);
 
-  // Path input (relative to mount root)
-  let sourcePath = $state('birdnet-pi/birds.db');
+  // Manual entry state
+  let showManualEntry = $state(false);
+  let manualPath = $state('');
+  let validateResp = $state<ValidateSourceResponse | null>(null);
+  let validateStatus = $state<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
+
+  // Selected source path (absolute path set by candidate selection or manual entry)
+  let sourcePath = $state('');
 
   // Selected import mode
   let selectedMode = $state<'db-only' | 'db-audio'>('db-only');
@@ -64,10 +72,6 @@
   const stepLabels: WizardStep[] = ['source', 'mode', 'confirm', 'progress', 'done'];
 
   let currentStepIndex = $derived(stepLabels.indexOf(currentStep));
-
-  let canProceedFromSource = $derived(
-    sourceAccessState === 'container-mount' && sourcePath.trim().length > 0
-  );
 
   let progressPercent = $derived.by(() => {
     if (
@@ -120,8 +124,8 @@
         return;
       }
 
-      // Discover external media
-      await loadExternalMedia();
+      // Discover source databases
+      await loadSources();
       if (destroyed) return;
     } catch (err) {
       if (destroyed) return;
@@ -143,33 +147,66 @@
     importError = null;
     errorMessage = null;
     isCancelling = false;
+    sourcePath = '';
+    showManualEntry = false;
+    manualPath = '';
+    validateStatus = 'idle';
+    validateResp = null;
     currentStep = 'source';
-    void loadExternalMedia();
+    void loadSources();
   }
 
-  async function loadExternalMedia() {
-    mediaLoadError = null;
+  async function loadSources() {
+    sourcesLoadError = null;
     try {
-      const resp = await api.get<ExternalMediaResponse>('/api/v2/system/external-media');
+      const resp = await api.get<ImportSourcesResponse>('/api/v2/import/sources');
       if (destroyed) return;
-      mediaResponse = resp;
-      sourceAccessState = deriveSourceAccessState(resp);
+      sourcesResponse = resp;
+      sourceStepState = deriveSourceStepState(resp);
     } catch (err) {
       if (destroyed) return;
       if (err instanceof ApiError) {
-        mediaLoadError = err.userMessage;
+        sourcesLoadError = err.userMessage;
       } else {
-        mediaLoadError = t('system.importExport.errors.mediaLoadFailed');
+        sourcesLoadError = t('system.importExport.errors.mediaLoadFailed');
       }
     }
   }
 
-  async function recheckMedia() {
+  async function recheckSources() {
     isLoading = true;
     try {
-      await loadExternalMedia();
+      await loadSources();
     } finally {
       isLoading = false;
+    }
+  }
+
+  function selectCandidate(cand: SourceCandidate) {
+    sourcePath = cand.path;
+    goToStep('mode');
+  }
+
+  async function useManualPath() {
+    if (!manualPath.trim()) return;
+    validateStatus = 'validating';
+    validateResp = null;
+    try {
+      const resp = await api.post<ValidateSourceResponse>('/api/v2/import/validate', {
+        source_path: manualPath.trim(),
+      });
+      if (destroyed) return;
+      validateResp = resp;
+      if (resp.valid) {
+        sourcePath = manualPath.trim();
+        validateStatus = 'idle';
+        goToStep('mode');
+      } else {
+        validateStatus = 'invalid';
+      }
+    } catch {
+      if (destroyed) return;
+      validateStatus = 'invalid';
     }
   }
 
@@ -384,134 +421,140 @@
       {:else if errorMessage && currentStep !== 'progress' && currentStep !== 'confirm'}
         <ErrorAlert message={errorMessage} type="error" />
       {:else if currentStep === 'source'}
-        <!-- Source access step -->
-        {#if mediaLoadError}
-          <div class="space-y-3">
-            <ErrorAlert message={mediaLoadError} type="error" />
-            <div>
-              <Button
-                variant="default"
-                onclick={recheckMedia}
-                disabled={isLoading}
-                title={isLoading ? t('system.importExport.loading') : undefined}
-              >
-                {t('system.importExport.sourceAccess.recheckButton')}
-              </Button>
-            </div>
-          </div>
-        {:else if sourceAccessState === 'native'}
-          <!-- Native state: informational panel only -->
-          <div class="space-y-3">
-            <div
-              class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]"
-            >
-              <AlertTriangle class="size-5 shrink-0 mt-0.5 text-[var(--color-info)]" />
-              <div class="space-y-2">
-                <p class="font-medium text-[var(--color-base-content)]">
-                  {t('system.importExport.sourceAccess.nativeTitle')}
-                </p>
-                <p class="text-sm text-[var(--color-base-content)]/80">
-                  {t('system.importExport.sourceAccess.nativeDescription')}
-                </p>
-                <p class="text-sm text-[var(--color-base-content)]/80">
-                  {t('system.importExport.sourceAccess.nativeHowTo')}
-                </p>
-              </div>
-            </div>
-          </div>
-        {:else if sourceAccessState === 'container-missing'}
-          <!-- Container + missing mount: guided setup -->
-          <div class="space-y-3">
-            <div
-              class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-            >
-              <AlertTriangle class="size-5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
-              <div>
-                <p class="font-medium text-[var(--color-base-content)]">
-                  {t('system.importExport.sourceAccess.missingTitle')}
-                </p>
-                <p class="text-sm text-[var(--color-base-content)]/80 mt-1">
-                  {t('system.importExport.sourceAccess.missingDescription')}
-                </p>
-              </div>
-            </div>
-
-            {#if mediaResponse?.guidance?.steps && mediaResponse.guidance.steps.length > 0}
-              <div>
-                <p class="text-sm font-medium text-[var(--color-base-content)] mb-2">
-                  {t('system.importExport.sourceAccess.setupStepsLabel')}
-                </p>
-                <ol class="space-y-2">
-                  {#each mediaResponse.guidance.steps as step, i (i)}
-                    <li class="flex items-start gap-2">
-                      <span
-                        class="flex-shrink-0 text-xs font-medium text-[var(--color-base-content)]/60 mt-0.5"
-                        >{i + 1}.</span
-                      >
-                      <code
-                        class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
-                        >{step}</code
-                      >
-                    </li>
-                  {/each}
-                </ol>
-              </div>
+        <!-- Source discovery step -->
+        {#snippet manualEntryForm()}
+          <div class="space-y-3 pt-3 border-t border-[var(--color-base-300)]">
+            <TextInput
+              id="manual-source-path"
+              label={t('system.importExport.source.manualEntryLabel')}
+              bind:value={manualPath}
+              placeholder="/home/pi/BirdNET-Pi/birds.db"
+            />
+            {#if validateStatus === 'validating'}
+              <p class="text-sm text-[var(--color-base-content)]/60">
+                {t('system.importExport.source.manualValidating')}
+              </p>
+            {:else if validateStatus === 'invalid'}
+              <p class="text-sm text-[var(--color-error)]">
+                {validateResp?.reason === 'not_found'
+                  ? t('system.importExport.source.manualNotFound')
+                  : validateResp?.reason === 'permission_denied'
+                    ? t('system.importExport.source.manualUnreadable')
+                    : t('system.importExport.source.manualInvalid')}
+              </p>
             {/if}
+            <Button
+              variant="default"
+              onclick={useManualPath}
+              disabled={!manualPath.trim() || validateStatus === 'validating'}
+              title={!manualPath.trim()
+                ? t('system.importExport.sourceAccess.pathRequiredReason')
+                : undefined}
+            >
+              {t('system.importExport.source.useThisButton')}
+            </Button>
+          </div>
+        {/snippet}
 
-            <div class="flex items-center gap-2 pt-2">
-              <Button
-                variant="default"
-                onclick={recheckMedia}
-                disabled={isLoading}
-                title={isLoading ? t('system.importExport.loading') : undefined}
-              >
-                {#if isLoading}
-                  <LoadingSpinner size="xs" aria-hidden="true" />
-                {/if}
-                {t('system.importExport.sourceAccess.recheckButton')}
+        {#if sourcesLoadError}
+          <div class="space-y-3">
+            <ErrorAlert message={sourcesLoadError} type="error" />
+            <div>
+              <Button variant="default" onclick={recheckSources} disabled={isLoading}>
+                {t('system.importExport.source.checkAgainButton')}
               </Button>
-              <span class="text-xs text-[var(--color-base-content)]/60">
-                {t('system.importExport.sourceAccess.recheckHint')}
-              </span>
             </div>
           </div>
-        {:else if sourceAccessState === 'container-mount'}
-          <!-- Container + mount present: path entry -->
+        {:else if sourceStepState === 'candidates'}
+          <!-- At least one candidate found -->
           <div class="space-y-4">
             <p class="text-sm text-[var(--color-base-content)]/80">
-              {t('system.importExport.sourceAccess.mountDescription')}
+              {t('system.importExport.source.candidatesIntro')}
             </p>
-
-            {#if mediaResponse}
-              <div class="text-sm bg-[var(--color-base-200)] rounded px-3 py-2 font-mono">
-                <span class="text-[var(--color-base-content)]/60"
-                  >{t('system.importExport.sourceAccess.mountRoot')}:</span
-                >
-                <span class="ml-1 text-[var(--color-base-content)]">{mediaResponse.mount_path}</span
-                >
-              </div>
-            {/if}
-
-            <TextInput
-              id="birds-db-path"
-              label={t('system.importExport.sourceAccess.pathLabel')}
-              bind:value={sourcePath}
-              placeholder="birdnet-pi/birds.db"
-              helpText={t('system.importExport.sourceAccess.pathHelpText')}
-              required={true}
-            />
-            {#if !sourcePath.trim()}
-              <p
-                id="source-path-required"
-                class="text-sm text-[var(--color-base-content)]/60"
-                aria-live="polite"
+            {#each sourcesResponse?.candidates ?? [] as cand (cand.path)}
+              <div
+                class="flex items-start justify-between gap-4 p-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)]"
               >
-                {t('system.importExport.sourceAccess.pathRequiredReason')}
+                <div class="min-w-0 flex-1">
+                  <p class="font-mono text-sm text-[var(--color-base-content)] break-all">
+                    {cand.path}
+                  </p>
+                  {#if cand.detection_count > 0}
+                    <p class="text-xs text-[var(--color-base-content)]/60 mt-1">
+                      {t('system.importExport.source.detectionsSummary', {
+                        count: String(formatNumber(cand.detection_count)),
+                        date: cand.latest_date,
+                      })}
+                    </p>
+                  {/if}
+                </div>
+                <Button variant="primary" onclick={() => selectCandidate(cand)}>
+                  {t('system.importExport.source.selectButton')}
+                </Button>
+              </div>
+            {/each}
+            <button
+              type="button"
+              class="text-sm text-[var(--color-primary)] hover:underline"
+              onclick={() => (showManualEntry = !showManualEntry)}
+            >
+              {t('system.importExport.source.manualEntryLink')}
+            </button>
+            {#if showManualEntry}
+              {@render manualEntryForm()}
+            {/if}
+          </div>
+        {:else if sourceStepState === 'zero-candidates'}
+          <!-- No candidates found -->
+          <div class="space-y-4">
+            <div class="text-center py-2">
+              <p class="font-medium text-[var(--color-base-content)]">
+                {t('system.importExport.source.zeroTitle')}
               </p>
+              <p class="text-sm text-[var(--color-base-content)]/70 mt-1">
+                {t('system.importExport.source.zeroDescription')}
+              </p>
+            </div>
+            {#if sourcesResponse?.guidance?.steps && sourcesResponse.guidance.steps.length > 0}
+              <ol class="space-y-2">
+                {#each sourcesResponse.guidance.steps as step, i (i)}
+                  <li class="flex items-start gap-2">
+                    <span
+                      class="flex-shrink-0 text-xs font-medium text-[var(--color-base-content)]/60 mt-0.5"
+                      >{i + 1}.</span
+                    >
+                    <code
+                      class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
+                      >{step}</code
+                    >
+                  </li>
+                {/each}
+              </ol>
+            {/if}
+            <Button
+              variant="default"
+              onclick={recheckSources}
+              disabled={isLoading}
+              title={isLoading ? t('system.importExport.loading') : undefined}
+            >
+              {#if isLoading}
+                <LoadingSpinner size="xs" aria-hidden="true" />
+              {/if}
+              {t('system.importExport.source.checkAgainButton')}
+            </Button>
+            <button
+              type="button"
+              class="text-sm text-[var(--color-primary)] hover:underline"
+              onclick={() => (showManualEntry = !showManualEntry)}
+            >
+              {t('system.importExport.source.manualEntryLink')}
+            </button>
+            {#if showManualEntry}
+              {@render manualEntryForm()}
             {/if}
           </div>
         {:else}
-          <!-- mediaResponse not loaded yet -->
+          <!-- sourcesResponse not yet available -->
           <div class="flex items-center justify-center py-8">
             <LoadingSpinner label={t('system.importExport.loading')} />
           </div>
@@ -815,29 +858,10 @@
       <!-- Right: forward/action buttons -->
       <div class="flex items-center gap-2">
         {#if currentStep === 'source'}
-          {#if sourceAccessState === 'native' || sourceAccessState === 'container-missing'}
-            <Button variant="default" onclick={onClose}>
-              {t('common.buttons.close')}
-            </Button>
-          {:else if sourceAccessState === 'container-mount'}
-            <Button
-              variant="primary"
-              onclick={() => goToStep('mode')}
-              disabled={!canProceedFromSource}
-              title={!canProceedFromSource
-                ? t('system.importExport.sourceAccess.pathRequiredReason')
-                : undefined}
-              aria-describedby={!canProceedFromSource ? 'source-path-required' : undefined}
-            >
-              {t('common.buttons.next')}
-              <ArrowRight class="size-4" />
-            </Button>
-          {:else}
-            <!-- still loading -->
-            <Button variant="default" onclick={onClose}>
-              {t('common.buttons.close')}
-            </Button>
-          {/if}
+          <!-- Candidate selection advances via the Select button; just offer Close here -->
+          <Button variant="default" onclick={onClose}>
+            {t('common.buttons.close')}
+          </Button>
         {:else if currentStep === 'mode'}
           <Button variant="primary" onclick={() => goToStep('confirm')}>
             {t('common.buttons.next')}
