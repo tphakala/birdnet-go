@@ -223,6 +223,8 @@ func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 		}
 	}
 	importGroup := g.Group("/import", authMiddleware)
+	importGroup.GET("/sources", c.GetImportSources)
+	importGroup.POST("/validate", c.ValidateImportSource)
 	importGroup.POST("/birdnet-pi", c.StartBirdNETPiImport)
 	importGroup.GET("/jobs/:jobId/progress", c.StreamImportProgress)
 	importGroup.POST("/jobs/:jobId/cancel", c.CancelImport)
