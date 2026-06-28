@@ -190,14 +190,18 @@ func (s *Source) Close() error {
 // or "" when the table is empty.
 func (s *Source) LatestDate(ctx context.Context) (string, error) {
 	var date sql.NullString
+	// Date is a TEXT column ("YYYY-MM-DD"), so MAX is the lexical (and thus
+	// chronological) maximum. No CAST: it is redundant for a TEXT column and
+	// would prevent SQLite from using an index on Date.
 	err := s.db.WithContext(ctx).
-		Raw("SELECT MAX(CAST(Date AS TEXT)) FROM detections").
+		Raw("SELECT MAX(Date) FROM detections").
 		Scan(&date).Error
 	if err != nil {
 		return "", errors.New(err).
 			Component("imports/birdnetpi").
 			Category(errors.CategoryDatabase).
 			Context("operation", "latest_date").
+			Context("table", "detections").
 			Build()
 	}
 	if !date.Valid {

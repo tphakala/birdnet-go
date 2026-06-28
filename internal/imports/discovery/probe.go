@@ -31,6 +31,11 @@ func probeCandidate(ctx context.Context, dbPath string, kind Kind) SourceCandida
 	defer func() { _ = src.Close() }()
 
 	if err := src.Validate(ctx); err != nil {
+		// A cancelled or expired scan context surfaces here as a Validate error;
+		// do not mislabel an otherwise valid database as having a bad schema.
+		if ctx.Err() != nil {
+			return c
+		}
 		c.Reason = ReasonInvalidSchema
 		return c
 	}

@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,6 +12,9 @@ import (
 
 func TestBuildGuidance_NativeLinuxHasMountSteps(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS != osLinux {
+		t.Skip("native guidance is only built on Linux; macOS and Windows are reserved")
+	}
 	g := BuildGuidance("Bare Metal", "birdnet")
 	require.NotNil(t, g)
 	joined := strings.Join(g.Steps, "\n")
@@ -22,6 +26,9 @@ func TestBuildGuidance_NativeLinuxHasMountSteps(t *testing.T) {
 
 func TestBuildGuidance_NativeLinuxDefaultsUserWhenUnknown(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS != osLinux {
+		t.Skip("native guidance is only built on Linux; macOS and Windows are reserved")
+	}
 	g := BuildGuidance("Bare Metal", "")
 	require.NotNil(t, g)
 	assert.Contains(t, strings.Join(g.Steps, "\n"), "birdnet")

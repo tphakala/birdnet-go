@@ -7,6 +7,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
+// osLinux is the runtime.GOOS value for Linux; native discovery and guidance are
+// implemented for Linux only.
+const osLinux = "linux"
+
 // Root is a directory the scanner should search, with its display kind.
 type Root struct {
 	// Path is the absolute directory to search.
@@ -46,15 +50,26 @@ func SelectProvider(envType, home string) LocationProvider {
 			{Path: sysinfo.DefaultExternalMountPath, Kind: KindLocal},
 		}}
 	}
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != osLinux {
 		return staticProvider{}
 	}
+	// Deduplicate by cleaned path so an overlapping entry (e.g. home == /root,
+	// which the default list also contains) is not walked twice.
 	var roots []Root
+	seen := make(map[string]struct{})
+	addRoot := func(path string, kind Kind) {
+		clean := filepath.Clean(path)
+		if _, dup := seen[clean]; dup {
+			return
+		}
+		seen[clean] = struct{}{}
+		roots = append(roots, Root{Path: clean, Kind: kind})
+	}
 	for _, d := range nativeLinuxLocalDirs(home) {
-		roots = append(roots, Root{Path: d, Kind: KindLocal})
+		addRoot(d, KindLocal)
 	}
 	for _, d := range nativeLinuxRemovableDirs {
-		roots = append(roots, Root{Path: d, Kind: KindRemovable})
+		addRoot(d, KindRemovable)
 	}
 	return staticProvider{roots: roots}
 }

@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"runtime"
 	"slices"
 
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -27,7 +28,14 @@ func BuildGuidance(envType, runAsUser string) *Guidance {
 	if sysinfo.IsContainerEnv(envType) {
 		return buildContainerGuidance(envType)
 	}
-	return buildNativeLinuxGuidance(runAsUser)
+	// Native setup guidance is implemented for Linux only. macOS and Windows are
+	// reserved: return no guidance rather than wrong, Linux-specific (lsblk/mount)
+	// instructions. This matches SelectProvider, which only populates native
+	// roots on Linux.
+	if runtime.GOOS == osLinux {
+		return buildNativeLinuxGuidance(runAsUser)
+	}
+	return nil
 }
 
 // buildNativeLinuxGuidance explains how to make BirdNET-Pi data reachable on a
