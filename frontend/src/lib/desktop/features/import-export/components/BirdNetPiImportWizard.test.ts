@@ -13,7 +13,8 @@ vi.mock('$lib/utils/logger', () => ({
   },
 }));
 
-// Mock api before importing component
+// Mock api before importing component.
+// C24: ApiError mock updated to 3-arg constructor (message, status, response).
 vi.mock('$lib/utils/api', () => ({
   api: {
     get: vi.fn(),
@@ -24,13 +25,13 @@ vi.mock('$lib/utils/api', () => ({
     userMessage: string;
     isNetworkError: boolean;
     response: Response;
-    constructor(message: string, status: number) {
+    constructor(message: string, status: number, response?: Response) {
       super(message);
       this.name = 'ApiError';
       this.status = status;
       this.userMessage = message;
       this.isNetworkError = false;
-      this.response = new Response(null, { status });
+      this.response = response ?? new Response(null, { status });
     }
   },
 }));
@@ -163,6 +164,25 @@ async function navigatePastSource() {
     name: /system.importExport.source.selectButton/,
   });
   await fireEvent.click(selectBtn);
+}
+
+/**
+ * Navigate from source step through mode to confirm step using an unreadable
+ * native candidate. The caller must have set up the appropriate source mock.
+ */
+async function navigateUnreadablePastSourceToConfirm() {
+  // Source step: click "Use this" for the unreadable candidate
+  const useThisBtn = await screen.findByRole('button', {
+    name: /system.importExport.source.useThisButton/,
+  });
+  await fireEvent.click(useThisBtn);
+
+  // Mode step: advance to confirm
+  await waitFor(() => screen.getByText('system.importExport.mode.label'));
+  await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+
+  // Wait for confirm step
+  await waitFor(() => screen.getByText('system.importExport.confirm.description'));
 }
 
 describe('BirdNetPiImportWizard', () => {
@@ -458,6 +478,7 @@ describe('BirdNetPiImportWizard', () => {
     expect(progressbar).toHaveAttribute('aria-valuenow', '50');
   });
 
+  // C23: complete event must also close the EventSource
   it('complete event transitions to done step with success state', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
 
@@ -493,8 +514,11 @@ describe('BirdNetPiImportWizard', () => {
     // View detections link must be present
     const link = screen.getByRole('link', { name: /system.importExport.done.viewDetectionsLink/ });
     expect(link).toHaveAttribute('href', expect.stringContaining('source=birdnet-pi'));
+    // C23: EventSource must have been closed on terminal event
+    expect(mockEsInstance?.close).toHaveBeenCalledOnce();
   });
 
+  // C23: error event must close the EventSource
   it('error event transitions to done step with error state', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
 
@@ -520,6 +544,8 @@ describe('BirdNetPiImportWizard', () => {
     await waitFor(() => {
       expect(screen.getByText('system.importExport.done.errorTitle')).toBeInTheDocument();
     });
+    // C23: EventSource must have been closed on terminal event
+    expect(mockEsInstance?.close).toHaveBeenCalledOnce();
   });
 
   it('native error event (no data) does not terminate the import', async () => {
@@ -586,6 +612,7 @@ describe('BirdNetPiImportWizard', () => {
     expect(mockEsInstance?.close).toHaveBeenCalledOnce();
   });
 
+  // C23: cancelled event must also close the EventSource
   it('cancelled event transitions to done step with cancelled state', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
 
@@ -608,6 +635,8 @@ describe('BirdNetPiImportWizard', () => {
     await waitFor(() => {
       expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
     });
+    // C23: EventSource must have been closed on terminal event
+    expect(mockEsInstance?.close).toHaveBeenCalledOnce();
   });
 
   // ---- Cancel ----
@@ -1005,8 +1034,9 @@ describe('BirdNetPiImportWizard', () => {
     ).toBeInTheDocument();
   });
 
-  // ---- Task 10: elevation panel ----
+  // ---- Task 10 / Part A: elevation panel (now at confirm step) ----
 
+  // Shared unreadable native sources response for elevation tests.
   const unreadableSourcesResponse = {
     environment: 'Bare Metal',
     containerized: false,
@@ -1029,64 +1059,139 @@ describe('BirdNetPiImportWizard', () => {
     guidance: null,
   };
 
-  it('shows the HTTP password warning for an unreadable source over plain HTTP', async () => {
-    // jsdom defaults to 'about:blank' which has protocol 'about:', not 'http:'.
-    // Override to simulate a plain-HTTP deployment.
+  function setupUnreadableNativeSources() {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        return Promise.resolve({ running: false, status: 'idle' });
+      }
+      if (url === '/api/v2/import/sources') {
+        return Promise.resolve(unreadableSourcesResponse);
+      }
+      return Promise.reject(new Error(`Unmocked GET: ${url}`));
+    });
+  }
+
+  // C25: unreadable native candidate routes to mode step (not immediate import)
+  it('unreadable native candidate navigates to mode step on Use this click', async () => {
+    setupUnreadableNativeSources();
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+
+    const useThisBtn = await screen.findByRole('button', {
+      name: /system.importExport.source.useThisButton/,
+    });
+    await fireEvent.click(useThisBtn);
+
+    // Must land on mode step, not immediately on progress
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.mode.label')).toBeInTheDocument();
+    });
+    // No API call to elevate should have been made yet
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  // C25: password_required response reveals password panel with HTTP warning
+  it('shows the HTTP password warning when password_required is returned', async () => {
     Object.defineProperty(globalThis, 'location', {
       value: { protocol: 'http:' },
       writable: true,
       configurable: true,
     });
 
-    vi.mocked(api.get).mockResolvedValueOnce({ running: false, status: 'idle' });
-    vi.mocked(api.get).mockResolvedValueOnce(unreadableSourcesResponse);
-    // First elevate attempt (no password) fails so the password panel is revealed.
-    vi.mocked(api.post).mockRejectedValueOnce(new Error('sudo unavailable'));
+    setupUnreadableNativeSources();
+    // First elevate attempt (no password) returns password_required
+    vi.mocked(api.post).mockResolvedValueOnce({ method: 'password_required' });
 
     render(BirdNetPiImportWizard, { props: { onClose } });
+
+    await navigateUnreadablePastSourceToConfirm();
+
+    // Click Start import to trigger the first elevation attempt
     await fireEvent.click(
-      await screen.findByRole('button', { name: /system.importExport.source.useThisButton/ })
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
     );
+
+    // Password panel with HTTP warning should appear at the confirm step
     expect(
       await screen.findByText(/system.importExport.source.elevation.httpWarning/)
     ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/system.importExport.source.elevation.passwordLabel/)
+    ).toBeInTheDocument();
   });
 
+  // C25: container unreadable candidate shows host-permission hint, NO elevation button
+  it('container unreadable candidate shows host-permission hint and no elevation button', async () => {
+    const containerUnreadableSources = {
+      ...unreadableSourcesResponse,
+      containerized: true,
+      run_as_uid: 1234,
+    };
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        return Promise.resolve({ running: false, status: 'idle' });
+      }
+      if (url === '/api/v2/import/sources') {
+        return Promise.resolve(containerUnreadableSources);
+      }
+      return Promise.reject(new Error(`Unmocked GET: ${url}`));
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+
+    // Should show the container-unreadable hint (i18n mock returns the key itself)
+    await waitFor(() => {
+      expect(
+        screen.getByText(/system.importExport.source.containerUnreadableHint/)
+      ).toBeInTheDocument();
+    });
+    // Must NOT show the "Use this" elevation button for a container unreadable candidate
+    expect(
+      screen.queryByRole('button', { name: /system.importExport.source.useThisButton/ })
+    ).not.toBeInTheDocument();
+  });
+
+  // C25: password must never appear in any logger calls
   it('never logs the typed sudo password', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({ running: false, status: 'idle' });
-    vi.mocked(api.get).mockResolvedValueOnce(unreadableSourcesResponse);
-    // First elevate (no password) fails -> password panel appears.
-    vi.mocked(api.post).mockRejectedValueOnce(new Error('sudo unavailable'));
-    // Second elevate (with password) returns a fallback response.
+    setupUnreadableNativeSources();
+    // First elevate (no password) returns password_required - triggers panel
+    vi.mocked(api.post).mockResolvedValueOnce({ method: 'password_required' });
+    // Second elevate (with password) returns a fallback response
     vi.mocked(api.post).mockResolvedValueOnce({
       method: 'fallback',
-      job_id: '',
-      status: '',
       fallback_commands: ['setfacl -m u:birdnet:r /home/pi/BirdNET-Pi/birds.db'],
     });
 
     render(BirdNetPiImportWizard, { props: { onClose } });
-    // Click "Use this" to start elevation without a password.
+
+    await navigateUnreadablePastSourceToConfirm();
+
+    // Click Start import to trigger first elevation (no password -> password_required)
     await fireEvent.click(
-      await screen.findByRole('button', { name: /system.importExport.source.useThisButton/ })
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
     );
-    // Wait for the password panel.
+
+    // Wait for the password panel to appear
     const passwordInput = await screen.findByLabelText(
       /system.importExport.source.elevation.passwordLabel/
     );
-    // Type the secret password into the input.
+    // Type the secret password into the input
     await fireEvent.input(passwordInput, { target: { value: 'hunter2' } });
-    // Submit with the password.
+
+    // Submit with the password
     await fireEvent.click(
       screen.getByRole('button', { name: /system.importExport.source.elevation.submitButton/ })
     );
-    // Wait for the fallback commands to appear.
+
+    // Wait for the fallback commands to appear (inside the details collapsible)
     await waitFor(() => {
       expect(
         screen.getByText('setfacl -m u:birdnet:r /home/pi/BirdNET-Pi/birds.db')
       ).toBeInTheDocument();
     });
-    // The secret password must never appear in any logger call.
+
+    // The secret password must never appear in any logger call
     const logged =
       vi.mocked(loggers.ui.error).mock.calls.flat().join(' ') +
       vi.mocked(loggers.ui.debug).mock.calls.flat().join(' ') +
@@ -1096,20 +1201,23 @@ describe('BirdNetPiImportWizard', () => {
   });
 
   it('elevate response with job_id advances to the progress step', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({ running: false, status: 'idle' });
-    vi.mocked(api.get).mockResolvedValueOnce(unreadableSourcesResponse);
-    // First elevate (no password) immediately succeeds via passwordless sudo.
+    setupUnreadableNativeSources();
+    // First elevate (no password) immediately succeeds via passwordless sudo
     vi.mocked(api.post).mockResolvedValueOnce({
       method: 'sudo',
       job_id: 'elev-job-123',
       status: 'started',
-      fallback_commands: [],
     });
 
     render(BirdNetPiImportWizard, { props: { onClose } });
+
+    await navigateUnreadablePastSourceToConfirm();
+
+    // Trigger elevation via Start import button
     await fireEvent.click(
-      await screen.findByRole('button', { name: /system.importExport.source.useThisButton/ })
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
     );
+
     await waitFor(() => {
       expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
     });
