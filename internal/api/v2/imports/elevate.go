@@ -1,6 +1,7 @@
 package importsapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"io/fs"
@@ -26,6 +27,22 @@ const (
 	stagingDirPrefix = "birdnet-go-import-"
 	// stagingTokenBytes is the length of the random staging-subdir name suffix.
 	stagingTokenBytes = 16
+)
+
+const (
+	// responseMethodDirect is returned when the source is directly readable;
+	// an import job is launched from the original path.
+	responseMethodDirect = "direct"
+	// responseMethodSudo is returned when staging succeeded via sudo (passwordless
+	// or password); an import job is launched from the staged copy.
+	responseMethodSudo = "sudo"
+	// responseMethodPasswordRequired is returned when passwordless elevation failed,
+	// AllowInAppElevation is enabled, and no password was supplied this call. The UI
+	// must prompt for the sudo password and re-POST with it. No job is launched.
+	responseMethodPasswordRequired = "password_required"
+	// responseMethodFallback is returned when elevation is unavailable or all rungs
+	// failed; the response includes copy-paste remediation commands.
+	responseMethodFallback = "fallback"
 )
 
 var (
@@ -66,10 +83,11 @@ func (c *Handler) newStagingDst(base string) (string, error) {
 }
 
 // preflightDiskSpace fails when the staging base filesystem cannot hold the copy.
-func (c *Handler) preflightDiskSpace(base string, requiredBytes uint64) error {
-	free, err := c.freeBytesFn(base)
-	if err != nil {
-		return err
+// free and freeErr are the results of a prior freeBytesFn call; passing them here
+// avoids a redundant Statfs syscall when the caller already fetched the value.
+func (c *Handler) preflightDiskSpace(free uint64, freeErr error, requiredBytes uint64) error {
+	if freeErr != nil {
+		return freeErr
 	}
 	if free < requiredBytes {
 		return ErrInsufficientSpace
@@ -89,7 +107,8 @@ type elevateRequest struct {
 
 // elevateResponse is returned by POST /import/elevate.
 type elevateResponse struct {
-	// Method reports how the file was made accessible: "direct", "sudo", or "fallback".
+	// Method reports how the file was made accessible: "direct", "sudo",
+	// "password_required", or "fallback".
 	Method string `json:"method"`
 	// JobID is set when an import was launched (Method "direct" or "sudo").
 	JobID string `json:"job_id,omitempty"`
@@ -102,7 +121,8 @@ type elevateResponse struct {
 // ElevateImport attempts to make an unreadable BirdNET-Pi database accessible via
 // the elevation ladder (direct read -> passwordless sudo -> in-app password ->
 // fallback). On a successful direct or sudo staging it launches the import; on
-// fallback it returns the copy-paste remediation commands.
+// password_required it asks the UI to re-POST with a sudo password; on fallback it
+// returns copy-paste remediation commands.
 //
 // Only available for native installs: container installs have no elevation need
 // because /external is already mounted at the right place.
@@ -116,10 +136,29 @@ func (c *Handler) ElevateImport(ctx echo.Context) error {
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
 	}
+	// Capture whether the caller supplied a password before the ladder's deferred
+	// req.Password.Clear() runs (Stage clears the password, so len(req.Password)
+	// is 0 after Stage regardless).
+	hadPassword := len(req.Password) > 0
 
 	// Elevation is a native-install-only code path.
-	if c.isContainerEnv() {
+	if c.isContainerEnv != nil && c.isContainerEnv() {
 		return c.HandleError(ctx, nil, "elevation is not available in container environments", http.StatusBadRequest)
+	}
+
+	// Verify the datastore is available before running any staging.
+	if c.DS == nil || c.Repo == nil {
+		return c.HandleError(ctx, nil, "datastore is not available", http.StatusServiceUnavailable)
+	}
+
+	// Validate import mode.
+	switch req.Mode {
+	case importModeDBOnly:
+		// accepted
+	case importModeDBaudio:
+		// accepted
+	default:
+		return c.HandleError(ctx, nil, "unsupported import mode", http.StatusBadRequest)
 	}
 
 	// Validate the source path: must be absolute and exist (may be unreadable).
@@ -140,24 +179,27 @@ func (c *Handler) ElevateImport(ctx echo.Context) error {
 		audioDir = cand.AudioDirGuess
 	}
 
-	// Resolve the trusted staging base and run the disk preflight.
+	// Resolve the trusted staging base.
 	base, err := c.resolveStagingBase()
 	if err != nil {
 		return c.HandleError(ctx, err, "staging base unavailable", http.StatusServiceUnavailable)
 	}
 
+	// Fetch disk space once; shared by the audio-size estimate and the preflight
+	// check to avoid a redundant Statfs syscall.
+	free, freeErr := c.freeBytesFn(base)
+
 	// Estimate required bytes: db size + (for db-audio) audio tree size * 2 transient factor.
 	requiredBytes := uint64(cand.Size) //nolint:gosec // Size is a non-negative file-size field
 	if audioDir != "" {
-		free, freeErr := c.freeBytesFn(base)
-		audioBytes := dirSizeBounded(audioDir, free, dirSizeBoundedNodeCap)
+		audioBytes := dirSizeBounded(ctx.Request().Context(), audioDir, free, dirSizeBoundedNodeCap)
 		requiredBytes += audioBytes * 2 // transient factor for copy
-		// Only check if freeBytesFn succeeded; an error here is treated as
-		// "unknown space" and the audio-size estimate may be 0 from the bounded
-		// walk, so we still proceed to the full preflight below.
-		_ = freeErr
+		if freeErr != nil {
+			c.LogDebugIfEnabled("import: could not check free disk space for audio estimate",
+				logger.String("error", freeErr.Error()))
+		}
 	}
-	if pfErr := c.preflightDiskSpace(base, requiredBytes); pfErr != nil {
+	if pfErr := c.preflightDiskSpace(free, freeErr, requiredBytes); pfErr != nil {
 		if errors.Is(pfErr, ErrInsufficientSpace) {
 			return c.HandleError(ctx, pfErr, "insufficient disk space for staging", http.StatusInsufficientStorage)
 		}
@@ -176,8 +218,10 @@ func (c *Handler) ElevateImport(ctx echo.Context) error {
 	// to fallback commands, which is the correct UX.
 
 	// Read settings live per request (hot-reload compliance).
-	settings := c.CurrentSettings()
-	allowElevation := settings.Import.AllowInAppElevation
+	var allowElevation bool
+	if settings := c.CurrentSettings(); settings != nil {
+		allowElevation = settings.Import.AllowInAppElevation
+	}
 
 	stageReq := elevation.StageRequest{
 		Src:            cleanSrc,
@@ -219,41 +263,37 @@ func (c *Handler) ElevateImport(ctx echo.Context) error {
 		if launchErr != nil {
 			return launchErr
 		}
-		if id == "" {
-			// launchImport already wrote an error response (409 pattern).
-			return nil
-		}
 		return ctx.JSON(http.StatusAccepted, elevateResponse{
-			Method: "direct",
+			Method: responseMethodDirect,
 			JobID:  id,
 			Status: importStatusStarted,
 		})
 
 	case elevation.MethodSudoNonInteractive, elevation.MethodSudoPassword:
-		// Staging succeeded; import from the staged copy.
+		// Staging succeeded; import from the staged copy. launchImport's deferred
+		// cleanup owns the staging dir lifetime on every non-transferred return.
 		id, launchErr := c.launchImport(ctx, out.StagedDB, req.Mode, nil, dst)
 		if launchErr != nil {
 			return launchErr
 		}
-		if id == "" {
-			// launchImport already wrote an error response. Cleanup dst now
-			// because launchImport's deferred cleanup only fires when launched
-			// (transferred=true); if launchImport returned nil here it wrote a
-			// 409 and did not start the goroutine.
-			c.cleanupStagingDir(dst)
-			return nil
-		}
 		return ctx.JSON(http.StatusAccepted, elevateResponse{
-			Method: "sudo",
+			Method: responseMethodSudo,
 			JobID:  id,
 			Status: importStatusStarted,
 		})
 
 	default: // elevation.MethodFallback
+		// A fallback from the ladder means passwordless elevation did not work.
+		// If in-app elevation is enabled and the caller supplied no password yet,
+		// ask for one rather than dropping straight to copy-paste commands: the
+		// password rung is only reachable once the user provides a password.
+		if allowElevation && !hadPassword {
+			return ctx.JSON(http.StatusOK, elevateResponse{Method: responseMethodPasswordRequired})
+		}
 		// Return the copy-paste remediation commands. Do NOT remove dst: for a
 		// fallback outcome import-stage never ran and dst was never created.
 		return ctx.JSON(http.StatusOK, elevateResponse{
-			Method:           "fallback",
+			Method:           responseMethodFallback,
 			FallbackCommands: out.FallbackCommands,
 		})
 	}
@@ -265,16 +305,19 @@ func (c *Handler) ElevateImport(ctx echo.Context) error {
 const dirSizeBoundedNodeCap = 50_000
 
 // dirSizeBounded walks dir summing regular-file sizes, returning early when the
-// running total exceeds capBytes or the node count reaches nodeCap. It returns 0
-// when dir is empty or absent. The bounds prevent a large or hostile audio tree
-// from stalling the HTTP handler goroutine.
-func dirSizeBounded(dir string, capBytes uint64, nodeCap int) uint64 {
+// running total exceeds capBytes, the node count reaches nodeCap, or ctx is
+// cancelled. It returns 0 when dir is empty or absent. The bounds prevent a large
+// or hostile audio tree from stalling the HTTP handler goroutine.
+func dirSizeBounded(ctx context.Context, dir string, capBytes uint64, nodeCap int) uint64 {
 	if dir == "" {
 		return 0
 	}
 	var total uint64
 	nodes := 0
 	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, walkErr error) error {
+		if ctx.Err() != nil {
+			return fs.SkipAll
+		}
 		if walkErr != nil {
 			return nil //nolint:nilerr // skip unreadable entries; we are estimating disk usage, not auditing
 		}
