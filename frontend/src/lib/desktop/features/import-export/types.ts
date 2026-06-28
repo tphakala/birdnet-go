@@ -56,3 +56,56 @@ export interface ImportStatusResponse {
 
 export type WizardStep = 'source' | 'mode' | 'confirm' | 'progress' | 'done';
 export type ImportMode = 'db-only' | 'db-audio';
+
+// --- Candidate-driven source discovery types (native import) ---
+
+export type CandidateKind = 'local' | 'removable' | 'network';
+
+/** A single auto-detected or manually validated BirdNET-Pi database. */
+export interface SourceCandidate {
+  path: string;
+  kind: CandidateKind;
+  detection_count: number;
+  latest_date: string;
+  audio_dir_guess: string;
+  size: number;
+  valid: boolean;
+  /** Empty string, 'permission_denied', 'invalid_schema', or 'open_failed'. */
+  reason: string;
+  owner_uid: number;
+  owner_name: string;
+}
+
+export interface ImportGuidance {
+  environment: string;
+  steps: string[];
+}
+
+export interface ImportSourcesResponse {
+  environment: string;
+  containerized: boolean;
+  run_as_user: string;
+  run_as_uid: number;
+  candidates: SourceCandidate[];
+  guidance: ImportGuidance | null;
+}
+
+export interface ValidateSourceResponse {
+  valid: boolean;
+  /** Empty string, 'not_found', 'invalid_path', 'permission_denied', 'invalid_schema', or 'open_failed'. */
+  reason: string;
+  detection_count: number;
+  latest_date: string;
+  audio_dir_guess: string;
+  owner_name: string;
+}
+
+export interface ElevateResponse {
+  method: 'direct' | 'sudo' | 'fallback';
+  job_id: string;
+  status: string;
+  fallback_commands: string[];
+}
+
+/** Derived state for the wizard source step. */
+export type SourceStepState = 'candidates' | 'zero-candidates';
