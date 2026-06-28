@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +35,10 @@ import (
 
 // testDBOnlyBody is the canonical valid db-only import request body used across tests.
 const testDBOnlyBody = `{"mode":"db-only","source_path":"birds.db"}`
+
+// osWindows is runtime.GOOS on Windows, used by tests that skip Linux/unix-only
+// native-import behavior the Windows filesystem cannot satisfy.
+const osWindows = "windows"
 
 // fakeSource implements imports.Source for unit tests.
 type fakeSource struct {
@@ -1694,6 +1699,15 @@ func TestNewHandler_DefaultsImportSeams(t *testing.T) {
 // is given a non-empty stagingCleanupDir, the directory is removed by the engine
 // goroutine on successful completion of the import.
 func TestLaunchImport_RemovesStagingDirOnCompletion(t *testing.T) {
+	// Native import staging is Linux-only (staging_base_other.go reports it
+	// unsupported off Linux). This test runs the full import engine and asserts the
+	// staging dir is gone afterward. On unix that holds even while the engine's db
+	// handle is still closing, because unlink removes a directory entry whose file
+	// is still open; Windows cannot delete an open file, so the assertion races the
+	// handle close. The flow never runs on Windows in production, so skip it there.
+	if runtime.GOOS == osWindows {
+		t.Skip("native import staging is unix-only; Windows cannot remove a dir with an open file handle")
+	}
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),

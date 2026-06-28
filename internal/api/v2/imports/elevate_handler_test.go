@@ -41,7 +41,7 @@ func (notReadable) CanRead(string) bool { return false }
 func TestElevateImport_FallbackWhenNotSudoer(t *testing.T) {
 	// chmod 0o000 is a no-op on Windows, so the source stays readable and the
 	// handler never reaches the elevation path. Native elevation is unix-only.
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("chmod-forced unreadable source is unix-only; native elevation does not run on Windows")
 	}
 	src := filepath.Join(t.TempDir(), "birds.db")
@@ -95,7 +95,7 @@ func TestElevateImport_InsufficientSpace(t *testing.T) {
 	// chmod 0o000 is a no-op on Windows, so the source stays readable, staging (and
 	// thus the disk preflight) is skipped, and the 507 is never produced. Native
 	// elevation/staging is unix-only.
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("chmod-forced unreadable source is unix-only; native staging does not run on Windows")
 	}
 	src := filepath.Join(t.TempDir(), "birds.db")
