@@ -4,9 +4,11 @@ package importsapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -94,7 +96,14 @@ func TestGetImportSources_ZeroCandidatesReturnsGuidance(t *testing.T) {
 	var resp sourcesResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
 	assert.Empty(t, resp.Candidates)
-	assert.NotNil(t, resp.Guidance, "guidance must be non-nil when no candidates found")
+	// Native setup guidance is implemented for Linux only (see discovery.BuildGuidance,
+	// which mirrors SelectProvider). On macOS/Windows native mode yields no guidance by
+	// design, so assert per-platform rather than assuming Linux behavior everywhere.
+	if runtime.GOOS == "linux" {
+		assert.NotNil(t, resp.Guidance, "guidance must be non-nil on Linux when no candidates found")
+	} else {
+		assert.Nil(t, resp.Guidance, "native guidance is Linux-only; must be nil on other platforms")
+	}
 }
 
 // TestValidateImportSource_Valid verifies that a well-formed BirdNET-Pi SQLite
@@ -108,7 +117,7 @@ func TestValidateImportSource_Valid(t *testing.T) {
 	dbPath := filepath.Join(dir, "birds.db")
 	writeMinimalBirdNetPiDB(t, dbPath)
 
-	body := `{"source_path":"` + dbPath + `"}`
+	body := fmt.Sprintf(`{"source_path":%q}`, dbPath)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/validate", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -132,7 +141,7 @@ func TestValidateImportSource_NotFound(t *testing.T) {
 	h.isContainerEnv = func() bool { return false } // native mode
 
 	nonexistent := filepath.Join(t.TempDir(), "nonexistent.db")
-	body := `{"source_path":"` + nonexistent + `"}`
+	body := fmt.Sprintf(`{"source_path":%q}`, nonexistent)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/validate", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -154,7 +163,7 @@ func TestValidateImportSource_CancelledContextDoesNotReturnNotFound(t *testing.T
 	h.isContainerEnv = func() bool { return false } // native mode
 
 	nonexistent := filepath.Join(t.TempDir(), "nonexistent.db")
-	body := `{"source_path":"` + nonexistent + `"}`
+	body := fmt.Sprintf(`{"source_path":%q}`, nonexistent)
 
 	// Build the request with an already-cancelled context.
 	reqCtx, cancel := context.WithCancel(t.Context())

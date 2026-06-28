@@ -1538,12 +1538,16 @@ func writeMinimalBirdNetPiDB(t *testing.T, path string) {
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	require.NoError(t, err)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
 	require.NoError(t, db.Exec(`CREATE TABLE detections (
 		Date TEXT, Time TEXT, Sci_Name TEXT, Com_Name TEXT, Confidence REAL,
 		Lat REAL, Lon REAL, Cutoff REAL, Sens REAL, File_Name TEXT)`).Error)
+	// Close immediately rather than via t.Cleanup: the helper returns nothing, so
+	// nothing depends on the connection staying open. Leaving the file open would
+	// block the probe from reopening it and prevent staging-dir removal on Windows,
+	// which cannot delete a directory containing an open file handle.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
 }
 
 func TestResolveNativeImportSourcePath_Valid(t *testing.T) {

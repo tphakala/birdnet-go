@@ -5,11 +5,13 @@ package importsapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -37,6 +39,11 @@ type notReadable struct{}
 func (notReadable) CanRead(string) bool { return false }
 
 func TestElevateImport_FallbackWhenNotSudoer(t *testing.T) {
+	// chmod 0o000 is a no-op on Windows, so the source stays readable and the
+	// handler never reaches the elevation path. Native elevation is unix-only.
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod-forced unreadable source is unix-only; native elevation does not run on Windows")
+	}
 	src := filepath.Join(t.TempDir(), "birds.db")
 	writeMinimalBirdNetPiDB(t, src)
 	require.NoError(t, os.Chmod(src, 0o000)) // make unreadable so direct fails
@@ -57,7 +64,7 @@ func TestElevateImport_FallbackWhenNotSudoer(t *testing.T) {
 		}, nil
 	}
 
-	body := `{"source_path":"` + src + `","mode":"db-only"}`
+	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only"}`, src)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
@@ -85,6 +92,12 @@ func TestElevateImport_RejectsContainer(t *testing.T) {
 }
 
 func TestElevateImport_InsufficientSpace(t *testing.T) {
+	// chmod 0o000 is a no-op on Windows, so the source stays readable, staging (and
+	// thus the disk preflight) is skipped, and the 507 is never produced. Native
+	// elevation/staging is unix-only.
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod-forced unreadable source is unix-only; native staging does not run on Windows")
+	}
 	src := filepath.Join(t.TempDir(), "birds.db")
 	writeMinimalBirdNetPiDB(t, src)
 	// Make unreadable so Probe returns cand.Valid=false, triggering the staging
@@ -102,7 +115,7 @@ func TestElevateImport_InsufficientSpace(t *testing.T) {
 		return &elevation.Ladder{Runner: failingRunner{}, Direct: notReadable{}, SelfExe: "/x", Log: slog.Default()}, nil
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(`{"source_path":"`+src+`","mode":"db-only"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(fmt.Sprintf(`{"source_path":%q,"mode":"db-only"}`, src)))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	ctx := echo.New().NewContext(req, rec)
@@ -139,7 +152,7 @@ func TestElevateImport_PasswordRequired_WhenAllowElevationAndNoPassword(t *testi
 	apitest.PublishTestSettings(t, settings)
 
 	// No password supplied -> expect password_required.
-	body := `{"source_path":"` + src + `","mode":"db-only"}`
+	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only"}`, src)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
@@ -182,7 +195,7 @@ func TestElevateImport_FallbackWhenPasswordSuppliedButStillFails(t *testing.T) {
 	apitest.PublishTestSettings(t, settings)
 
 	// Password supplied -> must get fallback, not password_required.
-	body := `{"source_path":"` + src + `","mode":"db-only","password":"wrongpass"}`
+	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only","password":"wrongpass"}`, src)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
@@ -218,7 +231,7 @@ func TestElevateImport_FallbackWhenAllowElevationDisabled(t *testing.T) {
 	}
 	// AllowInAppElevation is false by default; no settings override needed.
 
-	body := `{"source_path":"` + src + `","mode":"db-only"}`
+	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only"}`, src)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
@@ -240,7 +253,7 @@ func TestElevateImport_Returns503WhenDatastoreUnavailable(t *testing.T) {
 	h.DS = nil // simulate missing datastore
 
 	src := filepath.Join(t.TempDir(), "birds.db")
-	body := `{"source_path":"` + src + `","mode":"db-only"}`
+	body := fmt.Sprintf(`{"source_path":%q,"mode":"db-only"}`, src)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/elevate", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
