@@ -46,6 +46,7 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 - [SystemInfoCard](#systeminfocard) - System information display
 - [SettingsCard](#settingscard) - Configuration settings card
 - [SettingsSection](#settingssection) - Settings organization
+- [ExternalLinkBadge](#externallinkbadge) - renders a single external resource link as a badge with an icon hint and generic external-link fallback
 - [SimilarSpeciesPanel](#similarspeciespanel) - Selectable similar-species diff card (species guide)
 - [SpeciesComparison](#speciescomparison) - Similar-species comparison panel (species guide)
 - [SpeciesNotes](#speciesnotes) - Per-species user notes with CRUD (species guide)

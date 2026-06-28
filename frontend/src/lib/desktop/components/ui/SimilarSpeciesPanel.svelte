@@ -3,6 +3,7 @@
   import { SvelteMap } from 'svelte/reactivity';
   import { ExternalLink } from '@lucide/svelte';
   import { t, getLocale } from '$lib/i18n';
+  import ExternalLinkBadge from '$lib/desktop/components/ui/ExternalLinkBadge.svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import {
@@ -189,15 +190,7 @@
               </p>
               <div class="flex flex-wrap gap-2">
                 {#each selectedEntry.external_links ?? [] as link (link.url)}
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="badge badge-sm badge-ghost gap-1"
-                  >
-                    {link.name}
-                    <ExternalLink class="h-3 w-3" aria-hidden="true" />
-                  </a>
+                  <ExternalLinkBadge {link} />
                 {/each}
               </div>
             {:else}

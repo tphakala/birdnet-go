@@ -5,7 +5,6 @@
     X,
     ChevronDown,
     ChevronRight,
-    ExternalLink,
     Sprout,
     Sun,
     Leaf,
@@ -37,6 +36,7 @@
     type SimilarSpeciesEntry,
   } from '$lib/types/species';
   import SimilarSpeciesPanel from './SimilarSpeciesPanel.svelte';
+  import ExternalLinkBadge from '$lib/desktop/components/ui/ExternalLinkBadge.svelte';
 
   const logger = loggers.ui;
 
@@ -202,15 +202,7 @@
         {#if externalLinks.length > 0}
           <span class="sr-only">{t('analytics.species.guide.externalLinks')}</span>
           {#each externalLinks as link (link.url)}
-            <a
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="badge badge-sm badge-ghost gap-1"
-            >
-              {link.name}
-              <ExternalLink class="h-3 w-3" aria-hidden="true" />
-            </a>
+            <ExternalLinkBadge {link} />
           {/each}
         {/if}
       </div>

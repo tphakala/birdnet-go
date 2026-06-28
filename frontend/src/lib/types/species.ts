@@ -79,6 +79,7 @@ export type Expectedness = 'expected' | 'uncommon' | 'rare' | 'unexpected';
 export interface ExternalLink {
   name: string;
   url: string;
+  icon?: string;
 }
 
 export interface GuideFeatureFlags {
