@@ -4,9 +4,15 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io/fs"
+	"net/http"
+	"os"
 	"path/filepath"
 
+	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/imports/discovery"
+	"github.com/tphakala/birdnet-go/internal/imports/elevation"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
@@ -70,6 +76,193 @@ func (c *Handler) preflightDiskSpace(base string, requiredBytes uint64) error {
 	}
 	return nil
 }
+
+// elevateRequest carries the parameters for the /import/elevate endpoint.
+type elevateRequest struct {
+	// SourcePath is the absolute path to the BirdNET-Pi birds.db.
+	SourcePath string `json:"source_path"`
+	// Mode selects which data to copy: "db-only" or "db-audio".
+	Mode string `json:"mode"`
+	// Password is the optional sudo password. Memory-only; never logged or serialized.
+	Password elevation.Password `json:"password"`
+}
+
+// elevateResponse is returned by POST /import/elevate.
+type elevateResponse struct {
+	// Method reports how the file was made accessible: "direct", "sudo", or "fallback".
+	Method string `json:"method"`
+	// JobID is set when an import was launched (Method "direct" or "sudo").
+	JobID string `json:"job_id,omitempty"`
+	// Status mirrors the started import status when JobID is set.
+	Status string `json:"status,omitempty"`
+	// FallbackCommands are copy-paste shell commands for the "fallback" method.
+	FallbackCommands []string `json:"fallback_commands,omitempty"`
+}
+
+// ElevateImport attempts to make an unreadable BirdNET-Pi database accessible via
+// the elevation ladder (direct read -> passwordless sudo -> in-app password ->
+// fallback). On a successful direct or sudo staging it launches the import; on
+// fallback it returns the copy-paste remediation commands.
+//
+// Only available for native installs: container installs have no elevation need
+// because /external is already mounted at the right place.
+func (c *Handler) ElevateImport(ctx echo.Context) error {
+	// Belt-and-suspenders: clear the password in the decoded request on return so
+	// it is zeroed even if something returns before Ladder.Stage (which also
+	// clears its own copy).
+	var req elevateRequest
+	defer req.Password.Clear()
+
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
+	}
+
+	// Elevation is a native-install-only code path.
+	if c.isContainerEnv() {
+		return c.HandleError(ctx, nil, "elevation is not available in container environments", http.StatusBadRequest)
+	}
+
+	// Validate the source path: must be absolute and exist (may be unreadable).
+	if req.SourcePath == "" || !filepath.IsAbs(req.SourcePath) {
+		return c.HandleError(ctx, nil, "source_path must be an absolute path", http.StatusBadRequest)
+	}
+	cleanSrc := filepath.Clean(req.SourcePath)
+	if _, err := os.Lstat(cleanSrc); err != nil {
+		return c.HandleError(ctx, err, "source path does not exist", http.StatusBadRequest)
+	}
+
+	// Probe the source for size, audio-dir guess, and ownership details.
+	cand := discovery.Probe(ctx.Request().Context(), cleanSrc)
+
+	// Determine the audio directory for db-audio mode.
+	audioDir := ""
+	if req.Mode == importModeDBaudio {
+		audioDir = cand.AudioDirGuess
+	}
+
+	// Resolve the trusted staging base and run the disk preflight.
+	base, err := c.resolveStagingBase()
+	if err != nil {
+		return c.HandleError(ctx, err, "staging base unavailable", http.StatusServiceUnavailable)
+	}
+
+	// Estimate required bytes: db size + (for db-audio) audio tree size * 2 transient factor.
+	requiredBytes := uint64(cand.Size) //nolint:gosec // Size is a non-negative file-size field
+	if audioDir != "" {
+		free, freeErr := c.freeBytesFn(base)
+		audioBytes := dirSizeBounded(audioDir, free, dirSizeBoundedNodeCap)
+		requiredBytes += audioBytes * 2 // transient factor for copy
+		// Only check if freeBytesFn succeeded; an error here is treated as
+		// "unknown space" and the audio-size estimate may be 0 from the bounded
+		// walk, so we still proceed to the full preflight below.
+		_ = freeErr
+	}
+	if pfErr := c.preflightDiskSpace(base, requiredBytes); pfErr != nil {
+		if errors.Is(pfErr, ErrInsufficientSpace) {
+			return c.HandleError(ctx, pfErr, "insufficient disk space for staging", http.StatusInsufficientStorage)
+		}
+		// ErrDiskCheckUnsupported or other: skip the check rather than blocking
+		// (non-linux platforms cannot check; disk checks are best-effort).
+	}
+
+	// Pick a random staging destination. If the base is not trusted (returns
+	// ErrStagingBaseUnavailable), fall through to the ladder so it can return
+	// fallback commands; the ladder never reaches staging for that case anyway.
+	dst, dstErr := c.newStagingDst(base)
+	if dstErr != nil && !errors.Is(dstErr, ErrStagingBaseUnavailable) {
+		return c.HandleError(ctx, dstErr, "could not allocate staging directory", http.StatusInternalServerError)
+	}
+	// dstErr may be ErrStagingBaseUnavailable here; the ladder will fall through
+	// to fallback commands, which is the correct UX.
+
+	// Read settings live per request (hot-reload compliance).
+	settings := c.CurrentSettings()
+	allowElevation := settings.Import.AllowInAppElevation
+
+	stageReq := elevation.StageRequest{
+		Src:            cleanSrc,
+		Audio:          audioDir,
+		Dst:            dst,
+		UID:            os.Getuid(),
+		GID:            os.Getgid(),
+		Password:       req.Password,
+		AllowElevation: allowElevation,
+		Owner:          cand.OwnerName,
+	}
+
+	ladder, ladderErr := c.newLadder()
+	if ladderErr != nil {
+		return c.HandleError(ctx, ladderErr, "could not initialize elevation ladder", http.StatusInternalServerError)
+	}
+
+	out, stageErr := ladder.Stage(ctx.Request().Context(), &stageReq)
+	if stageErr != nil {
+		// A ladder error means the ladder itself failed, not a fallback outcome.
+		// Best-effort cleanup: import-stage may have partially created dst.
+		if dst != "" {
+			c.cleanupStagingDir(dst)
+		}
+		return c.HandleError(ctx, stageErr, "elevation failed", http.StatusInternalServerError)
+	}
+
+	// Audit log: method + src + dst. Never log the password.
+	c.LogInfoIfEnabled("import: elevation outcome",
+		logger.String("method", string(out.Method)),
+		logger.String("src", cleanSrc),
+		logger.String("dst", dst),
+	)
+
+	switch out.Method {
+	case elevation.MethodDirect:
+		// Source is directly readable; no staging needed. Import the original.
+		id, launchErr := c.launchImport(ctx, cleanSrc, req.Mode, nil, "")
+		if launchErr != nil {
+			return launchErr
+		}
+		if id == "" {
+			// launchImport already wrote an error response (409 pattern).
+			return nil
+		}
+		return ctx.JSON(http.StatusAccepted, elevateResponse{
+			Method: "direct",
+			JobID:  id,
+			Status: importStatusStarted,
+		})
+
+	case elevation.MethodSudoNonInteractive, elevation.MethodSudoPassword:
+		// Staging succeeded; import from the staged copy.
+		id, launchErr := c.launchImport(ctx, out.StagedDB, req.Mode, nil, dst)
+		if launchErr != nil {
+			return launchErr
+		}
+		if id == "" {
+			// launchImport already wrote an error response. Cleanup dst now
+			// because launchImport's deferred cleanup only fires when launched
+			// (transferred=true); if launchImport returned nil here it wrote a
+			// 409 and did not start the goroutine.
+			c.cleanupStagingDir(dst)
+			return nil
+		}
+		return ctx.JSON(http.StatusAccepted, elevateResponse{
+			Method: "sudo",
+			JobID:  id,
+			Status: importStatusStarted,
+		})
+
+	default: // elevation.MethodFallback
+		// Return the copy-paste remediation commands. Do NOT remove dst: for a
+		// fallback outcome import-stage never ran and dst was never created.
+		return ctx.JSON(http.StatusOK, elevateResponse{
+			Method:           "fallback",
+			FallbackCommands: out.FallbackCommands,
+		})
+	}
+}
+
+// dirSizeBoundedNodeCap is the maximum number of directory entries visited
+// during the audio-tree disk estimate. It prevents a hostile or enormous tree
+// from stalling the HTTP handler goroutine.
+const dirSizeBoundedNodeCap = 50_000
 
 // dirSizeBounded walks dir summing regular-file sizes, returning early when the
 // running total exceeds capBytes or the node count reaches nodeCap. It returns 0

@@ -1038,6 +1038,7 @@ func TestImportRoutes_Registered(t *testing.T) {
 	expected := []string{
 		"GET " + apiV2Prefix + "/import/sources",
 		"POST " + apiV2Prefix + "/import/validate",
+		"POST " + apiV2Prefix + "/import/elevate",
 		"POST " + apiV2Prefix + "/import/birdnet-pi",
 		"GET " + apiV2Prefix + "/import/jobs/:jobId/progress",
 		"POST " + apiV2Prefix + "/import/jobs/:jobId/cancel",
