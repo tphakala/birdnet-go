@@ -1227,11 +1227,13 @@
         "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
         "checkAgainButton": "Check again",
         "showCommandsLabel": "Show commands",
+        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
         "elevation": {
           "copying": "Copying your data...",
           "passwordTitle": "BirdNET-Go needs permission to read this data",
           "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
           "passwordLabel": "Administrator password",
+          "passwordRequiredReason": "Enter the administrator password to continue",
           "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
           "submitButton": "Copy and continue",
           "fallbackTitle": "Run this command to grant access",

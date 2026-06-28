@@ -953,10 +953,12 @@ export type TranslationKey =
   | 'system.importExport.source.zeroDescription'
   | 'system.importExport.source.checkAgainButton'
   | 'system.importExport.source.showCommandsLabel'
+  | 'system.importExport.source.containerUnreadableHint' // params: uid
   | 'system.importExport.source.elevation.copying'
   | 'system.importExport.source.elevation.passwordTitle'
   | 'system.importExport.source.elevation.passwordDescription'
   | 'system.importExport.source.elevation.passwordLabel'
+  | 'system.importExport.source.elevation.passwordRequiredReason'
   | 'system.importExport.source.elevation.httpWarning'
   | 'system.importExport.source.elevation.submitButton'
   | 'system.importExport.source.elevation.fallbackTitle'
@@ -4106,6 +4108,7 @@ export type TranslationParams = {
   'system.importExport.source.detectionsSummary': { count: string | number; date: string | number };
   'system.importExport.source.unreadableOwner': { owner: string | number };
   'system.importExport.source.manualValid': { count: string | number };
+  'system.importExport.source.containerUnreadableHint': { uid: string | number };
   'system.importExport.progress.progressLabel': { percent: string | number };
   'system.importExport.done.partialInserted': { count: string | number };
   'system.database.legacy.cleanup.success': { size: string | number };
