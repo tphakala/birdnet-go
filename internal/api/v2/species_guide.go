@@ -47,12 +47,12 @@ const (
 	relationshipSameFamily = "same_family"
 )
 
-// External-link source names (rendered as card labels by the frontend).
+// External-link constants. Only eBird is hardcoded here: it is a runtime special
+// case (its data is not in OpenFauna for licensing reasons). All other links come
+// from the OpenFauna sources registry and the opt-in supplementary registry.
 const (
-	linkNameWikipedia   = "Wikipedia"
-	linkNameINaturalist = "iNaturalist"
-	linkNameEBird       = "eBird"
-	linkNameXenoCanto   = "Xeno-canto"
+	linkNameEBird = "eBird"
+	linkIconEBird = "ebird"
 )
 
 // defaultWikiLang is the Wikipedia language subdomain used when the UI locale has
@@ -117,10 +117,12 @@ type GuideSource struct {
 	LicenseURL string `json:"license_url"`
 }
 
-// GuideExternalLink is a labeled external resource link.
+// GuideExternalLink is a labeled external resource link with an icon hint the
+// frontend maps to a bundled glyph (with a generic external-link fallback).
 type GuideExternalLink struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
+	Icon string `json:"icon,omitempty"`
 }
 
 // SpeciesGuideData is the response body for GET /species/:name/guide.
@@ -417,7 +419,12 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 	// in particular) when the feature flag is off.
 	if cfg.IsShowEnrichments() {
 		data.CurrentSeason = computeCurrentSeason(settings.BirdNET.Latitude, time.Now())
-		data.ExternalLinks = buildExternalLinks(guide.ScientificName, c.ebirdSpeciesCode(guide.ScientificName), locale)
+		data.ExternalLinks = externalLinksForGuide(
+			guide.ScientificName,
+			c.ebirdSpeciesCode(guide.ScientificName),
+			locale,
+			cfg.EnableSupplementaryLinks,
+		)
 		if exp := c.guideExpectedness(name); exp != "" {
 			data.Expectedness = exp
 		}
@@ -454,7 +461,8 @@ func (c *Controller) GetSimilarSpecies(ctx echo.Context) error {
 	// Links are enrichment data: only attach them to description-less entries when
 	// enrichments are enabled, mirroring the main guide modal.
 	withLinks := settings.Realtime.Dashboard.SpeciesGuide.IsShowEnrichments()
-	entries := c.resolveSimilarSpecies(ctx.Request().Context(), candidates, locale, withLinks)
+	supplementary := settings.Realtime.Dashboard.SpeciesGuide.EnableSupplementaryLinks
+	entries := c.resolveSimilarSpecies(ctx.Request().Context(), candidates, locale, withLinks, supplementary)
 
 	return ctx.JSON(http.StatusOK, SimilarSpeciesResponse{
 		ScientificName: name,
@@ -509,7 +517,7 @@ func (c *Controller) similarSpeciesCandidates(focal string) (genus string, candi
 
 // resolveSimilarSpecies fetches each candidate's guide in parallel and builds the
 // response entries, preserving candidate order.
-func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks bool) []SimilarSpeciesEntry {
+func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks, supplementary bool) []SimilarSpeciesEntry {
 	// Bound the whole fan-out so a cold cache (live external fetches) cannot
 	// block the request indefinitely; unresolved candidates fall back to
 	// name-only below.
@@ -539,8 +547,12 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 					// No prose to compare (e.g. an OpenFauna stub when Wikipedia is
 					// disabled or the species was never warmed). Surface external
 					// resource links instead so selecting the species is still useful.
-					entry.ExternalLinks = buildExternalLinks(
-						cand.scientificName, c.ebirdSpeciesCode(cand.scientificName), locale)
+					entry.ExternalLinks = externalLinksForGuide(
+						cand.scientificName,
+						c.ebirdSpeciesCode(cand.scientificName),
+						locale,
+						supplementary,
+					)
 				}
 				return nil
 			})
@@ -849,53 +861,35 @@ func (c *Controller) ebirdSpeciesCode(scientificName string) string {
 	return ""
 }
 
-// buildExternalLinks builds external resource links for a species, resolved to the
-// user's UI language where the source supports it.
+// externalLinksForGuide assembles the external resource links for a species:
+// OpenFauna-sourced links (Tier 1) plus opt-in computed supplementary links
+// (Tier 2: Xeno-canto + Wikipedia gap-fill) from the embedded data, with the eBird
+// link appended last when a real eBird species code is available. eBird is a
+// deliberate runtime special case: its data cannot live in OpenFauna for
+// eBird/Clements licensing reasons, and eBird has no public free-text search
+// endpoint, so species pages must be addressed by code as
+// https://ebird.org/species/<code>.
 //
-//   - Wikipedia points at the locale's language subdomain (e.g. de.wikipedia.org);
-//     species articles redirect from the scientific name across language wikis, so a
-//     scientific-name title is robust regardless of language.
-//   - iNaturalist comes from the embedded OpenFauna dataset (the taxon id cannot be
-//     derived); the taxon URL is language-neutral, so the UI language is passed via
-//     ?locale= for the page to render localized. Included only when OpenFauna has a
-//     taxon URL for the species.
-//   - eBird is a deliberate runtime special case (its data is not in OpenFauna for
-//     licensing reasons) and is included only when a real eBird species code is
-//     provided: eBird has no public free-text search endpoint (a ?q= search redirects
-//     to a login page), so species pages must be addressed by code as
-//     https://ebird.org/species/<code>.
-func buildExternalLinks(scientificName, ebirdCode, locale string) []GuideExternalLink {
-	links := make([]GuideExternalLink, 0, 4)
+// lang for {lang} substitution is the Wikipedia-style base-language subtag (so the
+// nb/nn -> no override is applied), which is also a valid iNaturalist ?locale= value.
+func externalLinksForGuide(scientificName, ebirdCode, locale string, includeSupplementary bool) []GuideExternalLink {
 	if scientificName == "" {
-		return links
+		return nil
 	}
-	lang := baseLanguage(locale)
-
-	wikiTitle := strings.ReplaceAll(scientificName, " ", "_")
-	links = append(links, GuideExternalLink{
-		Name: linkNameWikipedia,
-		URL:  "https://" + wikipediaSubdomain(lang) + ".wikipedia.org/wiki/" + url.PathEscape(wikiTitle),
-	})
-
-	if meta, ok := openfauna.LookupMeta(scientificName); ok && meta.INaturalistURL != "" {
-		links = append(links, GuideExternalLink{
-			Name: linkNameINaturalist,
-			URL:  withLocaleParam(meta.INaturalistURL, lang),
-		})
+	lang := wikipediaSubdomain(baseLanguage(locale))
+	resolved := openfauna.ExternalLinks(scientificName, lang, includeSupplementary)
+	out := make([]GuideExternalLink, 0, len(resolved)+1)
+	for _, l := range resolved {
+		out = append(out, GuideExternalLink{Name: l.Name, URL: l.URL, Icon: l.Icon})
 	}
-
 	if ebirdCode != "" {
-		links = append(links, GuideExternalLink{
+		out = append(out, GuideExternalLink{
 			Name: linkNameEBird,
 			URL:  "https://ebird.org/species/" + url.PathEscape(ebirdCode),
+			Icon: linkIconEBird,
 		})
 	}
-
-	links = append(links, GuideExternalLink{
-		Name: linkNameXenoCanto,
-		URL:  "https://xeno-canto.org/explore?query=" + url.QueryEscape(scientificName),
-	})
-	return links
+	return out
 }
 
 // wikipediaLangOverrides maps a base-language subtag to the Wikipedia language
@@ -940,20 +934,6 @@ func baseLanguage(locale string) string {
 		}
 	}
 	return l
-}
-
-// withLocaleParam returns rawURL with its "locale" query parameter set to lang.
-// A parse failure leaves the original URL untouched so a malformed dataset value
-// cannot drop the link entirely.
-func withLocaleParam(rawURL, lang string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-	q := u.Query()
-	q.Set("locale", lang)
-	u.RawQuery = q.Encode()
-	return u.String()
 }
 
 // summarizeDescription returns a short, single-paragraph summary of a description.

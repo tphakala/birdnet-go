@@ -278,15 +278,15 @@ func TestResolveSimilarSpecies_StubWithoutDescriptionGetsLocalizedLinks(t *testi
 	entries := c.resolveSimilarSpecies(
 		t.Context(),
 		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
-		"de", true, // locale=de, enrichments on
+		"de", true, false, // locale=de, enrichments on, supplementary off
 	)
 	require.Len(t, entries, 1)
 	assert.False(t, entries[0].HasGuide, "stub guide with empty description must not be has_guide")
 	require.NotEmpty(t, entries[0].ExternalLinks, "description-less entry should carry resource links")
 	var foundLocalizedWiki bool
 	for _, l := range entries[0].ExternalLinks {
-		if l.Name == linkNameWikipedia {
-			assert.Contains(t, l.URL, "de.wikipedia.org", "Wikipedia link should localize to the locale")
+		if l.Icon == "wikipedia" {
+			assert.Contains(t, l.URL, "dewiki", "Wikipedia link should localize to the German locale")
 			foundLocalizedWiki = true
 		}
 	}
@@ -304,7 +304,7 @@ func TestResolveSimilarSpecies_StubWithEnrichmentsOffHasNoLinks(t *testing.T) {
 	entries := c.resolveSimilarSpecies(
 		t.Context(),
 		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
-		defaultWikiLang, false, // enrichments off
+		defaultWikiLang, false, false, // enrichments off, supplementary off
 	)
 	require.Len(t, entries, 1)
 	assert.False(t, entries[0].HasGuide)
@@ -320,7 +320,7 @@ func TestResolveSimilarSpecies_WithDescriptionIsMarkedHasGuideAndNoLinks(t *test
 	entries := c.resolveSimilarSpecies(
 		t.Context(),
 		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
-		defaultWikiLang, true,
+		defaultWikiLang, true, false, // enrichments on, supplementary off
 	)
 	require.Len(t, entries, 1)
 	assert.True(t, entries[0].HasGuide, "guide with prose must be has_guide")

@@ -158,41 +158,54 @@ func TestComputeCurrentSeason(t *testing.T) {
 	assert.Equal(t, "dry1", computeCurrentSeason(0.0, time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)))
 }
 
-func TestBuildExternalLinks(t *testing.T) {
+func TestExternalLinksForGuide(t *testing.T) {
 	t.Parallel()
 
-	links := buildExternalLinks(sciEurasianBlackbird, "eurbla", "de")
+	// With eBird code and German locale: expect wikipedia, inaturalist (from OpenFauna
+	// Tier-1 for Turdus merula), and eBird appended; Xeno-canto only with supplementary.
+	links := externalLinksForGuide(sciEurasianBlackbird, "eurbla", "de", false)
 	assert.NotEmpty(t, links)
 
-	names := make(map[string]string, len(links))
+	byIcon := make(map[string]string, len(links))
 	for _, l := range links {
-		names[l.Name] = l.URL
+		byIcon[l.Icon] = l.URL
+		assert.NotEmpty(t, l.Icon, "every link should carry an icon hint")
 	}
-	// Wikipedia resolves to the UI language subdomain, using the scientific-name title.
-	assert.Contains(t, names, linkNameWikipedia)
-	assert.Contains(t, names[linkNameWikipedia], "https://de.wikipedia.org/wiki/Turdus_merula")
+	// Wikipedia comes from OpenFauna via Wikidata GoToLinkedPage redirect.
+	assert.Contains(t, byIcon, "wikipedia")
+	assert.Contains(t, byIcon["wikipedia"], "wikidata.org")
+	assert.Contains(t, byIcon["wikipedia"], "dewiki")
 	// iNaturalist comes from OpenFauna (taxon id) with the UI language as ?locale=.
-	assert.Contains(t, names, linkNameINaturalist)
-	assert.Contains(t, names[linkNameINaturalist], "inaturalist.org/taxa/12716")
-	assert.Contains(t, names[linkNameINaturalist], "locale=de")
+	assert.Contains(t, byIcon, "inaturalist")
+	assert.Contains(t, byIcon["inaturalist"], "inaturalist.org/taxa/")
+	assert.Contains(t, byIcon["inaturalist"], "locale=de")
 	// eBird links must point at the code-based species page, not a (broken) search.
-	assert.Contains(t, names, linkNameEBird)
-	assert.Contains(t, names[linkNameEBird], "ebird.org/species/eurbla")
-	assert.NotContains(t, names[linkNameEBird], "search?q=")
-	assert.Contains(t, names, linkNameXenoCanto)
+	assert.Contains(t, byIcon, "ebird")
+	assert.Contains(t, byIcon["ebird"], "ebird.org/species/eurbla")
+	assert.NotContains(t, byIcon["ebird"], "search?q=")
+	// Xeno-canto absent when supplementary is off.
+	assert.NotContains(t, byIcon, "xeno-canto")
 
-	// An empty/invalid locale falls back to the English Wikipedia, and without a
-	// resolved eBird code the eBird link is omitted rather than emitting a dead URL.
-	noCode := buildExternalLinks(sciEurasianBlackbird, "", "")
-	noCodeNames := make(map[string]string, len(noCode))
-	for _, l := range noCode {
-		noCodeNames[l.Name] = l.URL
+	// With supplementary on, Xeno-canto is included.
+	withSupp := externalLinksForGuide(sciEurasianBlackbird, "eurbla", "de", true)
+	suppByIcon := make(map[string]string, len(withSupp))
+	for _, l := range withSupp {
+		suppByIcon[l.Icon] = l.URL
 	}
-	assert.Contains(t, noCodeNames[linkNameWikipedia], "https://en.wikipedia.org/wiki/Turdus_merula")
-	assert.NotContains(t, noCodeNames, linkNameEBird)
-	assert.Contains(t, noCodeNames, linkNameXenoCanto)
+	assert.Contains(t, suppByIcon, "xeno-canto")
 
-	assert.Empty(t, buildExternalLinks("", "", "en"))
+	// An empty/invalid locale falls back to the English Wikipedia subdomain; without a
+	// resolved eBird code the eBird link is omitted rather than emitting a dead URL.
+	noCode := externalLinksForGuide(sciEurasianBlackbird, "", "", false)
+	noCodeByIcon := make(map[string]string, len(noCode))
+	for _, l := range noCode {
+		noCodeByIcon[l.Icon] = l.URL
+	}
+	assert.Contains(t, noCodeByIcon, "wikipedia")
+	assert.Contains(t, noCodeByIcon["wikipedia"], "enwiki")
+	assert.NotContains(t, noCodeByIcon, "ebird")
+
+	assert.Empty(t, externalLinksForGuide("", "", "en", false))
 }
 
 func TestBaseLanguage(t *testing.T) {
@@ -229,22 +242,59 @@ func TestWikipediaSubdomain(t *testing.T) {
 	}
 }
 
-// TestBuildExternalLinks_NorwegianWikipediaOverride verifies the nb UI locale yields
-// a canonical no.wikipedia.org link (not a redirecting nb.wikipedia.org one), while
-// iNaturalist keeps the base-language ?locale=nb (its locale param degrades gracefully).
-func TestBuildExternalLinks_NorwegianWikipediaOverride(t *testing.T) {
+// TestExternalLinksForGuide_NorwegianWikipediaOverride verifies the nb UI locale yields
+// a nowiki Wikidata redirect (not nbwiki), while iNaturalist keeps the base-language
+// ?locale=nb (its locale param degrades gracefully).
+func TestExternalLinksForGuide_NorwegianWikipediaOverride(t *testing.T) {
 	t.Parallel()
 
-	links := buildExternalLinks(sciEurasianBlackbird, "", "nb")
-	names := make(map[string]string, len(links))
+	links := externalLinksForGuide(sciEurasianBlackbird, "", "nb", false)
+	byIcon := make(map[string]string, len(links))
 	for _, l := range links {
-		names[l.Name] = l.URL
+		byIcon[l.Icon] = l.URL
 	}
-	assert.Contains(t, names[linkNameWikipedia], "https://no.wikipedia.org/wiki/Turdus_merula")
-	assert.NotContains(t, names[linkNameWikipedia], "nb.wikipedia.org")
-	if inat, ok := names[linkNameINaturalist]; ok {
-		assert.Contains(t, inat, "locale=nb")
+	// The nb->no override must be applied: Wikipedia Wikidata link uses "nowiki".
+	assert.Contains(t, byIcon["wikipedia"], "nowiki")
+	assert.NotContains(t, byIcon["wikipedia"], "nbwiki")
+	// iNaturalist also receives the mapped lang ("no"), not the raw locale ("nb").
+	if inat, ok := byIcon["inaturalist"]; ok {
+		assert.Contains(t, inat, "locale=no")
 	}
+}
+
+func TestExternalLinksForGuideAppendsEbirdAndIcons(t *testing.T) {
+	links := externalLinksForGuide("Aquila chrysaetos", "agldea", "en", false)
+	var haveEbird, haveWiki bool
+	for _, l := range links {
+		if l.Icon == "ebird" {
+			haveEbird = true
+			assert.Equal(t, "https://ebird.org/species/agldea", l.URL)
+		}
+		if l.Icon == "wikipedia" {
+			haveWiki = true
+		}
+		assert.NotEmpty(t, l.Icon, "every link should carry an icon hint")
+	}
+	assert.True(t, haveEbird, "eBird link should be appended when code present")
+	assert.True(t, haveWiki, "wikipedia link should come from OpenFauna")
+}
+
+func TestExternalLinksForGuideOmitsEbirdWhenNoCode(t *testing.T) {
+	links := externalLinksForGuide("Aquila chrysaetos", "", "en", false)
+	for _, l := range links {
+		assert.NotEqual(t, "ebird", l.Icon, "no eBird link without a code")
+	}
+}
+
+func TestExternalLinksForGuideSupplementaryAddsXenoCanto(t *testing.T) {
+	links := externalLinksForGuide("Aquila chrysaetos", "", "en", true)
+	var haveXC bool
+	for _, l := range links {
+		if l.Icon == "xeno-canto" {
+			haveXC = true
+		}
+	}
+	assert.True(t, haveXC, "supplementary on should add xeno-canto")
 }
 
 func TestSummarizeDescription(t *testing.T) {
