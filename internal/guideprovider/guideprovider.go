@@ -186,7 +186,11 @@ type registeredProvider struct {
 type GuideCache struct {
 	memory    sync.Map     // key "scientificName|locale" -> *SpeciesGuide
 	memCount  atomic.Int64 // approximate count of memory entries (soft cap guard)
-	store     GuideStore
+	// invalidateGen is bumped by InvalidateAll. A Tier-2 DB rehydrate captures it
+	// before reading and drops its write if it changed, so a pre-invalidation row
+	// read cannot re-seed memory after InvalidateAll's sweep has passed.
+	invalidateGen atomic.Int64
+	store         GuideStore
 	metrics   GuideCacheMetrics
 	providers []registeredProvider
 
@@ -304,6 +308,22 @@ func (c *GuideCache) storeMemory(key string, g *SpeciesGuide) {
 	}
 }
 
+// storeMemoryGen writes like storeMemory but undoes the write if InvalidateAll ran
+// since gen was captured (i.e. the value derives from a pre-invalidation read). The
+// store-then-verify ordering closes the window in both directions: if the sweep
+// already passed this key, the post-store generation check sees the bump and removes
+// the entry; if the sweep runs after our store, it removes the entry itself. Used by
+// the Tier-2 DB rehydrate in Get, the only path that can resurrect stale content
+// (Tier-3 fetches run under the current provider set, so their writes are fresh).
+func (c *GuideCache) storeMemoryGen(key string, g *SpeciesGuide, gen int64) {
+	c.storeMemory(key, g)
+	if c.invalidateGen.Load() != gen {
+		if _, loaded := c.memory.LoadAndDelete(key); loaded {
+			c.memCount.Add(-1)
+		}
+	}
+}
+
 // Start loads existing DB entries into memory and launches the refresh loop.
 // Safe to call once; subsequent calls are no-ops.
 func (c *GuideCache) Start() {
@@ -378,6 +398,12 @@ func (c *GuideCache) InvalidateAll(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
+	// Bump the generation up front, before clearing either tier. A concurrent Get
+	// may have read a pre-invalidation row from the DB tier and be about to write it
+	// into memory after the sweep below passes that key; the rehydrate path captures
+	// this generation before its read and drops such a write, so the "full"
+	// invalidate cannot leave a stale entry behind once it returns.
+	c.invalidateGen.Add(1)
 	// Clear the persistent tier first. If it fails we leave the memory tier intact
 	// and return the error, so the two tiers stay consistent (both populated) rather
 	// than ending up memory-empty while stale rows survive in the DB to reload on the
@@ -461,11 +487,15 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 	// constructed without a store. Production wiring always supplies one.
 	if c.store != nil {
 		providerName := c.resolveProviderName()
+		// Capture the invalidation generation before the read so a row fetched just
+		// before a concurrent InvalidateAll is not rehydrated into memory after its
+		// sweep (see storeMemoryGen).
+		gen := c.invalidateGen.Load()
 		entry, err := c.store.Get(ctx, name, locale, providerName)
 		switch {
 		case err == nil && entry != nil:
 			g := entryToGuide(entry)
-			c.storeMemory(key, g)
+			c.storeMemoryGen(key, g, gen)
 			c.metrics.RecordCacheHit(tierDB, entryQuality(g))
 			if c.isCacheEntryStale(g) {
 				c.triggerAsyncRefresh(name, locale)
