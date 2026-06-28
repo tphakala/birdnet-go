@@ -3,6 +3,7 @@ package birdnetpi
 
 import (
 	"context"
+	"database/sql"
 	"net/url"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -183,4 +184,24 @@ func (s *Source) Close() error {
 			Build()
 	}
 	return nil
+}
+
+// LatestDate returns the most recent detection date as stored ("YYYY-MM-DD"),
+// or "" when the table is empty.
+func (s *Source) LatestDate(ctx context.Context) (string, error) {
+	var date sql.NullString
+	err := s.db.WithContext(ctx).
+		Raw("SELECT MAX(CAST(Date AS TEXT)) FROM detections").
+		Scan(&date).Error
+	if err != nil {
+		return "", errors.New(err).
+			Component("imports/birdnetpi").
+			Category(errors.CategoryDatabase).
+			Context("operation", "latest_date").
+			Build()
+	}
+	if !date.Valid {
+		return "", nil
+	}
+	return date.String, nil
 }
