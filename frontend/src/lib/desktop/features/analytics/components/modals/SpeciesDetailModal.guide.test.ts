@@ -65,8 +65,7 @@ function enableGuide(): void {
       ...dashboard,
       speciesGuide: {
         enabled: true,
-        provider: 'wikipedia',
-        fallbackPolicy: 'all',
+        enableWikipedia: false,
         showNotes: false,
         showEnrichments: true,
         showSimilarSpecies: true,

@@ -579,15 +579,16 @@ export interface Dashboard {
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
   defaultAudioGain?: number; // Default playback gain in dB (0-24)
-  speciesGuide?: SpeciesGuideSettings; // Species guide provider settings
+  speciesGuide?: SpeciesGuideSettings; // Species guide settings (offline OpenFauna + optional Wikipedia)
 }
 
-// Species guide provider settings (Wikipedia/eBird enrichment).
+// Species guide settings. Taxonomy, localized common names, and external links
+// always come from the offline OpenFauna dataset; enableWikipedia opts into online
+// Wikipedia article descriptions (the one thing OpenFauna can't provide), off by default.
 // The three show* flags default to true when absent (matches backend *bool semantics).
 export interface SpeciesGuideSettings {
   enabled: boolean;
-  provider: string; // "wikipedia" | "ebird" | "auto"
-  fallbackPolicy: string; // "all" | "none"
+  enableWikipedia: boolean; // opt in to online Wikipedia descriptions (default off)
   warmTopN?: number;
   preFetchEnabled?: boolean;
   showNotes?: boolean;
@@ -1031,8 +1032,7 @@ function createEmptySettings(): SettingsFormData {
         defaultAudioGain: 0,
         speciesGuide: {
           enabled: false,
-          provider: 'wikipedia',
-          fallbackPolicy: 'all',
+          enableWikipedia: false,
           warmTopN: 50,
           preFetchEnabled: true,
           showNotes: true,

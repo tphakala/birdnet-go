@@ -2520,8 +2520,7 @@ func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bo
 	if !n.Enabled {
 		return false
 	}
-	return o.Provider != n.Provider ||
-		o.FallbackPolicy != n.FallbackPolicy ||
+	return o.EnableWikipedia != n.EnableWikipedia ||
 		o.WarmTopN != n.WarmTopN ||
 		o.PreFetchEnabled != n.PreFetchEnabled ||
 		o.IsShowNotes() != n.IsShowNotes() ||

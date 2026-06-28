@@ -78,23 +78,38 @@ describe('SimilarSpeciesPanel', () => {
     expect(screen.getByText('analytics.species.similar.versus')).toBeInTheDocument();
   });
 
-  it('disables species without a guide and explains why', async () => {
+  it('shows resource links for a description-less species and keeps it clickable', async () => {
     render(SimilarSpeciesPanel, {
       props: {
         mainName: 'American Crow',
-        similar: [entry({ common_name: 'Mystery Bird', has_guide: false })],
+        similar: [
+          entry({
+            scientific_name: 'Columba albinucha',
+            common_name: 'White-naped Pigeon',
+            has_guide: false,
+            external_links: [
+              { name: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Columba_albinucha' },
+              { name: 'eBird', url: 'https://ebird.org/species/whnpig1' },
+            ],
+          }),
+        ],
       },
     });
 
-    // aria-disabled (not native disabled) so screen-reader users can still focus
-    // the control and hear why it is unavailable.
-    const button = screen.getByRole('button', { name: /Mystery Bird/ });
-    expect(button).toHaveAttribute('aria-disabled', 'true');
-    expect(button).not.toBeDisabled();
-    // No selectable species → the card prompts the user to pick one.
-    expect(screen.getByText('analytics.species.similar.selectPrompt')).toBeInTheDocument();
-    // Clicking the unavailable species must not trigger a fetch.
-    await fireEvent.click(button);
+    // Auto-selected: the explore-resources heading and the link pills render
+    // instead of an empty comparison.
+    expect(
+      await screen.findByText('analytics.species.similar.exploreResources', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Wikipedia/ })).toHaveAttribute(
+      'href',
+      'https://en.wikipedia.org/wiki/Columba_albinucha'
+    );
+    expect(screen.getByRole('link', { name: /eBird/ })).toBeInTheDocument();
+
+    // The row stays clickable (no longer disabled) and links need no guide fetch.
+    const button = screen.getByRole('button', { name: /White-naped Pigeon/ });
+    expect(button).not.toHaveAttribute('aria-disabled');
     expect(api.get).not.toHaveBeenCalled();
   });
 

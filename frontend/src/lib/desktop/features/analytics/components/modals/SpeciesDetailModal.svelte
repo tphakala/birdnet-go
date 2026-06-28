@@ -48,6 +48,11 @@
   let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
   let showSimilarSpecies = $derived($dashboardSettings?.speciesGuide?.showSimilarSpecies ?? true);
   let showNotes = $derived($dashboardSettings?.speciesGuide?.showNotes ?? true);
+  // On desktop, when the guide (right column) has content, widen the modal and
+  // split into two columns so the horizontal space is used without stretching the
+  // description past a readable measure. Below `lg` the modal stays its default
+  // width and the content stacks in a single column (tablet/desktop-only UI).
+  let wideLayout = $derived(guideEnabled && showSimilarSpecies);
   $effect(() => {
     if (isOpen && !untrack(() => prevIsOpen)) {
       cachedSpecies = null;
@@ -83,7 +88,7 @@
   size="md"
   type="default"
   onClose={handleClose}
-  className="sm:modal-middle"
+  className={`sm:modal-middle${wideLayout ? ' lg:max-w-5xl' : ''}`}
   aria-labelledby="species-detail-modal-title"
 >
   {#snippet header()}
@@ -103,47 +108,64 @@
 
   {#snippet children()}
     {#if displaySpecies}
-      {#if displaySpecies.thumbnail_url}
-        <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)]">
-          <img
-            src={displaySpecies.thumbnail_url}
-            alt={displayName}
-            class="w-full h-full object-cover"
-          />
-        </div>
-      {/if}
-
-      {#if showStats}
-        <div class="grid grid-cols-2 gap-3 text-sm mt-3">
-          <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-            <span class="opacity-70">{t('analytics.species.card.detections')}</span>
-            <span class="font-semibold">{displaySpecies.count}</span>
-          </div>
-          <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-            <span class="opacity-70">{t('analytics.species.card.confidence')}</span>
-            <span class="font-semibold">{formatPercentage(displaySpecies.avg_confidence)}</span>
-          </div>
-          {#if displaySpecies.first_heard}
-            <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-              <span class="opacity-70">{t('analytics.species.headers.firstDetected')}</span>
-              <span class="font-semibold">{formatDate(displaySpecies.first_heard)}</span>
+      <!-- On desktop (lg+) with guide content, split into two columns so the wide
+           modal isn't a single narrow column with large empty margins. Below lg
+           everything stacks (tablet/desktop-only UI). -->
+      <div class={wideLayout ? 'lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start' : ''}>
+        <!-- Primary column: image, stats, notes -->
+        <div class="space-y-3">
+          {#if displaySpecies.thumbnail_url}
+            <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)]">
+              <img
+                src={displaySpecies.thumbnail_url}
+                alt={displayName}
+                class="w-full h-full object-cover"
+              />
             </div>
           {/if}
-          {#if displaySpecies.last_heard}
-            <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-              <span class="opacity-70">{t('analytics.species.headers.lastDetected')}</span>
-              <span class="font-semibold">{formatDate(displaySpecies.last_heard)}</span>
+
+          {#if showStats}
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
+                <span class="opacity-70">{t('analytics.species.card.detections')}</span>
+                <span class="font-semibold">{displaySpecies.count}</span>
+              </div>
+              <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
+                <span class="opacity-70">{t('analytics.species.card.confidence')}</span>
+                <span class="font-semibold">{formatPercentage(displaySpecies.avg_confidence)}</span>
+              </div>
+              {#if displaySpecies.first_heard}
+                <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
+                  <span class="opacity-70">{t('analytics.species.headers.firstDetected')}</span>
+                  <span class="font-semibold">{formatDate(displaySpecies.first_heard)}</span>
+                </div>
+              {/if}
+              {#if displaySpecies.last_heard}
+                <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
+                  <span class="opacity-70">{t('analytics.species.headers.lastDetected')}</span>
+                  <span class="font-semibold">{formatDate(displaySpecies.last_heard)}</span>
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          {#if guideEnabled && showNotes}
+            <!-- Key on the species so notes remount (and refetch) when the modal
+                 is reused for a different species without closing. -->
+            <div class="border-t border-[var(--color-base-300)] pt-4">
+              {#key displaySpecies.scientific_name}
+                <SpeciesNotes scientificName={displaySpecies.scientific_name} />
+              {/key}
             </div>
           {/if}
         </div>
-      {/if}
 
-      {#if guideEnabled && (showNotes || showSimilarSpecies)}
-        <div class="mt-4 space-y-4 border-t border-[var(--color-base-300)] pt-4">
-          <!-- Key on the species so the guide + notes remount (and refetch) when
-               the modal is reused for a different species without closing. -->
-          {#key displaySpecies.scientific_name}
-            {#if showSimilarSpecies}
+        <!-- Guide column: description + similar species -->
+        {#if guideEnabled && showSimilarSpecies}
+          <div
+            class="mt-4 border-t border-[var(--color-base-300)] pt-4 lg:mt-0 lg:border-t-0 lg:pt-0"
+          >
+            {#key displaySpecies.scientific_name}
               {#if guidePanelOpen}
                 <SpeciesComparison
                   scientificName={displaySpecies.scientific_name}
@@ -162,13 +184,10 @@
                   {t('analytics.species.similar.show')}
                 </button>
               {/if}
-            {/if}
-            {#if showNotes}
-              <SpeciesNotes scientificName={displaySpecies.scientific_name} />
-            {/if}
-          {/key}
-        </div>
-      {/if}
+            {/key}
+          </div>
+        {/if}
+      </div>
     {/if}
   {/snippet}
 

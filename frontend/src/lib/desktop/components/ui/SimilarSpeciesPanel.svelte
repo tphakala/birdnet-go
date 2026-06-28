@@ -1,7 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
-  import { t } from '$lib/i18n';
+  import { ExternalLink } from '@lucide/svelte';
+  import { t, getLocale } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import {
@@ -46,7 +47,9 @@
 
   let selectedEntry = $derived(similar.find(e => e.scientific_name === selected) ?? null);
   let selectedSections = $derived(selected ? (guides.get(selected) ?? null) : null);
-  let selectedStatus = $derived<LoadStatus | undefined>(selected ? status.get(selected) : undefined);
+  let selectedStatus = $derived<LoadStatus | undefined>(
+    selected ? status.get(selected) : undefined
+  );
   // Non-empty canonical rows for the selected species.
   let visibleRows = $derived(
     selectedSections ? SECTION_ROWS.filter(row => selectedSections[row.id].trim() !== '') : []
@@ -56,7 +59,9 @@
     status.set(name, 'loading');
     try {
       const enc = encodeURIComponent(name);
-      const g = await api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide`);
+      const g = await api.get<SpeciesGuideData>(
+        `/api/v2/species/${enc}/guide?locale=${encodeURIComponent(getLocale())}`
+      );
       guides.set(name, extractCanonicalSections(g.description));
       status.set(name, 'ready');
     } catch (e) {
@@ -73,6 +78,10 @@
 
   function select(name: string): void {
     selected = name;
+    // Links-only entries (no comparison prose) render their external_links
+    // directly from the /similar response — no per-species guide fetch needed.
+    const entry = similar.find(e => e.scientific_name === name);
+    if (!entry?.has_guide) return;
     // Only fetch on first selection or to retry a prior transient error. Skip
     // when ready, in flight, or 'notfound' — a 404 is a definitive negative
     // result and re-selecting must not re-hit the rate-limited guide endpoint.
@@ -106,7 +115,9 @@
       }
 
       if (selected === null || !names.has(selected)) {
-        const first = similar.find(e => e.has_guide);
+        // Prefer a species with a full guide (richer card), but fall back to the
+        // first species so links-only entries still auto-select.
+        const first = similar.find(e => e.has_guide) ?? similar[0];
         if (first) {
           select(first.scientific_name);
         } else if (selected !== null) {
@@ -134,19 +145,21 @@
               class="w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors
                 {entry.scientific_name === selected
                 ? 'bg-primary/10 text-primary font-medium'
-                : 'hover:bg-base-200'}
-                {entry.has_guide ? '' : 'cursor-not-allowed opacity-60'}"
-              aria-disabled={entry.has_guide ? undefined : true}
-              title={entry.has_guide ? undefined : t('analytics.species.similar.noGuideAvailable')}
+                : 'hover:bg-base-200'}"
+              title={entry.has_guide ? undefined : t('analytics.species.similar.linksOnly')}
               aria-pressed={entry.scientific_name === selected}
-              onclick={() => entry.has_guide && select(entry.scientific_name)}
+              onclick={() => select(entry.scientific_name)}
             >
-              <span class="block truncate">{entry.common_name || entry.scientific_name}</span>
-              {#if !entry.has_guide}
-                <span class="block text-xs text-base-content/50">
-                  {t('analytics.species.similar.noGuideAvailable')}
-                </span>
-              {/if}
+              <span class="flex items-center gap-1">
+                <span class="truncate">{entry.common_name || entry.scientific_name}</span>
+                {#if !entry.has_guide}
+                  <!-- Subtle cue: this species offers resource links, not a comparison. -->
+                  <ExternalLink
+                    class="h-3 w-3 shrink-0 text-base-content/40"
+                    aria-label={t('analytics.species.similar.linksOnly')}
+                  />
+                {/if}
+              </span>
             </button>
           </li>
         {/each}
@@ -168,7 +181,31 @@
             </p>
           </div>
 
-          {#if selectedStatus === 'loading'}
+          {#if !selectedEntry.has_guide}
+            <!-- No comparison prose: offer resource links so the selection is useful. -->
+            {#if (selectedEntry.external_links ?? []).length > 0}
+              <p class="text-sm text-base-content/70 mb-2">
+                {t('analytics.species.similar.exploreResources')}
+              </p>
+              <div class="flex flex-wrap gap-2">
+                {#each selectedEntry.external_links ?? [] as link (link.url)}
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="badge badge-sm badge-ghost gap-1"
+                  >
+                    {link.name}
+                    <ExternalLink class="h-3 w-3" aria-hidden="true" />
+                  </a>
+                {/each}
+              </div>
+            {:else}
+              <p class="text-sm text-base-content/70">
+                {t('analytics.species.similar.cardNoGuide')}
+              </p>
+            {/if}
+          {:else if selectedStatus === 'loading'}
             <div
               role="status"
               aria-live="polite"

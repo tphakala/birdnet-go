@@ -1,15 +1,20 @@
 # Species Guide
 
-The **Species Guide** enriches detected species with a plain-language description,
-taxonomy (genus/family), a similar-species comparison panel, and your own
-free-form notes. Descriptions come from Wikipedia; taxonomy enrichment can
-optionally come from eBird.
+The **Species Guide** enriches detected species with taxonomy (genus/family), a
+localized common name, external reference links, a similar-species comparison
+panel, and your own free-form notes — plus an optional plain-language description.
 
-The feature is **disabled by default** and contacts no external service until you
-enable it. When enabled, it sends only the **scientific name** of a detected
-species and a language code to the configured providers — no coordinates, audio,
-or personal data. See [Privacy & Data Collection](telemetry-privacy.md) for the
-full disclosure.
+Taxonomy, common names, and external links come from the **OpenFauna** dataset
+that ships **embedded in the binary**, so the guide works **fully offline** with
+no API key. The one piece that requires the internet — the **Wikipedia article
+description** — is **opt-in** and off by default.
+
+The feature is **disabled by default**. While disabled, or while enabled without
+Wikipedia descriptions, it contacts **no external service**. When you opt into
+Wikipedia descriptions, it sends only the **scientific name** of a detected
+species and a language code to Wikipedia — no coordinates, audio, or personal
+data. See [Privacy & Data Collection](telemetry-privacy.md) for the full
+disclosure.
 
 ## Quick start
 
@@ -23,9 +28,11 @@ realtime:
       enabled: true # turn the feature on (default: false)
 ```
 
-That is the only required setting. With just this, guides are fetched from
-Wikipedia in your dashboard language, cached locally, and shown on the species
-detail and detection detail views.
+That is the only required setting. With just this, guides are built **offline**
+from the embedded OpenFauna dataset (taxonomy, localized common names, and
+external links such as Wikipedia and iNaturalist), cached locally, and shown on
+the species detail and detection detail views. Links resolve to your dashboard
+language.
 
 Settings take effect immediately — **no restart is required** (hot-reload).
 
@@ -33,16 +40,15 @@ Settings take effect immediately — **no restart is required** (hot-reload).
 
 All keys live under `realtime.dashboard.speciesguide`:
 
-| Key                  | Type   | Default     | Description                                                                                            |
-| -------------------- | ------ | ----------- | ------------------------------------------------------------------------------------------------------ |
-| `enabled`            | bool   | `false`     | Master switch for the whole feature.                                                                   |
-| `provider`           | string | `wikipedia` | `wikipedia` (descriptions only) or `auto` (Wikipedia descriptions + eBird taxonomy when a key is set). |
-| `fallbackpolicy`     | string | `all`       | `all` merges every available provider to fill gaps; `none` uses only the primary provider.             |
-| `prefetchenabled`    | bool   | `true`      | Pre-fetch a guide in the background the first time a new species is detected.                          |
-| `warmtopn`           | int    | `50`        | On startup, warm the cache for your top-N most-detected species (`0` disables warming).                |
-| `shownotes`          | bool   | `true`      | Show the per-species notes section.                                                                    |
-| `showenrichments`    | bool   | `true`      | Show enrichment badges (expectedness, current season, external links).                                 |
-| `showsimilarspecies` | bool   | `true`      | Show the similar-species comparison panel.                                                             |
+| Key                  | Type | Default | Description                                                                                                 |
+| -------------------- | ---- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `enabled`            | bool | `false` | Master switch for the whole feature.                                                                        |
+| `enablewikipedia`    | bool | `false` | Also fetch article **descriptions** from Wikipedia (online). Off by default; everything else stays offline. |
+| `prefetchenabled`    | bool | `true`  | Pre-fetch a guide in the background the first time a new species is detected.                               |
+| `warmtopn`           | int  | `50`    | On startup, warm the cache for your top-N most-detected species (`0` disables warming).                     |
+| `shownotes`          | bool | `true`  | Show the per-species notes section.                                                                         |
+| `showenrichments`    | bool | `true`  | Show enrichment badges (expectedness, current season, external links).                                      |
+| `showsimilarspecies` | bool | `true`  | Show the similar-species comparison panel.                                                                  |
 
 > The three `show*` flags default to **on** when omitted. Set them to `false`
 > only to hide a section you don't want.
@@ -54,8 +60,7 @@ realtime:
   dashboard:
     speciesguide:
       enabled: true
-      provider: auto # use eBird taxonomy in addition to Wikipedia
-      fallbackpolicy: all
+      enablewikipedia: true # opt in to online Wikipedia descriptions (default: false)
       prefetchenabled: true
       warmtopn: 50
       shownotes: true
@@ -63,29 +68,23 @@ realtime:
       showsimilarspecies: true
 ```
 
-## Enabling eBird taxonomy enrichment (optional)
+## Enabling Wikipedia descriptions (optional)
 
-Wikipedia alone provides descriptions. To also fill in genus/family taxonomy and
-localized common names from eBird, you need a **free eBird API key** and must set
-`provider: auto`.
+OpenFauna does not carry article prose, only a link to the Wikipedia article. To
+show the full description text **inside** the guide, opt in:
 
-1. Request a key at <https://ebird.org/api/keygen> (requires a free eBird account).
-2. Configure the eBird integration (separate from the species guide block):
+```yaml
+realtime:
+  dashboard:
+    speciesguide:
+      enabled: true
+      enablewikipedia: true
+```
 
-   ```yaml
-   realtime:
-     ebird:
-       enabled: true
-       apikey: "YOUR_EBIRD_API_KEY"
-       locale: en # locale for eBird common names
-     dashboard:
-       speciesguide:
-         enabled: true
-         provider: auto # eBird is only consulted in "auto" mode
-   ```
-
-If `provider` is `auto` but no eBird key is configured, the guide silently falls
-back to Wikipedia-only — eBird enrichment is simply skipped, not an error.
+With this on, the guide fetches the article for the detected species from the
+Wikipedia edition matching your dashboard language, caches it locally, and shows
+it with its source link and license. With it off, the guide still shows the
+Wikipedia **link** (from OpenFauna) — it just doesn't fetch the article text.
 
 ## Notes
 
@@ -97,28 +96,32 @@ instance is exposed.
 
 ## Data sources & licensing
 
-- **Wikipedia** — article text is licensed **CC BY-SA 4.0**; the guide displays
-  the source link and license alongside each description.
-- **eBird** — taxonomy data, used only when you configure an API key.
+- **OpenFauna** (embedded, offline) — taxonomy, localized common names, and the
+  external reference links (Wikipedia, iNaturalist). Compiled from the GBIF
+  backbone taxonomy, Wikipedia, and the iNaturalist Open Data taxonomy.
+- **Wikipedia** (online, only when `enablewikipedia` is on) — article
+  descriptions, licensed **CC BY-SA 4.0**; the guide displays the source link
+  and license alongside each description.
 
 Guides are cached in your local database so repeat views and similar-species
-lookups don't re-contact the providers. The cache ages out automatically
+lookups don't re-contact Wikipedia. The cache ages out automatically
 (short-lived for "not found" results, longer for real guides), so it does not
 grow without bound.
 
 ## Troubleshooting
 
-| Symptom                                | Likely cause / fix                                                                                                   |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Guide section never appears            | `enabled` is still `false`, or the species detail panel is showing a species with no Wikipedia article.              |
-| "No guide found for species"           | Wikipedia has no matching article for that scientific name; this is expected for some species and is cached briefly. |
-| Taxonomy (genus/family) missing        | You are in `wikipedia` mode, or `auto` mode without a valid eBird API key.                                           |
-| Notes can be read but not added/edited | Note writes require authentication — sign in (or enable auth) first.                                                 |
-| "Too many requests" on the guide panel | The guide endpoints are rate-limited; wait a moment. Behind a reverse proxy, configure trusted-proxy/IP extraction.  |
+| Symptom                                  | Likely cause / fix                                                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Guide section never appears              | `enabled` is still `false`.                                                                                         |
+| No description text, only taxonomy/links | `enablewikipedia` is `false` (offline mode), or the species has no Wikipedia article in your dashboard language.    |
+| Taxonomy (genus/family) missing          | The species is not present in the embedded OpenFauna dataset.                                                       |
+| Notes can be read but not added/edited   | Note writes require authentication — sign in (or enable auth) first.                                                |
+| "Too many requests" on the guide panel   | The guide endpoints are rate-limited; wait a moment. Behind a reverse proxy, configure trusted-proxy/IP extraction. |
 
 ## Privacy summary
 
-When enabled, the Species Guide makes outbound HTTPS requests to Wikipedia (and
-eBird, if configured) containing only a scientific name and a language code. No
-coordinates, audio, or personal data are transmitted. The feature is opt-in and
-sends nothing while `enabled: false`.
+Taxonomy, common names, and links are served entirely from embedded data and
+make **no** outbound requests. Only when `enablewikipedia` is on does the guide
+make outbound HTTPS requests to Wikipedia, containing only a scientific name and
+a language code — no coordinates, audio, or personal data. The feature is opt-in
+and sends nothing while `enabled: false` (or while `enablewikipedia: false`).

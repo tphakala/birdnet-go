@@ -161,33 +161,90 @@ func TestComputeCurrentSeason(t *testing.T) {
 func TestBuildExternalLinks(t *testing.T) {
 	t.Parallel()
 
-	links := buildExternalLinks(sciEurasianBlackbird, "eurbla")
+	links := buildExternalLinks(sciEurasianBlackbird, "eurbla", "de")
 	assert.NotEmpty(t, links)
 
 	names := make(map[string]string, len(links))
 	for _, l := range links {
 		names[l.Name] = l.URL
 	}
-	assert.Contains(t, names, "Wikipedia")
-	assert.Contains(t, names["Wikipedia"], "Turdus_merula")
+	// Wikipedia resolves to the UI language subdomain, using the scientific-name title.
+	assert.Contains(t, names, linkNameWikipedia)
+	assert.Contains(t, names[linkNameWikipedia], "https://de.wikipedia.org/wiki/Turdus_merula")
+	// iNaturalist comes from OpenFauna (taxon id) with the UI language as ?locale=.
+	assert.Contains(t, names, linkNameINaturalist)
+	assert.Contains(t, names[linkNameINaturalist], "inaturalist.org/taxa/12716")
+	assert.Contains(t, names[linkNameINaturalist], "locale=de")
 	// eBird links must point at the code-based species page, not a (broken) search.
-	assert.Contains(t, names, "eBird")
-	assert.Contains(t, names["eBird"], "ebird.org/species/eurbla")
-	assert.NotContains(t, names["eBird"], "search?q=")
-	assert.Contains(t, names, "Xeno-canto")
+	assert.Contains(t, names, linkNameEBird)
+	assert.Contains(t, names[linkNameEBird], "ebird.org/species/eurbla")
+	assert.NotContains(t, names[linkNameEBird], "search?q=")
+	assert.Contains(t, names, linkNameXenoCanto)
 
-	// Without a resolved eBird code, omit the eBird link entirely rather than
-	// emitting a dead URL.
-	noCode := buildExternalLinks(sciEurasianBlackbird, "")
+	// An empty/invalid locale falls back to the English Wikipedia, and without a
+	// resolved eBird code the eBird link is omitted rather than emitting a dead URL.
+	noCode := buildExternalLinks(sciEurasianBlackbird, "", "")
 	noCodeNames := make(map[string]string, len(noCode))
 	for _, l := range noCode {
 		noCodeNames[l.Name] = l.URL
 	}
-	assert.Contains(t, noCodeNames, "Wikipedia")
-	assert.NotContains(t, noCodeNames, "eBird")
-	assert.Contains(t, noCodeNames, "Xeno-canto")
+	assert.Contains(t, noCodeNames[linkNameWikipedia], "https://en.wikipedia.org/wiki/Turdus_merula")
+	assert.NotContains(t, noCodeNames, linkNameEBird)
+	assert.Contains(t, noCodeNames, linkNameXenoCanto)
 
-	assert.Empty(t, buildExternalLinks("", ""))
+	assert.Empty(t, buildExternalLinks("", "", "en"))
+}
+
+func TestBaseLanguage(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"de":      "de",
+		"pt-br":   "pt",
+		"pt_pt":   "pt",
+		"zh_cn":   "zh",
+		"en_uk":   "en",
+		"EN":      "en",
+		"":        "en", // empty -> default
+		"x":       "en", // too short
+		"english": "en", // too long
+		"e1":      "en", // non-alpha
+	}
+	for in, want := range cases {
+		assert.Equalf(t, want, baseLanguage(in), "baseLanguage(%q)", in)
+	}
+}
+
+func TestWikipediaSubdomain(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"de": "de", // no override -> base subtag unchanged
+		"en": "en",
+		"nb": "no", // Norwegian Bokmål articles live on no.wikipedia.org
+		"nn": "no", // Norwegian Nynorsk likewise
+	}
+	for in, want := range cases {
+		assert.Equalf(t, want, wikipediaSubdomain(in), "wikipediaSubdomain(%q)", in)
+	}
+}
+
+// TestBuildExternalLinks_NorwegianWikipediaOverride verifies the nb UI locale yields
+// a canonical no.wikipedia.org link (not a redirecting nb.wikipedia.org one), while
+// iNaturalist keeps the base-language ?locale=nb (its locale param degrades gracefully).
+func TestBuildExternalLinks_NorwegianWikipediaOverride(t *testing.T) {
+	t.Parallel()
+
+	links := buildExternalLinks(sciEurasianBlackbird, "", "nb")
+	names := make(map[string]string, len(links))
+	for _, l := range links {
+		names[l.Name] = l.URL
+	}
+	assert.Contains(t, names[linkNameWikipedia], "https://no.wikipedia.org/wiki/Turdus_merula")
+	assert.NotContains(t, names[linkNameWikipedia], "nb.wikipedia.org")
+	if inat, ok := names[linkNameINaturalist]; ok {
+		assert.Contains(t, inat, "locale=nb")
+	}
 }
 
 func TestSummarizeDescription(t *testing.T) {

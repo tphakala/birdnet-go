@@ -1720,6 +1720,8 @@
         "versus": "vs {species}",
         "selectPrompt": "Válasszon egy fajt a(z) {species} összehasonlításához.",
         "noGuideAvailable": "Nincs elérhető útmutató",
+        "linksOnly": "Csak hivatkozások",
+        "exploreResources": "Nincs összehasonlítási részlet. Források felfedezése:",
         "cardLoading": "Összehasonlítás betöltése…",
         "cardNoGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
         "cardError": "Nem sikerült betölteni ezt a fajt. Próbáljon másikat.",
@@ -4223,22 +4225,9 @@
           "label": "Enable species guide",
           "helpText": "Show contextual guide information on detection details and the species modal."
         },
-        "provider": {
-          "label": "Provider",
-          "helpText": "Wikipedia provides descriptions; auto also enriches taxonomy from eBird when an API key is configured.",
-          "options": {
-            "wikipedia": "Wikipedia",
-            "ebird": "eBird",
-            "auto": "Wikipedia + eBird"
-          }
-        },
-        "fallbackPolicy": {
-          "label": "Fallback policy",
-          "helpText": "All merges every available provider; none uses only the primary provider.",
-          "options": {
-            "all": "All providers",
-            "none": "Primary only"
-          }
+        "enableWikipedia": {
+          "label": "Wikipedia descriptions",
+          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
         },
         "warmTopN": {
           "label": "Warm top species",

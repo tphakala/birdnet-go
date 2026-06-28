@@ -287,30 +287,12 @@ func validateDashboardSettings(settings *Dashboard) error {
 	return nil
 }
 
-// validateSpeciesGuideSettings normalizes the species guide provider and fallback
-// policy. Invalid or empty values fall back to the defaults rather than erroring,
-// and only matter when the feature is enabled.
+// validateSpeciesGuideSettings clamps the species guide's startup-warm target.
+// EnableWikipedia is a plain bool needing no normalization; settings only matter
+// when the feature is enabled.
 func validateSpeciesGuideSettings(settings *SpeciesGuideConfig) {
 	if !settings.Enabled {
 		return
-	}
-
-	if settings.Provider == "" {
-		settings.Provider = SpeciesGuideProviderWikipedia
-	} else if !slices.Contains(GetSpeciesGuideValidProviders(), settings.Provider) {
-		GetLogger().Warn("Invalid species guide provider, using default",
-			logger.String("invalid_provider", settings.Provider),
-			logger.String("fallback", SpeciesGuideProviderWikipedia))
-		settings.Provider = SpeciesGuideProviderWikipedia
-	}
-
-	if settings.FallbackPolicy == "" {
-		settings.FallbackPolicy = SpeciesGuideFallbackAll
-	} else if !slices.Contains(GetSpeciesGuideValidFallbackPolicies(), settings.FallbackPolicy) {
-		GetLogger().Warn("Invalid species guide fallback policy, using default",
-			logger.String("invalid_fallback_policy", settings.FallbackPolicy),
-			logger.String("fallback", SpeciesGuideFallbackAll))
-		settings.FallbackPolicy = SpeciesGuideFallbackAll
 	}
 
 	// Clamp the startup-warm target to a sane range. A negative value is

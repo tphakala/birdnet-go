@@ -182,23 +182,28 @@ type Dashboard struct {
 	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
 	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
 	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
-	SpeciesGuide     SpeciesGuideConfig   `yaml:"speciesguide" json:"speciesGuide"`                     // species guide provider settings (Wikipedia/eBird enrichment)
+	SpeciesGuide     SpeciesGuideConfig   `yaml:"speciesguide" json:"speciesGuide"`                     // species guide settings (offline OpenFauna; optional Wikipedia descriptions)
 }
 
-// SpeciesGuideConfig holds configuration for the species guide provider.
+// SpeciesGuideConfig holds configuration for the species guide.
+//
+// Taxonomy, localized common names, and external links always come from the
+// embedded, offline OpenFauna dataset whenever the feature is enabled. The only
+// online piece — the Wikipedia article description (which OpenFauna cannot
+// provide) — is opt-in via EnableWikipedia and defaults to off, so the guide
+// works fully offline out of the box.
 //
 // The three Show* flags are pointers so that an absent value defaults to true:
 // a plain bool would default to false and hide every section for existing users.
 // Read them through the IsShow*() accessors, never directly.
 type SpeciesGuideConfig struct {
-	Enabled            bool   `yaml:"enabled" json:"enabled"`
-	Provider           string `yaml:"provider" json:"provider"`                     // "wikipedia" | "auto"
-	FallbackPolicy     string `yaml:"fallbackpolicy" json:"fallbackPolicy"`         // "none" | "all"
-	WarmTopN           int    `yaml:"warmtopn" json:"warmTopN"`                     // top-N species warmed on startup (0 = off)
-	PreFetchEnabled    bool   `yaml:"prefetchenabled" json:"preFetchEnabled"`       // pre-fetch guides for newly detected species
-	ShowNotes          *bool  `yaml:"shownotes" json:"showNotes"`                   // default true
-	ShowEnrichments    *bool  `yaml:"showenrichments" json:"showEnrichments"`       // default true
-	ShowSimilarSpecies *bool  `yaml:"showsimilarspecies" json:"showSimilarSpecies"` // default true
+	Enabled            bool  `yaml:"enabled" json:"enabled"`
+	EnableWikipedia    bool  `yaml:"enablewikipedia" json:"enableWikipedia"`       // opt in to online Wikipedia descriptions (default off)
+	WarmTopN           int   `yaml:"warmtopn" json:"warmTopN"`                     // top-N species warmed on startup (0 = off)
+	PreFetchEnabled    bool  `yaml:"prefetchenabled" json:"preFetchEnabled"`       // pre-fetch guides for newly detected species
+	ShowNotes          *bool `yaml:"shownotes" json:"showNotes"`                   // default true
+	ShowEnrichments    *bool `yaml:"showenrichments" json:"showEnrichments"`       // default true
+	ShowSimilarSpecies *bool `yaml:"showsimilarspecies" json:"showSimilarSpecies"` // default true
 }
 
 // IsShowNotes reports whether the notes section should be shown (defaults to true when unset).

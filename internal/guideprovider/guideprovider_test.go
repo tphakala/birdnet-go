@@ -21,8 +21,9 @@ import (
 
 // fakeStore is an in-memory GuideStore for tests.
 type fakeStore struct {
-	mu      sync.Mutex
-	entries map[string]*GuideCacheEntry
+	mu           sync.Mutex
+	entries      map[string]*GuideCacheEntry
+	deleteAllErr error // when set, DeleteAll fails without clearing entries
 }
 
 func newFakeStore() *fakeStore {
@@ -80,6 +81,16 @@ func (s *fakeStore) Delete(_ context.Context, name, locale, provider string) err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.entries, fakeKey(name, locale, provider))
+	return nil
+}
+
+func (s *fakeStore) DeleteAll(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.deleteAllErr != nil {
+		return s.deleteAllErr
+	}
+	clear(s.entries)
 	return nil
 }
 
@@ -400,21 +411,32 @@ func TestGuideCache_FallbackMergesProviders(t *testing.T) {
 	store := newFakeStore()
 	c := NewGuideCache(store, noopMetrics{})
 	c.SetFallbackPolicy(conf.SpeciesGuideFallbackAll)
-	c.RegisterProvider(WikipediaProviderName, &fakeProvider{
-		name:   WikipediaProviderName,
-		result: &SpeciesGuide{CommonName: "Blackbird", Description: "Wikipedia prose."},
+	// Production ordering: OpenFauna is the primary (offline taxonomy + common name);
+	// Wikipedia is the secondary that fills the description and its attribution.
+	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{CommonName: "Common Blackbird", Genus: "Turdus", Family: "Turdidae"},
 	})
-	c.RegisterProvider(EBirdProviderName, &fakeProvider{
-		name:   EBirdProviderName,
-		result: &SpeciesGuide{Genus: "Turdus", Family: "Turdidae"},
+	c.RegisterProvider(WikipediaProviderName, &fakeProvider{
+		name: WikipediaProviderName,
+		result: &SpeciesGuide{
+			Description: "Wikipedia prose.",
+			SourceURL:   "https://en.wikipedia.org/wiki/Turdus_merula",
+			License:     "CC BY-SA 4.0",
+			LicenseURL:  "https://creativecommons.org/licenses/by-sa/4.0/",
+		},
 	})
 	t.Cleanup(c.Close)
 
 	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, "Wikipedia prose.", g.Description, "primary wins")
-	assert.Equal(t, "Turdus", g.Genus, "secondary fills gap")
-	assert.Equal(t, "Turdidae", g.Family, "secondary fills gap")
+	assert.Equal(t, "Common Blackbird", g.CommonName, "primary (OpenFauna) common name wins")
+	assert.Equal(t, "Turdus", g.Genus, "primary taxonomy retained")
+	assert.Equal(t, "Turdidae", g.Family, "primary taxonomy retained")
+	assert.Equal(t, "Wikipedia prose.", g.Description, "secondary fills the description gap")
+	assert.Equal(t, "CC BY-SA 4.0", g.License, "Wikipedia attribution carried with the prose")
+	assert.Equal(t, "https://en.wikipedia.org/wiki/Turdus_merula", g.SourceURL,
+		"Wikipedia source URL carried with the prose")
 }
 
 func TestGuideCache_SecondaryNotFoundDoesNotMarkPartial(t *testing.T) {
@@ -422,13 +444,14 @@ func TestGuideCache_SecondaryNotFoundDoesNotMarkPartial(t *testing.T) {
 	store := newFakeStore()
 	c := NewGuideCache(store, noopMetrics{})
 	c.SetFallbackPolicy(conf.SpeciesGuideFallbackAll)
-	c.RegisterProvider(WikipediaProviderName, &fakeProvider{
-		name:   WikipediaProviderName,
-		result: &SpeciesGuide{CommonName: "Blackbird", Description: "Complete Wikipedia prose."},
+	// OpenFauna (primary) resolves the species offline.
+	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{CommonName: "Common Blackbird", Genus: "Turdus", Family: "Turdidae"},
 	})
-	// eBird enrichment definitively has no entry for this species.
-	c.RegisterProvider(EBirdProviderName, &fakeProvider{
-		name: EBirdProviderName,
+	// Wikipedia (the secondary description provider) has no article for this species.
+	c.RegisterProvider(WikipediaProviderName, &fakeProvider{
+		name: WikipediaProviderName,
 		err:  ErrGuideNotFound,
 	})
 	t.Cleanup(c.Close)
@@ -444,13 +467,15 @@ func TestGuideCache_TransientSecondaryMarksPartial(t *testing.T) {
 	store := newFakeStore()
 	c := NewGuideCache(store, noopMetrics{})
 	c.SetFallbackPolicy(conf.SpeciesGuideFallbackAll)
-	c.RegisterProvider(WikipediaProviderName, &fakeProvider{
-		name:   WikipediaProviderName,
-		result: &SpeciesGuide{CommonName: "Blackbird", Description: "Complete Wikipedia prose."},
+	// OpenFauna (primary) resolves the species offline.
+	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{CommonName: "Common Blackbird", Genus: "Turdus", Family: "Turdidae"},
 	})
-	// eBird enrichment fails for a transient reason: the merged guide is partial.
-	c.RegisterProvider(EBirdProviderName, &fakeProvider{
-		name: EBirdProviderName,
+	// Wikipedia (the secondary description provider) fails for a transient reason:
+	// the merged guide is marked partial.
+	c.RegisterProvider(WikipediaProviderName, &fakeProvider{
+		name: WikipediaProviderName,
 		err:  NewTransientError(stubError("boom")),
 	})
 	t.Cleanup(c.Close)
@@ -458,6 +483,68 @@ func TestGuideCache_TransientSecondaryMarksPartial(t *testing.T) {
 	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
 	assert.True(t, g.Partial, "a transient secondary failure must mark the guide partial")
+}
+
+func TestGuideCache_HasProvider(t *testing.T) {
+	t.Parallel()
+	c := NewGuideCache(newFakeStore(), noopMetrics{})
+	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{name: OpenFaunaProviderName})
+
+	assert.True(t, c.HasProvider(OpenFaunaProviderName))
+	assert.False(t, c.HasProvider(WikipediaProviderName), "unregistered provider reports absent")
+	assert.False(t, (*GuideCache)(nil).HasProvider(OpenFaunaProviderName), "nil cache is safe")
+}
+
+func TestGuideCache_InvalidateAll(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	c := NewGuideCache(store, noopMetrics{})
+	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{CommonName: "Blackbird", Genus: "Turdus"},
+	})
+	t.Cleanup(c.Close)
+
+	// A fetch populates both the DB and memory tiers.
+	_, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	require.Positive(t, store.count(), "fetch should persist an entry")
+
+	require.NoError(t, c.InvalidateAll(t.Context()))
+
+	assert.Zero(t, store.count(), "DB tier cleared")
+	memEntries := 0
+	c.memory.Range(func(_, _ any) bool { memEntries++; return true })
+	assert.Zero(t, memEntries, "memory tier cleared")
+	assert.Zero(t, c.memCount.Load(), "memory count reset")
+}
+
+// TestGuideCache_InvalidateAll_DBFailureKeepsMemory verifies the persistent tier is
+// cleared first: when DeleteAll fails, the memory tier is left intact so the two
+// tiers stay consistent (both populated) instead of leaving memory empty while stale
+// rows survive in the DB to reload on the next restart.
+func TestGuideCache_InvalidateAll_DBFailureKeepsMemory(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	store.deleteAllErr = errors.NewStd("db unavailable")
+	c := NewGuideCache(store, noopMetrics{})
+	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{CommonName: "Blackbird", Genus: "Turdus"},
+	})
+	t.Cleanup(c.Close)
+
+	_, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	require.Positive(t, store.count(), "fetch should persist an entry")
+
+	err = c.InvalidateAll(t.Context())
+	require.Error(t, err, "DB failure surfaces to the caller")
+
+	memEntries := 0
+	c.memory.Range(func(_, _ any) bool { memEntries++; return true })
+	assert.Positive(t, memEntries, "memory tier preserved when DB delete fails")
+	assert.Positive(t, c.memCount.Load(), "memory count unchanged when DB delete fails")
 }
 
 func TestIsCacheEntryStale(t *testing.T) {
@@ -486,15 +573,36 @@ func TestIsCacheEntryStale(t *testing.T) {
 
 func TestMergeGuides(t *testing.T) {
 	t.Parallel()
-	primary := &SpeciesGuide{CommonName: "Primary", Description: ""}
-	secondary := &SpeciesGuide{CommonName: "Secondary", Description: "filled", Genus: "Turdus"}
+
+	// OpenFauna-like primary (taxonomy, no prose/source) + Wikipedia-like secondary
+	// (prose with CC BY-SA attribution). The merge keeps the primary's taxonomy and
+	// common name, fills the description, and carries the description's source URL and
+	// license from the secondary so the prose stays correctly attributed.
+	primary := &SpeciesGuide{CommonName: "Primary", Genus: "Turdus", Family: "Turdidae"}
+	secondary := &SpeciesGuide{
+		CommonName:  "Secondary",
+		Description: "filled",
+		SourceURL:   "https://de.wikipedia.org/wiki/Turdus_merula",
+		License:     "CC BY-SA 4.0",
+		LicenseURL:  "https://creativecommons.org/licenses/by-sa/4.0/",
+	}
 	merged := mergeGuides(primary, secondary)
 	assert.Equal(t, "Primary", merged.CommonName, "primary common name wins")
+	assert.Equal(t, "Turdus", merged.Genus, "primary taxonomy retained")
 	assert.Equal(t, "filled", merged.Description, "empty primary field filled by secondary")
-	assert.Equal(t, "Turdus", merged.Genus)
+	assert.Equal(t, secondary.SourceURL, merged.SourceURL, "prose source URL carried from secondary")
+	assert.Equal(t, secondary.License, merged.License, "prose license carried from secondary")
+	assert.Equal(t, secondary.LicenseURL, merged.LicenseURL, "prose license URL carried from secondary")
+
+	// A primary that already has source/license keeps its own (not overwritten).
+	primaryWithSource := &SpeciesGuide{SourceURL: "https://primary.example", License: "primary-license"}
+	keep := mergeGuides(primaryWithSource, secondary)
+	assert.Equal(t, "https://primary.example", keep.SourceURL, "primary source URL is not overwritten")
+	assert.Equal(t, "primary-license", keep.License, "primary license is not overwritten")
 
 	assert.Equal(t, secondary, mergeGuides(nil, secondary))
-	assert.Equal(t, primary, mergeGuides(primary, nil))
+	freshPrimary := &SpeciesGuide{CommonName: "P"}
+	assert.Equal(t, freshPrimary, mergeGuides(freshPrimary, nil))
 }
 
 func TestTruncateDescription(t *testing.T) {
@@ -512,7 +620,7 @@ func TestTrimToUTF8Boundary(t *testing.T) {
 	// "héllo" — 'é' is two bytes (0xC3 0xA9). Cutting at byte 2 must back off
 	// to a rune boundary so no partial rune is produced.
 	s := "héllo"
-	got := trimToUTF8Boundary(s, 2)
+	got := TrimToUTF8Boundary(s, 2)
 	assert.True(t, utf8ValidString(got))
 	assert.Equal(t, "h", got)
 }

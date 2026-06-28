@@ -1720,6 +1720,8 @@
         "versus": "vs {species}",
         "selectPrompt": "Selecione uma espécie para comparar com {species}.",
         "noGuideAvailable": "Nenhum guia disponível",
+        "linksOnly": "Apenas ligações",
+        "exploreResources": "Sem detalhes de comparação. Explorar recursos:",
         "cardLoading": "A carregar comparação…",
         "cardNoGuide": "Nenhum guia disponível para esta espécie.",
         "cardError": "Não foi possível carregar esta espécie. Tente outra.",
@@ -4223,22 +4225,9 @@
           "label": "Enable species guide",
           "helpText": "Show contextual guide information on detection details and the species modal."
         },
-        "provider": {
-          "label": "Provider",
-          "helpText": "Wikipedia provides descriptions; auto also enriches taxonomy from eBird when an API key is configured.",
-          "options": {
-            "wikipedia": "Wikipedia",
-            "ebird": "eBird",
-            "auto": "Wikipedia + eBird"
-          }
-        },
-        "fallbackPolicy": {
-          "label": "Fallback policy",
-          "helpText": "All merges every available provider; none uses only the primary provider.",
-          "options": {
-            "all": "All providers",
-            "none": "Primary only"
-          }
+        "enableWikipedia": {
+          "label": "Wikipedia descriptions",
+          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
         },
         "warmTopN": {
           "label": "Warm top species",

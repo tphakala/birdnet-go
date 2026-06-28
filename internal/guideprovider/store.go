@@ -229,6 +229,20 @@ func (s *GORMGuideStore) Delete(ctx context.Context, scientificName, locale, pro
 	return nil
 }
 
+// DeleteAll removes every cached entry. GORM refuses a global delete without a
+// WHERE clause unless AllowGlobalUpdate is set, so the session enables it. Used to
+// invalidate the whole cache when the registered provider set changes.
+func (s *GORMGuideStore) DeleteAll(ctx context.Context) error {
+	err := s.db.WithContext(ctx).
+		Session(&gorm.Session{AllowGlobalUpdate: true}).
+		Delete(&GuideCacheEntry{}).Error
+	if err != nil {
+		s.recordDBError("write", "delete_all")
+		return s.wrapDBError(err, "delete_all")
+	}
+	return nil
+}
+
 // Cleanup removes expired entries. Negative (not-found) entries age out on a
 // much shorter schedule (NegativeDBRetention) than positive entries
 // (DBRetention) so requests for never-present species cannot accumulate

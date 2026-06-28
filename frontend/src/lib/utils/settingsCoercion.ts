@@ -785,18 +785,11 @@ function coerceSpeciesGuideSettings(value: unknown): UnknownSettings {
     value != null && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
-  // Constrain to the values the backend accepts (see internal/conf/consts.go)
-  // so an invalid persisted value falls back to a safe default instead of
-  // leaking into UI/API flows.
-  const provider = coerceString(sg.provider, 'wikipedia');
-  const fallbackPolicy = coerceString(sg.fallbackPolicy, 'all');
+  // Taxonomy/common names/links come from the offline OpenFauna dataset; the only
+  // toggle is enableWikipedia (online descriptions), which defaults to off.
   return {
     enabled: coerceBoolean(sg.enabled, false),
-    provider:
-      provider === 'wikipedia' || provider === 'ebird' || provider === 'auto'
-        ? provider
-        : 'wikipedia',
-    fallbackPolicy: fallbackPolicy === 'all' || fallbackPolicy === 'none' ? fallbackPolicy : 'all',
+    enableWikipedia: coerceBoolean(sg.enableWikipedia, false),
     warmTopN: coerceNumber(sg.warmTopN, 0, 1000, 50), // max mirrors backend SpeciesGuideMaxWarmTopN
     preFetchEnabled: coerceBoolean(sg.preFetchEnabled, true),
     showNotes: coerceBoolean(sg.showNotes, true),

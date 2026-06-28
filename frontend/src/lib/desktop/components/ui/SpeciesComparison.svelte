@@ -13,7 +13,7 @@
     CloudRain,
     SunDim,
   } from '@lucide/svelte';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import { getSeasonHighlight, type SeasonIcon } from '$lib/utils/seasonHighlight';
@@ -111,10 +111,11 @@
     unavailable = false;
     noGuide = false;
     const enc = encodeURIComponent(scientificName);
+    const loc = encodeURIComponent(getLocale());
     try {
       const [g, s] = await Promise.all([
-        api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide`),
-        api.get<SimilarSpeciesResponse>(`/api/v2/species/${enc}/similar`).catch(
+        api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide?locale=${loc}`),
+        api.get<SimilarSpeciesResponse>(`/api/v2/species/${enc}/similar?locale=${loc}`).catch(
           (): SimilarSpeciesResponse => ({
             scientific_name: scientificName,
             genus: '',

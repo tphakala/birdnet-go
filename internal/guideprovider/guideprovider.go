@@ -24,7 +24,7 @@ import (
 // values so callers can register providers without importing both packages.
 const (
 	WikipediaProviderName = conf.SpeciesGuideProviderWikipedia
-	EBirdProviderName     = conf.SpeciesGuideProviderEBird
+	OpenFaunaProviderName = conf.SpeciesGuideProviderOpenFauna
 )
 
 // Cache freshness and retention policy.
@@ -159,6 +159,11 @@ type GuideStore interface {
 	// entries could otherwise materialize a very large slice at boot).
 	GetRecent(ctx context.Context, limit int) ([]GuideCacheEntry, error)
 	Delete(ctx context.Context, scientificName, locale, provider string) error
+	// DeleteAll removes every cached entry. It is used to invalidate the whole
+	// cache when the registered provider set changes (e.g. the user toggles
+	// Wikipedia descriptions), so guides produced under the old set are re-fetched
+	// rather than served stale until their TTL expires.
+	DeleteAll(ctx context.Context) error
 }
 
 // GuideCacheMetrics is the metrics sink, implemented by observability/metrics.
@@ -324,9 +329,9 @@ func (c *GuideCache) Close() {
 		c.lifecycleMu.Unlock()
 		c.cancel()
 		c.wg.Wait()
-		// Release per-provider resources (e.g. the eBird client's rate-limiter
-		// ticker). Without this a hot-reload that rebuilds the cache would leak
-		// the previous providers' resources. Done after wg.Wait, and under the
+		// Release per-provider resources for any provider implementing an optional
+		// Close. Without this a hot-reload that rebuilds the cache would leak the
+		// previous providers' resources. Done after wg.Wait, and under the
 		// providers write lock so an untracked singleflight Tier-3 fetch (which
 		// holds the read lock around provider.Fetch) cannot still be using a
 		// provider when its resources are released.
@@ -346,6 +351,53 @@ func (c *GuideCache) resolveProviderName() string {
 		return WikipediaProviderName
 	}
 	return c.providers[0].name
+}
+
+// HasProvider reports whether a provider with the given registration name is
+// registered. The provider set is established during setup (RegisterProvider)
+// before Start and is not mutated afterwards, so this reads without a lock,
+// mirroring resolveProviderName.
+func (c *GuideCache) HasProvider(name string) bool {
+	if c == nil {
+		return false
+	}
+	for i := range c.providers {
+		if c.providers[i].name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// InvalidateAll clears every cached guide from both the memory and DB tiers. It is
+// used on reconfiguration when the registered provider set changes, so guides
+// produced under the previous providers are re-fetched under the new set instead of
+// being served stale until their TTL expires. Background warming (when configured)
+// re-populates the hottest species immediately afterward.
+func (c *GuideCache) InvalidateAll(ctx context.Context) error {
+	if c == nil {
+		return nil
+	}
+	// Clear the persistent tier first. If it fails we leave the memory tier intact
+	// and return the error, so the two tiers stay consistent (both populated) rather
+	// than ending up memory-empty while stale rows survive in the DB to reload on the
+	// next restart. The caller logs the failure; the stale content then simply ages
+	// out on its normal TTL, the same outcome as if invalidation had not run.
+	if c.store != nil {
+		if err := c.store.DeleteAll(ctx); err != nil {
+			return err
+		}
+	}
+	// Persistent tier is clear (or absent): drop the memory tier, keeping memCount
+	// accurate by decrementing per removal.
+	c.memory.Range(func(k, _ any) bool {
+		if _, loaded := c.memory.LoadAndDelete(k); loaded {
+			c.memCount.Add(-1)
+		}
+		return true
+	})
+	c.updateCachePopulationRatio()
+	return nil
 }
 
 // loadFromDB populates the memory tier from all persisted entries.
@@ -507,6 +559,12 @@ func (c *GuideCache) fetchFromProviders(ctx context.Context, name, locale string
 		switch {
 		case err == nil && g != nil:
 			c.metrics.RecordFetch(rp.name, outcomeSuccess, elapsed)
+			// SourceProvider is the cache's canonical/primary provider (it also keys
+			// the DB row), not necessarily the origin of every field. Licensing
+			// attribution for the description rides on SourceURL/License/LicenseURL,
+			// which mergeGuides carries from whichever provider supplied the prose
+			// (e.g. Wikipedia under an OpenFauna-primary setup) — so the displayed
+			// source link and license stay correct even when this label is the primary.
 			g.SourceProvider = c.resolveProviderName()
 			g.ScientificName = name
 			g.CachedAt = time.Now()
@@ -825,8 +883,14 @@ func entryQuality(g *SpeciesGuide) string {
 	}
 }
 
-// mergeGuides merges secondary into primary: primary wins on conflicts,
-// secondary fills empty fields (e.g. eBird taxonomy on top of Wikipedia prose).
+// mergeGuides merges secondary into primary: primary wins on conflicts, secondary
+// fills empty fields. With OpenFauna primary and Wikipedia secondary, OpenFauna's
+// taxonomy and localized common name win, while Wikipedia fills the description.
+//
+// The source URL and license travel with the description: when the primary lacks
+// them (OpenFauna sets no source/license), they are taken from the secondary so the
+// Wikipedia prose keeps its CC BY-SA attribution (URL + license) in the merged and
+// persisted guide.
 func mergeGuides(primary, secondary *SpeciesGuide) *SpeciesGuide {
 	if primary == nil {
 		return secondary
@@ -846,6 +910,16 @@ func mergeGuides(primary, secondary *SpeciesGuide) *SpeciesGuide {
 	if primary.Family == "" {
 		primary.Family = secondary.Family
 	}
+	// Attribution for the prose: fill from the secondary when the primary has none.
+	if primary.SourceURL == "" {
+		primary.SourceURL = secondary.SourceURL
+	}
+	if primary.License == "" {
+		primary.License = secondary.License
+	}
+	if primary.LicenseURL == "" {
+		primary.LicenseURL = secondary.LicenseURL
+	}
 	if len(primary.SimilarSpecies) == 0 {
 		primary.SimilarSpecies = secondary.SimilarSpecies
 	}
@@ -858,12 +932,12 @@ func truncateDescription(s string) string {
 	if len(s) <= maxDescriptionLength {
 		return s
 	}
-	return trimToUTF8Boundary(s, maxDescriptionLength)
+	return TrimToUTF8Boundary(s, maxDescriptionLength)
 }
 
-// trimToUTF8Boundary returns s[:n] backed off to the nearest valid UTF-8 rune
+// TrimToUTF8Boundary returns s[:n] backed off to the nearest valid UTF-8 rune
 // boundary so no partial rune remains.
-func trimToUTF8Boundary(s string, n int) string {
+func TrimToUTF8Boundary(s string, n int) string {
 	if n >= len(s) {
 		return s
 	}

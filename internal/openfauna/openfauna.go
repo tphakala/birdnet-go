@@ -22,6 +22,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/csvutil"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -574,10 +576,56 @@ func lookupCommonNamesEffective(scientificNames []string, eff string) map[string
 	return out
 }
 
-// LookupMeta returns taxonomy/link metadata for one scientific name by scanning
-// the embedded dataset. Same performance caveat as Lookup.
+// metaCacheMaxEntries bounds the LookupMeta memo. The embedded metadata covers
+// ~15k species; the cap sits above that so every real species can be memoized
+// while a flood of distinct never-present names cannot grow the memo without limit.
+const metaCacheMaxEntries = 20000
+
+// metaCacheEntry is a memoized LookupMeta result. found distinguishes a cached
+// "present" entry from a cached "absent" one so negative lookups are memoized too.
+type metaCacheEntry struct {
+	meta  Meta
+	found bool
+}
+
+var (
+	// metaCache memoizes LookupMeta. The embedded dataset is immutable, so a result
+	// (present or absent) for a scientific name never changes; caching it avoids the
+	// O(dataset) metadata scan on repeat lookups (e.g. the per-request external links
+	// built for a guide, and the guide provider's enrichment fetches).
+	metaCache      sync.Map     // normalized scientific name -> metaCacheEntry
+	metaCacheCount atomic.Int64 // approximate entry count guarding the soft cap
+)
+
+// storeMetaCache records a LookupMeta result under the soft cap. A new key is only
+// added while under metaCacheMaxEntries: a slot is reserved up front and rolled back
+// on overflow or when a concurrent writer created the key first, so the memo stays
+// bounded and accurate under concurrent distinct-key lookups. Mirrors the bounded
+// in-memory pattern used by the guide cache.
+func storeMetaCache(key string, e *metaCacheEntry) {
+	if _, loaded := metaCache.Load(key); loaded {
+		return
+	}
+	if metaCacheCount.Add(1) > metaCacheMaxEntries {
+		metaCacheCount.Add(-1)
+		return
+	}
+	if _, loaded := metaCache.LoadOrStore(key, *e); loaded {
+		metaCacheCount.Add(-1)
+	}
+}
+
+// LookupMeta returns taxonomy/link metadata for one scientific name. The first
+// lookup for a name scans the embedded dataset; the immutable result is then
+// memoized so repeat lookups are O(1). The dataset-scan cost (see Lookup) is paid
+// only on the first, uncached lookup of each name.
 func LookupMeta(scientific string) (Meta, bool) {
 	target := normalizeName(scientific)
+	if v, ok := metaCache.Load(target); ok {
+		if e, ok := v.(metaCacheEntry); ok {
+			return e.meta, e.found
+		}
+	}
 	var found Meta
 	var ok bool
 	if err := streamMetadata(func(sci string, m Meta) error {
@@ -591,8 +639,10 @@ func LookupMeta(scientific string) (Meta, bool) {
 			logger.String("scientific", target),
 			logger.Error(err),
 		)
+		// Do not memoize on a scan error so a transient failure isn't cached.
 		return Meta{}, false
 	}
+	storeMetaCache(target, &metaCacheEntry{meta: found, found: ok})
 	GetLogger().Debug("openfauna single-species metadata lookup (index-miss fallback)",
 		logger.String("scientific", target),
 		logger.Bool("found", ok),

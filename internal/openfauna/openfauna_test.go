@@ -131,6 +131,24 @@ func TestLookupMeta_SingleSpecies_Embedded(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestLookupMeta_MemoizedResultsAreConsistent(t *testing.T) {
+	t.Parallel()
+
+	// The embedded dataset is immutable, so a present name must return identical
+	// metadata on the first (uncached) and second (memoized) lookup, and an absent
+	// name must stay absent. This exercises the LookupMeta memo cache path.
+	first, ok1 := LookupMeta("Turdus merula")
+	second, ok2 := LookupMeta("turdus merula") // different casing → same normalized key
+	require.True(t, ok1)
+	require.True(t, ok2)
+	assert.Equal(t, first, second, "memoized metadata must match the first lookup")
+
+	_, missA := LookupMeta("Notarealbird memoized")
+	_, missB := LookupMeta("Notarealbird memoized")
+	assert.False(t, missA)
+	assert.False(t, missB, "an absent name stays absent on the memoized lookup")
+}
+
 func TestLocales_Embedded(t *testing.T) {
 	t.Parallel()
 

@@ -3,11 +3,8 @@
 package analysis
 
 import (
-	"time"
-
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -15,8 +12,9 @@ import (
 
 // initGuideCacheIfNeeded builds and starts the species guide cache when the
 // feature is enabled, returning nil when disabled or when the datastore cannot
-// provide a GORM handle. It registers the Wikipedia provider always and the
-// eBird provider only when the configuration opts in and an API key is present.
+// provide a GORM handle. OpenFauna is always registered as the primary, offline
+// provider (taxonomy, common names, links); Wikipedia is registered as the
+// secondary description provider only when the user opts in via EnableWikipedia.
 func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpMetrics *metrics.GuideProviderMetrics) *guideprovider.GuideCache {
 	cfg := settings.Realtime.Dashboard.SpeciesGuide
 	if !cfg.Enabled {
@@ -41,40 +39,28 @@ func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpM
 	}
 
 	cache := guideprovider.NewGuideCache(store, gpMetrics)
-	cache.SetFallbackPolicy(cfg.FallbackPolicy)
 	cache.SetWarmTopN(cfg.WarmTopN)
 
-	// Wikipedia is always available (no credentials required).
-	cache.RegisterProvider(guideprovider.WikipediaProviderName,
-		guideprovider.NewWikipediaGuideProviderWithMetrics(gpMetrics))
+	// OpenFauna is the primary provider: registered first (so it is the merge base
+	// and DB cache key), it supplies offline taxonomy, localized common names, and
+	// external links with no credentials or network. It is always present when the
+	// guide is enabled.
+	cache.RegisterProvider(guideprovider.OpenFaunaProviderName,
+		guideprovider.NewOpenFaunaGuideProviderWithMetrics(gpMetrics))
 
-	// eBird enrichment is registered only when the user opted into it (provider
-	// "auto" or "ebird") and an API key is configured. Failure to build it is
-	// logged and skipped — it must never fail guide startup.
-	if cfg.Provider != conf.SpeciesGuideProviderWikipedia &&
-		settings.Realtime.EBird.Enabled && settings.Realtime.EBird.APIKey != "" {
-		ebirdClient, eErr := ebird.NewClient(ebird.Config{
-			APIKey:   settings.Realtime.EBird.APIKey,
-			CacheTTL: time.Duration(settings.Realtime.EBird.CacheTTL) * time.Hour,
-		})
-		switch {
-		case eErr != nil:
-			log.Warn("eBird client init failed; skipping eBird guide provider", logger.Error(eErr))
-		default:
-			ebirdProvider, pErr := guideprovider.NewEBirdGuideProviderWithMetrics(ebirdClient, gpMetrics)
-			if pErr != nil {
-				log.Warn("eBird guide provider init failed; skipping", logger.Error(pErr))
-				ebirdClient.Close()
-			} else {
-				cache.RegisterProvider(guideprovider.EBirdProviderName, ebirdProvider)
-			}
-		}
+	// Wikipedia is the optional secondary provider, supplying only the online prose
+	// description (the one thing OpenFauna cannot). It is registered solely when the
+	// user opts in (EnableWikipedia); otherwise the guide stays fully offline. The
+	// cache's default merge policy ("all") consults every registered provider, so a
+	// registered Wikipedia fills the description gap left by OpenFauna.
+	if cfg.EnableWikipedia {
+		cache.RegisterProvider(guideprovider.WikipediaProviderName,
+			guideprovider.NewWikipediaGuideProviderWithMetrics(gpMetrics))
 	}
 
 	cache.Start()
 	log.Info("Species guide cache initialized",
-		logger.String("provider", cfg.Provider),
-		logger.String("fallback_policy", cfg.FallbackPolicy))
+		logger.Bool("wikipedia_descriptions", cfg.EnableWikipedia))
 	return cache
 }
 

@@ -129,11 +129,12 @@ func (b *SettingsBuilder) WithImageProvider(provider, fallbackPolicy string) *Se
 	return b
 }
 
-// WithSpeciesGuideProvider configures species guide provider settings and enables the feature.
-func (b *SettingsBuilder) WithSpeciesGuideProvider(provider, fallbackPolicy string) *SettingsBuilder {
+// WithSpeciesGuide enables the species guide and sets whether online Wikipedia
+// descriptions are enabled (taxonomy/common names/links always come from the
+// offline OpenFauna dataset).
+func (b *SettingsBuilder) WithSpeciesGuide(enableWikipedia bool) *SettingsBuilder {
 	b.settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
-	b.settings.Realtime.Dashboard.SpeciesGuide.Provider = provider
-	b.settings.Realtime.Dashboard.SpeciesGuide.FallbackPolicy = fallbackPolicy
+	b.settings.Realtime.Dashboard.SpeciesGuide.EnableWikipedia = enableWikipedia
 	return b
 }
 

@@ -97,8 +97,7 @@ describe('CurrentlyHearingCard guide click affordance', () => {
         ...dashboard,
         speciesGuide: {
           enabled: true,
-          provider: 'wikipedia',
-          fallbackPolicy: 'all',
+          enableWikipedia: false,
           showNotes: true,
           showEnrichments: true,
           showSimilarSpecies: true,

@@ -2,49 +2,31 @@
 package conf
 
 import (
-	"slices"
 	"time"
 )
 
-// Species guide provider and fallback-policy identifiers.
+// Species guide provider identifiers and internal merge-policy values.
 //
 // These live in the conf package (not guideprovider) to avoid an import cycle:
 // guideprovider imports conf for these constants, so conf cannot import guideprovider.
+// They are provider/merge identities used internally by the guide cache, not
+// user-selectable settings (the only user-facing toggle is EnableWikipedia).
 const (
+	// SpeciesGuideProviderWikipedia identifies the Wikipedia description provider.
 	SpeciesGuideProviderWikipedia = "wikipedia"
-	SpeciesGuideProviderEBird     = "ebird"
-	SpeciesGuideProviderAuto      = "auto"
-	SpeciesGuideFallbackAll       = "all"
-	SpeciesGuideFallbackNone      = "none"
+	// SpeciesGuideProviderOpenFauna identifies the offline OpenFauna provider that
+	// supplies taxonomy, localized common names, and external links.
+	SpeciesGuideProviderOpenFauna = "openfauna"
+	// SpeciesGuideFallbackAll / None are the guide cache's internal provider-merge
+	// policy values (merge all registered providers vs. use only the primary).
+	SpeciesGuideFallbackAll  = "all"
+	SpeciesGuideFallbackNone = "none"
 
 	// SpeciesGuideMaxWarmTopN caps the configured startup-warm target. It bounds
 	// the slice preallocation in the warm path so an out-of-range hand-edited
 	// config value cannot force a huge allocation.
 	SpeciesGuideMaxWarmTopN = 1000
 )
-
-// speciesGuideValidProviders is the canonical list of accepted provider values.
-var speciesGuideValidProviders = []string{
-	SpeciesGuideProviderWikipedia,
-	SpeciesGuideProviderEBird,
-	SpeciesGuideProviderAuto,
-}
-
-// speciesGuideValidFallbackPolicies is the canonical list of accepted fallback policies.
-var speciesGuideValidFallbackPolicies = []string{
-	SpeciesGuideFallbackAll,
-	SpeciesGuideFallbackNone,
-}
-
-// GetSpeciesGuideValidProviders returns a defensive copy of the valid provider values.
-func GetSpeciesGuideValidProviders() []string {
-	return slices.Clone(speciesGuideValidProviders)
-}
-
-// GetSpeciesGuideValidFallbackPolicies returns a defensive copy of the valid fallback policies.
-func GetSpeciesGuideValidFallbackPolicies() []string {
-	return slices.Clone(speciesGuideValidFallbackPolicies)
-}
 
 const (
 	// Model IDs identify the inference backends available for detection.

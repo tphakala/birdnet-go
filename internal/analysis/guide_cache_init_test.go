@@ -72,7 +72,6 @@ func TestInitGuideCacheIfNeeded_NoGormProviderReturnsNil(t *testing.T) {
 	t.Parallel()
 	settings := &conf.Settings{}
 	settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
-	settings.Realtime.Dashboard.SpeciesGuide.Provider = conf.SpeciesGuideProviderWikipedia
 
 	cache := initGuideCacheIfNeeded(settings, &noGormDatastore{}, nil)
 	assert.Nil(t, cache, "no GORM handle means the guide cache cannot be built")
@@ -82,7 +81,6 @@ func TestInitGuideCacheIfNeeded_NilGormDBReturnsNil(t *testing.T) {
 	t.Parallel()
 	settings := &conf.Settings{}
 	settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
-	settings.Realtime.Dashboard.SpeciesGuide.Provider = conf.SpeciesGuideProviderWikipedia
 
 	cache := initGuideCacheIfNeeded(settings, nilGormDatastore{}, nil)
 	assert.Nil(t, cache, "a nil GORM handle means the guide cache cannot be built")
@@ -92,10 +90,10 @@ func TestInitGuideCacheIfNeeded_EnabledBuildsCache(t *testing.T) {
 	t.Parallel()
 	settings := &conf.Settings{}
 	settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
-	settings.Realtime.Dashboard.SpeciesGuide.Provider = conf.SpeciesGuideProviderWikipedia
-	settings.Realtime.Dashboard.SpeciesGuide.FallbackPolicy = conf.SpeciesGuideFallbackAll
-	// eBird is explicitly disabled so the build stays offline and deterministic.
-	settings.Realtime.EBird.Enabled = false
+	// Opt into Wikipedia so both providers (OpenFauna primary + Wikipedia secondary)
+	// are registered. Neither needs credentials and registration makes no network
+	// call, so the build stays offline and deterministic.
+	settings.Realtime.Dashboard.SpeciesGuide.EnableWikipedia = true
 
 	ds := &realGormDatastore{db: newMemoryDB(t)}
 

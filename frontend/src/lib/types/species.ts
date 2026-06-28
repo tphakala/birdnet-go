@@ -106,12 +106,17 @@ export interface SimilarSpeciesEntry {
   common_name: string;
   relationship: 'same_genus' | 'same_family' | 'similar';
   /**
-   * Whether the backend could resolve a guide for this candidate. The
-   * comparison panel only enables selection for entries with a guide; others
-   * are shown disabled with a reason rather than 404-ing on click.
+   * Whether the candidate has comparison prose. Entries with a guide render the
+   * comparison sections; entries without render `external_links` instead, so every
+   * selection is useful. Drives a subtle "links only" hint in the picker rail.
    */
   has_guide: boolean;
   guide_summary?: string;
+  /**
+   * Resource links shown for description-less entries (populated by the backend
+   * only when enrichments are enabled). Localized to the request locale.
+   */
+  external_links?: ExternalLink[];
 }
 export interface SimilarSpeciesResponse {
   scientific_name: string;

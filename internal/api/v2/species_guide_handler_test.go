@@ -31,6 +31,8 @@ import (
 const (
 	commonBlackbird     = "Common Blackbird"
 	paramScientificName = "scientific_name"
+	sciCarrionCrow      = "Corvus corone"
+	commonCarrionCrow   = "Carrion Crow"
 )
 
 // --- guide cache test doubles (the exported guideprovider interfaces) ---
@@ -59,6 +61,7 @@ func (emptyGuideStore) GetRecent(_ context.Context, _ int) ([]guideprovider.Guid
 	return nil, nil
 }
 func (emptyGuideStore) Delete(_ context.Context, _, _, _ string) error { return nil }
+func (emptyGuideStore) DeleteAll(_ context.Context) error              { return nil }
 
 // stubGuideProvider returns a fixed guide, or ErrGuideNotFound when result is nil.
 type stubGuideProvider struct {
@@ -199,6 +202,53 @@ func TestGetSpeciesGuide_EmptyNameReturns400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// A non-name-shaped scientific_name is rejected at the boundary with a 400 before it
+// can reach the providers (an outbound Wikipedia title) or the embedded-dataset memo,
+// rather than being passed through and 404-ing later.
+func TestGetSpeciesGuide_InvalidCharactersReturns400(t *testing.T) {
+	c := guideTestController(t, guideEnabledSettings())
+	// A cache wired here would only matter if the handler reached it; it must not.
+	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{Description: "should never be returned"}))
+	for _, name := range []string{
+		"Turdus merula; DROP TABLE",
+		"../../etc/passwd",
+		"<script>alert(1)</script>",
+		"Turdus_merula", // underscore is not a scientific-name character
+		strings.Repeat("a", scientificNameMaxLength+1),
+	} {
+		ctx, rec := guideCtx(t, name)
+		require.NoError(t, c.GetSpeciesGuide(ctx))
+		assert.Equalf(t, http.StatusBadRequest, rec.Code, "name %q should be rejected", name)
+	}
+}
+
+func TestIsPlausibleScientificName(t *testing.T) {
+	t.Parallel()
+	valid := []string{
+		sciEurasianBlackbird,          // "Turdus merula"
+		"Larus argentatus argentatus", // trinomial
+		"Phylloscopus collybita tristis",
+		"Saxicola torquatus",
+		"Anas platyrhynchos x Anas rubripes", // hybrid notation ("x" is a letter)
+		"Œnanthe œnanthe",                    // non-ASCII letters
+		"Power tools",                        // BirdNET non-species label
+	}
+	for _, s := range valid {
+		assert.Truef(t, isPlausibleScientificName(s), "%q should be accepted", s)
+	}
+	invalid := []string{
+		"Turdus_merula",
+		"Turdus/merula",
+		"Turdus merula 2",
+		"name\twith\ttabs",
+		"emoji 🦅",
+		"<b>",
+	}
+	for _, s := range invalid {
+		assert.Falsef(t, isPlausibleScientificName(s), "%q should be rejected", s)
+	}
+}
+
 // --- GetSimilarSpecies (gating branches; full resolution needs a TaxonomyDB) ---
 
 func TestGetSimilarSpecies_DisabledReturns404(t *testing.T) {
@@ -213,6 +263,69 @@ func TestGetSimilarSpecies_NoTaxonomyReturns503(t *testing.T) {
 	ctx, rec := guideCtx(t, sciEurasianBlackbird)
 	require.NoError(t, c.GetSimilarSpecies(ctx))
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+// A candidate whose guide resolves but carries no prose (an OpenFauna stub when
+// Wikipedia is disabled or the species was never warmed) must NOT be marked
+// has_guide, and (with enrichments on) must carry localized resource links so the
+// picker rail can offer links instead of an empty comparison card.
+func TestResolveSimilarSpecies_StubWithoutDescriptionGetsLocalizedLinks(t *testing.T) {
+	c := guideTestController(t, guideEnabledSettings())
+	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{
+		CommonName:  commonCarrionCrow,
+		Description: "",
+	}))
+	entries := c.resolveSimilarSpecies(
+		t.Context(),
+		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
+		"de", true, // locale=de, enrichments on
+	)
+	require.Len(t, entries, 1)
+	assert.False(t, entries[0].HasGuide, "stub guide with empty description must not be has_guide")
+	require.NotEmpty(t, entries[0].ExternalLinks, "description-less entry should carry resource links")
+	var foundLocalizedWiki bool
+	for _, l := range entries[0].ExternalLinks {
+		if l.Name == linkNameWikipedia {
+			assert.Contains(t, l.URL, "de.wikipedia.org", "Wikipedia link should localize to the locale")
+			foundLocalizedWiki = true
+		}
+	}
+	assert.True(t, foundLocalizedWiki, "expected a Wikipedia link in the fallback set")
+}
+
+// With enrichments off, a description-less entry carries no links (links are
+// enrichment data, consistent with the main guide modal).
+func TestResolveSimilarSpecies_StubWithEnrichmentsOffHasNoLinks(t *testing.T) {
+	c := guideTestController(t, guideEnabledSettings())
+	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{
+		CommonName:  commonCarrionCrow,
+		Description: "",
+	}))
+	entries := c.resolveSimilarSpecies(
+		t.Context(),
+		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
+		defaultWikiLang, false, // enrichments off
+	)
+	require.Len(t, entries, 1)
+	assert.False(t, entries[0].HasGuide)
+	assert.Empty(t, entries[0].ExternalLinks, "no links when enrichments are off")
+}
+
+func TestResolveSimilarSpecies_WithDescriptionIsMarkedHasGuideAndNoLinks(t *testing.T) {
+	c := guideTestController(t, guideEnabledSettings())
+	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{
+		CommonName:  commonCarrionCrow,
+		Description: "The carrion crow is a passerine bird of the family Corvidae.",
+	}))
+	entries := c.resolveSimilarSpecies(
+		t.Context(),
+		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
+		defaultWikiLang, true,
+	)
+	require.Len(t, entries, 1)
+	assert.True(t, entries[0].HasGuide, "guide with prose must be has_guide")
+	assert.Equal(t, commonCarrionCrow, entries[0].CommonName)
+	assert.Empty(t, entries[0].ExternalLinks, "described entry should not carry fallback links")
 }
 
 // --- Notes (no global-settings dependency, so these can run in parallel) ---

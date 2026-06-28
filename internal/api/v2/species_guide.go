@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
+	"unicode"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 // Guide quality classifications.
@@ -45,6 +46,24 @@ const (
 	relationshipSameGenus  = "same_genus"
 	relationshipSameFamily = "same_family"
 )
+
+// External-link source names (rendered as card labels by the frontend).
+const (
+	linkNameWikipedia   = "Wikipedia"
+	linkNameINaturalist = "iNaturalist"
+	linkNameEBird       = "eBird"
+	linkNameXenoCanto   = "Xeno-canto"
+)
+
+// defaultWikiLang is the Wikipedia language subdomain used when the UI locale has
+// no usable base-language subtag.
+const defaultWikiLang = "en"
+
+// scientificNameMaxLength bounds the accepted :scientific_name path parameter.
+// Real binomial/trinomial names (and BirdNET's non-species labels) are well under
+// this; the cap stops an arbitrarily long value from reaching the providers and the
+// embedded-dataset lookups. It is a byte cap (cheap, and names are ASCII Latin).
+const scientificNameMaxLength = 128
 
 const (
 	// guideRateLimitPerMinute bounds calls to the external-API-backed endpoints.
@@ -124,11 +143,15 @@ type SimilarSpeciesEntry struct {
 	ScientificName string `json:"scientific_name"`
 	CommonName     string `json:"common_name"`
 	Relationship   string `json:"relationship"`
-	// HasGuide reports whether a guide resolved for this candidate. The
-	// comparison panel uses it to enable selection only for species it can
-	// actually fetch a guide for, rather than letting a click 404.
+	// HasGuide reports whether the candidate resolved to a guide with comparison
+	// prose. The panel shows the comparison sections for these; for the rest it
+	// shows ExternalLinks instead, so every selection is useful.
 	HasGuide     bool   `json:"has_guide"`
 	GuideSummary string `json:"guide_summary,omitempty"`
+	// ExternalLinks is populated only for description-less entries (and only when
+	// enrichments are enabled): the resource links shown when there is no prose to
+	// compare. Entries with a description leave this nil and render sections.
+	ExternalLinks []GuideExternalLink `json:"external_links,omitempty"`
 }
 
 // SimilarSpeciesResponse is the response body for GET /species/:name/similar.
@@ -247,12 +270,58 @@ func parseScientificNameParam(ctx echo.Context) (string, error) {
 			Component("api-species-guide").
 			Build()
 	}
+	// Reject input that is not name-shaped before it reaches the providers and the
+	// embedded-dataset memo. This keeps an arbitrary, attacker-supplied value from
+	// being sent to Wikipedia's API as a page title and from accumulating one memoized
+	// dataset-scan result per distinct garbage value. A name outside the dataset and
+	// absent from Wikipedia would 404 regardless, so rejecting non-name input up front
+	// only changes the status for input that could never resolve to a guide.
+	if len(name) > scientificNameMaxLength {
+		return "", errors.Newf("scientific_name exceeds %d characters", scientificNameMaxLength).
+			Category(errors.CategoryValidation).
+			Component("api-species-guide").
+			Build()
+	}
+	if !isPlausibleScientificName(name) {
+		return "", errors.Newf("scientific_name contains invalid characters").
+			Category(errors.CategoryValidation).
+			Component("api-species-guide").
+			Build()
+	}
 	return name, nil
+}
+
+// isPlausibleScientificName reports whether s looks like a scientific name: only
+// letters (any script, to stay locale-safe), spaces, hyphens, apostrophes, and
+// periods. Every name in the embedded OpenFauna dataset (and BirdNET's binomial,
+// hyphenated, and "x"-hybrid labels) matches this set. It is a cheap input filter,
+// not a taxonomic check — it keeps obviously non-name input out of the providers and
+// the dataset memo without trying to enumerate valid binomials.
+func isPlausibleScientificName(s string) bool {
+	for _, r := range s {
+		switch {
+		case unicode.IsLetter(r):
+		case r == ' ' || r == '-' || r == '\'' || r == '.':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // handleScientificNameError maps a scientific-name parse error to a 400 response.
 func (c *Controller) handleScientificNameError(ctx echo.Context, err error) error {
 	return c.HandleError(ctx, err, "Invalid scientific name", http.StatusBadRequest)
+}
+
+// parseNoteIDParam returns the trimmed :id path param, or a validation error when absent.
+func parseNoteIDParam(ctx echo.Context) (string, error) {
+	id := strings.TrimSpace(ctx.Param("id"))
+	if id == "" {
+		return "", errors.Newf("note id is required").
+			Category(errors.CategoryValidation).Component("api-species-guide").Build()
+	}
+	return id, nil
 }
 
 // guideLocale resolves the request locale: query param, then dashboard locale, then "en".
@@ -348,7 +417,7 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 	// in particular) when the feature flag is off.
 	if cfg.IsShowEnrichments() {
 		data.CurrentSeason = computeCurrentSeason(settings.BirdNET.Latitude, time.Now())
-		data.ExternalLinks = buildExternalLinks(guide.ScientificName, c.ebirdSpeciesCode(guide.ScientificName))
+		data.ExternalLinks = buildExternalLinks(guide.ScientificName, c.ebirdSpeciesCode(guide.ScientificName), locale)
 		if exp := c.guideExpectedness(name); exp != "" {
 			data.Expectedness = exp
 		}
@@ -382,7 +451,10 @@ func (c *Controller) GetSimilarSpecies(ctx echo.Context) error {
 	locale := guideLocale(ctx, settings)
 	genus, candidates := c.similarSpeciesCandidates(name)
 
-	entries := c.resolveSimilarSpecies(ctx.Request().Context(), candidates, locale)
+	// Links are enrichment data: only attach them to description-less entries when
+	// enrichments are enabled, mirroring the main guide modal.
+	withLinks := settings.Realtime.Dashboard.SpeciesGuide.IsShowEnrichments()
+	entries := c.resolveSimilarSpecies(ctx.Request().Context(), candidates, locale, withLinks)
 
 	return ctx.JSON(http.StatusOK, SimilarSpeciesResponse{
 		ScientificName: name,
@@ -437,7 +509,7 @@ func (c *Controller) similarSpeciesCandidates(focal string) (genus string, candi
 
 // resolveSimilarSpecies fetches each candidate's guide in parallel and builds the
 // response entries, preserving candidate order.
-func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string) []SimilarSpeciesEntry {
+func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks bool) []SimilarSpeciesEntry {
 	// Bound the whole fan-out so a cold cache (live external fetches) cannot
 	// block the request indefinitely; unresolved candidates fall back to
 	// name-only below.
@@ -460,8 +532,16 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 					return nil //nolint:nilerr // best-effort enrichment; missing guide is fine
 				}
 				entry.CommonName = g.CommonName
-				entry.GuideSummary = summarizeDescription(g.Description)
-				entry.HasGuide = true
+				if strings.TrimSpace(g.Description) != "" {
+					entry.GuideSummary = summarizeDescription(g.Description)
+					entry.HasGuide = true
+				} else if withLinks {
+					// No prose to compare (e.g. an OpenFauna stub when Wikipedia is
+					// disabled or the species was never warmed). Surface external
+					// resource links instead so selecting the species is still useful.
+					entry.ExternalLinks = buildExternalLinks(
+						cand.scientificName, c.ebirdSpeciesCode(cand.scientificName), locale)
+				}
 				return nil
 			})
 			entries[idx] = entry
@@ -520,11 +600,9 @@ func (c *Controller) CreateSpeciesNote(ctx echo.Context) error {
 // UpdateSpeciesNote updates a note's entry (auth-gated).
 // PUT /api/v2/species/notes/:id
 func (c *Controller) UpdateSpeciesNote(ctx echo.Context) error {
-	id := strings.TrimSpace(ctx.Param("id"))
-	if id == "" {
-		return c.HandleError(ctx, errors.Newf("note id is required").
-			Category(errors.CategoryValidation).Component("api-species-guide").Build(),
-			"Missing note id", http.StatusBadRequest)
+	id, err := parseNoteIDParam(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, "Missing note id", http.StatusBadRequest)
 	}
 	if dsErr := c.requireDatastore(ctx); dsErr != nil {
 		return dsErr
@@ -547,11 +625,9 @@ func (c *Controller) UpdateSpeciesNote(ctx echo.Context) error {
 // DeleteSpeciesNote deletes a note (auth-gated).
 // DELETE /api/v2/species/notes/:id
 func (c *Controller) DeleteSpeciesNote(ctx echo.Context) error {
-	id := strings.TrimSpace(ctx.Param("id"))
-	if id == "" {
-		return c.HandleError(ctx, errors.Newf("note id is required").
-			Category(errors.CategoryValidation).Component("api-species-guide").Build(),
-			"Missing note id", http.StatusBadRequest)
+	id, err := parseNoteIDParam(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, "Missing note id", http.StatusBadRequest)
 	}
 	if dsErr := c.requireDatastore(ctx); dsErr != nil {
 		return dsErr
@@ -768,31 +844,111 @@ func (c *Controller) ebirdSpeciesCode(scientificName string) string {
 	return ""
 }
 
-// buildExternalLinks builds external resource links for a species. The eBird
-// link is only included when a real eBird species code is provided: eBird has
-// no public free-text search endpoint (a ?q= search redirects to a login page),
-// so species pages must be addressed by code as https://ebird.org/species/<code>.
-func buildExternalLinks(scientificName, ebirdCode string) []GuideExternalLink {
-	links := make([]GuideExternalLink, 0, 3)
+// buildExternalLinks builds external resource links for a species, resolved to the
+// user's UI language where the source supports it.
+//
+//   - Wikipedia points at the locale's language subdomain (e.g. de.wikipedia.org);
+//     species articles redirect from the scientific name across language wikis, so a
+//     scientific-name title is robust regardless of language.
+//   - iNaturalist comes from the embedded OpenFauna dataset (the taxon id cannot be
+//     derived); the taxon URL is language-neutral, so the UI language is passed via
+//     ?locale= for the page to render localized. Included only when OpenFauna has a
+//     taxon URL for the species.
+//   - eBird is a deliberate runtime special case (its data is not in OpenFauna for
+//     licensing reasons) and is included only when a real eBird species code is
+//     provided: eBird has no public free-text search endpoint (a ?q= search redirects
+//     to a login page), so species pages must be addressed by code as
+//     https://ebird.org/species/<code>.
+func buildExternalLinks(scientificName, ebirdCode, locale string) []GuideExternalLink {
+	links := make([]GuideExternalLink, 0, 4)
 	if scientificName == "" {
 		return links
 	}
+	lang := baseLanguage(locale)
+
 	wikiTitle := strings.ReplaceAll(scientificName, " ", "_")
 	links = append(links, GuideExternalLink{
-		Name: "Wikipedia",
-		URL:  "https://en.wikipedia.org/wiki/" + url.PathEscape(wikiTitle),
+		Name: linkNameWikipedia,
+		URL:  "https://" + wikipediaSubdomain(lang) + ".wikipedia.org/wiki/" + url.PathEscape(wikiTitle),
 	})
+
+	if meta, ok := openfauna.LookupMeta(scientificName); ok && meta.INaturalistURL != "" {
+		links = append(links, GuideExternalLink{
+			Name: linkNameINaturalist,
+			URL:  withLocaleParam(meta.INaturalistURL, lang),
+		})
+	}
+
 	if ebirdCode != "" {
 		links = append(links, GuideExternalLink{
-			Name: "eBird",
+			Name: linkNameEBird,
 			URL:  "https://ebird.org/species/" + url.PathEscape(ebirdCode),
 		})
 	}
+
 	links = append(links, GuideExternalLink{
-		Name: "Xeno-canto",
+		Name: linkNameXenoCanto,
 		URL:  "https://xeno-canto.org/explore?query=" + url.QueryEscape(scientificName),
 	})
 	return links
+}
+
+// wikipediaLangOverrides maps a base-language subtag to the Wikipedia language
+// subdomain to use when the two differ. Norwegian Bokmål ("nb") and Nynorsk ("nn")
+// articles live on the Norwegian Wikipedia ("no"); nb.wikipedia.org only redirects
+// there, so we address it canonically instead of relying on the redirect. Subtags
+// absent from this map use the base subtag unchanged.
+var wikipediaLangOverrides = map[string]string{
+	"nb": "no",
+	"nn": "no",
+}
+
+// wikipediaSubdomain returns the Wikipedia language subdomain for a base-language
+// subtag, applying wikipediaLangOverrides for the cases where the article namespace
+// differs from the language code. Callers pass a value already produced by
+// baseLanguage (validated, lowercase).
+func wikipediaSubdomain(lang string) string {
+	if sub, ok := wikipediaLangOverrides[lang]; ok {
+		return sub
+	}
+	return lang
+}
+
+// baseLanguage extracts the lowercase base-language subtag from a UI locale (e.g.
+// "pt-br"/"pt_pt" -> "pt", "zh-cn" -> "zh"), validating it as a 2-3 letter code.
+// Anything else falls back to defaultWikiLang ("en"). The locale always originates
+// from the app's UI locale set (base-language codes that map to live Wikipedia
+// subdomains, modulo wikipediaSubdomain's overrides), so the result is safe to use
+// as a Wikipedia language subdomain and as an iNaturalist ?locale= value.
+func baseLanguage(locale string) string {
+	l := strings.ToLower(strings.TrimSpace(locale))
+	// Split on either separator and keep the primary subtag.
+	if i := strings.IndexAny(l, "-_"); i >= 0 {
+		l = l[:i]
+	}
+	if len(l) < 2 || len(l) > 3 {
+		return defaultWikiLang
+	}
+	for _, r := range l {
+		if r < 'a' || r > 'z' {
+			return defaultWikiLang
+		}
+	}
+	return l
+}
+
+// withLocaleParam returns rawURL with its "locale" query parameter set to lang.
+// A parse failure leaves the original URL untouched so a malformed dataset value
+// cannot drop the link entirely.
+func withLocaleParam(rawURL, lang string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	q := u.Query()
+	q.Set("locale", lang)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // summarizeDescription returns a short, single-paragraph summary of a description.
@@ -806,19 +962,7 @@ func summarizeDescription(description string) string {
 		// Back the cut off to a rune boundary so multi-byte text (e.g. accented
 		// non-English guides) is not split mid-rune, which would otherwise leave a
 		// replacement character at the end of the summary.
-		intro = strings.TrimSpace(trimToRuneBoundary(intro, guideSummaryMaxLength))
+		intro = strings.TrimSpace(guideprovider.TrimToUTF8Boundary(intro, guideSummaryMaxLength))
 	}
 	return intro
-}
-
-// trimToRuneBoundary returns s[:n] backed off to the nearest valid UTF-8 rune
-// boundary so no partial rune remains.
-func trimToRuneBoundary(s string, n int) string {
-	if n >= len(s) {
-		return s
-	}
-	for n > 0 && !utf8.RuneStart(s[n]) {
-		n--
-	}
-	return s[:n]
 }

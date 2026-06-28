@@ -229,8 +229,7 @@
   // Species guide config with safe defaults (show* default to true).
   let speciesGuide = $derived({
     enabled: settings.dashboard.speciesGuide?.enabled ?? false,
-    provider: settings.dashboard.speciesGuide?.provider ?? 'wikipedia',
-    fallbackPolicy: settings.dashboard.speciesGuide?.fallbackPolicy ?? 'all',
+    enableWikipedia: settings.dashboard.speciesGuide?.enableWikipedia ?? false,
     preFetchEnabled: settings.dashboard.speciesGuide?.preFetchEnabled ?? true,
     warmTopN: settings.dashboard.speciesGuide?.warmTopN ?? 50,
     showNotes: settings.dashboard.speciesGuide?.showNotes ?? true,
@@ -460,50 +459,13 @@
           onchange={value => updateSpeciesGuideSetting('enabled', value)}
         />
 
-        <div
-          class="grid grid-cols-1 md:grid-cols-2 gap-x-6"
-          class:opacity-50={!speciesGuide.enabled}
-        >
-          <SelectDropdown
-            options={[
-              {
-                value: 'wikipedia',
-                label: t('settings.userInterface.speciesGuide.provider.options.wikipedia'),
-              },
-              {
-                value: 'auto',
-                label: t('settings.userInterface.speciesGuide.provider.options.auto'),
-              },
-            ]}
-            value={speciesGuide.provider}
-            label={t('settings.userInterface.speciesGuide.provider.label')}
-            helpText={t('settings.userInterface.speciesGuide.provider.helpText')}
+        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
+          <Checkbox
+            checked={speciesGuide.enableWikipedia}
+            label={t('settings.userInterface.speciesGuide.enableWikipedia.label')}
+            helpText={t('settings.userInterface.speciesGuide.enableWikipedia.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
-            variant="select"
-            groupBy={false}
-            menuSize="sm"
-            onChange={value => updateSpeciesGuideSetting('provider', value as string)}
-          />
-
-          <SelectDropdown
-            options={[
-              {
-                value: 'all',
-                label: t('settings.userInterface.speciesGuide.fallbackPolicy.options.all'),
-              },
-              {
-                value: 'none',
-                label: t('settings.userInterface.speciesGuide.fallbackPolicy.options.none'),
-              },
-            ]}
-            value={speciesGuide.fallbackPolicy}
-            label={t('settings.userInterface.speciesGuide.fallbackPolicy.label')}
-            helpText={t('settings.userInterface.speciesGuide.fallbackPolicy.helpText')}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
-            variant="select"
-            groupBy={false}
-            menuSize="sm"
-            onChange={value => updateSpeciesGuideSetting('fallbackPolicy', value as string)}
+            onchange={value => updateSpeciesGuideSetting('enableWikipedia', value)}
           />
         </div>
 

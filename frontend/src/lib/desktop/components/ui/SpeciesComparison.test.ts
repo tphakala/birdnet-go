@@ -89,7 +89,8 @@ describe('SpeciesComparison', () => {
             expectedness: 'expected',
             current_season: 'summer',
             external_links: [
-              { name: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Turdus_merula' },
+              { name: 'Wikipedia', url: 'https://de.wikipedia.org/wiki/Turdus_merula' },
+              { name: 'iNaturalist', url: 'https://www.inaturalist.org/taxa/12716?locale=de' },
             ],
           }) as never
         );
@@ -107,7 +108,12 @@ describe('SpeciesComparison', () => {
     ).toBeInTheDocument();
     const wiki = screen.getByText('Wikipedia');
     expect(wiki).toBeInTheDocument();
-    expect(wiki).toHaveAttribute('href', 'https://en.wikipedia.org/wiki/Turdus_merula');
+    expect(wiki).toHaveAttribute('href', 'https://de.wikipedia.org/wiki/Turdus_merula');
+    // The renderer is source-agnostic: a new source (iNaturalist) renders with no
+    // per-source code, proving the generic external-link card handles any source.
+    const inat = screen.getByText('iNaturalist');
+    expect(inat).toBeInTheDocument();
+    expect(inat).toHaveAttribute('href', 'https://www.inaturalist.org/taxa/12716?locale=de');
   });
 
   it('hides enrichment badges when the enrichments feature is disabled', async () => {
