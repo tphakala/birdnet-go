@@ -53,3 +53,50 @@ func TestProbeCandidate_NotASqliteDatabase(t *testing.T) {
 	assert.False(t, got.Valid)
 	assert.Contains(t, []string{ReasonInvalidSchema, ReasonOpenFailed}, got.Reason)
 }
+
+func TestProbe_ValidReturnsCounts(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	db := writeBirdsDB(t, dir)
+
+	got := Probe(t.Context(), db)
+	assert.True(t, got.Valid)
+	assert.Equal(t, db, got.Path)
+	assert.Equal(t, KindLocal, got.Kind)
+	assert.Equal(t, 1, got.DetectionCount)
+}
+
+func TestProbe_GarbageReturnsInvalid(t *testing.T) {
+	t.Parallel()
+	bad := filepath.Join(t.TempDir(), "birds.db")
+	require.NoError(t, os.WriteFile(bad, []byte("not sqlite"), 0o600))
+
+	got := Probe(t.Context(), bad)
+	assert.False(t, got.Valid)
+	assert.NotEmpty(t, got.Reason)
+}
+
+func TestProbe_MissingReturnsInvalidEmptyReason(t *testing.T) {
+	t.Parallel()
+	got := Probe(t.Context(), filepath.Join(t.TempDir(), "nonexistent.db"))
+	assert.False(t, got.Valid)
+	assert.Equal(t, KindLocal, got.Kind)
+	assert.Empty(t, got.Reason, "missing file must produce empty Reason so the API maps it to not_found")
+}
+
+// TestProbe_SymlinkToValidDB verifies that Probe follows a symlink to a valid
+// birds.db and reports it as valid. os.Stat (not Lstat) is used so a symlink
+// to a regular file is treated identically to a direct path.
+func TestProbe_SymlinkToValidDB(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	target := writeBirdsDB(t, dir)
+	link := filepath.Join(dir, "birds-link.db")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	// Probe should follow the symlink and see the regular file underneath.
+	got := Probe(t.Context(), link)
+	assert.True(t, got.Valid, "symlink to a valid birds.db must be reported as valid")
+	assert.Empty(t, got.Reason)
+}

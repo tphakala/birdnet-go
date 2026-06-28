@@ -72,3 +72,17 @@ func TestPasswordUnmarshalHandlesSurrogatePair(t *testing.T) {
 	require.NoError(t, json.Unmarshal(payload, &body))
 	assert.Equal(t, append([]byte("p"), "\U0001F600"...), body.Password.Bytes())
 }
+
+func TestPasswordUnmarshalRejectsNullByte(t *testing.T) {
+	var body struct {
+		Password Password `json:"password"`
+	}
+	// A JSON-escaped NUL (backslash-u-0000) must be rejected: sudo -S and PAM read
+	// the password as a C string and stop at the first NUL, so a truncated
+	// credential must never be silently accepted. The escape is written as a Go
+	// string literal so no actual NUL byte appears in this source file.
+	payload := []byte("{\"password\":\"ab\\u0000cd\"}")
+	err := json.Unmarshal(payload, &body)
+	require.Error(t, err)
+	assert.Nil(t, body.Password.Bytes())
+}

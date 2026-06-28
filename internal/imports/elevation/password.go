@@ -6,6 +6,7 @@
 package elevation
 
 import (
+	"bytes"
 	"encoding/json"
 	"log/slog"
 	"unicode/utf8"
@@ -124,6 +125,13 @@ func decodeJSONString(b []byte) ([]byte, error) {
 		default:
 			return out, errBadPassword
 		}
+	}
+	// Reject an embedded NUL byte. sudo -S (and PAM) read the password as a
+	// C string and stop at the first NUL, so a password containing  would
+	// silently authenticate against a truncated credential. Treat it as malformed.
+	if bytes.IndexByte(out, 0) >= 0 {
+		clear(out)
+		return nil, errBadPassword
 	}
 	return out, nil
 }
