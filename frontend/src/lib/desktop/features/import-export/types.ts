@@ -1,21 +1,6 @@
 // API types for BirdNET-Pi import feature.
 // Hand-written per project convention (no codegen).
 
-export interface ExternalMediaResponse {
-  environment: string;
-  containerized: boolean;
-  mount_path: string;
-  mount_present: boolean;
-  guidance: ExternalMediaGuidance | null;
-}
-
-export interface ExternalMediaGuidance {
-  environment: string;
-  steps: string[];
-}
-
-export type SourceAccessState = 'native' | 'container-mount' | 'container-missing';
-
 export interface StartImportRequest {
   mode: 'db-only' | 'db-audio';
   source_path: string;
@@ -101,10 +86,14 @@ export interface ValidateSourceResponse {
 }
 
 export interface ElevateResponse {
-  method: 'direct' | 'sudo' | 'fallback';
-  job_id: string;
-  status: string;
-  fallback_commands: string[];
+  /** Outcome of the elevation attempt. */
+  method: 'direct' | 'sudo' | 'password_required' | 'fallback';
+  /** Present when method is 'direct' or 'sudo'. */
+  job_id?: string;
+  /** Present when method is 'direct' or 'sudo'. */
+  status?: string;
+  /** Present when method is 'fallback'. */
+  fallback_commands?: string[];
 }
 
 /** Derived state for the wizard source step. */

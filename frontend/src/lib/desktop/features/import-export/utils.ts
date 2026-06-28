@@ -1,17 +1,4 @@
-import type {
-  ExternalMediaResponse,
-  ImportSourcesResponse,
-  SourceAccessState,
-  SourceCandidate,
-  SourceStepState,
-} from './types';
-
-/** Derive the source-access state from the external-media discovery response. */
-export function deriveSourceAccessState(media: ExternalMediaResponse): SourceAccessState {
-  if (!media.containerized) return 'native';
-  if (media.mount_present) return 'container-mount';
-  return 'container-missing';
-}
+import type { ImportSourcesResponse, SourceCandidate, SourceStepState } from './types';
 
 /** Build a detections-filter URL for the BirdNET-Pi source after import. */
 export function buildDetectionsFilterUrl(): string {
