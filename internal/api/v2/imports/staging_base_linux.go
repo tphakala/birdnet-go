@@ -6,17 +6,16 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // freeBytes returns the bytes available to an unprivileged user on the
-// filesystem that holds path.
+// filesystem that holds path. Delegates to diskmanager.GetAvailableSpace,
+// which validates the block size before multiplication (guarding against
+// Bsize <= 0 overflow).
 func freeBytes(path string) (uint64, error) {
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(path, &st); err != nil {
-		return 0, err
-	}
-	return st.Bavail * uint64(st.Bsize), nil //nolint:gosec // Bavail and Bsize are non-negative filesystem counters.
+	return diskmanager.GetAvailableSpace(path)
 }
 
 // assertTrustedBase confirms path is a directory owned by root (uid 0) with the

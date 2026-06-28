@@ -143,20 +143,30 @@ func toImportProgress(s imports.ImportStats) importProgress {
 }
 
 // resolveImportSourcePath resolves userPath under root with traversal and symlink-escape protection.
-// userPath must be a relative path. Returns the resolved absolute path on success.
+// userPath may be either a relative path (joined under root) or an absolute path (accepted only when
+// it resolves within root). Returns the resolved absolute path on success.
 func resolveImportSourcePath(root, userPath string) (string, error) {
 	if userPath == "" {
 		return "", errInvalidSourcePath
 	}
-	cleaned := filepath.Clean(userPath)
-	if filepath.IsAbs(cleaned) {
-		return "", errInvalidSourcePath
+
+	var candidate string
+	if filepath.IsAbs(userPath) {
+		// Accept absolute paths; containment is still enforced below via
+		// EvalSymlinks + isContained, so an absolute path outside root is rejected.
+		candidate = filepath.Clean(userPath)
+	} else {
+		// Relative path: join under root and perform an early traversal check before
+		// the symlink walk so a plaintext "../../../etc/passwd" is caught cheaply.
+		cleaned := filepath.Clean(userPath)
+		full := filepath.Join(root, cleaned)
+		rel, err := filepath.Rel(root, full)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", errInvalidSourcePath
+		}
+		candidate = full
 	}
-	full := filepath.Join(root, cleaned)
-	rel, err := filepath.Rel(root, full)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", errInvalidSourcePath
-	}
+
 	rootResolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
@@ -164,18 +174,18 @@ func resolveImportSourcePath(root, userPath string) (string, error) {
 		}
 		rootResolved = root
 	}
-	// Find the deepest existing ancestor of full, resolving symlinks, and verify it
-	// is physically contained within root. This rejects a symlinked ancestor that
-	// escapes root even when the target (or several intermediate dirs) do not yet
-	// exist, closing the TOCTOU window at any depth.
-	ancestor := full
+	// Find the deepest existing ancestor of candidate, resolving symlinks, and
+	// verify it is physically contained within root. This rejects a symlinked
+	// ancestor that escapes root even when the target (or several intermediate
+	// dirs) do not yet exist, closing the TOCTOU window at any depth.
+	ancestor := candidate
 	for {
 		resolved, evalErr := filepath.EvalSymlinks(ancestor)
 		if evalErr == nil {
 			if !isContained(rootResolved, resolved) {
 				return "", errInvalidSourcePath
 			}
-			suffix, relErr := filepath.Rel(ancestor, full)
+			suffix, relErr := filepath.Rel(ancestor, candidate)
 			if relErr != nil {
 				return "", errInvalidSourcePath
 			}
@@ -298,11 +308,6 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 	id, err := c.launchImport(ctx, resolvedPath, req.Mode, loc, "")
 	if err != nil {
 		return err
-	}
-	if id == "" {
-		// launchImport already committed an error response (e.g. 409 slot-in-use);
-		// return nil so Echo does not attempt a second write.
-		return nil
 	}
 	return ctx.JSON(http.StatusAccepted, startImportResponse{
 		JobID:  id,

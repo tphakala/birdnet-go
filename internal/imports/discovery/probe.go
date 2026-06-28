@@ -77,22 +77,6 @@ func probeCandidate(ctx context.Context, dbPath string, kind Kind) SourceCandida
 	return c
 }
 
-// classifyOpenError maps a birds.db open failure to a candidate Reason. gorm and
-// the SQLite driver return the same opaque "unable to open database file" for
-// both an unreadable file and a corrupt or non-SQLite one, so this re-tests
-// readability directly to tell a permission problem apart from a bad file; the
-// original open error carries no reliable signal to distinguish the two.
-func classifyOpenError(dbPath string) string {
-	if f, err := os.Open(dbPath); err != nil {
-		if os.IsPermission(err) {
-			return ReasonPermissionDenied
-		}
-	} else {
-		_ = f.Close()
-	}
-	return ReasonOpenFailed
-}
-
 // guessAudioDir returns the first sibling audio directory next to dbPath, or "".
 func guessAudioDir(dbPath string) string {
 	parent := filepath.Dir(dbPath)

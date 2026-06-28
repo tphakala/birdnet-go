@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/tphakala/birdnet-go/internal/imports/discovery"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 const (
@@ -65,18 +66,43 @@ func (c *Handler) GetImportSources(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, resp)
 }
 
-// ValidateImportSource probes a single manually entered absolute path and reports
-// whether it is a readable, valid BirdNET-Pi database, distinguishing not-found,
+// ValidateImportSource probes a single manually entered path and reports whether it
+// is a readable, valid BirdNET-Pi database, distinguishing not-found,
 // unreadable (permission_denied), and invalid-schema cases for the wizard.
+//
+// In container environments the path is resolved under the external mount root
+// (accepting both relative and absolute-within-root candidates from the wizard).
+// In native environments an absolute path is required.
 func (c *Handler) ValidateImportSource(ctx echo.Context) error {
 	var req validateRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
 	}
-	if req.SourcePath == "" || !filepath.IsAbs(req.SourcePath) {
-		return ctx.JSON(http.StatusOK, validateResponse{Valid: false, Reason: reasonInvalidPath})
+
+	var cand discovery.SourceCandidate
+	if c.isContainerEnv == nil || c.isContainerEnv() {
+		// Container: resolve path under mount root. Accepts both relative paths and
+		// absolute paths that resolve within root (wizard sends absolute candidates).
+		if req.SourcePath == "" {
+			return ctx.JSON(http.StatusOK, validateResponse{Valid: false, Reason: reasonInvalidPath})
+		}
+		root := c.importSourceRoot
+		if root == "" {
+			root = sysinfo.DefaultExternalMountPath
+		}
+		resolved, err := resolveImportSourcePath(root, req.SourcePath)
+		if err != nil {
+			return ctx.JSON(http.StatusOK, validateResponse{Valid: false, Reason: reasonInvalidPath})
+		}
+		cand = discovery.Probe(ctx.Request().Context(), resolved)
+	} else {
+		// Native: require an absolute path (existing behavior).
+		if req.SourcePath == "" || !filepath.IsAbs(req.SourcePath) {
+			return ctx.JSON(http.StatusOK, validateResponse{Valid: false, Reason: reasonInvalidPath})
+		}
+		cand = discovery.Probe(ctx.Request().Context(), filepath.Clean(req.SourcePath))
 	}
-	cand := discovery.Probe(ctx.Request().Context(), filepath.Clean(req.SourcePath))
+
 	resp := validateResponse{
 		Valid:          cand.Valid,
 		Reason:         cand.Reason,
@@ -88,8 +114,12 @@ func (c *Handler) ValidateImportSource(ctx echo.Context) error {
 	// Probe returns Reason "" + Valid false only when the file is absent (open
 	// failed at stat level). Surface that as not_found so the UI can say "we
 	// couldn't find a file there" rather than a generic error.
+	// C2: a cancelled context must not be mislabelled as "not_found"; the probe
+	// result is untrustworthy when the request was cancelled mid-flight.
 	if !cand.Valid && cand.Reason == "" {
-		resp.Reason = reasonNotFound
+		if ctx.Request().Context().Err() == nil {
+			resp.Reason = reasonNotFound
+		}
 	}
 	return ctx.JSON(http.StatusOK, resp)
 }
