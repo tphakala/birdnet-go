@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -173,8 +174,10 @@ func TestLadderReportsStagedAudio(t *testing.T) {
 		Src: "/data/birds.db", Audio: "/data/BirdSongs", Dst: "/stg", UID: 1000, GID: 1000,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "/stg/birds.db", out.StagedDB)
-	assert.Equal(t, "/stg/BirdSongs", out.StagedAudio)
+	// stagedOutcome joins with filepath.Join, so the expected paths must use the
+	// same OS separator (this test runs on the windows-amd64 CI runner too).
+	assert.Equal(t, filepath.FromSlash("/stg/birds.db"), out.StagedDB)
+	assert.Equal(t, filepath.FromSlash("/stg/BirdSongs"), out.StagedAudio)
 }
 
 func TestLadderFallbackWhenNoSudo(t *testing.T) {
