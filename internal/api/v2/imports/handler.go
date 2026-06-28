@@ -30,8 +30,15 @@
 package importsapi
 
 import (
+	"context"
+	"os"
+	"os/user"
+	"strconv"
+
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/imports"
+	"github.com/tphakala/birdnet-go/internal/imports/discovery"
+	"github.com/tphakala/birdnet-go/internal/imports/elevation"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
@@ -63,6 +70,28 @@ type Handler struct {
 	// sysinfo.IsContainer; overridable in tests to exercise the native branch.
 	isContainerEnv func() bool
 
+	// importEnvInfo reports the runtime environment + run-as identity for the
+	// /import/sources response and guidance. Defaults to a sysinfo+os/user
+	// reader; overridable in tests.
+	importEnvInfo func() envInfo
+	// scanCandidates runs the discovery scan for a provider. Defaults to a real
+	// bounded Scanner; tests inject fixed candidates.
+	scanCandidates func(ctx context.Context, provider discovery.LocationProvider) []discovery.SourceCandidate
+	// newLadder builds the elevation ladder. Defaults to elevation.NewLadder;
+	// tests inject a fake-runner ladder.
+	newLadder func() (*elevation.Ladder, error)
+	// stagingBase is the trusted, service-user-owned directory under which
+	// per-import staging subdirectories are created. Resolved lazily; overridable
+	// in tests.
+	stagingBase string
+	// freeBytesFn reports free bytes on the filesystem holding path. Defaults to
+	// the platform freeBytes; tests inject a stub for the disk preflight.
+	freeBytesFn func(path string) (uint64, error)
+	// verifyTrustedBase confirms the staging parent is a root-owned, sticky
+	// directory the service user cannot swap. Defaults to the platform
+	// assertTrustedBase; tests override it (a test cannot create a root-owned dir).
+	verifyTrustedBase func(path string) error
+
 	// cleanupStatus tracks the state of legacy database cleanup. It is initialized
 	// lazily in RegisterLegacyCleanupRoutes; the migration status handler reads it
 	// nil-guarded.
@@ -76,6 +105,33 @@ type Handler struct {
 	notificationService *notification.Service
 }
 
+// envInfo is the runtime environment plus the BirdNET-Go process run-as identity.
+type envInfo struct {
+	envType       string
+	containerized bool
+	uid           int
+	username      string
+	home          string
+}
+
+// defaultEnvInfo reads the cached environment and the current process identity.
+// Username/home come from os/user; both default to "" if the lookup fails (a
+// containerized uid may have no passwd entry), which guidance handles.
+func defaultEnvInfo() envInfo {
+	envType, _ := sysinfo.GetEnvironment()
+	uid := os.Getuid()
+	info := envInfo{
+		envType:       envType,
+		containerized: sysinfo.IsContainerEnv(envType),
+		uid:           uid,
+	}
+	if u, err := user.LookupId(strconv.Itoa(uid)); err == nil {
+		info.username = u.Username
+		info.home = u.HomeDir
+	}
+	return info
+}
+
 // New constructs the import/migration domain handler around the shared core and
 // the facade-injected notification service. The import lifecycle manager is
 // created here; the import source-path root/factory default lazily and the legacy
@@ -86,6 +142,13 @@ func New(core *apicore.Core, notificationService *notification.Service) *Handler
 		notificationService: notificationService,
 		importMgr:           newImportManager(),
 		isContainerEnv:      sysinfo.IsContainer,
+		importEnvInfo:       defaultEnvInfo,
+		scanCandidates: func(ctx context.Context, p discovery.LocationProvider) []discovery.SourceCandidate {
+			return discovery.NewScanner(p).Scan(ctx)
+		},
+		newLadder:         elevation.NewLadder,
+		freeBytesFn:       freeBytes,
+		verifyTrustedBase: assertTrustedBase,
 	}
 }
 

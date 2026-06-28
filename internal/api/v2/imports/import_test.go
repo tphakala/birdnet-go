@@ -1638,3 +1638,14 @@ func TestStartBirdNETPiImport_ContainerDispatch_AcceptsRelativePath(t *testing.T
 	require.NoError(t, c.StartBirdNETPiImport(ctx))
 	assert.Equal(t, http.StatusAccepted, rec.Code)
 }
+
+// TestNewHandler_DefaultsImportSeams verifies that New() wires all injectable
+// seams used by the sources/validate/elevate endpoints.
+func TestNewHandler_DefaultsImportSeams(t *testing.T) {
+	h := New(apitest.NewCore(t), nil)
+	require.NotNil(t, h.importEnvInfo)
+	require.NotNil(t, h.scanCandidates)
+	require.NotNil(t, h.newLadder)
+	require.NotNil(t, h.freeBytesFn)
+	require.NotNil(t, h.verifyTrustedBase)
+}
