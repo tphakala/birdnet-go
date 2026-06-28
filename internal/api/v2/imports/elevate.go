@@ -169,6 +169,17 @@ func (c *Handler) ElevateImport(ctx echo.Context) error {
 	if _, err := os.Lstat(cleanSrc); err != nil {
 		return c.HandleError(ctx, err, "source path does not exist", http.StatusBadRequest)
 	}
+	// Resolve all symlink components to the canonical path before handing it to the
+	// root import-stage subcommand. import-stage opens only the final component with
+	// O_NOFOLLOW, so an intermediate symlinked directory would otherwise be resolved
+	// by root; resolving here matches resolveNativeImportSourcePath and closes that
+	// gap. EvalSymlinks needs only traverse (not read) permission on the path, so it
+	// works even when the file itself is unreadable by the service user.
+	resolvedSrc, err := filepath.EvalSymlinks(cleanSrc)
+	if err != nil {
+		return c.HandleError(ctx, err, "source path could not be resolved", http.StatusBadRequest)
+	}
+	cleanSrc = resolvedSrc
 
 	// Probe the source for size, audio-dir guess, and ownership details.
 	cand := discovery.Probe(ctx.Request().Context(), cleanSrc)

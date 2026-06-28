@@ -12,12 +12,15 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
+
+	"golang.org/x/time/rate"
 )
 
 // resolveNativeImportSourcePath validates an absolute path to a BirdNET-Pi
@@ -223,6 +226,17 @@ func isContained(root, target string) bool {
 // in unit tests or a misconfiguration; in that case install a middleware that
 // denies access with 401 rather than registering the routes unprotected (Echo's
 // applyMiddleware would also panic on a literal nil entry).
+// Elevation endpoint rate limit: POST /import/elevate feeds a submitted sudo
+// password to `sudo -S`, and the ladder runs `sudo -k` before each attempt
+// (clearing the timestamp cache), so without an app-level limit an authenticated
+// LAN client could brute-force the host sudo password (OWASP ASVS V2.4.1). Bound
+// it to a small burst per client IP with slow refill; legitimate use needs only a
+// couple of attempts.
+const (
+	elevateRateLimitBurst  = 10
+	elevateRateLimitWindow = 5 * time.Minute
+)
+
 func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 	authMiddleware := c.AuthMiddleware
 	if authMiddleware == nil {
@@ -232,10 +246,32 @@ func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 			}
 		}
 	}
+
+	// Per-client-IP rate limiter applied only to the elevation endpoint.
+	elevateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Skipper: middleware.DefaultSkipper,
+		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+			middleware.RateLimiterMemoryStoreConfig{
+				Rate:      rate.Limit(float64(elevateRateLimitBurst) / elevateRateLimitWindow.Seconds()),
+				Burst:     elevateRateLimitBurst,
+				ExpiresIn: elevateRateLimitWindow,
+			},
+		),
+		IdentifierExtractor: func(ctx echo.Context) (string, error) { return ctx.RealIP(), nil },
+		ErrorHandler: func(ctx echo.Context, err error) error {
+			c.LogSecurityWarnIfEnabled("import: elevation rate limit exceeded", logger.String("ip", ctx.RealIP()))
+			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
+		},
+		DenyHandler: func(ctx echo.Context, _ string, err error) error {
+			c.LogSecurityWarnIfEnabled("import: elevation attempt denied by rate limit", logger.String("ip", ctx.RealIP()))
+			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
+		},
+	})
+
 	importGroup := g.Group("/import", authMiddleware)
 	importGroup.GET("/sources", c.GetImportSources)
 	importGroup.POST("/validate", c.ValidateImportSource)
-	importGroup.POST("/elevate", c.ElevateImport)
+	importGroup.POST("/elevate", c.ElevateImport, elevateLimiter)
 	importGroup.POST("/birdnet-pi", c.StartBirdNETPiImport)
 	importGroup.GET("/jobs/:jobId/progress", c.StreamImportProgress)
 	importGroup.POST("/jobs/:jobId/cancel", c.CancelImport)
