@@ -285,7 +285,7 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 		}
 	}
 
-	// Parse optional timezone.
+	// Parse optional timezone before delegating to launchImport.
 	var loc *time.Location
 	if req.Location != "" {
 		loc, err = time.LoadLocation(req.Location)
@@ -293,6 +293,44 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 			return c.HandleError(ctx, err, "invalid location", http.StatusBadRequest)
 		}
 	}
+
+	id, err := c.launchImport(ctx, resolvedPath, req.Mode, loc, "")
+	if err != nil {
+		return err
+	}
+	if id == "" {
+		// launchImport already committed an error response (e.g. 409 slot-in-use);
+		// return nil so Echo does not attempt a second write.
+		return nil
+	}
+	return ctx.JSON(http.StatusAccepted, startImportResponse{
+		JobID:  id,
+		Status: importStatusStarted,
+	})
+}
+
+// launchImport builds the import source from an already-resolved, validated path,
+// reserves the single import slot, and runs the engine in a tracked goroutine,
+// returning the job id on success. loc is the optional timezone for timestamp
+// normalization; pass nil to use the source timezone as-is.
+//
+// When stagingCleanupDir is non-empty it is a per-import staging directory
+// created by the elevation ladder. The engine goroutine removes it on every
+// terminal path so a privileged staged copy never outlives the import. If
+// launchImport returns synchronously before the goroutine starts (e.g. the slot
+// is already in use), it removes the staging directory itself so no elevated
+// copy is left on disk.
+func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc *time.Location, stagingCleanupDir string) (string, error) {
+	// Guard: clean up the staging dir if we return before the engine goroutine
+	// takes ownership. transferred flips to true right before c.Go() so that the
+	// deferred cleanup here is skipped once the goroutine is responsible.
+	staged := stagingCleanupDir != ""
+	transferred := false
+	defer func() {
+		if staged && !transferred {
+			c.cleanupStagingDir(stagingCleanupDir)
+		}
+	}()
 
 	// Build source using the injectable factory (defaults to birdnetpi.New).
 	factory := c.importSourceFactory
@@ -303,25 +341,25 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 	}
 	src, err := factory(resolvedPath)
 	if err != nil {
-		return c.HandleError(ctx, err, "failed to open source", http.StatusBadRequest)
+		return "", c.HandleError(ctx, err, "failed to open source", http.StatusBadRequest)
 	}
 
 	// Validate source synchronously for an immediate error response.
 	if err := src.Validate(ctx.Request().Context()); err != nil {
 		_ = src.Close()
-		return c.HandleError(ctx, err, "source validation failed", http.StatusBadRequest)
+		return "", c.HandleError(ctx, err, "source validation failed", http.StatusBadRequest)
 	}
 
 	// For db-audio mode, resolve the export path before reserving the import slot
 	// so an unconfigured path returns 400 without occupying the slot.
 	var clipExportPath string
-	if req.Mode == importModeDBaudio {
+	if mode == importModeDBaudio {
 		if settings := c.CurrentSettings(); settings != nil {
 			clipExportPath = settings.Realtime.Audio.Export.Path
 		}
 		if clipExportPath == "" {
 			_ = src.Close()
-			return c.HandleError(ctx, nil, "audio export path is not configured; set the audio export path to import audio", http.StatusBadRequest)
+			return "", c.HandleError(ctx, nil, "audio export path is not configured; set the audio export path to import audio", http.StatusBadRequest)
 		}
 	}
 
@@ -336,7 +374,7 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 	if !c.importMgr.start(job) {
 		jobCancel()
 		_ = src.Close()
-		return c.HandleError(ctx, errImportInProgress, "an import is already in progress", http.StatusConflict)
+		return "", c.HandleError(ctx, errImportInProgress, "an import is already in progress", http.StatusConflict)
 	}
 
 	// Run the engine in a goroutine tracked by the controller WaitGroup.
@@ -344,12 +382,14 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 		SourceNode: imports.DefaultSourceNode,
 		Location:   loc,
 	}
-	if req.Mode == importModeDBaudio {
+	if mode == importModeDBaudio {
 		opts.IncludeAudio = true
 		opts.AudioSourceDir = filepath.Dir(resolvedPath)
 		opts.ClipExportPath = clipExportPath
 	}
 	eng := imports.NewEngine(c.Repo)
+
+	transferred = true // goroutine now owns the staging dir lifetime
 	c.Go(func() {
 		var stats imports.ImportStats
 		var runErr error
@@ -364,13 +404,38 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 		}()
 		defer jobCancel()
 		defer func() { _ = src.Close() }()
+		if stagingCleanupDir != "" {
+			defer c.cleanupStagingDir(stagingCleanupDir)
+		}
 		stats, runErr = eng.Run(jobCtx, src, &opts, job)
 	})
 
-	return ctx.JSON(http.StatusAccepted, startImportResponse{
-		JobID:  id,
-		Status: importStatusStarted,
-	})
+	return id, nil
+}
+
+// cleanupStagingDir best-effort removes a per-import staging directory. It only
+// removes a path that is strictly under the handler's resolved staging base, so a
+// caller cannot turn this into an arbitrary-delete primitive; a path outside the
+// base is logged and skipped.
+func (c *Handler) cleanupStagingDir(dir string) {
+	base, _ := c.resolveStagingBase()
+	if base == "" || !isStrictlyUnder(base, dir) {
+		c.LogWarnIfEnabled("import: refusing to clean staging dir outside base", logger.String("dir", dir))
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		c.LogWarnIfEnabled("import: failed to remove staging dir", logger.String("dir", dir), logger.String("error", err.Error()))
+	}
+}
+
+// isStrictlyUnder reports whether child is a proper descendant of parent after
+// cleaning both. Equal paths return false (never remove the base itself).
+func isStrictlyUnder(parent, child string) bool {
+	rel, err := filepath.Rel(filepath.Clean(parent), filepath.Clean(child))
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 // StreamImportProgress streams import progress as Server-Sent Events.

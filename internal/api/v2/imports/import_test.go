@@ -1651,3 +1651,88 @@ func TestNewHandler_DefaultsImportSeams(t *testing.T) {
 	require.NotNil(t, h.freeBytesFn)
 	require.NotNil(t, h.verifyTrustedBase)
 }
+
+// TestLaunchImport_RemovesStagingDirOnCompletion verifies that when launchImport
+// is given a non-empty stagingCleanupDir, the directory is removed by the engine
+// goroutine on successful completion of the import.
+func TestLaunchImport_RemovesStagingDirOnCompletion(t *testing.T) {
+	verifyNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
+
+	base := t.TempDir()
+	stagingDir := filepath.Join(base, "birdnet-go-import-staging")
+	require.NoError(t, os.MkdirAll(stagingDir, 0o700))
+	db := filepath.Join(stagingDir, "birds.db")
+	writeMinimalBirdNetPiDB(t, db)
+
+	_, c := newImportHandler(t)
+	c.DS = mocks.NewMockInterface(t)
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+	c.isContainerEnv = func() bool { return false }
+	c.stagingBase = base // allow cleanupStagingDir to match the base
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	id, launchErr := c.launchImport(ctx, db, importModeDBOnly, nil, stagingDir)
+	require.NoError(t, launchErr)
+	require.NotEmpty(t, id)
+
+	// Poll until the job reaches the done state (cleanup runs before job.finish).
+	deadline := time.Now().Add(10 * time.Second)
+	var finalStatus importStatusResponse
+	for time.Now().Before(deadline) {
+		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		statusRec := httptest.NewRecorder()
+		statusCtx := e.NewContext(statusReq, statusRec)
+		require.NoError(t, c.GetImportStatus(statusCtx))
+		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
+		if !finalStatus.Running && finalStatus.Status == importStatusDone {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	assert.Equal(t, importStatusDone, finalStatus.Status)
+	assert.NoDirExists(t, stagingDir, "staging dir must be removed by engine goroutine on completion")
+}
+
+// TestLaunchImport_RemovesStagingDirOnSlotInUse verifies that when the single
+// import slot is already occupied, launchImport cleans up the staging directory
+// synchronously before returning the 409 error.
+func TestLaunchImport_RemovesStagingDirOnSlotInUse(t *testing.T) {
+	base := t.TempDir()
+	stagingDir := filepath.Join(base, "birdnet-go-import-staging")
+	require.NoError(t, os.MkdirAll(stagingDir, 0o700))
+	db := filepath.Join(stagingDir, "birds.db")
+	writeMinimalBirdNetPiDB(t, db)
+
+	_, c := newImportHandler(t)
+	c.DS = mocks.NewMockInterface(t)
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	c.Repo = mockRepo
+	c.isContainerEnv = func() bool { return false }
+	c.stagingBase = base
+
+	// Pre-occupy the single import slot so launchImport fails synchronously.
+	require.True(t, c.importMgr.start(newImportJob("busy", func() {})))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	_, launchErr := c.launchImport(ctx, db, importModeDBOnly, nil, stagingDir)
+	// c.HandleError writes the 409 body and returns nil (Echo pattern); launchImport follows the same convention.
+	require.NoError(t, launchErr)
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	assert.NoDirExists(t, stagingDir, "staging dir must be cleaned up on synchronous slot-in-use failure")
+}
