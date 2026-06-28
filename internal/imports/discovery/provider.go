@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"path/filepath"
 	"runtime"
 
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -29,7 +30,7 @@ func (p staticProvider) Roots() []Root { return p.roots }
 func nativeLinuxLocalDirs(home string) []string {
 	dirs := []string{"/opt/birdnet-pi", "/root"}
 	if home != "" {
-		dirs = append([]string{home + "/BirdNET-Pi", home}, dirs...)
+		dirs = append([]string{filepath.Join(home, "BirdNET-Pi"), home}, dirs...)
 	}
 	return dirs
 }

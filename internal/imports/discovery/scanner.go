@@ -48,6 +48,9 @@ func WithProber(p proberFunc) Option { return func(s *Scanner) { s.prober = p } 
 func WithNetworkPrefixes(p []string) Option { return func(s *Scanner) { s.networkPrefixes = p } }
 
 // NewScanner builds a Scanner with production defaults, overridable via options.
+// Non-positive depth, timeout, or candidate limits are clamped back to the
+// defaults so a bad option value cannot disable a bound (a non-positive
+// maxCandidates would otherwise make every scan return nothing).
 func NewScanner(provider LocationProvider, opts ...Option) *Scanner {
 	s := &Scanner{
 		provider:        provider,
@@ -60,36 +63,78 @@ func NewScanner(provider LocationProvider, opts ...Option) *Scanner {
 	for _, o := range opts {
 		o(s)
 	}
+	if s.maxDepth <= 0 {
+		s.maxDepth = defaultMaxDepth
+	}
+	if s.timeout <= 0 {
+		s.timeout = defaultScanTimeout
+	}
+	if s.maxCandidates <= 0 {
+		s.maxCandidates = defaultMaxCandidates
+	}
 	return s
 }
 
-// Scan searches all provider roots and returns the discovered candidates.
+// Scan searches all provider roots and returns the discovered candidates. The
+// walk runs in a separate goroutine so a blocking syscall on a hung mount (a
+// dead USB, or a stale network mount whose fstype is not in the skip list)
+// cannot block the caller past the timeout. On timeout or cancellation Scan
+// returns the candidates collected so far; the walk goroutine is then abandoned
+// and unwinds once the context is cancelled (the deferred cancel below) or the
+// stuck syscall returns, without holding up the caller.
 func (s *Scanner) Scan(ctx context.Context) []SourceCandidate {
+	if s.provider == nil {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	seen := make(map[string]struct{})
-	var out []SourceCandidate
+	results := make(chan SourceCandidate)
+	go s.walk(ctx, results)
 
+	out := make([]SourceCandidate, 0, s.maxCandidates)
+	for {
+		select {
+		case <-ctx.Done():
+			return out
+		case c, ok := <-results:
+			if !ok {
+				return out
+			}
+			out = append(out, c)
+			if len(out) >= s.maxCandidates {
+				return out
+			}
+		}
+	}
+}
+
+// walk visits every provider root, sending each discovered candidate on results,
+// and closes results when finished or when ctx is cancelled.
+func (s *Scanner) walk(ctx context.Context, results chan<- SourceCandidate) {
+	defer close(results)
+	seen := make(map[string]struct{})
 	for _, root := range s.provider.Roots() {
 		if ctx.Err() != nil {
-			return out
+			return
 		}
 		if s.underNetworkMount(root.Path) {
 			continue
 		}
-		out = s.walkRoot(ctx, root, seen, out)
-		if len(out) >= s.maxCandidates {
-			return out[:s.maxCandidates]
+		if !s.walkRoot(ctx, root, seen, results) {
+			return
 		}
 	}
-	return out
 }
 
-func (s *Scanner) walkRoot(ctx context.Context, root Root, seen map[string]struct{}, out []SourceCandidate) []SourceCandidate {
+// walkRoot walks a single root, sending birds.db candidates on results. It
+// returns false when the caller should stop (context cancelled), true otherwise.
+func (s *Scanner) walkRoot(ctx context.Context, root Root, seen map[string]struct{}, results chan<- SourceCandidate) bool {
 	rootClean := filepath.Clean(root.Path)
+	cont := true
 	_ = filepath.WalkDir(rootClean, func(path string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
+			cont = false
 			return filepath.SkipAll
 		}
 		if err != nil {
@@ -111,18 +156,28 @@ func (s *Scanner) walkRoot(ctx context.Context, root Root, seen map[string]struc
 		if d.Name() != birdsDBFilename {
 			return nil
 		}
+		// Only probe regular files. This skips a symlink (whose target could
+		// escape the scanned root) and, importantly, a FIFO, socket, or device
+		// node named birds.db, on which the probe's os.Open would block the
+		// scanner goroutine indefinitely.
+		if !d.Type().IsRegular() {
+			return nil
+		}
 		clean := filepath.Clean(path)
 		if _, dup := seen[clean]; dup {
 			return nil
 		}
 		seen[clean] = struct{}{}
-		out = append(out, s.prober(ctx, clean, root.Kind))
-		if len(out) >= s.maxCandidates {
+		cand := s.prober(ctx, clean, root.Kind)
+		select {
+		case results <- cand:
+		case <-ctx.Done():
+			cont = false
 			return filepath.SkipAll
 		}
 		return nil
 	})
-	return out
+	return cont
 }
 
 // depthBelow returns how many path separators deep path is below root.
@@ -137,9 +192,12 @@ func depthBelow(root, path string) int {
 // underNetworkMount reports whether path is at or below any network mount prefix.
 func (s *Scanner) underNetworkMount(path string) bool {
 	clean := filepath.Clean(path)
+	sep := string(filepath.Separator)
 	for _, prefix := range s.networkPrefixes {
 		p := filepath.Clean(prefix)
-		if clean == p || strings.HasPrefix(clean, p+string(filepath.Separator)) {
+		// p == sep means the whole filesystem is a network mount; everything is
+		// under it (and p+sep would be "//", which HasPrefix would never match).
+		if clean == p || p == sep || strings.HasPrefix(clean, p+sep) {
 			return true
 		}
 	}

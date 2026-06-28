@@ -1,57 +1,104 @@
 package discovery
 
 import (
-	"strings"
-	"sync"
+	"slices"
+
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
-// Guidance holds instructions for the user when a candidate has a known problem.
+// nativeLinuxEnv is the Environment label used for native (non-container) Linux
+// guidance. It mirrors a typical sysinfo.GetEnvironment value for bare metal.
+const nativeLinuxEnv = "Bare Metal"
+
+// Guidance is environment-specific, copy-pasteable setup help shown when no
+// importable database was found automatically. It is structured as data so the
+// frontend can render and localize it.
 type Guidance struct {
-	// Key is the unique identifier for this guidance (e.g., "invalid_schema").
-	Key string
-	// Message is the user-facing instruction (not localized at this layer).
-	Message string
+	// Environment is the detected runtime (e.g. "Docker", "Bare Metal").
+	Environment string `json:"environment"`
+	// Steps is an ordered list of plain instructions or shell commands.
+	Steps []string `json:"steps"`
 }
 
-var (
-	guidanceMu sync.RWMutex
-	guidance   = map[string]Guidance{
-		ReasonPermissionDenied: {
-			Key:     ReasonPermissionDenied,
-			Message: "BirdNET-Go does not have read permission for this file. Please check the file owner and permissions.",
-		},
-		ReasonInvalidSchema: {
-			Key:     ReasonInvalidSchema,
-			Message: "This database does not have the required BirdNET-Pi schema (missing columns or table).",
-		},
-		ReasonOpenFailed: {
-			Key:     ReasonOpenFailed,
-			Message: "The file is not a valid SQLite database or could not be opened.",
-		},
+// BuildGuidance returns setup help for the given environment, or nil when none
+// applies. runAsUser is the BirdNET-Go process user, used to make native
+// permission hints concrete ("" if unknown).
+func BuildGuidance(envType, runAsUser string) *Guidance {
+	if sysinfo.IsContainerEnv(envType) {
+		return buildContainerGuidance(envType)
 	}
-)
-
-// RegisterGuidance adds or replaces guidance for a Reason.
-// It is safe for concurrent use, primarily intended for init() registration
-// of platform-specific guidance.
-func RegisterGuidance(reason, message string) {
-	guidanceMu.Lock()
-	defer guidanceMu.Unlock()
-	guidance[reason] = Guidance{
-		Key:     reason,
-		Message: strings.TrimSpace(message),
-	}
+	return buildNativeLinuxGuidance(runAsUser)
 }
 
-// GetGuidance returns the guidance for a reason, or a fallback if unknown.
-func GetGuidance(reason string) Guidance {
-	guidanceMu.RLock()
-	defer guidanceMu.RUnlock()
-	if g, ok := guidance[reason]; ok {
-		return g
+// buildNativeLinuxGuidance explains how to make BirdNET-Pi data reachable on a
+// native Linux install: where the data usually lives, and how to connect and
+// mount a USB stick or SD card.
+func buildNativeLinuxGuidance(runAsUser string) *Guidance {
+	user := runAsUser
+	if user == "" {
+		user = "birdnet"
 	}
-	return Guidance{
-		Key:     reason,
-		Message: "An unknown error prevented reading this database.",
+	steps := []string{
+		"# If your BirdNET-Pi data is on this device, it is usually at:",
+		"#   /home/<user>/BirdNET-Pi/birds.db",
+		"# If it is on a USB stick or SD card, connect it and find it:",
+		"lsblk -o NAME,SIZE,MOUNTPOINT,LABEL",
+		"# If it is not mounted yet, mount it (replace sda1 with your device):",
+		"sudo mkdir -p /mnt/usb",
+		"sudo mount /dev/sda1 /mnt/usb",
+		"# Then click Check again. BirdNET-Go runs as user '" + user + "';",
+		"# if it cannot read the data, it will offer to copy it for you.",
+	}
+	return &Guidance{Environment: nativeLinuxEnv, Steps: steps}
+}
+
+// buildContainerGuidance returns the host-side bind-mount setup steps for a
+// container runtime. The commands create the host external-media directory,
+// make it rshared so sub-mounts propagate into the container, chown it to the
+// container UID, and show the runtime-specific volume flag.
+func buildContainerGuidance(envType string) *Guidance {
+	const (
+		hostDir      = "/mnt/birdnet-go/external"
+		containerDir = "/external"
+	)
+	hostSetup := []string{
+		"sudo mkdir -p " + hostDir,
+		"sudo mount --bind " + hostDir + " " + hostDir,
+		"sudo mount --make-rshared " + hostDir,
+		`sudo chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}" ` + hostDir,
+	}
+	switch envType {
+	case sysinfo.EnvDocker:
+		steps := slices.Clone(hostSetup)
+		steps = append(steps,
+			"# Add to your docker run command:",
+			"-v "+hostDir+":"+containerDir+":rslave",
+			"# Or in docker-compose.yml under the birdnet-go service volumes:",
+			"volumes:",
+			"  - type: bind",
+			"    source: "+hostDir,
+			"    target: "+containerDir,
+			"    bind:",
+			"      propagation: rslave",
+			"# If you used install.sh, re-run the installer to wire this automatically.",
+			"# Then restart the container.",
+		)
+		return &Guidance{Environment: envType, Steps: steps}
+	case sysinfo.EnvPodman:
+		steps := slices.Clone(hostSetup)
+		steps = append(steps,
+			"# Add to your podman run command or quadlet file:",
+			"-v "+hostDir+":"+containerDir+":rslave",
+			"# If you used install.sh, re-run the installer to wire this automatically.",
+			"# Then restart the container.",
+		)
+		return &Guidance{Environment: envType, Steps: steps}
+	default:
+		steps := slices.Clone(hostSetup)
+		steps = append(steps,
+			"# Mount the host directory into the container using your runtime's volume mechanism.",
+			"# Or re-run the BirdNET-Go installer (install.sh) to configure the mount automatically.",
+		)
+		return &Guidance{Environment: envType, Steps: steps}
 	}
 }

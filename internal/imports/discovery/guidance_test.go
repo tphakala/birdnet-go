@@ -1,28 +1,44 @@
 package discovery
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
-func TestGetGuidance_KnownReason(t *testing.T) {
+func TestBuildGuidance_NativeLinuxHasMountSteps(t *testing.T) {
 	t.Parallel()
-	g := GetGuidance(ReasonPermissionDenied)
-	assert.Equal(t, ReasonPermissionDenied, g.Key)
-	assert.Contains(t, g.Message, "permission")
+	g := BuildGuidance("Bare Metal", "birdnet")
+	require.NotNil(t, g)
+	joined := strings.Join(g.Steps, "\n")
+	assert.Contains(t, joined, "lsblk")
+	assert.Contains(t, joined, "mount")
+	// The configured run-as user is surfaced in the hint.
+	assert.Contains(t, joined, "birdnet")
 }
 
-func TestGetGuidance_UnknownReason(t *testing.T) {
+func TestBuildGuidance_NativeLinuxDefaultsUserWhenUnknown(t *testing.T) {
 	t.Parallel()
-	g := GetGuidance("this_is_not_a_real_reason")
-	assert.Equal(t, "this_is_not_a_real_reason", g.Key)
-	assert.Contains(t, g.Message, "unknown")
+	g := BuildGuidance("Bare Metal", "")
+	require.NotNil(t, g)
+	assert.Contains(t, strings.Join(g.Steps, "\n"), "birdnet")
 }
 
-func TestRegisterGuidance(t *testing.T) {
-	RegisterGuidance("test_custom", "My custom message")
-	g := GetGuidance("test_custom")
-	assert.Equal(t, "test_custom", g.Key)
-	assert.Equal(t, "My custom message", g.Message)
+func TestBuildGuidance_DockerHasVolumeSteps(t *testing.T) {
+	t.Parallel()
+	g := BuildGuidance(sysinfo.EnvDocker, "")
+	require.NotNil(t, g)
+	assert.Equal(t, sysinfo.EnvDocker, g.Environment)
+	assert.Contains(t, strings.Join(g.Steps, "\n"), "rslave")
+}
+
+func TestBuildGuidance_PodmanHasVolumeSteps(t *testing.T) {
+	t.Parallel()
+	g := BuildGuidance(sysinfo.EnvPodman, "")
+	require.NotNil(t, g)
+	assert.Equal(t, sysinfo.EnvPodman, g.Environment)
+	assert.Contains(t, strings.Join(g.Steps, "\n"), "podman")
 }

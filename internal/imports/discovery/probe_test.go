@@ -16,7 +16,7 @@ func writeBirdsDB(t *testing.T, dir string) string {
 	p := filepath.Join(dir, "birds.db")
 	db, err := sql.Open("sqlite3", p)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { assert.NoError(t, db.Close()) })
 	_, err = db.Exec(`CREATE TABLE detections (
 		Date TEXT, Time TEXT, Sci_Name TEXT, Com_Name TEXT, Confidence REAL,
 		Lat REAL, Lon REAL, Cutoff REAL, Sens REAL, File_Name TEXT)`)
