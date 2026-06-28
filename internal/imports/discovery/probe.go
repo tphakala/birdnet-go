@@ -21,19 +21,28 @@ var audioDirNames = []string{"BirdSongs", "Extracted"}
 //
 // Unlike the scanner (which only ever probes regular dir entries), Probe takes an
 // arbitrary user-supplied path, so it MUST reject non-regular files itself:
-// probeCandidate's os.Open blocks indefinitely on a FIFO or device node, which
-// would hang the HTTP handler goroutine. Lstat neither follows a final symlink
-// nor opens the file.
+// probeCandidate's sqlite open blocks indefinitely on a FIFO or device node,
+// which would hang the HTTP handler goroutine. os.Stat (not Lstat) is used so
+// a symlink to a valid birds.db is accepted; a symlink to a FIFO or device is
+// still rejected by the IsRegular check after the symlink is followed.
+//
+// Residual TOCTOU: a regular file swapped to a FIFO between Stat and the sqlite
+// open is handled by classifyOpenError's O_NONBLOCK open on unix. The import
+// path re-validates the source before committing.
 func Probe(ctx context.Context, path string) SourceCandidate {
-	info, err := os.Lstat(path)
+	info, err := os.Stat(path)
 	if err != nil {
-		// Absent or unstattable: invalid with an empty Reason. The API layer maps
-		// the empty Reason to "not_found".
+		// Absent or inaccessible. A permission error on the path itself is
+		// surfaced as ReasonPermissionDenied; anything else (not-found, broken
+		// symlink) maps to an empty Reason so the API layer labels it "not_found".
+		if os.IsPermission(err) {
+			return SourceCandidate{Path: path, Kind: KindLocal, Valid: false, Reason: ReasonPermissionDenied, OwnerUID: -1}
+		}
 		return SourceCandidate{Path: path, Kind: KindLocal, OwnerUID: -1}
 	}
 	if !info.Mode().IsRegular() {
-		// A symlink, FIFO, socket, device, or directory is never a valid source and
-		// must never be opened.
+		// A FIFO, socket, device, or directory (including a symlink to one) is
+		// never a valid source and must never be opened.
 		return SourceCandidate{Path: path, Kind: KindLocal, Valid: false, Reason: ReasonOpenFailed, OwnerUID: -1}
 	}
 	return probeCandidate(ctx, path, KindLocal)

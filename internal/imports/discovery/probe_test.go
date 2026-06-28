@@ -84,17 +84,19 @@ func TestProbe_MissingReturnsInvalidEmptyReason(t *testing.T) {
 	assert.Empty(t, got.Reason, "missing file must produce empty Reason so the API maps it to not_found")
 }
 
-func TestProbe_SymlinkReturnsInvalid(t *testing.T) {
+// TestProbe_SymlinkToValidDB verifies that Probe follows a symlink to a valid
+// birds.db and reports it as valid. os.Stat (not Lstat) is used so a symlink
+// to a regular file is treated identically to a direct path.
+func TestProbe_SymlinkToValidDB(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	target := filepath.Join(dir, "target")
-	link := filepath.Join(dir, "birds.db")
-	require.NoError(t, os.WriteFile(target, []byte("x"), 0o600))
+	target := writeBirdsDB(t, dir)
+	link := filepath.Join(dir, "birds-link.db")
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("cannot create symlink: %v", err)
 	}
-	// A symlink is not a regular file (Lstat), so Probe rejects it.
+	// Probe should follow the symlink and see the regular file underneath.
 	got := Probe(t.Context(), link)
-	assert.False(t, got.Valid)
-	assert.Equal(t, ReasonOpenFailed, got.Reason)
+	assert.True(t, got.Valid, "symlink to a valid birds.db must be reported as valid")
+	assert.Empty(t, got.Reason)
 }

@@ -80,9 +80,9 @@ type Handler struct {
 	// newLadder builds the elevation ladder. Defaults to elevation.NewLadder;
 	// tests inject a fake-runner ladder.
 	newLadder func() (*elevation.Ladder, error)
-	// stagingBase is the trusted, service-user-owned directory under which
-	// per-import staging subdirectories are created. Resolved lazily; overridable
-	// in tests.
+	// stagingBase is the trusted root directory under which import-stage creates
+	// per-import staging subdirectories. resolveStagingBase returns it; it does NOT
+	// create any directory itself. Overridable in tests.
 	stagingBase string
 	// freeBytesFn reports free bytes on the filesystem holding path. Defaults to
 	// the platform freeBytes; tests inject a stub for the disk preflight.

@@ -98,9 +98,11 @@ func TestGetImportSources_ZeroCandidatesReturnsGuidance(t *testing.T) {
 }
 
 // TestValidateImportSource_Valid verifies that a well-formed BirdNET-Pi SQLite
-// database at an absolute path is reported as valid.
+// database at an absolute path is reported as valid. Pinned to native mode so
+// the per-environment path resolution is deterministic across platforms.
 func TestValidateImportSource_Valid(t *testing.T) {
 	e, h := sourcesHandler(t)
+	h.isContainerEnv = func() bool { return false } // native mode
 
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "birds.db")
@@ -174,8 +176,10 @@ func TestValidateImportSource_CancelledContextDoesNotReturnNotFound(t *testing.T
 
 // TestValidateImportSource_RejectsRelative verifies that a relative path produces
 // valid:false with reason "invalid_path" without touching the filesystem.
+// Pinned to native mode so the per-environment path resolution is deterministic.
 func TestValidateImportSource_RejectsRelative(t *testing.T) {
 	e, h := sourcesHandler(t)
+	h.isContainerEnv = func() bool { return false } // native mode
 
 	body := `{"source_path":"relative/birds.db"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/validate", strings.NewReader(body))

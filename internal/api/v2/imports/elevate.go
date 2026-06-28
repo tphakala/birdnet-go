@@ -118,6 +118,55 @@ type elevateResponse struct {
 	FallbackCommands []string `json:"fallback_commands,omitempty"`
 }
 
+// allocateStagingDst prepares the staging directory for import-stage: resolves the
+// trusted base, verifies free disk space, and returns a random non-existent
+// destination path that import-stage will create. It returns ("", nil) when the
+// base is unavailable (ErrStagingBaseUnavailable); in that case the ladder receives
+// an empty Dst and falls through to its fallback-commands rung, which is the
+// correct UX. A non-nil error means the caller must return an HTTP error:
+// ErrInsufficientSpace for 507, any other error for 503.
+func (c *Handler) allocateStagingDst(reqCtx context.Context, cand *discovery.SourceCandidate, audioDir string) (string, error) {
+	base, baseErr := c.resolveStagingBase()
+	if baseErr != nil {
+		return "", baseErr
+	}
+
+	// Fetch disk space once; shared by the audio-size estimate and the
+	// preflight check to avoid a redundant Statfs syscall.
+	free, freeErr := c.freeBytesFn(base)
+
+	// Estimate required bytes: db size + (for db-audio) audio tree size * 2
+	// transient factor.
+	requiredBytes := uint64(cand.Size) //nolint:gosec // Size is a non-negative file-size field
+	if audioDir != "" {
+		audioBytes := dirSizeBounded(reqCtx, audioDir, free, dirSizeBoundedNodeCap)
+		requiredBytes += audioBytes * 2 // transient factor for copy
+		if freeErr != nil {
+			c.LogDebugIfEnabled("import: could not check free disk space for audio estimate",
+				logger.String("error", freeErr.Error()))
+		}
+	}
+	if pfErr := c.preflightDiskSpace(free, freeErr, requiredBytes); pfErr != nil {
+		if errors.Is(pfErr, ErrInsufficientSpace) {
+			return "", pfErr
+		}
+		// ErrDiskCheckUnsupported or other: skip the check rather than blocking
+		// (non-linux platforms cannot check; disk checks are best-effort).
+	}
+
+	// Pick a random staging destination. If the base is not trusted (returns
+	// ErrStagingBaseUnavailable), return ("", nil) so the caller passes an empty
+	// Dst to the ladder; the ladder then falls through to fallback commands.
+	dst, dstErr := c.newStagingDst(base)
+	if dstErr != nil {
+		if !errors.Is(dstErr, ErrStagingBaseUnavailable) {
+			return "", dstErr
+		}
+		return "", nil
+	}
+	return dst, nil
+}
+
 // ElevateImport attempts to make an unreadable BirdNET-Pi database accessible via
 // the elevation ladder (direct read -> passwordless sudo -> in-app password ->
 // fallback). On a successful direct or sudo staging it launches the import; on
@@ -190,43 +239,21 @@ func (c *Handler) ElevateImport(ctx echo.Context) error {
 		audioDir = cand.AudioDirGuess
 	}
 
-	// Resolve the trusted staging base.
-	base, err := c.resolveStagingBase()
-	if err != nil {
-		return c.HandleError(ctx, err, "staging base unavailable", http.StatusServiceUnavailable)
-	}
-
-	// Fetch disk space once; shared by the audio-size estimate and the preflight
-	// check to avoid a redundant Statfs syscall.
-	free, freeErr := c.freeBytesFn(base)
-
-	// Estimate required bytes: db size + (for db-audio) audio tree size * 2 transient factor.
-	requiredBytes := uint64(cand.Size) //nolint:gosec // Size is a non-negative file-size field
-	if audioDir != "" {
-		audioBytes := dirSizeBounded(ctx.Request().Context(), audioDir, free, dirSizeBoundedNodeCap)
-		requiredBytes += audioBytes * 2 // transient factor for copy
-		if freeErr != nil {
-			c.LogDebugIfEnabled("import: could not check free disk space for audio estimate",
-				logger.String("error", freeErr.Error()))
+	// Staging infrastructure is only needed when the source is not directly
+	// readable. When cand.Valid is true the ladder's direct rung handles it
+	// with no staging copy, so skip the /var/tmp allocation and disk preflight
+	// to avoid a spurious 507 for an already-accessible database.
+	var dst string
+	if !cand.Valid {
+		var stagingErr error
+		dst, stagingErr = c.allocateStagingDst(ctx.Request().Context(), &cand, audioDir)
+		if stagingErr != nil {
+			if errors.Is(stagingErr, ErrInsufficientSpace) {
+				return c.HandleError(ctx, stagingErr, "insufficient disk space for staging", http.StatusInsufficientStorage)
+			}
+			return c.HandleError(ctx, stagingErr, "staging setup failed", http.StatusServiceUnavailable)
 		}
 	}
-	if pfErr := c.preflightDiskSpace(free, freeErr, requiredBytes); pfErr != nil {
-		if errors.Is(pfErr, ErrInsufficientSpace) {
-			return c.HandleError(ctx, pfErr, "insufficient disk space for staging", http.StatusInsufficientStorage)
-		}
-		// ErrDiskCheckUnsupported or other: skip the check rather than blocking
-		// (non-linux platforms cannot check; disk checks are best-effort).
-	}
-
-	// Pick a random staging destination. If the base is not trusted (returns
-	// ErrStagingBaseUnavailable), fall through to the ladder so it can return
-	// fallback commands; the ladder never reaches staging for that case anyway.
-	dst, dstErr := c.newStagingDst(base)
-	if dstErr != nil && !errors.Is(dstErr, ErrStagingBaseUnavailable) {
-		return c.HandleError(ctx, dstErr, "could not allocate staging directory", http.StatusInternalServerError)
-	}
-	// dstErr may be ErrStagingBaseUnavailable here; the ladder will fall through
-	// to fallback commands, which is the correct UX.
 
 	// Read settings live per request (hot-reload compliance).
 	var allowElevation bool

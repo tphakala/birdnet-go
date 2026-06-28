@@ -87,6 +87,11 @@ func TestElevateImport_RejectsContainer(t *testing.T) {
 func TestElevateImport_InsufficientSpace(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "birds.db")
 	writeMinimalBirdNetPiDB(t, src)
+	// Make unreadable so Probe returns cand.Valid=false, triggering the staging
+	// path where the disk preflight runs. Without this, the source is directly
+	// readable (cand.Valid=true) and staging (+ preflight) is skipped entirely.
+	require.NoError(t, os.Chmod(src, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(src, 0o600) })
 
 	h := New(testCore(t), nil)
 	h.isContainerEnv = func() bool { return false }
