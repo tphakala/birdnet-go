@@ -751,10 +751,13 @@ Performance Optimizations:
     </div>
   </nav>
 
-  <!-- Fixed-position tooltip for collapsed sidebar (escapes overflow containers) -->
+  <!-- Fixed-position tooltip for collapsed sidebar (escapes overflow containers).
+       z-[210] keeps it above the drawer (z-[200] = Z_INDEX.SIDEBAR_DRAWER): the
+       collapsed state persists in localStorage and can carry over to a mobile
+       viewport, where the drawer is raised to z-[200] and would otherwise hide it. -->
   {#if tooltipVisible && isCollapsed}
     <div
-      class="sidebar-tooltip fixed px-2 py-1 bg-[var(--color-base-300)] text-[var(--color-base-content)] text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[100] -translate-y-1/2"
+      class="sidebar-tooltip fixed px-2 py-1 bg-[var(--color-base-300)] text-[var(--color-base-content)] text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[210] -translate-y-1/2"
       style:top="{tooltipPosition.top}px"
       style:left="{tooltipPosition.left}px"
     >
