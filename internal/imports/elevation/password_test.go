@@ -60,3 +60,15 @@ func TestPasswordUnmarshalHandlesEscapes(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"password":"a\"b\\c"}`), &body))
 	assert.Equal(t, []byte(`a"b\c`), body.Password.Bytes())
 }
+
+func TestPasswordUnmarshalHandlesSurrogatePair(t *testing.T) {
+	var body struct {
+		Password Password `json:"password"`
+	}
+	// U+1F600 JSON-escaped as a UTF-16 surrogate pair must decode to the single
+	// 4-byte UTF-8 code point, not two corrupted halves. The escaped \u form (not
+	// a raw emoji) is required to exercise the surrogate-pair decode path.
+	payload := []byte("{\"password\":\"p\\uD83D\\uDE00\"}")
+	require.NoError(t, json.Unmarshal(payload, &body))
+	assert.Equal(t, append([]byte("p"), "\U0001F600"...), body.Password.Bytes())
+}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -155,9 +156,16 @@ func (l *Ladder) Stage(ctx context.Context, req *StageRequest) (Outcome, error) 
 		// Drop any cached sudo grant first so the password attempt starts fresh
 		// and a stale timestamp cache cannot mask a wrong password.
 		_ = l.Runner.Run(ctx, nil, "sudo", "-k")
-		// Feed the password on stdin; -p "" suppresses the prompt.
+		// Feed the password on stdin; -p "" suppresses the prompt. sudo -S reads
+		// the password as a line, so it MUST be newline-terminated. Build a
+		// throwaway newline-terminated copy and zero it right after use.
+		pwLine := make([]byte, len(req.Password)+1)
+		copy(pwLine, req.Password)
+		pwLine[len(pwLine)-1] = '\n'
 		sudoArgs := append([]string{"-S", "-p", "", "--"}, cmd...)
-		if runErr := l.Runner.Run(ctx, req.Password.Bytes(), "sudo", sudoArgs...); runErr == nil {
+		runErr := l.Runner.Run(ctx, pwLine, "sudo", sudoArgs...)
+		clear(pwLine)
+		if runErr == nil {
 			l.Log.Info("import: staged via sudo with password",
 				slog.String("src", req.Src),
 				slog.String("dst", req.Dst),
@@ -224,12 +232,38 @@ func fallbackCommands(req *StageRequest) []string {
 	// runs in a shell, so a path or owner containing spaces or shell metacharacters
 	// (e.g. $(...), ;, backtick) must not be interpretable. shellQuote single-quotes
 	// the value so it is always a single literal argument.
-	cmds := []string{
-		fmt.Sprintf("sudo setfacl -R -m u:%s:rX %s", shellQuote(owner), shellQuote(req.Src)),
-	}
+	//
+	// A recursive rX on the data directory is not enough on its own: if a parent
+	// (e.g. /home/pi, mode 0700) lacks execute/search for the service user, it
+	// cannot traverse down to the data at all. So also grant a traversal (x) ACL on
+	// each ancestor directory of the source, up to but not including the root.
+	var cmds []string
+	cmds = append(cmds, parentTraversalACLs(owner, req.Src)...)
+	cmds = append(cmds, fmt.Sprintf("sudo setfacl -R -m u:%s:rX %s", shellQuote(owner), shellQuote(req.Src)))
 	if req.Audio != "" {
+		cmds = append(cmds, parentTraversalACLs(owner, req.Audio)...)
 		cmds = append(cmds, fmt.Sprintf("sudo setfacl -R -m u:%s:rX %s", shellQuote(owner), shellQuote(req.Audio)))
 	}
+	return cmds
+}
+
+// parentTraversalACLs returns setfacl commands granting the owner execute
+// (search) access on each ancestor directory of path, from its parent up to but
+// not including the filesystem root. Without traversal on every ancestor, a
+// recursive rX on the leaf data directory still cannot be reached.
+func parentTraversalACLs(owner, path string) []string {
+	var cmds []string
+	dir := filepath.Dir(filepath.Clean(path))
+	for dir != "" && dir != string(filepath.Separator) && dir != "." {
+		cmds = append(cmds, fmt.Sprintf("sudo setfacl -m u:%s:x %s", shellQuote(owner), shellQuote(dir)))
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	// List outermost ancestor first so the user grants traversal top-down.
+	slices.Reverse(cmds)
 	return cmds
 }
 
@@ -248,9 +282,18 @@ func (e *execRunner) Run(ctx context.Context, stdin []byte, name string, args ..
 	if len(stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
-	// Discard stdout/stderr to avoid echoing a password prompt or other output.
-	// sudo with -p "" suppresses prompts; stderr discard prevents accidental leaks.
-	return cmd.Run()
+	// Capture stderr for diagnosability. sudo's prompt is suppressed via -p "",
+	// and our own subcommand never writes the password to stderr, so this does
+	// not leak the secret; it surfaces the actual sudo / import-stage failure.
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if stderr.Len() > 0 {
+			return fmt.Errorf("%w: %s", err, bytes.TrimSpace(stderr.Bytes()))
+		}
+		return err
+	}
+	return nil
 }
 
 // osDirectReader checks readability using os.Open.

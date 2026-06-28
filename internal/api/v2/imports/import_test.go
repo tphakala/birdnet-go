@@ -1531,7 +1531,7 @@ func TestResolveNativeImportSourcePath_RejectsRelative(t *testing.T) {
 
 func TestResolveNativeImportSourcePath_RejectsMissing(t *testing.T) {
 	_, err := resolveNativeImportSourcePath("/nonexistent/birds.db")
-	require.Error(t, err)
+	require.ErrorIs(t, err, errInvalidSourcePath)
 }
 
 // TestResolveNativeImportSourcePath_AcceptsRegularFile documents that the

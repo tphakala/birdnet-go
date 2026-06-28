@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,8 +108,8 @@ func TestLadderPasswordPathFeedsAndClears(t *testing.T) {
 	assert.Equal(t, MethodSudoPassword, out.Method)
 	// sudo -k must be invoked before the password attempt.
 	assert.Equal(t, []string{"sudo", "-k"}, findCall(r.calls, "-k"))
-	// The password is fed on stdin exactly once.
-	assert.Equal(t, 1, countStdin(r.stdins, []byte("hunter2")))
+	// The password is fed on stdin exactly once, newline-terminated for sudo -S.
+	assert.Equal(t, 1, countStdin(r.stdins, []byte("hunter2\n")))
 	// The password bytes are zeroed after use (Clear() zeroes the backing
 	// array; the caller's pw slice header still points at that array).
 	assert.Equal(t, make([]byte, len("hunter2")), []byte(pw))
@@ -185,9 +186,10 @@ func TestLadderFallbackWhenNoSudo(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, MethodFallback, out.Method)
 	require.NotEmpty(t, out.FallbackCommands)
-	// The remediation command must reference the (shell-quoted) source path so a
-	// regression that drops argument interpolation is caught.
-	assert.Contains(t, out.FallbackCommands[0], "'/data/birds.db'")
+	// Some remediation command must reference the (shell-quoted) source path so a
+	// regression that drops argument interpolation is caught. The first commands
+	// are parent-directory traversal grants, so check across all of them.
+	assert.Contains(t, strings.Join(out.FallbackCommands, "\n"), "'/data/birds.db'")
 }
 
 func TestLadderSudoStagingFailsFallsThrough(t *testing.T) {

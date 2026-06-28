@@ -23,8 +23,9 @@ import (
 // resolveNativeImportSourcePath validates an absolute path to a BirdNET-Pi
 // birds.db on a native install. Unlike the container branch there is no root
 // confinement: reading any file the service user can read is no privilege
-// escalation. The path must be absolute, exist as a regular file, and be a
-// valid BirdNET-Pi SQLite database.
+// escalation. The path must be absolute and resolve to an existing regular
+// file; BirdNET-Pi schema validation is deferred to the shared factory +
+// Validate step in StartBirdNETPiImport (the container branch does the same).
 func resolveNativeImportSourcePath(userPath string) (string, error) {
 	if userPath == "" || !filepath.IsAbs(userPath) {
 		return "", errInvalidSourcePath

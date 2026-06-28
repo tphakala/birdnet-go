@@ -31,12 +31,19 @@ type Password []byte
 // string unescape (the standard escapes plus \uXXXX) into a fresh byte buffer so
 // the only cleartext bytes live in a slice Clear() can wipe.
 func (p *Password) UnmarshalJSON(b []byte) error {
+	// Zero any secret this Password already held: if it is unmarshaled more than
+	// once (reuse), the old backing array would otherwise linger, and on a decode
+	// error a stale password must not survive into a later retry.
+	old := *p
 	out, err := decodeJSONString(b)
 	if err != nil {
-		// Zero any partially-decoded cleartext before discarding it.
+		// Zero both the partially-decoded cleartext and the prior value.
 		clear(out)
+		clear(old)
+		*p = nil
 		return err
 	}
+	clear(old)
 	*p = out
 	return nil
 }
@@ -92,6 +99,25 @@ func decodeJSONString(b []byte) ([]byte, error) {
 				r = r<<4 | rune(d)
 			}
 			i += 4
+			// Combine a UTF-16 surrogate pair (\uD800-\uDBFF followed by
+			// \uDC00-\uDFFF) into the single code point it encodes, so non-BMP
+			// characters in a password decode correctly instead of as two halves.
+			if r >= 0xD800 && r <= 0xDBFF && i+6 <= len(body) && body[i] == '\\' && body[i+1] == 'u' {
+				var lo rune
+				valid := true
+				for j := range 4 {
+					d, ok := hexVal(body[i+2+j])
+					if !ok {
+						valid = false
+						break
+					}
+					lo = lo<<4 | rune(d)
+				}
+				if valid && lo >= 0xDC00 && lo <= 0xDFFF {
+					r = (r-0xD800)<<10 | (lo - 0xDC00) + 0x10000
+					i += 6
+				}
+			}
 			var enc [utf8.UTFMax]byte
 			n := utf8.EncodeRune(enc[:], r)
 			out = append(out, enc[:n]...)
