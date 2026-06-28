@@ -74,16 +74,16 @@ func resolveLinks(links map[string]LinkEntry, lang string, reg map[string]Source
 		if !ok {
 			continue
 		}
-		var url string
+		var linkURL string
 		switch {
 		case entry.URL != "":
-			url = entry.URL
+			linkURL = entry.URL
 		case entry.ID != "":
-			url = substituteTemplate(src.URL, map[string]string{"id": entry.ID, "lang": lang})
+			linkURL = substituteTemplate(src.URL, map[string]string{"id": entry.ID, "lang": lang})
 		default:
 			continue
 		}
-		out = append(out, Link{Name: src.Name, URL: url, Icon: src.Icon, Order: src.Order})
+		out = append(out, Link{Name: src.Name, URL: linkURL, Icon: src.Icon, Order: src.Order})
 	}
 	sortLinks(out)
 	return out
