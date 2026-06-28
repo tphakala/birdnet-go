@@ -31,6 +31,7 @@
     CircleX,
   } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
+  import { portal } from '$lib/utils/portal';
   import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
   import { auth } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
@@ -225,6 +226,7 @@
         variant === 'overlay' ? 'hover:bg-white/10' : 'hover:bg-[var(--color-base-300)]'}
       <ul
         bind:this={menuElement}
+        use:portal
         in:dropdown
         out:dropdown={{ duration: 100 }}
         class={cn(
