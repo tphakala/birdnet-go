@@ -1092,32 +1092,40 @@ describe('BirdNetPiImportWizard', () => {
 
   // C25: password_required response reveals password panel with HTTP warning
   it('shows the HTTP password warning when password_required is returned', async () => {
+    const origLocation = globalThis.location;
     Object.defineProperty(globalThis, 'location', {
       value: { protocol: 'http:' },
       writable: true,
       configurable: true,
     });
+    try {
+      setupUnreadableNativeSources();
+      // First elevate attempt (no password) returns password_required
+      vi.mocked(api.post).mockResolvedValueOnce({ method: 'password_required' });
 
-    setupUnreadableNativeSources();
-    // First elevate attempt (no password) returns password_required
-    vi.mocked(api.post).mockResolvedValueOnce({ method: 'password_required' });
+      render(BirdNetPiImportWizard, { props: { onClose } });
 
-    render(BirdNetPiImportWizard, { props: { onClose } });
+      await navigateUnreadablePastSourceToConfirm();
 
-    await navigateUnreadablePastSourceToConfirm();
+      // Click Start import to trigger the first elevation attempt
+      await fireEvent.click(
+        screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+      );
 
-    // Click Start import to trigger the first elevation attempt
-    await fireEvent.click(
-      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
-    );
-
-    // Password panel with HTTP warning should appear at the confirm step
-    expect(
-      await screen.findByText(/system.importExport.source.elevation.httpWarning/)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/system.importExport.source.elevation.passwordLabel/)
-    ).toBeInTheDocument();
+      // Password panel with HTTP warning should appear at the confirm step
+      expect(
+        await screen.findByText(/system.importExport.source.elevation.httpWarning/)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/system.importExport.source.elevation.passwordLabel/)
+      ).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(globalThis, 'location', {
+        value: origLocation,
+        writable: true,
+        configurable: true,
+      });
+    }
   });
 
   // C25: container unreadable candidate shows host-permission hint, NO elevation button
