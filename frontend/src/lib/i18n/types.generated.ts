@@ -897,7 +897,6 @@ export type TranslationKey =
   | 'system.sections.inference'
   | 'system.sections.terminal'
   | 'system.sections.importExport'
-  | 'system.importExport.pageDescription'
   | 'system.importExport.available'
   | 'system.importExport.comingSoon'
   | 'system.importExport.loading'

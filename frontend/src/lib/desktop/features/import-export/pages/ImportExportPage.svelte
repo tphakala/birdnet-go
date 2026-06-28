@@ -18,10 +18,6 @@
 </script>
 
 <div class="space-y-6">
-  <p class="text-sm text-[var(--color-base-content)]/70">
-    {t('system.importExport.pageDescription')}
-  </p>
-
   <!-- Import section -->
   <section aria-labelledby="import-section-heading">
     <h3

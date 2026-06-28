@@ -1158,7 +1158,6 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "pageDescription": "Import data from other bird recording systems or export your detections.",
       "available": "Available",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
