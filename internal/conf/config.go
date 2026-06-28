@@ -193,17 +193,22 @@ type Dashboard struct {
 // provide) — is opt-in via EnableWikipedia and defaults to off, so the guide
 // works fully offline out of the box.
 //
+// EnableSupplementaryLinks opts into computed fallback links (Xeno-canto plus a
+// Wikipedia link for species the offline dataset does not cover); it defaults
+// off and needs no network access at render time.
+//
 // The three Show* flags are pointers so that an absent value defaults to true:
 // a plain bool would default to false and hide every section for existing users.
 // Read them through the IsShow*() accessors, never directly.
 type SpeciesGuideConfig struct {
-	Enabled            bool  `yaml:"enabled" json:"enabled"`
-	EnableWikipedia    bool  `yaml:"enablewikipedia" json:"enableWikipedia"`       // opt in to online Wikipedia descriptions (default off)
-	WarmTopN           int   `yaml:"warmtopn" json:"warmTopN"`                     // top-N species warmed on startup (0 = off)
-	PreFetchEnabled    bool  `yaml:"prefetchenabled" json:"preFetchEnabled"`       // pre-fetch guides for newly detected species
-	ShowNotes          *bool `yaml:"shownotes" json:"showNotes"`                   // default true
-	ShowEnrichments    *bool `yaml:"showenrichments" json:"showEnrichments"`       // default true
-	ShowSimilarSpecies *bool `yaml:"showsimilarspecies" json:"showSimilarSpecies"` // default true
+	Enabled                  bool  `yaml:"enabled" json:"enabled"`
+	EnableWikipedia          bool  `yaml:"enablewikipedia" json:"enableWikipedia"`                   // opt in to online Wikipedia descriptions (default off)
+	EnableSupplementaryLinks bool  `yaml:"enablesupplementarylinks" json:"enableSupplementaryLinks"` // opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off
+	WarmTopN                 int   `yaml:"warmtopn" json:"warmTopN"`                                 // top-N species warmed on startup (0 = off)
+	PreFetchEnabled          bool  `yaml:"prefetchenabled" json:"preFetchEnabled"`                   // pre-fetch guides for newly detected species
+	ShowNotes                *bool `yaml:"shownotes" json:"showNotes"`                               // default true
+	ShowEnrichments          *bool `yaml:"showenrichments" json:"showEnrichments"`                   // default true
+	ShowSimilarSpecies       *bool `yaml:"showsimilarspecies" json:"showSimilarSpecies"`             // default true
 }
 
 // IsShowNotes reports whether the notes section should be shown (defaults to true when unset).
