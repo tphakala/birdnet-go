@@ -107,7 +107,7 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	// returns context.Canceled — which happens when ctx is already done. Use an
 	// independent context so both servers are fully shut down.
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // Echo.Shutdown skips Server.Shutdown if TLSServer.Shutdown returns context.Canceled
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // t.Context() is already cancelled in Cleanup
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
 		if s.httpRedirectServer != nil {
@@ -313,7 +313,7 @@ func TestAutoTLS_DualListeners_RedirectStatus(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // t.Context() is already cancelled in Cleanup
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
 		if s.httpRedirectServer != nil {
@@ -419,7 +419,7 @@ func TestAutoTLS_RedirectDisabled_ServesApp(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // t.Context() is already cancelled in Cleanup
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
 		if s.httpRedirectServer != nil {
