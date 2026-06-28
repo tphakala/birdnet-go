@@ -7,8 +7,14 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 )
+
+// stagedDBName is the fixed filename import-stage writes the staged database as.
+// It must match staging.stagedDBName; kept as a local constant to avoid importing
+// the staging package (which pulls in cgo) just for a string.
+const stagedDBName = "birds.db"
 
 // Method describes how the ladder satisfied (or declined) the staging request.
 type Method string
@@ -105,6 +111,12 @@ func NewLadder() (*Ladder, error) {
 // Stage runs the four-rung elevation ladder for req and returns the outcome.
 // The password in req is cleared on every return path.
 func (l *Ladder) Stage(ctx context.Context, req *StageRequest) (Outcome, error) {
+	// Clear the password on every return path, regardless of which rung is
+	// reached or whether elevation is attempted at all. A direct-read or
+	// passwordless-sudo success returns before the password rung, so clearing
+	// only inside that rung would leave a caller-supplied password in memory.
+	defer req.Password.Clear()
+
 	// Rung 1: direct read. If the service user can read the source, no copy needed.
 	if l.Direct.CanRead(req.Src) {
 		l.Log.Info("import: direct read available",
@@ -114,48 +126,41 @@ func (l *Ladder) Stage(ctx context.Context, req *StageRequest) (Outcome, error) 
 		return Outcome{Method: MethodDirect, StagedDB: req.Src, StagedAudio: req.Audio}, nil
 	}
 
-	// Rung 2: passwordless sudo probe.
+	// cmd is the import-stage invocation (binary + flags), shared by both sudo
+	// rungs. Each rung prepends its own sudo flags and the "--" sentinel.
+	cmd := buildStageCommand(l.SelfExe, req)
+
+	// Rung 2: passwordless sudo probe, then the staged copy via `sudo -n`.
 	if err := l.Runner.Run(ctx, nil, "sudo", "-n", "true"); err == nil {
-		argv := buildArgv(l.SelfExe, req)
-		if runErr := l.Runner.Run(ctx, nil, "sudo", argv...); runErr == nil {
+		sudoArgs := append([]string{"-n", "--"}, cmd...)
+		if runErr := l.Runner.Run(ctx, nil, "sudo", sudoArgs...); runErr == nil {
 			l.Log.Info("import: staged via passwordless sudo",
 				slog.String("src", req.Src),
 				slog.String("dst", req.Dst),
 				slog.String("method", string(MethodSudoNonInteractive)),
 			)
-			return Outcome{
-				Method:   MethodSudoNonInteractive,
-				StagedDB: req.Dst + "/birds.db",
-			}, nil
+			return stagedOutcome(MethodSudoNonInteractive, req), nil
 		}
 	}
 
 	// Rung 3: in-app sudo password.
 	if req.AllowElevation && len(req.Password) > 0 {
-		defer req.Password.Clear()
-		// Drop any cached sudo grant first so the password attempt starts fresh.
+		// Drop any cached sudo grant first so the password attempt starts fresh
+		// and a stale timestamp cache cannot mask a wrong password.
 		_ = l.Runner.Run(ctx, nil, "sudo", "-k")
 		// Feed the password on stdin; -p "" suppresses the prompt.
-		argv := buildArgv(l.SelfExe, req)
-		pwBytes := req.Password.Bytes()
-		sudoArgs := append([]string{"-S", "-p", "", "--"}, argv...)
-		if runErr := l.Runner.Run(ctx, pwBytes, "sudo", sudoArgs...); runErr == nil {
+		sudoArgs := append([]string{"-S", "-p", "", "--"}, cmd...)
+		if runErr := l.Runner.Run(ctx, req.Password.Bytes(), "sudo", sudoArgs...); runErr == nil {
 			l.Log.Info("import: staged via sudo with password",
 				slog.String("src", req.Src),
 				slog.String("dst", req.Dst),
 				slog.String("method", string(MethodSudoPassword)),
 			)
-			return Outcome{
-				Method:   MethodSudoPassword,
-				StagedDB: req.Dst + "/birds.db",
-			}, nil
+			return stagedOutcome(MethodSudoPassword, req), nil
 		}
 		l.Log.Warn("import: sudo password elevation failed",
 			slog.String("src", req.Src),
 		)
-	} else {
-		// Ensure the password is cleared even when not attempted.
-		req.Password.Clear()
 	}
 
 	// Rung 4: fallback. Provide copy-paste remediation hints, no error.
@@ -167,12 +172,14 @@ func (l *Ladder) Stage(ctx context.Context, req *StageRequest) (Outcome, error) 
 	return Outcome{Method: MethodFallback, FallbackCommands: cmds}, nil
 }
 
-// buildArgv builds the --flag=value argv slice for the import-stage subcommand.
-// The "-n" and "--" sentinel are prepended so sudo passes the command through
-// without interpretation and cannot re-elevate further.
-func buildArgv(selfExe string, req *StageRequest) []string {
-	args := make([]string, 0, 8)
-	args = append(args, "-n", "--",
+// buildStageCommand builds the import-stage invocation (binary path plus
+// --flag=value arguments), without any sudo flags. Each sudo rung prepends its
+// own flags and a "--" sentinel, so the flags here are never re-interpreted by
+// sudo. Using --flag=value form means a value that looks like a flag (e.g.
+// --src=-rf) is bound to its flag, not treated as a new option.
+func buildStageCommand(selfExe string, req *StageRequest) []string {
+	args := make([]string, 0, 7)
+	args = append(args,
 		selfExe,
 		"import-stage",
 		"--src="+req.Src,
@@ -184,6 +191,17 @@ func buildArgv(selfExe string, req *StageRequest) []string {
 		args = append(args, "--audio="+req.Audio)
 	}
 	return args
+}
+
+// stagedOutcome builds the Outcome for a successful sudo staging copy. The staged
+// paths mirror what import-stage writes under Dst: the database as stagedDBName
+// and, when audio was requested, the audio tree under its base name.
+func stagedOutcome(method Method, req *StageRequest) Outcome {
+	out := Outcome{Method: method, StagedDB: filepath.Join(req.Dst, stagedDBName)}
+	if req.Audio != "" {
+		out.StagedAudio = filepath.Join(req.Dst, filepath.Base(req.Audio))
+	}
+	return out
 }
 
 // fallbackCommands returns copy-paste shell commands the user can run manually

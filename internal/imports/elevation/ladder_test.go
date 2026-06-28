@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,10 +40,8 @@ func (d fakeDirect) CanRead(string) bool { return d.readable }
 
 func findCall(calls [][]string, arg string) []string {
 	for _, c := range calls {
-		for _, a := range c {
-			if a == arg {
-				return c
-			}
+		if slices.Contains(c, arg) {
+			return c
 		}
 	}
 	return nil
@@ -110,6 +109,66 @@ func TestLadderPasswordPathFeedsAndClears(t *testing.T) {
 	assert.Equal(t, make([]byte, len("hunter2")), []byte(pw))
 	// No log line contains the cleartext password.
 	assert.NotContains(t, logBuf.String(), "hunter2")
+}
+
+func TestLadderSudoNonInteractiveArgvWellFormed(t *testing.T) {
+	r := &fakeRunner{}
+	l := &Ladder{Runner: r, Direct: fakeDirect{}, SelfExe: "/bin/birdnet", Log: slog.Default()}
+	_, err := l.Stage(t.Context(), &StageRequest{
+		Src: "/data/birds.db", Dst: "/stg", UID: 1000, GID: 1000,
+	})
+	require.NoError(t, err)
+	// The staged-copy call must be: sudo -n -- /bin/birdnet import-stage ...
+	// with exactly one "--" sentinel and the binary immediately after it.
+	staged := r.calls[1]
+	require.Equal(t, []string{
+		"sudo", "-n", "--",
+		"/bin/birdnet", "import-stage",
+		"--src=/data/birds.db", "--dst=/stg", "--uid=1000", "--gid=1000",
+	}, staged)
+}
+
+func TestLadderSudoPasswordArgvWellFormed(t *testing.T) {
+	r := &fakeRunner{failOn: map[string]bool{"-n": true}}
+	l := &Ladder{Runner: r, Direct: fakeDirect{}, SelfExe: "/bin/birdnet", Log: slog.Default()}
+	_, err := l.Stage(t.Context(), &StageRequest{
+		Src: "/data/birds.db", Dst: "/stg", UID: 1000, GID: 1000,
+		Password: Password("pw"), AllowElevation: true,
+	})
+	require.NoError(t, err)
+	// The password staged-copy call must be:
+	// sudo -S -p "" -- /bin/birdnet import-stage ...
+	// The binary must sit immediately after the single "--" sentinel: a stray
+	// "-n" or a doubled "--" would make sudo try to exec the wrong command.
+	staged := findCall(r.calls, "import-stage")
+	require.Equal(t, []string{
+		"sudo", "-S", "-p", "", "--",
+		"/bin/birdnet", "import-stage",
+		"--src=/data/birds.db", "--dst=/stg", "--uid=1000", "--gid=1000",
+	}, staged)
+}
+
+func TestLadderClearsPasswordOnDirectRead(t *testing.T) {
+	// Even when the source is directly readable (password never used), a
+	// caller-supplied password must be zeroed on return.
+	pw := Password("hunter2")
+	l := &Ladder{Runner: &fakeRunner{}, Direct: fakeDirect{readable: true}, SelfExe: "/bin/birdnet", Log: slog.Default()}
+	_, err := l.Stage(t.Context(), &StageRequest{
+		Src: "/data/birds.db", Dst: "/stg", Password: pw, AllowElevation: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, make([]byte, len("hunter2")), []byte(pw))
+}
+
+func TestLadderReportsStagedAudio(t *testing.T) {
+	r := &fakeRunner{}
+	l := &Ladder{Runner: r, Direct: fakeDirect{}, SelfExe: "/bin/birdnet", Log: slog.Default()}
+	out, err := l.Stage(t.Context(), &StageRequest{
+		Src: "/data/birds.db", Audio: "/data/BirdSongs", Dst: "/stg", UID: 1000, GID: 1000,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "/stg/birds.db", out.StagedDB)
+	assert.Equal(t, "/stg/BirdSongs", out.StagedAudio)
 }
 
 func TestLadderFallbackWhenNoSudo(t *testing.T) {
