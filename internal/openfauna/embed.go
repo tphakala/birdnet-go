@@ -24,3 +24,6 @@ var localesList []byte
 
 //go:embed data/SOURCE.txt
 var dataSource []byte
+
+//go:embed supplementary_sources.json
+var supplementarySourcesJSON []byte

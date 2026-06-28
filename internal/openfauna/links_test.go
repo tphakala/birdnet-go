@@ -69,3 +69,52 @@ func TestEmbeddedSourcesLoad(t *testing.T) {
 		t.Fatalf("wikipedia order = %d, want 10", reg["wikipedia"].Order)
 	}
 }
+
+func TestExternalLinksSupplementaryAppendsXenoCanto(t *testing.T) {
+	// Aquila chrysaetos is in the embedded dataset with wikipedia+inaturalist ids.
+	withSupp := ExternalLinks("Aquila chrysaetos", "en", true)
+	icons := map[string]bool{}
+	for _, l := range withSupp {
+		icons[l.Icon] = true
+	}
+	if !icons["xeno-canto"] {
+		t.Fatalf("supplementary on: expected a xeno-canto link, got %+v", withSupp)
+	}
+	wikiCount := 0
+	for _, l := range withSupp {
+		if l.Icon == "wikipedia" {
+			wikiCount++
+		}
+	}
+	if wikiCount != 1 {
+		t.Fatalf("expected exactly one wikipedia link (no duplicate gap-fill), got %d: %+v", wikiCount, withSupp)
+	}
+}
+
+func TestExternalLinksSupplementaryOffOmitsXenoCanto(t *testing.T) {
+	off := ExternalLinks("Aquila chrysaetos", "en", false)
+	for _, l := range off {
+		if l.Icon == "xeno-canto" {
+			t.Fatalf("supplementary off: xeno-canto should not appear: %+v", off)
+		}
+	}
+}
+
+func TestExternalLinksWikipediaGapFillForMissingSpecies(t *testing.T) {
+	links := ExternalLinks("Madeupus nonexistus", "fr", true)
+	var wiki, xc bool
+	for _, l := range links {
+		if l.Icon == "wikipedia" {
+			wiki = true
+			if l.URL != "https://fr.wikipedia.org/wiki/Madeupus_nonexistus" {
+				t.Fatalf("gap-fill wikipedia url wrong: %s", l.URL)
+			}
+		}
+		if l.Icon == "xeno-canto" {
+			xc = true
+		}
+	}
+	if !wiki || !xc {
+		t.Fatalf("missing-species gap-fill incomplete: wiki=%v xc=%v (%+v)", wiki, xc, links)
+	}
+}
