@@ -383,19 +383,23 @@ Performance Optimizations:
     },
   ]);
 
+  // Close the mobile drawer by unchecking the toggle. Dispatch a synthetic
+  // change event so Svelte's bind:checked binding stays in sync.
+  function closeMobileDrawer() {
+    const drawer = document.getElementById('my-drawer');
+    if (drawer instanceof HTMLInputElement && drawer.checked) {
+      drawer.checked = false;
+      drawer.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
   function navigate(url: string) {
     if (url === navigationUrls.dashboard) {
       resetDateToToday();
     }
     // Close flyouts on navigation
     activeFlyout = null;
-    // Close the mobile drawer on navigation by unchecking the toggle.
-    // Dispatch a synthetic event so Svelte's bind:checked stays in sync.
-    const drawer = document.getElementById('my-drawer') as HTMLInputElement | null;
-    if (drawer?.checked) {
-      drawer.checked = false;
-      drawer.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    closeMobileDrawer();
     if (onNavigate) {
       onNavigate(url);
     } else {
@@ -417,6 +421,8 @@ Performance Optimizations:
     // Capture the full current location (path + query) at click time so the
     // post-login redirect returns the user to the exact filtered view (#3306).
     loginRedirectUrl = getCurrentPathWithQuery();
+    // Close the mobile drawer before opening the modal to ensure a clean transition.
+    closeMobileDrawer();
     showLoginModal = true;
   }
 
@@ -450,7 +456,8 @@ Performance Optimizations:
 
 <aside
   class={cn(
-    'drawer-side z-10 transition-all duration-200 ease-in-out overflow-visible',
+    // z-[200] matches Z_INDEX.SIDEBAR_DRAWER; lg:z-10 restores desktop stacking
+    'drawer-side z-[200] lg:z-10 transition-all duration-200 ease-in-out overflow-visible',
     isCollapsed ? 'lg:w-16' : 'lg:w-64',
     className
   )}
@@ -744,10 +751,13 @@ Performance Optimizations:
     </div>
   </nav>
 
-  <!-- Fixed-position tooltip for collapsed sidebar (escapes overflow containers) -->
+  <!-- Fixed-position tooltip for collapsed sidebar (escapes overflow containers).
+       z-[210] keeps it above the drawer (z-[200] = Z_INDEX.SIDEBAR_DRAWER): the
+       collapsed state persists in localStorage and can carry over to a mobile
+       viewport, where the drawer is raised to z-[200] and would otherwise hide it. -->
   {#if tooltipVisible && isCollapsed}
     <div
-      class="sidebar-tooltip fixed px-2 py-1 bg-[var(--color-base-300)] text-[var(--color-base-content)] text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[100] -translate-y-1/2"
+      class="sidebar-tooltip fixed px-2 py-1 bg-[var(--color-base-300)] text-[var(--color-base-content)] text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[210] -translate-y-1/2"
       style:top="{tooltipPosition.top}px"
       style:left="{tooltipPosition.left}px"
     >
