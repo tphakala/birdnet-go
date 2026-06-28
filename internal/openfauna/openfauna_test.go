@@ -69,10 +69,8 @@ func TestBuildIndex_AttachesMetadata_Embedded(t *testing.T) {
 	require.True(t, ok, "expected metadata for Turdus merula")
 	assert.NotEmpty(t, m.Class)
 	assert.NotEmpty(t, m.Family)
-	// The 7th metadata column (inaturalist_url) must flow through to the right
-	// field. Contains("inaturalist") weakly pins the column identity (catching a
-	// wikipedia/inaturalist column swap) while staying tolerant of URL drift.
-	assert.Contains(t, m.INaturalistURL, "inaturalist", "iNaturalist column must map to INaturalistURL")
+	// The inaturalist link must flow through to the Links map keyed by "inaturalist".
+	assert.NotEmpty(t, m.Links["inaturalist"].ID, "iNaturalist link must be present in Links map")
 }
 
 func TestBuildIndex_CaseInsensitiveMatching_Embedded(t *testing.T) {
@@ -125,7 +123,7 @@ func TestLookupMeta_SingleSpecies_Embedded(t *testing.T) {
 	m, ok := LookupMeta("Turdus merula")
 	require.True(t, ok)
 	assert.NotEmpty(t, m.Family)
-	assert.NotEmpty(t, m.INaturalistURL)
+	assert.NotEmpty(t, m.Links["inaturalist"].ID, "inaturalist link must be present in Links map")
 
 	_, ok = LookupMeta("Definitely notaspecies")
 	assert.False(t, ok)
@@ -212,18 +210,19 @@ func TestNilIndex_MethodsDoNotPanic(t *testing.T) {
 	assert.Empty(t, ix.Locale())
 }
 
-// TestDecodeMetadataRows_HeaderMappedAndExpansionTolerant proves the metadata
-// decoder maps columns by header name: it tolerates a different column order and
-// ignores unknown future columns (here a hypothetical thumbnail_url), which is the
-// whole point of header mapping for an expanding schema.
-func TestDecodeMetadataRows_HeaderMappedAndExpansionTolerant(t *testing.T) {
+// TestDecodeMetadataRows_JSONLAndExpansionTolerant proves the metadata decoder
+// parses JSONL correctly and silently ignores unknown top-level fields (e.g. a
+// future "media" array) because json.Unmarshal drops fields not present in the
+// target struct.
+func TestDecodeMetadataRows_JSONLAndExpansionTolerant(t *testing.T) {
 	t.Parallel()
 
-	csv := "order,scientific_name,family,class,wikipedia_url,inaturalist_url,family_common,thumbnail_url\n" +
-		"Passeriformes,Turdus merula,Turdidae,Aves,https://w/x,https://i/1,Thrushes,https://t/x\n"
+	// Include an unknown top-level field ("media") to confirm it is ignored.
+	input := `{"scientific_name":"Turdus merula","taxonomy":{"class":"Aves","order":"Passeriformes","family":"Turdidae","family_common":"Thrushes"},"links":{"wikipedia":{"id":"Q25334"},"inaturalist":{"id":"12345"}},"media":[{"url":"https://example.com/img.jpg"}]}
+`
 
 	got := map[string]Meta{}
-	err := decodeMetadataRows(strings.NewReader(csv), func(sci string, m Meta) error {
+	err := decodeMetadataRows(strings.NewReader(input), func(sci string, m Meta) error {
 		got[sci] = m
 		return nil
 	})
@@ -235,29 +234,46 @@ func TestDecodeMetadataRows_HeaderMappedAndExpansionTolerant(t *testing.T) {
 	assert.Equal(t, "Passeriformes", m.Order)
 	assert.Equal(t, "Turdidae", m.Family)
 	assert.Equal(t, "Thrushes", m.FamilyCommon)
-	assert.Equal(t, "https://w/x", m.WikipediaURL)
-	assert.Equal(t, "https://i/1", m.INaturalistURL)
+	assert.Equal(t, "Q25334", m.Links["wikipedia"].ID)
+	assert.Equal(t, "12345", m.Links["inaturalist"].ID)
 }
 
-func TestDecodeMetadataRows_MissingScientificNameColumn(t *testing.T) {
+// TestDecodeMetadataRows_EmptyScientificNameSkipped confirms that JSONL records
+// with an empty or absent "scientific_name" field are silently skipped rather than
+// surfaced as errors (the old CSV decoder rejected a missing header column; the
+// JSONL decoder treats empty scientific_name as a skip signal).
+func TestDecodeMetadataRows_EmptyScientificNameSkipped(t *testing.T) {
 	t.Parallel()
 
-	csv := "class,order\nAves,Passeriformes\n"
-	err := decodeMetadataRows(strings.NewReader(csv), func(string, Meta) error { return nil })
-	require.Error(t, err, "missing scientific_name column must be an error")
+	// One record with no scientific_name, one valid record. Only the valid one
+	// should reach the callback.
+	input := `{"taxonomy":{"class":"Aves","order":"Passeriformes","family":"Turdidae","family_common":""}}
+{"scientific_name":"Turdus merula","taxonomy":{"class":"Aves","order":"Passeriformes","family":"Turdidae","family_common":""},"links":{}}
+`
+	got := map[string]Meta{}
+	err := decodeMetadataRows(strings.NewReader(input), func(sci string, m Meta) error {
+		got[sci] = m
+		return nil
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 1, "record without scientific_name must be skipped, not added")
+	_, ok := got["Turdus merula"]
+	assert.True(t, ok, "the valid record must still be decoded")
 }
 
-// TestDecodeMetadataRows_MissingOptionalColumn proves backward compatibility the
-// other direction: a header that omits an optional known column (family_common)
-// still decodes, leaving that field empty rather than erroring or misaligning.
-func TestDecodeMetadataRows_MissingOptionalColumn(t *testing.T) {
+// TestDecodeMetadataRows_MissingOptionalLinksKey proves forward/backward
+// compatibility: a JSONL record that omits the "family_common" taxonomy field or
+// an entire links key still decodes without error, leaving the corresponding
+// struct field or map entry at its zero value.
+func TestDecodeMetadataRows_MissingOptionalLinksKey(t *testing.T) {
 	t.Parallel()
 
-	csv := "scientific_name,class,order,family,wikipedia_url,inaturalist_url\n" +
-		"Turdus merula,Aves,Passeriformes,Turdidae,https://w/x,https://i/1\n"
+	// family_common absent, inaturalist key absent from links.
+	input := `{"scientific_name":"Turdus merula","taxonomy":{"class":"Aves","order":"Passeriformes","family":"Turdidae"},"links":{"wikipedia":{"id":"Q25334"}}}
+`
 
 	got := map[string]Meta{}
-	err := decodeMetadataRows(strings.NewReader(csv), func(sci string, m Meta) error {
+	err := decodeMetadataRows(strings.NewReader(input), func(sci string, m Meta) error {
 		got[sci] = m
 		return nil
 	})
@@ -267,8 +283,9 @@ func TestDecodeMetadataRows_MissingOptionalColumn(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "Aves", m.Class)
 	assert.Equal(t, "Turdidae", m.Family)
-	assert.Equal(t, "https://i/1", m.INaturalistURL)
-	assert.Empty(t, m.FamilyCommon, "absent optional column must decode to empty, not misalign")
+	assert.Equal(t, "Q25334", m.Links["wikipedia"].ID)
+	assert.Empty(t, m.FamilyCommon, "absent family_common must decode to empty, not error")
+	assert.Empty(t, m.Links["inaturalist"].ID, "absent links key must decode to zero LinkEntry, not error")
 }
 
 // TestDecodeTranslationRows_FiltersSynthetic exercises the per-row callback over
@@ -396,4 +413,32 @@ func TestReverseResolveToScientificSet_FlattensMultiResolutionEntry_Embedded(t *
 	got := ReverseResolveToScientificSet([]string{"Hairy Woodpecker"}, "en")
 	assert.Contains(t, got, "dryobates villosus")
 	assert.Contains(t, got, "leuconotopicus villosus")
+}
+
+func TestDecodeMetadataJSONL(t *testing.T) {
+	const sample = `{"scientific_name":"Aquila chrysaetos","taxonomy":{"class":"Aves","order":"Accipitriformes","family":"Accipitridae","family_common":"Hawks"},"links":{"inaturalist":{"id":"5074"},"wikipedia":{"id":"Q41181"}}}
+{"scientific_name":"Turdus merula","taxonomy":{"class":"Aves","order":"Passeriformes","family":"Turdidae","family_common":""},"links":{"wikipedia":{"id":"Q25334","url":"https://en.wikipedia.org/wiki/Common_blackbird"}}}
+`
+	got := map[string]Meta{}
+	err := decodeMetadataRows(strings.NewReader(sample), func(sci string, m Meta) error {
+		got[sci] = m
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("decodeMetadataRows: %v", err)
+	}
+	eagle, ok := got["Aquila chrysaetos"]
+	if !ok {
+		t.Fatal("missing Aquila chrysaetos")
+	}
+	if eagle.Family != "Accipitridae" || eagle.FamilyCommon != "Hawks" || eagle.Class != "Aves" {
+		t.Fatalf("eagle taxonomy wrong: %+v", eagle)
+	}
+	if eagle.Links["inaturalist"].ID != "5074" || eagle.Links["wikipedia"].ID != "Q41181" {
+		t.Fatalf("eagle links wrong: %+v", eagle.Links)
+	}
+	blackbird := got["Turdus merula"]
+	if blackbird.Links["wikipedia"].URL != "https://en.wikipedia.org/wiki/Common_blackbird" {
+		t.Fatalf("blackbird wikipedia url override missing: %+v", blackbird.Links["wikipedia"])
+	}
 }

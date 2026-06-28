@@ -15,9 +15,11 @@
 package openfauna
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/csv"
+	"encoding/json"
 	"io"
 	"maps"
 	"slices"
@@ -25,7 +27,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/tphakala/birdnet-go/internal/csvutil"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -42,19 +43,6 @@ const (
 	translationColumns = 3
 )
 
-// Column header names of the metadata CSV. Metadata is decoded by header name
-// rather than fixed position so that future columns added upstream do not break
-// this decoder or an already-shipped consumer.
-const (
-	metaColScientific   = "scientific_name"
-	metaColClass        = "class"
-	metaColOrder        = "order"
-	metaColFamily       = "family"
-	metaColFamilyCommon = "family_common"
-	metaColWikipedia    = "wikipedia_url"
-	metaColINaturalist  = "inaturalist_url"
-)
-
 // GetLogger returns the structured logger scoped to this package.
 func GetLogger() logger.Logger {
 	return logger.Global().Module(loggerModule)
@@ -68,20 +56,26 @@ func DataVersion() string {
 	return strings.TrimSpace(string(dataSource))
 }
 
-// Meta holds taxonomy and external-link metadata for a species, sourced from the
-// GBIF backbone taxonomy, Wikipedia, and the iNaturalist Open Data taxonomy.
-//
-// The upstream metadata schema is designed to grow over time (for example with
-// thumbnails or conservation status). New columns are added to the embedded CSV
-// without breaking this package because metadata is decoded by column header
-// name; consuming a new column simply means adding a field here in a later update.
+// LinkEntry is one external-link reference for a species from OpenFauna's nested
+// links map: a stable id resolved against the sources registry, and an optional
+// url override used verbatim when the registry template cannot address the species
+// (e.g. a Wikipedia article with no confident Wikidata QID).
+type LinkEntry struct {
+	ID  string `json:"id"`
+	URL string `json:"url"`
+}
+
+// Meta holds taxonomy and the per-species external-link references for a species.
+// Taxonomy comes from the GBIF backbone; Links is keyed by source id (e.g.
+// "wikipedia", "inaturalist", "gbif") and resolved to URLs by the sources registry
+// (see links.go). The URL fields of the old flat schema are gone: links are now
+// resolved generically rather than precomputed per provider.
 type Meta struct {
-	Class          string
-	Order          string
-	Family         string
-	FamilyCommon   string
-	WikipediaURL   string
-	INaturalistURL string
+	Class        string
+	Order        string
+	Family       string
+	FamilyCommon string
+	Links        map[string]LinkEntry
 }
 
 // Index is a sparse, immutable lookup table for a single locale, holding only the
@@ -145,10 +139,20 @@ func decodeTranslationRows(src io.Reader, fn translationRowFunc) error {
 // metaRowFunc receives one decoded metadata row.
 type metaRowFunc func(scientific string, m Meta) error
 
-// streamMetadata decodes the embedded metadata.csv.gz row by row. Columns are
-// resolved by header name so additional metadata columns can be appended to the
-// dataset without breaking this decoder or pinned consumers. It never holds more
-// than one row in memory.
+// metadataRecord mirrors one metadata.jsonl object.
+type metadataRecord struct {
+	ScientificName string `json:"scientific_name"`
+	Taxonomy       struct {
+		Class        string `json:"class"`
+		Order        string `json:"order"`
+		Family       string `json:"family"`
+		FamilyCommon string `json:"family_common"`
+	} `json:"taxonomy"`
+	Links map[string]LinkEntry `json:"links"`
+}
+
+// streamMetadata decodes the embedded metadata.jsonl.gz one object per line. It
+// never holds more than one record in memory.
 func streamMetadata(fn metaRowFunc) error {
 	zr, err := gzip.NewReader(bytes.NewReader(metadataGz))
 	if err != nil {
@@ -162,61 +166,48 @@ func streamMetadata(fn metaRowFunc) error {
 	return decodeMetadataRows(zr, fn)
 }
 
-// decodeMetadataRows reads the (uncompressed) metadata CSV from src and calls fn
-// for each data row. Columns are resolved by header name so additional metadata
-// columns can be appended upstream without breaking this decoder. Split out from
-// streamMetadata so the header-mapping behaviour can be tested with synthetic data.
+// decodeMetadataRows reads newline-delimited JSON metadata from src and calls fn
+// for each record. Split out so the decoding can be tested with synthetic data.
 func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
-	r := csv.NewReader(src)
-	r.ReuseRecord = true
-	// FieldsPerRecord stays at its zero default: the reader infers the column
-	// count from the header and enforces it for every row, validating the schema
-	// width without hardcoding it (the metadata schema grows over time).
-
-	headerRow, err := r.Read()
-	if err != nil {
-		return errors.New(err).
-			Component(loggerModule).
-			Category(errors.CategoryFileParsing).
-			Context("operation", "read_metadata_header").
-			Build()
-	}
-	header := csvutil.NewHeader(headerRow)
-	sciIdx := header.Col(metaColScientific)
-	if sciIdx < 0 {
-		return errors.Newf("openfauna: metadata header missing %q column", metaColScientific).
-			Component(loggerModule).
-			Category(errors.CategoryFileParsing).
-			Context("operation", "validate_metadata_header").
-			Build()
-	}
-	for {
-		rec, err := r.Read()
-		if errors.Is(err, io.EOF) {
-			return nil
+	sc := bufio.NewScanner(src)
+	// Species records are small, but the default 64KiB token cap can be exceeded by
+	// records carrying a long media-credit string; raise the max to 1MiB to be safe.
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
 		}
-		if err != nil {
+		var rec metadataRecord
+		if err := json.Unmarshal(line, &rec); err != nil {
 			return errors.New(err).
 				Component(loggerModule).
 				Category(errors.CategoryFileParsing).
-				Context("operation", "read_metadata_row").
+				Context("operation", "decode_metadata_jsonl").
 				Build()
 		}
-		if sciIdx >= len(rec) {
+		if rec.ScientificName == "" {
 			continue
 		}
 		m := Meta{
-			Class:          header.Field(rec, metaColClass),
-			Order:          header.Field(rec, metaColOrder),
-			Family:         header.Field(rec, metaColFamily),
-			FamilyCommon:   header.Field(rec, metaColFamilyCommon),
-			WikipediaURL:   header.Field(rec, metaColWikipedia),
-			INaturalistURL: header.Field(rec, metaColINaturalist),
+			Class:        rec.Taxonomy.Class,
+			Order:        rec.Taxonomy.Order,
+			Family:       rec.Taxonomy.Family,
+			FamilyCommon: rec.Taxonomy.FamilyCommon,
+			Links:        rec.Links,
 		}
-		if cbErr := fn(rec[sciIdx], m); cbErr != nil {
+		if cbErr := fn(rec.ScientificName, m); cbErr != nil {
 			return cbErr
 		}
 	}
+	if err := sc.Err(); err != nil {
+		return errors.New(err).
+			Component(loggerModule).
+			Category(errors.CategoryFileParsing).
+			Context("operation", "scan_metadata_jsonl").
+			Build()
+	}
+	return nil
 }
 
 // normalizeName canonicalizes a scientific name for case-insensitive matching.
