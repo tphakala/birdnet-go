@@ -760,7 +760,12 @@ func (c *Controller) probableSpeciesScores(bn probableSpeciesPredictor) map[stri
 		return c.guideRarityScores
 	}
 
-	today := time.Now().Truncate(HoursPerDay * time.Hour)
+	// Anchor on local calendar noon rather than time.Now().Truncate(24h):
+	// Truncate operates on absolute (UTC) time, so in large positive-offset zones it
+	// can land on the wrong local calendar day near midnight. Noon keeps the
+	// day-of-year fed to the geomodel correct in every timezone.
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
 	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
 	if err != nil {
 		return nil
