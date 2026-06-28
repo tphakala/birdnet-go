@@ -165,9 +165,12 @@ func verifySQLiteMagic(f *os.File) error {
 	return nil
 }
 
-// copyOpenFileTo copies the content of f to dst, creating dst with mode 0o600.
+// copyOpenFileTo copies the content of f to dst. dst is created exclusively and
+// without following symlinks (createNoFollow): the staging directory is owned by
+// the unprivileged service user, so a plain create could be redirected through a
+// pre-planted symlink and have this root process write to an arbitrary path.
 func copyOpenFileTo(f *os.File, dst string) error {
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	out, err := createNoFollow(dst)
 	if err != nil {
 		return errors.New(err).Component("imports").
 			Category(errors.CategoryFileIO).Context("op", "create-dst").Build()
