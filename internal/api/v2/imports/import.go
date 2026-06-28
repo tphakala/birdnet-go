@@ -20,6 +20,33 @@ import (
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
+// resolveNativeImportSourcePath validates an absolute path to a BirdNET-Pi
+// birds.db on a native install. Unlike the container branch there is no root
+// confinement: reading any file the service user can read is no privilege
+// escalation. The path must be absolute and resolve to an existing regular
+// file; BirdNET-Pi schema validation is deferred to the shared factory +
+// Validate step in StartBirdNETPiImport (the container branch does the same).
+func resolveNativeImportSourcePath(userPath string) (string, error) {
+	if userPath == "" || !filepath.IsAbs(userPath) {
+		return "", errInvalidSourcePath
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Clean(userPath))
+	if err != nil {
+		return "", errInvalidSourcePath
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", errInvalidSourcePath
+	}
+	// Path-only resolution: confirm it is an absolute, existing, regular file.
+	// Schema validation (open + BirdNET-Pi schema check) is done once by the
+	// shared factory + Validate path in StartBirdNETPiImport, using the request
+	// context and surfacing distinct "failed to open" vs "validation failed"
+	// errors. Mirrors the container branch (resolveImportSourcePath), which also
+	// defers schema validation to that shared step.
+	return resolved, nil
+}
+
 // Import mode constants.
 const (
 	importModeDBOnly  = "db-only"
@@ -61,7 +88,7 @@ var errInvalidSourcePath = errors.NewStd("invalid source path")
 // startImportRequest is the JSON body for POST /import/birdnet-pi.
 type startImportRequest struct {
 	Mode       string `json:"mode"`        // accepted values: "db-only", "db-audio"
-	SourcePath string `json:"source_path"` // path relative to the external mount root
+	SourcePath string `json:"source_path"` // container: relative to the external mount root; native: absolute path to the source birds.db
 	Location   string `json:"location"`    // optional IANA timezone name e.g. "Europe/Helsinki"
 }
 
@@ -229,18 +256,31 @@ func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "unsupported import mode", http.StatusBadRequest)
 	}
 
-	// Resolve and validate source path.
-	root := c.importSourceRoot
-	if root == "" {
-		root = sysinfo.DefaultExternalMountPath
-	}
-	resolvedPath, err := resolveImportSourcePath(root, req.SourcePath)
-	if err != nil {
-		return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
-	}
-	info, statErr := os.Stat(resolvedPath)
-	if statErr != nil || !info.Mode().IsRegular() {
-		return c.HandleError(ctx, statErr, "source file not found or not a regular file", http.StatusBadRequest)
+	// Resolve and validate source path. Dispatch depends on whether we run in a
+	// container (relative path under an external mount root) or natively (absolute
+	// path validated on the spot by the service user).
+	var (
+		resolvedPath string
+		err          error
+	)
+	if c.isContainerEnv == nil || c.isContainerEnv() {
+		root := c.importSourceRoot
+		if root == "" {
+			root = sysinfo.DefaultExternalMountPath
+		}
+		resolvedPath, err = resolveImportSourcePath(root, req.SourcePath)
+		if err != nil {
+			return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
+		}
+		info, statErr := os.Stat(resolvedPath)
+		if statErr != nil || !info.Mode().IsRegular() {
+			return c.HandleError(ctx, statErr, "source file not found or not a regular file", http.StatusBadRequest)
+		}
+	} else {
+		resolvedPath, err = resolveNativeImportSourcePath(req.SourcePath)
+		if err != nil {
+			return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
+		}
 	}
 
 	// Parse optional timezone.

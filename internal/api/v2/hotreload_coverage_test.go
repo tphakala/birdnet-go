@@ -245,6 +245,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 
 	// --- Alerting ---
 	"Alerting": {categories: []hotReloadCategory{hotReloadFresh}},
+
+	// --- Import (in-app elevation toggle; per-request policy read live, no action) ---
+	"Import": {categories: []hotReloadCategory{hotReloadFresh}},
 }
 
 // Ceiling decreases as TODO actions are implemented; target is zero.
