@@ -17,6 +17,7 @@
     SourceCandidate,
     SourceStepState,
     ValidateSourceResponse,
+    ElevateResponse,
     StartImportRequest,
     StartImportResponse,
     ImportProgress,
@@ -25,7 +26,7 @@
     ImportStatusResponse,
     WizardStep,
   } from '../types';
-  import { deriveSourceStepState, buildDetectionsFilterUrl } from '../utils';
+  import { deriveSourceStepState, isUnreadable, buildDetectionsFilterUrl } from '../utils';
   import { formatNumber } from '$lib/utils/formatters';
 
   const logger = loggers.ui;
@@ -51,6 +52,18 @@
   let manualPath = $state('');
   let validateResp = $state<ValidateSourceResponse | null>(null);
   let validateStatus = $state<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
+
+  // Elevation state (for unreadable candidates)
+  let elevating = $state(false);
+  let elevationFor = $state('');
+  let showPasswordPanel = $state(false);
+  let sudoPassword = $state('');
+  let fallbackCommands = $state<string[]>([]);
+  let elevationError = $state<string | null>(null);
+
+  // True when the page is served over plain HTTP (password warning required).
+  // Use globalThis.location to avoid the no-undef lint rule while supporting SSR.
+  const isPlainHttp = globalThis.location?.protocol === 'http:';
 
   // Selected source path (absolute path set by candidate selection or manual entry)
   let sourcePath = $state('');
@@ -208,6 +221,53 @@
       if (destroyed) return;
       validateStatus = 'invalid';
     }
+  }
+
+  async function elevate(path: string, withPassword: boolean) {
+    elevating = true;
+    elevationError = null;
+    fallbackCommands = [];
+    try {
+      const body: { source_path: string; mode: string; password?: string } = {
+        source_path: path,
+        mode: selectedMode,
+      };
+      if (withPassword && sudoPassword) {
+        body.password = sudoPassword;
+      }
+      const resp = await api.post<ElevateResponse>('/api/v2/import/elevate', body);
+      if (destroyed) return;
+      if (resp.method === 'fallback') {
+        fallbackCommands = resp.fallback_commands ?? [];
+        showPasswordPanel = false;
+        return;
+      }
+      if (resp.job_id) {
+        sourcePath = path;
+        jobId = resp.job_id;
+        currentStep = 'progress';
+        connectEventSource(resp.job_id);
+      }
+    } catch (err) {
+      if (destroyed) return;
+      // Reveal the password panel so the user can retry with their sudo password.
+      showPasswordPanel = true;
+      elevationError = t('system.importExport.source.elevation.failed');
+      // NEVER log sudoPassword or any part of the request body containing it.
+      logger.error('Elevation request failed', err instanceof ApiError ? err.status : 'unknown');
+    } finally {
+      elevating = false;
+      sudoPassword = ''; // clear on every return path; single-use memory
+    }
+  }
+
+  function startElevation(cand: SourceCandidate) {
+    elevationFor = cand.path;
+    showPasswordPanel = false;
+    fallbackCommands = [];
+    elevationError = null;
+    // Try without a password first: covers direct read access and passwordless sudo.
+    void elevate(cand.path, false);
   }
 
   function connectEventSource(id: string) {
@@ -472,25 +532,123 @@
               {t('system.importExport.source.candidatesIntro')}
             </p>
             {#each sourcesResponse?.candidates ?? [] as cand (cand.path)}
-              <div
-                class="flex items-start justify-between gap-4 p-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)]"
-              >
-                <div class="min-w-0 flex-1">
-                  <p class="font-mono text-sm text-[var(--color-base-content)] break-all">
-                    {cand.path}
-                  </p>
-                  {#if cand.detection_count > 0}
-                    <p class="text-xs text-[var(--color-base-content)]/60 mt-1">
-                      {t('system.importExport.source.detectionsSummary', {
-                        count: String(formatNumber(cand.detection_count)),
-                        date: cand.latest_date,
-                      })}
+              <div class="space-y-2">
+                <!-- Candidate card -->
+                <div
+                  class="flex items-start justify-between gap-4 p-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)]"
+                >
+                  <div class="min-w-0 flex-1">
+                    <p class="font-mono text-sm text-[var(--color-base-content)] break-all">
+                      {cand.path}
                     </p>
+                    {#if cand.detection_count > 0}
+                      <p class="text-xs text-[var(--color-base-content)]/60 mt-1">
+                        {t('system.importExport.source.detectionsSummary', {
+                          count: String(formatNumber(cand.detection_count)),
+                          date: cand.latest_date,
+                        })}
+                      </p>
+                    {/if}
+                    {#if isUnreadable(cand)}
+                      <p class="text-xs text-[var(--color-warning)] mt-1">
+                        {t('system.importExport.source.unreadableOwner', {
+                          owner: cand.owner_name,
+                        })}
+                      </p>
+                    {/if}
+                  </div>
+                  {#if isUnreadable(cand)}
+                    <Button
+                      variant="default"
+                      onclick={() => startElevation(cand)}
+                      disabled={elevating}
+                    >
+                      {t('system.importExport.source.useThisButton')}
+                    </Button>
+                  {:else}
+                    <Button variant="primary" onclick={() => selectCandidate(cand)}>
+                      {t('system.importExport.source.selectButton')}
+                    </Button>
                   {/if}
                 </div>
-                <Button variant="primary" onclick={() => selectCandidate(cand)}>
-                  {t('system.importExport.source.selectButton')}
-                </Button>
+
+                <!-- Elevation panel shown beneath the unreadable candidate being elevated -->
+                {#if isUnreadable(cand) && elevationFor === cand.path}
+                  <div
+                    class="p-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] space-y-3"
+                  >
+                    {#if elevating}
+                      <div class="flex items-center gap-2">
+                        <LoadingSpinner size="sm" aria-hidden="true" />
+                        <span class="text-sm text-[var(--color-base-content)]">
+                          {t('system.importExport.source.elevation.copying')}
+                        </span>
+                      </div>
+                    {:else if showPasswordPanel}
+                      {#if isPlainHttp}
+                        <div
+                          class="p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)] text-sm text-[var(--color-base-content)]/80"
+                        >
+                          {t('system.importExport.source.elevation.httpWarning')}
+                        </div>
+                      {/if}
+                      <p class="font-medium text-[var(--color-base-content)]">
+                        {t('system.importExport.source.elevation.passwordTitle')}
+                      </p>
+                      <p class="text-sm text-[var(--color-base-content)]/70">
+                        {t('system.importExport.source.elevation.passwordDescription')}
+                      </p>
+                      <div>
+                        <label
+                          for="elevation-password"
+                          class="block text-sm font-medium text-[var(--color-base-content)]/70 mb-1"
+                        >
+                          {t('system.importExport.source.elevation.passwordLabel')}
+                        </label>
+                        <input
+                          id="elevation-password"
+                          type="password"
+                          bind:value={sudoPassword}
+                          class="block w-full px-3 py-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-sm text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+                          autocomplete="current-password"
+                        />
+                      </div>
+                      {#if elevationError}
+                        <ErrorAlert message={elevationError} type="error" />
+                      {/if}
+                      <Button
+                        variant="primary"
+                        onclick={() => elevate(elevationFor, true)}
+                        disabled={!sudoPassword.trim() || elevating}
+                        title={!sudoPassword.trim()
+                          ? t('system.importExport.sourceAccess.pathRequiredReason')
+                          : undefined}
+                      >
+                        {t('system.importExport.source.elevation.submitButton')}
+                      </Button>
+                    {:else if fallbackCommands.length > 0}
+                      <p class="font-medium text-[var(--color-base-content)]">
+                        {t('system.importExport.source.elevation.fallbackTitle')}
+                      </p>
+                      <p class="text-sm text-[var(--color-base-content)]/70">
+                        {t('system.importExport.source.elevation.fallbackDescription')}
+                      </p>
+                      <ol class="space-y-2">
+                        {#each fallbackCommands as cmd (cmd)}
+                          <li class="flex items-start gap-2">
+                            <code
+                              class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
+                              >{cmd}</code
+                            >
+                          </li>
+                        {/each}
+                      </ol>
+                      <Button variant="default" onclick={recheckSources}>
+                        {t('system.importExport.source.checkAgainButton')}
+                      </Button>
+                    {/if}
+                  </div>
+                {/if}
               </div>
             {/each}
             <button

@@ -1,6 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 
+// Mock logger so tests can verify no password is leaked to log calls.
+vi.mock('$lib/utils/logger', () => ({
+  loggers: {
+    ui: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+  },
+}));
+
 // Mock api before importing component
 vi.mock('$lib/utils/api', () => ({
   api: {
@@ -72,6 +84,7 @@ function dispatchMockEvent(type: string, data: unknown) {
 // Import component after mocks are set up
 import BirdNetPiImportWizard from './BirdNetPiImportWizard.svelte';
 import { api } from '$lib/utils/api';
+import { loggers } from '$lib/utils/logger';
 import { flushSync } from 'svelte';
 
 // Default sources response: one readable candidate in a container environment.
@@ -990,5 +1003,115 @@ describe('BirdNetPiImportWizard', () => {
     expect(
       await screen.findByRole('button', { name: /system.importExport.source.checkAgainButton/ })
     ).toBeInTheDocument();
+  });
+
+  // ---- Task 10: elevation panel ----
+
+  const unreadableSourcesResponse = {
+    environment: 'Bare Metal',
+    containerized: false,
+    run_as_user: 'birdnet',
+    run_as_uid: 1000,
+    candidates: [
+      {
+        path: '/home/pi/BirdNET-Pi/birds.db',
+        kind: 'local' as const,
+        detection_count: 0,
+        latest_date: '',
+        audio_dir_guess: '',
+        size: 1,
+        valid: false,
+        reason: 'permission_denied',
+        owner_uid: 1001,
+        owner_name: 'pi',
+      },
+    ],
+    guidance: null,
+  };
+
+  it('shows the HTTP password warning for an unreadable source over plain HTTP', async () => {
+    // jsdom defaults to 'about:blank' which has protocol 'about:', not 'http:'.
+    // Override to simulate a plain-HTTP deployment.
+    Object.defineProperty(globalThis, 'location', {
+      value: { protocol: 'http:' },
+      writable: true,
+      configurable: true,
+    });
+
+    vi.mocked(api.get).mockResolvedValueOnce({ running: false, status: 'idle' });
+    vi.mocked(api.get).mockResolvedValueOnce(unreadableSourcesResponse);
+    // First elevate attempt (no password) fails so the password panel is revealed.
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('sudo unavailable'));
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /system.importExport.source.useThisButton/ })
+    );
+    expect(
+      await screen.findByText(/system.importExport.source.elevation.httpWarning/)
+    ).toBeInTheDocument();
+  });
+
+  it('never logs the typed sudo password', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ running: false, status: 'idle' });
+    vi.mocked(api.get).mockResolvedValueOnce(unreadableSourcesResponse);
+    // First elevate (no password) fails -> password panel appears.
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('sudo unavailable'));
+    // Second elevate (with password) returns a fallback response.
+    vi.mocked(api.post).mockResolvedValueOnce({
+      method: 'fallback',
+      job_id: '',
+      status: '',
+      fallback_commands: ['setfacl -m u:birdnet:r /home/pi/BirdNET-Pi/birds.db'],
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    // Click "Use this" to start elevation without a password.
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /system.importExport.source.useThisButton/ })
+    );
+    // Wait for the password panel.
+    const passwordInput = await screen.findByLabelText(
+      /system.importExport.source.elevation.passwordLabel/
+    );
+    // Type the secret password into the input.
+    await fireEvent.input(passwordInput, { target: { value: 'hunter2' } });
+    // Submit with the password.
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.source.elevation.submitButton/ })
+    );
+    // Wait for the fallback commands to appear.
+    await waitFor(() => {
+      expect(
+        screen.getByText('setfacl -m u:birdnet:r /home/pi/BirdNET-Pi/birds.db')
+      ).toBeInTheDocument();
+    });
+    // The secret password must never appear in any logger call.
+    const logged =
+      vi.mocked(loggers.ui.error).mock.calls.flat().join(' ') +
+      vi.mocked(loggers.ui.debug).mock.calls.flat().join(' ') +
+      vi.mocked(loggers.ui.info).mock.calls.flat().join(' ') +
+      vi.mocked(loggers.ui.warn).mock.calls.flat().join(' ');
+    expect(logged).not.toContain('hunter2');
+  });
+
+  it('elevate response with job_id advances to the progress step', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ running: false, status: 'idle' });
+    vi.mocked(api.get).mockResolvedValueOnce(unreadableSourcesResponse);
+    // First elevate (no password) immediately succeeds via passwordless sudo.
+    vi.mocked(api.post).mockResolvedValueOnce({
+      method: 'sudo',
+      job_id: 'elev-job-123',
+      status: 'started',
+      fallback_commands: [],
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /system.importExport.source.useThisButton/ })
+    );
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    });
   });
 });
