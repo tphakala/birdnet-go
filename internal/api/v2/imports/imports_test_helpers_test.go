@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -136,4 +138,13 @@ func newFakeV2ManagerWithTable(t *testing.T, tableName, prefix string, count int
 	}
 
 	return &fakeV2Manager{db: db, tablePrefix: prefix}
+}
+
+// testCore returns a minimal *apicore.Core wired for unit tests in this package.
+// It wraps apitest.NewCore so any test that needs New(testCore(t), nil) gets a
+// core with valid settings, a mock datastore, and an echo group. Defined here
+// (no build tag) so it is visible to all test files including linux-only ones.
+func testCore(t *testing.T) *apicore.Core {
+	t.Helper()
+	return apitest.NewCore(t)
 }
