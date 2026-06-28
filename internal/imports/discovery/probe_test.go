@@ -81,6 +81,7 @@ func TestProbe_MissingReturnsInvalidEmptyReason(t *testing.T) {
 	got := Probe(t.Context(), filepath.Join(t.TempDir(), "nonexistent.db"))
 	assert.False(t, got.Valid)
 	assert.Equal(t, KindLocal, got.Kind)
+	assert.Empty(t, got.Reason, "missing file must produce empty Reason so the API maps it to not_found")
 }
 
 func TestProbe_SymlinkReturnsInvalid(t *testing.T) {

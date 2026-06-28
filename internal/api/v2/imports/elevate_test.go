@@ -48,12 +48,10 @@ func TestNewStagingDst_RefusesUntrustedBase(t *testing.T) {
 
 func TestPreflightDiskSpace_Insufficient(t *testing.T) {
 	h := New(testCore(t), nil)
-	h.freeBytesFn = func(string) (uint64, error) { return 100, nil }
-	require.ErrorIs(t, h.preflightDiskSpace(t.TempDir(), 1000), ErrInsufficientSpace)
+	require.ErrorIs(t, h.preflightDiskSpace(100, nil, 1000), ErrInsufficientSpace)
 }
 
 func TestPreflightDiskSpace_Sufficient(t *testing.T) {
 	h := New(testCore(t), nil)
-	h.freeBytesFn = func(string) (uint64, error) { return 10_000, nil }
-	require.NoError(t, h.preflightDiskSpace(t.TempDir(), 1000))
+	require.NoError(t, h.preflightDiskSpace(10_000, nil, 1000))
 }

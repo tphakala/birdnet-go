@@ -622,6 +622,39 @@ func TestResolveImportSourcePath_SymlinkEscape(t *testing.T) {
 	require.ErrorIs(t, err, errInvalidSourcePath)
 }
 
+// TestResolveImportSourcePath_AbsoluteWithinRootAccepted verifies that an
+// absolute path pointing inside the mount root is accepted (B1). The containment
+// check still enforces that the resolved path is physically under root.
+func TestResolveImportSourcePath_AbsoluteWithinRootAccepted(t *testing.T) {
+	root := t.TempDir()
+
+	// Create a file directly inside root.
+	p := filepath.Join(root, "birds.db")
+	require.NoError(t, os.WriteFile(p, []byte("x"), 0o600))
+
+	resolved, err := resolveImportSourcePath(root, p)
+	require.NoError(t, err)
+
+	// t.TempDir may sit under a symlink (macOS /var -> /private/var), so compare
+	// against the EvalSymlinks-resolved path rather than the literal input.
+	want, evalErr := filepath.EvalSymlinks(p)
+	require.NoError(t, evalErr)
+	assert.Equal(t, want, resolved)
+}
+
+// TestResolveImportSourcePath_AbsoluteOutsideRootRejected verifies that an
+// absolute path that resolves outside the mount root is rejected (B1).
+func TestResolveImportSourcePath_AbsoluteOutsideRootRejected(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir() // separate temp dir, therefore outside root
+
+	p := filepath.Join(outside, "birds.db")
+	require.NoError(t, os.WriteFile(p, []byte("x"), 0o600))
+
+	_, err := resolveImportSourcePath(root, p)
+	require.ErrorIs(t, err, errInvalidSourcePath)
+}
+
 // TestStartBirdNETPiImport_MissingFile_Returns400 verifies missing file returns 400.
 func TestStartBirdNETPiImport_MissingFile_Returns400(t *testing.T) {
 	_, c := newImportHandler(t)

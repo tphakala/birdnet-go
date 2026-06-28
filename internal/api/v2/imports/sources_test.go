@@ -122,11 +122,15 @@ func TestValidateImportSource_Valid(t *testing.T) {
 }
 
 // TestValidateImportSource_NotFound verifies that a non-existent absolute path
-// produces valid:false with reason "not_found".
+// produces valid:false with reason "not_found". Uses t.TempDir() for a
+// cross-platform absolute path; sets native mode so the path is treated as
+// native-absolute on all OSes (filepath.IsAbs("/...") is false on Windows).
 func TestValidateImportSource_NotFound(t *testing.T) {
 	e, h := sourcesHandler(t)
+	h.isContainerEnv = func() bool { return false } // native mode
 
-	body := `{"source_path":"/nonexistent/birds.db"}`
+	nonexistent := filepath.Join(t.TempDir(), "nonexistent.db")
+	body := `{"source_path":"` + nonexistent + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/validate", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -139,6 +143,33 @@ func TestValidateImportSource_NotFound(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
 	assert.False(t, resp.Valid)
 	assert.Equal(t, reasonNotFound, resp.Reason)
+}
+
+// TestValidateImportSource_CancelledContextDoesNotReturnNotFound verifies that a
+// cancelled request context does not mislabel the probe result as "not_found" (C2).
+func TestValidateImportSource_CancelledContextDoesNotReturnNotFound(t *testing.T) {
+	e, h := sourcesHandler(t)
+	h.isContainerEnv = func() bool { return false } // native mode
+
+	nonexistent := filepath.Join(t.TempDir(), "nonexistent.db")
+	body := `{"source_path":"` + nonexistent + `"}`
+
+	// Build the request with an already-cancelled context.
+	reqCtx, cancel := context.WithCancel(t.Context())
+	cancel() // immediately cancelled
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/import/validate", strings.NewReader(body))
+	req = req.WithContext(reqCtx)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, h.ValidateImportSource(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp validateResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.False(t, resp.Valid)
+	assert.NotEqual(t, reasonNotFound, resp.Reason, "cancelled context must not produce not_found")
 }
 
 // TestValidateImportSource_RejectsRelative verifies that a relative path produces

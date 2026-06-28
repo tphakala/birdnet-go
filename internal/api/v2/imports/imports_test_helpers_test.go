@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
@@ -130,7 +131,7 @@ func newFakeV2ManagerWithTable(t *testing.T, tableName, prefix string, count int
 
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqlDB.Close() })
+	t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
 
 	require.NoError(t, db.Exec("CREATE TABLE IF NOT EXISTS "+tableName+" (id INTEGER PRIMARY KEY)").Error)
 	for i := range count {
