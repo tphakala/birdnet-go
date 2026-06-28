@@ -54,7 +54,7 @@ jobs:
             libdir: /usr/aarch64-linux-gnu/lib
             tflite_asset: linux_arm64.tar.gz
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
@@ -138,7 +138,7 @@ jobs:
             tflite_asset: linux_arm64.tar.gz
             apt_packages: build-essential pkg-config gcc-aarch64-linux-gnu
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
@@ -159,7 +159,7 @@ jobs:
           execute-install-scripts: 'false'
 
       - name: Cache OpenVINO C API headers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .cache/openvino
           # Keyed on the Taskfile so an OPENVINO_BUILD bump rotates the cache; the
