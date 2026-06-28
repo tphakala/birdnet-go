@@ -4229,6 +4229,10 @@
           "label": "Wikipedia descriptions",
           "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
         },
+        "enableSupplementaryLinks": {
+          "label": "Supplementary links",
+          "helpText": "Add Xeno-canto audio links and a Wikipedia link for species not covered by the offline dataset. Links open external sites; no data is fetched in the background."
+        },
         "warmTopN": {
           "label": "Warm top species",
           "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."

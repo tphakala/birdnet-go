@@ -230,6 +230,7 @@
   let speciesGuide = $derived({
     enabled: settings.dashboard.speciesGuide?.enabled ?? false,
     enableWikipedia: settings.dashboard.speciesGuide?.enableWikipedia ?? false,
+    enableSupplementaryLinks: settings.dashboard.speciesGuide?.enableSupplementaryLinks ?? false,
     preFetchEnabled: settings.dashboard.speciesGuide?.preFetchEnabled ?? true,
     warmTopN: settings.dashboard.speciesGuide?.warmTopN ?? 50,
     showNotes: settings.dashboard.speciesGuide?.showNotes ?? true,
@@ -466,6 +467,16 @@
             helpText={t('settings.userInterface.speciesGuide.enableWikipedia.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
             onchange={value => updateSpeciesGuideSetting('enableWikipedia', value)}
+          />
+        </div>
+
+        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
+          <Checkbox
+            checked={speciesGuide.enableSupplementaryLinks}
+            label={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.label')}
+            helpText={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('enableSupplementaryLinks', value)}
           />
         </div>
 

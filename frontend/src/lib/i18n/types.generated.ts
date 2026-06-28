@@ -3057,6 +3057,8 @@ export type TranslationKey =
   | 'settings.userInterface.speciesGuide.enabled.helpText'
   | 'settings.userInterface.speciesGuide.enableWikipedia.label'
   | 'settings.userInterface.speciesGuide.enableWikipedia.helpText'
+  | 'settings.userInterface.speciesGuide.enableSupplementaryLinks.label'
+  | 'settings.userInterface.speciesGuide.enableSupplementaryLinks.helpText'
   | 'settings.userInterface.speciesGuide.warmTopN.label'
   | 'settings.userInterface.speciesGuide.warmTopN.helpText'
   | 'settings.userInterface.speciesGuide.preFetchEnabled.label'

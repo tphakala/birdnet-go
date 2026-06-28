@@ -589,6 +589,7 @@ export interface Dashboard {
 export interface SpeciesGuideSettings {
   enabled: boolean;
   enableWikipedia: boolean; // opt in to online Wikipedia descriptions (default off)
+  enableSupplementaryLinks?: boolean; // opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off
   warmTopN?: number;
   preFetchEnabled?: boolean;
   showNotes?: boolean;
@@ -1033,6 +1034,7 @@ function createEmptySettings(): SettingsFormData {
         speciesGuide: {
           enabled: false,
           enableWikipedia: false,
+          enableSupplementaryLinks: false,
           warmTopN: 50,
           preFetchEnabled: true,
           showNotes: true,
