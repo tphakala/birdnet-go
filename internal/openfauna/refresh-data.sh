@@ -18,12 +18,15 @@ DEST="$(cd "$(dirname "$0")" && pwd)/data"
 mkdir -p "$DEST"
 
 cd "$OF_DIR"
-go run ./cmd/compiler # writes build/translations.csv and build/metadata.csv
+go run ./cmd/compiler # writes build/translations.csv, build/metadata.jsonl, build/sources.json, build/manifest.json, build/aliases.json
 OF_SHA="$(git rev-parse --short HEAD)"
 GEN_DATE="$(date -u +%Y-%m-%d)"
 
 gzip -9 -n -c build/translations.csv >"$DEST/translations.csv.gz"
-gzip -9 -n -c build/metadata.csv >"$DEST/metadata.csv.gz"
+gzip -9 -n -c build/metadata.jsonl  >"$DEST/metadata.jsonl.gz"
+cp build/sources.json   "$DEST/sources.json"
+cp build/manifest.json  "$DEST/manifest.json"
+cp build/aliases.json   "$DEST/aliases.json"
 tail -n +2 build/translations.csv | cut -d, -f2 | sort -u >"$DEST/locales.txt"
 printf 'openfauna@%s %s\n' "$OF_SHA" "$GEN_DATE" >"$DEST/SOURCE.txt"
 

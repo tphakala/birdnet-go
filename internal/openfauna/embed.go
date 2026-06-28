@@ -10,8 +10,14 @@ import _ "embed"
 //go:embed data/translations.csv.gz
 var translationsGz []byte
 
-//go:embed data/metadata.csv.gz
+//go:embed data/metadata.jsonl.gz
 var metadataGz []byte
+
+//go:embed data/sources.json
+var sourcesJSON []byte
+
+//go:embed data/manifest.json
+var manifestJSON []byte
 
 //go:embed data/locales.txt
 var localesList []byte
