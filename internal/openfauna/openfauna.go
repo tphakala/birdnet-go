@@ -226,6 +226,17 @@ func normalizeName(s string) string {
 //
 // Memory: only matching rows are retained; the full dataset is never held at once.
 func BuildIndex(scientificNames []string, locale string) (*Index, error) {
+	// Fail loud if the embedded data regressed to a non-2.x schema: the parser and
+	// the sources registry assume the 2.x shape, so a mismatch means links/taxonomy
+	// may silently not resolve. The hard gate is the schema unit test; this is the
+	// runtime signal for an operator reading logs.
+	if major, ok := embeddedSchemaMajor(); !ok || major != expectedSchemaMajor {
+		GetLogger().Error("embedded openfauna schema version mismatch; external links may be unavailable",
+			logger.Int("expected_major", expectedSchemaMajor),
+			logger.String("data_version", DataVersion()),
+		)
+	}
+
 	want := make(map[string]struct{}, len(scientificNames))
 	for _, n := range scientificNames {
 		want[normalizeName(n)] = struct{}{}
