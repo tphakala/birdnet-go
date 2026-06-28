@@ -53,3 +53,47 @@ func TestProbeCandidate_NotASqliteDatabase(t *testing.T) {
 	assert.False(t, got.Valid)
 	assert.Contains(t, []string{ReasonInvalidSchema, ReasonOpenFailed}, got.Reason)
 }
+
+func TestProbe_ValidReturnsCounts(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	db := writeBirdsDB(t, dir)
+
+	got := Probe(t.Context(), db)
+	assert.True(t, got.Valid)
+	assert.Equal(t, db, got.Path)
+	assert.Equal(t, KindLocal, got.Kind)
+	assert.Equal(t, 1, got.DetectionCount)
+}
+
+func TestProbe_GarbageReturnsInvalid(t *testing.T) {
+	t.Parallel()
+	bad := filepath.Join(t.TempDir(), "birds.db")
+	require.NoError(t, os.WriteFile(bad, []byte("not sqlite"), 0o600))
+
+	got := Probe(t.Context(), bad)
+	assert.False(t, got.Valid)
+	assert.NotEmpty(t, got.Reason)
+}
+
+func TestProbe_MissingReturnsInvalidEmptyReason(t *testing.T) {
+	t.Parallel()
+	got := Probe(t.Context(), filepath.Join(t.TempDir(), "nonexistent.db"))
+	assert.False(t, got.Valid)
+	assert.Equal(t, KindLocal, got.Kind)
+}
+
+func TestProbe_SymlinkReturnsInvalid(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	link := filepath.Join(dir, "birds.db")
+	require.NoError(t, os.WriteFile(target, []byte("x"), 0o600))
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	// A symlink is not a regular file (Lstat), so Probe rejects it.
+	got := Probe(t.Context(), link)
+	assert.False(t, got.Valid)
+	assert.Equal(t, ReasonOpenFailed, got.Reason)
+}
