@@ -1079,18 +1079,23 @@ func (cm *ControlMonitor) handleReconfigureSpeciesGuide() {
 
 	newCache := initGuideCacheIfNeeded(settings, cm.apiController.DS, cm.metrics.GuideProvider)
 
-	// Swap in the new cache (nil when disabled). SetGuideCache closes the old
-	// cache outside its lock so concurrent readers are never blocked.
-	cm.apiController.SetGuideCache(newCache)
-
-	// When the provider set changed, drop guides cached under the old set so the new
-	// providers re-populate them; the warm step below refreshes the hottest species.
+	// When the provider set changed, drop guides cached under the old set BEFORE
+	// activating the cache. initGuideCacheIfNeeded's Start() pre-loads existing DB
+	// rows (written under the old providers) into the new cache's memory tier, so
+	// invalidating after SetGuideCache would leave a window where a request hitting
+	// the freshly-activated cache is served a stale entry. Clearing first means the
+	// cache only ever goes live empty (the new providers re-populate it; the warm
+	// step below refreshes the hottest species).
 	if newCache != nil && providerSetChanged {
 		if err := newCache.InvalidateAll(context.Background()); err != nil {
 			GetLogger().Warn("Failed to invalidate species guide cache after provider change",
 				logger.Error(err))
 		}
 	}
+
+	// Swap in the new cache (nil when disabled). SetGuideCache closes the old
+	// cache outside its lock so concurrent readers are never blocked.
+	cm.apiController.SetGuideCache(newCache)
 
 	// Record the set now backing the cache so a later reconfigure can detect a change
 	// even if the feature is disabled (cache becomes nil) in between. Only update when
