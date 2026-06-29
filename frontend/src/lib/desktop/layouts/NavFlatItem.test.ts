@@ -3,11 +3,6 @@ import { createComponentTestFactory, screen, fireEvent } from '../../../test/ren
 import NavFlatItem from './NavFlatItem.svelte';
 import { Search } from '@lucide/svelte';
 
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => key),
-  getLocale: vi.fn(() => 'en'),
-}));
-
 describe('NavFlatItem', () => {
   const itemTest = createComponentTestFactory(NavFlatItem);
 

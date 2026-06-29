@@ -35,16 +35,14 @@
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]';
 
   let computedAriaLabel = $derived(ariaLabel ?? label);
-
-  let tooltipText = $derived(label);
 </script>
 
 <button
   type="button"
   onclick={() => onNavigate(url)}
-  onmouseenter={e => isCollapsed && showTooltip(e, tooltipText)}
+  onmouseenter={e => isCollapsed && showTooltip(e, label)}
   onmouseleave={hideTooltip}
-  onfocus={e => isCollapsed && showTooltip(e, tooltipText)}
+  onfocus={e => isCollapsed && showTooltip(e, label)}
   onblur={hideTooltip}
   aria-label={computedAriaLabel}
   aria-current={active ? 'page' : undefined}

@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 
 vi.mock('$lib/i18n', () => ({ t: (k: string) => k }));
 vi.mock('../registry/analyticsControls.svelte', () => ({
@@ -59,11 +59,10 @@ describe('analytics route pages render without throwing', () => {
     ['weather', WeatherPage, 'analytics.hub.tabs.weather'],
     ['soundscape', SoundscapePage, 'analytics.hub.tabs.soundscape'],
   ])('%s page mounts with the correct title', (_name, Comp, expectedTitleKey) => {
-    const { container } = render(Comp as never);
-    // The title is now in the section's aria-label (the h1 was removed to avoid
+    render(Comp as never);
+    // The title is in the section's aria-label (the h1 was removed to avoid
     // a duplicate title with the global Header). The t() mock echoes keys verbatim.
-    const section = container.querySelector('section[aria-label]');
-    expect(section).toBeTruthy();
-    expect(section?.getAttribute('aria-label')).toBe(expectedTitleKey);
+    // Use getByRole('region') to verify both the ARIA role and the label together.
+    expect(screen.getByRole('region', { name: expectedTitleKey })).toBeInTheDocument();
   });
 });
