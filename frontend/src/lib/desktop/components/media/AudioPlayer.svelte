@@ -32,9 +32,8 @@
   import { cn } from '$lib/utils/cn.js';
   import { Play, Pause, Download, XCircle } from '@lucide/svelte';
   import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
-  import AudibleBatsButton, {
-    type AudibleBatsSettings,
-  } from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
+  import AudibleBatsButton from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
+  import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import AudioToolbar from './AudioToolbar.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -264,16 +263,18 @@
   let processAbortController: AbortController | null = null;
   let processDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Audible bats derived playback state. When active, the player swaps its audio
-  // source to a server-generated time-expanded (slowed) copy so ultrasonic bat
-  // calls fall into the human hearing range. The spectrogram still spans the full
-  // original clip; because the derived audio's duration scales by the expansion
-  // factor, the playhead and seeking stay proportionally in sync automatically.
-  let audibleBatsActive = $state(false);
-  let audibleBatsGenerating = $state(false);
-  let audibleBatsError = $state<string | null>(null);
-  let audibleBatsUrl = $state<string | null>(null);
-  let audibleBatsAbortController: AbortController | null = null;
+  // Audible bats derived playback. When active, the player swaps its audio source
+  // to a server-generated time-expanded (slowed) copy so ultrasonic bat calls fall
+  // into the human hearing range. The spectrogram still spans the full original
+  // clip; because the derived audio's duration scales by the expansion factor, the
+  // playhead and seeking stay proportionally in sync automatically. The request
+  // lifecycle lives in the shared composable; this component owns the actual
+  // source swap (so position is preserved across the duration change).
+  const audibleBats = useAudibleBats({
+    getDetectionId: () => detectionId,
+    onActivate: url => swapAudioSource(url),
+    onDeactivate: () => swapAudioSource(processedAudioUrl ?? audioUrl),
+  });
   // Proportional position (0-1) to restore after an audio source swap, applied
   // once the new source's metadata (and therefore its duration) is available.
   let audibleBatsPendingFraction: number | null = null;
@@ -1128,109 +1129,9 @@
     }
   }
 
-  // Generate (or regenerate) the derived audible-bats audio and switch playback to it.
-  async function handleAudibleBatsEnable(settings: AudibleBatsSettings) {
-    // Abort any in-flight generation so a stale response can't win.
-    if (audibleBatsAbortController) {
-      audibleBatsAbortController.abort();
-    }
-    audibleBatsError = null;
-    audibleBatsGenerating = true;
-    const controller = new AbortController();
-    audibleBatsAbortController = controller;
-
-    try {
-      const response = await fetch(
-        buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}/audible-bats`),
-        {
-          method: 'POST',
-          headers: jsonHeadersWithCsrf(),
-          signal: controller.signal,
-          body: JSON.stringify({
-            expansion: settings.expansion,
-            normalize: settings.normalize,
-            gain_db: settings.gainDb,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        let errorMsg = t('media.audio.audibleBats.error');
-        try {
-          const errorData: { message?: string } = await response.json();
-          errorMsg = errorData.message ?? errorMsg;
-        } catch {
-          // Use default error message
-        }
-        throw new Error(errorMsg);
-      }
-
-      const blob = await response.blob();
-
-      // Discard if a newer request (or a disable) superseded this one.
-      if (audibleBatsAbortController !== controller) return;
-
-      if (audibleBatsUrl) {
-        URL.revokeObjectURL(audibleBatsUrl);
-      }
-      audibleBatsUrl = URL.createObjectURL(blob);
-      audibleBatsActive = true;
-      swapAudioSource(audibleBatsUrl);
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        return; // Superseded — leave state to the newer request/disable
-      }
-      if (audibleBatsAbortController !== controller) return;
-      audibleBatsActive = false;
-      audibleBatsError = err instanceof Error ? err.message : t('media.audio.audibleBats.error');
-      logger.error('Audible bats generation failed', err as Error);
-    } finally {
-      if (audibleBatsAbortController === controller) {
-        audibleBatsGenerating = false;
-        audibleBatsAbortController = null;
-      }
-    }
-  }
-
-  // Return to normal playback. Called when the user disables the mode and
-  // whenever a setting changes while a derived copy is active.
-  function handleAudibleBatsDisable() {
-    if (audibleBatsAbortController) {
-      audibleBatsAbortController.abort();
-      audibleBatsAbortController = null;
-    }
-    audibleBatsGenerating = false;
-
-    const hadDerivedAudio = audibleBatsActive || audibleBatsUrl !== null;
-    audibleBatsActive = false;
-    audibleBatsError = null;
-
-    if (hadDerivedAudio) {
-      // Restore to the processed copy if one is active, otherwise to the original.
-      swapAudioSource(processedAudioUrl ?? audioUrl);
-    }
-    if (audibleBatsUrl) {
-      URL.revokeObjectURL(audibleBatsUrl);
-      audibleBatsUrl = null;
-    }
-  }
-
-  // Reset all derived-playback state without touching the audio source (used when
-  // the detection itself changes — the source reset is handled elsewhere).
-  function resetAudibleBatsState() {
-    if (audibleBatsAbortController) {
-      audibleBatsAbortController.abort();
-      audibleBatsAbortController = null;
-    }
-    if (audibleBatsUrl) {
-      URL.revokeObjectURL(audibleBatsUrl);
-      audibleBatsUrl = null;
-    }
-    audibleBatsActive = false;
-    audibleBatsGenerating = false;
-    audibleBatsError = null;
-    audibleBatsPendingFraction = null;
-  }
+  // The generate/disable lifecycle lives in the useAudibleBats composable; the
+  // onActivate/onDeactivate callbacks above route back into swapAudioSource so the
+  // playback position is preserved across the source change.
 
   // Part of user-requested spectrogram generation feature (see TODO above)
   // Check spectrogram mode on mount/URL change to avoid double-request pattern
@@ -1644,7 +1545,8 @@
         isProcessing = false;
         // Reset audible-bats derived playback for the new detection (the source
         // is reset to audioUrl above; this just clears the derived-copy state).
-        resetAudibleBatsState();
+        audibleBats.reset();
+        audibleBatsPendingFraction = null;
         // Reset playback state for new audio
         isPlaying = false;
         currentTime = 0;
@@ -1935,12 +1837,7 @@
       if (processAbortController) {
         processAbortController.abort();
       }
-      if (audibleBatsUrl) {
-        URL.revokeObjectURL(audibleBatsUrl);
-      }
-      if (audibleBatsAbortController) {
-        audibleBatsAbortController.abort();
-      }
+      audibleBats.cleanup();
     };
   });
 
@@ -2116,11 +2013,11 @@
     >
       {#if isBatSpectrogram}
         <AudibleBatsButton
-          active={audibleBatsActive}
-          generating={audibleBatsGenerating}
-          error={audibleBatsError}
-          onEnable={handleAudibleBatsEnable}
-          onDisable={handleAudibleBatsDisable}
+          active={audibleBats.active}
+          generating={audibleBats.generating}
+          error={audibleBats.error}
+          onEnable={settings => audibleBats.enable(settings)}
+          onDisable={() => audibleBats.disable()}
         />
       {/if}
       <AudioSettingsButton
