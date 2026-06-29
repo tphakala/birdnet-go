@@ -90,6 +90,8 @@
   const menuItemCollapsed = 'justify-center px-0';
   const subitemClass =
     'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150';
+  const focusRing =
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]';
 </script>
 
 <svelte:window onkeydown={handleWindowKeydown} />
@@ -99,6 +101,7 @@
     <!-- Collapsed: Icon with flyout -->
     <div class="relative">
       <button
+        type="button"
         bind:this={buttonRef}
         onclick={handleToggleFlyout}
         onmouseenter={e => !flyoutOpen && showTooltip(e, label)}
@@ -108,9 +111,10 @@
           menuItemCollapsed,
           routeActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)]/80',
           'hover:text-[var(--color-base-content)] hover:menu-hover',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
+          focusRing
         )}
         aria-expanded={flyoutOpen}
+        aria-haspopup="menu"
         aria-label={ariaLabel ?? label}
       >
         <Icon class="size-5 shrink-0" />
@@ -140,7 +144,7 @@
                 class={cn(
                   subitemClass,
                   'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
+                  focusRing
                 )}
                 aria-label={item.ariaLabel}
               >
@@ -152,6 +156,7 @@
               </a>
             {:else}
               <button
+                type="button"
                 onclick={() => onNavigate(item.url)}
                 aria-current={routeCache[item.routeKey] ? 'page' : undefined}
                 class={cn(
@@ -159,7 +164,7 @@
                   routeCache[item.routeKey]
                     ? 'menu-subitem-active'
                     : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
+                  focusRing
                 )}
               >
                 <item.icon class="size-4 shrink-0" />{item.label}
@@ -172,12 +177,13 @@
   {:else}
     <!-- Expanded: Regular collapsible -->
     <button
+      type="button"
       onclick={onToggleExpanded}
       class={cn(
         menuItemBase,
         routeActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)]/80',
         'hover:text-[var(--color-base-content)] hover:menu-hover',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
+        focusRing
       )}
       aria-expanded={expanded}
     >
@@ -204,7 +210,7 @@
               class={cn(
                 subitemClass,
                 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
+                focusRing
               )}
               aria-label={item.ariaLabel}
             >
@@ -216,6 +222,7 @@
             </a>
           {:else}
             <button
+              type="button"
               onclick={() => onNavigate(item.url)}
               aria-current={routeCache[item.routeKey] ? 'page' : undefined}
               class={cn(
@@ -223,7 +230,7 @@
                 routeCache[item.routeKey]
                   ? 'menu-subitem-active'
                   : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
+                focusRing
               )}
             >
               <item.icon class="size-4 shrink-0" />{item.label}

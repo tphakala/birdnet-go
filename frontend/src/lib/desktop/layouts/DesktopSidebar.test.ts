@@ -130,8 +130,8 @@ describe('DesktopSidebar - flat task-grouped sections (#1273/#1274/#1275)', () =
     const { container } = sidebarTest.render({ currentRoute: '/ui/dashboard' });
 
     // Top-level flat items.
-    expect(screen.getByText('navigation.dashboard')).toBeTruthy();
-    expect(screen.getByText('navigation.liveAudio')).toBeTruthy();
+    expect(screen.getByText('navigation.dashboard')).toBeInTheDocument();
+    expect(screen.getByText('navigation.liveAudio')).toBeInTheDocument();
 
     // Four section headers in the spec'd order.
     const headerLabels = [
@@ -140,7 +140,7 @@ describe('DesktopSidebar - flat task-grouped sections (#1273/#1274/#1275)', () =
       'navigation.sections.environment',
       'navigation.sections.dataQuality',
     ];
-    headerLabels.forEach(label => expect(screen.getByText(label)).toBeTruthy());
+    headerLabels.forEach(label => expect(screen.getByText(label)).toBeInTheDocument());
 
     // Each section is a role="group" labelled by its header id, in document order.
     const groups = Array.from(
@@ -156,8 +156,8 @@ describe('DesktopSidebar - flat task-grouped sections (#1273/#1274/#1275)', () =
     // Each group's aria-labelledby resolves to a header element carrying that id.
     groups.forEach(g => {
       const id = g.getAttribute('aria-labelledby');
-      expect(id).toBeTruthy();
-      expect(container.querySelector(`#${id}`)).toBeTruthy();
+      expect(id).not.toBeNull();
+      expect(container.querySelector(`#${id}`)).toBeInTheDocument();
     });
   });
 
@@ -179,7 +179,7 @@ describe('DesktopSidebar - flat task-grouped sections (#1273/#1274/#1275)', () =
     ];
 
     for (const [text] of expectations) {
-      expect(screen.getByText(text)).toBeTruthy();
+      expect(screen.getByText(text)).toBeInTheDocument();
     }
 
     for (const [text, url] of expectations) {
@@ -201,18 +201,19 @@ describe('DesktopSidebar - flat task-grouped sections (#1273/#1274/#1275)', () =
 
   it('collapsed mode: headers are sr-only, items keep an accessible name, and no analytics flyout is used', () => {
     sidebar.collapse();
-    const { container } = sidebarTest.render({ currentRoute: '/ui/dashboard' });
+    sidebarTest.render({ currentRoute: '/ui/dashboard' });
 
     // The section headers are present in the DOM (so aria-labelledby stays valid) but sr-only.
-    const exploreHeader = container.querySelector('#nav-section-explore');
-    expect(exploreHeader).toBeTruthy();
-    expect(exploreHeader?.className).toContain('sr-only');
+    // Use getByText to get a non-nullable reference for the class assertion.
+    const exploreHeader = screen.getByText('navigation.sections.explore');
+    expect(exploreHeader).toBeInTheDocument();
+    expect(exploreHeader.className).toContain('sr-only');
 
     // Collapsed items render icon-only (no visible label text) but still expose an aria-label.
     const searchBtn = screen.getByRole('button', { name: 'navigation.search' });
-    expect(searchBtn).toBeTruthy();
+    expect(searchBtn).toBeInTheDocument();
     const summaryBtn = screen.getByRole('button', { name: 'analytics.hub.tabs.summary' });
-    expect(summaryBtn).toBeTruthy();
+    expect(summaryBtn).toBeInTheDocument();
 
     // No analytics flyout/collapsible: the analytics submenu trigger aria-label must be absent.
     expect(screen.queryByLabelText('navigation.analyticsSubmenu')).toBeNull();
@@ -237,14 +238,42 @@ describe('DesktopSidebar - flat task-grouped sections (#1273/#1274/#1275)', () =
     // About is now a Help subitem. With the Help section auto-expanded on /ui/about,
     // the About entry is rendered and marked current.
     await waitFor(() => {
-      expect(screen.getByText('navigation.about')).toBeTruthy();
+      expect(screen.getByText('navigation.about')).toBeInTheDocument();
     });
 
     const aboutBtn = getBtn('navigation.about');
     expect(aboutBtn.getAttribute('aria-current')).toBe('page');
 
-    // It sits inside the Help collapsible, not at the top level next to Dashboard.
+    // Negative: it is NOT a flat nav-section item (not at the top level).
     expect(aboutBtn.closest('[aria-labelledby^="nav-section-"]')).toBeNull();
+
+    // Positive: it IS inside the Help collapsible section container.
+    const helpContainer = screen.getByText('navigation.help').closest('.flyout-container');
+    expect(helpContainer).not.toBeNull();
+    expect(helpContainer?.contains(aboutBtn)).toBe(true);
+  });
+
+  it('renders analytics items within their sections in spec order', () => {
+    const { container } = sidebarTest.render({ currentRoute: '/ui/dashboard' });
+
+    // EXPLORE: Summary, Species, Search
+    const exploreGroup = container.querySelector('#nav-section-explore')?.closest('[role="group"]');
+    const exploreButtons = Array.from(exploreGroup?.querySelectorAll('button') ?? []);
+    const exploreLabels = exploreButtons.map(b => b.textContent.trim()).filter(Boolean);
+    expect(exploreLabels[0]).toContain('analytics.hub.tabs.summary');
+    expect(exploreLabels[1]).toContain('analytics.species.title');
+    expect(exploreLabels[2]).toContain('navigation.search');
+
+    // PATTERNS: Activity, Trends, Nocturnal, Biodiversity
+    const patternsGroup = container
+      .querySelector('#nav-section-patterns')
+      ?.closest('[role="group"]');
+    const patternsButtons = Array.from(patternsGroup?.querySelectorAll('button') ?? []);
+    const patternsLabels = patternsButtons.map(b => b.textContent.trim()).filter(Boolean);
+    expect(patternsLabels[0]).toContain('analytics.hub.tabs.patterns');
+    expect(patternsLabels[1]).toContain('analytics.hub.tabs.trends');
+    expect(patternsLabels[2]).toContain('analytics.hub.tabs.nocturnal');
+    expect(patternsLabels[3]).toContain('analytics.hub.tabs.biodiversity');
   });
 
   it('deep-link (#1275 part A): analytics item URLs carry the active query while Search/Dashboard stay query-less', async () => {

@@ -288,99 +288,99 @@ Performance Optimizations:
   // Append the active analytics filter query to analytics item URLs, mirroring the
   // prefixing convention analyticsControls.writeUrl uses. queryString has no leading
   // '?' and is '' when all params are default, so default URLs stay clean.
-  function withQuery(base: string): string {
+  // queryString is captured once per recompute to avoid repeated reads per item.
+  let navSections: NavSection[] = $derived.by(() => {
     const qs = analyticsControls.queryString;
-    return base + (qs ? `?${qs}` : '');
-  }
-
-  let navSections: NavSection[] = $derived([
-    {
-      id: 'explore',
-      headerLabel: t('navigation.sections.explore'),
-      items: [
-        {
-          icon: BarChart3,
-          label: t('analytics.hub.tabs.summary'),
-          url: withQuery(navigationUrls.analyticsSummary),
-          routeKey: 'analyticsSummary',
-        },
-        {
-          icon: Bird,
-          label: t('analytics.species.title'),
-          url: withQuery(navigationUrls.analyticsSpecies),
-          routeKey: 'analyticsSpecies',
-        },
-        {
-          icon: Search,
-          label: t('navigation.search'),
-          url: navigationUrls.search,
-          routeKey: 'search',
-        },
-      ],
-    },
-    {
-      id: 'patterns',
-      headerLabel: t('navigation.sections.patterns'),
-      items: [
-        {
-          icon: Activity,
-          label: t('analytics.hub.tabs.patterns'),
-          url: withQuery(navigationUrls.analyticsActivity),
-          routeKey: 'analyticsActivity',
-        },
-        {
-          icon: TrendingUp,
-          label: t('analytics.hub.tabs.trends'),
-          url: withQuery(navigationUrls.analyticsTrends),
-          routeKey: 'analyticsTrends',
-        },
-        {
-          icon: Moon,
-          label: t('analytics.hub.tabs.nocturnal'),
-          url: withQuery(navigationUrls.analyticsNocturnal),
-          routeKey: 'analyticsNocturnal',
-        },
-        {
-          icon: Leaf,
-          label: t('analytics.hub.tabs.biodiversity'),
-          url: withQuery(navigationUrls.analyticsBiodiversity),
-          routeKey: 'analyticsBiodiversity',
-        },
-      ],
-    },
-    {
-      id: 'environment',
-      headerLabel: t('navigation.sections.environment'),
-      items: [
-        {
-          icon: CloudSun,
-          label: t('analytics.hub.tabs.weather'),
-          url: withQuery(navigationUrls.analyticsWeather),
-          routeKey: 'analyticsWeather',
-          comingSoon: true,
-        },
-        {
-          icon: AudioLines,
-          label: t('analytics.hub.tabs.soundscape'),
-          url: withQuery(navigationUrls.analyticsSoundscape),
-          routeKey: 'analyticsSoundscape',
-          comingSoon: true,
-        },
-      ],
-    },
-    {
-      id: 'dataQuality',
-      headerLabel: t('navigation.sections.dataQuality'),
-      items: [
-        {
-          icon: BadgeCheck,
-          label: t('analytics.hub.tabs.quality'),
-          url: withQuery(navigationUrls.analyticsReview),
-          routeKey: 'analyticsReview',
-        },
-      ],
-    },
-  ]);
+    const withQuery = (base: string) => base + (qs ? `?${qs}` : '');
+    return [
+      {
+        id: 'explore',
+        headerLabel: t('navigation.sections.explore'),
+        items: [
+          {
+            icon: BarChart3,
+            label: t('analytics.hub.tabs.summary'),
+            url: withQuery(navigationUrls.analyticsSummary),
+            routeKey: 'analyticsSummary',
+          },
+          {
+            icon: Bird,
+            label: t('analytics.species.title'),
+            url: withQuery(navigationUrls.analyticsSpecies),
+            routeKey: 'analyticsSpecies',
+          },
+          {
+            icon: Search,
+            label: t('navigation.search'),
+            url: navigationUrls.search,
+            routeKey: 'search',
+          },
+        ],
+      },
+      {
+        id: 'patterns',
+        headerLabel: t('navigation.sections.patterns'),
+        items: [
+          {
+            icon: Activity,
+            label: t('analytics.hub.tabs.patterns'),
+            url: withQuery(navigationUrls.analyticsActivity),
+            routeKey: 'analyticsActivity',
+          },
+          {
+            icon: TrendingUp,
+            label: t('analytics.hub.tabs.trends'),
+            url: withQuery(navigationUrls.analyticsTrends),
+            routeKey: 'analyticsTrends',
+          },
+          {
+            icon: Moon,
+            label: t('analytics.hub.tabs.nocturnal'),
+            url: withQuery(navigationUrls.analyticsNocturnal),
+            routeKey: 'analyticsNocturnal',
+          },
+          {
+            icon: Leaf,
+            label: t('analytics.hub.tabs.biodiversity'),
+            url: withQuery(navigationUrls.analyticsBiodiversity),
+            routeKey: 'analyticsBiodiversity',
+          },
+        ],
+      },
+      {
+        id: 'environment',
+        headerLabel: t('navigation.sections.environment'),
+        items: [
+          {
+            icon: CloudSun,
+            label: t('analytics.hub.tabs.weather'),
+            url: withQuery(navigationUrls.analyticsWeather),
+            routeKey: 'analyticsWeather',
+            comingSoon: true,
+          },
+          {
+            icon: AudioLines,
+            label: t('analytics.hub.tabs.soundscape'),
+            url: withQuery(navigationUrls.analyticsSoundscape),
+            routeKey: 'analyticsSoundscape',
+            comingSoon: true,
+          },
+        ],
+      },
+      {
+        id: 'dataQuality',
+        headerLabel: t('navigation.sections.dataQuality'),
+        items: [
+          {
+            icon: BadgeCheck,
+            label: t('analytics.hub.tabs.quality'),
+            url: withQuery(navigationUrls.analyticsReview),
+            routeKey: 'analyticsReview',
+          },
+        ],
+      },
+    ];
+  });
 
   let systemItems: NavItem[] = $derived([
     {
@@ -637,7 +637,7 @@ Performance Optimizations:
 
     <!-- Navigation Menu -->
     <div class={cn('flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
-      <div class="flex flex-col gap-1" role="navigation">
+      <div class="flex flex-col gap-1">
         <!-- Dashboard -->
         <NavFlatItem
           icon={LayoutDashboard}

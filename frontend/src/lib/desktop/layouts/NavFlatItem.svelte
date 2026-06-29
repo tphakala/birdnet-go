@@ -39,9 +39,7 @@
 
   let badgeText = $derived(t('analytics.comingSoon.badge'));
 
-  let computedAriaLabel = $derived(
-    ariaLabel ?? (isCollapsed && comingSoon ? `${label} (${badgeText})` : label)
-  );
+  let computedAriaLabel = $derived(ariaLabel ?? (comingSoon ? `${label} (${badgeText})` : label));
 
   let tooltipText = $derived(comingSoon ? `${label} (${badgeText})` : label);
 </script>

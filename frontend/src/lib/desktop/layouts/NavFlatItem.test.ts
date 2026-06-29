@@ -117,6 +117,14 @@ describe('NavFlatItem', () => {
     expect(button.getAttribute('aria-label')).toContain('analytics.comingSoon.badge');
   });
 
+  it('suffixes aria-label with coming-soon text when expanded and comingSoon=true', () => {
+    itemTest.render({ ...defaultProps, isCollapsed: false, comingSoon: true, label: 'Weather' });
+    const button = screen.getByRole('button');
+    // Screen readers must hear the coming-soon state in expanded mode too
+    expect(button.getAttribute('aria-label')).toContain('Weather');
+    expect(button.getAttribute('aria-label')).toContain('analytics.comingSoon.badge');
+  });
+
   it('does NOT have role="menuitem"', () => {
     itemTest.render({ ...defaultProps });
     const button = screen.getByRole('button');

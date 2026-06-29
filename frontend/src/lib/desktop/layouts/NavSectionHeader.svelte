@@ -12,7 +12,7 @@
   {id}
   class={isCollapsed
     ? 'sr-only'
-    : 'px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-base-content)]/50 select-none'}
+    : 'px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-base-content)]/70 select-none'}
 >
   {label}
 </div>
