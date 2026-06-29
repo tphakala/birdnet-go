@@ -653,7 +653,7 @@
   .action-spinner {
     width: 0.85rem;
     height: 0.85rem;
-    border: 2px solid currentColor;
+    border: 2px solid currentcolor;
     border-top-color: transparent;
     border-radius: 50%;
     animation: bat-spin 0.7s linear infinite;
