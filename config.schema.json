@@ -2364,7 +2364,9 @@
         },
         "warmtopn": {
           "type": "integer",
-          "description": "top-N species warmed on startup (0 = off)"
+          "maximum": 1000,
+          "minimum": 0,
+          "description": "top-N species warmed on startup (0 = off; clamped to SpeciesGuideMaxWarmTopN)"
         },
         "prefetchenabled": {
           "type": "boolean",

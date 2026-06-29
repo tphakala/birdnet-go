@@ -213,7 +213,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.dashboard.speciesguide.enabled` | boolean |  |
 | `realtime.dashboard.speciesguide.enablewikipedia` | boolean | opt in to online Wikipedia descriptions (default off) |
 | `realtime.dashboard.speciesguide.enablesupplementarylinks` | boolean | opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off |
-| `realtime.dashboard.speciesguide.warmtopn` | integer | top-N species warmed on startup (0 = off) |
+| `realtime.dashboard.speciesguide.warmtopn` | integer | top-N species warmed on startup (0 = off; clamped to SpeciesGuideMaxWarmTopN) |
 | `realtime.dashboard.speciesguide.prefetchenabled` | boolean | pre-fetch guides for newly detected species |
 | `realtime.dashboard.speciesguide.shownotes` | boolean | default true |
 | `realtime.dashboard.speciesguide.showenrichments` | boolean | default true |

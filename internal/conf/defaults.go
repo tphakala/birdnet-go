@@ -182,6 +182,7 @@ func setDefaultConfig() {
 	// The three Show* flags intentionally have no default; nil → true via IsShow*().
 	viper.SetDefault("realtime.dashboard.speciesguide.enabled", false)
 	viper.SetDefault("realtime.dashboard.speciesguide.enablewikipedia", false)
+	viper.SetDefault("realtime.dashboard.speciesguide.enablesupplementarylinks", false)
 	viper.SetDefault("realtime.dashboard.speciesguide.prefetchenabled", true)
 	viper.SetDefault("realtime.dashboard.speciesguide.warmtopn", 50)
 

@@ -204,7 +204,7 @@ type SpeciesGuideConfig struct {
 	Enabled                  bool  `yaml:"enabled" json:"enabled"`
 	EnableWikipedia          bool  `yaml:"enablewikipedia" json:"enableWikipedia"`                   // opt in to online Wikipedia descriptions (default off)
 	EnableSupplementaryLinks bool  `yaml:"enablesupplementarylinks" json:"enableSupplementaryLinks"` // opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off
-	WarmTopN                 int   `yaml:"warmtopn" json:"warmTopN"`                                 // top-N species warmed on startup (0 = off)
+	WarmTopN                 int   `yaml:"warmtopn" json:"warmTopN" jsonschema:"minimum=0,maximum=1000"` // top-N species warmed on startup (0 = off; clamped to SpeciesGuideMaxWarmTopN)
 	PreFetchEnabled          bool  `yaml:"prefetchenabled" json:"preFetchEnabled"`                   // pre-fetch guides for newly detected species
 	ShowNotes                *bool `yaml:"shownotes" json:"showNotes"`                               // default true
 	ShowEnrichments          *bool `yaml:"showenrichments" json:"showEnrichments"`                   // default true
