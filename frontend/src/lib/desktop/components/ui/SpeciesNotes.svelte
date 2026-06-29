@@ -49,10 +49,6 @@
   let editTooLong = $derived(utf8ByteLength(editDraft.trim()) > NOTE_MAX_BYTES);
   let canSaveEdit = $derived(editDraft.trim().length > 0 && !editTooLong && !saving);
 
-  function notesUrl(): string {
-    return `/api/v2/species/${encodeURIComponent(scientificName)}/notes`;
-  }
-
   async function load(name: string): Promise<void> {
     loading = true;
     error = null;
@@ -92,11 +88,19 @@
   }
 
   async function addNote(): Promise<void> {
+    // Capture the species this write targets; the instance is reused across
+    // species, so a switch mid-flight must not insert this note into another
+    // species' list (load() drops stale reads; writes need the same guard).
+    const currentName = scientificName.trim();
     const entry = draft.trim();
     if (entry.length === 0 || saving || utf8ByteLength(entry) > NOTE_MAX_BYTES) return;
     saving = true;
     try {
-      const created = await api.post<SpeciesNoteData>(notesUrl(), { entry });
+      const created = await api.post<SpeciesNoteData>(
+        `/api/v2/species/${encodeURIComponent(currentName)}/notes`,
+        { entry }
+      );
+      if (currentName !== scientificName.trim()) return;
       notes = [created, ...notes];
       draft = '';
     } catch (e) {
@@ -117,11 +121,13 @@
   }
 
   async function saveEdit(id: number): Promise<void> {
+    const currentName = scientificName.trim();
     const entry = editDraft.trim();
     if (entry.length === 0 || saving || utf8ByteLength(entry) > NOTE_MAX_BYTES) return;
     saving = true;
     try {
       await api.put(`/api/v2/species/notes/${id}`, { entry });
+      if (currentName !== scientificName.trim()) return;
       // Optimistically update the entry text only; the server-authoritative
       // updated_at refreshes on the next load (avoids a UTC toISOString date).
       notes = notes.map(n => (n.id === id ? { ...n, entry } : n));
@@ -134,9 +140,11 @@
   }
 
   async function deleteNote(id: number): Promise<void> {
+    const currentName = scientificName.trim();
     confirmingDeleteId = null;
     try {
       await api.delete(`/api/v2/species/notes/${id}`);
+      if (currentName !== scientificName.trim()) return;
       notes = notes.filter(n => n.id !== id);
     } catch (e) {
       toastActions.error(t('analytics.species.notes.deleteFailed'));

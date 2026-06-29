@@ -63,6 +63,10 @@
       const g = await api.get<SpeciesGuideData>(
         `/api/v2/species/${enc}/guide?locale=${encodeURIComponent(getLocale())}`
       );
+      // The focal species (and thus `similar`) may have changed while this fetch
+      // was in flight; a late response for a species no longer in the list must
+      // not repopulate the pruned cache.
+      if (!similar.some(e => e.scientific_name === name)) return;
       guides.set(name, extractCanonicalSections(g.description));
       status.set(name, 'ready');
     } catch (e) {
