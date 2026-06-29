@@ -185,7 +185,7 @@ func TestGetSpeciesGuide_ClientCanceledReturns499(t *testing.T) {
 	c.SetGuideCache(gc)
 
 	e := echo.New()
-	reqCtx, cancel := context.WithCancel(context.Background())
+	reqCtx, cancel := context.WithCancel(t.Context())
 	cancel() // client already gone before the handler runs
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/x/guide", http.NoBody).WithContext(reqCtx)
 	rec := httptest.NewRecorder()

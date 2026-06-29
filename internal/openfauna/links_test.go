@@ -4,22 +4,25 @@ import (
 	"testing"
 )
 
+// idWikipedia is the wikipedia source id, repeated across these table tests.
+const idWikipedia = "wikipedia"
+
 func TestResolveLinksTier1(t *testing.T) {
 	reg := map[string]Source{
-		"wikipedia":   {Name: "Wikipedia", Order: 10, Icon: "wikipedia", URL: "https://www.wikidata.org/wiki/Special:GoToLinkedPage/{lang}wiki/{id}"},
+		idWikipedia:   {Name: "Wikipedia", Order: 10, Icon: idWikipedia, URL: "https://www.wikidata.org/wiki/Special:GoToLinkedPage/{lang}wiki/{id}"},
 		"inaturalist": {Name: "iNaturalist", Order: 20, Icon: "inaturalist", URL: "https://www.inaturalist.org/taxa/{id}?locale={lang}"},
 		"gbif":        {Name: "GBIF", Order: 30, Icon: "gbif", URL: "https://www.gbif.org/species/{id}"},
 	}
 	links := map[string]LinkEntry{
 		"gbif":        {ID: "2480528"},
-		"wikipedia":   {ID: "Q41181"},
+		idWikipedia:   {ID: "Q41181"},
 		"inaturalist": {ID: "5074"},
 	}
 	got := resolveLinks(links, "de", reg)
 	if len(got) != 3 {
 		t.Fatalf("want 3 links, got %d: %+v", len(got), got)
 	}
-	if got[0].Name != "Wikipedia" || got[0].Icon != "wikipedia" ||
+	if got[0].Name != "Wikipedia" || got[0].Icon != idWikipedia ||
 		got[0].URL != "https://www.wikidata.org/wiki/Special:GoToLinkedPage/dewiki/Q41181" {
 		t.Fatalf("wikipedia link wrong: %+v", got[0])
 	}
@@ -33,10 +36,10 @@ func TestResolveLinksTier1(t *testing.T) {
 
 func TestResolveLinksHonorsURLOverride(t *testing.T) {
 	reg := map[string]Source{
-		"wikipedia": {Name: "Wikipedia", Order: 10, Icon: "wikipedia", URL: "https://www.wikidata.org/wiki/Special:GoToLinkedPage/{lang}wiki/{id}"},
+		idWikipedia: {Name: "Wikipedia", Order: 10, Icon: idWikipedia, URL: "https://www.wikidata.org/wiki/Special:GoToLinkedPage/{lang}wiki/{id}"},
 	}
 	links := map[string]LinkEntry{
-		"wikipedia": {ID: "Q123", URL: "https://en.wikipedia.org/wiki/Common_blackbird"},
+		idWikipedia: {ID: "Q123", URL: "https://en.wikipedia.org/wiki/Common_blackbird"},
 	}
 	got := resolveLinks(links, "fi", reg)
 	if len(got) != 1 || got[0].URL != "https://en.wikipedia.org/wiki/Common_blackbird" {
@@ -46,10 +49,10 @@ func TestResolveLinksHonorsURLOverride(t *testing.T) {
 
 func TestResolveLinksSkipsUnknownSourceAndEmptyID(t *testing.T) {
 	reg := map[string]Source{
-		"wikipedia": {Name: "Wikipedia", Order: 10, Icon: "wikipedia", URL: "https://x/{id}"},
+		idWikipedia: {Name: "Wikipedia", Order: 10, Icon: idWikipedia, URL: "https://x/{id}"},
 	}
 	links := map[string]LinkEntry{
-		"wikipedia": {ID: ""},   // no id, no override -> skip
+		idWikipedia: {ID: ""},   // no id, no override -> skip
 		"mystery":   {ID: "42"}, // source not in registry -> skip
 	}
 	got := resolveLinks(links, "en", reg)
@@ -60,13 +63,13 @@ func TestResolveLinksSkipsUnknownSourceAndEmptyID(t *testing.T) {
 
 func TestEmbeddedSourcesLoad(t *testing.T) {
 	reg := Sources()
-	for _, want := range []string{"wikipedia", "inaturalist", "gbif"} {
+	for _, want := range []string{idWikipedia, "inaturalist", "gbif"} {
 		if _, ok := reg[want]; !ok {
 			t.Fatalf("embedded sources.json missing %q: %+v", want, reg)
 		}
 	}
-	if reg["wikipedia"].Order != 10 {
-		t.Fatalf("wikipedia order = %d, want 10", reg["wikipedia"].Order)
+	if reg[idWikipedia].Order != 10 {
+		t.Fatalf("wikipedia order = %d, want 10", reg[idWikipedia].Order)
 	}
 }
 
@@ -82,7 +85,7 @@ func TestExternalLinksSupplementaryAppendsXenoCanto(t *testing.T) {
 	}
 	wikiCount := 0
 	for _, l := range withSupp {
-		if l.Icon == "wikipedia" {
+		if l.Icon == idWikipedia {
 			wikiCount++
 		}
 	}
@@ -104,7 +107,7 @@ func TestExternalLinksWikipediaGapFillForMissingSpecies(t *testing.T) {
 	links := ExternalLinks("Madeupus nonexistus", "fr", true)
 	var wiki, xc bool
 	for _, l := range links {
-		if l.Icon == "wikipedia" {
+		if l.Icon == idWikipedia {
 			wiki = true
 			if l.URL != "https://fr.wikipedia.org/wiki/Madeupus_nonexistus" {
 				t.Fatalf("gap-fill wikipedia url wrong: %s", l.URL)
