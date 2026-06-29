@@ -76,12 +76,23 @@
     onToggleFlyout(sectionId);
   }
 
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (!flyoutOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onToggleFlyout(sectionId);
+      buttonRef?.focus();
+    }
+  }
+
   const menuItemBase =
     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
   const menuItemCollapsed = 'justify-center px-0';
   const subitemClass =
     'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150';
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="flex flex-col relative flyout-container">
   {#if isCollapsed}
@@ -96,7 +107,8 @@
           menuItemBase,
           menuItemCollapsed,
           routeActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)]/80',
-          'hover:text-[var(--color-base-content)] hover:menu-hover'
+          'hover:text-[var(--color-base-content)] hover:menu-hover',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
         )}
         aria-expanded={flyoutOpen}
         aria-label={ariaLabel ?? label}
@@ -127,7 +139,8 @@
                 rel="noopener noreferrer"
                 class={cn(
                   subitemClass,
-                  'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                  'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
                 )}
                 aria-label={item.ariaLabel}
               >
@@ -140,11 +153,13 @@
             {:else}
               <button
                 onclick={() => onNavigate(item.url)}
+                aria-current={routeCache[item.routeKey] ? 'page' : undefined}
                 class={cn(
                   subitemClass,
                   routeCache[item.routeKey]
                     ? 'menu-subitem-active'
-                    : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
                 )}
               >
                 <item.icon class="size-4 shrink-0" />{item.label}
@@ -161,7 +176,8 @@
       class={cn(
         menuItemBase,
         routeActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)]/80',
-        'hover:text-[var(--color-base-content)] hover:menu-hover'
+        'hover:text-[var(--color-base-content)] hover:menu-hover',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
       )}
       aria-expanded={expanded}
     >
@@ -187,7 +203,8 @@
               rel="noopener noreferrer"
               class={cn(
                 subitemClass,
-                'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
               )}
               aria-label={item.ariaLabel}
             >
@@ -200,11 +217,13 @@
           {:else}
             <button
               onclick={() => onNavigate(item.url)}
+              aria-current={routeCache[item.routeKey] ? 'page' : undefined}
               class={cn(
                 subitemClass,
                 routeCache[item.routeKey]
                   ? 'menu-subitem-active'
-                  : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                  : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]'
               )}
             >
               <item.icon class="size-4 shrink-0" />{item.label}
