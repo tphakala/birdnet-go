@@ -303,6 +303,9 @@ func parseScientificNameParam(ctx echo.Context) (string, error) {
 // not a taxonomic check — it keeps obviously non-name input out of the providers and
 // the dataset memo without trying to enumerate valid binomials.
 func isPlausibleScientificName(s string) bool {
+	if s == "" {
+		return false // an empty name is never plausible (callers also guard, but be explicit)
+	}
 	for _, r := range s {
 		switch {
 		case unicode.IsLetter(r):

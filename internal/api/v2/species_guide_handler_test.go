@@ -240,6 +240,7 @@ func TestIsPlausibleScientificName(t *testing.T) {
 		assert.Truef(t, isPlausibleScientificName(s), "%q should be accepted", s)
 	}
 	invalid := []string{
+		"", // empty is never plausible
 		"Turdus_merula",
 		"Turdus/merula",
 		"Turdus merula 2",
@@ -505,14 +506,17 @@ func TestSpeciesGuideRoutes_NotesAreAuthGated(t *testing.T) {
 		{http.MethodDelete, "/api/v2/species/notes/1", ""},
 	}
 	for _, g := range gated {
-		var body io.Reader = http.NoBody
-		if g.body != "" {
-			body = strings.NewReader(g.body)
-		}
-		req := httptest.NewRequest(g.method, g.target, body)
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		e.ServeHTTP(rec, req)
-		assert.Equalf(t, http.StatusUnauthorized, rec.Code, "%s %s must be auth-gated", g.method, g.target)
+		t.Run(g.method+" "+g.target, func(t *testing.T) {
+			t.Parallel()
+			var body io.Reader = http.NoBody
+			if g.body != "" {
+				body = strings.NewReader(g.body)
+			}
+			req := httptest.NewRequest(g.method, g.target, body)
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+			assert.Equalf(t, http.StatusUnauthorized, rec.Code, "%s %s must be auth-gated", g.method, g.target)
+		})
 	}
 }
