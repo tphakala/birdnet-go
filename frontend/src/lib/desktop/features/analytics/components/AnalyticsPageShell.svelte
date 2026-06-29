@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { untrack } from 'svelte';
   import { t, type TranslationKey } from '$lib/i18n';
   import AnalyticsControlBar from './AnalyticsControlBar.svelte';
   import { analyticsControls } from '../registry/analyticsControls.svelte';
@@ -29,8 +30,12 @@
     // Touch the range so a range change re-triggers the species fetch.
     void analyticsControls.params.startDate;
     void analyticsControls.params.endDate;
-    if (speciesApplicable) analyticsControls.ensureSpecies();
-    if (sourceApplicable) analyticsControls.ensureSources();
+    const reqSpecies = speciesApplicable;
+    const reqSource = sourceApplicable;
+    untrack(() => {
+      if (reqSpecies) analyticsControls.ensureSpecies();
+      if (reqSource) analyticsControls.ensureSources();
+    });
   });
 </script>
 

@@ -1,9 +1,12 @@
 // analyticsControls.svelte.ts
 //
 // Module-level Svelte 5 store: single owner of analytics URL filter state
-// (range/start/end/species/source) and single writer of browser history for the
-// analytics routes. Per-view chart group is derived from the route by each page,
-// NOT stored here. Filter state persists across analytics pages.
+// (range/start/end/species/source) and single writer of analytics filter (query)
+// state. Per-view chart group is derived from the route by each page, NOT stored
+// here. Filter state persists across analytics pages.
+//
+// State and fetch helpers were extracted from the monolithic analytics hub during
+// the PR1 IA redesign.
 import { navigation } from '$lib/stores/navigation.svelte';
 import { createSpeciesId, type Species, type SpeciesFrequency } from '$lib/types/species';
 import { t } from '$lib/i18n';
@@ -16,25 +19,23 @@ import {
   resolveDateRange,
   formatDateForAPI,
 } from './analyticsParams';
+import { ANALYTICS_BASE } from './analyticsRouting';
 import type { AnalyticsParams, AudioSourceOption } from './types';
 
 const logger = getLogger('analytics-controls');
 const SPECIES_SUMMARY_LIMIT = 50;
 const AUTO_SELECT_TOP = 5;
 
-// Lifted verbatim from Analytics.svelte.
 interface SpeciesSummaryResponse {
   scientific_name?: string;
   common_name?: string;
   count?: number;
 }
 
-// Lifted verbatim from Analytics.svelte.
 interface SourcesResponse {
   sources?: unknown;
 }
 
-// Lifted verbatim from Analytics.svelte (lines 150-155).
 function classifyFrequency(count: number): SpeciesFrequency {
   if (count > 100) return 'very-common';
   if (count > 50) return 'common';
@@ -42,7 +43,6 @@ function classifyFrequency(count: number): SpeciesFrequency {
   return 'rare';
 }
 
-// Lifted verbatim from Analytics.svelte (lines 253-272).
 // Coerce the /analytics/sources payload ({ sources: [{ id, name, count }] }) defensively into the
 // control bar's option shape, dropping rows without a usable id and falling back name -> id.
 function coerceSources(data: unknown): AudioSourceOption[] {
@@ -68,8 +68,8 @@ function coerceSources(data: unknown): AudioSourceOption[] {
 
 /**
  * Shape of the analytics control store returned by createAnalyticsControls().
- * The store is the single writer of analytics browser history; consumers read
- * state and call mutating methods - they never write URLs directly.
+ * The store is the single writer of analytics filter (query) state; consumers
+ * read state and call mutating methods - they never write URLs directly.
  */
 export interface AnalyticsControls {
   readonly params: AnalyticsParams;
@@ -112,13 +112,15 @@ export function createAnalyticsControls(): AnalyticsControls {
   let sourcesController: AbortController | null = null;
   let speciesKey = ''; // rangeKey the current availableSpecies were fetched for
   let sourcesRequested = false;
-  let popstateBound = false;
+  let popstateRefCount = 0;
+  const onPop = (): void => syncFromUrl();
 
   const speciesNames = $derived(
     new Map(availableSpecies.map(s => [s.scientificName ?? s.id, s.commonName]))
   );
 
   function writeUrl(mode: 'push' | 'replace'): void {
+    if (!navigation.currentPath.startsWith(ANALYTICS_BASE)) return;
     const qs = serializeAnalyticsParams(params);
     const target = navigation.currentPath + (qs ? `?${qs}` : '');
     if (mode === 'replace') navigation.redirect(target);
@@ -147,7 +149,6 @@ export function createAnalyticsControls(): AnalyticsControls {
     applyParams({ species: top }, 'replace');
   }
 
-  // Adapted from Analytics.svelte fetchAvailableSpecies (lines 171-220).
   // The untrack(() => params) snapshot was dropped: this function is called
   // imperatively (not inside an effect), so reading params directly is safe.
   async function fetchAvailableSpecies(): Promise<void> {
@@ -170,18 +171,22 @@ export function createAnalyticsControls(): AnalyticsControls {
       const data: unknown = await response.json();
       // Invariant: id === scientificName for real rows.
       availableSpecies = Array.isArray(data)
-        ? (data as SpeciesSummaryResponse[]).map((item, index) => {
-            const count = item.count ?? 0;
-            return {
-              id: createSpeciesId(item.scientific_name ?? `species-${index}`),
-              commonName: item.common_name ?? t('common.unknown'),
-              scientificName: item.scientific_name ?? t('common.unknown'),
-              frequency: classifyFrequency(count),
-              category: t('analytics.advanced.categories.birds'),
-              description: t('analytics.advanced.detections', { count }),
-              count,
-            };
-          })
+        ? (data as unknown[])
+            .filter(
+              (item): item is SpeciesSummaryResponse => item != null && typeof item === 'object'
+            )
+            .map((item, index) => {
+              const count = item.count ?? 0;
+              return {
+                id: createSpeciesId(item.scientific_name ?? `species-${index}`),
+                commonName: item.common_name ?? t('common.unknown'),
+                scientificName: item.scientific_name ?? t('common.unknown'),
+                frequency: classifyFrequency(count),
+                category: t('analytics.advanced.categories.birds'),
+                description: t('analytics.advanced.detections', { count }),
+                count,
+              };
+            })
         : [];
 
       maybeAutoSelectSpecies();
@@ -194,7 +199,6 @@ export function createAnalyticsControls(): AnalyticsControls {
     }
   }
 
-  // Adapted from Analytics.svelte fetchAvailableSources (lines 274-296).
   async function fetchAvailableSources(): Promise<void> {
     sourcesController?.abort();
     const ac = new AbortController();
@@ -233,13 +237,19 @@ export function createAnalyticsControls(): AnalyticsControls {
   }
 
   function init(): () => void {
-    if (typeof window === 'undefined' || popstateBound) return () => {};
-    const onPop = () => syncFromUrl();
-    window.addEventListener('popstate', onPop);
-    popstateBound = true;
+    if (typeof window === 'undefined') return () => {};
+    if (popstateRefCount === 0) {
+      window.addEventListener('popstate', onPop);
+    }
+    popstateRefCount++;
+    let cleaned = false;
     return () => {
-      window.removeEventListener('popstate', onPop);
-      popstateBound = false;
+      if (cleaned) return;
+      cleaned = true;
+      popstateRefCount--;
+      if (popstateRefCount === 0) {
+        window.removeEventListener('popstate', onPop);
+      }
     };
   }
 
