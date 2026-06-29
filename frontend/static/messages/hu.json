@@ -4576,7 +4576,7 @@
         "language": "Nyelv és terület",
         "visualContent": "Vizuális tartalom",
         "audioPlayback": "Hang lejátszás",
-        "speciesGuide": "Species Guide"
+        "speciesGuide": "Fajútmutató"
       },
       "appearance": {
         "title": "Megjelenés",
@@ -4598,42 +4598,42 @@
         "defaultGainUnit": "dB"
       },
       "speciesGuide": {
-        "title": "Species Guide",
-        "description": "Enrich detection details with descriptions, notes, and similar species from Wikipedia and eBird.",
+        "title": "Fajútmutató",
+        "description": "Gazdagítsa az észlelési adatokat leírásokkal, jegyzetekkel és hasonló fajokkal a Wikipédiáról és az eBirdről.",
         "enabled": {
-          "label": "Enable species guide",
-          "helpText": "Show contextual guide information on detection details and the species modal."
+          "label": "Fajútmutató engedélyezése",
+          "helpText": "Kontextusfüggő útmutató-információk megjelenítése az észlelési adatoknál és a faj ablakában."
         },
         "enableWikipedia": {
-          "label": "Wikipedia descriptions",
-          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
+          "label": "Wikipédia-leírások",
+          "helpText": "Cikkleírások lekérése a Wikipédiáról is (internet szükséges). Alapértelmezetten kikapcsolva – a rendszertan, a köznevek és a külső hivatkozások mindig offline működnek az OpenFaunán keresztül."
         },
         "enableSupplementaryLinks": {
-          "label": "Supplementary links",
-          "helpText": "Add Xeno-canto audio links and a Wikipedia link for species not covered by the offline dataset. Links open external sites; no data is fetched in the background."
+          "label": "Kiegészítő hivatkozások",
+          "helpText": "Xeno-canto hangfelvétel-hivatkozások és egy Wikipédia-hivatkozás hozzáadása az offline adathalmaz által nem lefedett fajokhoz. A hivatkozások külső oldalakat nyitnak meg; a háttérben nem töltődnek le adatok."
         },
         "warmTopN": {
-          "label": "Warm top species",
-          "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."
+          "label": "Leggyakoribb fajok előmelegítése",
+          "helpText": "A legtöbbször észlelt fajok útmutatóinak előtöltése indításkor (a 0 kikapcsolja az előmelegítést)."
         },
         "preFetchEnabled": {
-          "label": "Pre-fetch on detection",
-          "helpText": "Fetch the guide the first time a species is detected so it loads instantly later."
+          "label": "Előzetes letöltés észleléskor",
+          "helpText": "Az útmutató lekérése egy faj első észlelésekor, hogy később azonnal betöltődjön."
         },
         "sections": {
-          "title": "Guide Sections"
+          "title": "Útmutató szakaszai"
         },
         "showNotes": {
-          "label": "Show notes",
-          "helpText": "Allow per-species user notes."
+          "label": "Jegyzetek megjelenítése",
+          "helpText": "Fajonkénti felhasználói jegyzetek engedélyezése."
         },
         "showEnrichments": {
-          "label": "Show enrichments",
-          "helpText": "Show quality, expectedness, and season badges."
+          "label": "Bővítések megjelenítése",
+          "helpText": "Minőség-, várhatóság- és évszakjelvények megjelenítése."
         },
         "showSimilarSpecies": {
-          "label": "Show similar species",
-          "helpText": "Show the similar-species comparison panel."
+          "label": "Hasonló fajok megjelenítése",
+          "helpText": "A hasonló fajok összehasonlító paneljének megjelenítése."
         }
       }
     },

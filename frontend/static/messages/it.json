@@ -4576,7 +4576,7 @@
         "language": "Lingua e regionale",
         "visualContent": "Contenuti visivi",
         "audioPlayback": "Riproduzione audio",
-        "speciesGuide": "Species Guide"
+        "speciesGuide": "Guida alle specie"
       },
       "appearance": {
         "title": "Aspetto",
@@ -4598,42 +4598,42 @@
         "defaultGainUnit": "dB"
       },
       "speciesGuide": {
-        "title": "Species Guide",
-        "description": "Enrich detection details with descriptions, notes, and similar species from Wikipedia and eBird.",
+        "title": "Guida alle specie",
+        "description": "Arricchisci i dettagli di rilevamento con descrizioni, note e specie simili da Wikipedia ed eBird.",
         "enabled": {
-          "label": "Enable species guide",
-          "helpText": "Show contextual guide information on detection details and the species modal."
+          "label": "Abilita guida alle specie",
+          "helpText": "Mostra le informazioni contestuali della guida nei dettagli di rilevamento e nella finestra della specie."
         },
         "enableWikipedia": {
-          "label": "Wikipedia descriptions",
-          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
+          "label": "Descrizioni da Wikipedia",
+          "helpText": "Recupera anche le descrizioni degli articoli da Wikipedia (richiede Internet). Disattivato per impostazione predefinita: tassonomia, nomi comuni e collegamenti esterni funzionano sempre offline tramite OpenFauna."
         },
         "enableSupplementaryLinks": {
-          "label": "Supplementary links",
-          "helpText": "Add Xeno-canto audio links and a Wikipedia link for species not covered by the offline dataset. Links open external sites; no data is fetched in the background."
+          "label": "Collegamenti supplementari",
+          "helpText": "Aggiungi collegamenti audio Xeno-canto e un collegamento a Wikipedia per le specie non coperte dal set di dati offline. I collegamenti aprono siti esterni; nessun dato viene recuperato in background."
         },
         "warmTopN": {
-          "label": "Warm top species",
-          "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."
+          "label": "Precarica specie più frequenti",
+          "helpText": "Precarica le guide delle specie più rilevate all’avvio (0 disabilita il precaricamento)."
         },
         "preFetchEnabled": {
-          "label": "Pre-fetch on detection",
-          "helpText": "Fetch the guide the first time a species is detected so it loads instantly later."
+          "label": "Precaricamento al rilevamento",
+          "helpText": "Recupera la guida al primo rilevamento di una specie, così si carica all’istante in seguito."
         },
         "sections": {
-          "title": "Guide Sections"
+          "title": "Sezioni della guida"
         },
         "showNotes": {
-          "label": "Show notes",
-          "helpText": "Allow per-species user notes."
+          "label": "Mostra note",
+          "helpText": "Consenti note utente per specie."
         },
         "showEnrichments": {
-          "label": "Show enrichments",
-          "helpText": "Show quality, expectedness, and season badges."
+          "label": "Mostra arricchimenti",
+          "helpText": "Mostra i badge di qualità, prevedibilità e stagione."
         },
         "showSimilarSpecies": {
-          "label": "Show similar species",
-          "helpText": "Show the similar-species comparison panel."
+          "label": "Mostra specie simili",
+          "helpText": "Mostra il pannello di confronto delle specie simili."
         }
       }
     },

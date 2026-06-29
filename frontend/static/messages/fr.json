@@ -4576,7 +4576,7 @@
         "language": "Langue et régional",
         "visualContent": "Contenu visuel",
         "audioPlayback": "Lecture audio",
-        "speciesGuide": "Species Guide"
+        "speciesGuide": "Guide des espèces"
       },
       "appearance": {
         "title": "Apparence",
@@ -4598,42 +4598,42 @@
         "defaultGainUnit": "dB"
       },
       "speciesGuide": {
-        "title": "Species Guide",
-        "description": "Enrich detection details with descriptions, notes, and similar species from Wikipedia and eBird.",
+        "title": "Guide des espèces",
+        "description": "Enrichissez les détails de détection avec des descriptions, des notes et des espèces similaires issues de Wikipedia et eBird.",
         "enabled": {
-          "label": "Enable species guide",
-          "helpText": "Show contextual guide information on detection details and the species modal."
+          "label": "Activer le guide des espèces",
+          "helpText": "Afficher les informations contextuelles du guide dans les détails de détection et la fenêtre de l’espèce."
         },
         "enableWikipedia": {
-          "label": "Wikipedia descriptions",
-          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
+          "label": "Descriptions Wikipedia",
+          "helpText": "Récupérer aussi les descriptions d’articles depuis Wikipedia (nécessite Internet). Désactivé par défaut – la taxonomie, les noms communs et les liens externes fonctionnent toujours hors ligne via OpenFauna."
         },
         "enableSupplementaryLinks": {
-          "label": "Supplementary links",
-          "helpText": "Add Xeno-canto audio links and a Wikipedia link for species not covered by the offline dataset. Links open external sites; no data is fetched in the background."
+          "label": "Liens complémentaires",
+          "helpText": "Ajouter des liens audio Xeno-canto et un lien Wikipedia pour les espèces non couvertes par le jeu de données hors ligne. Les liens ouvrent des sites externes ; aucune donnée n’est récupérée en arrière-plan."
         },
         "warmTopN": {
-          "label": "Warm top species",
-          "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."
+          "label": "Préchauffer les espèces les plus fréquentes",
+          "helpText": "Précharger les guides des espèces les plus détectées au démarrage (0 désactive le préchauffage)."
         },
         "preFetchEnabled": {
-          "label": "Pre-fetch on detection",
-          "helpText": "Fetch the guide the first time a species is detected so it loads instantly later."
+          "label": "Préchargement à la détection",
+          "helpText": "Récupérer le guide lors de la première détection d’une espèce pour qu’il se charge instantanément ensuite."
         },
         "sections": {
-          "title": "Guide Sections"
+          "title": "Sections du guide"
         },
         "showNotes": {
-          "label": "Show notes",
-          "helpText": "Allow per-species user notes."
+          "label": "Afficher les notes",
+          "helpText": "Autoriser les notes utilisateur par espèce."
         },
         "showEnrichments": {
-          "label": "Show enrichments",
-          "helpText": "Show quality, expectedness, and season badges."
+          "label": "Afficher les enrichissements",
+          "helpText": "Afficher les badges de qualité, de prévisibilité et de saison."
         },
         "showSimilarSpecies": {
-          "label": "Show similar species",
-          "helpText": "Show the similar-species comparison panel."
+          "label": "Afficher les espèces similaires",
+          "helpText": "Afficher le panneau de comparaison des espèces similaires."
         }
       }
     },

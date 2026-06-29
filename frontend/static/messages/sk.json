@@ -4576,7 +4576,7 @@
         "language": "Jazyk a regionálne",
         "visualContent": "Vizuálny obsah",
         "audioPlayback": "Prehrávanie zvuku",
-        "speciesGuide": "Species Guide"
+        "speciesGuide": "Sprievodca druhmi"
       },
       "appearance": {
         "title": "Vzhľad",
@@ -4598,42 +4598,42 @@
         "defaultGainUnit": "dB"
       },
       "speciesGuide": {
-        "title": "Species Guide",
-        "description": "Enrich detection details with descriptions, notes, and similar species from Wikipedia and eBird.",
+        "title": "Sprievodca druhmi",
+        "description": "Obohaťte podrobnosti detekcie o popisy, poznámky a podobné druhy z Wikipédie a eBird.",
         "enabled": {
-          "label": "Enable species guide",
-          "helpText": "Show contextual guide information on detection details and the species modal."
+          "label": "Povoliť sprievodcu druhmi",
+          "helpText": "Zobraziť kontextové informácie sprievodcu v podrobnostiach detekcie a v okne druhu."
         },
         "enableWikipedia": {
-          "label": "Wikipedia descriptions",
-          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
+          "label": "Popisy z Wikipédie",
+          "helpText": "Načítať aj popisy článkov z Wikipédie (vyžaduje internet). Predvolene vypnuté – taxonómia, bežné názvy a externé odkazy fungujú vždy offline cez OpenFauna."
         },
         "enableSupplementaryLinks": {
-          "label": "Supplementary links",
-          "helpText": "Add Xeno-canto audio links and a Wikipedia link for species not covered by the offline dataset. Links open external sites; no data is fetched in the background."
+          "label": "Doplnkové odkazy",
+          "helpText": "Pridať zvukové odkazy Xeno-canto a odkaz na Wikipédiu pre druhy, ktoré offline súbor údajov nepokrýva. Odkazy otvárajú externé stránky; na pozadí sa nenačítavajú žiadne údaje."
         },
         "warmTopN": {
-          "label": "Warm top species",
-          "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."
+          "label": "Predhriať najčastejšie druhy",
+          "helpText": "Pri spustení vopred načítať sprievodcov pre najčastejšie detegované druhy (0 vypína predhrievanie)."
         },
         "preFetchEnabled": {
-          "label": "Pre-fetch on detection",
-          "helpText": "Fetch the guide the first time a species is detected so it loads instantly later."
+          "label": "Predbežné načítanie pri detekcii",
+          "helpText": "Načítať sprievodcu pri prvej detekcii druhu, aby sa neskôr zobrazil okamžite."
         },
         "sections": {
-          "title": "Guide Sections"
+          "title": "Sekcie sprievodcu"
         },
         "showNotes": {
-          "label": "Show notes",
-          "helpText": "Allow per-species user notes."
+          "label": "Zobraziť poznámky",
+          "helpText": "Povoliť používateľské poznámky pre jednotlivé druhy."
         },
         "showEnrichments": {
-          "label": "Show enrichments",
-          "helpText": "Show quality, expectedness, and season badges."
+          "label": "Zobraziť obohatenia",
+          "helpText": "Zobraziť odznaky kvality, očakávanosti a ročného obdobia."
         },
         "showSimilarSpecies": {
-          "label": "Show similar species",
-          "helpText": "Show the similar-species comparison panel."
+          "label": "Zobraziť podobné druhy",
+          "helpText": "Zobraziť panel porovnania podobných druhov."
         }
       }
     },

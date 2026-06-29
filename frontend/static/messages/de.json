@@ -4576,7 +4576,7 @@
         "language": "Sprache & Region",
         "visualContent": "Visuelle Inhalte",
         "audioPlayback": "Audiowiedergabe",
-        "speciesGuide": "Species Guide"
+        "speciesGuide": "Artensteckbrief"
       },
       "appearance": {
         "title": "Erscheinungsbild",
@@ -4598,42 +4598,42 @@
         "defaultGainUnit": "dB"
       },
       "speciesGuide": {
-        "title": "Species Guide",
-        "description": "Enrich detection details with descriptions, notes, and similar species from Wikipedia and eBird.",
+        "title": "Artensteckbrief",
+        "description": "Reichern Sie Erkennungsdetails mit Beschreibungen, Notizen und ähnlichen Arten aus Wikipedia und eBird an.",
         "enabled": {
-          "label": "Enable species guide",
-          "helpText": "Show contextual guide information on detection details and the species modal."
+          "label": "Artensteckbrief aktivieren",
+          "helpText": "Kontextbezogene Steckbrief-Informationen in den Erkennungsdetails und im Arten-Dialog anzeigen."
         },
         "enableWikipedia": {
-          "label": "Wikipedia descriptions",
-          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
+          "label": "Wikipedia-Beschreibungen",
+          "helpText": "Zusätzlich Artikelbeschreibungen von Wikipedia abrufen (erfordert Internet). Standardmäßig aus – Taxonomie, Trivialnamen und externe Links funktionieren immer offline über OpenFauna."
         },
         "enableSupplementaryLinks": {
-          "label": "Supplementary links",
-          "helpText": "Add Xeno-canto audio links and a Wikipedia link for species not covered by the offline dataset. Links open external sites; no data is fetched in the background."
+          "label": "Ergänzende Links",
+          "helpText": "Xeno-canto-Audiolinks und einen Wikipedia-Link für Arten hinzufügen, die nicht im Offline-Datensatz enthalten sind. Links öffnen externe Websites; im Hintergrund werden keine Daten abgerufen."
         },
         "warmTopN": {
-          "label": "Warm top species",
-          "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."
+          "label": "Häufigste Arten vorladen",
+          "helpText": "Steckbriefe der am häufigsten erkannten Arten beim Start vorladen (0 deaktiviert das Vorladen)."
         },
         "preFetchEnabled": {
-          "label": "Pre-fetch on detection",
-          "helpText": "Fetch the guide the first time a species is detected so it loads instantly later."
+          "label": "Bei Erkennung vorab laden",
+          "helpText": "Den Steckbrief beim ersten Erkennen einer Art abrufen, damit er später sofort lädt."
         },
         "sections": {
-          "title": "Guide Sections"
+          "title": "Steckbrief-Abschnitte"
         },
         "showNotes": {
-          "label": "Show notes",
-          "helpText": "Allow per-species user notes."
+          "label": "Notizen anzeigen",
+          "helpText": "Benutzernotizen pro Art zulassen."
         },
         "showEnrichments": {
-          "label": "Show enrichments",
-          "helpText": "Show quality, expectedness, and season badges."
+          "label": "Anreicherungen anzeigen",
+          "helpText": "Abzeichen für Qualität, Erwartbarkeit und Jahreszeit anzeigen."
         },
         "showSimilarSpecies": {
-          "label": "Show similar species",
-          "helpText": "Show the similar-species comparison panel."
+          "label": "Ähnliche Arten anzeigen",
+          "helpText": "Den Vergleichsbereich für ähnliche Arten anzeigen."
         }
       }
     },

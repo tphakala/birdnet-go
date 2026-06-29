@@ -4576,7 +4576,7 @@
         "language": "Idioma y regional",
         "visualContent": "Contenido visual",
         "audioPlayback": "Reproducción de audio",
-        "speciesGuide": "Species Guide"
+        "speciesGuide": "Guía de especies"
       },
       "appearance": {
         "title": "Apariencia",
@@ -4598,42 +4598,42 @@
         "defaultGainUnit": "dB"
       },
       "speciesGuide": {
-        "title": "Species Guide",
-        "description": "Enrich detection details with descriptions, notes, and similar species from Wikipedia and eBird.",
+        "title": "Guía de especies",
+        "description": "Enriquece los detalles de detección con descripciones, notas y especies similares de Wikipedia y eBird.",
         "enabled": {
-          "label": "Enable species guide",
-          "helpText": "Show contextual guide information on detection details and the species modal."
+          "label": "Activar guía de especies",
+          "helpText": "Mostrar información contextual de la guía en los detalles de detección y en la ventana de especie."
         },
         "enableWikipedia": {
-          "label": "Wikipedia descriptions",
-          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
+          "label": "Descripciones de Wikipedia",
+          "helpText": "Obtener también descripciones de artículos de Wikipedia (requiere internet). Desactivado de forma predeterminada: la taxonomía, los nombres comunes y los enlaces externos siempre funcionan sin conexión mediante OpenFauna."
         },
         "enableSupplementaryLinks": {
-          "label": "Supplementary links",
-          "helpText": "Add Xeno-canto audio links and a Wikipedia link for species not covered by the offline dataset. Links open external sites; no data is fetched in the background."
+          "label": "Enlaces complementarios",
+          "helpText": "Añadir enlaces de audio de Xeno-canto y un enlace de Wikipedia para especies no incluidas en el conjunto de datos sin conexión. Los enlaces abren sitios externos; no se descargan datos en segundo plano."
         },
         "warmTopN": {
-          "label": "Warm top species",
-          "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."
+          "label": "Precargar especies más frecuentes",
+          "helpText": "Precargar las guías de las especies más detectadas al iniciar (0 desactiva la precarga)."
         },
         "preFetchEnabled": {
-          "label": "Pre-fetch on detection",
-          "helpText": "Fetch the guide the first time a species is detected so it loads instantly later."
+          "label": "Precargar al detectar",
+          "helpText": "Obtener la guía la primera vez que se detecta una especie para que se cargue al instante más adelante."
         },
         "sections": {
-          "title": "Guide Sections"
+          "title": "Secciones de la guía"
         },
         "showNotes": {
-          "label": "Show notes",
-          "helpText": "Allow per-species user notes."
+          "label": "Mostrar notas",
+          "helpText": "Permitir notas de usuario por especie."
         },
         "showEnrichments": {
-          "label": "Show enrichments",
-          "helpText": "Show quality, expectedness, and season badges."
+          "label": "Mostrar enriquecimientos",
+          "helpText": "Mostrar insignias de calidad, previsibilidad y estación."
         },
         "showSimilarSpecies": {
-          "label": "Show similar species",
-          "helpText": "Show the similar-species comparison panel."
+          "label": "Mostrar especies similares",
+          "helpText": "Mostrar el panel de comparación de especies similares."
         }
       }
     },
