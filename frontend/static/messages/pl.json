@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Ten wykres wymaga co najmniej {min} punktów danych. Kontynuuj nagrywanie i wróć wkrótce.",
         "export": "Eksportuj",
         "exportComingSoon": "Eksport CSV pojawi się wkrótce."
-      },
-      "comingSoon": {
-        "description": "Ta sekcja jest w budowie i pojawi się w nadchodzącej aktualizacji."
       }
     },
-    "title": "Przegląd",
     "loadingError": "Nie udało się załadować niektórych danych analitycznych. Spróbuj ponownie później.",
     "stats": {
       "totalDetections": "Wszystkie Detekcje",

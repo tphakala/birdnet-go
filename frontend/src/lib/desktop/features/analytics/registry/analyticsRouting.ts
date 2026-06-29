@@ -39,10 +39,9 @@ export function resolveAnalyticsRedirect(pathname: string, search: string): stri
   if (path === ANALYTICS_BASE) {
     const tab = sp.get('tab');
     sp.delete('tab');
-    const segment =
-      tab && Object.prototype.hasOwnProperty.call(TAB_TO_SEGMENT, tab)
-        ? TAB_TO_SEGMENT[tab]
-        : 'summary';
+    const guard = tab && Object.prototype.hasOwnProperty.call(TAB_TO_SEGMENT, tab);
+    // eslint-disable-next-line security/detect-object-injection -- tab is guarded by hasOwnProperty against a fixed const map
+    const segment = guard ? TAB_TO_SEGMENT[tab] : 'summary';
     return withQuery(`${ANALYTICS_BASE}/${segment}`, sp);
   }
 

@@ -1417,8 +1417,6 @@ export type TranslationKey =
   | 'analytics.hub.card.notEnoughDataHint' // params: min
   | 'analytics.hub.card.export'
   | 'analytics.hub.card.exportComingSoon'
-  | 'analytics.hub.comingSoon.description'
-  | 'analytics.title'
   | 'analytics.loadingError'
   | 'analytics.stats.totalDetections'
   | 'analytics.stats.uniqueSpecies'

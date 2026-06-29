@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Det här diagrammet behöver minst {min} datapunkter. Fortsätt spela in och titta tillbaka snart.",
         "export": "Exportera",
         "exportComingSoon": "CSV-export kommer snart."
-      },
-      "comingSoon": {
-        "description": "Det här avsnittet är under uppbyggnad och kommer i en kommande uppdatering."
       }
     },
-    "title": "Översikt",
     "loadingError": "Kunde inte ladda vissa analysdata. Försök igen senare.",
     "stats": {
       "totalDetections": "Totala detektioner",

@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Tämä kaavio tarvitsee vähintään {min} datapistettä. Jatka tallentamista ja palaa pian takaisin.",
         "export": "Vie",
         "exportComingSoon": "CSV-vienti tulee pian."
-      },
-      "comingSoon": {
-        "description": "Tämä osio on rakenteilla ja tulee tulevassa päivityksessä."
       }
     },
-    "title": "Yleiskatsaus",
     "loadingError": "Joidenkin analytiikkatietojen lataus epäonnistui. Yritä myöhemmin uudelleen.",
     "stats": {
       "totalDetections": "Havainnot yhteensä",

@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Dette diagram kræver mindst {min} datapunkter. Fortsæt optagelsen, og kig forbi igen snart.",
         "export": "Eksporter",
         "exportComingSoon": "CSV-eksport kommer snart."
-      },
-      "comingSoon": {
-        "description": "Dette afsnit er under opbygning og kommer i en kommende opdatering."
       }
     },
-    "title": "Oversigt",
     "loadingError": "Kunne ikke indlæse nogle analysedata. Prøv venligst igen senere.",
     "stats": {
       "totalDetections": "Samlede registreringer",

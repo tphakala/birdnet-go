@@ -401,6 +401,7 @@
     [uiPath('dashboard')]: findRouteConfig('dashboard'),
     [uiPath('live-stream')]: findRouteConfig('live-stream'),
     [uiPath('notifications')]: findRouteConfig('notifications'),
+    [uiPath('analytics')]: findRouteConfig('analytics-summary'),
     [uiPath('analytics', 'species')]: findRouteConfig('species'),
     [uiPath('analytics', 'summary')]: findRouteConfig('analytics-summary'),
     [uiPath('analytics', 'activity')]: findRouteConfig('analytics-activity'),

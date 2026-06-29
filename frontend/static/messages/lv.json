@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Šai diagrammai nepieciešami vismaz {min} datu punkti. Turpiniet ierakstīšanu un atgriezieties drīz.",
         "export": "Eksportēt",
         "exportComingSoon": "CSV eksports būs pieejams drīz."
-      },
-      "comingSoon": {
-        "description": "Šī sadaļa tiek izstrādāta un būs pieejama kādā no nākamajiem atjauninājumiem."
       }
     },
-    "title": "Pārskats",
     "loadingError": "Neizdevās ielādēt dažus analītikas datus. Lūdzu, mēģiniet vēlāk.",
     "stats": {
       "totalDetections": "Kopējās atpazīšanas",

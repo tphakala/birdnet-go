@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "This chart needs at least {min} data points. Keep recording and check back soon.",
         "export": "Export",
         "exportComingSoon": "CSV export is coming soon."
-      },
-      "comingSoon": {
-        "description": "This section is under construction and will arrive in an upcoming update."
       }
     },
-    "title": "Overview",
     "loadingError": "Failed to load some analytics data. Please try again later.",
     "stats": {
       "totalDetections": "Total Detections",

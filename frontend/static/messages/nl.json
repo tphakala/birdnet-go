@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Deze grafiek heeft minstens {min} gegevenspunten nodig. Blijf opnemen en kom snel terug.",
         "export": "Exporteren",
         "exportComingSoon": "CSV-export komt binnenkort."
-      },
-      "comingSoon": {
-        "description": "Deze sectie is in aanbouw en komt in een toekomstige update."
       }
     },
-    "title": "Aantallen",
     "loadingError": "Kon analyse gegevens niet inladen. Probeer het later opnieuw.",
     "stats": {
       "totalDetections": "Totaal herkend",

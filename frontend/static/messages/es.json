@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Este gráfico necesita al menos {min} puntos de datos. Sigue grabando y vuelve pronto.",
         "export": "Exportar",
         "exportComingSoon": "La exportación CSV llegará pronto."
-      },
-      "comingSoon": {
-        "description": "Esta sección está en construcción y llegará en una próxima actualización."
       }
     },
-    "title": "Resumen",
     "loadingError": "Error al cargar algunos datos analíticos. Por favor, inténtalo más tarde.",
     "stats": {
       "totalDetections": "Detecciones totales",

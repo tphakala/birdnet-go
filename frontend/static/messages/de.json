@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Dieses Diagramm benötigt mindestens {min} Datenpunkte. Nimm weiter auf und schau bald wieder vorbei.",
         "export": "Exportieren",
         "exportComingSoon": "CSV-Export kommt bald."
-      },
-      "comingSoon": {
-        "description": "Dieser Bereich befindet sich im Aufbau und kommt in einem kommenden Update."
       }
     },
-    "title": "Übersicht",
     "loadingError": "Fehler beim Laden einiger Analysedaten. Bitte versuchen Sie es später erneut.",
     "stats": {
       "totalDetections": "Erkennungen gesamt",

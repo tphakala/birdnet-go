@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Ehhez a diagramhoz legalább {min} adatpont szükséges. Folytassa a rögzítést, és nézzen vissza hamarosan.",
         "export": "Exportálás",
         "exportComingSoon": "A CSV-exportálás hamarosan érkezik."
-      },
-      "comingSoon": {
-        "description": "Ez a szakasz fejlesztés alatt áll, és egy közelgő frissítésben érkezik."
       }
     },
-    "title": "Áttekintés",
     "loadingError": "Néhány analitikai adat betöltése sikertelen. Próbálja később újra.",
     "stats": {
       "totalDetections": "Összes detektálás",

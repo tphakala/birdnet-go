@@ -108,6 +108,7 @@ export function parseAnalyticsParams(search: string, opts: ParseOptions = {}): A
   const speciesRaw = sp.get('species') ?? '';
   const species = speciesRaw
     ? [
+        // Dedupe so a hand-edited URL with repeats (?species=A,A) does not produce duplicate selections / duplicate D3 series keys.
         ...new Set(
           speciesRaw
             .split(',')

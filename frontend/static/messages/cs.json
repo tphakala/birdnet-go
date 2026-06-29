@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Tento graf potřebuje alespoň {min} datových bodů. Pokračujte v nahrávání a vraťte se brzy.",
         "export": "Exportovat",
         "exportComingSoon": "Export do CSV brzy přijde."
-      },
-      "comingSoon": {
-        "description": "Tato sekce se připravuje a přijde v některé z příštích aktualizací."
       }
     },
-    "title": "Přehled",
     "loadingError": "Nepodařilo se načíst některá analytická data. Zkuste to prosím později.",
     "stats": {
       "totalDetections": "Celkem detekcí",

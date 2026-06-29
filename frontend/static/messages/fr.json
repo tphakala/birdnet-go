@@ -1823,12 +1823,8 @@
         "notEnoughDataHint": "Ce graphique nécessite au moins {min} points de données. Continuez l'enregistrement et revenez bientôt.",
         "export": "Exporter",
         "exportComingSoon": "L'export CSV arrive bientôt."
-      },
-      "comingSoon": {
-        "description": "Cette section est en cours de construction et arrivera dans une prochaine mise à jour."
       }
     },
-    "title": "Vue d'ensemble",
     "loadingError": "Échec du chargement de certaines données analytiques. Veuillez réessayer plus tard.",
     "stats": {
       "totalDetections": "Total des détections",
