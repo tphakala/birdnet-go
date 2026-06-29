@@ -169,45 +169,49 @@ func streamMetadata(fn metaRowFunc) error {
 // decodeMetadataRows reads newline-delimited JSON metadata from src and calls fn
 // for each record. Split out so the decoding can be tested with synthetic data.
 func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
-	sc := bufio.NewScanner(src)
-	// Species records are small, but the default 64KiB token cap can be exceeded by
-	// records carrying a long media-credit string; raise the max to 1MiB to be safe.
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		line := bytes.TrimSpace(sc.Bytes())
-		if len(line) == 0 {
-			continue
+	// Read line by line with a bufio.Reader rather than bufio.Scanner: ReadBytes
+	// grows to fit an arbitrarily long record (no fixed token cap) and lets us skip
+	// a single malformed line instead of aborting the whole stream. Losing one bad
+	// record must not wipe out every species' taxonomy and links.
+	br := bufio.NewReader(src)
+	for {
+		raw, readErr := br.ReadBytes('\n')
+		// Process whatever was read before handling readErr, so a final line without
+		// a trailing newline is not dropped.
+		if line := bytes.TrimSpace(raw); len(line) > 0 {
+			var rec metadataRecord
+			switch err := json.Unmarshal(line, &rec); {
+			case err != nil:
+				// The schema unit test guards the vendored data, so a parse failure
+				// here means a corrupt or unexpected record at runtime: skip it and
+				// keep going so the rest of the dataset still resolves.
+				GetLogger().Error("skipping malformed openfauna metadata record", logger.Error(err))
+			case rec.ScientificName == "":
+				// No name to key on; skip silently (mirrors the empty-name contract).
+			default:
+				m := Meta{
+					Class:        rec.Taxonomy.Class,
+					Order:        rec.Taxonomy.Order,
+					Family:       rec.Taxonomy.Family,
+					FamilyCommon: rec.Taxonomy.FamilyCommon,
+					Links:        rec.Links,
+				}
+				if cbErr := fn(rec.ScientificName, m); cbErr != nil {
+					return cbErr
+				}
+			}
 		}
-		var rec metadataRecord
-		if err := json.Unmarshal(line, &rec); err != nil {
-			return errors.New(err).
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			return errors.New(readErr).
 				Component(loggerModule).
 				Category(errors.CategoryFileParsing).
-				Context("operation", "decode_metadata_jsonl").
+				Context("operation", "scan_metadata_jsonl").
 				Build()
 		}
-		if rec.ScientificName == "" {
-			continue
-		}
-		m := Meta{
-			Class:        rec.Taxonomy.Class,
-			Order:        rec.Taxonomy.Order,
-			Family:       rec.Taxonomy.Family,
-			FamilyCommon: rec.Taxonomy.FamilyCommon,
-			Links:        rec.Links,
-		}
-		if cbErr := fn(rec.ScientificName, m); cbErr != nil {
-			return cbErr
-		}
 	}
-	if err := sc.Err(); err != nil {
-		return errors.New(err).
-			Component(loggerModule).
-			Category(errors.CategoryFileParsing).
-			Context("operation", "scan_metadata_jsonl").
-			Build()
-	}
-	return nil
 }
 
 // normalizeName canonicalizes a scientific name for case-insensitive matching.
@@ -217,6 +221,23 @@ func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
 // matches the convention of the project's other species name resolvers.
 func normalizeName(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
+}
+
+var schemaWarnOnce sync.Once
+
+// warnOnSchemaMismatch logs (at most once per process) when the embedded data's
+// schema major differs from what this package parses. The embedded data is fixed
+// at build time, so the result never changes within a run; the sync.Once keeps a
+// repeatedly-called BuildIndex from flooding the log.
+func warnOnSchemaMismatch() {
+	schemaWarnOnce.Do(func() {
+		if major, ok := embeddedSchemaMajor(); !ok || major != expectedSchemaMajor {
+			GetLogger().Error("embedded openfauna schema version mismatch; external links may be unavailable",
+				logger.Int("expected_major", expectedSchemaMajor),
+				logger.String("data_version", DataVersion()),
+			)
+		}
+	})
 }
 
 // BuildIndex streams the embedded dataset once and returns a sparse Index holding
@@ -229,13 +250,9 @@ func BuildIndex(scientificNames []string, locale string) (*Index, error) {
 	// Fail loud if the embedded data regressed to a non-2.x schema: the parser and
 	// the sources registry assume the 2.x shape, so a mismatch means links/taxonomy
 	// may silently not resolve. The hard gate is the schema unit test; this is the
-	// runtime signal for an operator reading logs.
-	if major, ok := embeddedSchemaMajor(); !ok || major != expectedSchemaMajor {
-		GetLogger().Error("embedded openfauna schema version mismatch; external links may be unavailable",
-			logger.Int("expected_major", expectedSchemaMajor),
-			logger.String("data_version", DataVersion()),
-		)
-	}
+	// runtime signal for an operator reading logs. The embedded schema is fixed for
+	// the process lifetime, so warn at most once however many times BuildIndex runs.
+	warnOnSchemaMismatch()
 
 	want := make(map[string]struct{}, len(scientificNames))
 	for _, n := range scientificNames {

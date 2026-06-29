@@ -49,12 +49,21 @@ func Sources() map[string]Source {
 	return sourcesReg
 }
 
+// Placeholder keys substituted into source URL templates. substituteTemplate
+// replaces longer keys first so {sci_underscored} is not partially matched by {sci}.
+const (
+	phID             = "id"
+	phLang           = "lang"
+	phSci            = "sci"
+	phSciUnderscored = "sci_underscored"
+)
+
 // substituteTemplate fills {id}, {lang}, {sci}, {sci_underscored} placeholders in a
 // URL template. Longer keys are replaced first so {sci_underscored} is not partially
 // matched by {sci}. Callers pass only the vars relevant to their registry.
 func substituteTemplate(tmpl string, vars map[string]string) string {
 	out := tmpl
-	for _, k := range []string{"sci_underscored", "sci", "lang", "id"} {
+	for _, k := range []string{phSciUnderscored, phSci, phLang, phID} {
 		if v, ok := vars[k]; ok {
 			out = strings.ReplaceAll(out, "{"+k+"}", v)
 		}
@@ -79,7 +88,11 @@ func resolveLinks(links map[string]LinkEntry, lang string, reg map[string]Source
 		case entry.URL != "":
 			linkURL = entry.URL
 		case entry.ID != "":
-			linkURL = substituteTemplate(src.URL, map[string]string{"id": entry.ID, "lang": lang})
+			// entry.ID is substituted verbatim (not URL-escaped): registry ids are
+			// stable tokens from the trusted vendored dataset (Wikidata QIDs, numeric
+			// taxon ids). A source whose id would need escaping (e.g. a Wikipedia title
+			// with spaces) ships a url override instead, handled by the case above.
+			linkURL = substituteTemplate(src.URL, map[string]string{phID: entry.ID, phLang: lang})
 		default:
 			continue
 		}
@@ -125,9 +138,9 @@ func supplementarySources() map[string]Source {
 // is path-escaped with spaces as underscores, {lang} is the UI base language.
 func resolveComputedLinks(scientificName, lang string, reg map[string]Source) []Link {
 	vars := map[string]string{
-		"sci":             url.QueryEscape(scientificName),
-		"sci_underscored": url.PathEscape(strings.ReplaceAll(scientificName, " ", "_")),
-		"lang":            lang,
+		phSci:            url.QueryEscape(scientificName),
+		phSciUnderscored: url.PathEscape(strings.ReplaceAll(scientificName, " ", "_")),
+		phLang:           lang,
 	}
 	out := make([]Link, 0, len(reg))
 	for _, src := range reg {
@@ -160,14 +173,22 @@ func ExternalLinks(scientificName, lang string, includeSupplementary bool) []Lin
 	if !includeSupplementary {
 		return tier1
 	}
+	// Suppress a supplementary link only when Tier 1 already shows the same source,
+	// keyed by icon hint. Empty icons are ignored on both sides: a source without an
+	// icon must neither populate the dedup set (it would then drop every icon-less
+	// supplementary link that merely shares the empty-string key) nor be matched by it.
 	have := make(map[string]struct{}, len(tier1))
 	for _, l := range tier1 {
-		have[l.Icon] = struct{}{}
+		if l.Icon != "" {
+			have[l.Icon] = struct{}{}
+		}
 	}
 	combined := tier1
 	for _, l := range resolveComputedLinks(scientificName, lang, supplementarySources()) {
-		if _, dup := have[l.Icon]; dup {
-			continue
+		if l.Icon != "" {
+			if _, dup := have[l.Icon]; dup {
+				continue
+			}
 		}
 		combined = append(combined, l)
 	}

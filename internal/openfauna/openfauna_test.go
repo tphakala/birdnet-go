@@ -288,6 +288,28 @@ func TestDecodeMetadataRows_MissingOptionalLinksKey(t *testing.T) {
 	assert.Empty(t, m.Links["inaturalist"].ID, "absent links key must decode to zero LinkEntry, not error")
 }
 
+// TestDecodeMetadataRows_MalformedLineSkipped proves a single corrupt JSONL line
+// is skipped rather than aborting the whole stream, so one bad record cannot wipe
+// out every other species' taxonomy and links. The final line also omits a trailing
+// newline to confirm it is still decoded.
+func TestDecodeMetadataRows_MalformedLineSkipped(t *testing.T) {
+	t.Parallel()
+
+	input := `{"scientific_name":"Turdus merula","taxonomy":{"class":"Aves"}}
+{ this is not valid json
+{"scientific_name":"Erithacus rubecula","taxonomy":{"class":"Aves"}}`
+
+	got := map[string]Meta{}
+	err := decodeMetadataRows(strings.NewReader(input), func(sci string, m Meta) error {
+		got[sci] = m
+		return nil
+	})
+	require.NoError(t, err, "a malformed line must be skipped, not surfaced as an error")
+	require.Len(t, got, 2, "valid records on either side of a malformed line must still decode")
+	assert.Contains(t, got, "Turdus merula")
+	assert.Contains(t, got, "Erithacus rubecula", "the final newline-less record must still decode")
+}
+
 // TestDecodeTranslationRows_FiltersSynthetic exercises the per-row callback over
 // an in-memory translations CSV without touching the embedded data.
 func TestDecodeTranslationRows_FiltersSynthetic(t *testing.T) {

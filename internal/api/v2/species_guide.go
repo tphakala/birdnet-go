@@ -870,8 +870,11 @@ func (c *Controller) ebirdSpeciesCode(scientificName string) string {
 // endpoint, so species pages must be addressed by code as
 // https://ebird.org/species/<code>.
 //
-// lang for {lang} substitution is the Wikipedia-style base-language subtag (so the
-// nb/nn -> no override is applied), which is also a valid iNaturalist ?locale= value.
+// lang for {lang} substitution is the Wikipedia project subtag (so the nb/nn -> no
+// override is applied). The Wikidata GoToLinkedPage template requires the exact wiki
+// project code, so that mapping is mandatory there; the same subtag also feeds
+// iNaturalist's ?locale= value. iNaturalist falls back to its default locale for a
+// value it does not recognize, so the link is always valid even when not localized.
 func externalLinksForGuide(scientificName, ebirdCode, locale string, includeSupplementary bool) []GuideExternalLink {
 	if scientificName == "" {
 		return nil
