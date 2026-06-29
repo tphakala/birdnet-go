@@ -21,6 +21,10 @@ describe('resolveAnalyticsRedirect', () => {
     expect(resolveAnalyticsRedirect('/ui/analytics/', '')).toBe('/ui/analytics/summary');
   });
 
+  it('routes an unknown ?tab= value to summary (unknown-tab fallback)', () => {
+    expect(resolveAnalyticsRedirect('/ui/analytics', '?tab=bogus')).toBe('/ui/analytics/summary');
+  });
+
   it('preserves non-tab query params', () => {
     expect(resolveAnalyticsRedirect('/ui/analytics', '?tab=trends&range=week&species=A')).toBe(
       '/ui/analytics/trends?range=week&species=A'

@@ -39,12 +39,26 @@ describe('analyticsControls', () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('seeds params from the current URL search', () => {
+  // Fix L: split into two assertions so each tested path is isolated.
+
+  it('constructor seeds params directly from window.location.search (no syncFromUrl needed)', () => {
     setLocation('?range=week&species=A,B');
     const c = createAnalyticsControls();
-    c.syncFromUrl();
+    // Do NOT call syncFromUrl - the constructor reads window.location.search directly.
     expect(c.params.range).toBe('week');
     expect(c.params.species).toEqual(['A', 'B']);
+  });
+
+  it('syncFromUrl updates params when the location changes after construction', () => {
+    setLocation('?range=quarter');
+    const c = createAnalyticsControls();
+    expect(c.params.range).toBe('quarter'); // seeded by constructor from initial location
+
+    // Change location after construction and call syncFromUrl to pick up the new value.
+    setLocation('?range=year&species=X');
+    c.syncFromUrl();
+    expect(c.params.range).toBe('year');
+    expect(c.params.species).toEqual(['X']);
   });
 
   it('applyParams writes the current pathname + serialized query (push)', () => {
@@ -107,6 +121,53 @@ describe('analyticsControls', () => {
       setLocation('?range=year');
       window.dispatchEvent(new Event('popstate'));
       expect(c.params.range).toBe('week'); // unchanged after listener removed
+    });
+  });
+
+  // Fix K: maybeAutoSelectSpecies coverage (previously in Analytics.test.ts, now deleted).
+  // fetchAvailableSpecies calls maybeAutoSelectSpecies after a successful fetch.
+  describe('maybeAutoSelectSpecies via ensureSpecies()', () => {
+    const speciesData = [
+      { scientific_name: 'Turdus merula', common_name: 'Common Blackbird', count: 10 },
+      { scientific_name: 'Parus major', common_name: 'Great Tit', count: 7 },
+      { scientific_name: 'Erithacus rubecula', common_name: 'European Robin', count: 3 },
+    ];
+
+    function stubFetch(): void {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: (): Promise<typeof speciesData> => Promise.resolve(speciesData),
+        })
+      );
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('auto-selects the top species with a replace write when no species are in params', async () => {
+      setLocation('');
+      const c = createAnalyticsControls();
+      stubFetch();
+      c.ensureSpecies();
+      // fetchAvailableSpecies awaits fetch() then .json() - drain both ticks via setTimeout so
+      // all queued microtasks complete before the assertion.
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      expect(navState.last?.mode).toBe('replace');
+      expect(navState.last?.url).toContain('species=');
+    });
+
+    it('does not auto-select when species are already present in params', async () => {
+      // Seed params.species via the URL so maybeAutoSelectSpecies returns early.
+      setLocation('?species=A');
+      const c = createAnalyticsControls();
+      stubFetch();
+      c.ensureSpecies();
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      // No replace write should have occurred - navState.last stays null.
+      expect(navState.last).toBeNull();
     });
   });
 });

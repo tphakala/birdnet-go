@@ -42,13 +42,18 @@ import ReviewPage from './ReviewPage.svelte';
 
 describe('analytics route pages render without throwing', () => {
   it.each([
-    ['summary', SummaryPage],
-    ['activity', ActivityPage],
-    ['trends', TrendsPage],
-    ['biodiversity', BiodiversityPage],
-    ['review', ReviewPage],
-  ])('%s page mounts', (_name, Comp) => {
+    ['summary', SummaryPage, 'analytics.hub.tabs.summary'],
+    ['activity', ActivityPage, 'analytics.hub.tabs.patterns'],
+    ['trends', TrendsPage, 'analytics.hub.tabs.trends'],
+    ['biodiversity', BiodiversityPage, 'analytics.hub.tabs.biodiversity'],
+    ['review', ReviewPage, 'analytics.hub.tabs.quality'],
+  ])('%s page mounts with the correct title', (_name, Comp, expectedTitleKey) => {
     const { container } = render(Comp as never);
-    expect(container.querySelector('#analytics-page-title')).toBeTruthy();
+    const titleEl = container.querySelector('#analytics-page-title');
+    // The t() mock echoes keys verbatim, so textContent equals the i18n key.
+    expect(titleEl).toBeTruthy();
+    // titleEl is the nullable querySelector result, so optional chaining keeps this lint-clean.
+    const text = (titleEl?.textContent ?? '').trim();
+    expect(text).toBe(expectedTitleKey);
   });
 });

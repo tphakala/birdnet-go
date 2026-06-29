@@ -124,8 +124,7 @@ describe('DesktopSidebar - analytics submenu', () => {
     expect(screen.getByText('analytics.hub.tabs.biodiversity')).toBeTruthy();
     expect(screen.getByText('analytics.hub.tabs.quality')).toBeTruthy();
 
-    // Verify the hrefs point to the correct UI routes (no onNavigate handler,
-    // so the sidebar uses the /ui/ prefix paths).
+    // Each item renders as a button (onclick calls the internal navigate handler).
     const summaryBtn = screen.getByText('analytics.hub.tabs.summary').closest('button');
     const speciesBtn = screen.getByText('analytics.species.title').closest('button');
     const activityBtn = screen.getByText('analytics.hub.tabs.patterns').closest('button');
@@ -139,5 +138,43 @@ describe('DesktopSidebar - analytics submenu', () => {
     expect(trendsBtn).toBeTruthy();
     expect(biodiversityBtn).toBeTruthy();
     expect(reviewBtn).toBeTruthy();
+  });
+
+  it('each analytics submenu button routes to its correct URL via the onNavigate prop', async () => {
+    // With onNavigate provided, navigationUrls uses the short form without the /ui/ prefix.
+    const onNavigate = vi.fn();
+    sidebarTest.render({ currentRoute: '/ui/analytics/summary', onNavigate });
+
+    // Wait for the submenu to expand (the $effect fires on route match).
+    await waitFor(() => {
+      expect(screen.getByText('analytics.hub.tabs.summary')).toBeTruthy();
+    });
+
+    // Resolve each item's button; throw rather than use a non-null assertion so
+    // the error message is clear if a button is missing.
+    const getBtn = (text: string): HTMLButtonElement => {
+      const el = screen.getByText(text).closest('button');
+      if (!el) throw new Error(`Button with text "${text}" not found in sidebar`);
+      return el;
+    };
+
+    // Click each item and assert the spy receives the correct route segment.
+    await fireEvent.click(getBtn('analytics.hub.tabs.summary'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/summary');
+
+    await fireEvent.click(getBtn('analytics.species.title'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/species');
+
+    await fireEvent.click(getBtn('analytics.hub.tabs.patterns'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/activity');
+
+    await fireEvent.click(getBtn('analytics.hub.tabs.trends'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/trends');
+
+    await fireEvent.click(getBtn('analytics.hub.tabs.biodiversity'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/biodiversity');
+
+    await fireEvent.click(getBtn('analytics.hub.tabs.quality'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/review');
   });
 });
