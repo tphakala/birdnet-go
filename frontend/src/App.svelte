@@ -401,10 +401,12 @@
     [uiPath('dashboard')]: findRouteConfig('dashboard'),
     [uiPath('live-stream')]: findRouteConfig('live-stream'),
     [uiPath('notifications')]: findRouteConfig('notifications'),
-    // Fallback if handleRouting's redirect does not fire (e.g. an aggressive
+    // Fallbacks if handleRouting's redirect does not fire (e.g. an aggressive
     // sub_filter proxy rewrite that corrupts the literal path before handleRouting
-    // runs, or SSR). The normal flow never reaches this entry directly.
+    // runs, or SSR). The normal flow never reaches these entries directly: the bare
+    // hub redirects to summary and the retired /advanced path redirects to activity.
     [uiPath('analytics')]: findRouteConfig('analytics-summary'),
+    [uiPath('analytics', 'advanced')]: findRouteConfig('analytics-activity'),
     [uiPath('analytics', 'species')]: findRouteConfig('species'),
     [uiPath('analytics', 'summary')]: findRouteConfig('analytics-summary'),
     [uiPath('analytics', 'activity')]: findRouteConfig('analytics-activity'),

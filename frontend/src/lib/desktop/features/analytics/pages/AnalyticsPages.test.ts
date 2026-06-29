@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/svelte';
 
 vi.mock('$lib/i18n', () => ({ t: (k: string) => k }));
@@ -41,6 +41,10 @@ import BiodiversityPage from './BiodiversityPage.svelte';
 import ReviewPage from './ReviewPage.svelte';
 
 describe('analytics route pages render without throwing', () => {
+  // Reset the shared analyticsControls mock so vi.fn() call history does not leak
+  // between parametrized cases.
+  beforeEach(() => vi.clearAllMocks());
+
   it.each([
     ['summary', SummaryPage, 'analytics.hub.tabs.summary'],
     ['activity', ActivityPage, 'analytics.hub.tabs.patterns'],
