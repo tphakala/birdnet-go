@@ -63,7 +63,7 @@ describe('AnalyticsPageShell', () => {
     expect(screen.getByTestId('body')).toBeInTheDocument();
   });
 
-  describe('mount effect - deep-link fix (#1275)', () => {
+  describe('mount effect - deep-link fix', () => {
     it('calls syncFromUrl on mount', () => {
       render(AnalyticsPageShell, {
         props: { ...defaultProps, children: makeBody() },

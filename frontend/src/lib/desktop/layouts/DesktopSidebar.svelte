@@ -271,7 +271,7 @@ Performance Optimizations:
 
   // Flat task-grouped analytics sections (replaces the single Analytics collapsible
   // plus the old top-level Search/About buttons). Derived so labels and the
-  // query-string-bearing analytics URLs stay reactive (#1275 part A).
+  // query-string-bearing analytics URLs stay reactive.
   interface NavFlatItemDef {
     icon: Component;
     label: string;
@@ -667,7 +667,7 @@ Performance Optimizations:
         <!-- Flat task-grouped analytics sections (Explore / Patterns / Environment / Data Quality).
              Rendered above the auth gate so analytics + Search stay publicly visible. The same
              markup serves collapsed (header self-hides via sr-only; items render icon-only with
-             tooltips) and expanded modes - no flyout (#1273 acceptance criterion 7). -->
+             tooltips) and expanded modes - no flyout (collapsed flat-icon mode). -->
         {#each navSections as section (section.id)}
           <div role="group" aria-labelledby={`nav-section-${section.id}`}>
             <NavSectionHeader

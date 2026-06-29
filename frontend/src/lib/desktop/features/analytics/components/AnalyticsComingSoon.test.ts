@@ -45,7 +45,7 @@ describe('AnalyticsComingSoon', () => {
     expect(screen.getByText('analytics.comingSoon.weather.feature1')).toBeInTheDocument();
   });
 
-  describe('mount effect - deep-link fix (#1275)', () => {
+  describe('mount effect - deep-link fix', () => {
     it('calls syncFromUrl on mount', () => {
       render(AnalyticsComingSoon, { props: defaultProps });
       expect(mockSyncFromUrl).toHaveBeenCalledOnce();

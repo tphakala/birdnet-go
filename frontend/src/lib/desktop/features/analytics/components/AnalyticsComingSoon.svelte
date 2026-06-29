@@ -14,10 +14,10 @@
 
   // Apply any filter query carried in the URL we mounted on, then register the
   // popstate listener. Mirrors AnalyticsPageShell - see its comment for the
-  // full rationale (#1275 part B). Coming-soon views need no data fetches, so
+  // full rationale. Coming-soon views need no data fetches, so
   // unlike the shell we do not call ensureSpecies/ensureSources.
   $effect(() => {
-    analyticsControls.syncFromUrl(); // honor filter query carried in the URL we mounted on (#1275)
+    analyticsControls.syncFromUrl(); // honor filter query carried in the URL we mounted on
     return analyticsControls.init(); // register the ref-counted popstate listener; its cleanup is the teardown
   });
 </script>

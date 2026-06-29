@@ -23,12 +23,12 @@
 
   // Apply any filter query carried in the URL we mounted on, then register the
   // popstate listener. syncFromUrl runs first so an in-session deep link (e.g.
-  // /ui/analytics/trends?range=year) is honored on mount (#1275 part B). With
+  // /ui/analytics/trends?range=year) is honored on mount. With
   // Part A sidebar links carry the active query, so a sidebar navigation lands
   // on a URL that already encodes the current filters - syncFromUrl reads the
   // same filters back and persistence is preserved.
   $effect(() => {
-    analyticsControls.syncFromUrl(); // honor filter query carried in the URL we mounted on (#1275)
+    analyticsControls.syncFromUrl(); // honor filter query carried in the URL we mounted on
     return analyticsControls.init(); // register the ref-counted popstate listener; its cleanup is the teardown
   });
 

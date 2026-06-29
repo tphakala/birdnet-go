@@ -92,7 +92,7 @@ describe('DesktopSidebar - post-login redirect wiring (#3306)', () => {
   });
 });
 
-describe('DesktopSidebar - flat task-grouped sections (#1273/#1274/#1275)', () => {
+describe('DesktopSidebar - flat task-grouped sections', () => {
   const sidebarTest = createComponentTestFactory(DesktopSidebar);
 
   // Resolve a button by its (mocked-key) text; throw with a clear message if missing.
@@ -276,7 +276,7 @@ describe('DesktopSidebar - flat task-grouped sections (#1273/#1274/#1275)', () =
     expect(patternsLabels[3]).toContain('analytics.hub.tabs.biodiversity');
   });
 
-  it('deep-link (#1275 part A): analytics item URLs carry the active query while Search/Dashboard stay query-less', async () => {
+  it('deep-link: analytics item URLs carry the active query while Search/Dashboard stay query-less', async () => {
     const onNavigate = vi.fn();
     // Set a non-default filter so queryString is non-empty.
     analyticsControls.applyParams({ range: 'year' });
