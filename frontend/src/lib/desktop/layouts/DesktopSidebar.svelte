@@ -78,6 +78,9 @@ Performance Optimizations:
     TrendingUp,
     Leaf,
     BadgeCheck,
+    Moon,
+    CloudSun,
+    AudioLines,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import CollapsibleNavSection from './CollapsibleNavSection.svelte';
@@ -176,6 +179,9 @@ Performance Optimizations:
     analyticsTrends: actualRoute === '/ui/analytics/trends',
     analyticsBiodiversity: actualRoute === '/ui/analytics/biodiversity',
     analyticsReview: actualRoute === '/ui/analytics/review',
+    analyticsNocturnal: actualRoute === '/ui/analytics/nocturnal',
+    analyticsWeather: actualRoute === '/ui/analytics/weather',
+    analyticsSoundscape: actualRoute === '/ui/analytics/soundscape',
     analyticsSpecies: actualRoute === '/ui/analytics/species',
     search: actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
@@ -229,6 +235,9 @@ Performance Optimizations:
     analyticsTrends: onNavigate ? '/analytics/trends' : '/ui/analytics/trends',
     analyticsBiodiversity: onNavigate ? '/analytics/biodiversity' : '/ui/analytics/biodiversity',
     analyticsReview: onNavigate ? '/analytics/review' : '/ui/analytics/review',
+    analyticsNocturnal: onNavigate ? '/analytics/nocturnal' : '/ui/analytics/nocturnal',
+    analyticsWeather: onNavigate ? '/analytics/weather' : '/ui/analytics/weather',
+    analyticsSoundscape: onNavigate ? '/analytics/soundscape' : '/ui/analytics/soundscape',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
@@ -289,6 +298,24 @@ Performance Optimizations:
       label: t('analytics.hub.tabs.quality'),
       url: navigationUrls.analyticsReview,
       routeKey: 'analyticsReview',
+    },
+    {
+      icon: Moon,
+      label: t('analytics.hub.tabs.nocturnal'),
+      url: navigationUrls.analyticsNocturnal,
+      routeKey: 'analyticsNocturnal',
+    },
+    {
+      icon: CloudSun,
+      label: t('analytics.hub.tabs.weather'),
+      url: navigationUrls.analyticsWeather,
+      routeKey: 'analyticsWeather',
+    },
+    {
+      icon: AudioLines,
+      label: t('analytics.hub.tabs.soundscape'),
+      url: navigationUrls.analyticsSoundscape,
+      routeKey: 'analyticsSoundscape',
     },
   ]);
 

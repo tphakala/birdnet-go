@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Elemzés - Éjszakai aktivitás",
+    "analyticsWeather": "Elemzés - Időjárás-korreláció",
+    "analyticsSoundscape": "Elemzés - Hangkép"
   },
   "navigation": {
     "dashboard": "Irányítópult",
@@ -1803,7 +1806,10 @@
         "trends": "Trendek",
         "biodiversity": "Biodiverzitás",
         "quality": "Ellenőrzés és pontosság",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Éjszakai aktivitás",
+        "weather": "Időjárás",
+        "soundscape": "Hangkép"
       },
       "aria": {
         "tabs": "Elemzési szakaszok"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Néhány analitikai adat betöltése sikertelen. Próbálja később újra.",
+    "comingSoon": {
+      "badge": "Hamarosan",
+      "plannedTitle": "Tervezett funkciók",
+      "weather": {
+        "description": "Madárfelvételek a helyi időjárási viszonyokhoz mérve. Ez a nézet az észleléseket összekapcsolja a hőmérséklettel, széllel és csapadékkal.",
+        "feature1": "Észlelések korrelálása hőmérséklettel, széllel és csapadékkal",
+        "feature2": "Megmutatja, hogyan befolyásolják az időjárási frontok a fajok aktivitását",
+        "feature3": "Szezonális aktivitás összehasonlítása a historikus időjárási adatokkal"
+      },
+      "soundscape": {
+        "description": "Átfogó kép a környezet akusztikai karakteréről, akusztikai indexek segítségével összefoglalva a hangkép diverzitását az idő múlásával.",
+        "feature1": "Akusztikus indexek, amelyek összefoglalják a hangkép összetettségét",
+        "feature2": "A biodiverzitás nyomon követése a környezeti hang révén az idő múlásával",
+        "feature3": "Hajnali és esti kórusok azonosítása az akusztikai felvételekben"
+      }
+    },
     "stats": {
       "totalDetections": "Összes detektálás",
       "uniqueSpecies": "Egyedi fajok",

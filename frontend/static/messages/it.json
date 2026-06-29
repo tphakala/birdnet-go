@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analisi - Attività notturna",
+    "analyticsWeather": "Analisi - Correlazione meteo",
+    "analyticsSoundscape": "Analisi - Paesaggio sonoro"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1803,7 +1806,10 @@
         "trends": "Tendenze",
         "biodiversity": "Biodiversità",
         "quality": "Revisione e accuratezza",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Attività notturna",
+        "weather": "Meteo",
+        "soundscape": "Paesaggio sonoro"
       },
       "aria": {
         "tabs": "Sezioni di analisi"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Impossibile caricare alcuni dati analitici. Riprova più tardi.",
+    "comingSoon": {
+      "badge": "Prossimamente",
+      "plannedTitle": "Funzionalità pianificate",
+      "weather": {
+        "description": "Attività degli uccelli correlata alle condizioni meteorologiche locali. Questa vista metterà in relazione le rilevazioni con temperatura, vento e pioggia.",
+        "feature1": "Correlare le rilevazioni con temperatura, vento e precipitazioni",
+        "feature2": "Vedere come i fronti meteorologici influenzano l'attività delle specie",
+        "feature3": "Confrontare l'attività stagionale con il meteo storico"
+      },
+      "soundscape": {
+        "description": "Uno sguardo al carattere acustico complessivo del proprio ambiente, utilizzando indici acustici per riassumere la diversità del paesaggio sonoro nel tempo.",
+        "feature1": "Indici acustici che riassumono la complessità del paesaggio sonoro",
+        "feature2": "Tracciare la biodiversità attraverso il suono ambientale nel tempo",
+        "feature3": "Individuare i cori dell'alba e del crepuscolo nel registro acustico"
+      }
+    },
     "stats": {
       "totalDetections": "Rilevamenti Totali",
       "uniqueSpecies": "Specie Uniche",

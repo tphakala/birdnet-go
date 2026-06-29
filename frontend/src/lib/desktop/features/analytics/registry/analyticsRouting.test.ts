@@ -43,4 +43,26 @@ describe('resolveAnalyticsRedirect', () => {
     expect(resolveAnalyticsRedirect('/ui/analytics/activity', '?range=week')).toBeNull();
     expect(resolveAnalyticsRedirect('/ui/dashboard', '')).toBeNull();
   });
+
+  it('treats the coming-soon routes as canonical (no redirect)', () => {
+    // nocturnal/weather/soundscape are real per-route pages, not legacy ?tab=
+    // aliases. They must never be added to TAB_TO_SEGMENT: a stray mapping would
+    // synthesize a bogus redirect off the bare hub. Landing directly on them
+    // resolves to null, same as any other canonical segment.
+    expect(resolveAnalyticsRedirect('/ui/analytics/nocturnal', '')).toBeNull();
+    expect(resolveAnalyticsRedirect('/ui/analytics/weather', '?range=week')).toBeNull();
+    expect(resolveAnalyticsRedirect('/ui/analytics/soundscape', '')).toBeNull();
+
+    // The load-bearing guard: a bare-hub ?tab= matching one of these slugs must
+    // fall back to summary, NOT redirect to that segment. This is the assertion
+    // that fails if a stray TAB_TO_SEGMENT entry is ever added for them (the
+    // canonical-route checks above pass regardless of the map).
+    expect(resolveAnalyticsRedirect('/ui/analytics', '?tab=nocturnal')).toBe(
+      '/ui/analytics/summary'
+    );
+    expect(resolveAnalyticsRedirect('/ui/analytics', '?tab=weather')).toBe('/ui/analytics/summary');
+    expect(resolveAnalyticsRedirect('/ui/analytics', '?tab=soundscape')).toBe(
+      '/ui/analytics/summary'
+    );
+  });
 });

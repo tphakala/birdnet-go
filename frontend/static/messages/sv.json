@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analys - Nattaktivitet",
+    "analyticsWeather": "Analys - Väderkorrelation",
+    "analyticsSoundscape": "Analys - Ljudlandskap"
   },
   "navigation": {
     "dashboard": "Instrumentpanel",
@@ -1803,7 +1806,10 @@
         "trends": "Trender",
         "biodiversity": "Biologisk mångfald",
         "quality": "Granskning och noggrannhet",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Nattaktivitet",
+        "weather": "Väder",
+        "soundscape": "Ljudlandskap"
       },
       "aria": {
         "tabs": "Analysavsnitt"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Kunde inte ladda vissa analysdata. Försök igen senare.",
+    "comingSoon": {
+      "badge": "Kommer snart",
+      "plannedTitle": "Planerade funktioner",
+      "weather": {
+        "description": "Fågelaktivitet spårad mot lokala väderförhållanden. Den här vyn korrelerar detektioner med temperatur, vind och nederbörd.",
+        "feature1": "Korrelera detektioner med temperatur, vind och nederbörd",
+        "feature2": "Se hur väderfronter förändrar artaktiviteten",
+        "feature3": "Jämför säsongsaktivitet med historiska väderdata"
+      },
+      "soundscape": {
+        "description": "En inblick i miljöns övergripande akustiska karaktär, med hjälp av akustiska index för att sammanfatta ljudlandskapets mångfald över tid.",
+        "feature1": "Akustiska index som sammanfattar ljudlandskapets komplexitet",
+        "feature2": "Spåra biologisk mångfald genom omgivande ljud över tid",
+        "feature3": "Identifiera grynings- och skymningskörer i det akustiska registret"
+      }
+    },
     "stats": {
       "totalDetections": "Totala detektioner",
       "uniqueSpecies": "Unika arter",

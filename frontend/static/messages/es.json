@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analítica - Actividad nocturna",
+    "analyticsWeather": "Analítica - Correlación meteorológica",
+    "analyticsSoundscape": "Analítica - Paisaje sonoro"
   },
   "navigation": {
     "dashboard": "Panel de control",
@@ -1803,7 +1806,10 @@
         "trends": "Tendencias",
         "biodiversity": "Biodiversidad",
         "quality": "Revisión y precisión",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Actividad nocturna",
+        "weather": "Clima",
+        "soundscape": "Paisaje sonoro"
       },
       "aria": {
         "tabs": "Secciones de análisis"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Error al cargar algunos datos analíticos. Por favor, inténtalo más tarde.",
+    "comingSoon": {
+      "badge": "Próximamente",
+      "plannedTitle": "Funciones planificadas",
+      "weather": {
+        "description": "Actividad de aves rastreada frente a condiciones meteorológicas locales. Esta vista correlacionará las detecciones con temperatura, viento y lluvia.",
+        "feature1": "Correlacionar detecciones con temperatura, viento y precipitaciones",
+        "feature2": "Ver cómo los frentes meteorológicos cambian la actividad de las especies",
+        "feature3": "Comparar la actividad estacional con el clima histórico"
+      },
+      "soundscape": {
+        "description": "Una mirada al carácter acústico general del entorno, utilizando índices acústicos para resumir la diversidad del paisaje sonoro a lo largo del tiempo.",
+        "feature1": "Índices acústicos que resumen la complejidad del paisaje sonoro",
+        "feature2": "Rastrear la biodiversidad a través del sonido ambiental a lo largo del tiempo",
+        "feature3": "Detectar coros del amanecer y del crepúsculo en el registro acústico"
+      }
+    },
     "stats": {
       "totalDetections": "Detecciones totales",
       "uniqueSpecies": "Especies únicas",

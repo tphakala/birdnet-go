@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytika - Noční aktivita",
+    "analyticsWeather": "Analytika - Korelace s počasím",
+    "analyticsSoundscape": "Analytika - Zvuková krajina"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1803,7 +1806,10 @@
         "trends": "Trendy",
         "biodiversity": "Biodiverzita",
         "quality": "Kontrola a přesnost",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Noční aktivita",
+        "weather": "Počasí",
+        "soundscape": "Zvuková krajina"
       },
       "aria": {
         "tabs": "Sekce analýzy"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Nepodařilo se načíst některá analytická data. Zkuste to prosím později.",
+    "comingSoon": {
+      "badge": "Připravujeme",
+      "plannedTitle": "Plánované funkce",
+      "weather": {
+        "description": "Aktivita ptáků v závislosti na místních povětrnostních podmínkách. Toto zobrazení bude korelovat vaše detekce s teplotou, větrem a srážkami.",
+        "feature1": "Korelace detekcí s teplotou, větrem a srážkami",
+        "feature2": "Zjistit, jak atmosférické fronty ovlivňují aktivitu druhů",
+        "feature3": "Porovnat sezónní aktivitu s historickými meteorologickými daty"
+      },
+      "soundscape": {
+        "description": "Pohled na celkový akustický charakter vašeho prostředí pomocí akustických indexů pro shrnutí diverzity zvukové krajiny v čase.",
+        "feature1": "Akustické indexy shrnující složitost zvukové krajiny",
+        "feature2": "Sledování biodiverzity prostřednictvím okolního zvuku v průběhu času",
+        "feature3": "Odhalení úsvitových a soumračných chorů v akustickém záznamu"
+      }
+    },
     "stats": {
       "totalDetections": "Celkem detekcí",
       "uniqueSpecies": "Unikátní druhy",

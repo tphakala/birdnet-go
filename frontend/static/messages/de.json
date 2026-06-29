@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytics - Nachtaktivität",
+    "analyticsWeather": "Analytics - Wetterkorrelation",
+    "analyticsSoundscape": "Analytics - Klanglandschaft"
   },
   "navigation": {
     "dashboard": "Übersicht",
@@ -1803,7 +1806,10 @@
         "trends": "Trends",
         "biodiversity": "Artenvielfalt",
         "quality": "Überprüfung & Genauigkeit",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Nachtaktivität",
+        "weather": "Wetter",
+        "soundscape": "Klanglandschaft"
       },
       "aria": {
         "tabs": "Analysebereiche"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Fehler beim Laden einiger Analysedaten. Bitte versuchen Sie es später erneut.",
+    "comingSoon": {
+      "badge": "Demnächst verfügbar",
+      "plannedTitle": "Geplante Funktionen",
+      "weather": {
+        "description": "Vogelaktivität im Vergleich zu lokalen Wetterbedingungen. Diese Ansicht korreliert Erkennungen mit Temperatur, Wind und Niederschlag.",
+        "feature1": "Erkennungen mit Temperatur, Wind und Niederschlag korrelieren",
+        "feature2": "Sehen, wie Wetterfronten die Artenaktivität verschieben",
+        "feature3": "Saisonale Aktivität mit historischen Wetterdaten vergleichen"
+      },
+      "soundscape": {
+        "description": "Ein Blick auf den akustischen Charakter Ihrer Umgebung, mit akustischen Indizes zur Zusammenfassung der Klanglandschaftsvielfalt über die Zeit.",
+        "feature1": "Akustische Indizes, die die Komplexität der Klanglandschaft zusammenfassen",
+        "feature2": "Biodiversität durch Umgebungsgeräusche über die Zeit verfolgen",
+        "feature3": "Morgen- und Abendchöre im akustischen Protokoll erkennen"
+      }
+    },
     "stats": {
       "totalDetections": "Erkennungen gesamt",
       "uniqueSpecies": "Einzigartige Arten",

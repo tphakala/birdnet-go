@@ -13,16 +13,7 @@
  */
 import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
 
-import type { AnalyticsParams, ChartGroup, DateRangePreset } from './types';
-
-/** Tab groups in display order. */
-export const GROUP_ORDER: readonly ChartGroup[] = [
-  'overview',
-  'patterns',
-  'trends',
-  'biodiversity',
-  'quality',
-] as const;
+import type { AnalyticsParams, DateRangePreset } from './types';
 
 const VALID_RANGES = new Set<string>(['week', 'month', 'quarter', 'year', 'custom']);
 

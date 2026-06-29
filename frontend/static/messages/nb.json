@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analyse - Nattaktivitet",
+    "analyticsWeather": "Analyse - Værkorrelasjon",
+    "analyticsSoundscape": "Analyse - Lydlandskap"
   },
   "navigation": {
     "dashboard": "Dashbord",
@@ -1803,7 +1806,10 @@
         "trends": "Trender",
         "biodiversity": "Biologisk mangfold",
         "quality": "Gjennomgang og nøyaktighet",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Nattaktivitet",
+        "weather": "Vær",
+        "soundscape": "Lydlandskap"
       },
       "aria": {
         "tabs": "Analyseseksjoner"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Innlasting av noen analysedata mislyktes. Prøv igjen senere.",
+    "comingSoon": {
+      "badge": "Kommer snart",
+      "plannedTitle": "Planlagte funksjoner",
+      "weather": {
+        "description": "Fugleaktivitet spores mot lokale værforhold. Denne visningen vil korrelere deteksjonene med temperatur, vind og nedbør.",
+        "feature1": "Korreler deteksjoner med temperatur, vind og nedbør",
+        "feature2": "Se hvordan værsystemer påvirker artsaktiviteten",
+        "feature3": "Sammenlign sesongaktivitet med historiske værdata"
+      },
+      "soundscape": {
+        "description": "Et innblikk i den overordnede akustiske karakteren til miljøet, ved bruk av akustiske indekser for å oppsummere lydlandskapets mangfold over tid.",
+        "feature1": "Akustiske indekser som oppsummerer lydlandskapets kompleksitet",
+        "feature2": "Spor biodiversitet gjennom omgivende lyd over tid",
+        "feature3": "Oppdag morgen- og kveldskorer i det akustiske registeret"
+      }
+    },
     "stats": {
       "totalDetections": "Totalt registreringer",
       "uniqueSpecies": "Unike arter",
