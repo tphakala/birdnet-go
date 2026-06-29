@@ -839,6 +839,11 @@ func (s *Server) registerSPARoutes() {
 		"/ui/analytics",
 		"/ui/analytics/species",
 		"/ui/analytics/advanced",
+		"/ui/analytics/summary",
+		"/ui/analytics/activity",
+		"/ui/analytics/trends",
+		"/ui/analytics/biodiversity",
+		"/ui/analytics/review",
 		"/ui/search",
 		"/ui/about",
 	}
