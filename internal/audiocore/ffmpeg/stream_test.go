@@ -5,8 +5,10 @@ import (
 	"context"
 	"io"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -15,13 +17,20 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 )
 
-// ffmpegTimeoutFlag is the FFmpeg connection timeout flag emitted for all source
-// types, including RTSP (the legacy -stimeout was removed in FFmpeg 5.x+).
+// ffmpegTimeoutFlag is the connection timeout flag expected when these tests
+// pin a modern FFmpeg version, including RTSP sources.
 const ffmpegTimeoutFlag = "-timeout"
 
-// ffmpegLegacyTimeoutFlag is the deprecated RTSP -stimeout flag. It must never be
-// emitted, but is still recognised when present in user-supplied parameters.
+// ffmpegLegacyTimeoutFlag is the legacy RTSP timeout flag. It must not be
+// emitted for the modern FFmpeg version pinned by these tests.
 const ffmpegLegacyTimeoutFlag = "-stimeout"
+
+const testFFmpegModernMajor = 7
+
+var seedFFmpegMajorRefs struct {
+	sync.Mutex
+	counts map[string]int
+}
 
 // newTestConfig returns a minimal StreamConfig suitable for unit tests.
 func newTestConfig() StreamConfig {
@@ -37,6 +46,32 @@ func newTestConfig() StreamConfig {
 		Transport:  "tcp",
 		LogLevel:   "error",
 	}
+}
+
+// seedFFmpegMajor pins the FFmpeg major version for a path in the package cache
+// so timeout-flag selection is deterministic in tests, independent of the
+// host's installed ffmpeg. It cleans up after the test.
+func seedFFmpegMajor(t *testing.T, ffmpegPath string, major int) {
+	t.Helper()
+
+	seedFFmpegMajorRefs.Lock()
+	if seedFFmpegMajorRefs.counts == nil {
+		seedFFmpegMajorRefs.counts = make(map[string]int)
+	}
+	seedFFmpegMajorRefs.counts[ffmpegPath]++
+	ffmpegMajorCache.Store(ffmpegPath, major)
+	seedFFmpegMajorRefs.Unlock()
+
+	t.Cleanup(func() {
+		seedFFmpegMajorRefs.Lock()
+		defer seedFFmpegMajorRefs.Unlock()
+
+		seedFFmpegMajorRefs.counts[ffmpegPath]--
+		if seedFFmpegMajorRefs.counts[ffmpegPath] == 0 {
+			delete(seedFFmpegMajorRefs.counts, ffmpegPath)
+			ffmpegMajorCache.Delete(ffmpegPath)
+		}
+	})
 }
 
 // newTestStream creates a Stream for testing with no-op callbacks.
@@ -416,17 +451,24 @@ func TestStream_CircuitBreakerCooldown(t *testing.T) {
 }
 
 func TestStream_DataRateCalculation(t *testing.T) {
-	t.Parallel()
+	// getRate divides total bytes by the time span between the first and last
+	// sample, returning 0 when that span is zero (div-by-zero guard). On
+	// coarse-timer platforms (Windows, ~15ms resolution) three back-to-back
+	// addSample calls can share a timestamp, making the span zero and the rate
+	// zero. Use synctest's fake clock advanced by time.Sleep so the samples get
+	// distinct timestamps deterministically on every platform.
+	synctest.Test(t, func(t *testing.T) {
+		calc := newDataRateCalculator(dataRateWindowSize)
 
-	stream := newTestStream(t)
-	calc := stream.dataRateCalc
+		calc.addSample(1024)
+		time.Sleep(time.Millisecond)
+		calc.addSample(2048)
+		time.Sleep(time.Millisecond)
+		calc.addSample(1536)
 
-	calc.addSample(1024)
-	calc.addSample(2048)
-	calc.addSample(1536)
-
-	rate := calc.getRate()
-	assert.Greater(t, rate, 0.0)
+		rate := calc.getRate()
+		assert.Greater(t, rate, 0.0)
+	})
 }
 
 func TestStream_DataRateCalculator_EmptyRate(t *testing.T) {
@@ -794,6 +836,7 @@ func TestStream_BuildFFmpegInputArgs_RTSP(t *testing.T) {
 	t.Parallel()
 
 	cfg := newTestConfig()
+	seedFFmpegMajor(t, cfg.FFmpegPath, testFFmpegModernMajor)
 	cfg.Type = "rtsp"
 	stream := newTestStreamWithConfig(t, &cfg)
 
@@ -809,6 +852,7 @@ func TestStream_BuildFFmpegInputArgs_HTTP(t *testing.T) {
 	t.Parallel()
 
 	cfg := newTestConfig()
+	seedFFmpegMajor(t, cfg.FFmpegPath, testFFmpegModernMajor)
 	cfg.URL = "http://192.168.1.183/stream"
 	cfg.Type = "http"
 	stream := newTestStreamWithConfig(t, &cfg)
@@ -824,6 +868,7 @@ func TestStream_BuildFFmpegInputArgs_InvalidTimeout(t *testing.T) {
 	t.Parallel()
 
 	cfg := newTestConfig() // default is RTSP
+	seedFFmpegMajor(t, cfg.FFmpegPath, testFFmpegModernMajor)
 	stream := newTestStreamWithConfig(t, &cfg)
 
 	params := []string{"-timeout", "abc", "-loglevel", "debug"}
@@ -850,6 +895,8 @@ func TestStream_BuildFFmpegInputArgs_InvalidTimeout(t *testing.T) {
 
 func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 	t.Parallel()
+	cfg := newTestConfig()
+	seedFFmpegMajor(t, cfg.FFmpegPath, testFFmpegModernMajor)
 
 	tests := []struct {
 		name              string

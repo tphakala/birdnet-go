@@ -9,16 +9,16 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	goflac "github.com/tphakala/go-flac/pcm"
 )
 
 const (
 	// tempExt is appended to the output path while encoding; the file is renamed
-	// to the final path on success. Intentionally duplicated from ffmpeg.TempExt
-	// (same value ".temp") rather than imported, to keep this package free of any
-	// dependency on the ffmpeg package it is meant to replace.
-	tempExt = ".temp"
+	// to the final path on success. It aliases audiotemp.Ext (a leaf package with
+	// no dependency on the ffmpeg package this encoder is meant to replace).
+	tempExt = audiotemp.Ext
 
 	// defaultCompressionLevel matches FFmpeg's default FLAC compression level and
 	// go-flac's benchmark default.
@@ -73,9 +73,9 @@ type Options struct {
 func SupportedBitDepth(bitDepth int) bool { return bitDepth == bitDepth16 }
 
 // EncodePCM encodes opts.PCMData to a FLAC file at opts.OutputPath. The write is
-// atomic: data is encoded to OutputPath+tempExt and renamed on success, with the
-// temp file removed on any failure. A non-zero GainDB is applied in Go before
-// encoding; opts.PCMData itself is never modified.
+// atomic: data is encoded to a unique per-export temp file and renamed on
+// success, with the temp file removed on any failure. A non-zero GainDB is
+// applied in Go before encoding; opts.PCMData itself is never modified.
 func EncodePCM(ctx context.Context, opts *Options) (err error) {
 	if opts == nil {
 		return errors.Newf("flac encode: nil options").
@@ -106,7 +106,7 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 			Build()
 	}
 
-	tempPath := opts.OutputPath + tempExt
+	tempPath := audiotemp.UniquePath(opts.OutputPath)
 	f, createErr := os.Create(tempPath) //nolint:gosec // path derived from validated config
 	if createErr != nil {
 		return errors.New(createErr).
@@ -163,7 +163,7 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 			Build()
 	}
 
-	if renameErr := os.Rename(tempPath, opts.OutputPath); renameErr != nil {
+	if renameErr := audiotemp.Finalize(tempPath, opts.OutputPath); renameErr != nil {
 		return errors.New(renameErr).
 			Component("audiocore/flac").
 			Category(errors.CategoryFileIO).

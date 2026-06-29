@@ -336,22 +336,23 @@ func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id strin
 // AdditionalResultsToDatastoreResults separately if needed.
 func NoteFromResult(result *detection.Result) Note {
 	return Note{
-		ID:             result.ID,
-		SourceNode:     result.SourceNode,
-		Date:           result.Timestamp.Format(mapper.DateFormat),
-		Time:           result.Timestamp.Format(mapper.TimeFormat),
-		BeginTime:      result.BeginTime,
-		EndTime:        result.EndTime,
-		SpeciesCode:    result.Species.Code,
-		ScientificName: result.Species.ScientificName,
-		CommonName:     result.Species.CommonName,
-		Confidence:     result.Confidence,
-		Latitude:       result.Latitude,
-		Longitude:      result.Longitude,
-		Threshold:      result.Threshold,
-		Sensitivity:    result.Sensitivity,
-		ClipName:       result.ClipName,
-		ProcessingTime: result.ProcessingTime,
+		ID:                result.ID,
+		SourceNode:        result.SourceNode,
+		Date:              result.Timestamp.Format(mapper.DateFormat),
+		Time:              result.Timestamp.Format(mapper.TimeFormat),
+		BeginTime:         result.BeginTime,
+		EndTime:           result.EndTime,
+		SpeciesCode:       result.Species.Code,
+		ScientificName:    result.Species.ScientificName,
+		RawScientificName: result.Species.RawScientificName,
+		CommonName:        result.Species.CommonName,
+		Confidence:        result.Confidence,
+		Latitude:          result.Latitude,
+		Longitude:         result.Longitude,
+		Threshold:         result.Threshold,
+		Sensitivity:       result.Sensitivity,
+		ClipName:          result.ClipName,
+		ProcessingTime:    result.ProcessingTime,
 		Source: AudioSource{
 			ID:          result.AudioSource.ID,
 			SafeString:  result.AudioSource.SafeString,
@@ -362,6 +363,7 @@ func NoteFromResult(result *detection.Result) Note {
 		Verified:   result.Verified,
 		Locked:     result.Locked,
 		Model:      result.Model,
+		RawLabel:   result.RawLabel,
 	}
 }
 
@@ -381,6 +383,7 @@ func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) [
 		dsResults[i] = Results{
 			Species:    speciesStr,
 			Confidence: float32(r.Confidence),
+			RawLabel:   r.RawLabel,
 		}
 	}
 	return dsResults
@@ -410,9 +413,10 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 		BeginTime: note.BeginTime,
 		EndTime:   note.EndTime,
 		Species: detection.Species{
-			ScientificName: note.ScientificName,
-			CommonName:     note.CommonName,
-			Code:           note.SpeciesCode,
+			ScientificName:    note.ScientificName,
+			RawScientificName: note.RawScientificName,
+			CommonName:        note.CommonName,
+			Code:              note.SpeciesCode,
 		},
 		Confidence:     note.Confidence,
 		Latitude:       note.Latitude,

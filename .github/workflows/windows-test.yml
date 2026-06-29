@@ -47,7 +47,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
@@ -110,11 +110,12 @@ jobs:
 
       - name: Setup ONNX Runtime
         run: |
-          # Inlined instead of the setup-onnxruntime composite action: that action
-          # caches to /tmp/onnxruntime, and on Windows actions/cache (Node) and Git
-          # Bash interpret /tmp as different directories, so a cache hit restores
-          # the libs where the bash verify step cannot see them. Download into the
-          # workspace, where Node and bash agree. (No caching; the zip is small.)
+          # Inlined instead of the setup-onnxruntime composite action. The action
+          # now caches under runner.temp, where actions/cache (Node) and Git Bash
+          # agree even on Windows, so it would work here too. This job still
+          # downloads into the workspace because it is simpler: no cache for a
+          # small zip, and the libs land next to the cygpath DLL-search wiring
+          # below. (Historically the action used /tmp, which diverged on Windows.)
           curl -fsSL -o onnxruntime.zip \
             "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip"
           tmp="$(mktemp -d)"
@@ -152,8 +153,11 @@ jobs:
           # exit code (no gotestfmt: go can wrap non-JSON build output into JSON
           # events whose content crashes its tokenizer). Failed tests are printed
           # below and in the job summary. Longer timeout than Linux: the native
-          # runner with -race is much slower.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 600s ./... > gotest.log 2>&1
+          # runner with -race is much slower, and api/v2 (the largest package,
+          # ~2000 tests) intermittently exceeded the old 600s per-package ceiling
+          # under runner load (cumulative race-instrumented work, not a deadlock).
+          # 900s adds headroom and stays under the 25m step cap below.
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 

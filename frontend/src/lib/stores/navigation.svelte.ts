@@ -27,6 +27,7 @@ const UI_ROOT_RE = /^\/ui\/?$/;
 export interface NavigationStore {
   currentPath: string;
   navigate: (url: string) => void;
+  redirect: (url: string) => void;
   handlePopState: () => void;
 }
 
@@ -95,16 +96,17 @@ export function createNavigation(): NavigationStore {
   );
 
   /**
-   * Navigate to a new path using SPA navigation (no page reload).
-   * Updates both internal state and browser URL bar with proxy-aware URL.
+   * Apply a new URL to internal routing state and the browser address bar.
    *
-   * Query parameters are preserved in the browser URL but NOT stored in currentPath.
-   * This matches the behavior on page reload where window.location.pathname
-   * (which doesn't include query string) is used for routing.
+   * Query parameters and hash fragments are preserved in the browser URL but NOT
+   * stored in currentPath. This matches the behavior on page reload where
+   * window.location.pathname (which doesn't include query string) is used for
+   * routing.
    *
-   * @param url - Path to navigate to, optionally with query string (e.g., '/ui/detections/123?tab=review')
+   * @param url - Path to apply, optionally with query string / hash
+   * @param mode - 'push' adds a history entry; 'replace' overwrites the current one
    */
-  function navigate(url: string): void {
+  function applyUrl(url: string, mode: 'push' | 'replace'): void {
     // Separate pathname from query string and hash fragment
     // Only pathname goes to currentPath (matches window.location.pathname behavior)
     // Query and hash are preserved in browser URL only
@@ -141,8 +143,33 @@ export function createNavigation(): NavigationStore {
     if (typeof window !== 'undefined') {
       // Build proxy-aware URL for the browser address bar (includes query/hash)
       const fullUrl = buildAppUrl(normalizedPath) + suffix;
-      window.history.pushState({}, '', fullUrl);
+      if (mode === 'replace') {
+        window.history.replaceState({}, '', fullUrl);
+      } else {
+        window.history.pushState({}, '', fullUrl);
+      }
     }
+  }
+
+  /**
+   * Navigate to a new path using SPA navigation (no page reload).
+   * Pushes a new history entry so Back returns to the previous view.
+   *
+   * @param url - Path to navigate to, optionally with query string (e.g., '/ui/detections/123?tab=review')
+   */
+  function navigate(url: string): void {
+    applyUrl(url, 'push');
+  }
+
+  /**
+   * Redirect to a new path, replacing the current history entry instead of
+   * pushing a new one. Used for retired routes so the dead URL does not linger
+   * in history (Back skips straight past it).
+   *
+   * @param url - Path to redirect to, optionally with query string
+   */
+  function redirect(url: string): void {
+    applyUrl(url, 'replace');
   }
 
   /**
@@ -162,6 +189,7 @@ export function createNavigation(): NavigationStore {
       return currentPath;
     },
     navigate,
+    redirect,
     handlePopState,
   };
 }

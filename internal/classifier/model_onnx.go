@@ -76,6 +76,12 @@ func (bn *BirdNET) initializeONNXModel() error {
 	}
 
 	bn.classifier = classifier
+	// We ship only the CPU execution provider for ONNX Runtime today (other ORT
+	// EPs like CUDA/DirectML/CoreML would set the device from the bound provider).
+	// ONNX Runtime executes the model file as-is, so the runtime precision is the
+	// weight precision recorded in ModelInfo.Quantization (e.g. INT8 for the arm64
+	// int8 variant, FP32 for an fp32 ONNX model).
+	bn.setRuntimeInfo(deviceCPU, BackendONNX, string(bn.ModelInfo.Quantization))
 
 	log.Info("ONNX model initialized",
 		logger.String("model", modelPath),

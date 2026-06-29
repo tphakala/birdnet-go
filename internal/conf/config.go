@@ -467,7 +467,7 @@ type PushProviderConfig struct {
 	// Script-specific
 	Command     string            `yaml:"command" json:"command"`
 	Args        []string          `yaml:"args" json:"args"`
-	Environment map[string]string `yaml:"environment" json:"environment"`
+	Environment map[string]string `yaml:"environment" json:"environment" jsonschema:"nullable"`
 	InputFormat string            `yaml:"input_format" json:"input_format" mapstructure:"input_format"`
 	// Webhook-specific
 	Endpoints []WebhookEndpointConfig `yaml:"endpoints" json:"endpoints"`
@@ -478,7 +478,7 @@ type PushProviderConfig struct {
 type WebhookEndpointConfig struct {
 	URL     string            `yaml:"url" json:"url"`
 	Method  string            `yaml:"method" json:"method"`                          // POST, PUT, PATCH (default: POST)
-	Headers map[string]string `yaml:"headers" json:"headers"`                        // Custom HTTP headers
+	Headers map[string]string `yaml:"headers" json:"headers" jsonschema:"nullable"`  // Custom HTTP headers
 	Timeout Duration          `yaml:"timeout" json:"timeout" mapstructure:"timeout"` // Per-endpoint timeout (default: use provider timeout)
 	Auth    WebhookAuthConfig `yaml:"auth" json:"auth"`                              // Authentication configuration
 }
@@ -514,7 +514,7 @@ type PushFilterConfig struct {
 	Types           []string       `yaml:"types" json:"types" mapstructure:"types"`
 	Priorities      []string       `yaml:"priorities" json:"priorities" mapstructure:"priorities"`
 	Components      []string       `yaml:"components" json:"components" mapstructure:"components"`
-	MetadataFilters map[string]any `yaml:"metadata_filters" json:"metadata_filters" mapstructure:"metadata_filters"`
+	MetadataFilters map[string]any `yaml:"metadata_filters" json:"metadata_filters" mapstructure:"metadata_filters" jsonschema:"nullable"`
 }
 
 // WundergroundSettings contains settings for WeatherUnderground integration.
@@ -901,9 +901,9 @@ type SpeciesConfig struct {
 // species names in any case (e.g., "American Robin", "american robin")
 // and they will all resolve to the same lowercase key.
 type SpeciesSettings struct {
-	Include []string                 `yaml:"include" json:"include"` // Always include these species
-	Exclude []string                 `yaml:"exclude" json:"exclude"` // Always exclude these species
-	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration (keys normalized to lowercase)
+	Include []string                 `yaml:"include" json:"include"`                     // Always include these species
+	Exclude []string                 `yaml:"exclude" json:"exclude"`                     // Always exclude these species
+	Config  map[string]SpeciesConfig `yaml:"config" json:"config" jsonschema:"nullable"` // Per-species configuration (keys normalized to lowercase)
 }
 
 // LogDeduplicationSettings contains settings for log deduplication
@@ -932,9 +932,9 @@ type YearlyTrackingSettings struct {
 
 // SeasonalTrackingSettings contains settings for tracking first arrivals each season
 type SeasonalTrackingSettings struct {
-	Enabled    bool              `yaml:"enabled" json:"enabled"`       // true to enable seasonal tracking
-	WindowDays int               `yaml:"windowdays" json:"windowDays"` // Days to show "new this season" indicator (default: 21)
-	Seasons    map[string]Season `yaml:"seasons" json:"seasons"`       // Season definitions
+	Enabled    bool              `yaml:"enabled" json:"enabled"`                       // true to enable seasonal tracking
+	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 21)
+	Seasons    map[string]Season `yaml:"seasons" json:"seasons" jsonschema:"nullable"` // Season definitions
 }
 
 // Season defines the start date for a season
@@ -1256,7 +1256,26 @@ type BirdNETConfig struct {
 	Labels             []string            `yaml:"-" json:"-"`                                                 // list of available species labels, runtime value
 	UseXNNPACK         bool                `yaml:"usexnnpack" json:"useXnnpack"`                               // true to use XNNPACK delegate for inference acceleration
 	ONNXRuntimePath    string              `yaml:"onnxruntimepath,omitempty" json:"onnxRuntimePath,omitempty"` // path to ONNX Runtime shared library (required for ONNX models)
+	OpenVINOPath       string              `yaml:"openvinopath,omitempty" json:"openVinoPath,omitempty"`       // path to libopenvino_c shared library (OpenVINO image variants only)
+	Backend            string              `yaml:"backend,omitempty" json:"backend,omitempty"`                 // inference backend preference: "auto" (default), "onnx", or "openvino"
+	OpenVINODevice     string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`   // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
 }
+
+// Inference backend preferences for BirdNET.Backend.
+const (
+	BackendPrefAuto     = "auto"
+	BackendPrefONNX     = "onnx"
+	BackendPrefOpenVINO = "openvino"
+)
+
+// OpenVINO device preferences for BirdNET.OpenVINODevice. "auto" picks the GPU
+// (Intel iGPU) when present for eligible models, else the f16 CPU path; "cpu"
+// and "gpu" force a device. An empty string is treated as "auto".
+const (
+	OVDeviceAuto = "auto"
+	OVDeviceCPU  = "cpu"
+	OVDeviceGPU  = "gpu"
+)
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
@@ -1638,9 +1657,9 @@ func (s *GoogleDriveBackupSettings) Validate() error {
 
 // BackupTarget defines settings for a backup target
 type BackupTarget struct {
-	Type     string         `yaml:"type" json:"type"`         // Specifies the type of the backup target (e.g., "local", "s3", "ftp", "sftp"). This determines the storage mechanism.
-	Enabled  bool           `yaml:"enabled" json:"enabled"`   // If true, this backup target will be used for storing backups. At least one target should be enabled for backups to be stored.
-	Settings map[string]any `yaml:"settings" json:"settings"` // A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling.
+	Type     string         `yaml:"type" json:"type"`                               // Specifies the type of the backup target (e.g., "local", "s3", "ftp", "sftp"). This determines the storage mechanism.
+	Enabled  bool           `yaml:"enabled" json:"enabled"`                         // If true, this backup target will be used for storing backups. At least one target should be enabled for backups to be stored.
+	Settings map[string]any `yaml:"settings" json:"settings" jsonschema:"nullable"` // A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling.
 }
 
 // BackupScheduleConfig defines a single backup schedule
@@ -1650,6 +1669,14 @@ type BackupScheduleConfig struct {
 	Minute   int    `yaml:"minute" json:"minute"`     // The minute of the hour when the backup is scheduled to run. (Valid range: 0-59)
 	Weekday  string `yaml:"weekday" json:"weekday"`   // For weekly schedules, the day of the week. Accepts: "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" (case-insensitive), or numeric: "0" (Sunday) through "6" (Saturday). Empty or ignored for daily schedules.
 	IsWeekly bool   `yaml:"isweekly" json:"isWeekly"` // If true, this schedule is weekly (runs on the specified Weekday at Hour:Minute). If false, it's a daily schedule (runs every day at Hour:Minute). (Valid: true or false)
+}
+
+// ImportConfig controls the BirdNET-Pi import feature behavior.
+type ImportConfig struct {
+	// AllowInAppElevation enables the in-app sudo elevation ladder for native
+	// imports of unreadable source data. Default true. When false, the UI only
+	// offers copy-paste remediation and never prompts for a sudo password.
+	AllowInAppElevation bool `yaml:"allowinappelevation" json:"allowInAppElevation" mapstructure:"allowinappelevation"`
 }
 
 // BackupConfig contains backup-related configuration
@@ -1698,7 +1725,7 @@ type Settings struct {
 
 	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 
-	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
+	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms" jsonschema:"nullable"` // Optional scientific-name synonym overrides merged with built-ins
 
 	Input InputConfig `yaml:"-" json:"-"` // Input configuration for file and directory analysis
 
@@ -1730,6 +1757,8 @@ type Settings struct {
 	} `yaml:"output" json:"output"`
 
 	Backup BackupConfig `yaml:"backup" json:"backup"` // Backup configuration
+
+	Import ImportConfig `yaml:"import" json:"import"` // BirdNET-Pi import behavior
 
 	Notification NotificationConfig `yaml:"notification" json:"notification"` // Configuration for push notifications
 

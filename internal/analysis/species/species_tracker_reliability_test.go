@@ -320,7 +320,7 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 						{ScientificName: "Test_Species", FirstSeenDate: "2024-01-01"},
 					}, nil).Maybe()
 				// BG-17: InitFromDatabase requires notification history
-				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -329,7 +329,7 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 				// BG-17: InitFromDatabase now loads notification history
-				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -341,7 +341,7 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 						{ScientificName: "Valid_Species", FirstSeenDate: "2024-01-01"}, // Valid data
 					}, nil).Maybe()
 				// BG-17: InitFromDatabase requires notification history
-				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()

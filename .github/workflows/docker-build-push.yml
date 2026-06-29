@@ -70,7 +70,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -446,13 +446,27 @@ jobs:
           REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
           echo "DOCKERHUB_REPO=tphakala/${REPO_NAME}" >> ${GITHUB_ENV}
 
+      # This job does not check out the repo, so it cannot use the shared
+      # ./.github/actions/setup-apt-packages composite; the continue-on-error +
+      # outcome-checked reinstall fallback is inlined instead so a corrupt apt
+      # cache (tar exit 2) cannot hard-fail the podman-compatibility test.
       - name: Install Podman
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+        id: apt-podman
+        continue-on-error: true
+        uses: awalsh128/cache-apt-pkgs-action@5513791f75b039e2a79653b1a92238d3fb8d99b4 # v1.6.2
         with:
           packages: podman
           version: 1.0
       - name: Verify Podman
-        run: podman --version
+        run: |
+          # Reinstall directly if the cache restore did not succeed or podman is
+          # missing/broken after the (continue-on-error) cached install above.
+          if [ "${{ steps.apt-podman.outcome }}" != "success" ] || ! podman --version > /dev/null 2>&1; then
+            echo "::warning::Podman apt cache restore did not succeed (outcome=${{ steps.apt-podman.outcome }}); reinstalling directly"
+            sudo apt-get update -qq -o Acquire::Retries=3 -o Acquire::http::Timeout=30
+            sudo apt-get install -y --fix-broken -o Acquire::Retries=3 -o Acquire::http::Timeout=30 podman
+          fi
+          podman --version
 
       - name: Test Podman compatibility
         run: |

@@ -1,7 +1,7 @@
 // Species Selector Type Definitions
 //
 // For current analytics types, prefer importing from:
-// - `frontend/src/lib/desktop/features/analytics/pages/AdvancedAnalytics.svelte` (interface definitions)
+// - `frontend/src/lib/desktop/features/analytics/registry/types.ts` (interface definitions)
 // - Use the typed interfaces there for new analytics code instead of the legacy `count` property
 
 /**
@@ -34,7 +34,7 @@ export interface Species {
    * for compatibility with existing components but should not be used in new code.
    *
    * For new analytics features, use the typed interfaces in:
-   * `frontend/src/lib/desktop/features/analytics/pages/AdvancedAnalytics.svelte`
+   * `frontend/src/lib/desktop/features/analytics/registry/types.ts`
    * which provide proper type safety and structure for analytics data.
    */
   count?: number;

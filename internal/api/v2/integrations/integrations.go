@@ -1,0 +1,1046 @@
+// Package integrations is the api/v2 integrations domain handler. It owns the
+// /api/v2/integrations/* endpoints (MQTT status/test plus its TLS certificate
+// management, BirdWeather, weather-provider, and eBird connectivity tests). The
+// Handler embeds *apicore.Core by pointer so the shared dependencies and helpers
+// (Metrics, Processor, HandleError, CurrentSettings, AuthMiddleware, the logging
+// helpers) promote onto it. Like the TLS domain, the MQTT TLS certificate writes
+// mutate persisted settings, so the Handler also holds the facade's settings-save
+// machinery (the shared settings mutex and the publish/save/change helpers)
+// injected as function fields; the facade constructs one Handler and calls
+// RegisterRoutes to wire the routes in their existing order.
+package integrations
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	neturl "net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/birdweather"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/mqtt"
+	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/weather"
+)
+
+// Weather provider identifiers used by the weather test-connection handler. These
+// are owned by the integrations domain (the only consumer) and name the provider
+// the settings UI selects.
+const (
+	WeatherProviderOpenWeather  = "openweather"
+	WeatherProviderWunderground = "wunderground"
+	WeatherProviderYrno         = "yrno"
+)
+
+// Integration constants (file-local)
+const (
+	integrationConnectTimeout = 3   // Connection test timeout in seconds
+	integrationShortTimeout   = 5   // Short timeout in seconds
+	integrationMediumTimeout  = 20  // Medium timeout in seconds
+	integrationLongTimeout    = 30  // Long timeout in seconds
+	integrationStageDelay     = 200 // Delay between stages in milliseconds
+)
+
+// Handler serves the integrations domain endpoints. It embeds *apicore.Core BY
+// POINTER so the shared Core members promote onto it without re-wiring; Core
+// carries atomic/lock-bearing fields and must never be copied by value. The four
+// settings-save members are injected from the facade (the settings domain still
+// owns them): the shared *sync.RWMutex serializes MQTT TLS certificate writes
+// against the main settings update handlers, and the function fields are bound
+// method values of the facade Controller, named identically to the originals so
+// the moved handler bodies stay verbatim.
+type Handler struct {
+	*apicore.Core
+
+	settingsMutex          *sync.RWMutex
+	getSettingsOrFallback  func() *conf.Settings
+	publishAndSaveSettings func(current, updated *conf.Settings) error
+	handleSettingsChanges  func(oldSettings, currentSettings *conf.Settings) error
+}
+
+// New builds an integrations Handler around the shared core and the facade's
+// settings-save machinery. settingsMutex MUST be the same *sync.RWMutex the
+// settings update handlers lock, so MQTT TLS certificate writes serialize against
+// them; the function arguments are the facade's getSettingsOrFallback/
+// publishAndSaveSettings/handleSettingsChanges method values.
+func New(
+	core *apicore.Core,
+	settingsMutex *sync.RWMutex,
+	getSettingsOrFallback func() *conf.Settings,
+	publishAndSaveSettings func(current, updated *conf.Settings) error,
+	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
+) *Handler {
+	return &Handler{
+		Core:                   core,
+		settingsMutex:          settingsMutex,
+		getSettingsOrFallback:  getSettingsOrFallback,
+		publishAndSaveSettings: publishAndSaveSettings,
+		handleSettingsChanges:  handleSettingsChanges,
+	}
+}
+
+// RegisterRoutes registers all integration-related API endpoints on the supplied
+// API v2 group, preserving the exact routes, per-route middleware, and order the
+// facade used before the integrations domain was extracted.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+	c.LogInfoIfEnabled("Initializing integrations routes")
+
+	// Create integrations API group with auth middleware
+	integrationsGroup := g.Group("/integrations", c.AuthMiddleware)
+
+	// MQTT routes
+	mqttGroup := integrationsGroup.Group("/mqtt")
+	mqttGroup.GET("/status", c.GetMQTTStatus)
+	mqttGroup.POST("/test", c.TestMQTTConnection)
+	mqttGroup.POST("/homeassistant/discovery", c.TriggerHomeAssistantDiscovery)
+
+	// MQTT TLS certificate management
+	mqttTLSGroup := mqttGroup.Group("/tls", c.AuthMiddleware)
+	mqttTLSGroup.GET("/certificate", c.GetMQTTTLSCertificate)
+	mqttTLSGroup.POST("/certificate", c.UploadMQTTTLSCertificate)
+	mqttTLSGroup.DELETE("/certificate", c.DeleteMQTTTLSCertificate)
+
+	// BirdWeather routes
+	bwGroup := integrationsGroup.Group("/birdweather")
+	bwGroup.GET("/status", c.GetBirdWeatherStatus)
+	bwGroup.POST("/test", c.TestBirdWeatherConnection)
+
+	// Weather routes
+	weatherGroup := integrationsGroup.Group("/weather")
+	weatherGroup.POST("/test", c.TestWeatherConnection)
+
+	// eBird routes
+	ebirdGroup := integrationsGroup.Group("/ebird")
+	ebirdGroup.POST("/test", c.TestEBirdConnection)
+
+	c.LogInfoIfEnabled("Integrations routes initialized successfully")
+}
+
+// IntegrationTestClient defines the interface for integration test clients.
+// Both MQTT and BirdWeather clients implement this interface.
+type IntegrationTestClient[T any] interface {
+	TestConnection(ctx context.Context, resultChan chan<- T)
+	Cleanup()
+}
+
+// mqttTestAdapter wraps mqtt.Client to implement IntegrationTestClient
+type mqttTestAdapter struct {
+	client interface {
+		TestConnection(ctx context.Context, resultChan chan<- mqtt.TestResult)
+		Disconnect()
+	}
+}
+
+func (a *mqttTestAdapter) TestConnection(ctx context.Context, resultChan chan<- mqtt.TestResult) {
+	a.client.TestConnection(ctx, resultChan)
+}
+
+func (a *mqttTestAdapter) Cleanup() {
+	a.client.Disconnect()
+}
+
+// birdweatherTestAdapter wraps birdweather.BwClient to implement IntegrationTestClient
+type birdweatherTestAdapter struct {
+	client interface {
+		TestConnection(ctx context.Context, resultChan chan<- birdweather.TestResult)
+		Close()
+	}
+}
+
+func (a *birdweatherTestAdapter) TestConnection(ctx context.Context, resultChan chan<- birdweather.TestResult) {
+	a.client.TestConnection(ctx, resultChan)
+}
+
+func (a *birdweatherTestAdapter) Cleanup() {
+	a.client.Close()
+}
+
+// runStreamingIntegrationTest runs an integration test with streaming results.
+// It handles the common pattern of:
+// - Creating context with timeout
+// - Running test in goroutine with cleanup
+// - Streaming results to HTTP client
+// - Handling client disconnection
+func runStreamingIntegrationTest[T any](
+	c *Handler,
+	ctx echo.Context,
+	resultChan chan T,
+	client IntegrationTestClient[T],
+	timeout time.Duration,
+	integrationName string,
+) error {
+	// Create a done channel to signal when the client disconnects
+	doneChan := make(chan struct{})
+
+	// Use sync.Once to ensure doneChan is closed exactly once
+	var closeOnce sync.Once
+	safeDoneClose := func() {
+		closeOnce.Do(func() {
+			close(doneChan)
+		})
+	}
+
+	// Mutex for safe writing to response
+	var writeMu sync.Mutex
+
+	// Create context with timeout that also gets cancelled if HTTP client disconnects
+	httpCtx := ctx.Request().Context()
+	testCtx, cancel := context.WithTimeout(httpCtx, timeout)
+	defer cancel()
+
+	// Run the test in a goroutine
+	go func() {
+		defer close(resultChan)
+		startTime := time.Now()
+
+		// Start the test
+		client.TestConnection(testCtx, resultChan)
+
+		// Calculate elapsed time
+		elapsedTime := time.Since(startTime).Milliseconds()
+
+		// Clean up client resources
+		client.Cleanup()
+
+		// Send final result with elapsed time if the client is still connected
+		select {
+		case <-doneChan:
+			c.Debug("HTTP client disconnected, skipping final result")
+		case <-testCtx.Done():
+			c.Debug("Test context cancelled: %v", testCtx.Err())
+		default:
+			writeMu.Lock()
+			defer writeMu.Unlock()
+
+			finalResult := map[string]any{
+				"elapsed_time_ms": elapsedTime,
+				"state":           "completed",
+			}
+
+			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
+				apicore.GetLogger().Error("Error writing final test result",
+					logger.String("integration", integrationName),
+					logger.Error(err),
+				)
+			}
+		}
+	}()
+
+	// Feed streaming results to client
+	encoder := json.NewEncoder(ctx.Response())
+
+	// drainResultChan consumes any remaining values from resultChan in a
+	// background goroutine so the worker goroutine doesn't block forever
+	// trying to send after the consumer has stopped reading.
+	drainResultChan := func() {
+		go func() {
+			for range resultChan {
+			}
+		}()
+	}
+
+	// Stream results to client until done
+	for result := range resultChan {
+		writeMu.Lock()
+		if err := encoder.Encode(result); err != nil {
+			apicore.GetLogger().Error("Error encoding test result",
+				logger.String("integration", integrationName),
+				logger.Error(err),
+			)
+			writeMu.Unlock()
+			safeDoneClose()
+			cancel()
+			drainResultChan()
+			return nil
+		}
+		ctx.Response().Flush()
+		writeMu.Unlock()
+
+		// Check if HTTP context is done (client disconnected)
+		select {
+		case <-httpCtx.Done():
+			c.Debug("HTTP client disconnected during %s test", integrationName)
+			safeDoneClose()
+			cancel()
+			drainResultChan()
+			return nil
+		default:
+			// Continue processing
+		}
+	}
+
+	return nil
+}
+
+// MQTTStatus represents the current status of the MQTT connection
+type MQTTStatus struct {
+	Connected bool   `json:"connected"`            // Whether the MQTT client is currently connected to the broker
+	Broker    string `json:"broker"`               // The URI of the MQTT broker (e.g., tcp://mqtt.example.com:1883)
+	Topic     string `json:"topic"`                // The topic pattern used for publishing/subscribing to MQTT messages
+	ClientID  string `json:"client_id"`            // The unique identifier used by this client when connecting to the broker
+	LastError string `json:"last_error,omitempty"` // Most recent error message, if any connection issues occurred
+}
+
+// MQTTTestResult represents the result of an MQTT connection test
+type MQTTTestResult struct {
+	Success     bool   `json:"success"`                   // Whether the connection test was successful
+	Message     string `json:"message"`                   // Human-readable description of the test result
+	ElapsedTime int64  `json:"elapsed_time_ms,omitempty"` // Time taken to complete the test in milliseconds
+}
+
+// BirdWeatherStatus represents the current status of the BirdWeather integration
+type BirdWeatherStatus struct {
+	Enabled          bool    `json:"enabled"`              // Whether BirdWeather integration is enabled
+	StationID        string  `json:"station_id"`           // The BirdWeather station ID
+	Threshold        float64 `json:"threshold"`            // The confidence threshold for reporting detections
+	LocationAccuracy float64 `json:"location_accuracy"`    // The location accuracy in meters
+	LastError        string  `json:"last_error,omitempty"` // Most recent error message, if any issues occurred
+}
+
+// GetMQTTStatus handles GET /api/v2/integrations/mqtt/status
+func (c *Handler) GetMQTTStatus(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+	c.LogInfoIfEnabled("Getting MQTT status",
+		logger.String("path", path),
+		logger.String("ip", ip))
+
+	// Get MQTT configuration from fresh settings
+	settings := c.CurrentSettings()
+	mqttConfig := settings.Realtime.MQTT
+
+	// Prepare status response
+	status := MQTTStatus{
+		Connected: false, // Default to not connected
+		Broker:    mqttConfig.Broker,
+		Topic:     mqttConfig.Topic,
+		ClientID:  settings.Main.Name, // Use the application name as client ID
+	}
+
+	// If MQTT is not enabled, return status as-is
+	if !mqttConfig.Enabled {
+		c.LogInfoIfEnabled("MQTT is disabled, returning status",
+			logger.String("path", path),
+			logger.String("ip", ip))
+		return ctx.JSON(http.StatusOK, status)
+	}
+
+	// Check connection status using a temporary client
+	c.LogDebugIfEnabled("Checking MQTT connection status",
+		logger.String("path", path),
+		logger.String("ip", ip))
+	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context(), settings)
+	status.Connected = connected
+	if checkErr != "" {
+		status.LastError = checkErr
+	}
+
+	c.LogInfoIfEnabled("Retrieved MQTT status successfully",
+		logger.Bool("connected", status.Connected),
+		logger.String("broker", status.Broker),
+		logger.String("last_error", status.LastError),
+		logger.String("path", path),
+		logger.String("ip", ip),
+	)
+	return ctx.JSON(http.StatusOK, status)
+}
+
+// checkMQTTConnectionStatus attempts to connect to the MQTT broker using a temporary client
+// to determine the current connection status.
+// Returns true if connected, false otherwise, along with any error message encountered.
+func (c *Handler) checkMQTTConnectionStatus(parentCtx context.Context, settings *conf.Settings) (connected bool, lastError string) {
+	// Use the injected metrics instance
+	if c.Metrics == nil {
+		c.LogErrorIfEnabled("Metrics instance not available for MQTT status check")
+		return false, "error:metrics:not_initialized"
+	}
+
+	tempClient, err := mqtt.NewClient(settings, c.Metrics)
+	if err != nil {
+		c.LogErrorIfEnabled("Failed to create temporary MQTT client for status check",
+			logger.Error(err))
+		return false, fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error())
+	}
+	defer tempClient.Disconnect() // Ensure temporary client is disconnected
+
+	// Use a short timeout for the connection attempt
+	connectCtx, cancel := context.WithTimeout(parentCtx, integrationConnectTimeout*time.Second)
+	defer cancel()
+
+	// Try to connect
+	err = tempClient.Connect(connectCtx)
+	if err != nil {
+		c.LogWarnIfEnabled("Temporary MQTT client connection failed during status check",
+			logger.Error(err),
+			logger.String("broker", settings.Realtime.MQTT.Broker))
+		return false, fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error())
+	}
+
+	// Check if genuinely connected
+	if !tempClient.IsConnected() {
+		c.LogWarnIfEnabled("Temporary MQTT client connected but IsConnected() returned false",
+			logger.String("broker", settings.Realtime.MQTT.Broker))
+		// Consider this a failure for status purposes, though connection might be flapping
+		return false, "error:connection:mqtt_connection_unstable"
+	}
+
+	c.LogDebugIfEnabled("Temporary MQTT client connected successfully for status check",
+		logger.String("broker", settings.Realtime.MQTT.Broker))
+	return true, "" // Connected successfully
+}
+
+// GetBirdWeatherStatus handles GET /api/v2/integrations/birdweather/status
+func (c *Handler) GetBirdWeatherStatus(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+	c.LogInfoIfEnabled("Getting BirdWeather status",
+		logger.String("path", path),
+		logger.String("ip", ip))
+
+	// Get BirdWeather configuration from fresh settings
+	bwConfig := c.CurrentSettings().Realtime.Birdweather
+
+	// Prepare status response
+	status := BirdWeatherStatus{
+		Enabled:          bwConfig.Enabled,
+		StationID:        bwConfig.ID,
+		Threshold:        bwConfig.Threshold,
+		LocationAccuracy: bwConfig.LocationAccuracy,
+	}
+
+	// For now, we just return the configuration status
+	// In the future, we could add checks for client status here
+	c.LogInfoIfEnabled("Retrieved BirdWeather status successfully",
+		logger.Bool("enabled", status.Enabled),
+		logger.String("station_id", status.StationID),
+		logger.Float64("threshold", status.Threshold),
+		logger.String("path", path),
+		logger.String("ip", ip),
+	)
+
+	return ctx.JSON(http.StatusOK, status)
+}
+
+// TestMQTTConnection handles POST /api/v2/integrations/mqtt/test
+func (c *Handler) TestMQTTConnection(ctx echo.Context) error {
+	// Get MQTT configuration from fresh settings
+	settings := c.CurrentSettings()
+	mqttConfig := settings.Realtime.MQTT
+
+	if !mqttConfig.Enabled {
+		return ctx.JSON(http.StatusOK, MQTTTestResult{
+			Success: false,
+			Message: "MQTT is not enabled in settings",
+		})
+	}
+
+	// Validate MQTT configuration
+	if mqttConfig.Broker == "" {
+		return ctx.JSON(http.StatusBadRequest, MQTTTestResult{
+			Success: false,
+			Message: "MQTT broker not configured",
+		})
+	}
+
+	// Use the injected metrics instance
+	if c.Metrics == nil {
+		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
+			Success: false,
+			Message: "Metrics instance not available for MQTT test",
+		})
+	}
+
+	// Create test MQTT client with the current configuration
+	client, err := mqtt.NewClient(settings, c.Metrics)
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
+			Success: false,
+			Message: formatClientError("Failed to create MQTT client", err, settings),
+		})
+	}
+
+	// Prepare for testing
+	ctx.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	ctx.Response().WriteHeader(http.StatusOK)
+
+	// Channel for test results
+	resultChan := make(chan mqtt.TestResult)
+
+	// Create adapter and run streaming test
+	adapter := &mqttTestAdapter{client: client}
+	return runStreamingIntegrationTest(c, ctx, resultChan, adapter, integrationMediumTimeout*time.Second, "MQTT")
+}
+
+// TestBirdWeatherConnection handles POST /api/v2/integrations/birdweather/test
+func (c *Handler) TestBirdWeatherConnection(ctx echo.Context) error {
+	var request BirdWeatherTestRequest
+	if err := ctx.Bind(&request); err != nil {
+		return c.HandleError(ctx, err, "Invalid BirdWeather test request", http.StatusBadRequest)
+	}
+
+	// Validate BirdWeather configuration from the request
+	if !request.Enabled {
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"success": false,
+			"message": "BirdWeather integration is not enabled",
+			"state":   "failed",
+		})
+	}
+
+	// Validate BirdWeather configuration
+	if request.ID == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]any{
+			"success": false,
+			"message": "BirdWeather station ID not configured",
+			"state":   "failed",
+		})
+	}
+
+	// Clone current settings and override only BirdWeather fields from the request
+	testSettings := conf.CloneSettings(c.CurrentSettings())
+	testSettings.Realtime.Birdweather = conf.BirdweatherSettings{
+		Enabled:          request.Enabled,
+		ID:               request.ID,
+		Threshold:        request.Threshold,
+		LocationAccuracy: request.LocationAccuracy,
+		Debug:            request.Debug,
+	}
+
+	// Create test BirdWeather client with the test configuration
+	client, err := birdweather.New(testSettings)
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, map[string]any{
+			"success": false,
+			"message": formatClientError("Failed to create BirdWeather client", err, testSettings),
+			"state":   "failed",
+		})
+	}
+
+	// Prepare for testing
+	ctx.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	ctx.Response().WriteHeader(http.StatusOK)
+
+	// Channel for test results
+	resultChan := make(chan birdweather.TestResult)
+
+	// Create adapter and run streaming test
+	adapter := &birdweatherTestAdapter{client: client}
+	return runStreamingIntegrationTest(c, ctx, resultChan, adapter, integrationLongTimeout*time.Second, "BirdWeather")
+}
+
+// BirdWeatherTestRequest represents a request to test BirdWeather connectivity
+type BirdWeatherTestRequest struct {
+	Enabled          bool    `json:"enabled"`
+	ID               string  `json:"id"`
+	Threshold        float64 `json:"threshold"`
+	LocationAccuracy float64 `json:"locationAccuracy"`
+	Debug            bool    `json:"debug"`
+}
+
+// EBirdTestRequest represents a request to test eBird API connectivity
+type EBirdTestRequest struct {
+	Enabled bool   `json:"enabled"`
+	APIKey  string `json:"apiKey"`
+	Locale  string `json:"locale"`
+}
+
+// WeatherTestRequest represents a request to test weather provider connectivity
+type WeatherTestRequest struct {
+	Provider     string                    `json:"provider"`
+	PollInterval int                       `json:"pollInterval"`
+	Debug        bool                      `json:"debug"`
+	OpenWeather  conf.OpenWeatherSettings  `json:"openWeather"`
+	Wunderground conf.WundergroundSettings `json:"wunderground"`
+}
+
+// WeatherTestStage represents the result of a weather test stage
+type WeatherTestStage struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Status  string `json:"status"` // pending, in_progress, completed, error
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// TestWeatherConnection handles POST /api/v2/integrations/weather/test
+func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
+	var request WeatherTestRequest
+	if err := ctx.Bind(&request); err != nil {
+		return c.HandleError(ctx, err, "Invalid weather test request", http.StatusBadRequest)
+	}
+
+	// Restore redacted API keys before validation so the test runs against the
+	// real saved secret. The settings UI returns secrets as a redacted
+	// placeholder (RedactedValue); if the user clicks Test without re-entering
+	// the key, the request carries that placeholder instead of the real key.
+	// Restoring here (and not only in the save flow) prevents the test from
+	// failing with a bogus "authentication failed".
+	current := c.CurrentSettings()
+	apicore.RestoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
+	apicore.RestoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
+
+	// Validate provider
+	if request.Provider == "" || request.Provider == "none" {
+		return c.HandleErrorWithKey(ctx, nil, "No weather provider selected", http.StatusBadRequest, notification.MsgErrIntegNoWeatherProvider, nil)
+	}
+
+	// Validate OpenWeather specific requirements
+	if request.Provider == WeatherProviderOpenWeather && request.OpenWeather.APIKey == "" {
+		return c.HandleErrorWithKey(ctx, nil, "OpenWeather API key is required", http.StatusBadRequest, notification.MsgErrIntegOWKeyRequired, nil)
+	}
+
+	// Set up streaming response
+	ctx.Response().Header().Set("Content-Type", "application/x-ndjson")
+	ctx.Response().Header().Set("Cache-Control", "no-cache")
+	ctx.Response().Header().Set("Connection", "keep-alive")
+	ctx.Response().WriteHeader(http.StatusOK)
+
+	// Clone current settings and override only Weather fields from the request
+	testSettings := conf.CloneSettings(current)
+	testSettings.Realtime.Weather = conf.WeatherSettings{
+		Provider:     request.Provider,
+		Debug:        request.Debug,
+		PollInterval: request.PollInterval,
+		OpenWeather:  request.OpenWeather,
+		Wunderground: request.Wunderground,
+	}
+
+	// Create test context with timeout
+	testCtx, cancel := context.WithTimeout(ctx.Request().Context(), integrationLongTimeout*time.Second)
+	defer cancel()
+
+	// Create encoder for streaming results
+	encoder := json.NewEncoder(ctx.Response())
+
+	// Helper function to send stage results
+	sendStage := func(stage WeatherTestStage) error {
+		if err := encoder.Encode(stage); err != nil {
+			return err
+		}
+		ctx.Response().Flush()
+		return nil
+	}
+
+	// Run weather test stages
+	stages := []struct {
+		id    string
+		title string
+		test  func() (string, error)
+	}{
+		{"starting", "Starting Test", func() (string, error) {
+			return fmt.Sprintf("Initializing %s weather provider test...", getProviderDisplayName(request.Provider)), nil
+		}},
+		{"connectivity", "API Connectivity", func() (string, error) {
+			return c.testWeatherAPIConnectivity(testCtx, testSettings)
+		}},
+		{"authentication", "Authentication", func() (string, error) {
+			return c.testWeatherAuthentication(testCtx, testSettings)
+		}},
+		{"fetch", "Weather Data Fetch", func() (string, error) {
+			return c.testWeatherDataFetch(testCtx, testSettings)
+		}},
+		{"parse", "Data Parsing", func() (string, error) {
+			return "Weather data validated successfully", nil
+		}},
+	}
+
+	// Execute each stage
+	for _, stage := range stages {
+		// Send in-progress status
+		if err := sendStage(WeatherTestStage{
+			ID:     stage.id,
+			Title:  stage.title,
+			Status: "in_progress",
+		}); err != nil {
+			return nil // Client disconnected
+		}
+
+		// Run the test
+		message, err := stage.test()
+		if err != nil {
+			// Send error status
+			return sendStage(WeatherTestStage{
+				ID:      stage.id,
+				Title:   stage.title,
+				Status:  "error",
+				Message: message,
+				Error:   err.Error(),
+			})
+		}
+
+		// Send completed status
+		if err := sendStage(WeatherTestStage{
+			ID:      stage.id,
+			Title:   stage.title,
+			Status:  "completed",
+			Message: message,
+		}); err != nil {
+			return nil // Client disconnected
+		}
+
+		// Small delay between stages for UX
+		time.Sleep(integrationStageDelay * time.Millisecond)
+	}
+
+	return nil
+}
+
+// testWeatherAPIConnectivity tests basic connectivity to the weather API
+func (c *Handler) testWeatherAPIConnectivity(ctx context.Context, settings *conf.Settings) (string, error) {
+	var testURL string
+	provider := settings.Realtime.Weather.Provider
+
+	switch provider {
+	case WeatherProviderYrno:
+		testURL = "https://api.met.no/weatherapi/locationforecast/2.0/status"
+	case WeatherProviderOpenWeather:
+		testURL = "https://api.openweathermap.org"
+	case WeatherProviderWunderground:
+		testURL = "https://api.weather.com"
+	default:
+		return "", fmt.Errorf("unsupported weather provider: %s", provider)
+	}
+
+	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to %s API: %w", getProviderDisplayName(provider), err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			apicore.GetLogger().Warn("Failed to close response body", logger.Error(err))
+		}
+	}()
+
+	return fmt.Sprintf("Successfully connected to %s API", getProviderDisplayName(provider)), nil
+}
+
+// testWeatherAuthentication tests authentication with the weather API
+func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.Settings) (string, error) {
+	provider := settings.Realtime.Weather.Provider
+
+	switch provider {
+	case WeatherProviderOpenWeather:
+		apiKey := settings.Realtime.Weather.OpenWeather.APIKey
+		endpoint := settings.Realtime.Weather.OpenWeather.Endpoint
+		if endpoint == "" {
+			endpoint = "https://api.openweathermap.org/data/2.5/weather"
+		}
+
+		testURL := fmt.Sprintf("%s?lat=0&lon=0&appid=%s", endpoint, apiKey)
+
+		client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
+		if err != nil {
+			// Scrub before wrapping: the *url.Error embeds testURL, which carries
+			// the appid API key, and this error is returned to the API client and logs.
+			return "", fmt.Errorf("failed to create authentication request: %w", privacy.WrapError(err))
+		}
+
+		req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
+		resp, err := client.Do(req)
+		if err != nil {
+			// Scrub before wrapping: the transport *url.Error embeds the appid API key.
+			return "", fmt.Errorf("failed to authenticate with OpenWeather API: %w", privacy.WrapError(err))
+		}
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				apicore.GetLogger().Warn("Failed to close response body", logger.Error(err))
+			}
+		}()
+
+		if resp.StatusCode == http.StatusUnauthorized {
+			return "", fmt.Errorf("invalid API key - please check your OpenWeather API key")
+		}
+
+		return "Successfully authenticated with OpenWeather API", nil
+
+	case WeatherProviderWunderground:
+		// For Weather Underground, authentication is tested in the data fetch stage
+		// since there's no separate auth endpoint
+		return "Authentication will be verified during data fetch", nil
+
+	default:
+		return "Authentication not required for this provider", nil
+	}
+}
+
+// testWeatherDataFetch tests fetching actual weather data
+func (c *Handler) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
+	var provider weather.Provider
+	switch settings.Realtime.Weather.Provider {
+	case WeatherProviderYrno:
+		provider = weather.NewYrNoProvider(nil)
+	case WeatherProviderOpenWeather:
+		provider = weather.NewOpenWeatherProvider(nil)
+	case WeatherProviderWunderground:
+		provider = weather.NewWundergroundProvider(nil)
+	default:
+		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
+	}
+
+	weatherData, err := provider.FetchWeather(ctx, settings)
+	if err != nil {
+		// Extract the actual error message instead of wrapping it
+		// The provider already returns detailed error messages
+		return "", err
+	}
+
+	if weatherData == nil {
+		return "", fmt.Errorf("no weather data returned from provider")
+	}
+
+	// Return weather data summary
+	return fmt.Sprintf("Successfully fetched weather data for %s, %s. Temperature: %.1f°, Conditions: %s",
+		weatherData.Location.City,
+		weatherData.Location.Country,
+		weatherData.Temperature.Current,
+		weatherData.Description), nil
+}
+
+// getProviderDisplayName returns a user-friendly name for the weather provider
+func getProviderDisplayName(provider string) string {
+	switch provider {
+	case WeatherProviderYrno:
+		return "Yr.no"
+	case WeatherProviderOpenWeather:
+		return "OpenWeather"
+	case WeatherProviderWunderground:
+		return "Weather Underground"
+	default:
+		// Simple capitalization for unknown providers
+		if provider != "" {
+			return strings.ToUpper(provider[:1]) + provider[1:]
+		}
+		return provider
+	}
+}
+
+// TriggerHomeAssistantDiscovery handles POST /api/v2/integrations/mqtt/homeassistant/discovery
+// It manually triggers Home Assistant MQTT discovery message publishing.
+func (c *Handler) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
+	c.LogInfoIfEnabled("Triggering Home Assistant discovery",
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()))
+
+	// Snapshot processor to avoid TOCTOU race
+	proc := c.Processor
+	if proc == nil {
+		return c.HandleErrorWithKey(ctx, nil, "Processor not available", http.StatusServiceUnavailable, notification.MsgErrIntegProcessorUnavail, nil)
+	}
+
+	// Trigger discovery
+	if err := proc.TriggerHomeAssistantDiscovery(ctx.Request().Context()); err != nil {
+		return c.HandleErrorWithKey(ctx, err, "Failed to trigger Home Assistant discovery", http.StatusBadRequest, notification.MsgErrIntegDiscoveryFailed, nil)
+	}
+
+	c.LogInfoIfEnabled("Home Assistant discovery triggered successfully",
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()))
+
+	return ctx.JSON(http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Discovery messages sent successfully",
+	})
+}
+
+// formatClientError returns a user-safe error message for client creation failures.
+// Raw error details are only included when WebServer.Debug is enabled,
+// consistent with ErrorResponse.Error gating (PR #2081).
+func formatClientError(prefix string, err error, settings *conf.Settings) string {
+	if settings != nil && settings.WebServer.Debug {
+		return fmt.Sprintf("%s: %v", prefix, err)
+	}
+	return prefix + ". Check configuration and try again."
+}
+
+// writeJSONResponse writes a JSON response to the client
+// NOTE: For most cases, consider using Echo's built-in ctx.JSON(httpStatus, data) instead
+// This function is primarily useful for streaming or special encoding scenarios
+func (c *Handler) writeJSONResponse(ctx echo.Context, data any) error {
+	encoder := json.NewEncoder(ctx.Response())
+	return encoder.Encode(data)
+}
+
+// TestEBirdConnection handles POST /api/v2/integrations/ebird/test
+func (c *Handler) TestEBirdConnection(ctx echo.Context) error {
+	var request EBirdTestRequest
+	if err := ctx.Bind(&request); err != nil {
+		return c.HandleError(ctx, err, "Invalid eBird test request", http.StatusBadRequest)
+	}
+
+	// Restore the redacted API key before validation so the test runs against
+	// the real saved secret. The settings UI returns the key as a redacted
+	// placeholder (RedactedValue); if the user clicks Test without re-entering
+	// it, the request carries that placeholder instead of the real key, which
+	// would otherwise fail authentication.
+	apicore.RestoreRedactedSecret(c.CurrentSettings().Realtime.EBird.APIKey, &request.APIKey)
+
+	if !request.Enabled {
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"success": false,
+			"message": "eBird integration is not enabled",
+			"state":   "failed",
+		})
+	}
+
+	if request.APIKey == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]any{
+			"success": false,
+			"message": "eBird API key is required",
+			"state":   "failed",
+		})
+	}
+
+	ctx.Response().Header().Set("Content-Type", "application/x-ndjson")
+	ctx.Response().Header().Set("Cache-Control", "no-cache")
+	ctx.Response().Header().Set("Connection", "keep-alive")
+	ctx.Response().WriteHeader(http.StatusOK)
+
+	testCtx, cancel := context.WithTimeout(ctx.Request().Context(), integrationMediumTimeout*time.Second)
+	defer cancel()
+
+	encoder := json.NewEncoder(ctx.Response())
+
+	sendStage := func(stage WeatherTestStage) error {
+		if err := encoder.Encode(stage); err != nil {
+			return err
+		}
+		ctx.Response().Flush()
+		return nil
+	}
+
+	locale := request.Locale
+	if locale == "" {
+		locale = "en"
+	}
+
+	stages := []struct {
+		id    string
+		title string
+		test  func() (string, error)
+	}{
+		{"connectivity", "API Connectivity", func() (string, error) {
+			return c.testEBirdConnectivity(testCtx)
+		}},
+		{"authentication", "Authentication", func() (string, error) {
+			return c.testEBirdAuthentication(testCtx, request.APIKey, locale)
+		}},
+	}
+
+	for _, stage := range stages {
+		if err := sendStage(WeatherTestStage{
+			ID:     stage.id,
+			Title:  stage.title,
+			Status: "in_progress",
+		}); err != nil {
+			return nil
+		}
+
+		message, err := stage.test()
+		if err != nil {
+			return sendStage(WeatherTestStage{
+				ID:      stage.id,
+				Title:   stage.title,
+				Status:  "error",
+				Message: message,
+				Error:   err.Error(),
+			})
+		}
+
+		if err := sendStage(WeatherTestStage{
+			ID:      stage.id,
+			Title:   stage.title,
+			Status:  "completed",
+			Message: message,
+		}); err != nil {
+			return nil
+		}
+
+		time.Sleep(integrationStageDelay * time.Millisecond)
+	}
+
+	return nil
+}
+
+// testEBirdConnectivity tests basic connectivity to the eBird API
+func (c *Handler) testEBirdConnectivity(ctx context.Context) (string, error) {
+	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "HEAD", "https://api.ebird.org/v2/ref/taxonomy/ebird", http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "BirdNET-Go eBird Test")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to eBird API: %w", err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			apicore.GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
+		}
+	}()
+
+	// Any response (even 403) means the API is reachable, but 5xx indicates server issues
+	if resp.StatusCode >= http.StatusInternalServerError {
+		return "", fmt.Errorf("eBird API returned server error (status %d)", resp.StatusCode)
+	}
+
+	return "Successfully connected to eBird API", nil
+}
+
+// testEBirdAuthentication tests authentication with the eBird API using a small taxonomy request
+func (c *Handler) testEBirdAuthentication(ctx context.Context, apiKey, locale string) (string, error) {
+	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+
+	url := fmt.Sprintf("https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species&maxResults=1&locale=%s", neturl.QueryEscape(locale))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create authentication request: %w", err)
+	}
+
+	req.Header.Set("X-eBirdApiToken", apiKey)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "BirdNET-Go eBird Test")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to authenticate with eBird API: %w", err)
+	}
+	defer func() {
+		// Drain body to allow connection reuse before closing
+		_, _ = io.Copy(io.Discard, resp.Body)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			apicore.GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
+		}
+	}()
+
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		return "", fmt.Errorf("invalid API key - please check your eBird API key")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected response from eBird API (status %d)", resp.StatusCode)
+	}
+
+	return fmt.Sprintf("Successfully authenticated with eBird API (locale: %s)", locale), nil
+}

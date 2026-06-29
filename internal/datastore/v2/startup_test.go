@@ -299,6 +299,107 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 	})
 }
 
+// newSchemaCheckDB opens a fresh temp-file SQLite GORM DB for hasCompleteFreshV2Schema
+// tests. SQLite stands in for MySQL here: hasCompleteFreshV2Schema is dialect-agnostic
+// (it uses GORM's migrator), so the same decision logic runs in CI without a MySQL server.
+func newSchemaCheckDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "schema_check.db")
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	return db
+}
+
+// seedMigrationStatesTable creates the plural migration_states table and inserts a
+// singleton row (id=1) with the given state.
+func seedMigrationStatesTable(t *testing.T, db *gorm.DB, status entities.MigrationStatus) {
+	t.Helper()
+	require.NoError(t, db.AutoMigrate(&entities.MigrationState{}))
+	now := time.Now()
+	require.NoError(t, db.Save(&entities.MigrationState{
+		ID:          1,
+		State:       status,
+		StartedAt:   &now,
+		CompletedAt: &now,
+	}).Error)
+}
+
+// createBareDetectionsTable creates a placeholder no-prefix detections table. Only its
+// existence matters to hasCompleteFreshV2Schema, so a minimal schema is sufficient.
+func createBareDetectionsTable(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	require.NoError(t, db.Exec("CREATE TABLE detections (id INTEGER PRIMARY KEY)").Error)
+}
+
+// TestHasCompleteFreshV2Schema covers the GitHub #3575 guard: a "completed"
+// migration_states marker is treated as a usable fresh v2 schema only when the real
+// detections data table also exists.
+func TestHasCompleteFreshV2Schema(t *testing.T) {
+	t.Run("completed marker with detections table", func(t *testing.T) {
+		db := newSchemaCheckDB(t)
+		seedMigrationStatesTable(t, db, entities.MigrationStatusCompleted)
+		createBareDetectionsTable(t, db)
+
+		assert.True(t, hasCompleteFreshV2Schema(db),
+			"completed marker plus detections table is a usable fresh v2 schema")
+	})
+
+	t.Run("completed marker without detections table", func(t *testing.T) {
+		// This is the #3575 wedge: a stale completed marker survives a backend switch
+		// or partial init, but the detections data table was never created.
+		db := newSchemaCheckDB(t)
+		seedMigrationStatesTable(t, db, entities.MigrationStatusCompleted)
+
+		assert.False(t, hasCompleteFreshV2Schema(db),
+			"completed marker without a detections table must not be treated as fresh v2")
+	})
+
+	t.Run("detections table but state not completed", func(t *testing.T) {
+		db := newSchemaCheckDB(t)
+		seedMigrationStatesTable(t, db, entities.MigrationStatusIdle)
+		createBareDetectionsTable(t, db)
+
+		assert.False(t, hasCompleteFreshV2Schema(db),
+			"a non-completed migration state is not a finished v2 install")
+	})
+
+	t.Run("no migration_states table", func(t *testing.T) {
+		db := newSchemaCheckDB(t)
+		createBareDetectionsTable(t, db)
+
+		assert.False(t, hasCompleteFreshV2Schema(db),
+			"missing migration state table means no v2 schema")
+	})
+
+	t.Run("migration_states table exists but is empty", func(t *testing.T) {
+		// Exercises the First() ErrRecordNotFound branch: the table was created but
+		// the singleton state row was never written.
+		db := newSchemaCheckDB(t)
+		require.NoError(t, db.AutoMigrate(&entities.MigrationState{}))
+		createBareDetectionsTable(t, db)
+
+		assert.False(t, hasCompleteFreshV2Schema(db),
+			"an empty migration_states table (no state row) is not a finished v2 install")
+	})
+
+	t.Run("legacy singular migration_state table name", func(t *testing.T) {
+		// Pre-PR #2165 databases used the singular "migration_state" table name.
+		db := newSchemaCheckDB(t)
+		require.NoError(t, db.Exec("CREATE TABLE migration_state (id INTEGER PRIMARY KEY, state TEXT)").Error)
+		require.NoError(t, db.Exec("INSERT INTO migration_state (id, state) VALUES (1, ?)",
+			string(entities.MigrationStatusCompleted)).Error)
+		createBareDetectionsTable(t, db)
+
+		assert.True(t, hasCompleteFreshV2Schema(db),
+			"legacy singular table name must still resolve")
+	})
+}
+
 // createLegacySQLite creates a minimal legacy SQLite database with a notes table
 // containing the specified number of records starting from ID 1.
 func createLegacySQLite(t *testing.T, path string, recordCount int) {
@@ -520,4 +621,36 @@ func TestCheckMySQLHasFreshV2Schema_NativePasswordAuth(t *testing.T) {
 	assert.NotPanics(t, func() {
 		_ = CheckMySQLHasFreshV2Schema(settings)
 	})
+}
+
+// TestCheckMySQLHasFreshV2Schema_RequiresDetectionsTable reproduces the GitHub #3575
+// wedge against a real MySQL server: a no-prefix migration_states "completed" marker
+// must NOT be treated as a usable fresh v2 schema when the detections data table is
+// missing. Otherwise initializeV2OnlyMode picks useV2Prefix=false and every v2 query
+// targets a bare `detections` table that does not exist.
+func TestCheckMySQLHasFreshV2Schema_RequiresDetectionsTable(t *testing.T) {
+	cfg := skipIfNoMySQL(t)
+	settings := mysqlTestSettings(cfg)
+
+	// Build a healthy fresh (no v2_ prefix) v2 schema. cfg.UseV2Prefix is false, so
+	// NewMySQLManager creates clean, no-prefix table names.
+	mgr, err := NewMySQLManager(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = mgr.Delete()
+		_ = mgr.Close()
+	})
+	require.NoError(t, mgr.Initialize())
+	require.NoError(t, mgr.DB().Model(&entities.MigrationState{}).
+		Where("id = 1").
+		Update("state", entities.MigrationStatusCompleted).Error)
+
+	// Healthy: completed marker AND detections table present.
+	assert.True(t, CheckMySQLHasFreshV2Schema(settings),
+		"a completed marker with a detections table is a usable fresh v2 schema")
+
+	// #3575: drop the detections data table but leave the completed marker behind.
+	require.NoError(t, mgr.DB().Migrator().DropTable("detections"))
+	assert.False(t, CheckMySQLHasFreshV2Schema(settings),
+		"a stale completed marker without a detections table must not be treated as fresh v2")
 }

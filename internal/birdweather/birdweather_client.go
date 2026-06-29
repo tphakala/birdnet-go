@@ -25,8 +25,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+
+	"golang.org/x/net/http2"
 )
 
 // GetLogger returns the birdweather package logger
@@ -43,8 +46,24 @@ const (
 	// httpClientTimeout is the default timeout for HTTP requests
 	httpClientTimeout = 45 * time.Second
 
-	// encodingTimeout is the timeout for audio encoding operations
-	encodingTimeout = 30 * time.Second
+	// encodingTimeout is the timeout for audio encoding operations. FLAC
+	// encoding runs two sequential FFmpeg passes (loudness analysis, then the
+	// gain-adjusted encode) under this single budget, so on slow hardware
+	// (Raspberry Pi, Home Assistant add-ons) the analysis pass alone could
+	// previously exhaust a 30s budget and starve the encode pass. 60s gives both
+	// passes room; the upload still runs in a background worker, so a slower
+	// encode does not block the analysis pipeline or the UI.
+	encodingTimeout = 60 * time.Second
+
+	// http2ReadIdleTimeout and http2PingTimeout enable HTTP/2 connection health
+	// checks on the upload client. The BirdWeather API sits behind a CDN that
+	// silently drops idle connections; reusing a half-open pooled connection
+	// surfaces as "http2: client connection force closed via ClientConn.Close".
+	// With these set, the transport sends a PING on an idle connection after
+	// http2ReadIdleTimeout and discards it if no PONG arrives within
+	// http2PingTimeout, so a dead connection is never reused for an upload.
+	http2ReadIdleTimeout = 15 * time.Second
+	http2PingTimeout     = 5 * time.Second
 
 	// detectionDurationSeconds is the duration added to timestamp for end time
 	detectionDurationSeconds = 3
@@ -190,6 +209,29 @@ type Interface interface {
 	Close()
 }
 
+// newUploadHTTPClient builds the HTTP client used for BirdWeather uploads. It
+// uses a dedicated transport (cloned from http.DefaultTransport so proxy support
+// and dial timeouts are preserved) instead of the shared global transport, and
+// enables HTTP/2 health-check PINGs so a half-open connection dropped by the
+// CDN is detected and discarded rather than reused for an upload (which would
+// fail with "http2: client connection force closed via ClientConn.Close").
+func newUploadHTTPClient() *http.Client {
+	transport := httpclient.CloneDefaultTransport()
+	if h2, err := http2.ConfigureTransports(transport); err == nil {
+		h2.ReadIdleTimeout = http2ReadIdleTimeout
+		h2.PingTimeout = http2PingTimeout
+	} else {
+		// Non-fatal: without explicit HTTP/2 configuration the transport still
+		// negotiates HTTP/2 via ALPN, just without the proactive idle PINGs.
+		GetLogger().Warn("Failed to configure HTTP/2 health checks for BirdWeather uploads",
+			logger.Error(err))
+	}
+	return &http.Client{
+		Timeout:   httpClientTimeout,
+		Transport: transport,
+	}
+}
+
 // New creates and initializes a new BwClient with the given settings.
 // The HTTP client is configured with httpClientTimeout to prevent hanging requests.
 func New(settings *conf.Settings) (*BwClient, error) {
@@ -202,7 +244,7 @@ func New(settings *conf.Settings) (*BwClient, error) {
 		Accuracy:      settings.Realtime.Birdweather.LocationAccuracy,
 		Latitude:      settings.BirdNET.Latitude,
 		Longitude:     settings.BirdNET.Longitude,
-		HTTPClient:    &http.Client{Timeout: httpClientTimeout},
+		HTTPClient:    newUploadHTTPClient(),
 	}
 
 	// Attach the circuit breaker. Metrics are intentionally nil for now — the
@@ -225,15 +267,18 @@ func New(settings *conf.Settings) (*BwClient, error) {
 func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude float64) {
 	log := GetLogger()
 
-	// Create a new local random generator seeded with current Unix time
-	rnd := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))) //nolint:gosec // G404: weak randomness acceptable for upload retry jitter, not security-critical
-
 	// Calculate the degree offset using metersPerDegree approximation
 	degreeOffset := radiusMeters / metersPerDegree
 
-	// Generate random offsets within +/- degreeOffset
-	latOffset := (rnd.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
-	lonOffset := (rnd.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
+	// Generate random offsets within +/- degreeOffset. Use the top-level
+	// math/rand/v2 generator (auto-seeded at startup, goroutine-safe) instead of
+	// seeding a fresh PCG from time.Now() on every call: successive calls within
+	// the same clock tick (coarse on Windows, ~15ms) would seed identically and
+	// produce the same "random" offset, defeating the location-fuzzing privacy
+	// guarantee. math/rand/v2 is not crypto-secure, which is fine for privacy
+	// fuzzing of an already-approximate coordinate.
+	latOffset := (rand.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
+	lonOffset := (rand.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
 
 	// Apply the offsets to the original coordinates and truncate to 4 decimal places
 	latitude = math.Floor((b.Latitude+latOffset)*coordinatePrecisionFactor) / coordinatePrecisionFactor
@@ -1065,7 +1110,10 @@ func (b *BwClient) Close() {
 
 	log.Info("Closing BirdWeather client")
 	if b.HTTPClient != nil && b.HTTPClient.Transport != nil {
-		// If the transport implements the CloseIdleConnections method, call it
+		// If the transport implements the CloseIdleConnections method, call it.
+		// The upload client owns a dedicated transport (see newUploadHTTPClient),
+		// so this only reclaims this client's idle connections and never touches
+		// the shared http.DefaultTransport pool.
 		type transporter interface {
 			CloseIdleConnections()
 		}
@@ -1073,8 +1121,12 @@ func (b *BwClient) Close() {
 			log.Debug("Closing idle HTTP connections")
 			transport.CloseIdleConnections()
 		}
-		// Cancel any in-flight requests by using a new client
-		b.HTTPClient = nil // Allow GC to collect the old client/transport
+		// Deliberately do NOT nil out b.HTTPClient here. In-flight uploads read
+		// b.HTTPClient without holding the processor's bwClientMutex (they
+		// obtained the *BwClient via GetBwClient and released the lock), so a
+		// write here races with those reads and risks a nil dereference. The
+		// client/transport are garbage-collected once the BwClient is dropped
+		// from the processor; CloseIdleConnections already frees pooled sockets.
 	}
 
 	if b.Settings.Realtime.Birdweather.Debug {

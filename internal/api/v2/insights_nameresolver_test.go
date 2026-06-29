@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 )
 
 // fakeResolver is a minimal datastore.SpeciesNameResolver for tests.
@@ -23,12 +24,31 @@ func TestBuildNameMaps_ResolverLocalizes(t *testing.T) {
 	nm := buildNameMaps([]string{"Turdus merula_LabelName"},
 		fakeResolver{m: map[string]string{"Turdus merula": "Mustarastas"}})
 	assert.Equal(t, "Mustarastas", nm.sciToCommon["Turdus merula"])
-	assert.Equal(t, "Turdus merula", nm.commonToSci[normalizeForLookup("Mustarastas")])
+	assert.Equal(t, "Turdus merula", nm.commonToSci[apicore.NormalizeForLookup("Mustarastas")])
 }
 
 func TestBuildNameMaps_NilResolverKeepsLabel(t *testing.T) {
 	nm := buildNameMaps([]string{"Turdus merula_LabelName"}, nil)
 	assert.Equal(t, "LabelName", nm.sciToCommon["Turdus merula"])
+}
+
+func TestBuildCommonNameMap(t *testing.T) {
+	t.Parallel()
+	labels := []string{
+		"Turdus merula_Eurasian Blackbird",
+		"Parus major_Great Tit",
+		"Invalid Label Without Separator",
+		"_EmptyScientificName",
+	}
+
+	m := buildNameMaps(labels, nil).sciToCommon
+	assert.Equal(t, "Eurasian Blackbird", m["Turdus merula"])
+	assert.Equal(t, "Great Tit", m["Parus major"])
+	assert.Len(t, m, 2) // invalid entries excluded
+
+	// Test resolveCommonName fallback
+	assert.Equal(t, "Eurasian Blackbird", apicore.ResolveCommonName(m, "Turdus merula"))
+	assert.Equal(t, "Unknown species", apicore.ResolveCommonName(m, "Unknown species"))
 }
 
 func TestBuildNameMaps_ScientificOnlyLabelSearchable(t *testing.T) {
@@ -38,7 +58,7 @@ func TestBuildNameMaps_ScientificOnlyLabelSearchable(t *testing.T) {
 	nm := buildNameMaps([]string{"Myotis myotis"},
 		fakeResolver{m: map[string]string{"Myotis myotis": "Greater Mouse-eared Bat"}})
 	assert.Equal(t, "Greater Mouse-eared Bat", nm.sciToCommon["Myotis myotis"])
-	assert.Equal(t, "Myotis myotis", nm.commonToSci[normalizeForLookup("Greater Mouse-eared Bat")])
+	assert.Equal(t, "Myotis myotis", nm.commonToSci[apicore.NormalizeForLookup("Greater Mouse-eared Bat")])
 
 	// Without a resolver, a scientific-only label has no common name and is skipped.
 	bare := buildNameMaps([]string{"Myotis myotis"}, nil)

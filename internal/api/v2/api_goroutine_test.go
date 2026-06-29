@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -20,8 +21,11 @@ import (
 // TestControllerShutdownCleansUpGoroutines verifies that background goroutines
 // are properly cleaned up when the controller is shut down
 func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
-	// Defer goleak check to verify no goroutines leak after test
-	defer goleak.VerifyNone(t,
+	// Snapshot existing goroutines now (test start) and verify no leaks at the
+	// end. Captured here so a leftover transport-dial goroutine from a
+	// previously-run test (shuffle order) is ignored, not attributed to this
+	// test; see verifyNoLeaks for the full rationale.
+	verifyNoLeaks(t,
 		// Ignore goroutines from testing framework and other standard libraries
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
@@ -82,12 +86,9 @@ func TestSendReconfigActionsExitsOnShutdown(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	controlChan := make(chan string, 1)
-	c := &Controller{
-		controlChan: controlChan,
-		ctx:         ctx,
-		cancel:      cancel,
-		apiLogger:   logger.Global().Module("api"),
-	}
+	cCore := &apicore.Core{APILogger: logger.Global().Module("api")}
+	cCore.SetTestContext(ctx, cancel)
+	c := &Controller{Core: cCore, controlChan: controlChan}
 
 	actions := []string{"action_one", "action_two", "action_three"}
 
@@ -118,12 +119,9 @@ func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
 	defer cancel()
 
 	controlChan := make(chan string, 1)
-	c := &Controller{
-		controlChan: controlChan,
-		ctx:         ctx,
-		cancel:      cancel,
-		apiLogger:   logger.Global().Module("api"),
-	}
+	cCore := &apicore.Core{APILogger: logger.Global().Module("api")}
+	cCore.SetTestContext(ctx, cancel)
+	c := &Controller{Core: cCore, controlChan: controlChan}
 
 	close(controlChan)
 
@@ -136,19 +134,19 @@ func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
 // TestGoroutineCleanupWithoutRoutes verifies that creating a controller without
 // routes doesn't start unnecessary goroutines
 func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
-	// Register cleanup with goleak at the beginning
-	t.Cleanup(func() {
-		goleak.VerifyNone(t,
-			// Ignore goroutines from testing framework and other standard libraries
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("runtime.gopark"),
-			goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
-			// Ignore the go-cache janitor which we can't control
-			goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-			// Ignore lumberjack logger goroutines
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		)
-	})
+	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// leftover transport-dial goroutine from a previously-run test under
+	// -shuffle is ignored rather than wrongly attributed here.
+	verifyNoLeaks(t,
+		// Ignore goroutines from testing framework and other standard libraries
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+		// Ignore the go-cache janitor which we can't control
+		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
+		// Ignore lumberjack logger goroutines
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	// Setup test environment (which uses NewWithOptions with initializeRoutes=false)
 	_, _, controller := setupTestEnvironment(t)

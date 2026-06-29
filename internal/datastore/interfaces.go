@@ -198,6 +198,47 @@ type Interface interface {
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
 	// GetSpeciesDiversityData returns daily unique species counts within the given date range.
 	GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]DailyAnalyticsData, error)
+	// GetActivityHeatmap returns detection counts bucketed by (station-local date, intra-day slot)
+	// over the inclusive date range, as a columnar sparse payload. species is an optional filter.
+	GetActivityHeatmap(ctx context.Context, startDate, endDate, species string) (ActivityHeatmapData, error)
+	// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for
+	// the top `limit` species by detection volume over the inclusive date range (false positives
+	// excluded), ordered by descending volume. Powers the who-sings-when ridgeline.
+	GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyDistribution, error)
+	// GetDailyActivityOnset returns, per calendar day in the inclusive date range, the dawn-chorus
+	// onset relative to civil dawn (false positives excluded). species is an optional scientific-name
+	// filter. Powers the dawn-chorus onset tracker.
+	GetDailyActivityOnset(ctx context.Context, startDate, endDate, species string) ([]DailyActivityOnset, error)
+	// GetConfidenceHistogram returns the per-species confidence-score distribution over the date range,
+	// powering the confidence distribution chart. With no species filter it covers the top `limit`
+	// species by detection volume; with a species filter it covers just that species.
+	GetConfidenceHistogram(ctx context.Context, startDate, endDate, species string, bins, limit int) ([]SpeciesConfidenceHistogram, error)
+	// GetSpeciesAccumulation returns, per calendar day in the inclusive date range, the cumulative
+	// count of distinct species first detected within that range (false positives excluded). Powers
+	// the species accumulation curve in the Biodiversity tab; "first seen" is bounded to the selected
+	// window, not lifetime.
+	GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]SpeciesAccumulationPoint, error)
+	// GetYearOverYear returns the current year-to-date cumulative detection counts versus the same
+	// calendar span one year earlier (false positives excluded): one point per current-year calendar
+	// day from Jan 1 through date (station-local YYYY-MM-DD; empty -> today in the station timezone).
+	// Counts are aligned by calendar (month, day) with leap-day Feb 29 handled, and the delta is current
+	// minus previous. Powers the year-over-year tracker in the Trends tab.
+	GetYearOverYear(ctx context.Context, date string) (YearOverYearResult, error)
+	// GetSpeciesPhenology returns the arrival/departure residency span (first and last
+	// false-positive-excluded detection, plus the in-range detection count) for the top `limit` species
+	// by volume over the date range. Powers the arrival/departure phenology chart in the Biodiversity
+	// tab; spans are bounded to the selected window, not lifetime.
+	GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesPhenologyPoint, error)
+	// GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded)
+	// for the top `limit` species by detection volume over the inclusive date range, ordered by
+	// descending volume. Powers the acoustic succession streamgraph in the Activity Patterns tab.
+	GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyCounts, error)
+	// GetAudioSources returns each audio source that has at least one (false-positive-excluded)
+	// detection in the date range, with its in-range detection count, ordered by count descending. When
+	// both dates are empty it covers all history. Powers the analytics source/mic filter's option list;
+	// the metric is v2only (the legacy schema does not persist a detection's source), so the legacy
+	// datastore returns an empty result.
+	GetAudioSources(ctx context.Context, startDate, endDate string) ([]AudioSourceSummary, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
@@ -217,16 +258,10 @@ type Interface interface {
 	DeleteThresholdEvents(speciesName string) error
 	DeleteAllThresholdEvents() (int64, error)
 	// Notification History methods
-	// TODO(BG-17): Add context.Context as first parameter for cancellation/timeout support:
-	//   SaveNotificationHistory(ctx context.Context, history *NotificationHistory) error
-	//   GetNotificationHistory(ctx context.Context, scientificName string, notificationType string) (*NotificationHistory, error)
-	//   GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]NotificationHistory, error)
-	//   DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error)
-	// This requires updating all implementations and call sites (breaking change)
-	SaveNotificationHistory(history *NotificationHistory) error
-	GetNotificationHistory(scientificName string, notificationType string) (*NotificationHistory, error)
-	GetActiveNotificationHistory(after time.Time) ([]NotificationHistory, error)
-	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
+	SaveNotificationHistory(ctx context.Context, history *NotificationHistory) error
+	GetNotificationHistory(ctx context.Context, scientificName string, notificationType string) (*NotificationHistory, error)
+	GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]NotificationHistory, error)
+	DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) // Returns count deleted
 	// Database stats method for runtime statistics
 	GetDatabaseStats(ctx context.Context) (*DatabaseStats, error)
 	// PingWithLatency executes a trivial query (SELECT 1) and returns the round-trip time.

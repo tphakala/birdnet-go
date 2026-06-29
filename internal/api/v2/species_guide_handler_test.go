@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -29,10 +30,11 @@ import (
 
 // Shared literals (kept as constants to satisfy goconst and avoid drift).
 const (
-	commonBlackbird     = "Common Blackbird"
-	paramScientificName = "scientific_name"
-	sciCarrionCrow      = "Corvus corone"
-	commonCarrionCrow   = "Carrion Crow"
+	commonBlackbird      = "Common Blackbird"
+	paramScientificName  = "scientific_name"
+	sciCarrionCrow       = "Corvus corone"
+	commonCarrionCrow    = "Carrion Crow"
+	sciEurasianBlackbird = "Turdus merula"
 )
 
 // --- guide cache test doubles (the exported guideprovider interfaces) ---
@@ -115,7 +117,7 @@ func guideTestController(t *testing.T, s *conf.Settings) *Controller {
 	t.Helper()
 	withRestoredGlobalSettings(t)
 	conftest.SetTestSettings(s)
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(s)
 	return c
 }
@@ -192,7 +194,7 @@ func TestGetSpeciesGuide_ClientCanceledReturns499(t *testing.T) {
 	ec.SetParamValues(sciEurasianBlackbird)
 
 	require.NoError(t, c.GetSpeciesGuide(ec))
-	assert.Equal(t, StatusClientClosedRequest, rec.Code)
+	assert.Equal(t, apicore.StatusClientClosedRequest, rec.Code)
 }
 
 func TestGetSpeciesGuide_EmptyNameReturns400(t *testing.T) {
@@ -334,7 +336,7 @@ func TestResolveSimilarSpecies_WithDescriptionIsMarkedHasGuideAndNoLinks(t *test
 func notesController(t *testing.T) (*Controller, *mocks.MockInterface) {
 	t.Helper()
 	mockDS := mocks.NewMockInterface(t)
-	c := &Controller{DS: mockDS}
+	c := &Controller{Core: &apicore.Core{DS: mockDS}}
 	c.Settings.Store(&conf.Settings{})
 	return c, mockDS
 }
@@ -384,7 +386,7 @@ func TestGetSpeciesNotes_Returns200(t *testing.T) {
 
 func TestGetSpeciesNotes_DatastoreUnavailableReturns503(t *testing.T) {
 	t.Parallel()
-	c := &Controller{} // DS nil
+	c := &Controller{Core: &apicore.Core{}} // DS nil
 	c.Settings.Store(&conf.Settings{})
 
 	ctx, rec := notesCtx(t, http.MethodGet, "/api/v2/species/Turdus/notes", "",
@@ -481,11 +483,11 @@ func TestDeleteSpeciesNote_NotFoundReturns404(t *testing.T) {
 func TestSpeciesGuideRoutes_WritesAreAuthGated(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
-	c := &Controller{Echo: e, Group: e.Group("/api/v2")}
+	c := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	c.Settings.Store(&conf.Settings{})
 	// A denying middleware stands in for the real authenticator: it short-circuits
 	// before the handler, so a gated route returns 401 without touching the DS.
-	c.authMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
+	c.AuthMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
 		return func(ctx echo.Context) error {
 			return ctx.NoContent(http.StatusUnauthorized)
 		}

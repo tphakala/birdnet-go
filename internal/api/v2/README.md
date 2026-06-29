@@ -6,21 +6,25 @@ The API v2 provides comprehensive access to BirdNET-Go's bird detection and moni
 
 ## Endpoint Registration Pattern
 
-### Standard Registration
+> Architecture and the "add a new endpoint / add a new domain" recipes live in
+> `internal/api/v2/CLAUDE.md`. The summary below is the registration mechanics.
 
-All endpoints follow this registration pattern in their respective `init*Routes()` functions:
+### Per-domain registration
+
+`internal/api/v2` is a thin facade (package `api`) plus one subpackage per domain.
+Each domain package exposes `type Handler struct{ *apicore.Core }`, a
+`New(core *apicore.Core)` constructor, and a `RegisterRoutes(g *echo.Group)` method
+that wires its own routes on the `/api/v2` group:
 
 ```go
-func (c *Controller) initExampleRoutes() {
+// internal/api/v2/example/example.go
+func (c *Handler) RegisterRoutes(g *echo.Group) {
     // Public endpoints (no authentication required)
-    c.Group.GET("/path", c.HandlerFunction)
-    c.Group.POST("/path", c.HandlerFunction)
+    g.GET("/path", c.HandlerFunction)
+    g.POST("/path", c.HandlerFunction)
 
-    // Protected endpoints (authentication required)
-    c.Group.POST("/protected-path", c.HandlerFunction, c.getEffectiveAuthMiddleware())
-
-    // Alternative auth pattern (deprecated, use above)
-    c.Group.POST("/legacy-auth", c.HandlerFunction, c.AuthMiddleware)
+    // Protected endpoints: apply the promoted c.AuthMiddleware field
+    g.POST("/protected-path", c.HandlerFunction, c.AuthMiddleware)
 
     // Rate-limited endpoints (typically for streams)
     rateLimiterConfig := middleware.RateLimiterConfig{
@@ -29,25 +33,28 @@ func (c *Controller) initExampleRoutes() {
             middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(1), Burst: 5},
         ),
     }
-    c.Group.GET("/stream", c.StreamHandler, middleware.RateLimiterWithConfig(rateLimiterConfig))
+    g.GET("/stream", c.StreamHandler, middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
 ```
 
 ### Authentication Middleware
 
-Use `c.getEffectiveAuthMiddleware()` for new protected endpoints. This automatically selects the appropriate authentication method.
+Apply the promoted `c.AuthMiddleware` field (injected from the parent server via
+the `WithAuthMiddleware` option) to protected routes and groups.
+`c.GetAuthMiddleware()` returns the same value for callers that prefer an accessor.
 
 ### Route Initialization
 
-All route initialization functions are called from `api.go:initRoutes()`:
+The facade constructs each domain Handler in `NewWithOptions` and calls every
+`RegisterRoutes` from `api.go:initRoutes()` in a deterministic ordered list:
 
 ```go
 routeInitializers := []struct {
     name string
     fn   func()
 }{
-    {"example routes", c.initExampleRoutes},
-    // Add new route groups here
+    {"example routes", func() { c.example.RegisterRoutes(c.Group) }},
+    // Add a new domain's RegisterRoutes here, preserving the existing order
 }
 ```
 
@@ -72,15 +79,16 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 }
 ```
 
-### Authentication (`auth.go`)
+### Authentication (`auth/auth.go`)
 
-| Method | Route          | Handler         | Auth | Description                 |
-| ------ | -------------- | --------------- | ---- | --------------------------- |
-| POST   | `/auth/login`  | `Login`         | ❌   | User authentication         |
-| POST   | `/auth/logout` | `Logout`        | ✅   | End user session            |
-| GET    | `/auth/status` | `GetAuthStatus` | ✅   | Check authentication status |
+| Method | Route            | Handler         | Auth | Description                 |
+| ------ | ---------------- | --------------- | ---- | --------------------------- |
+| POST   | `/auth/login`    | `Login`         | ❌   | User authentication         |
+| GET    | `/auth/callback` | `OAuthCallback` | ❌   | Complete OAuth login flow   |
+| POST   | `/auth/logout`   | `Logout`        | ✅   | End user session            |
+| GET    | `/auth/status`   | `GetAuthStatus` | ✅   | Check authentication status |
 
-### Analytics (`analytics.go`)
+### Analytics (`analytics/analytics.go`)
 
 | Method | Route                                 | Handler                    | Auth | Description                        |
 | ------ | ------------------------------------- | -------------------------- | ---- | ---------------------------------- |
@@ -88,11 +96,21 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/analytics/species/summary`          | `GetSpeciesSummary`        | ❌   | Overall species statistics         |
 | GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species      |
 | GET    | `/analytics/species/thumbnails`       | `GetSpeciesThumbnails`     | ❌   | Species thumbnail images           |
+| GET    | `/analytics/species/accumulation`     | `GetSpeciesAccumulation`   | ❌   | Species accumulation curve (biodiversity collector's curve): per calendar day, the cumulative count of distinct species first detected within the range (false positives excluded; "first seen" is bounded to the window, not lifetime). All-species (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days) |
+| GET    | `/analytics/species/phenology`        | `GetSpeciesPhenology`      | ❌   | Arrival/departure phenology (residency-bar Gantt): per species, the first and last detection date (station-local, false positives excluded) plus the in-range detection count, for the top-N species by volume. All-species top-N (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 12, max 20) |
 | GET    | `/analytics/time/hourly`              | `GetHourlyAnalytics`       | ❌   | Hourly detection patterns          |
 | GET    | `/analytics/time/daily`               | `GetDailyAnalytics`        | ❌   | Daily detection patterns           |
 | GET    | `/analytics/time/distribution/hourly` | `GetTimeOfDayDistribution` | ❌   | Time-of-day detection distribution |
+| GET    | `/analytics/time/distribution/species` | `GetSpeciesHourlyDistribution` | ❌ | Who-sings-when ridgeline: per-species hour-of-day distribution for the top N species by volume. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 5, max 8) |
+| GET    | `/analytics/time/heatmap`             | `GetActivityHeatmap`       | ❌   | Seasonal density heatmap (date x intra-day slot; `?format=csv`) |
+| GET    | `/analytics/time/dawn-onset`          | `GetDawnChorusOnset`       | ❌   | Dawn-chorus onset tracker: per-day onset relative to civil dawn (minutes; negative = before civil dawn). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional |
+| GET    | `/analytics/time/succession`          | `GetAcousticSuccession`    | ❌   | Acoustic succession streamgraph: per species, the raw hour-of-day detection counts (24 buckets, false positives excluded) for the top-N species by volume, stacked into a streamgraph showing the diel acoustic handover. All-species top-N (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 6, max 10) |
+| GET    | `/analytics/time/year-over-year`      | `GetYearOverYear`          | ❌   | Year-over-year tracker: current year-to-date cumulative detection counts versus the same calendar span one year earlier (false positives excluded), one point per current-year day with a per-day delta, aligned by calendar (month, day) with leap-day Feb 29 handled. All-species (no species filter). `date` optional (station-local YYYY-MM-DD; defaults to today) sets the inclusive end of both windows. Returns `{currentYear, previousYear, points[]}` |
+| GET    | `/analytics/sun`                      | `GetAnalyticsSun`          | ❌   | Sun times for the nocturnal activity clock's day/night shading: sunrise/sunset/civil-dawn/civil-dusk as minute-of-day in server-local time. `date` for a single day, or `start_date`/`end_date` for a range (collapsed to its midpoint); defaults to today. Returns `available:false` (not an error) on polar day/night or when SunCalc is unconfigured |
+| GET    | `/analytics/confidence/distribution`  | `GetConfidenceDistribution` | ❌  | Confidence distribution per species: per-species normalized histogram of detection confidence scores (Review & Accuracy tab). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (single species filter; default is the top-N species by volume); `bins` optional (default 20, clamped to 5-50); `limit` optional (default 5, max 8) |
+| GET    | `/analytics/sources`                  | `GetAnalyticsSources`      | ❌   | Audio sources that have detections in range, powering the analytics hub's source/mic filter: each source's opaque id (string), display label, and in-range detection count (false positives excluded), most active first. `start_date`/`end_date` optional (omit both for all history). v2only (the legacy schema does not persist a detection's source; legacy returns an empty list). Source names are anonymized for unauthenticated clients; the opaque id is safe to expose. Returns `{sources[]}` (never null) |
 
-### Control Operations (`control.go`)
+### Control Operations (`control/control.go`)
 
 | Method | Route                         | Handler               | Auth | Description                            |
 | ------ | ----------------------------- | --------------------- | ---- | -------------------------------------- |
@@ -104,7 +122,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/control/restart-source/:id` | `RestartAudioSource`  | ✅   | Restart a single audio source by ID    |
 | GET    | `/control/actions`            | `GetAvailableActions` | ✅   | List available control actions         |
 
-### Debug (`debug.go`)
+### Debug (`app/debug.go`)
 
 | Method | Route                         | Handler                    | Auth | Description               |
 | ------ | ----------------------------- | -------------------------- | ---- | ------------------------- |
@@ -112,7 +130,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/debug/trigger-notification` | `DebugTriggerNotification` | ✅   | Trigger test notification |
 | GET    | `/debug/status`               | `DebugSystemStatus`        | ✅   | System debug information  |
 
-### Detections (`detections.go`)
+### Detections (`detections/detections.go`)
 
 | Method | Route                         | Handler                 | Auth | Description                                |
 | ------ | ----------------------------- | ----------------------- | ---- | ------------------------------------------ |
@@ -130,7 +148,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/detections/batch/lock`      | `BatchLockDetections`   | ✅   | Bulk lock or unlock detections             |
 | POST   | `/detections/batch/resolve`   | `BatchResolveDetections`| ✅   | Resolve query params to detection IDs      |
 
-### Integrations (`integrations.go`)
+### Integrations (`integrations/integrations.go`)
 
 | Method | Route                                        | Handler                         | Auth | Description                                    |
 | ------ | -------------------------------------------- | ------------------------------- | ---- | ---------------------------------------------- |
@@ -145,7 +163,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/integrations/weather/test`                 | `TestWeatherConnection`         | ✅   | Test weather provider connection               |
 | POST   | `/integrations/ebird/test`                   | `TestEBirdConnection`           | ✅   | Test eBird API connectivity and authentication |
 
-### Media (`media.go`)
+### Media (`media/media.go`)
 
 | Method | Route                                | Handler                  | Auth | Description                        |
 | ------ | ------------------------------------ | ------------------------ | ---- | ---------------------------------- |
@@ -159,7 +177,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
 
-### Notifications (`notifications.go`)
+### Notifications (`notifications/notifications.go`)
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                         |
 | ------ | ---------------------------------- | ---------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------- |
@@ -174,7 +192,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/notifications/test/new-species`  | `CreateTestNewSpeciesNotification` | ✅   | Create test new-species notification                                                                                |
 | GET    | `/notifications/check-ntfy-server` | `CheckNtfyServer`                  | ✅   | Probe NTFY host for HTTPS/HTTP connectivity (authenticated to prevent SSRF relay). Query: `host=<hostname[:port]>`. |
 
-### Range Filter (`range.go`)
+### Range Filter (`range/range.go`)
 
 | Method | Route                   | Handler                       | Auth | Description                                                 |
 | ------ | ----------------------- | ----------------------------- | ---- | ----------------------------------------------------------- |
@@ -186,7 +204,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter; returns the active set (range-filtered birds plus always-active secondary models) |
 | POST   | `/range/rebuild`        | `RebuildRangeFilter`          | ❌   | Rebuild range filter data                                   |
 
-### Search (`search.go`)
+### Search (`detections/search.go`)
 
 | Method | Route     | Handler        | Auth | Description                    |
 | ------ | --------- | -------------- | ---- | ------------------------------ |
@@ -217,13 +235,13 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 - `startEvent` / `endEvent` (`"sunrise"` | `"sunset"`): Solar mode events
 - `startOffset` / `endOffset` (int, -180 to 180): Minutes offset from solar event
 
-### Filesystem (`filesystem.go`)
+### Filesystem (`filesystem/filesystem.go`)
 
 | Method | Route                | Handler            | Auth | Description                                              |
 | ------ | -------------------- | ------------------ | ---- | -------------------------------------------------------- |
 | GET    | `/filesystem/browse` | `BrowseFileSystem` | ✅   | Browse files and directories with secure path validation |
 
-### Species (`species.go`)
+### Species (`species/species.go`)
 
 | Method | Route                      | Handler               | Auth | Description                                                       |
 | ------ | -------------------------- | --------------------- | ---- | ----------------------------------------------------------------- |
@@ -233,30 +251,15 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 | GET    | `/species/:code/thumbnail`          | `GetSpeciesThumbnail`     | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
 | GET    | `/species/dictionary/:locale`       | `ServeSpeciesDictionary`  | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
-### Species Guide (`species_guide.go`)
-
-Wikipedia/eBird-backed guide enrichment, similar-species comparison, and per-species notes. Disabled by default (`realtime.dashboard.speciesguide.enabled`). Returns 404 when the feature is disabled and 503 when enabled but the cache is unavailable.
-
-| Method | Route                                | Handler             | Auth | Description                                                          |
-| ------ | ------------------------------------ | ------------------- | ---- | ------------------------------------------------------------------- |
-| GET    | `/species/:scientific_name/guide`    | `GetSpeciesGuide`   | ❌⚡ | Species guide (description, quality, expectedness, season, links)   |
-| GET    | `/species/:scientific_name/similar`  | `GetSimilarSpecies` | ❌⚡ | Same-genus / same-family / similar species with summaries + `has_guide` |
-| GET    | `/species/:scientific_name/notes`    | `GetSpeciesNotes`   | ❌   | List user notes for a species                                       |
-| POST   | `/species/:scientific_name/notes`    | `CreateSpeciesNote` | ✅   | Create a user note for a species                                    |
-| PUT    | `/species/notes/:id`                 | `UpdateSpeciesNote` | ✅   | Update a user note                                                  |
-| DELETE | `/species/notes/:id`                 | `DeleteSpeciesNote` | ✅   | Delete a user note                                                  |
-
-⚡ = rate-limited (external API calls).
-
-### Server-Sent Events (`sse.go`)
+### Server-Sent Events (`sse/sse.go`)
 
 | Method | Route                 | Handler             | Auth | Description                  |
 | ------ | --------------------- | ------------------- | ---- | ---------------------------- |
-| GET    | `/detections/stream`  | `StreamDetections`  | ❌⚡ | Real-time detection stream   |
+| GET    | `/detections/stream`  | `StreamDetections`  | ❌⚡ | Real-time detection stream. Source display names are anonymized for unauthenticated clients (only the stable source id is exposed, on both the `detection` and `pending` events); authenticated clients receive the full display name |
 | GET    | `/soundlevels/stream` | `StreamSoundLevels` | ❌⚡ | Real-time audio level stream |
 | GET    | `/sse/status`         | `GetSSEStatus`      | ❌   | SSE connection status        |
 
-### Audio Level SSE (`audio_level.go`) and Stream Sources (`audio_sources.go`)
+### Audio Level SSE (`audio/audio_level.go`) and Stream Sources (`audio/audio_sources.go`)
 
 | Method | Route                  | Handler             | Auth | Description                              |
 | ------ | ---------------------- | ------------------- | ---- | ---------------------------------------- |
@@ -304,7 +307,7 @@ Wikipedia/eBird-backed guide enrichment, similar-species comparison, and per-spe
 
 Returns an empty `sources` array when no sources are configured. The `type` field is one of: `rtsp`, `http`, `hls`, `rtmp`, `udp`, `audio_card`, `file`. The `state` field is one of: `inactive`, `starting`, `running`, `error`, `stopped`. The `/streams/sources` endpoint returns only stream types (excludes `audio_card` and `file`).
 
-### HLS Streaming (`audio_hls.go`)
+### HLS Streaming (`audio/audio_hls.go`)
 
 | Method | Route                                       | Handler            | Auth               | Description                   |
 | ------ | ------------------------------------------- | ------------------ | ------------------ | ----------------------------- |
@@ -381,7 +384,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 - `SegmentLength`: HLS segment duration in seconds (default: 2, range: 1-30)
 - `FfmpegLogLevel`: FFmpeg log level (default: "warning")
 
-### Stream Health Monitoring (`streams_health.go`)
+### Stream Health Monitoring (`audio/streams_health.go`)
 
 | Method | Route                    | Handler                   | Auth | Description                                                                          |
 | ------ | ------------------------ | ------------------------- | ---- | ------------------------------------------------------------------------------------ |
@@ -391,7 +394,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)               |
 | POST   | `/streams/test`          | `TestStream`              | ✅   | Test a stream URL to verify connectivity and discover audio properties (sample rate, codec, bat compatibility) |
 
-### Quiet Hours Status (`quiet_hours.go`)
+### Quiet Hours Status (`audio/quiet_hours.go`)
 
 | Method | Route                         | Handler               | Auth | Description                                                                                                             |
 | ------ | ----------------------------- | --------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -413,7 +416,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 - `soundCardSuppressed`: true if the sound card is currently in quiet hours
 - `suppressedStreams`: map of stream URLs to their suppression state (only suppressed streams included)
 
-### Support (`support.go`)
+### Support (`support/support.go`)
 
 | Method | Route                   | Handler               | Auth | Description                      |
 | ------ | ----------------------- | --------------------- | ---- | -------------------------------- |
@@ -421,7 +424,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/support/download/:id` | `DownloadSupportDump` | ✅   | Download support dump            |
 | GET    | `/support/status`       | `GetSupportStatus`    | ✅   | Support system status            |
 
-### System Information (`system.go`)
+### System Information (`system/system.go`)
 
 | Method | Route                            | Handler                   | Auth | Description                          |
 | ------ | -------------------------------- | ------------------------- | ---- | ------------------------------------ |
@@ -437,8 +440,9 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/system/audio/sources`          | `ListAudioSources`        | ✅   | Active audio sources (all types)     |
 | GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding  |
 | GET    | `/system/models`                 | `GetActiveModels`         | ✅   | Active model metadata                |
+| GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats/RAM/source attachment, audio pipeline metrics, per-model error rate, load failures, last detection, and metric key names for time-series lookups. |
 
-### Events (`events.go`, `events_aggregation.go`)
+### Events (`system/events.go`, `system/events_aggregation.go`)
 
 Registered under the system route group. All endpoints require authentication.
 
@@ -452,7 +456,7 @@ Registered under the system route group. All endpoints require authentication.
 - `GET /system/events/detections`: `date` (YYYY-MM-DD, defaults to today)
 - `GET /system/events/operational`: `date` (YYYY-MM-DD, defaults to today), `level` (DEBUG/INFO/WARN/ERROR, defaults to INFO)
 
-### Weather (`weather.go`)
+### Weather (`weather/weather.go`)
 
 | Method | Route                         | Handler                   | Auth | Description                         |
 | ------ | ----------------------------- | ------------------------- | ---- | ----------------------------------- |
@@ -463,7 +467,7 @@ Registered under the system route group. All endpoints require authentication.
 | GET    | `/weather/latest`             | `GetLatestWeather`        | ❌   | Latest weather data                 |
 | GET    | `/weather/sun/:date`          | `GetSunTimes`             | ❌   | Sun times (sunrise/sunset) for date |
 
-### Alert Rules (`alerts.go`)
+### Alert Rules (`alerts/alerts.go`)
 
 Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
@@ -488,7 +492,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 - `GET /alerts/rules`: `object_type`, `enabled` (true/false), `built_in` (true/false)
 - `GET /alerts/history`: `rule_id`, `limit` (default 50), `offset`
 
-### Insights (`insights.go`)
+### Insights (`analytics/insights.go`)
 
 Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
@@ -505,7 +509,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 - All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
 
-### Models (`models.go`)
+### Models (`models/models.go`)
 
 | Method | Route                          | Handler                 | Auth | Description                                           |
 | ------ | ------------------------------ | ----------------------- | ---- | ----------------------------------------------------- |
@@ -517,7 +521,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | DELETE | `/models/installed/:id`        | `UninstallModel`        | ✅   | Remove an installed model from disk                   |
 | GET    | `/models/install/:id/progress` | `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress             |
 
-**GET /api/v2/models** — Returns all classifier models registered in the model registry. Each entry includes a config alias (used in audio source configuration) and a human-readable display name.
+**GET /api/v2/models** - Returns all classifier models registered in the model registry. Each entry includes a config alias (used in audio source configuration) and a human-readable display name.
 
 **Response:**
 
@@ -528,7 +532,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 ]
 ```
 
-### TLS Certificate Management (`tls.go`)
+### TLS Certificate Management (`tls/tls.go`)
 
 | Method | Route                       | Handler                         | Auth | Description                                |
 | ------ | --------------------------- | ------------------------------- | ---- | ------------------------------------------ |
@@ -538,9 +542,9 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | POST   | `/tls/certificate/generate` | `GenerateSelfSignedCertificate` | ✅   | Generate self-signed certificate           |
 | GET    | `/tls/certificate/download` | `DownloadTLSCertificate`        | ✅   | Download installed certificate as PEM file |
 
-**GET /api/v2/tls/certificate** — Returns `{"installed": false}` when no certificate is installed, or full certificate metadata (subject, issuer, SANs, expiry, fingerprint) when one is present.
+**GET /api/v2/tls/certificate** - Returns `{"installed": false}` when no certificate is installed, or full certificate metadata (subject, issuer, SANs, expiry, fingerprint) when one is present.
 
-**POST /api/v2/tls/certificate** — Upload a PEM-encoded certificate and private key. The pair is validated before saving. Sets TLS mode to `manual`.
+**POST /api/v2/tls/certificate** - Upload a PEM-encoded certificate and private key. The pair is validated before saving. Sets TLS mode to `manual`.
 
 ```json
 {
@@ -550,7 +554,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 }
 ```
 
-**POST /api/v2/tls/certificate/generate** — Generate a self-signed certificate. Validity accepts duration strings like `30d`, `1y`, `8760h` (default: `365d`, min: `1d`, max: `10y`). SANs are auto-collected from configured host, base URL, and local network interfaces.
+**POST /api/v2/tls/certificate/generate** - Generate a self-signed certificate. Validity accepts duration strings like `30d`, `1y`, `8760h` (default: `365d`, min: `1d`, max: `10y`). SANs are auto-collected from configured host, base URL, and local network interfaces.
 
 ```json
 {
@@ -558,7 +562,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 }
 ```
 
-### Diagnostics (`diagnostics.go`)
+### Diagnostics (`system/diagnostics.go`)
 
 | Method | Route                            | Handler                  | Auth | Description                    |
 | ------ | -------------------------------- | ------------------------ | ---- | ------------------------------ |
@@ -566,6 +570,18 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | POST   | `/system/diagnostics/run`        | `RunDiagnostics`         | ✅   | Run full diagnostic suite      |
 | GET    | `/system/diagnostics/report/:id` | `GetDiagnosticsReport`   | ✅   | Retrieve completed report      |
 | GET    | `/system/diagnostics/errors`     | `GetRecentErrors`        | ✅   | Recent error log entries       |
+
+### Import (`imports/import.go`)
+
+| Method | Route                          | Handler              | Auth | Description                              |
+| ------ | ------------------------------ | -------------------- | ---- | ---------------------------------------- |
+| GET    | `/import/sources`              | `GetImportSources`   | ✅   | List auto-detected BirdNET-Pi databases and setup guidance |
+| POST   | `/import/validate`             | `ValidateImportSource` | ✅ | Probe a manually entered BirdNET-Pi database path |
+| POST   | `/import/elevate`              | `ElevateImport`      | ✅   | Stage an unreadable source via sudo elevation and launch import |
+| POST   | `/import/birdnet-pi`           | `StartBirdNETPiImport` | ✅   | Start a BirdNET-Pi import (`db-only`, or `db-audio` to also copy clips) |
+| GET    | `/import/jobs/:jobId/progress` | `StreamImportProgress` | ✅   | SSE progress stream for import job      |
+| POST   | `/import/jobs/:jobId/cancel`   | `CancelImport`         | ✅   | Cancel a running import                 |
+| GET    | `/import/status`               | `GetImportStatus`      | ✅   | Get current import status (polling)     |
 
 **GET /api/v2/system/diagnostics/status** - Returns the overall health status and per-category breakdown from the most recent diagnostic run. Returns `{"status": "unknown"}` if no diagnostics have been run yet.
 
@@ -579,52 +595,43 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 - ✅ = Authentication required
 - ✅ publicLiveAudio = Authentication required unless `PublicAccess.LiveAudio` is enabled (dynamic per-request check)
-- 🔑 token = Token-based access — the crypto-random `stream_token` returned by `/start` acts as the credential
+- 🔑 token = Token-based access - the crypto-random `stream_token` returned by `/start` acts as the credential
 - ❌ = No authentication required
 - ⚡ = Rate limited
 - 🔒 = Admin only (subset of authenticated)
 
 ## Adding New Endpoints
 
-### 1. Create Handler Function
+See `internal/api/v2/CLAUDE.md` for the full architecture and the "add a new
+domain" recipe. To add an endpoint to an EXISTING domain:
+
+### 1. Create the Handler method (on the domain's `*Handler`)
 
 ```go
+// internal/api/v2/<domain>/<domain>.go
 // HandlerName handles the endpoint description
-func (c *Controller) HandlerName(ctx echo.Context) error {
+func (c *Handler) HandlerName(ctx echo.Context) error {
     // Validate input
-    // Process request
-    // Return response
+    // Process request, using c.HandleError / c.CurrentSettings / dto.* etc.
     return ctx.JSON(http.StatusOK, response)
 }
 ```
 
-### 2. Register Route
-
-Add to appropriate `init*Routes()` function:
+### 2. Register the route in that domain's `RegisterRoutes`
 
 ```go
-func (c *Controller) initExampleRoutes() {
-    // Choose appropriate pattern based on authentication needs
-    c.Group.GET("/path", c.HandlerName)                                    // Public
-    c.Group.POST("/path", c.HandlerName, c.getEffectiveAuthMiddleware())   // Protected
+func (c *Handler) RegisterRoutes(g *echo.Group) {
+    // Choose the pattern based on authentication needs
+    g.GET("/path", c.HandlerName)                       // Public
+    g.POST("/path", c.HandlerName, c.AuthMiddleware)    // Protected
 }
 ```
 
-### 3. Add to Route Initializers
+No facade change is needed for a new endpoint in an existing domain. A brand-new
+domain additionally needs a `Controller` field, a `New(...)` call, and one ordered
+`RegisterRoutes` entry in `api.go:initRoutes()` (see CLAUDE.md Recipe B).
 
-Update `api.go:initRoutes()` if creating a new route category:
-
-```go
-routeInitializers := []struct {
-    name string
-    fn   func()
-}{
-    // ... existing routes ...
-    {"new category routes", c.initNewCategoryRoutes},
-}
-```
-
-### 4. Update Documentation
+### 3. Update Documentation
 
 - Add endpoint to this README.md
 - Add usage examples if complex
@@ -658,7 +665,7 @@ c.log.Info("operation completed",
 
 ### Authentication
 
-- Use `c.getEffectiveAuthMiddleware()` for protected endpoints
+- Apply the promoted `c.AuthMiddleware` field to protected endpoints
 - Consider IP bypass rules for local access
 - Use proper HTTP status codes (401 vs 403)
 
@@ -713,8 +720,8 @@ The `/notifications/stream` endpoint provides both notifications and toast messa
 
 **Event Types:**
 
-- `notification` - System notifications (errors, warnings, info — delivered to authenticated subscribers)
-- `toast` - Temporary UI messages (success, info, warning, error — authenticated only)
+- `notification` - System notifications (errors, warnings, info - delivered to authenticated subscribers)
+- `toast` - Temporary UI messages (success, info, warning, error - authenticated only)
 - `connected` - Connection established
 - `heartbeat` - Keep-alive signal
 
@@ -740,7 +747,7 @@ The `/notifications/stream` endpoint provides both notifications and toast messa
 
 ## Stream Health Monitoring API
 
-The Stream Health API provides comprehensive real-time monitoring of RTSP stream status, leveraging the FFmpeg error detection system from PR #1380. These endpoints are **settings-page only** — they are consumed by the `StreamManager` component in the audio settings page and all require authentication, so the example `curl` calls below must be accompanied by the usual session cookie or bearer token. They are not called from the public dashboard.
+The Stream Health API provides comprehensive real-time monitoring of RTSP stream status, leveraging the FFmpeg error detection system from PR #1380. These endpoints are **settings-page only** - they are consumed by the `StreamManager` component in the audio settings page and all require authentication, so the example `curl` calls below must be accompanied by the usual session cookie or bearer token. They are not called from the public dashboard.
 
 ### Key Features
 
@@ -993,7 +1000,7 @@ Updates are sent only when changes are detected, reducing bandwidth compared to 
 
 ### Integration Tips
 
-1. **Choose the Right Endpoint** (all require authentication — settings page only):
+1. **Choose the Right Endpoint** (all require authentication - settings page only):
    - Use SSE (`/streams/health/stream`) for real-time settings-page monitoring
    - Use REST polling (`/streams/status`) for periodic background checks on the settings page
    - Use REST (`/streams/health/:url`) for on-demand detailed diagnostics

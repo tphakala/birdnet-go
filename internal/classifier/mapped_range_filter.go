@@ -5,6 +5,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 // mappedRangeFilter wraps an inference.RangeFilter whose output indices correspond
@@ -22,20 +23,32 @@ type mappedRangeFilter struct {
 	geomodelIndex   map[string]int // label -> index for O(1) lookup
 }
 
+// canonicalSpeciesKey returns the match key for a model label: its scientific
+// name (the part before the first underscore in "ScientificName_CommonName"),
+// resolved through the OpenFauna taxonomic alias map and lowercased. Normalizing
+// both the geomodel and the classifier sides to the canonical name lets a legacy
+// classifier label (e.g. BirdNET v2.4 "Streptopelia senegalensis") match the
+// geomodel's current name for the same taxon ("Spilopelia senegalensis"), instead
+// of being treated as unmapped and silently filtered out when the geomodel uses a
+// newer taxonomy than the classifier. A non-aliased name resolves to itself, so
+// this is a no-op for species without a reclassification.
+func canonicalSpeciesKey(label string) string {
+	sci := detection.ExtractScientificName(label)
+	return strings.ToLower(openfauna.CanonicalName(sci))
+}
+
 // buildSpeciesMapping creates the classifier-to-geomodel index mapping by
-// matching scientific names (the part before the first underscore in
-// "ScientificName_CommonName" labels). The match is case-insensitive.
+// matching scientific names. Matching is case-insensitive and alias-aware (see
+// canonicalSpeciesKey).
 func buildSpeciesMapping(classifierLabels, geomodelLabels []string) []int {
 	geoIndex := make(map[string]int, len(geomodelLabels))
 	for i, label := range geomodelLabels {
-		sci := detection.ExtractScientificName(label)
-		geoIndex[strings.ToLower(sci)] = i
+		geoIndex[canonicalSpeciesKey(label)] = i
 	}
 
 	mapping := make([]int, len(classifierLabels))
 	for i, label := range classifierLabels {
-		sci := detection.ExtractScientificName(label)
-		if idx, ok := geoIndex[strings.ToLower(sci)]; ok {
+		if idx, ok := geoIndex[canonicalSpeciesKey(label)]; ok {
 			mapping[i] = idx
 		} else {
 			mapping[i] = -1

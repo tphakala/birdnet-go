@@ -50,17 +50,20 @@ func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 			result := p.createDetectionResult(p.Settings,
 				time.Now(),
 				time.Now(), time.Now().Add(3*time.Second),
-				"Parus major", "Great Tit", "gretit1",
+				"Parus major", "Great Tit", "gretit1", "",
 				0.95,
 				datastore.AudioSource{ID: "test", DisplayName: "Test"},
 				"clip.wav",
 				100*time.Millisecond, 0.5,
 				tc.modelID,
+				"Parus major_Great Tit_gretit1",
 			)
 
 			assert.Equal(t, tc.expectedName, result.Model.Name)
 			assert.Equal(t, tc.expectedVersion, result.Model.Version)
 			assert.Equal(t, tc.expectedVariant, result.Model.Variant)
+			assert.Equal(t, "Parus major_Great Tit_gretit1", result.RawLabel,
+				"createDetectionResult must set RawLabel from the passed raw label")
 		})
 	}
 }

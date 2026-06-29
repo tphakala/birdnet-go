@@ -1,107 +1,174 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { waitFor, cleanup, fireEvent } from '@testing-library/svelte';
-import { createComponentTestFactory } from '../../../../../test/render-helpers';
-import { api } from '$lib/utils/api';
-import Analytics from './Analytics.svelte';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 
-// api.get is the data source we drive for the race.
-vi.mock('$lib/utils/api', () => ({
-  api: { get: vi.fn() },
-  ApiError: class ApiError extends Error {},
+// Replace the real registry (which mounts heavy D3 charts) with stub charts so
+// the hub test focuses on tab/URL behavior and active-tab mounting.
+vi.mock('../registry/charts', async () => {
+  const StubChart = (await import('../components/__tests__/StubChart.svelte')).default;
+  const make = (id: string, group: string) => ({
+    id,
+    group,
+    titleKey: `title.${id}`,
+    descKey: `desc.${id}`,
+    emptyKey: `empty.${id}`,
+    emptyHintKey: `emptyHint.${id}`,
+    component: StubChart,
+    fetch: vi.fn().mockResolvedValue([{ a: 1 }, { a: 2 }]),
+    size: 'full' as const,
+    supports: { species: group !== 'biodiversity', source: false },
+  });
+  const defs = [
+    make('time-of-day-species', 'patterns'),
+    make('daily-species-trend', 'trends'),
+    make('species-diversity', 'biodiversity'),
+  ];
+  return {
+    CHART_REGISTRY: defs,
+    chartsForGroup: (g: string) => defs.filter(d => d.group === g),
+    groupHasCharts: (g: string) => defs.some(d => d.group === g),
+  };
+});
+
+// Stub the Overview panel: its data fetching / D3 are out of scope for the hub's
+// tab and URL-state behavior. The hub renders it for the (default) Overview tab.
+vi.mock('../components/AnalyticsOverview.svelte', async () => ({
+  default: (await import('../components/__tests__/StubOverview.svelte')).default,
 }));
 
-// D3 charts and source badge are irrelevant to the fetch-sequence logic and
-// pull in heavy/contextual dependencies, so stub them out.
-vi.mock('../components/charts/d3/BarChart.svelte');
-vi.mock('../components/charts/d3/LineChart.svelte');
-vi.mock('../components/charts/d3/NewSpeciesTimelineChart.svelte');
-vi.mock('$lib/desktop/features/dashboard/components/SourceBadge.svelte');
+import Analytics from './Analytics.svelte';
 
-const analyticsTest = createComponentTestFactory(Analytics);
+const PATH = '/ui/analytics';
 
-// Sentinel scientific names referenced by both the mock data and the assertions,
-// so a typo cannot silently desync the two.
-const FRESH_SCIENTIFIC = 'Fresh-sci';
-const STALE_SCIENTIFIC = 'Stale-sci';
+// The shared setup mocks window.location with a plain (writable) object that
+// does NOT reflect history.pushState. So we set location fields directly to
+// simulate the address bar, and spy on history to assert what the hub writes.
+function setLocation(search: string): void {
+  window.location.pathname = PATH;
+  window.location.search = search;
+}
 
-describe('Analytics fetch-sequence race (#978)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(api.get).mockReset();
+function mockFetch() {
+  return vi.fn(async (url: string) => {
+    if (typeof url === 'string' && url.includes('/analytics/species/summary')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [
+          { scientific_name: 'Turdus merula', common_name: 'Common Blackbird', count: 120 },
+          { scientific_name: 'Parus major', common_name: 'Great Tit', count: 80 },
+        ],
+      } as unknown as Response;
+    }
+    return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+  });
+}
+
+let pushSpy: ReturnType<typeof vi.spyOn>;
+let replaceSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  setLocation('');
+  globalThis.fetch = mockFetch() as unknown as typeof fetch;
+  pushSpy = vi.spyOn(window.history, 'pushState');
+  replaceSpy = vi.spyOn(window.history, 'replaceState');
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  setLocation('');
+});
+
+const tab = (name: string) => screen.getByRole('tab', { name });
+const pushedUrls = (): string[] => pushSpy.mock.calls.map((c: unknown[]) => String(c[2]));
+
+describe('Analytics hub: tabs, URL state, active-tab mounting', () => {
+  it('lands on the Overview tab by default and mounts the overview panel', async () => {
+    render(Analytics);
+    await tick();
+
+    expect(tab('analytics.hub.tabs.overview')).toHaveAttribute('aria-selected', 'true');
+
+    // Overview renders the panel; no chart tab is mounted.
+    expect(screen.getByTestId('stub-overview')).toBeInTheDocument();
+    expect(document.querySelector('#time-of-day-species')).not.toBeInTheDocument();
+    expect(document.querySelector('#species-diversity')).not.toBeInTheDocument();
   });
 
-  afterEach(() => {
-    cleanup();
+  it('switches tabs, writes ?tab= to the URL, and swaps which content is mounted', async () => {
+    render(Analytics);
+    await tick();
+
+    await fireEvent.click(tab('analytics.hub.tabs.trends'));
+    await tick();
+
+    expect(pushedUrls().some(u => u.includes('tab=trends'))).toBe(true);
+    expect(document.querySelector('#daily-species-trend')).toBeInTheDocument();
+    expect(screen.queryByTestId('stub-overview')).not.toBeInTheDocument();
   });
 
-  // Regression: a slower earlier fetchData() run must not overwrite a newer run's
-  // data. The fix stamps each run with analyticsFetchSeq and each fetcher commits
-  // only when its captured token still matches the latest run.
-  it('does not let a stale recent-detections response overwrite a newer run', async () => {
-    let recentCalls = 0;
-    let resolveStaleRecent!: (value: unknown) => void;
-    const staleRecent = new Promise<unknown>(resolve => {
-      resolveStaleRecent = resolve;
-    });
+  it('restores the Overview tab on Back/Forward to the tab-less URL (popstate)', async () => {
+    render(Analytics);
+    await tick();
 
-    vi.mocked(api.get).mockImplementation((url: string): Promise<unknown> => {
-      if (url.includes('/api/v2/detections/recent')) {
-        recentCalls += 1;
-        // First run's recent fetch is held in flight; the second resolves at once.
-        if (recentCalls === 1) return staleRecent;
-        return Promise.resolve([
-          {
-            id: 'fresh',
-            timestamp: '2024-01-02T08:00:00',
-            commonName: 'Fresh Bird',
-            scientificName: FRESH_SCIENTIFIC,
-            confidence: 0.9,
-          },
-        ]);
-      }
-      if (url.includes('/api/v2/analytics/time/daily')) {
-        return Promise.resolve({ data: [] });
-      }
-      // summary, hourly distribution, new species all accept an empty array.
-      return Promise.resolve([]);
-    });
+    await fireEvent.click(tab('analytics.hub.tabs.biodiversity'));
+    await tick();
+    expect(document.querySelector('#species-diversity')).toBeInTheDocument();
 
-    const { container } = analyticsTest.render({});
+    // Simulate the browser Back button returning to the tab-less URL.
+    setLocation('');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await tick();
 
-    // The initial run (on mount) fires all six fetchers; the recent one is held.
-    await waitFor(() => {
-      expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThanOrEqual(6);
-    });
+    expect(tab('analytics.hub.tabs.overview')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('stub-overview')).toBeInTheDocument();
+    expect(document.querySelector('#species-diversity')).not.toBeInTheDocument();
+  });
 
-    // Trigger a second fetchData() via the filter form while run 1 is still in
-    // flight (submitting the form bypasses the loading-disabled button).
-    const form = container.querySelector('form');
-    expect(form).not.toBeNull();
-    await fireEvent.submit(form as HTMLFormElement);
+  it('restores the active tab from the initial URL on load (reload)', async () => {
+    setLocation('?tab=trends');
+    render(Analytics);
+    await tick();
 
-    // Run 2 resolves and renders the fresh detection.
-    await waitFor(() => {
-      expect(container.textContent).toContain(FRESH_SCIENTIFIC);
-    });
+    expect(tab('analytics.hub.tabs.trends')).toHaveAttribute('aria-selected', 'true');
+    expect(document.querySelector('#daily-species-trend')).toBeInTheDocument();
+  });
 
-    // The stale run-1 recent response now arrives; the sequence guard must drop it.
-    resolveStaleRecent([
-      {
-        id: 'stale',
-        timestamp: '2024-01-01T08:00:00',
-        commonName: 'Stale Bird',
-        scientificName: STALE_SCIENTIFIC,
-        confidence: 0.5,
-      },
-    ]);
-    // Flush the production stale-handling path: await the promise it awaits, then
-    // a macrotask so every microtask hop (the sequence guard, state commit) and
-    // the Svelte DOM flush complete before asserting absence. A microtask-only
-    // flush (await tick) under-drains and lets the negative assertion fire early.
-    await staleRecent;
-    await new Promise(resolve => setTimeout(resolve, 0));
+  it('shows a coming-soon placeholder for tabs without charts', async () => {
+    render(Analytics);
+    await tick();
 
-    expect(container.textContent).toContain(FRESH_SCIENTIFIC);
-    expect(container.textContent).not.toContain(STALE_SCIENTIFIC);
+    await fireEvent.click(tab('analytics.hub.tabs.quality'));
+    await tick();
+
+    await waitFor(() =>
+      expect(screen.getByText('analytics.hub.comingSoon.description')).toBeInTheDocument()
+    );
+    expect(document.querySelector('#time-of-day-species')).not.toBeInTheDocument();
+  });
+
+  it('does not auto-select species on the Overview tab (keeps the URL clean)', async () => {
+    render(Analytics);
+    // Let the species summary resolve; the Overview tab must not write a species param.
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await tick();
+    expect(replaceSpy.mock.calls.some((c: unknown[]) => String(c[2]).includes('species='))).toBe(
+      false
+    );
+  });
+
+  it('auto-selects top species into the URL when a species-driven tab is opened', async () => {
+    render(Analytics);
+    await tick();
+
+    await fireEvent.click(tab('analytics.hub.tabs.patterns'));
+
+    // Auto-select writes species via replaceState once the summary resolves.
+    await waitFor(() =>
+      expect(replaceSpy.mock.calls.some((c: unknown[]) => String(c[2]).includes('species='))).toBe(
+        true
+      )
+    );
   });
 });

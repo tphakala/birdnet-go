@@ -100,8 +100,8 @@ func TestPerModelInferenceLatencyCheck_Healthy(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 100, P99MS: 200, WindowMS: 1500},
-			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 300, P99MS: 600, WindowMS: 2500},
+			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 100, P95MS: 200, WindowMS: 1500},
+			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 300, P95MS: 600, WindowMS: 2500},
 		}
 	})
 
@@ -116,7 +116,7 @@ func TestPerModelInferenceLatencyCheck_Warning(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 100, P99MS: 800, WindowMS: 1500},
+			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 100, P95MS: 800, WindowMS: 1500},
 		}
 	})
 
@@ -130,7 +130,7 @@ func TestPerModelInferenceLatencyCheck_Critical(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 500, P99MS: 2300, WindowMS: 2500},
+			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 500, P95MS: 2300, WindowMS: 2500},
 		}
 	})
 
@@ -144,8 +144,8 @@ func TestPerModelInferenceLatencyCheck_MixedStatus(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 50, P99MS: 100, WindowMS: 1500},
-			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 500, P99MS: 2300, WindowMS: 2500},
+			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 50, P95MS: 100, WindowMS: 1500},
+			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 500, P95MS: 2300, WindowMS: 2500},
 		}
 	})
 
@@ -181,7 +181,7 @@ func TestPerModelInferenceLatencyCheck_ZeroWindow(t *testing.T) {
 	t.Parallel()
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
-			{ModelID: "Test", ModelName: "Test Model", AvgMS: 100, P99MS: 200, WindowMS: 0},
+			{ModelID: "Test", ModelName: "Test Model", AvgMS: 100, P95MS: 200, WindowMS: 0},
 		}
 	})
 
@@ -195,11 +195,11 @@ func TestPerModelInferenceLatencyCheck_CorrectWindowPerModel(t *testing.T) {
 	check := NewPerModelInferenceLatencyCheck(func() []ModelInferenceInfo {
 		return []ModelInferenceInfo{
 			// BirdNET v2.4: 3s clips, 50% overlap -> 1500ms window
-			// 800ms p99 / 1500ms = 53% -> Warning
-			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 400, P99MS: 800, WindowMS: 1500},
+			// 800ms p95 / 1500ms = 53% -> Warning
+			{ModelID: "BirdNET_V2.4", ModelName: "BirdNET v2.4", AvgMS: 400, P95MS: 800, WindowMS: 1500},
 			// Perch V2: 5s clips, 50% overlap -> 2500ms window
-			// 800ms p99 / 2500ms = 32% -> Healthy
-			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 400, P99MS: 800, WindowMS: 2500},
+			// 800ms p95 / 2500ms = 32% -> Healthy
+			{ModelID: "Perch_V2", ModelName: "Perch V2", AvgMS: 400, P95MS: 800, WindowMS: 2500},
 		}
 	})
 
@@ -249,6 +249,43 @@ func TestORTAvailabilityCheck_FoundNotInitialized(t *testing.T) {
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusHealthy, result.Status)
 	assert.Contains(t, result.Message, "not yet initialized")
+}
+
+func TestOpenVINOAvailabilityCheck_NotSupported(t *testing.T) {
+	t.Parallel()
+	// Default build: OpenVINO not compiled in. The check stays silent (skipped)
+	// rather than reporting an always-"inactive" line.
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return false, false })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
+func TestOpenVINOAvailabilityCheck_Active(t *testing.T) {
+	t.Parallel()
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return true, true })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+	// "backend active" is unique to the active message; the not-in-use message also
+	// contains the bare token "active" ("ONNX Runtime active"), so asserting the
+	// full phrase catches a flag inversion that "active" alone would not.
+	assert.Contains(t, result.Message, "backend active")
+}
+
+func TestOpenVINOAvailabilityCheck_SupportedNotInUse(t *testing.T) {
+	t.Parallel()
+	// Built with the openvino tag but no classifier is running on it (the core may
+	// have loaded for device probing, but inference fell back to ORT).
+	check := NewOpenVINOAvailabilityCheck(func() (bool, bool) { return true, false })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+	assert.Contains(t, result.Message, "not in use")
+}
+
+func TestOpenVINOAvailabilityCheck_NilProvider(t *testing.T) {
+	t.Parallel()
+	check := NewOpenVINOAvailabilityCheck(nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
 }
 
 // --- Helper tests ---

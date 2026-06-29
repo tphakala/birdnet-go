@@ -520,6 +520,11 @@ func (m *mockLabelRepository) GetByScientificNames(_ context.Context, names []st
 	return result, nil
 }
 
+// UpdateLabelType implements LabelRepository (no-op for testing).
+func (m *mockLabelRepository) UpdateLabelType(_ context.Context, _, _ uint) error {
+	return nil
+}
+
 // mockAudioSourceRepository is a simple mock for testing ResolveLocationsToSourceIDs
 type mockAudioSourceRepository struct {
 	sources map[string][]*entities.AudioSource

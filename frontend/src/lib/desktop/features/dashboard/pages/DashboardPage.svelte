@@ -687,7 +687,6 @@ Performance Optimizations:
       // Handle specific event types
       eventSource.addEventListener('connected', (event: Event) => {
         try {
-          // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           logger.debug('Connected event received:', data);
@@ -698,7 +697,6 @@ Performance Optimizations:
 
       eventSource.addEventListener('detection', (event: Event) => {
         try {
-          // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           handleSSEDetection(data);
@@ -709,7 +707,6 @@ Performance Optimizations:
 
       eventSource.addEventListener('heartbeat', (event: Event) => {
         try {
-          // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           logger.debug('Heartbeat event received, clients:', data.clients);
@@ -720,7 +717,6 @@ Performance Optimizations:
 
       eventSource.addEventListener('pending', (event: Event) => {
         try {
-          // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           if (Array.isArray(data)) {

@@ -344,7 +344,7 @@ func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string
 // plus this score-1.0 entry) when the two carry different label strings; that is
 // expected. The score-1.0 entry must be kept so the species reads as
 // always-active, and same-taxon near-duplicates are collapsed for the user at
-// the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range.go),
+// the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range/range.go),
 // not here, so the functional inclusion set keeps every scientific name.
 func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
 	seen := make(map[string]bool, len(*speciesScores))

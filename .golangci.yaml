@@ -10,6 +10,15 @@ linters:
     rules:
       - path: frontend/
         text: ".*"
+      # The OpenVINO cgo binding passes Go pointer addresses (&var) into C
+      # output parameters, so go tool cgo emits _cgoCheckPointer(_, 0 == 0)
+      # safety checks. gocritic's dupSubExpr flags that generated "0 == 0" and
+      # maps it back to the source call lines. The finding is in cgo-generated
+      # code, not handwritten code, so it is excluded for this file only.
+      - path: internal/inference/openvino/backend_openvino.go
+        text: "dupSubExpr"
+        linters:
+          - gocritic
   enable:
     # Existing linters
     - copyloopvar

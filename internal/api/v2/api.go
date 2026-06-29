@@ -2,49 +2,55 @@
 package api
 
 import (
-	"context"
-	"crypto/rand"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
+	"github.com/tphakala/birdnet-go/internal/api/v2/analytics"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/app"
+	audioapi "github.com/tphakala/birdnet-go/internal/api/v2/audio"
+	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	"github.com/tphakala/birdnet-go/internal/api/v2/control"
+	"github.com/tphakala/birdnet-go/internal/api/v2/detections"
+	"github.com/tphakala/birdnet-go/internal/api/v2/dynamicthresholds"
+	"github.com/tphakala/birdnet-go/internal/api/v2/filesystem"
+	importsapi "github.com/tphakala/birdnet-go/internal/api/v2/imports"
+	"github.com/tphakala/birdnet-go/internal/api/v2/integrations"
+	mediaapi "github.com/tphakala/birdnet-go/internal/api/v2/media"
+	"github.com/tphakala/birdnet-go/internal/api/v2/models"
+	"github.com/tphakala/birdnet-go/internal/api/v2/notifications"
+	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
+	"github.com/tphakala/birdnet-go/internal/api/v2/species"
+	"github.com/tphakala/birdnet-go/internal/api/v2/sse"
+	"github.com/tphakala/birdnet-go/internal/api/v2/support"
+	"github.com/tphakala/birdnet-go/internal/api/v2/system"
+	tlsapi "github.com/tphakala/birdnet-go/internal/api/v2/tls"
+	"github.com/tphakala/birdnet-go/internal/api/v2/weather"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
-	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
-	"github.com/tphakala/birdnet-go/internal/ebird"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"github.com/tphakala/birdnet-go/internal/securefs"
-	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
-
-// Tunnel provider constant for unknown providers
-const tunnelProviderUnknown = "unknown"
 
 // apiV2Prefix is the base path prefix for all v2 API routes (the Echo group
 // prefix; see Controller.Group). It is the single source of truth used to
@@ -52,126 +58,200 @@ const tunnelProviderUnknown = "unknown"
 // allow-list in isPrivateModeExempt cannot drift from the registered routes.
 const apiV2Prefix = "/api/v2"
 
-// Controller manages the API routes and handlers
+// Controller manages the API routes and handlers. It embeds the shared
+// substrate *apicore.Core BY POINTER so every exported Core member (deps,
+// settings accessors, error/log helpers, shared middleware, SSE hub and
+// broadcasters) promotes onto *Controller and external callers keep working.
+// Core holds atomic/lock-bearing fields, so it MUST be embedded by pointer and
+// never copied by value; a single Core is constructed once in NewWithOptions
+// and shared by this pointer.
 type Controller struct {
-	Echo  *echo.Echo
-	Group *echo.Group
-	DS    datastore.Interface           // Deprecated: Use Repo for new detection operations
-	Repo  datastore.DetectionRepository // New: Preferred for detection CRUD operations
-	// Settings holds this controller's settings snapshot as a lock-free atomic
-	// pointer (copy-on-write). Update handlers publish a fresh *conf.Settings via
-	// Settings.Store under settingsMutex; every reader Loads it, directly or
-	// through the currentSettings()/controllerSettings() accessors. Storing it
-	// atomically (rather than as a plain *conf.Settings field) is what lets
-	// newErrorResponse read it from HandleError while UpdateSettings holds
-	// settingsMutex.Lock without deadlocking on a non-reentrant RLock. The sibling
-	// engine and audioWatchdog fields use the same atomic-pointer pattern.
-	Settings       atomic.Pointer[conf.Settings]
-	BirdImageCache *imageprovider.BirdImageCache
-	SunCalc        *suncalc.SunCalc
-	Processor      *processor.Processor
-	EBirdClient    *ebird.Client
-	TaxonomyDB     *classifier.TaxonomyDatabase
-	// guideCache is the species guide cache. The controller is its canonical
-	// owner (hot-reload swaps it in), guarded by guideCacheMu. May be nil when
-	// the feature is disabled.
+	*apicore.Core
+
+	// Domain handlers. Each owns a slice of the API surface and embeds the same
+	// *apicore.Core; the facade constructs them once and calls their
+	// RegisterRoutes in the deterministic order initRoutes defines.
+	weather *weather.Handler
+
+	// tlsHandler serves the /api/v2/tls/* certificate endpoints. It is named
+	// tlsHandler (not tls) and the domain package is imported as tlsapi to avoid
+	// colliding with the crypto/tls standard package. Unlike weather it also holds
+	// the facade's settings-save machinery (see NewWithOptions) because TLS writes
+	// mutate persisted settings.
+	tlsHandler *tlsapi.Handler
+
+	// integrations serves the /api/v2/integrations/* endpoints (MQTT status/test,
+	// MQTT TLS certificate management, BirdWeather/weather-provider/eBird
+	// connectivity tests, and the Home Assistant discovery trigger). Like the TLS
+	// handler it also holds the facade's settings-save machinery (see
+	// NewWithOptions) because the MQTT TLS certificate writes mutate persisted
+	// settings; the remaining deps (Metrics, Processor, settings accessors, and the
+	// error/log helpers) all promote from the shared *apicore.Core.
+	integrations *integrations.Handler
+
+	// detections serves the /api/v2/detections/* CRUD/review/lock/ignore/batch
+	// endpoints and POST /api/v2/search. Besides the shared *apicore.Core it holds
+	// the facade's settings-save machinery (the exclude-list mutation persists
+	// settings) plus facade-owned function dependencies still owned by package api
+	// until their domains are extracted: the auth check (isClientAuthenticated) and
+	// the cached name-map accessors (loadCommonNameMap/loadCommonToScientificMap).
+	detections *detections.Handler
+
+	// rangeHandler serves the /api/v2/range/* endpoints (range-filter status,
+	// species scores/count/list/CSV, test, rebuild). It is named rangeHandler
+	// because "range" is a Go reserved word; the domain package is imported as
+	// rangeapi. Like weather it needs only the shared *apicore.Core.
+	rangeHandler *rangeapi.Handler
+
+	// species serves the /api/v2/species/* and /api/v2/taxonomy/* endpoints
+	// (species info, rarity, the all-species picker, the dictionary, thumbnails,
+	// and genus/family/tree lookups). Besides the shared *apicore.Core it receives
+	// two facade-owned function dependencies: a read accessor over the shared
+	// scientific-to-common name map (loadCommonNameMap) and the media domain's
+	// species-image proxy handler (ServeSpeciesImageProxy), both still owned by
+	// package api until their domains are extracted.
+	species *species.Handler
+
+	// models serves the /api/v2/models/* endpoints (listing enabled classifier
+	// models, browsing the gallery catalog, and install/reinstall/uninstall plus
+	// streamed download progress). Like weather it needs only the shared
+	// *apicore.Core (ModelManager, settings, error/log helpers, goroutine plumbing).
+	models *models.Handler
+
+	// support serves the /api/v2/support/* endpoints (generating a diagnostic
+	// support dump, downloading it, and reporting telemetry status). Like weather
+	// it needs only the shared *apicore.Core (settings, datastore, V2 manager,
+	// error/log helpers, goroutine plumbing).
+	support *support.Handler
+
+	// filesystem serves the /api/v2/filesystem/* endpoints (the secure
+	// file-browser endpoint backing the frontend directory picker). Like weather
+	// it needs only the shared *apicore.Core (the media SecureFS sandbox, the auth
+	// middleware, and the error/log helpers all promote from it).
+	filesystem *filesystem.Handler
+
+	// dynamicThresholds serves the /api/v2/dynamic-thresholds* endpoints (BG-59:
+	// reading the merged runtime threshold data from the database and processor
+	// memory, aggregate stats, per-species lookups and event history, plus the
+	// protected single and bulk reset controls). Like weather it needs only the
+	// shared *apicore.Core (DS, Processor, AuthMiddleware, settings, and the
+	// error/log helpers all promote from it).
+	dynamicThresholds *dynamicthresholds.Handler
+
+	// alerts serves the /api/v2/alerts/* endpoints (alert-rule CRUD,
+	// import/export, history, schema, and test-fire). Beyond the shared
+	// *apicore.Core it OWNS its two domain dependencies (the alert-rule
+	// repository and the alerting engine), which it constructs lazily in
+	// RegisterRoutes when the enhanced v2 database schema is active. The facade
+	// calls c.alerts.Shutdown() during teardown to stop the engine and its
+	// global event bus.
+	alerts *alerts.Handler
+
+	// control serves the /api/v2/control/* endpoints (restart analysis, reload
+	// model, rebuild range filter, restart server/container, restart a single
+	// audio source, and list actions). Beyond the shared *apicore.Core it OWNS
+	// sourceRestarter (set via the SetSourceRestarter facade delegator) and
+	// receives the shared controlChan as a send-only injection (the facade keeps
+	// the bidirectional field because the settings domain also sends on it and
+	// internal/analysis owns and closes it).
+	control *control.Handler
+
+	// audio serves the audio/streaming domain: the live audio-level SSE stream and
+	// stream-source listing, the HLS streaming endpoints (incl. the bespoke
+	// stream-token playlist/segment serving and the publicLiveAudio dynamic auth
+	// gate), the stream health/test endpoints, quiet-hours status, the audio
+	// liveness health endpoint, and the /system/audio device/source endpoints.
+	// Beyond the shared *apicore.Core it owns the HLS manager and audio-level
+	// broadcaster singletons; the facade exposes RestartHLSStreams/SetAudioWatchdog/
+	// SetAudioLevelChan delegators for the internal/analysis and parent-server
+	// callers.
+	audio *audioapi.Handler
+
+	controlChan chan string
+
+	// guideCache is the species guide cache. The facade is its canonical owner
+	// (hot-reload swaps it in via SetGuideCache), guarded by guideCacheMu. May be
+	// nil when the feature is disabled.
 	guideCache   *guideprovider.GuideCache
 	guideCacheMu sync.RWMutex
 	// guideRarity* memoize the daily probable-species score map (normalized
 	// scientific name -> score) for the guide expectedness badge, so a burst of
-	// guide requests doesn't re-run the geomodel prediction per call. The memo is
-	// keyed on the configured location (guideRarityLocKey) as well as the TTL, so a
-	// location change invalidates it immediately instead of serving a stale map for
-	// up to the TTL window.
+	// guide requests doesn't re-run the geomodel prediction per call. Keyed on the
+	// configured location (guideRarityLocKey) and the TTL so a location change
+	// invalidates it immediately.
 	guideRarityMu     sync.RWMutex
 	guideRarityExpiry time.Time
 	guideRarityScores map[string]float64
 	guideRarityLocKey string
-	controlChan       chan string
-	shutdownRequester ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
-	shutdownMu        sync.RWMutex      // protects shutdownRequester
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
 	// Thread-safe: should be set before controller initialization.
-	DisableSaveSettings  bool         // disables disk persistence of settings
-	isGlobalOwner        bool         // true when this controller owns the global settings singleton
-	settingsMutex        sync.RWMutex // Serializes the read-modify-write in settings update handlers; reads are lock-free via the atomic Settings pointer
-	detectionCache       *cache.Cache // Cache for detection queries
-	startTime            *time.Time
-	SFS                  *securefs.SecureFS     // Add SecureFS instance
-	apiLogger            logger.Logger          // Structured logger for API operations
-	securityLogger       logger.Logger          // Logger scoped to the "security" module for authentication events
-	metrics              *observability.Metrics // Shared metrics instance
-	spectrogramGenerator *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
+	DisableSaveSettings bool         // disables disk persistence of settings
+	isGlobalOwner       bool         // true when this controller owns the global settings singleton
+	settingsMutex       sync.RWMutex // Serializes the read-modify-write in settings update handlers; reads are lock-free via the atomic Settings pointer
 
-	// Auth related fields (injected from server via functional options)
-	authService    auth.Service        // Authentication service (injected from server)
-	authMiddleware echo.MiddlewareFunc // Authentication middleware function (injected from server)
+	startTime *time.Time
 
-	// notificationService is the notification service this controller uses. It is
-	// nil in production, where getNotificationService() falls back to the
-	// process-global singleton (notification.GetService()). Tests inject an
-	// isolated per-test instance via WithNotificationService so each test gets its
-	// own config and store without touching the global singleton.
+	// media serves the media domain: media-file serving (audio clips and
+	// spectrogram images from the SecureFS sandbox), on-demand spectrogram
+	// generation, the ID-based audio/spectrogram endpoints (including the greedy
+	// GET /api/v2/audio/:id route on c.Echo), clip extraction and audio
+	// processing, the cached bird-image proxy (ServeSpeciesImageProxy, injected
+	// into the species handler), and the external-media mount-status endpoint.
+	// Beyond the shared *apicore.Core it owns the audio-processing cache and
+	// concurrency limiter and the spectrogram generator. It is constructed BEFORE
+	// the species handler because species injects c.media.ServeSpeciesImageProxy.
+	media *mediaapi.Handler
+
+	// authService is the authentication service injected from server (via the
+	// WithAuthService functional option). The facade keeps it as the injection
+	// source and hands the same value to the auth domain handler.
+	authService auth.Service
+
+	// authHandler serves the /api/v2/auth/* endpoints (login, OAuth callback,
+	// logout, auth status). Beyond the shared *apicore.Core it receives the
+	// facade-injected authService. It is constructed AFTER the functional options
+	// are applied so authService reflects WithAuthService (see NewWithOptions).
+	authHandler *authapi.Handler
+
+	// notificationService is the notification service the facade injects into the
+	// domain handlers. It is nil in production, where each handler's
+	// getNotificationService() accessor falls back to the process-global singleton
+	// (notification.GetService()). Tests inject an isolated per-test instance via
+	// WithNotificationService so each test gets its own config and store without
+	// touching the global singleton. The facade keeps this field because the toast
+	// helpers (toast_helpers.go) read it directly and the same value is handed to
+	// the notifications, imports, and app domain handlers below.
 	notificationService *notification.Service
 
-	// Metrics history store for sparkline data
-	metricsStore observability.MetricsStore
+	// notifications serves the /api/v2/notifications/* endpoints (list, unread
+	// count, SSE notification+toast stream, per-item mutations, the test
+	// new-species trigger, and the NTFY connectivity probe). Beyond the shared
+	// *apicore.Core it receives the facade-injected notificationService and
+	// authService. It is constructed AFTER the functional options are applied so
+	// both services reflect WithNotificationService / WithAuthService (see
+	// NewWithOptions).
+	notifications *notifications.Handler
 
-	// Detection rate cache for database overview endpoint
-	detectionRateCache *datastore.DetectionRateCache
+	// sse serves the SSE stream endpoints (/api/v2/detections/stream,
+	// /api/v2/soundlevels/stream, /api/v2/sse/status). It needs only the shared
+	// *apicore.Core: the SSE hub (SSEManager), the write primitives and the stream
+	// scaffolding (SendSSEHeartbeat/LogSSEConnection/SendConnectionMessage) all
+	// promote from the embedded core. The hub itself stays in apicore.
+	sse *sse.Handler
 
-	// SSE related fields
-	sseManager *SSEManager // Manager for Server-Sent Events connections
-
-	// Cleanup related fields
-	ctx    context.Context    // Context for managing goroutines
-	cancel context.CancelFunc // Cancel function for graceful shutdown
-
-	// Goroutine lifecycle management
-	wg sync.WaitGroup // tracks background goroutines for clean shutdown
-
-	// Audio level channel for SSE streaming
-	// TODO: Consider moving to a dedicated audio manager
-	audioLevelChan chan audiocore.AudioLevelData
-
-	// engine provides access to the unified audio subsystem (sources, buffers, routing).
-	// Stored atomically: written once via WithAudioEngine after Controller init,
-	// read concurrently by HTTP handlers.
-	engine atomic.Pointer[engine.AudioEngine]
-
-	// V2Manager provides access to the v2 normalized database for stats and backup
-	V2Manager datastoreV2.Manager
-
-	// Application metadata repository (initialized lazily in initAppRoutes)
-	appMetadataRepo repository.AppMetadataRepository
-
-	// Alerting fields (initialized lazily in initAlertRoutes)
-	alertRuleRepo repository.AlertRuleRepository
-	alertEngine   *alerting.Engine
-
-	// Insights fields (initialized lazily in initInsightsRoutes)
-	insightsRepo repository.InsightsRepository
-	nameMaps     atomic.Value // stores *nameMaps; see internal/api/v2/insights.go
-	// nameResolver is the authoritative localized name source shared with the
-	// classifier orchestrator. Overrides label-derived names in the cached maps.
-	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
-
-	// Model gallery fields
-	ModelManager *classifier.ModelManager
-
-	// Audio processing fields
-	processingCache     *processingCache
-	processingSemaphore chan struct{}
-
-	// probeStreamInfo probes a live stream's audio characteristics for the
-	// stream-test endpoint. Nil in production, where TestStream falls back to
-	// ffmpeg.ProbeStreamInfo; tests set it to stub probing without ffprobe.
-	probeStreamInfo probeStreamInfoFunc
-
-	// Legacy cleanup state tracker
-	cleanupStatus *CleanupStatus
+	// imports serves the import/migration domain: the BirdNET-Pi import endpoints,
+	// the legacy->v2 migration endpoints and the background migration-worker control
+	// surface, the migration prerequisite checks, the async SQLite backup-job
+	// endpoints, and the legacy-database cleanup endpoints. Beyond the shared
+	// *apicore.Core it owns the import lifecycle manager, the import source-path
+	// root/factory, the legacy-cleanup tracker, and the facade-injected notification
+	// service. The facade calls c.imports.Shutdown() during teardown to stop the
+	// backup job manager's cleanup goroutine. The migration-worker package-level
+	// funcs (importsapi.SetMigration*/StopMigrationWorker) are driven by
+	// internal/analysis.
+	imports *importsapi.Handler
 
 	// Test synchronization fields (only populated when initializeRoutes is true)
 	// goroutinesStarted signals when all background goroutines have successfully started.
@@ -179,63 +259,53 @@ type Controller struct {
 	// Only created when routes are initialized (production mode or specific tests).
 	goroutinesStarted chan struct{} // signals when all background goroutines have started (nil if routes not initialized)
 
-	// audioWatchdog provides liveness state for audio health endpoints.
-	// Stored atomically because it is set during pipeline Start() and read
-	// concurrently by HTTP handlers.
-	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
+	// Audio level channel for SSE streaming
+	// TODO: Consider moving to a dedicated audio manager
+	audioLevelChan chan audiocore.AudioLevelData
 
-	// Health check infrastructure for the diagnostics endpoints.
-	healthRegistry     *health.Registry
-	healthReports      *health.ReportStore
-	healthErrors       *health.ErrorRingBuffer
-	healthMetricsStore *observability.HealthMetricsStore
-	healthEvents       *observability.HealthEventBuffer
+	// appHandler serves the app/debug domain: the public /app/config bootstrap
+	// endpoint (which issues the frontend CSRF token via middleware.EnsureCSRFToken
+	// and returns the SPA configuration), the wizard dismiss endpoint, and the
+	// debug-mode-gated /debug/* endpoints. Beyond the shared *apicore.Core it
+	// receives the facade-injected authService and notificationService and owns the
+	// app-metadata repository (built lazily in RegisterAppRoutes). It is constructed
+	// AFTER the functional options are applied so both injected services reflect
+	// WithAuthService / WithNotificationService (see NewWithOptions).
+	appHandler *app.Handler
 
-	// sourceRestarter restarts a single audio source by ID. Set during
-	// pipeline Start() and called by the restart-source control endpoint.
-	sourceRestarter atomic.Pointer[SourceRestarterFunc]
-}
+	// Cached BirdNET name maps (facade-owned; see name_maps.go). They are shared
+	// infrastructure: the analytics, detections, and species domains read them via
+	// injected accessors, and internal/analysis drives them through
+	// UpdateCommonNameMap/SetNameResolver on *Controller.
+	nameMaps atomic.Value // stores *nameMaps; see internal/api/v2/name_maps.go
+	// nameResolver is the authoritative localized name source shared with the
+	// classifier orchestrator. Overrides label-derived names in the cached maps.
+	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
 
-// SourceRestarterFunc restarts a single audio source identified by sourceID.
-type SourceRestarterFunc func(sourceID string) error
+	// analytics serves the /api/v2/analytics/* species/time/confidence/sun/sources
+	// endpoints, the geographic /range/heatmap endpoint, the /insights/* +
+	// /dashboard/kpis endpoints, and the auth-protected /system/database/overview
+	// endpoint. It owns the insights repository; the facade keeps the name-map
+	// plumbing (name_maps.go) and seeds the maps before registering insights routes.
+	analytics *analytics.Handler
 
-// ShutdownRequester allows triggering a programmatic shutdown.
-type ShutdownRequester interface {
-	RequestShutdown()
-}
+	// healthErrorBuf is the optional shared ErrorRingBuffer seed injected via
+	// WithHealthErrorBuffer. It is handed to the system domain handler at
+	// construction; the system handler owns the live diagnostics health
+	// infrastructure (registry, report store, error buffer, metrics store, event
+	// buffer) and exposes the metrics store / event buffer to the analysis pipeline
+	// through the HealthMetricsStore()/HealthEventBuffer() facade delegators.
+	healthErrorBuf *health.ErrorRingBuffer
 
-// currentSettings returns the latest settings snapshot so UI changes
-// take effect in API responses without restarting the service.
-//
-// It resolves the lock-free global atomic snapshot first and only falls back
-// to this controller's own snapshot when no global snapshot has been published
-// (standalone unit-test controllers). Both reads are lock-free (the per-controller
-// fallback is an atomic Load), so the accessor is race-free against the
-// Settings.Store the update handlers perform under c.settingsMutex.
-func (c *Controller) currentSettings() *conf.Settings {
-	if latest := conf.GetSettings(); latest != nil {
-		return latest
-	}
-	return c.Settings.Load()
-}
-
-// controllerSettings returns this controller's own settings snapshot, read
-// lock-free from the atomic Settings pointer that the update handlers publish on
-// every save. Unlike currentSettings(), it deliberately does NOT consult the
-// process-global atomic snapshot: use it for reads whose result is asserted
-// per-controller (e.g. debug-gated response verbosity), where the shared global
-// snapshot would couple otherwise-independent parallel tests.
-//
-// Loading the atomic pointer (rather than reading a plain field under
-// settingsMutex.RLock) is what makes this safe to call from newErrorResponse,
-// which is reached from HandleError while UpdateSettings already holds
-// settingsMutex.Lock: a non-reentrant RLock there would deadlock. The snapshot is
-// published under that same write lock, so the read sees a consistent value. The
-// returned snapshot is immutable (copy-on-write), so callers may dereference its
-// fields freely. Returns nil only on a controller that never stored settings
-// (standalone tests); callers that may hit that path nil-check or fall back.
-func (c *Controller) controllerSettings() *conf.Settings {
-	return c.Settings.Load()
+	// system serves the /api/v2/system/* information endpoints plus the events,
+	// diagnostics, metrics-history and terminal endpoints. Beyond the shared
+	// *apicore.Core it owns the diagnostics health infrastructure and receives the
+	// controller start time and the optional health-error-buffer seed by injection.
+	// The facade keeps the genuine-system route registration plus the cross-domain
+	// /system routes (audio devices, external-media, database overview/migration/
+	// backup/legacy) in initSystemRoutes (system_routes.go) until those domains are
+	// extracted.
+	system *system.Handler
 }
 
 // Option is a functional option for configuring the Controller.
@@ -244,7 +314,7 @@ type Option func(*Controller)
 // WithAuthMiddleware sets the authentication middleware for the controller.
 func WithAuthMiddleware(mw echo.MiddlewareFunc) Option {
 	return func(c *Controller) {
-		c.authMiddleware = mw
+		c.AuthMiddleware = mw
 	}
 }
 
@@ -277,7 +347,7 @@ func WithGuideCache(gc *guideprovider.GuideCache) Option {
 // This enables the metrics history and streaming endpoints.
 func WithMetricsStore(store observability.MetricsStore) Option {
 	return func(c *Controller) {
-		c.metricsStore = store
+		c.MetricsStore = store
 	}
 }
 
@@ -292,7 +362,7 @@ func WithV2Manager(mgr datastoreV2.Manager) Option {
 // WithAudioEngine sets the AudioEngine for audio subsystem access.
 func WithAudioEngine(e *engine.AudioEngine) Option {
 	return func(c *Controller) {
-		c.engine.Store(e)
+		c.Engine.Store(e)
 	}
 }
 
@@ -300,68 +370,20 @@ func WithAudioEngine(e *engine.AudioEngine) Option {
 func WithModelManager(mm *classifier.ModelManager) Option {
 	return func(c *Controller) {
 		c.ModelManager = mm
+		// Wire the topology-changed callback so model add/remove broadcasts over
+		// the metrics SSE stream. The method value binds c; c.MetricsStore is read
+		// lazily at call time, so option ordering is irrelevant.
+		mm.SetTopologyChangedCallback(c.BroadcastInferenceTopologyChanged)
 	}
 }
 
 // WithHealthErrorBuffer injects a shared ErrorRingBuffer created at startup.
-// When set, initDiagnosticsRoutes uses this buffer instead of creating its own,
-// enabling the logger to feed errors into the same buffer the health checks read.
+// When set, the system handler's diagnostics initializer uses this buffer instead
+// of creating its own, enabling the logger to feed errors into the same buffer the
+// health checks read.
 func WithHealthErrorBuffer(buf *health.ErrorRingBuffer) Option {
 	return func(c *Controller) {
-		c.healthErrors = buf
-	}
-}
-
-// parseIPFromHeader attempts to parse a valid IP from a header value.
-// Returns the IP string if valid, empty string otherwise.
-func parseIPFromHeader(headerValue string) string {
-	if headerValue == "" {
-		return ""
-	}
-	// Strip IPv6 zone ID (e.g., %wlan0) before parsing.
-	// net.ParseIP does not handle zone identifiers, and iOS Safari
-	// commonly connects via IPv6 link-local addresses with zone IDs.
-	if before, _, found := strings.Cut(headerValue, "%"); found {
-		headerValue = before
-	}
-	ip := net.ParseIP(headerValue)
-	if ip != nil {
-		return ip.String()
-	}
-	return ""
-}
-
-// TunnelDetectionMiddleware inspects headers to determine if the request is likely proxied
-// and sets context values for logging.
-func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(ctx echo.Context) error {
-			req := ctx.Request()
-			tunneled := false
-			provider := tunnelProviderUnknown
-
-			// Only classify the request as tunneled when the IP extractor actually
-			// honored a forwarded header, i.e. the resolved client IP differs from
-			// the immediate connection peer. That happens only for a trusted proxy,
-			// so a directly-connected client cannot spoof a "tunneled" label by
-			// sending forwarded headers from an untrusted address.
-			if peerIP, _ := peerAddrFromRequest(req); peerIP != nil && peerIP.String() != ctx.RealIP() {
-				switch {
-				case req.Header.Get(headerCFConnectingIP) != "":
-					tunneled = true
-					provider = "cloudflare"
-				case req.Header.Get(echo.HeaderXForwardedFor) != "" || req.Header.Get(echo.HeaderXRealIP) != "":
-					// Other proxy headers present: tunneled, but provider is generic.
-					tunneled = true
-					provider = "generic"
-				}
-			}
-
-			ctx.Set("is_tunneled", tunneled)
-			ctx.Set("tunnel_provider", provider)
-
-			return next(ctx)
-		}
+		c.healthErrorBuf = buf
 	}
 }
 
@@ -389,56 +411,6 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	return c, nil
 }
 
-// resolveAndValidateMediaPath resolves a potentially relative media path and ensures it exists as a directory.
-// Returns the absolute path and any error encountered.
-func resolveAndValidateMediaPath(configPath string) (string, error) {
-	mediaPath := configPath
-	if mediaPath == "" {
-		mediaPath = defaultExportPath
-		GetLogger().Warn("Audio export path is empty, using default",
-			logger.String("default_path", defaultExportPath),
-		)
-	}
-
-	// Resolve relative path to absolute based on working directory
-	if !filepath.IsAbs(mediaPath) {
-		workDir, err := os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("failed to get working directory to resolve relative media path: %w", err)
-		}
-		mediaPath = filepath.Join(workDir, mediaPath)
-		GetLogger().Debug("Resolved relative media export path",
-			logger.String("config_path", configPath),
-			logger.String("absolute_path", mediaPath),
-		)
-	}
-
-	// Ensure directory exists, creating if necessary
-	if err := ensureDirectoryExists(mediaPath); err != nil {
-		return "", err
-	}
-
-	return mediaPath, nil
-}
-
-// ensureDirectoryExists checks that a path exists and is a directory, creating it if needed.
-func ensureDirectoryExists(path string) error {
-	fi, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		if err := os.MkdirAll(path, FilePermExecutable); err != nil {
-			return fmt.Errorf("failed to create directory %q: %w", path, err)
-		}
-		fi, err = os.Stat(path)
-	}
-	if err != nil {
-		return fmt.Errorf("error checking path %q: %w", path, err)
-	}
-	if !fi.IsDir() {
-		return fmt.Errorf("path is not a directory: %q", path)
-	}
-	return nil
-}
-
 // NewWithOptions creates a new API controller with optional route initialization.
 // Set initializeRoutes to false for testing to avoid starting background goroutines.
 func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
@@ -446,117 +418,163 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	controlChan chan string,
 	metrics *observability.Metrics, initializeRoutes bool, opts ...Option) (*Controller, error) {
 
-	// Validate and resolve media export path
-	mediaPath, err := resolveAndValidateMediaPath(settings.Realtime.Audio.Export.Path)
+	// Build the shared core (SecureFS, lifecycle context, IP extractor, loggers,
+	// taxonomy, eBird client, SSE manager). The PrivateMode exempt allow-list is
+	// supplied by the facade so it stays colocated with the domain route-path
+	// constants.
+	core, err := apicore.NewCore(e, ds, settings, birdImageCache, sunCalc, metrics, isPrivateModeExempt)
 	if err != nil {
 		return nil, err
 	}
 
-	sfs, err := securefs.New(mediaPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize secure filesystem for media: %w", err)
-	}
-
-	// Create context for managing goroutines
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Only create DetectionRepository if datastore is available.
-	// This prevents nil pointer dereference when datastore is disabled.
-	var repo datastore.DetectionRepository
-	if ds != nil {
-		repo = datastore.NewDetectionRepository(ds, nil)
-	}
-
 	c := &Controller{
-		Echo:                 e,
-		DS:                   ds,
-		Repo:                 repo, // Bridge to new domain model (nil if datastore disabled)
-		isGlobalOwner:        settings == conf.GetSettings(),
-		BirdImageCache:       birdImageCache,
-		SunCalc:              sunCalc,
-		controlChan:          controlChan,
-		detectionCache:       cache.New(detectionCacheExpiry, detectionCacheCleanup),
-		SFS:                  sfs, // Assign SecureFS instance
-		metrics:              metrics,
-		ctx:                  ctx,
-		cancel:               cancel,
-		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()),
-		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
+		Core:          core,
+		controlChan:   controlChan,
+		isGlobalOwner: settings == conf.GetSettings(),
 	}
-	// Publish the initial settings snapshot so controllerSettings() reads it
-	// lock-free. Every save republishes via Settings.Store; see the Settings
-	// field doc and the settings update handlers.
-	c.Settings.Store(settings)
 
-	// Configure the trusted-proxy-gated IP extractor. Forwarded client-IP headers
-	// (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) are honored only when the
-	// connection peer is a trusted proxy (loopback/link-local/private by default,
-	// plus Security.TrustedProxies); otherwise the real peer address is used. It
-	// reads this controller's own settings snapshot per request (published above
-	// and on every save), so it honors the controller's TrustedProxies and
-	// hot-reloads without a restart.
-	e.IPExtractor = newTrustedProxyIPExtractor(c.controllerSettings)
-	GetLogger().Info("Configured trusted-proxy-gated IP extractor (forwarded client IP honored only from trusted proxies)")
-
-	// Propagate the derived FFprobe path from config validation to the
-	// ffmpeg package so executeFFprobe can find it without PATH lookup.
-	// Always set (even if empty) so repeated controller inits clear stale state.
-	ffmpeg.SetFFprobePath(settings.Realtime.Audio.FfprobePath)
-
-	// Initialize audio processing cache and concurrency limiter
-	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
-	c.processingCache = newProcessingCache(cacheDir, processingCacheMaxFiles)
-	c.processingSemaphore = make(chan struct{}, 2)
-
-	// Start cache cleanup goroutine
-	c.wg.Go(func() {
-		ticker := time.NewTicker(processingCacheTickerInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				c.processingCache.cleanExpired()
-			}
-		}
-	})
-
-	// Initialize structured logger for API requests
-	c.apiLogger = logger.Global().Module("api")
-
-	// Authentication events (form login/logout, OAuth callback) log to the
-	// "security" module so they are co-located with the OAuth and provider-init
-	// logging, where admins look when debugging auth.
-	c.securityLogger = logger.Global().Module("security")
-
-	// Load local taxonomy database for fast species lookups
-	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
-	if err != nil {
-		c.logWarnIfEnabled("Failed to load taxonomy database", logger.Error(err))
-		c.logWarnIfEnabled("Species taxonomy lookups will fall back to eBird API")
-		// Continue without taxonomy database - eBird API fallback will be used
-		c.TaxonomyDB = nil
-	} else {
-		c.TaxonomyDB = taxonomyDB
-		stats := taxonomyDB.Stats()
-		c.logInfoIfEnabled("Loaded taxonomy database",
-			logger.Any("genus_count", stats["genus_count"]),
-			logger.Any("family_count", stats["family_count"]),
-			logger.Any("species_count", stats["species_count"]),
-			logger.String("version", taxonomyDB.Version),
-			logger.String("updated_at", taxonomyDB.UpdatedAt),
-		)
-	}
+	// Construct domain handlers around the shared core. They hold the same
+	// *apicore.Core pointer and register their routes in initRoutes.
+	c.weather = weather.New(c.Core)
+	c.rangeHandler = rangeapi.New(c.Core)
+	// The SSE handler receives the facade-owned auth check (isClientAuthenticated)
+	// so the public detection stream can anonymize the source DisplayName for
+	// unauthenticated subscribers (matching detections/analytics and the
+	// StreamAudioLevel precedent). The bound method value reads c.authService at
+	// call time, so the post-functional-option authService is observed per request.
+	c.sse = sse.New(c.Core, c.isClientAuthenticated)
+	// The TLS handler needs the facade's settings-save machinery: the shared
+	// settingsMutex (passed by pointer so TLS certificate writes serialize against
+	// the main settings update handlers) and the bound method values for reading,
+	// publishing/persisting, and post-processing settings changes. c is fully
+	// constructed here, so the &c.settingsMutex address and the method values are
+	// stable for the controller's lifetime.
+	c.tlsHandler = tlsapi.New(c.Core, &c.settingsMutex,
+		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+	// The integrations handler needs the same facade settings-save machinery as the
+	// TLS handler: the MQTT TLS certificate writes mutate persisted settings, so it
+	// receives the shared &c.settingsMutex (so those writes serialize against the
+	// main settings update handlers) plus the bound publish/save/change method
+	// values. c is fully constructed here and these deps are stable for its
+	// lifetime, so this can be wired before the functional options loop (it needs no
+	// option-set dependency).
+	c.integrations = integrations.New(c.Core, &c.settingsMutex,
+		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+	// The detections handler needs the same facade settings-save machinery as the
+	// integrations/TLS handlers (the review/ignore exclude-list mutation persists
+	// settings) plus three more facade-owned function dependencies whose subsystems
+	// are not extracted yet: the auth check (isClientAuthenticated) and the cached
+	// name-map accessors (loadCommonNameMap/loadCommonToScientificMap). c is fully
+	// constructed here and these deps are stable for its lifetime; the method values
+	// read their backing fields at call time (so the post-option authService is
+	// observed), so this is wired before the functional options loop.
+	c.detections = detections.New(c.Core, &c.settingsMutex,
+		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges,
+		c.isClientAuthenticated, c.loadCommonNameMap, c.loadCommonToScientificMap)
+	// The analytics handler is injected the same facade-owned dependencies as
+	// detections: the auth check (isClientAuthenticated, read per request so the
+	// public /analytics/sources response anonymizes source names) and the cached
+	// name-map accessors (loadCommonNameMap / loadCommonToScientificMap). It owns
+	// the insights repository, which it builds lazily in RegisterInsightsRoutes.
+	c.analytics = analytics.New(c.Core,
+		c.isClientAuthenticated, c.loadCommonNameMap, c.loadCommonToScientificMap)
+	// The media handler owns the audio-processing cache, the spectrogram
+	// generator, and the cache-cleanup goroutine (all built from the shared
+	// SecureFS in mediaapi.New). It is constructed BEFORE the species handler
+	// because species injects c.media.ServeSpeciesImageProxy (a method value on
+	// the media handler) for its thumbnail endpoint.
+	c.media = mediaapi.New(c.Core)
+	// The species handler delegates to two dependencies: loadCommonNameMap (the
+	// shared name-map read accessor, facade-owned in name_maps.go) and the media
+	// domain's species-image proxy handler
+	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
+	// is fully constructed here, so the method values are stable for its lifetime.
+	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
+	// The models handler needs only the shared core (ModelManager and the
+	// settings/error/log/goroutine helpers all promote from it).
+	c.models = models.New(c.Core)
+	// The support handler needs only the shared core (settings, datastore, V2
+	// manager, and the error/log/goroutine helpers all promote from it).
+	c.support = support.New(c.Core)
+	// The filesystem handler needs only the shared core (the media SecureFS
+	// sandbox, the auth middleware, and the error/log helpers all promote from it).
+	c.filesystem = filesystem.New(c.Core)
+	// The dynamic-thresholds handler needs only the shared core (DS, Processor,
+	// the auth middleware, settings, and the error/log helpers all promote from it).
+	c.dynamicThresholds = dynamicthresholds.New(c.Core)
+	// The alerts handler owns its two domain dependencies (alert-rule repository
+	// and alerting engine), constructed lazily in RegisterRoutes; it needs only
+	// the shared core here (V2Manager, auth middleware, and the error/log helpers
+	// all promote from it).
+	c.alerts = alerts.New(c.Core)
+	// The control handler owns its sourceRestarter and receives the shared
+	// control-signal channel as a send-only injection. c.controlChan is already
+	// set in the Controller literal above; passing it here narrows it to a
+	// send-only view so the handler can never read or close a channel that
+	// internal/analysis owns. The remaining deps (Engine, ShutdownRequester, and
+	// the error/log helpers) all promote from the shared core.
+	c.control = control.New(c.Core, c.controlChan)
 
 	// Apply functional options (auth middleware and service injected from server)
 	for _, opt := range opts {
 		opt(c)
 	}
 
+	// Construct the auth domain handler AFTER the functional options are applied:
+	// WithAuthService sets c.authService in the loop above (unlike the other
+	// domain deps, which are set in the Controller literal before construction).
+	// The handler captures the injected authService (nil if WithAuthService was
+	// not passed; the handlers nil-guard it). authService is read fresh per
+	// request in the monolith but never changes after this point, so capturing
+	// the post-option value is behaviorally identical. The shared AuthMiddleware
+	// it uses for the protected logout/status group promotes from c.Core and is
+	// read at RegisterRoutes time (after this), so it is also populated.
+	c.authHandler = authapi.New(c.Core, c.authService)
+
+	// Construct the notifications domain handler AFTER the functional options are
+	// applied, for the same reason as the auth handler: both WithNotificationService
+	// and WithAuthService set their fields in the loop above. The handler captures
+	// the injected services (notificationService falls back to the global singleton
+	// when nil; authService is nil-guarded). Neither changes after this point, so
+	// capturing the post-option values is behaviorally identical to the monolith's
+	// per-request reads. The facade keeps c.notificationService because the toast
+	// helpers read it directly and it is handed to the notifications, imports, and
+	// app domain handlers, each of which resolves the service via its own
+	// getNotificationService() accessor.
+	c.notifications = notifications.New(c.Core, c.notificationService, c.authService)
+
+	// Construct the import/migration domain handler AFTER the functional options
+	// are applied so it captures the post-option notificationService (the migration
+	// and legacy-cleanup completion notifications resolve the service through it,
+	// falling back to the process-global singleton when nil), mirroring the
+	// notifications handler above. Its import lifecycle manager is created in New;
+	// the legacy-cleanup tracker is created lazily in RegisterLegacyCleanupRoutes.
+	c.imports = importsapi.New(c.Core, c.notificationService)
+
+	// Construct the app/debug domain handler AFTER the functional options are
+	// applied so it captures the post-option authService (the /app/config
+	// accessAllowed check reads it, nil-guarded) and notificationService (the debug
+	// trigger-notification/status handlers resolve the service through it, falling
+	// back to the process-global singleton when nil), mirroring the notifications
+	// and imports handlers above. Neither service changes after this point, so
+	// capturing the post-option values is behaviorally identical to the monolith's
+	// per-request reads. Its app-metadata repository is built lazily in
+	// RegisterAppRoutes from the V2Manager promoted off c.Core.
+	c.appHandler = app.New(c.Core, c.authService, c.notificationService)
+
+	// Construct the audio/streaming domain handler AFTER the functional options are
+	// applied so it captures the post-option authService (used by the public
+	// audio-level stream and quiet-hours status to anonymize source names / stream
+	// URLs for unauthenticated callers; nil-guarded). authService never changes
+	// after this point, so capturing it is behaviorally identical to the monolith's
+	// per-request reads. The audio Engine/AudioWatchdog atomic pointers and the
+	// Settings/AuthMiddleware helpers promote from c.Core; the live audio-level
+	// channel is wired later via SetAudioLevelChan.
+	c.audio = audioapi.New(c.Core, c.authService)
+
 	// Log auth configuration status
 	log := GetLogger()
-	if c.authMiddleware != nil {
+	if c.AuthMiddleware != nil {
 		log.Info("Auth middleware configured via functional options")
 	} else {
 		log.Warn("Auth middleware not configured")
@@ -565,7 +583,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Create v2 API group
 	c.Group = e.Group(apiV2Prefix)
 
-	// Configure middlewares
+	// Configure middlewares (applied once, in this order)
 	c.Group.Use(middleware.Recover())          // Recover should be early
 	c.Group.Use(c.TunnelDetectionMiddleware()) // Add tunnel detection **before** logging
 	// c.Group.Use(middleware.Logger())        // Removed: Use custom LoggingMiddleware below for structured logging
@@ -573,7 +591,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Removing duplicate CORS here to avoid conflicts with global CORS configuration
 	c.Group.Use(middleware.BodyLimit("1M")) // Limit request body to 1MB to prevent DoS attacks
 	c.Group.Use(c.LoggingMiddleware())      // Use custom structured logging middleware
-	c.Group.Use(c.privateModeAuth)          // Gate all API endpoints behind auth when PrivateMode is enabled
+	c.Group.Use(c.PrivateModeAuth)          // Gate all API endpoints behind auth when PrivateMode is enabled
 
 	// NOTE: CSRF token is provided by the /app/config endpoint using middleware.EnsureCSRFToken()
 	// which handles Echo v4.15.0's Sec-Fetch-Site optimization that may skip token generation
@@ -583,38 +601,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	now := time.Now()
 	c.startTime = &now
 
-	// Initialize SSE manager
-	c.sseManager = NewSSEManager()
-
-	// Initialize eBird client if enabled
-	if settings.Realtime.EBird.Enabled {
-		if settings.Realtime.EBird.APIKey == "" {
-			// Create notification for missing API key
-			// The Build() method automatically publishes to the event bus for notifications
-			_ = errors.Newf("eBird integration enabled but API key not configured").
-				Category(errors.CategoryConfiguration).
-				Context("setting", "realtime.ebird.apikey").
-				Component("ebird").
-				Build()
-			log.Warn("eBird integration enabled but API key not configured")
-		} else {
-			ebirdConfig := ebird.Config{
-				APIKey:   settings.Realtime.EBird.APIKey,
-				CacheTTL: time.Duration(settings.Realtime.EBird.CacheTTL) * time.Hour,
-			}
-			ebirdClient, err := ebird.NewClient(ebirdConfig)
-			if err != nil {
-				// Initialization error - already enhanced by ebird.NewClient
-				log.Warn("Failed to initialize eBird client", logger.Error(err))
-				// Continue without eBird client - it's not critical
-			} else {
-				c.EBirdClient = ebirdClient
-				log.Info("Initialized eBird API client")
-			}
-		}
-	} else {
-		log.Debug("eBird integration disabled")
-	}
+	// Construct the system domain handler AFTER the functional options are applied
+	// (so the WithHealthErrorBuffer seed in c.healthErrorBuf is observed) and after
+	// c.startTime is set (the diagnostics uptime check captures the pointer). It
+	// owns the diagnostics health infrastructure; its routes are registered in
+	// initRoutes below.
+	c.system = system.New(c.Core, c.startTime, c.healthErrorBuf, audioapi.LatestAudioLevels)
 
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
 	if initializeRoutes {
@@ -628,67 +620,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	return c, nil // Return controller and nil error
 }
 
-// LoggingMiddleware creates a middleware function that logs API requests
-func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(ctx echo.Context) error {
-			start := time.Now()
-
-			// Process the request
-			err := next(ctx)
-
-			// Skip logging if apiLogger is not initialized
-			if c.apiLogger == nil {
-				return err
-			}
-
-			// Extract request information
-			req := ctx.Request()
-			res := ctx.Response()
-
-			// Determine the actual status code. When a handler returns an
-			// *echo.HTTPError, Echo's centralized error handler has not yet
-			// executed at this point in the middleware chain, so res.Status
-			// is still the default 200. Extract the real code from the error.
-			status := res.Status
-			if err != nil {
-				var he *echo.HTTPError
-				if errors.As(err, &he) {
-					status = he.Code
-				} else if status < http.StatusBadRequest {
-					// Non-HTTP errors (e.g. database errors) won't have a
-					// status set yet; Echo's error handler runs after this
-					// middleware. Default to 500 to avoid logging failures
-					// as successes.
-					status = http.StatusInternalServerError
-				}
-			}
-
-			// Get tunnel info from context
-			isTunneled, _ := ctx.Get("is_tunneled").(bool)
-			tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
-
-			// Log the request with structured data
-			fields := []logger.Field{
-				logger.String("method", req.Method),
-				logger.String("path", req.URL.Path),
-				logger.String("query", req.URL.RawQuery),
-				logger.Int("status", status),
-				logger.String("ip", ctx.RealIP()), // Uses custom extractor
-				logger.Bool("tunneled", isTunneled),
-				logger.String("tunnel_provider", tunnelProvider),
-				logger.String("user_agent", req.UserAgent()),
-				logger.Int64("latency_ms", time.Since(start).Milliseconds()),
-			}
-			if err != nil {
-				fields = append(fields, logger.Error(err))
-			}
-
-			c.apiLogger.Info("API Request", fields...)
-
-			return err
-		}
-	}
+// SetSourceRestarter injects the function used by the restart-source control
+// endpoint. It delegates to the control domain handler, which owns the
+// sourceRestarter slot. The audio pipeline calls this on *Controller during
+// Start(), so the method stays on the facade as a one-line delegator.
+func (c *Controller) SetSourceRestarter(fn control.SourceRestarterFunc) {
+	c.control.SetSourceRestarter(fn)
 }
 
 // initRoutes registers all API endpoints
@@ -704,39 +641,42 @@ func (c *Controller) initRoutes() {
 		name string
 		fn   func()
 	}{
-		{"app routes", c.initAppRoutes},
-		{"search routes", c.initSearchRoutes},
-		{"detection routes", c.initDetectionRoutes},
-		{"analytics routes", c.initAnalyticsRoutes},
-		{"weather routes", c.initWeatherRoutes},
+		{"app routes", func() { c.appHandler.RegisterAppRoutes(c.Group) }},
+		{"search routes", func() { c.detections.RegisterSearchRoutes(c.Group) }},
+		{"detection routes", func() { c.detections.RegisterDetectionRoutes(c.Group) }},
+		{"analytics routes", func() { c.analytics.RegisterAnalyticsRoutes(c.Group) }},
+		{"weather routes", func() { c.weather.RegisterRoutes(c.Group) }},
 		{"system routes", c.initSystemRoutes},
-		{"terminal routes", c.initTerminalRoutes},
+		{"audio device routes", func() { c.audio.RegisterAudioDeviceRoutes(c.Group) }},
+		{"terminal routes", func() { c.system.RegisterTerminalRoutes(c.Group) }},
 		{"settings routes", c.initSettingsRoutes},
-		{"filesystem routes", c.initFileSystemRoutes},
-		{"stream health routes", c.initStreamHealthRoutes},
-		{"stream test routes", c.initStreamTestRoutes},
-		{"audio health routes", c.initAudioHealthRoutes},
-		{"quiet hours routes", c.initQuietHoursRoutes},
-		{"audio level routes", c.initAudioLevelRoutes},
-		{"hls streaming routes", c.initHLSRoutes},
-		{"integration routes", c.initIntegrationsRoutes},
-		{"control routes", c.initControlRoutes},
-		{"auth routes", c.initAuthRoutes},
-		{"media routes", c.initMediaRoutes},
-		{"range routes", c.initRangeRoutes},
-		{"heatmap routes", c.initHeatmapRoutes},
-		{"sse routes", c.initSSERoutes},
-		{"diagnostics routes", c.initDiagnosticsRoutes},
-		{"metrics history routes", c.initMetricsHistoryRoutes},
-		{"notification routes", c.initNotificationRoutes},
-		{"support routes", c.initSupportRoutes},
-		{"debug routes", c.initDebugRoutes},
-		{"species routes", c.initSpeciesRoutes},
-		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
-		{"alert routes", c.initAlertRoutes},
-		{"model routes", c.initModelRoutes},
+		{"filesystem routes", func() { c.filesystem.RegisterRoutes(c.Group) }},
+		{"stream health routes", func() { c.audio.RegisterStreamHealthRoutes(c.Group) }},
+		{"stream test routes", func() { c.audio.RegisterStreamTestRoutes(c.Group) }},
+		{"audio health routes", func() { c.audio.RegisterAudioHealthRoutes(c.Group) }},
+		{"quiet hours routes", func() { c.audio.RegisterQuietHoursRoutes(c.Group) }},
+		{"audio level routes", func() { c.audio.RegisterAudioLevelRoutes(c.Group) }},
+		{"hls streaming routes", func() { c.audio.RegisterHLSRoutes(c.Group) }},
+		{"integration routes", func() { c.integrations.RegisterRoutes(c.Group) }},
+		{"control routes", func() { c.control.RegisterRoutes(c.Group) }},
+		{"auth routes", func() { c.authHandler.RegisterRoutes(c.Group) }},
+		{"media routes", func() { c.media.RegisterRoutes(c.Group) }},
+		{"range routes", func() { c.rangeHandler.RegisterRoutes(c.Group) }},
+		{"heatmap routes", func() { c.analytics.RegisterHeatmapRoutes(c.Group) }},
+		{"sse routes", func() { c.sse.RegisterRoutes(c.Group) }},
+		{"diagnostics routes", func() { c.system.RegisterDiagnosticsRoutes(c.Group) }},
+		{"metrics history routes", func() { c.system.RegisterMetricsHistoryRoutes(c.Group) }},
+		{"notification routes", func() { c.notifications.RegisterRoutes(c.Group) }},
+		{"support routes", func() { c.support.RegisterRoutes(c.Group) }},
+		{"debug routes", func() { c.appHandler.RegisterDebugRoutes(c.Group) }},
+		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
+		{"species guide routes", c.initSpeciesGuideRoutes},
+		{"dynamic threshold routes", func() { c.dynamicThresholds.RegisterRoutes(c.Group) }},
+		{"alert routes", func() { c.alerts.RegisterRoutes(c.Group) }},
+		{"model routes", func() { c.models.RegisterRoutes(c.Group) }},
 		{"insights routes", c.initInsightsRoutes},
-		{"tls routes", c.initTLSRoutes},
+		{"tls routes", func() { c.tlsHandler.RegisterRoutes(c.Group) }},
+		{"import routes", func() { c.imports.RegisterImportRoutes(c.Group) }},
 	}
 
 	for _, initializer := range routeInitializers {
@@ -761,38 +701,13 @@ func (c *Controller) initRoutes() {
 	}
 }
 
-// errDatastoreUnavailable is returned by DS-dependent handlers when the controller was
-// constructed without a datastore. NewWithOptions permits a nil datastore ("datastore
-// disabled" mode) and initRoutes skips registering the detection and media route groups
-// in that mode; requireDatastore is defense in depth for any such handler reached anyway.
-var errDatastoreUnavailable = errors.NewStd("datastore is not available")
-
-// requireDatastore writes a 503 Service Unavailable response and returns the non-nil
-// errDatastoreUnavailable when the controller has no datastore, so handlers can guard with:
-//
-//	if err := c.requireDatastore(ctx); err != nil {
-//	    return err
-//	}
-//
-// It returns the sentinel (not HandleError's nil) so the guard actually short-circuits the
-// caller; the 503 body is already written, so echo's error handler skips the committed
-// response. This honors the constructor's advertised "datastore disabled" mode instead of
-// letting a nil c.DS dereference panic.
-func (c *Controller) requireDatastore(ctx echo.Context) error {
-	if c.DS == nil {
-		_ = c.HandleError(ctx, errDatastoreUnavailable, "Datastore is not available", http.StatusServiceUnavailable)
-		return errDatastoreUnavailable
-	}
-	return nil
-}
-
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
 	// Read version/build/debug from this controller's own snapshot (nil-safe for
 	// standalone test controllers).
 	var version, buildDate string
 	debug := false
-	if settings := c.controllerSettings(); settings != nil {
+	if settings := c.ControllerSettings(); settings != nil {
 		version = settings.Version
 		buildDate = settings.BuildDate
 		debug = settings.WebServer.Debug
@@ -845,7 +760,7 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	systemMetrics := make(map[string]any)
 
 	// CPU usage from cached background sampler
-	cpuPercent := GetCachedCPUUsage()
+	cpuPercent := apicore.GetCachedCPUUsage()
 	if len(cpuPercent) > 0 {
 		systemMetrics["cpu_usage"] = cpuPercent[0]
 	} else {
@@ -890,12 +805,12 @@ func (c *Controller) Shutdown() {
 	// Close all SSE clients first so echo.Shutdown() has no active
 	// connections to wait for. SSE handlers block on request context
 	// which only closes when echo shuts down, creating a circular wait.
-	if c.sseManager != nil {
-		c.sseManager.CloseAllClients()
+	if c.SSEManager != nil {
+		c.SSEManager.CloseAllClients()
 	}
 
-	// Close and nil the species guide cache (the controller is its canonical
-	// owner). Snapshot under the lock, then close outside it.
+	// Close and nil the species guide cache (the facade is its canonical owner).
+	// Snapshot under the lock, then close outside it.
 	c.guideCacheMu.Lock()
 	gc := c.guideCache
 	c.guideCache = nil
@@ -904,25 +819,36 @@ func (c *Controller) Shutdown() {
 		gc.Close()
 	}
 
-	// Stop alerting engine background goroutines and event bus
-	if c.alertEngine != nil {
-		c.alertEngine.Stop()
-	}
-	if bus := alerting.GetGlobalBus(); bus != nil {
-		bus.Stop()
-	}
-
-	// Cancel context to stop all goroutines
-	if c.cancel != nil {
-		c.cancel()
+	// Stop the alerting engine background goroutines and its global event bus.
+	// The alerts handler owns the engine; Shutdown is a no-op when the engine was
+	// never initialized (legacy database or V2Manager absent).
+	if c.alerts != nil {
+		c.alerts.Shutdown()
 	}
 
-	// Wait for all goroutines to finish
-	c.wg.Wait()
+	// Cancel context to stop all goroutines, then wait for them to finish.
+	c.Cancel()
+	c.Wait()
 
-	// Shutdown the backup job manager to stop its cleanup goroutine
-	if backupJobManager != nil {
-		backupJobManager.Shutdown()
+	// Release the media SecureFS sandbox handle (an open os.Root): otherwise it
+	// leaks across controller restarts, and on Windows the open directory handle
+	// blocks t.TempDir() cleanup of the export dir in tests. This runs before
+	// echo.Shutdown() drains in-flight HTTP requests, so a request still reading
+	// the media filesystem in the brief shutdown window can observe os.ErrClosed
+	// (surfaced as a 5xx, no panic) - acceptable for a shutting-down process.
+	// Draining first was rejected because it would delay cancelling
+	// controller-context-bound streaming handlers.
+	if c.SFS != nil {
+		if err := c.SFS.Close(); err != nil {
+			GetLogger().Error("Error closing media SecureFS", logger.Error(err))
+		}
+	}
+
+	// Shut down the import/migration domain (stops the backup job manager's cleanup
+	// goroutine). The migration worker is stopped separately by internal/analysis as
+	// part of the datastore lifecycle.
+	if c.imports != nil {
+		c.imports.Shutdown()
 	}
 
 	// Flush all log writers (the main writer plus every module writer, including
@@ -935,183 +861,11 @@ func (c *Controller) Shutdown() {
 
 	// TODO: The go-cache library's janitor goroutine cannot be stopped.
 	// Consider migrating to a context-aware cache implementation.
-	if c.detectionCache != nil {
-		c.detectionCache.Flush()
+	if c.DetectionCache != nil {
+		c.DetectionCache.Flush()
 	}
 
 	c.Debug("API Controller shutdown complete")
-}
-
-// SetShutdownRequester sets the shutdown requester for programmatic restart.
-// Thread-safe: may be called after the HTTP server starts accepting requests.
-func (c *Controller) SetShutdownRequester(sr ShutdownRequester) {
-	c.shutdownMu.Lock()
-	defer c.shutdownMu.Unlock()
-	c.shutdownRequester = sr
-}
-
-// getShutdownRequester returns the current shutdown requester, or nil.
-func (c *Controller) getShutdownRequester() ShutdownRequester {
-	c.shutdownMu.RLock()
-	defer c.shutdownMu.RUnlock()
-	return c.shutdownRequester
-}
-
-// Error response structure
-type ErrorResponse struct {
-	Error         string         `json:"error"`
-	Message       string         `json:"message"`
-	Code          int            `json:"code"`
-	CorrelationID string         `json:"correlation_id"`         // Unique identifier for tracking this error
-	ErrorKey      string         `json:"error_key,omitempty"`    // i18n translation key for frontend
-	ErrorParams   map[string]any `json:"error_params,omitempty"` // Interpolation parameters for error_key
-}
-
-// newErrorResponse creates a new API error response using the controller's
-// injected settings to decide whether to expose raw error details.
-func (c *Controller) newErrorResponse(err error, message string, code int) *ErrorResponse {
-	// Generate a random correlation ID (8 characters should be sufficient)
-	correlationID := generateCorrelationID()
-
-	// Only expose raw err.Error() in debug mode: it can contain internal
-	// paths, SQL errors, stack traces, etc. In production, use the
-	// sanitized message parameter instead.
-	var errorStr string
-	// Read the controller's own debug flag via the lock-free atomic Settings pointer: this
-	// is reached from HandleError while UpdateSettings holds c.settingsMutex, so
-	// it must not acquire the lock (a non-reentrant RLock would deadlock), and the
-	// flag must remain per-controller (handlers assert debug-gated error verbosity
-	// per controller, not via the shared global snapshot). controllerSettings()
-	// reads the per-controller snapshot published under that same write lock, so
-	// the read is race-free. See controllerSettings.
-	settings := c.controllerSettings()
-	if err != nil && settings != nil && settings.WebServer.Debug {
-		errorStr = err.Error()
-	} else {
-		errorStr = message
-	}
-
-	return &ErrorResponse{
-		Error:         errorStr,
-		Message:       message,
-		Code:          code,
-		CorrelationID: correlationID,
-	}
-}
-
-// generateCorrelationID creates a unique identifier for error tracking using cryptographic randomness
-// for better security and uniqueness guarantees across all platforms
-func generateCorrelationID() string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	const length = 8
-
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		// Fall back to a default ID if crypto/rand fails
-		return "ERR-RAND"
-	}
-
-	// Map the random bytes to charset characters
-	for i := range b {
-		b[i] = charset[int(b[i])%len(charset)]
-	}
-	return string(b)
-}
-
-// handleErrorInternal is the shared implementation for HandleError and HandleErrorWithKey.
-func (c *Controller) handleErrorInternal(ctx echo.Context, err error, message string, code int, errorKey string, errorParams map[string]any) error {
-	errorResp := c.newErrorResponse(err, message, code)
-	errorResp.ErrorKey = errorKey
-	errorResp.ErrorParams = errorParams
-
-	// Determine IP to log using the request context
-	ip := ctx.RealIP()
-
-	// Get tunnel info from context
-	isTunneled, _ := ctx.Get("is_tunneled").(bool)
-	tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
-
-	// Build error string for logging
-	var errorStr string
-	if err != nil {
-		errorStr = err.Error()
-	} else {
-		errorStr = message
-	}
-
-	// Build log fields
-	fields := []logger.Field{
-		logger.String("correlation_id", errorResp.CorrelationID),
-		logger.String("message", message),
-		logger.String("error", errorStr),
-		logger.Int("code", code),
-		logger.String("path", ctx.Request().URL.Path),
-		logger.String("method", ctx.Request().Method),
-		logger.String("ip", ip),
-		logger.Bool("tunneled", isTunneled),
-		logger.String("tunnel_provider", tunnelProvider),
-	}
-	if errorKey != "" {
-		fields = append(fields, logger.String("error_key", errorKey))
-	}
-
-	c.logErrorIfEnabled("API Error", fields...)
-
-	// Report server-side errors (5xx) to Sentry telemetry.
-	// 4xx errors are client mistakes (bad input, not found), not bugs, and are excluded.
-	if code >= http.StatusInternalServerError {
-		c.reportErrorToTelemetry(ctx, err, message, code)
-	}
-
-	return ctx.JSON(code, errorResp)
-}
-
-// reportErrorToTelemetry reports server-side errors (5xx) to Sentry telemetry.
-// Errors already reported by lower layers (e.g., datastore) are skipped to avoid
-// duplicate Sentry events. Privacy scrubbing and opt-in checks are handled by the
-// internal/errors and internal/telemetry packages.
-func (c *Controller) reportErrorToTelemetry(ctx echo.Context, err error, message string, code int) {
-	// Skip if the underlying error was already reported by a lower layer.
-	if err != nil {
-		var ee *errors.EnhancedError
-		if errors.As(err, &ee) && ee.IsReported() {
-			return
-		}
-	}
-
-	// Client disconnects and request timeouts are not server bugs.
-	if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-		return
-	}
-
-	path := ctx.Request().URL.Path
-	method := ctx.Request().Method
-
-	var builder *errors.ErrorBuilder
-	if err != nil {
-		builder = errors.New(err)
-	} else {
-		builder = errors.Newf("%s", message)
-	}
-
-	_ = builder.
-		Component("api").
-		Category(errors.CategoryHTTP).
-		Context("http_status", code).
-		Context("endpoint", path).
-		Context("method", method).
-		Build()
-}
-
-// HandleError constructs and returns an appropriate error response
-func (c *Controller) HandleError(ctx echo.Context, err error, message string, code int) error {
-	return c.handleErrorInternal(ctx, err, message, code, "", nil)
-}
-
-// HandleErrorWithKey constructs and returns an error response with an i18n translation key.
-// The errorKey and errorParams allow the frontend to display translated error messages.
-func (c *Controller) HandleErrorWithKey(ctx echo.Context, err error, message string, code int, errorKey string, errorParams map[string]any) error {
-	return c.handleErrorInternal(ctx, err, message, code, errorKey, errorParams)
 }
 
 // HandleErrorForTest constructs and returns an echo.HTTPError for testing purposes
@@ -1123,61 +877,6 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 		fullMessage = fmt.Sprintf("%s: %v", message, err)
 	}
 	return echo.NewHTTPError(code, fullMessage)
-}
-
-// Debug logs debug messages when debug mode is enabled.
-//
-// Reads the debug flag from the process-global snapshot via conf.GetSettings()
-// (a lock-free atomic.Load), so process-wide debug logging follows the latest
-// published global settings. Returns silently when the global snapshot has not
-// been set (e.g. in unit tests with a standalone Controller); the per-controller
-// c.Settings snapshot is deliberately not consulted here.
-func (c *Controller) Debug(format string, v ...any) {
-	settings := conf.GetSettings()
-	if settings == nil {
-		// Skip debug logging when the global snapshot hasn't been set
-		// (e.g. in unit tests with a standalone Controller).
-		return
-	}
-	if settings.WebServer.Debug {
-		msg := fmt.Sprintf(format, v...)
-		c.logDebugIfEnabled(msg)
-	}
-}
-
-// logAPIRequest is a helper to log API requests with common context fields.
-func (c *Controller) logAPIRequest(ctx echo.Context, level logger.LogLevel, msg string, fields ...logger.Field) {
-	if c.apiLogger == nil {
-		return // Do nothing if logger isn't initialized
-	}
-
-	// Extract common context info
-	ip := ctx.RealIP()
-	path := ctx.Request().URL.Path
-
-	// Create base fields with preallocated capacity
-	baseFields := make([]logger.Field, 0, 2+len(fields))
-	baseFields = append(baseFields,
-		logger.String("path", path),
-		logger.String("ip", ip),
-	)
-
-	// Append specific fields to base fields
-	baseFields = append(baseFields, fields...)
-
-	// Log at the specified level
-	c.apiLogger.Log(level, msg, baseFields...)
-}
-
-// GetAuthMiddleware returns the authentication middleware function injected from server.
-// This replaces the previous getEffectiveAuthMiddleware that had fallback logic.
-//
-// Returns nil if no middleware was configured via WithAuthMiddleware option.
-// Callers should be aware that applying nil middleware to Echo routes is a no-op
-// (the routes become unprotected). A warning is logged during initialization
-// if auth middleware is not configured.
-func (c *Controller) GetAuthMiddleware() echo.MiddlewareFunc {
-	return c.authMiddleware
 }
 
 // InitializeAPI creates a new API controller and registers all routes.
@@ -1198,7 +897,7 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 	apiController.Processor = proc
 
 	// Log initialization
-	apiController.logInfoIfEnabled("API v2 initialized",
+	apiController.LogInfoIfEnabled("API v2 initialized",
 		logger.String("version", settings.Version),
 		logger.String("build_date", settings.BuildDate),
 	)

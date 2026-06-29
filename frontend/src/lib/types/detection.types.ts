@@ -23,6 +23,7 @@ export interface Detection {
   scientificName: string;
   commonName: string;
   confidence: number;
+  modelType?: string; // AI model type (e.g. 'bird', 'bat'); drives the spectrogram frequency range
   verified: 'correct' | 'false_positive' | 'unverified';
   locked: boolean;
   unlikely?: boolean;

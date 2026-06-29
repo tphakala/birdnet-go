@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -50,6 +51,14 @@ type ModelManager struct {
 	settingsMu   sync.Mutex // serializes clone-mutate-publish cycles on settings
 	installed    map[string]InstalledModel
 	downloading  map[string]*DownloadState
+
+	// topologyChangedCb, when set, is invoked after a successful model load or
+	// unload so observers (e.g. the metrics SSE stream) can signal that the
+	// inference topology changed. It is injected to keep this package free of an
+	// internal/observability import (which would create an import cycle). The
+	// atomic pointer makes concurrent set and notify safe (the setter is
+	// exported, so a caller could re-register a callback while loads/unloads run).
+	topologyChangedCb atomic.Pointer[func()]
 }
 
 // InstalledModel represents a model that has been downloaded and is available.
@@ -98,6 +107,28 @@ func (mm *ModelManager) ModelInfos() []ModelInfo {
 	return mm.orchestrator.ModelInfos()
 }
 
+// SetTopologyChangedCallback registers a callback invoked after a successful
+// model load or unload. It is injected (rather than imported) to avoid an
+// internal/observability import cycle. Passing nil disables the callback. The
+// store is atomic, so it is safe to call concurrently with notifyTopologyChanged.
+func (mm *ModelManager) SetTopologyChangedCallback(cb func()) {
+	if cb == nil {
+		mm.topologyChangedCb.Store(nil)
+		return
+	}
+	mm.topologyChangedCb.Store(&cb)
+}
+
+// notifyTopologyChanged invokes the registered topology-changed callback if one
+// is set. It must be called outside any held lock, since the callback may run
+// arbitrary observer code. The load is atomic, so it is safe to call
+// concurrently with SetTopologyChangedCallback.
+func (mm *ModelManager) notifyTopologyChanged() {
+	if p := mm.topologyChangedCb.Load(); p != nil {
+		(*p)()
+	}
+}
+
 // ScanInstalled scans modelsDir for subdirectories matching catalog IDs. For
 // each matching subdirectory, it checks whether the ONNX model file (the
 // CatalogFile with Role "model") exists on disk. If found, the model is
@@ -105,10 +136,14 @@ func (mm *ModelManager) ModelInfos() []ModelInfo {
 func (mm *ModelManager) ScanInstalled() {
 	log := GetLogger()
 
+	// Snapshot the active catalog (honors a user-edited model-catalog.json)
+	// before taking mm.mu; ActiveCatalog acquires its own lock.
+	catalog := ActiveCatalog()
+
 	// Phase 1: scan the filesystem under mm.mu.
 	mm.mu.Lock()
-	for i := range EmbeddedCatalog {
-		entry := &EmbeddedCatalog[i]
+	for i := range catalog {
+		entry := &catalog[i]
 		subdir := filepath.Join(mm.modelsDir, entry.ID)
 
 		modelFile := ""
@@ -434,6 +469,7 @@ func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []st
 	if mm.orchestrator == nil {
 		return
 	}
+	loaded := false
 	for _, catalogID := range installedIDs {
 		entry, found := GetCatalogEntry(catalogID)
 		if !found || entry.RegistryID == "" {
@@ -447,7 +483,13 @@ func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []st
 				logger.String("catalog_id", catalogID),
 				logger.String("registry_id", entry.RegistryID),
 				logger.Error(err))
+			continue
 		}
+		loaded = true
+	}
+	// Signal topology change once if at least one model was loaded (no lock held here).
+	if loaded {
+		mm.notifyTopologyChanged()
 	}
 }
 
@@ -550,6 +592,16 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 			Build()
 	}
 
+	// topologyChanged is set when a model is unloaded below. The deferred notify
+	// is registered BEFORE the unlock defer so it runs AFTER the lock is released
+	// (deferred calls run LIFO), keeping notifyTopologyChanged outside the lock.
+	topologyChanged := false
+	defer func() {
+		if topologyChanged {
+			mm.notifyTopologyChanged()
+		}
+	}()
+
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 
@@ -580,6 +632,8 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 				Context("unload_error", err.Error()).
 				Build()
 		}
+		// Model unloaded: topology changed. Deferred notify fires after unlock.
+		topologyChanged = true
 	}
 
 	subdir := filepath.Join(mm.modelsDir, catalogID)
@@ -781,6 +835,7 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 	}
 
 	// Unload from orchestrator BEFORE overwriting files to avoid crashes.
+	unloaded := false
 	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 		if err := mm.orchestrator.UnloadModel(entry.RegistryID); err != nil {
 			mm.mu.Unlock()
@@ -800,6 +855,7 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 				Context("unload_error", err.Error()).
 				Build()
 		}
+		unloaded = true
 	}
 
 	// Record download as in-progress.
@@ -808,6 +864,11 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 		Status:    StatusDownloading,
 	}
 	mm.mu.Unlock()
+
+	// Model unloaded above: topology changed. Notify outside the lock.
+	if unloaded {
+		mm.notifyTopologyChanged()
+	}
 
 	if err := mm.downloadModelFiles(ctx, entry, baseURL, progress, false); err != nil {
 		// Keep failed state briefly for SSE pollers, then clean up.
@@ -1002,6 +1063,9 @@ func (mm *ModelManager) hotLoadAfterInstall(log logger.Logger, entry *CatalogEnt
 			log.Warn("Failed to hot-load model (will be available after restart)",
 				logger.String("catalog_id", entry.ID),
 				logger.Error(err))
+		} else {
+			// Model hot-loaded: topology changed (no lock held here).
+			mm.notifyTopologyChanged()
 		}
 	}
 	if HasGeomodelFiles(entry) {

@@ -27,6 +27,14 @@ type Collector struct {
 	interval time.Duration
 	cpuFunc  CPUUsageFunc
 
+	// now is the clock used to timestamp each collection tick. A single tick
+	// timestamp is shared by every delta-based collector (disk I/O, database,
+	// inference, and health counters) so all rates and recorded timestamps in one
+	// collect() reference the same instant. Defaults to time.Now; tests inject a
+	// deterministic clock to avoid depending on wall-clock resolution (which is
+	// coarse on Windows and made TestCollector_InferenceThroughput flaky).
+	now func() time.Time
+
 	// Internal state for disk I/O delta computation
 	prevDiskIO   map[string]disk.IOCountersStat
 	prevDiskTime time.Time
@@ -39,6 +47,19 @@ type Collector struct {
 	inferenceCounters  *inferencestats.CounterMap
 	prevInferenceSnaps map[string]*inferencestats.Snapshot
 
+	// Per-model clip length provider for RTF computation (optional, set via SetModelClipFunc)
+	modelClipFunc func() map[string]float64
+	// Per-model RSS byte provider (optional, set via SetModelRSSFunc)
+	modelRSSFunc func() (map[string]int64, int64)
+	// Prometheus gauge setters (optional, set via SetInferenceGaugeSetters)
+	rtfGauge             func(model string, rtf float64)
+	rssGauge             func(model string, bytes int64)
+	inferenceGaugeDelete func(model string)
+	// gaugeModels tracks which model IDs have had a gauge label set so stale
+	// series can be pruned after unload. Accessed only from the collect()
+	// goroutine, so no mutex is needed.
+	gaugeModels map[string]struct{}
+
 	// Health counter tracking (optional, set via SetHealthStore/SetHealthEvents)
 	healthStore     *HealthMetricsStore
 	healthEvents    *HealthEventBuffer
@@ -46,6 +67,9 @@ type Collector struct {
 	streamHealthFn  func() []StreamHealthSnapshot
 	prevAudioSnaps  map[string]AudioRouterSnapshot
 	prevStreamSnaps map[string]StreamHealthSnapshot
+	// Audio Prometheus gauge setters (optional, set via SetAudioGaugeSetters).
+	audioQueueDepthGauge   func(source string, depth float64)
+	audioDroppedChunksGauge func(source string, total float64)
 
 	// Track which metrics have had logged errors to avoid log spam
 	loggedErrors map[string]bool
@@ -66,6 +90,7 @@ func NewCollector(store MetricsStore, interval time.Duration, cpuFunc CPUUsageFu
 		store:        store,
 		interval:     interval,
 		cpuFunc:      cpuFunc,
+		now:          time.Now,
 		prevDiskIO:   make(map[string]disk.IOCountersStat),
 		loggedErrors: make(map[string]bool),
 	}
@@ -92,8 +117,10 @@ func (c *Collector) Start(ctx context.Context) {
 
 // Metric key constants for collected system metrics.
 const (
-	// expectedMetricCount is the pre-allocation hint for the number of metrics collected per tick.
-	expectedMetricCount = 12
+	// expectedMetricCount is a lower-bound hint for the map pre-allocation per tick.
+	// Per-model RTF keys add len(models) more entries each tick, so the map may grow
+	// beyond this value. This is intentional: the map grows as needed.
+	expectedMetricCount = 13
 
 	metricCPUTotal          = "cpu.total"
 	metricMemoryUsedPercent = "memory.used_percent"
@@ -120,18 +147,28 @@ func inferenceMetricKey(modelID string) string {
 func (c *Collector) collect() {
 	points := make(map[string]float64, expectedMetricCount)
 
+	// Single authoritative timestamp for this tick. Every delta-based collector
+	// computes its delta against this instant and the previous tick's instant
+	// (a rate for disk I/O/database/inference, a recorded count for health
+	// counters), so they stay mutually consistent and the timing is fully
+	// controllable in tests.
+	tick := c.now()
+
 	c.collectCPU(points)
 	c.collectMemory(points)
 	c.collectTemperature(points)
-	c.collectDisk(points)
-	c.collectDatabase(points)
-	c.collectInference(points)
+	c.collectDisk(points, tick)
+	c.collectDatabase(points, tick)
+	c.collectInference(points, tick)
+	c.collectAudio(points)
 
 	if len(points) > 0 {
 		c.store.RecordBatch(points)
 	}
 
-	c.collectHealthCounters()
+	c.collectModelRSS()
+	c.pruneInferenceGauges()
+	c.collectHealthCounters(tick)
 }
 
 // collectCPU reads CPU usage from the injected function.
@@ -161,9 +198,9 @@ func (c *Collector) collectTemperature(points map[string]float64) {
 }
 
 // collectDisk reads disk usage and I/O statistics via gopsutil.
-func (c *Collector) collectDisk(points map[string]float64) {
+func (c *Collector) collectDisk(points map[string]float64, tick time.Time) {
 	c.collectDiskUsage(points)
-	c.collectDiskIO(points)
+	c.collectDiskIO(points, tick)
 }
 
 // collectDiskUsage reads disk usage percentages for each partition.
@@ -190,16 +227,15 @@ func (c *Collector) collectDiskUsage(points map[string]float64) {
 }
 
 // collectDiskIO computes disk I/O rates (bytes/sec) as deltas between ticks.
-func (c *Collector) collectDiskIO(points map[string]float64) {
+func (c *Collector) collectDiskIO(points map[string]float64, tick time.Time) {
 	counters, err := disk.IOCounters()
 	if err != nil {
 		c.logOnce("disk_io", "failed to read disk I/O counters: %v", err)
 		return
 	}
 
-	now := time.Now()
 	if !c.prevDiskTime.IsZero() {
-		elapsed := now.Sub(c.prevDiskTime).Seconds()
+		elapsed := tick.Sub(c.prevDiskTime).Seconds()
 		if elapsed > 0 {
 			for device := range counters {
 				counter := counters[device]
@@ -223,7 +259,7 @@ func (c *Collector) collectDiskIO(points map[string]float64) {
 	}
 
 	c.prevDiskIO = counters
-	c.prevDiskTime = now
+	c.prevDiskTime = tick
 }
 
 // SetDBCounters sets the database atomic counters for latency tracking.
@@ -235,14 +271,20 @@ func (c *Collector) SetDBCounters(counters *dbstats.Counters) {
 // usToMs converts microseconds to milliseconds.
 const usToMs = 1000.0
 
+// usPerSecond is the number of microseconds per second, used for RTF computation.
+const usPerSecond = 1_000_000.0
+
 // collectDatabase computes database latency and throughput metrics from
 // atomic counter snapshots. Requires two consecutive snapshots for deltas.
-func (c *Collector) collectDatabase(points map[string]float64) {
+func (c *Collector) collectDatabase(points map[string]float64, tick time.Time) {
 	if c.dbCounters == nil {
 		return
 	}
 
 	snap := c.dbCounters.Snapshot()
+	// Use the shared tick timestamp for delta math and as the stored reference
+	// for the next tick, rather than the snapshot's own time.Now().
+	snap.CollectedAt = tick
 
 	// Max values are reset-on-read from Snapshot(), always record them
 	// (even on the first tick when prevDBSnap is nil)
@@ -277,11 +319,42 @@ func (c *Collector) SetInferenceCounters(counters *inferencestats.CounterMap) {
 	c.inferenceCounters = counters
 }
 
+// SetModelClipFunc sets a function that returns each model's clip length in seconds.
+// Used to compute the real-time factor (RTF = avg_inference_s / clip_s).
+// Must be called before Start.
+func (c *Collector) SetModelClipFunc(f func() map[string]float64) { c.modelClipFunc = f }
+
+// SetModelRSSFunc sets a function that returns per-model host RSS deltas in bytes
+// and the runtime baseline. Used to update the RSS Prometheus gauge each tick.
+// Must be called before Start.
+func (c *Collector) SetModelRSSFunc(f func() (map[string]int64, int64)) { c.modelRSSFunc = f }
+
+// SetInferenceGaugeSetters injects the Prometheus gauge setter functions for RTF,
+// RSS, and deletion. All are nil-safe; only non-nil functions are called.
+// Must be called before Start.
+func (c *Collector) SetInferenceGaugeSetters(rtf func(string, float64), rss func(string, int64), del func(string)) {
+	c.rtfGauge = rtf
+	c.rssGauge = rss
+	c.inferenceGaugeDelete = del
+}
+
+// SetAudioGaugeSetters injects the Prometheus gauge setter functions for audio
+// queue depth and dropped-chunks total. Both are nil-safe; only non-nil
+// functions are called. Must be called before Start.
+func (c *Collector) SetAudioGaugeSetters(queueDepth, droppedChunks func(string, float64)) {
+	c.audioQueueDepthGauge = queueDepth
+	c.audioDroppedChunksGauge = droppedChunks
+}
+
 // AudioRouterSnapshot holds cumulative counter values for a single audio source.
 type AudioRouterSnapshot struct {
 	SourceID string
 	Drops    int64
 	Errors   int64
+	// QueueDepth is the instantaneous maximum inbox occupancy across all routes
+	// for this source. It is a gauge (not a counter) and is updated on every
+	// collection tick.
+	QueueDepth int64
 }
 
 // StreamHealthSnapshot holds cumulative counter values for a single RTSP stream,
@@ -316,12 +389,25 @@ func (c *Collector) SetHealthEvents(buf *HealthEventBuffer) {
 	c.healthEvents = buf
 }
 
-func (c *Collector) collectInference(points map[string]float64) {
+func (c *Collector) collectInference(points map[string]float64, tick time.Time) {
 	if c.inferenceCounters == nil {
 		return
 	}
 
+	var clips map[string]float64
+	if c.modelClipFunc != nil {
+		clips = c.modelClipFunc()
+	}
+
 	snaps := c.inferenceCounters.SnapshotAll()
+	// Stamp every snapshot with the shared tick timestamp so throughput deltas
+	// (and the previous-snapshot references stored below) use one consistent,
+	// test-controllable clock instead of each Snapshot's own time.Now().
+	for modelID := range snaps {
+		s := snaps[modelID]
+		s.CollectedAt = tick
+		snaps[modelID] = s
+	}
 
 	if c.prevInferenceSnaps == nil {
 		c.prevInferenceSnaps = make(map[string]*inferencestats.Snapshot, len(snaps))
@@ -342,12 +428,61 @@ func (c *Collector) collectInference(points map[string]float64) {
 			continue
 		}
 
+		// avg_ms and rtf use the raw signed delta, exactly as before Phase 3.
+		// A counter reset (negative delta) falls through to the else branch and
+		// zeroes avg_ms, preserving the original Phase 1 behavior.
 		deltaInvokes := snap.InvokeCount - prev.InvokeCount
 		if deltaInvokes > 0 {
 			deltaUs := snap.InvokeTotalUs - prev.InvokeTotalUs
 			points[key] = float64(deltaUs) / float64(deltaInvokes) / usToMs
+
+			if clips != nil {
+				if clip, ok := clips[modelID]; ok && clip > 0 {
+					intervalAvgSec := (float64(deltaUs) / float64(deltaInvokes)) / usPerSecond
+					rtf := intervalAvgSec / clip
+					points[inferencestats.RTFMetricKey(modelID)] = rtf
+					if c.rtfGauge != nil {
+						c.rtfGauge(modelID, rtf)
+						if c.gaugeModels == nil {
+							c.gaugeModels = make(map[string]struct{})
+						}
+						c.gaugeModels[modelID] = struct{}{}
+					}
+				}
+			}
 		} else {
 			points[key] = 0
+		}
+
+		// Throughput and error_rate use reset-adjusted deltas so that a counter
+		// reset (e.g. process restart) is treated as the absolute current value
+		// rather than a negative spike. These locals are scoped to the new series
+		// and do not affect avg_ms or rtf above.
+		tpInvokes := deltaInvokes
+		if tpInvokes < 0 {
+			tpInvokes = snap.InvokeCount
+		}
+		tpErrors := snap.InvokeErrors - prev.InvokeErrors
+		if tpErrors < 0 {
+			tpErrors = snap.InvokeErrors
+		}
+
+		// Elapsed seconds between the two snapshots, used for throughput computation.
+		elapsedSeconds := snap.CollectedAt.Sub(prev.CollectedAt).Seconds()
+
+		// Throughput: invocations per second over the tick interval.
+		if elapsedSeconds > 0 {
+			points[inferencestats.ThroughputMetricKey(modelID)] = float64(tpInvokes) / elapsedSeconds
+		} else {
+			points[inferencestats.ThroughputMetricKey(modelID)] = 0
+		}
+
+		// Error rate: errors / (errors + invocations) over the tick interval, range [0, 1].
+		total := tpErrors + tpInvokes
+		if total > 0 {
+			points[inferencestats.ErrorRateMetricKey(modelID)] = float64(tpErrors) / float64(total)
+		} else {
+			points[inferencestats.ErrorRateMetricKey(modelID)] = 0
 		}
 
 		s := snap
@@ -357,6 +492,43 @@ func (c *Collector) collectInference(points map[string]float64) {
 	for modelID := range c.prevInferenceSnaps {
 		if _, ok := snaps[modelID]; !ok {
 			delete(c.prevInferenceSnaps, modelID)
+		}
+	}
+}
+
+// collectModelRSS sets the per-model RSS Prometheus gauge each tick. RSS is set
+// shortly after load (the warm-up + measurement is deferred and run off o.mu,
+// so it lands a moment after the model becomes visible) and stable until reload;
+// setting it every tick is idempotent and handles model add/remove, and the tick
+// cadence naturally picks up the value once the deferred warm-up records it. RSS
+// is not written to the ring buffer in Phase 1.
+func (c *Collector) collectModelRSS() {
+	if c.modelRSSFunc == nil || c.rssGauge == nil {
+		return
+	}
+	perModel, _ := c.modelRSSFunc()
+	for id, bytes := range perModel {
+		c.rssGauge(id, bytes)
+		if c.gaugeModels == nil {
+			c.gaugeModels = make(map[string]struct{})
+		}
+		c.gaugeModels[id] = struct{}{}
+	}
+}
+
+// pruneInferenceGauges deletes gauge label values for models that are no longer
+// loaded, preventing stale Prometheus series after unload/reload. The canonical
+// loaded set is modelClipFunc() (all loaded models, independent of RSS
+// availability). No-op until the clip func and delete callback are wired.
+func (c *Collector) pruneInferenceGauges() {
+	if c.modelClipFunc == nil || c.inferenceGaugeDelete == nil || len(c.gaugeModels) == 0 {
+		return
+	}
+	loaded := c.modelClipFunc()
+	for id := range c.gaugeModels {
+		if _, ok := loaded[id]; !ok {
+			c.inferenceGaugeDelete(id)
+			delete(c.gaugeModels, id)
 		}
 	}
 }
@@ -402,19 +574,35 @@ func skipCollectorFS(fstype string) bool {
 	return skipCollectorFSTypes[fstype]
 }
 
+// collectAudio records the aggregate audio queue depth into the MetricsStore
+// batch so it is available to the frontend sparkline series and the metrics
+// history API. Only records when audioRouterFn is wired; no-ops otherwise.
+func (c *Collector) collectAudio(points map[string]float64) {
+	if c.audioRouterFn == nil {
+		return
+	}
+	snaps := c.audioRouterFn()
+	var sum int64
+	for _, s := range snaps {
+		sum += s.QueueDepth
+	}
+	points[MetricKeyAudioQueueDepthAggregate] = float64(sum)
+}
+
 // collectHealthCounters samples cumulative audio and stream counters,
 // computes deltas from the previous snapshot, and records them into the
 // dedicated HealthMetricsStore. Follows the same delta pattern as collectDiskIO.
-func (c *Collector) collectHealthCounters() {
+func (c *Collector) collectHealthCounters(tick time.Time) {
 	if c.healthStore == nil {
 		return
 	}
-	now := time.Now()
-	c.collectAudioHealthCounters(now)
-	c.collectStreamHealthCounters(now)
+	c.collectAudioHealthCounters(tick)
+	c.collectStreamHealthCounters(tick)
 }
 
-// collectAudioHealthCounters computes deltas for audio drops and overruns.
+// collectAudioHealthCounters computes deltas for audio drops and overruns and
+// updates Prometheus gauges. Queue depth is recorded into the MetricsStore
+// batch by collectAudio (called from collect), not here.
 func (c *Collector) collectAudioHealthCounters(now time.Time) {
 	if c.audioRouterFn == nil {
 		return
@@ -438,10 +626,21 @@ func (c *Collector) collectAudioHealthCounters(now time.Time) {
 			// IDs. Seed a zero here so ResultsQueueDropCheck reads "Healthy" from
 			// startup instead of "Skipped", consistent with the audio drop checks.
 			c.healthStore.RecordAt(MetricPrefixResultsQueueDrops+id, 0, now)
+			// Prometheus audio gauges are intentionally NOT set on the seeding tick:
+			// only the health-store keys are seeded. Gauges are set from the second
+			// tick onward once a previous snapshot exists for delta computation.
 			continue
 		}
 		c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, MetricTypeAudioDrops, now)
 		c.recordHealthDelta(MetricPrefixAudioOverruns+id, cur.Errors, prev.Errors, id, MetricTypeAudioOverruns, now)
+
+		// Update Prometheus gauges if wired.
+		if c.audioQueueDepthGauge != nil {
+			c.audioQueueDepthGauge(id, float64(cur.QueueDepth))
+		}
+		if c.audioDroppedChunksGauge != nil {
+			c.audioDroppedChunksGauge(id, float64(cur.Drops))
+		}
 	}
 
 	c.prevAudioSnaps = current

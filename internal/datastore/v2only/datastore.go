@@ -38,6 +38,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	obmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -139,6 +140,11 @@ type Datastore struct {
 	avesClassID        *uint // "Aves" taxonomic class ID (optional)
 	chiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
 
+	// nonBirdLabelTypeIDs maps each non-bird sound category to its label_type_id.
+	// Set once in the constructor (read-only afterwards) so concurrent Save calls can
+	// classify Perch v2 (FSD50K) sound classes without a data race.
+	nonBirdLabelTypeIDs map[nonbird.Category]uint
+
 	// names holds the species name lookup maps behind an atomic.Pointer
 	// for lock-free reads and atomic swaps when locale changes.
 	names atomic.Pointer[nameMaps]
@@ -195,6 +201,20 @@ type Config struct {
 	SpeciesCodeMap map[string]string
 }
 
+// getOrCreateLabelTypeID returns the id of the label type named name, creating
+// the row if absent. It returns an error if the resolved id is 0 (a zero
+// label_type_id is a silent FK orphan that would corrupt label rows).
+func getOrCreateLabelTypeID(db *gorm.DB, name string) (uint, error) {
+	var lt entities.LabelType
+	if err := db.Where("name = ?", name).FirstOrCreate(&lt, entities.LabelType{Name: name}).Error; err != nil {
+		return 0, fmt.Errorf("resolve label type %q: %w", name, err)
+	}
+	if lt.ID == 0 {
+		return 0, fmt.Errorf("label type %q resolved to id 0", name)
+	}
+	return lt.ID, nil
+}
+
 // New creates a new V2-only Datastore.
 func New(cfg *Config) (*Datastore, error) {
 	if cfg.Manager == nil {
@@ -225,14 +245,27 @@ func New(cfg *Config) (*Datastore, error) {
 		return nil, fmt.Errorf("failed to migrate species_notes table: %w", err)
 	}
 
-	// Get or verify species label type ID
+	// Get or verify species label type ID.
+	// Uses the helper so a zero id (FK orphan) causes construction to fail early.
 	speciesLabelTypeID := cfg.SpeciesLabelTypeID
 	if speciesLabelTypeID == 0 {
-		var labelType entities.LabelType
-		if err := db.Where("name = ?", "species").FirstOrCreate(&labelType, entities.LabelType{Name: "species"}).Error; err != nil {
+		var err error
+		speciesLabelTypeID, err = getOrCreateLabelTypeID(db, entities.LabelTypeSpecies)
+		if err != nil {
 			return nil, fmt.Errorf("failed to get species label type: %w", err)
 		}
-		speciesLabelTypeID = labelType.ID
+	}
+
+	// Build cached map of non-bird category -> label_type_id.
+	// All seven IDs are resolved once here (read-only after construction) so
+	// concurrent Save calls can classify non-bird sounds without a data race.
+	nonBirdLabelTypeIDs := make(map[nonbird.Category]uint, len(nonbird.Categories()))
+	for _, cat := range nonbird.Categories() {
+		id, err := getOrCreateLabelTypeID(db, string(cat))
+		if err != nil {
+			return nil, fmt.Errorf("resolve non-bird label type for category %q: %w", cat, err)
+		}
+		nonBirdLabelTypeIDs[cat] = id
 	}
 
 	// Get or verify default model ID (BirdNET)
@@ -289,25 +322,26 @@ func New(cfg *Config) (*Datastore, error) {
 	}
 
 	ds := &Datastore{
-		manager:            cfg.Manager,
-		detection:          cfg.Detection,
-		label:              cfg.Label,
-		model:              cfg.Model,
-		source:             cfg.Source,
-		weather:            cfg.Weather,
-		imageCache:         cfg.ImageCache,
-		threshold:          cfg.Threshold,
-		notification:       cfg.Notification,
-		appEvent:           cfg.AppEvent,
-		log:                cfg.Logger,
-		timezone:           tz,
-		suncalc:            cfg.SunCalc,
-		defaultModelID:     defaultModelID,
-		speciesLabelTypeID: speciesLabelTypeID,
-		avesClassID:        avesClassID,
-		chiropteraClassID:  chiropteraClassID,
-		speciesCodeMap:     speciesCodeMap,
-		dbCounters:         dbCounters,
+		manager:             cfg.Manager,
+		detection:           cfg.Detection,
+		label:               cfg.Label,
+		model:               cfg.Model,
+		source:              cfg.Source,
+		weather:             cfg.Weather,
+		imageCache:          cfg.ImageCache,
+		threshold:           cfg.Threshold,
+		notification:        cfg.Notification,
+		appEvent:            cfg.AppEvent,
+		log:                 cfg.Logger,
+		timezone:            tz,
+		suncalc:             cfg.SunCalc,
+		defaultModelID:      defaultModelID,
+		speciesLabelTypeID:  speciesLabelTypeID,
+		avesClassID:         avesClassID,
+		chiropteraClassID:   chiropteraClassID,
+		nonBirdLabelTypeIDs: nonBirdLabelTypeIDs,
+		speciesCodeMap:      speciesCodeMap,
+		dbCounters:          dbCounters,
 	}
 	ds.names.Store(nm)
 
@@ -543,6 +577,20 @@ func (ds *Datastore) GetDatabaseStats(ctx context.Context) (*datastore.DatabaseS
 	return stats, nil
 }
 
+// labelTypeForRawLabel resolves the label_type_id and taxonomic_class_id for a label given its
+// full raw classifier label. A Perch v2 (FSD50K) non-bird sound class (recognized by
+// nonbird.CategoryOf on the full raw label) gets its category's label type and a nil taxonomic
+// class; everything else (birds, and any label not recognized as non-bird, including an empty
+// rawLabel) gets the species label type and the model's taxonomic class. The stored scientific
+// name is unchanged by this function - the caller still stores the extracted scientific name.
+// isNonBird reports whether the non-bird branch was taken (used to gate first-writer-wins relabel).
+func (ds *Datastore) labelTypeForRawLabel(rawLabel string, speciesTaxClassID *uint) (labelTypeID uint, taxClassID *uint, isNonBird bool) {
+	if cat, ok := nonbird.CategoryOf(rawLabel); ok {
+		return ds.nonBirdLabelTypeIDs[cat], nil, true
+	}
+	return ds.speciesLabelTypeID, speciesTaxClassID, false
+}
+
 // taxonomicClassForModel returns the appropriate taxonomic class ID for label
 // creation based on the model type. Bird models use Aves, bat models use
 // Chiroptera, and multi-taxa models use nil (no default taxonomic class).
@@ -565,6 +613,81 @@ func (ds *Datastore) EnsureModelRegistered(info detection.ModelInfo) error {
 	ctx := context.Background()
 	_, err := ds.model.GetOrCreate(ctx, info.Name, info.Version, info.Variant, detection.ResolveModelType(info.Name, info.Version), info.ClassifierPath)
 	return err
+}
+
+// resolvePredictionLabels classifies and batch-resolves labels for all prediction results.
+// It groups predictions by their (labelTypeID, taxClassID), calls BatchGetOrCreate per group,
+// relabels any non-bird groups that were previously stored with the wrong (species) type, and
+// returns a predLabels slice in the same order as results. Returns nil if results is empty.
+func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []datastore.Results, modelID uint, taxonomicClassID *uint) ([]*entities.Label, error) {
+	if len(results) == 0 {
+		return nil, nil
+	}
+
+	// Collect species names and classify each prediction.
+	// Results.Species may contain concatenated "ScientificName_CommonName" format
+	// from legacy code (see AdditionalResultsToDatastoreResults). Extract only
+	// the scientific name portion for v2 label storage.
+	speciesNames := make([]string, len(results))
+	predTypeIDs := make([]uint, len(results))
+	predTaxIDs := make([]*uint, len(results))
+	for i, r := range results {
+		speciesNames[i] = detection.ExtractScientificName(r.Species)
+		predTypeIDs[i], predTaxIDs[i], _ = ds.labelTypeForRawLabel(r.RawLabel, taxonomicClassID)
+	}
+
+	// Group prediction names by (labelTypeID, taxClassID). taxClassID nil is represented
+	// by 0 in the key (real taxonomic-class IDs are never 0); groupTax preserves the
+	// actual *uint to pass to BatchGetOrCreate.
+	type predGroupKey struct{ typeID, taxID uint }
+	groupNames := make(map[predGroupKey][]string)
+	groupTax := make(map[predGroupKey]*uint)
+	for i := range results {
+		var taxKey uint
+		if predTaxIDs[i] != nil {
+			taxKey = *predTaxIDs[i]
+		}
+		k := predGroupKey{predTypeIDs[i], taxKey}
+		groupNames[k] = append(groupNames[k], speciesNames[i])
+		groupTax[k] = predTaxIDs[i]
+	}
+
+	// Batch resolve each group and merge into a single name->label map. A given scientific name
+	// maps to exactly one label row per model (unique on (scientific_name, model_id)), so even if
+	// the same name were classified into two groups, both BatchGetOrCreate calls return the same
+	// underlying label (same ID). Downstream uses only the label ID, so the merge is safe
+	// regardless of group iteration order.
+	merged := make(map[string]*entities.Label, len(results))
+	for k, names := range groupNames {
+		m, err := ds.label.BatchGetOrCreate(ctx, names, modelID, k.typeID, groupTax[k])
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch get/create prediction labels: %w", err)
+		}
+		for name, lbl := range m {
+			// First-writer-wins relabel for non-bird groups (k.typeID is not the species type).
+			if k.typeID != ds.speciesLabelTypeID && lbl.LabelTypeID != k.typeID {
+				if err := ds.label.UpdateLabelType(ctx, lbl.ID, k.typeID); err != nil {
+					return nil, fmt.Errorf("failed to relabel non-bird prediction label %q: %w", name, err)
+				}
+				lbl.LabelTypeID = k.typeID
+				lbl.TaxonomicClassID = nil
+			}
+			merged[name] = lbl
+		}
+	}
+
+	// Resolve predLabels in original order.
+	predLabels := make([]*entities.Label, len(results))
+	for i := range results {
+		sciName := speciesNames[i]
+		lbl, ok := merged[sciName]
+		if !ok {
+			return nil, fmt.Errorf("label not found for species %s after batch creation", results[i].Species)
+		}
+		predLabels[i] = lbl
+	}
+
+	return predLabels, nil
 }
 
 // Save saves a note with its results atomically.
@@ -591,40 +714,30 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// If the detection save fails, orphaned reference data may persist.
 	// This is acceptable as they will be reused on subsequent saves.
 	// Extract scientific name in case it contains concatenated "ScientificName_CommonName" format.
-	label, err := ds.label.GetOrCreate(ctx, detection.ExtractScientificName(note.ScientificName), model.ID, ds.speciesLabelTypeID, taxonomicClassID)
+	// Classify the primary label: non-bird Perch sound classes get their category's label type
+	// and a nil taxonomic class; birds and unrecognized labels (including empty RawLabel) keep
+	// the species label type and the model's taxonomic class.
+	primaryTypeID, primaryTaxID, primaryNonBird := ds.labelTypeForRawLabel(note.RawLabel, taxonomicClassID)
+	label, err := ds.label.GetOrCreate(ctx, detection.ExtractScientificName(note.ScientificName), model.ID, primaryTypeID, primaryTaxID)
 	if err != nil {
 		return fmt.Errorf("failed to get/create label: %w", err)
 	}
+	// First-writer-wins relabel: if this non-bird class was previously created as species, correct its type.
+	if primaryNonBird && label.LabelTypeID != primaryTypeID {
+		if err := ds.label.UpdateLabelType(ctx, label.ID, primaryTypeID); err != nil {
+			return fmt.Errorf("failed to relabel non-bird label %q: %w", label.ScientificName, err)
+		}
+		label.LabelTypeID = primaryTypeID
+		label.TaxonomicClassID = nil
+	}
 
 	// Pre-resolve all prediction labels before starting transaction.
-	// Uses batch operation to avoid N+1 queries.
-	var predLabels []*entities.Label
-	if len(results) > 0 {
-		// Collect species names for batch resolution.
-		// Results.Species may contain concatenated "ScientificName_CommonName" format
-		// from legacy code (see AdditionalResultsToDatastoreResults). Extract only
-		// the scientific name portion for v2 label storage.
-		speciesNames := make([]string, len(results))
-		for i, r := range results {
-			speciesNames[i] = detection.ExtractScientificName(r.Species)
-		}
-
-		// Batch resolve all labels (returns map[scientificName]*Label)
-		labelMap, err := ds.label.BatchGetOrCreate(ctx, speciesNames, model.ID, ds.speciesLabelTypeID, taxonomicClassID)
-		if err != nil {
-			return fmt.Errorf("failed to batch get/create prediction labels: %w", err)
-		}
-
-		// Build predLabels slice from map, preserving order
-		predLabels = make([]*entities.Label, len(results))
-		for i := range results {
-			sciName := speciesNames[i]
-			lbl, ok := labelMap[sciName]
-			if !ok {
-				return fmt.Errorf("label not found for species %s after batch creation", results[i].Species)
-			}
-			predLabels[i] = lbl
-		}
+	// Uses batch operation to avoid N+1 queries. Predictions are grouped by their
+	// classified (labelTypeID, taxClassID) so BatchGetOrCreate can be called once per
+	// group. Non-bird groups are relabeled if they were previously stored as species.
+	predLabels, err := ds.resolvePredictionLabels(ctx, results, model.ID, taxonomicClassID)
+	if err != nil {
+		return err
 	}
 
 	// Parse the date string and time string to get Unix timestamp
@@ -892,13 +1005,16 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Locked:         locked,
 	}
 
-	// Populate model info from preloaded Model entity
+	// Populate model info from preloaded Model entity. ModelType is carried here
+	// (from the batch-loaded ai_models relation) so API handlers can read it
+	// directly instead of issuing a per-detection lookup (avoids N+1 on lists).
 	if det.Model != nil {
 		note.Model = detection.ModelInfo{
 			Name:           det.Model.Name,
 			Version:        det.Model.Version,
 			Variant:        det.Model.Variant,
 			ClassifierPath: det.Model.ClassifierPath,
+			ModelType:      string(det.Model.ModelType),
 		}
 	}
 
@@ -995,6 +1111,14 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 	// TimeOfDay calculation
 	timeOfDay := ds.calculateTimeOfDay(timestamp, lat, lon)
 
+	// Model type from the preloaded Model entity (batch-loaded via
+	// loadDetectionRelations), so the search UI can pick the correct spectrogram
+	// frequency axis (bat vs bird) without a per-result lookup.
+	modelType := ""
+	if det.Model != nil {
+		modelType = string(det.Model.ModelType)
+	}
+
 	return datastore.DetectionRecord{
 		ID:             strconv.FormatUint(uint64(det.ID), 10),
 		Timestamp:      timestamp,
@@ -1012,6 +1136,7 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 		Device:         device,
 		Source:         source,
 		TimeOfDay:      timeOfDay,
+		ModelType:      modelType,
 	}
 }
 
@@ -3022,6 +3147,400 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	return results, nil
 }
 
+// GetActivityHeatmap returns detection counts bucketed by (station-local date, intra-day slot)
+// over [startDate, endDate]. It fetches the raw detection timestamps in range (false positives
+// excluded) and buckets them in Go (buildActivityHeatmap), keeping the slot/date math out of
+// dialect SQL and correct across DST. species is an optional scientific-name filter; an unknown
+// species yields an empty grid that still carries the full date axis.
+func (ds *Datastore) GetActivityHeatmap(ctx context.Context, startDate, endDate, species string) (datastore.ActivityHeatmapData, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return datastore.ActivityHeatmapData{}, err
+	}
+
+	labelID, err := ds.resolveLabelID(ctx, species)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return buildActivityHeatmap(nil, ds.timezone, startDate, endDate)
+		}
+		return datastore.ActivityHeatmapData{}, err
+	}
+
+	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelID)
+	if err != nil {
+		return datastore.ActivityHeatmapData{}, err
+	}
+
+	return buildActivityHeatmap(timestamps, ds.timezone, startDate, endDate)
+}
+
+// selectTopSpeciesHourly is the shared selection path for the top-N-by-volume hour-of-day species
+// charts (who-sings-when ridgeline and acoustic succession). It selects the top `limit` species by
+// detection volume over [startDate, endDate] (GetTopSpecies, descending volume) and fetches their
+// false-positive-excluded per-hour counts in a single batched (label_id, hour) group-by
+// (GetBatchHourlyOccurrences). The two charts differ only in how they fold these counts, so that
+// folding stays in the caller. minConfidence is 0 so it counts every detection, matching the heatmap
+// and the other time-based analytics endpoints. Returns a nil top slice (with nil error) when no
+// species qualify, so each caller emits its own empty, non-nil result.
+func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endDate string, limit int) ([]repository.SpeciesCount, map[uint][24]int, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// minConfidence 0 counts every detection (no confidence floor), matching the heatmap and the
+	// other time-based analytics; named to avoid a bare magic literal at the two call sites.
+	const noConfidenceFloor = 0.0
+
+	// Top-N species by raw detection volume across all models (modelID nil). GetTopSpecies uses an
+	// inclusive end (<= end) while GetBatchHourlyOccurrences below uses an exclusive end (< end), so
+	// subtract one second to cover the exact same range; otherwise ranking and bucket totals could
+	// disagree on a detection landing exactly on the end boundary.
+	topEnd := end
+	if end != math.MaxInt64 {
+		topEnd--
+	}
+	top, err := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
+	if err != nil {
+		return nil, nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "select_top_species_hourly_top").
+			Build()
+	}
+	if len(top) == 0 {
+		return nil, nil, nil
+	}
+
+	// One label ID per top row; fetch their false-positive-excluded hourly counts in a single
+	// batched query (chunked internally for large label sets).
+	labelIDs := make([]uint, 0, len(top))
+	for i := range top {
+		labelIDs = append(labelIDs, top[i].LabelID)
+	}
+
+	hourlyByLabel, err := ds.detection.GetBatchHourlyOccurrences(ctx, labelIDs, start, end, ds.zoneOffsetSeconds(start), noConfidenceFloor)
+	if err != nil {
+		return nil, nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "select_top_species_hourly_buckets").
+			Build()
+	}
+
+	return top, hourlyByLabel, nil
+}
+
+// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for the
+// top `limit` species by detection volume over [startDate, endDate], ordered by descending volume.
+// It selects the top-N species and their per-hour counts via selectTopSpeciesHourly, then merges and
+// normalizes per species in Go (buildSpeciesHourlyDistribution) so each species' timing shape is
+// comparable regardless of raw volume. Powers the who-sings-when ridgeline.
+func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
+	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(top) == 0 {
+		return []datastore.SpeciesHourlyDistribution{}, nil
+	}
+	return buildSpeciesHourlyDistribution(top, hourlyByLabel), nil
+}
+
+// GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded) for
+// the top `limit` species by detection volume over [startDate, endDate], ordered by descending
+// volume. It selects the top-N species and their per-hour counts via selectTopSpeciesHourly (the
+// same path as the ridgeline), then merges per species in Go (buildAcousticSuccession). Unlike the
+// ridgeline it does NOT normalize: the streamgraph stacks raw counts so band width is detection
+// volume. Powers the acoustic succession streamgraph.
+func (ds *Datastore) GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyCounts, error) {
+	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(top) == 0 {
+		return []datastore.SpeciesHourlyCounts{}, nil
+	}
+	return buildAcousticSuccession(top, hourlyByLabel), nil
+}
+
+// GetDailyActivityOnset returns the per-day dawn-chorus onset relative to civil dawn over the
+// inclusive [startDate, endDate] range. It fetches false-positive-excluded detection timestamps
+// once (GetDetectionTimestamps), then buckets and computes the per-day onset in a shared,
+// table-tested Go helper (buildDailyActivityOnset). Civil dawn comes from the configured SunCalc,
+// expressed in the station timezone so it shares the same minute-of-day frame as the bucketed
+// detections; a day with no civil dawn (polar day / night) or too few detections gets a nil onset
+// that the client renders as a gap. species is an optional scientific-name filter; an unknown
+// species yields all-null days that still carry the full date axis (matching the heatmap).
+func (ds *Datastore) GetDailyActivityOnset(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyActivityOnset, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	dawn := ds.civilDawnMinuteLookup()
+
+	labelID, err := ds.resolveLabelID(ctx, species)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return buildDailyActivityOnset(nil, ds.timezone, startDate, endDate, onsetDetectionRank, minOnsetDetections, dawn)
+		}
+		return nil, err
+	}
+
+	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelID)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_daily_activity_onset").
+			Build()
+	}
+
+	return buildDailyActivityOnset(timestamps, ds.timezone, startDate, endDate, onsetDetectionRank, minOnsetDetections, dawn)
+}
+
+// GetConfidenceHistogram returns the per-species confidence-score distribution over the date range,
+// powering the confidence distribution chart (design spec section 6.5). With no species filter it
+// covers the top `limit` species by raw detection volume; with a species filter it covers just that
+// species (always included if it has any detections). It fetches each species' false-positive-excluded
+// confidences in one batched query (GetBatchConfidences), then bins and normalizes them in a shared,
+// table-tested Go helper (buildSpeciesConfidenceHistogram). minConfidence is 0 so every detection is
+// counted, matching the who-sings-when ridgeline and the other species analytics endpoints.
+func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endDate, species string, bins, limit int) ([]datastore.SpeciesConfidenceHistogram, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// minConfidence 0 counts every detection (no confidence floor), matching the who-sings-when
+	// ridgeline and the other time-based analytics; named to avoid a bare magic literal below.
+	const noConfidenceFloor = 0.0
+
+	// Select the species set and the per-species detection floor. An explicit species filter yields
+	// just that species (always shown if it has any detections); otherwise the top `limit` species by
+	// raw volume, with low-volume species dropped as noisy.
+	var speciesSet []repository.SpeciesCount
+	var minCount int
+	if species != "" {
+		// Use every label ID that maps to this scientific name (a species can carry one label per
+		// model), so the filtered path merges multi-model detections exactly like the top-N path below;
+		// resolving a single label ID would silently drop other models' detections for the species.
+		labelIDs, labelErr := ds.label.GetLabelIDsByScientificName(ctx, species)
+		if labelErr != nil {
+			return nil, errors.New(labelErr).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_confidence_histogram_resolve_species").
+				Build()
+		}
+		if len(labelIDs) == 0 {
+			return []datastore.SpeciesConfidenceHistogram{}, nil
+		}
+		speciesSet = make([]repository.SpeciesCount, 0, len(labelIDs))
+		for _, labelID := range labelIDs {
+			speciesSet = append(speciesSet, repository.SpeciesCount{LabelID: labelID, ScientificName: species})
+		}
+		minCount = 1
+	} else {
+		// GetTopSpecies uses an inclusive end (<= end) while GetBatchConfidences uses an exclusive end
+		// (< end); subtract one second so ranking and binned totals cover the exact same range and never
+		// disagree on a detection landing on the end boundary (mirrors GetHourlyDistributionBySpecies).
+		topEnd := end
+		if end != math.MaxInt64 {
+			topEnd--
+		}
+		top, topErr := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
+		if topErr != nil {
+			return nil, errors.New(topErr).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_confidence_histogram_top").
+				Build()
+		}
+		speciesSet = top
+		minCount = minConfidenceHistogramDetections
+	}
+
+	if len(speciesSet) == 0 {
+		return []datastore.SpeciesConfidenceHistogram{}, nil
+	}
+
+	labelIDs := make([]uint, 0, len(speciesSet))
+	for i := range speciesSet {
+		labelIDs = append(labelIDs, speciesSet[i].LabelID)
+	}
+
+	confByLabel, err := ds.detection.GetBatchConfidences(ctx, labelIDs, start, end, noConfidenceFloor)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_confidence_histogram_confidences").
+			Build()
+	}
+
+	return buildSpeciesConfidenceHistogram(speciesSet, confByLabel, bins, minCount), nil
+}
+
+// GetSpeciesAccumulation returns the species accumulation curve over [startDate, endDate]: per
+// calendar day, the cumulative count of distinct species first detected within the range (false
+// positives excluded). It fetches each species' in-period first-seen in one grouped query
+// (GetSpeciesFirstSeenInPeriod), then builds the cumulative per-day curve in a shared, table-tested
+// Go helper (buildSpeciesAccumulation) using the station timezone for date bucketing.
+func (ds *Datastore) GetSpeciesAccumulation(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesAccumulationPoint, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	firstSeen, err := ds.detection.GetSpeciesFirstSeenInPeriod(ctx, start, end)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_accumulation").
+			Build()
+	}
+
+	return buildSpeciesAccumulation(firstSeen, ds.timezone, startDate, endDate)
+}
+
+// GetAudioSources returns each audio source with at least one (false-positive-excluded) detection in
+// [startDate, endDate] (all history when both dates are empty), with its in-range detection count,
+// ordered by count descending. It fetches the grouped summaries in one query
+// (GetSourceActivitySummaries) and maps the repository rows onto the datastore result shape; the metric
+// needs no date bucketing, so there is no shared Go helper. Powers the analytics source/mic filter's
+// option list (the source dimension that the per-mic comparison chart consumes).
+func (ds *Datastore) GetAudioSources(ctx context.Context, startDate, endDate string) ([]datastore.AudioSourceSummary, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := ds.detection.GetSourceActivitySummaries(ctx, start, end)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_audio_sources").
+			Build()
+	}
+
+	summaries := make([]datastore.AudioSourceSummary, 0, len(rows))
+	for i := range rows {
+		displayName := ""
+		if rows[i].DisplayName != nil {
+			displayName = *rows[i].DisplayName
+		}
+		summaries = append(summaries, datastore.AudioSourceSummary{
+			ID:          rows[i].SourceID,
+			DisplayName: displayName,
+			NodeName:    rows[i].NodeName,
+			SourceType:  rows[i].SourceType,
+			Count:       rows[i].Count,
+		})
+	}
+	return summaries, nil
+}
+
+// GetYearOverYear returns the year-over-year tracker: the current year-to-date cumulative detection
+// count versus the same calendar span one year earlier, per current-year calendar day from Jan 1
+// through date (false positives excluded). date is a station-local YYYY-MM-DD bound; empty defaults to
+// today in the station timezone. It fetches raw detection timestamps for each window in two separate
+// grouped queries (GetDetectionTimestamps) - which skips scanning the multi-month gap between the
+// windows - then aligns and cumulates them in a shared, table-tested Go helper (buildYearOverYear).
+// Bucketing uses the station timezone while the date axis is enumerated in UTC for DST safety.
+func (ds *Datastore) GetYearOverYear(ctx context.Context, date string) (datastore.YearOverYearResult, error) {
+	loc := ds.timezone
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	// Resolve the requested date (default: today in the station timezone). Only ref's calendar date
+	// (year/month/day) is used downstream by computeYearOverYearWindows; the intraday clock is ignored.
+	ref := time.Now().In(loc)
+	if date != "" {
+		t, parseErr := time.ParseInLocation(time.DateOnly, date, loc)
+		if parseErr != nil {
+			return datastore.YearOverYearResult{}, errors.New(parseErr).
+				Component("datastore").
+				Category(errors.CategoryValidation).
+				Context("operation", "get_year_over_year").
+				Context("date", date).
+				Build()
+		}
+		ref = t
+	}
+	w := computeYearOverYearWindows(ref, loc)
+
+	thisTs, err := ds.detection.GetDetectionTimestamps(ctx, w.curStartEpoch, w.curEndEpoch, nil)
+	if err != nil {
+		return datastore.YearOverYearResult{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_year_over_year_current").
+			Build()
+	}
+	lastTs, err := ds.detection.GetDetectionTimestamps(ctx, w.priorStartEpoch, w.priorEndEpoch, nil)
+	if err != nil {
+		return datastore.YearOverYearResult{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_year_over_year_previous").
+			Build()
+	}
+
+	return buildYearOverYear(thisTs, lastTs, loc, w.curStart, w.curEnd, w.priorStart, w.priorEnd, w.curYear, w.prevYear)
+}
+
+// GetSpeciesPhenology returns the arrival/departure residency span for the top `limit` species by
+// volume over [startDate, endDate]: each species' first and last false-positive-excluded detection
+// plus the in-range count. It fetches the spans in one grouped query (GetSpeciesPhenologyInPeriod),
+// then formats the timestamps to station-local dates and orders the rows by arrival in a shared,
+// table-tested Go helper (buildSpeciesPhenology) using the station timezone.
+func (ds *Datastore) GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesPhenologyPoint, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := ds.detection.GetSpeciesPhenologyInPeriod(ctx, start, end, limit)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_phenology").
+			Build()
+	}
+
+	return buildSpeciesPhenology(rows, ds.timezone), nil
+}
+
+// civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and
+// station timezone. The closure yields civil dawn's station-local minute-of-day for a date, or
+// ok=false when no SunCalc is configured or civil dawn is undefined for the date (polar day/night).
+func (ds *Datastore) civilDawnMinuteLookup() civilDawnMinuteLookup {
+	return func(date time.Time) (int, bool) {
+		if ds.suncalc == nil {
+			return 0, false
+		}
+		// Anchor at local noon before the lookup: SunCalc re-derives the calendar date in its own
+		// coordinate-derived zone, so passing midnight could land on the adjacent day (and return
+		// the wrong day's civil dawn) when that zone trails the configured station timezone. Noon
+		// keeps the intended calendar day for any real timezone offset.
+		civilDawn, ok := ds.suncalc.GetCivilDawn(date.Add(12 * time.Hour))
+		if !ok {
+			return 0, false
+		}
+		// Express civil dawn in the station timezone so its minute-of-day matches the frame used to
+		// bucket detections; this stays correct even if SunCalc's coordinate-derived zone differs
+		// from the configured station timezone or across DST.
+		lt := civilDawn.In(ds.timezone)
+		return lt.Hour()*60 + lt.Minute(), true
+	}
+}
+
 // ============================================================
 // Dynamic Threshold Methods
 // ============================================================
@@ -3548,11 +4067,13 @@ func notificationScientificName(h *entities.NotificationHistory) string {
 
 // SaveNotificationHistory saves a notification history entry.
 // Resolves the scientific name to a label ID before saving.
-func (ds *Datastore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+func (ds *Datastore) SaveNotificationHistory(ctx context.Context, history *datastore.NotificationHistory) error {
 	if ds.notification == nil {
 		return fmt.Errorf("notification repository not configured")
 	}
-	ctx := context.Background()
+	if history == nil {
+		return fmt.Errorf("notification history cannot be nil")
+	}
 
 	// Resolve scientific name to label ID using default model
 	label, err := ds.label.GetOrCreate(ctx, history.ScientificName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
@@ -3570,11 +4091,10 @@ func (ds *Datastore) SaveNotificationHistory(history *datastore.NotificationHist
 }
 
 // GetNotificationHistory retrieves a notification history entry.
-func (ds *Datastore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+func (ds *Datastore) GetNotificationHistory(ctx context.Context, scientificName, notificationType string) (*datastore.NotificationHistory, error) {
 	if ds.notification == nil {
 		return nil, datastore.ErrNotificationHistoryNotFound
 	}
-	ctx := context.Background()
 	h, err := ds.notification.GetNotificationHistory(ctx, scientificName, notificationType)
 	if err != nil {
 		return nil, err
@@ -3591,11 +4111,10 @@ func (ds *Datastore) GetNotificationHistory(scientificName, notificationType str
 }
 
 // GetActiveNotificationHistory retrieves active notification history entries.
-func (ds *Datastore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+func (ds *Datastore) GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]datastore.NotificationHistory, error) {
 	if ds.notification == nil {
 		return []datastore.NotificationHistory{}, nil
 	}
-	ctx := context.Background()
 	v2Histories, err := ds.notification.GetActiveNotificationHistory(ctx, after)
 	if err != nil {
 		return nil, err
@@ -3617,11 +4136,10 @@ func (ds *Datastore) GetActiveNotificationHistory(after time.Time) ([]datastore.
 }
 
 // DeleteExpiredNotificationHistory deletes expired notification history entries.
-func (ds *Datastore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+func (ds *Datastore) DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) {
 	if ds.notification == nil {
 		return 0, nil
 	}
-	ctx := context.Background()
 	return ds.notification.DeleteExpiredNotificationHistory(ctx, before)
 }
 

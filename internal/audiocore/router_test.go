@@ -922,7 +922,7 @@ func TestRouter_Dispatch_RefFullInboxDrops(t *testing.T) {
 	// Dispatch enough frames to guarantee drops: the drainer consumes at most
 	// one frame before blocking in Write, so 2*cap + 1 leaves no room for
 	// timing-related flakiness.
-	totalFrames := 2*routeInboxCapacity + 1
+	totalFrames := 2*RouteInboxCapacity + 1
 	for range totalFrames {
 		ref := NewFrameRef(func() { released.Add(1) })
 		router.Dispatch(AudioFrame{
@@ -1149,4 +1149,36 @@ func TestRouter_PoolCacheHit(t *testing.T) {
 	assert.NotNil(t, route.float64Pool.Load(), "float64Pool should be cached after frames")
 	assert.NotNil(t, route.byteOutPool.Load(), "byteOutPool should be cached after frames")
 	router.mu.RUnlock()
+}
+
+// TestRouter_QueueDepth verifies that Routes() returns the current inbox
+// occupancy in RouteInfo.QueueDepth for routes with queued frames.
+func TestRouter_QueueDepth(t *testing.T) {
+	t.Parallel()
+
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(func() { router.Close() })
+
+	const consumerID = "analysis-consumer"
+	consumer := newBlockingConsumer(consumerID)
+	t.Cleanup(consumer.unblock)
+
+	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 0.0, nil))
+
+	// Push N frames without draining. The drainer goroutine will take at most
+	// one frame (blocking in Write), so inbox occupancy should be N-1 or N.
+	// We overfill slightly so at least RouteInboxCapacity frames sit in the
+	// inbox after the drainer goroutine takes one.
+	const pushFrames = RouteInboxCapacity
+	for range pushFrames {
+		router.Dispatch(testFrame("src-1"))
+	}
+
+	// QueueDepth must be positive: the inbox has frames queued.
+	routes := router.Routes("src-1")
+	require.Len(t, routes, 1)
+	assert.Positive(t, routes[0].QueueDepth,
+		"QueueDepth must be positive when frames are queued in the inbox")
+	assert.LessOrEqual(t, routes[0].QueueDepth, RouteInboxCapacity,
+		"QueueDepth must not exceed inbox capacity")
 }

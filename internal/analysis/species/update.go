@@ -139,6 +139,17 @@ func (t *SpeciesTracker) updateSeasonalTrackingLocked(scientificName string, det
 // UpdateSpecies updates the first seen time for a species if necessary
 // Returns true if this is a new species detection
 func (t *SpeciesTracker) UpdateSpecies(scientificName string, detectionTime time.Time) bool {
+	// While the background load is in flight the maps are not yet populated, so
+	// every species would look new. Suppress (return not-new) and skip recording;
+	// the detection is still persisted by the caller and tracked from the next one.
+	if t.warming.Load() {
+		return false
+	}
+
+	// Collapse taxonomic aliases so this taxon keys identically to its history,
+	// regardless of which name (legacy or canonical) the caller passed.
+	scientificName = canonicalSpeciesName(scientificName)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -159,6 +170,14 @@ func (t *SpeciesTracker) UpdateSpecies(scientificName string, detectionTime time
 
 // IsNewSpecies checks if a species is considered "new" within the configured window
 func (t *SpeciesTracker) IsNewSpecies(scientificName string) bool {
+	// Suppress while warming: the maps are empty mid-load, so an unguarded check
+	// would report every species as never-seen-before.
+	if t.warming.Load() {
+		return false
+	}
+
+	scientificName = canonicalSpeciesName(scientificName)
+
 	t.mu.RLock()
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
 	t.mu.RUnlock()
@@ -227,6 +246,24 @@ func (t *SpeciesTracker) CheckAndUpdateSpecies(scientificName string, detectionT
 // CheckAndUpdateSpeciesWithNovelty atomically checks species status, updates
 // tracking, and returns novelty episode details for alert rules.
 func (t *SpeciesTracker) CheckAndUpdateSpeciesWithNovelty(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int, novelty NoveltyStatus) {
+	// While warming, suppress new-species/novelty and skip recording so the empty
+	// maps cannot produce a spurious first-detection. Checked before t.mu so it
+	// never blocks on the lock the background loader holds.
+	//
+	// daysSinceFirstSeen is 0 here, NOT the -1 "unknown" sentinel used by
+	// warmingSpeciesStatus: this value flows to events.NewDetectionEvent, which
+	// rejects a negative daysSinceFirstSeen. A -1 would drop the ordinary
+	// detection.occurred event for every detection during warm-up and break
+	// alert rules. With isNew=false the value is not interpreted as "new today".
+	if t.warming.Load() {
+		return false, 0, inactiveNoveltyStatus(inactiveNoveltyValue)
+	}
+
+	// Collapse taxonomic aliases so the lookup and recording below key this taxon
+	// identically to its loaded history (canonical names) regardless of which name
+	// the detection carried.
+	scientificName = canonicalSpeciesName(scientificName)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

@@ -9,6 +9,7 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
+      - "Taskfile.yml"
       - ".github/workflows/container-test.yml"
   pull_request:
     paths:
@@ -17,6 +18,7 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
+      - "Taskfile.yml"
       - ".github/workflows/container-test.yml"
 
 concurrency:
@@ -32,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -65,7 +67,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 

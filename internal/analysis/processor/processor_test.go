@@ -274,3 +274,39 @@ func TestProcessor_resolveAudioSource_EnrichesFromRegistry(t *testing.T) {
 		})
 	}
 }
+
+// TestConvertToAdditionalResults_ExcludesAliasedPrimary verifies that the primary
+// species is excluded from the additional results even when the model emitted it under
+// a legacy/alias scientific name while primaryScientificName is the canonical name (as
+// happens after parseAndValidateSpecies canonicalizes the primary). Otherwise the
+// aliased primary would be stored a second time as an additional result.
+func TestConvertToAdditionalResults_ExcludesAliasedPrimary(t *testing.T) {
+	t.Parallel()
+
+	input := []datastore.Results{
+		// The model emitted the primary taxon under its legacy v2.4 name.
+		{Species: "Streptopelia senegalensis_Laughing Dove", Confidence: 0.91},
+		{Species: "Turdus merula_Eurasian Blackbird", Confidence: 0.40},
+	}
+
+	// primaryScientificName is the canonical name resolved by parseAndValidateSpecies.
+	result := convertToAdditionalResults(input, "Spilopelia senegalensis")
+
+	require.Len(t, result, 1, "the aliased primary must be excluded from additional results")
+	assert.Equal(t, "Turdus merula", result[0].Species.ScientificName)
+}
+
+func TestConvertToAdditionalResults_SetsRawLabelFromSpecies(t *testing.T) {
+	t.Parallel()
+
+	input := []datastore.Results{
+		{Species: "male_speech_and_man_speaking", Confidence: 0.80},
+		{Species: "Turdus merula_Common Blackbird", Confidence: 0.75},
+	}
+
+	result := convertToAdditionalResults(input, "")
+
+	require.Len(t, result, 2)
+	assert.Equal(t, "male_speech_and_man_speaking", result[0].RawLabel, "raw label must equal the original r.Species string")
+	assert.Equal(t, "Turdus merula_Common Blackbird", result[1].RawLabel, "raw label must equal the original r.Species string")
+}

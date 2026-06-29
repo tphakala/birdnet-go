@@ -26,8 +26,15 @@ func setDefaultConfig() {
 
 	// Per-module log files
 	// Core processing modules
-	setModuleLogDefaults("analysis", true)    // Bird detection analysis
-	setModuleLogDefaults("birdnet", true)     // BirdNET model inference
+	setModuleLogDefaults("analysis", true) // Bird detection analysis
+	setModuleLogDefaults("birdnet", true)  // BirdNET model inference
+	// Mirror the birdnet module to the console so backend selection, model-init,
+	// reload, and bat-scheduler lines are visible in journald/containers and not
+	// only in logs/birdnet.log. This realigns the viper default with the intent in
+	// logger/config.go (applyConfigDefaults), which the generated config was
+	// silently overriding. Console mirroring is filtered at the console level
+	// (info), so the module's debug-level per-inference file logs never reach stdout.
+	viper.SetDefault("logging.modules.birdnet.console_also", true)
 	setModuleLogDefaults("audio", true)       // Audio capture/processing
 	setModuleLogDefaults("datastore", true)   // Database operations
 	setModuleLogDefaults("spectrogram", true) // Spectrogram generation
@@ -353,6 +360,9 @@ func setDefaultConfig() {
 	viper.SetDefault("webserver.livestream.sampleRate", DefaultLiveStreamSampleRate)
 	viper.SetDefault("webserver.livestream.segmentLength", DefaultLiveStreamSegmentLength)
 	viper.SetDefault("webserver.livestream.ffmpegLogLevel", DefaultLiveStreamFFmpegLogLevel)
+
+	// Import feature: in-app sudo elevation enabled by default.
+	viper.SetDefault("import.allowInAppElevation", true)
 
 	// File output configuration
 	viper.SetDefault("output.file.enabled", true)

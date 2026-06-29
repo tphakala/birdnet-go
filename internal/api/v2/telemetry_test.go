@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -27,22 +28,30 @@ func captureHook(t *testing.T) *[]*errors.EnhancedError {
 	return &captured
 }
 
-// newTestContext creates an echo.Context for use in telemetry tests.
+// newTestContext creates an echo.Context for use in telemetry tests. It also sets
+// the matched route pattern (via SetPath) to the request path, simulating echo's
+// post-routing state: the telemetry endpoint context is now recorded from
+// apicore.RoutePattern(ctx) (the matched route pattern) rather than the raw URL
+// path, so the token-bearing path of a request like an HLS stream is never sent to
+// Sentry. The static test paths used here have no path parameters, so the pattern
+// equals the path.
 func newTestContext(t *testing.T, method, path string) (echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(method, path, http.NoBody)
 	rec := httptest.NewRecorder()
-	return e.NewContext(req, rec), rec
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath(path)
+	return ctx, rec
 }
 
 // TestHandleError_5xxReportedToTelemetry verifies that a 5xx HandleError call
 // publishes exactly one EnhancedError to the telemetry hook.
-// Note: Not parallel — modifies global error-hook state.
+// Note: Not parallel; modifies global error-hook state.
 func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections")
 
@@ -58,13 +67,35 @@ func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 	assert.Equal(t, http.MethodGet, ee.Context["method"])
 }
 
+// TestHandleError_5xxTelemetryErrorIsScrubbed verifies the error that reaches the
+// telemetry pipeline has its message sanitized at the source (privacy.WrapError),
+// so credential-bearing error text never reaches Sentry even when the global
+// telemetry privacy scrubber is unset.
+// Note: Not parallel; modifies global error-hook state.
+func TestHandleError_5xxTelemetryErrorIsScrubbed(t *testing.T) {
+	captured := captureHook(t)
+
+	c := &Controller{Core: &apicore.Core{}}
+	c.Settings.Store(getTestSettings(t))
+	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/streams")
+
+	credErr := fmt.Errorf("failed to dial rtsp://user:pass@192.168.1.50:554/stream")
+	err := c.HandleError(ctx, credErr, "Internal server error", http.StatusInternalServerError)
+	require.NoError(t, err)
+
+	require.Len(t, *captured, 1, "expected one telemetry event for the 5xx error")
+	telemetryMsg := (*captured)[0].Error()
+	assert.NotContains(t, telemetryMsg, "user:pass", "credentials must be scrubbed from the telemetry error")
+	assert.NotContains(t, telemetryMsg, "192.168.1.50", "the IP must be scrubbed from the telemetry error")
+}
+
 // TestHandleError_4xxNotReportedToTelemetry verifies that a 4xx HandleError call
 // produces no telemetry events (4xx errors are client mistakes, not server bugs).
-// Note: Not parallel — modifies global error-hook state.
+// Note: Not parallel; modifies global error-hook state.
 func TestHandleError_4xxNotReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodPost, "/api/v2/settings")
 
@@ -76,11 +107,11 @@ func TestHandleError_4xxNotReportedToTelemetry(t *testing.T) {
 
 // TestHandleError_NilError_5xxReported verifies that a nil underlying error with a
 // 5xx code still produces a telemetry event, using the message as the error text.
-// Note: Not parallel — modifies global error-hook state.
+// Note: Not parallel; modifies global error-hook state.
 func TestHandleError_NilError_5xxReported(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/health")
 
@@ -96,11 +127,11 @@ func TestHandleError_NilError_5xxReported(t *testing.T) {
 
 // TestHandleErrorWithKey_5xxReportedToTelemetry verifies the i18n variant also
 // reports 5xx errors to telemetry.
-// Note: Not parallel — modifies global error-hook state.
+// Note: Not parallel; modifies global error-hook state.
 func TestHandleErrorWithKey_5xxReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodDelete, "/api/v2/detections/123")
 
@@ -121,7 +152,7 @@ func TestHandleErrorWithKey_5xxReportedToTelemetry(t *testing.T) {
 // TestHandleError_AlreadyReportedSkipsDuplicate verifies that an error already
 // reported by a lower layer (IsReported() == true) is not sent to Sentry again
 // from the API layer.
-// Note: Not parallel — modifies global error-hook state.
+// Note: Not parallel; modifies global error-hook state.
 func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 	// Build and pre-report an EnhancedError to simulate a lower-layer report.
 	preReported := errors.Newf("db deadlock").
@@ -133,7 +164,7 @@ func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 	// Now install the hook (after pre-reporting, so the Build() call above is not counted).
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections")
 
@@ -145,11 +176,11 @@ func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 
 // TestHandleError_404NotReportedToTelemetry verifies that 404 Not Found errors
 // are not reported (they are expected conditions for unknown resources).
-// Note: Not parallel — modifies global error-hook state.
+// Note: Not parallel; modifies global error-hook state.
 func TestHandleError_404NotReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections/99999")
 
@@ -161,11 +192,11 @@ func TestHandleError_404NotReportedToTelemetry(t *testing.T) {
 
 // TestHandleError_502BadGatewayReportedToTelemetry verifies that non-500 5xx codes
 // (e.g., 502 Bad Gateway) are also reported as server errors.
-// Note: Not parallel — modifies global error-hook state.
+// Note: Not parallel; modifies global error-hook state.
 func TestHandleError_502BadGatewayReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/system")
 

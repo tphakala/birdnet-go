@@ -16,6 +16,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/time/rate"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -216,9 +217,9 @@ func (c *Controller) initSpeciesGuideRoutes() {
 
 	// Notes — reads public, writes auth-gated.
 	c.Group.GET("/species/:scientific_name/notes", c.GetSpeciesNotes)
-	c.Group.POST("/species/:scientific_name/notes", c.CreateSpeciesNote, c.authMiddleware)
-	c.Group.PUT("/species/notes/:id", c.UpdateSpeciesNote, c.authMiddleware)
-	c.Group.DELETE("/species/notes/:id", c.DeleteSpeciesNote, c.authMiddleware)
+	c.Group.POST("/species/:scientific_name/notes", c.CreateSpeciesNote, c.GetAuthMiddleware())
+	c.Group.PUT("/species/notes/:id", c.UpdateSpeciesNote, c.GetAuthMiddleware())
+	c.Group.DELETE("/species/notes/:id", c.DeleteSpeciesNote, c.GetAuthMiddleware())
 }
 
 // newGuideRateLimiter builds the shared rate limiter for guide/similar endpoints.
@@ -349,7 +350,7 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 		return c.handleScientificNameError(ctx, err)
 	}
 
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	cfg := settings.Realtime.Dashboard.SpeciesGuide
 	if !cfg.Enabled {
 		return c.HandleError(ctx, errors.Newf("species guide is disabled").
@@ -375,9 +376,9 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 			// Client disconnected mid-fetch (navigated away / closed the tab): an
 			// expected lifecycle event, not a server or upstream error. Log at info
 			// and return the client-closed status instead of a misleading 502.
-			c.logInfoIfEnabled("species guide request canceled by client",
+			c.LogInfoIfEnabled("species guide request canceled by client",
 				logger.String("species", name), logger.Error(err))
-			return c.HandleError(ctx, err, "Request canceled by client", StatusClientClosedRequest)
+			return c.HandleError(ctx, err, "Request canceled by client", apicore.StatusClientClosedRequest)
 		case errors.Is(err, context.DeadlineExceeded):
 			return c.HandleError(ctx, err, "Species guide request timed out", http.StatusRequestTimeout)
 		case errors.Is(err, errGuideCacheUnavailable):
@@ -441,7 +442,7 @@ func (c *Controller) GetSimilarSpecies(ctx echo.Context) error {
 		return c.handleScientificNameError(ctx, err)
 	}
 
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if !settings.Realtime.Dashboard.SpeciesGuide.Enabled {
 		return c.HandleError(ctx, errors.Newf("species guide is disabled").
 			Category(errors.CategoryConfiguration).
@@ -570,7 +571,7 @@ func (c *Controller) GetSpeciesNotes(ctx echo.Context) error {
 	if err != nil {
 		return c.handleScientificNameError(ctx, err)
 	}
-	if dsErr := c.requireDatastore(ctx); dsErr != nil {
+	if dsErr := c.RequireDatastore(ctx); dsErr != nil {
 		return dsErr
 	}
 
@@ -593,7 +594,7 @@ func (c *Controller) CreateSpeciesNote(ctx echo.Context) error {
 	if err != nil {
 		return c.handleScientificNameError(ctx, err)
 	}
-	if dsErr := c.requireDatastore(ctx); dsErr != nil {
+	if dsErr := c.RequireDatastore(ctx); dsErr != nil {
 		return dsErr
 	}
 
@@ -616,7 +617,7 @@ func (c *Controller) UpdateSpeciesNote(ctx echo.Context) error {
 	if err != nil {
 		return c.HandleError(ctx, err, "Missing note id", http.StatusBadRequest)
 	}
-	if dsErr := c.requireDatastore(ctx); dsErr != nil {
+	if dsErr := c.RequireDatastore(ctx); dsErr != nil {
 		return dsErr
 	}
 
@@ -641,7 +642,7 @@ func (c *Controller) DeleteSpeciesNote(ctx echo.Context) error {
 	if err != nil {
 		return c.HandleError(ctx, err, "Missing note id", http.StatusBadRequest)
 	}
-	if dsErr := c.requireDatastore(ctx); dsErr != nil {
+	if dsErr := c.RequireDatastore(ctx); dsErr != nil {
 		return dsErr
 	}
 
@@ -729,7 +730,7 @@ func (c *Controller) guideExpectedness(scientificName string) string {
 // location. The memoized probable-species map is invalidated when this changes so
 // a location update is reflected immediately rather than after the TTL window.
 func (c *Controller) guideRarityLocationKey() string {
-	settings := c.currentSettings()
+	settings := c.CurrentSettings()
 	if settings == nil {
 		return ""
 	}
@@ -794,6 +795,29 @@ func (c *Controller) probableSpeciesScores(bn probableSpeciesPredictor) map[stri
 }
 
 // scoreToExpectedness maps a geomodel occurrence score to an expectedness label.
+// Rarity score thresholds for the guide expectedness badge. These mirror the
+// geomodel occurrence-probability bands the species rarity domain uses; they are
+// defined locally because the guide's expectedness logic lives in package api
+// while the species rarity domain moved to the species subpackage.
+const (
+	RarityThresholdCommon   = 0.5
+	RarityThresholdUncommon = 0.2
+	RarityThresholdRare     = 0.05
+)
+
+// speciesHasGeomodelCoverage reports whether the scientific name is in the primary
+// model's label set (the geomodel's classifiable vocabulary). Secondary-model-only
+// species (e.g. bats) are absent from it and so have no geomodel occurrence
+// probability to base a rarity on.
+func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName string) bool {
+	for _, label := range bn.Labels() {
+		if strings.EqualFold(detection.ExtractScientificName(label), scientificName) {
+			return true
+		}
+	}
+	return false
+}
+
 func scoreToExpectedness(score float64) string {
 	switch {
 	case score > RarityThresholdCommon:

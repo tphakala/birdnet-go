@@ -1,0 +1,118 @@
+name: Sync Wiki
+
+# Publishes doc/wiki/ to the GitHub project wiki. The repository is the single
+# source of truth; the wiki is a generated mirror. The cmd/wiki-export tool
+# remaps page names to wiki slugs, rewrites intra-doc links, and injects a
+# "do not edit" banner. See doc/wiki/building.md (section "Publishing the wiki")
+# for the one-time deploy-key setup required to enable pushes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'doc/wiki/**'
+      - 'cmd/wiki-export/**'
+      - '.github/workflows/wiki-sync.yml'
+  workflow_dispatch:
+
+# The default GITHUB_TOKEN cannot authenticate to the *.wiki.git repository, so
+# this job pushes with a dedicated SSH deploy key (secret WIKI_SSH_DEPLOY_KEY)
+# and needs only read access to the main repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Generate wiki pages
+        run: go run ./cmd/wiki-export doc/wiki "${RUNNER_TEMP}/wiki-staging"
+
+      - name: Check for deploy key
+        id: guard
+        env:
+          WIKI_SSH_DEPLOY_KEY: ${{ secrets.WIKI_SSH_DEPLOY_KEY }}
+        run: |
+          if [ -z "${WIKI_SSH_DEPLOY_KEY}" ]; then
+            {
+              echo "### Wiki sync skipped"
+              echo "The \`WIKI_SSH_DEPLOY_KEY\` secret is not configured, so the"
+              echo "generated pages were not pushed. See doc/wiki/building.md for setup."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Configure SSH for the wiki repository
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          WIKI_SSH_DEPLOY_KEY: ${{ secrets.WIKI_SSH_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${WIKI_SSH_DEPLOY_KEY}" > ~/.ssh/wiki_deploy_key
+          chmod 600 ~/.ssh/wiki_deploy_key
+          ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<'EOF'
+          Host github.com
+            IdentityFile ~/.ssh/wiki_deploy_key
+            IdentitiesOnly yes
+          EOF
+
+      - name: Clone the wiki repository
+        if: steps.guard.outputs.enabled == 'true'
+        run: git clone "git@github.com:${GITHUB_REPOSITORY}.wiki.git" "${RUNNER_TEMP}/wiki"
+
+      - name: Stage generated pages
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          staging="${RUNNER_TEMP}/wiki-staging"
+          wiki="${RUNNER_TEMP}/wiki"
+          # Additive copy: generated pages overwrite their counterparts but any
+          # hand-written wiki page not produced by wiki-export is left untouched.
+          cp -R "${staging}/." "${wiki}/"
+          # Remove legacy pages left by earlier manual pushes (explicit allowlist,
+          # never a blanket mirror): the doubled ".md.md" extensions and the
+          # Unicode-hyphen guide that BirdNET-Go-Guide.md now replaces.
+          find "${wiki}" -maxdepth 1 -type f -name '*.md.md' -delete
+          find "${wiki}" -maxdepth 1 -type f -name 'BirdNET*Go-Guide.md' ! -name 'BirdNET-Go-Guide.md' -delete
+          # Prune managed pages the exporter no longer generates, so deleting or
+          # renaming a doc/wiki page removes its published counterpart instead of
+          # leaving an orphan. Only pages carrying the generated banner are
+          # eligible, so hand-written wiki pages are never touched.
+          for page in "${wiki}"/*.md; do
+            [ -e "${page}" ] || continue
+            name="$(basename "${page}")"
+            if grep -qF 'wiki-sync:managed' "${page}" && [ ! -e "${staging}/${name}" ]; then
+              echo "pruning stale managed page: ${name}"
+              rm -f "${page}"
+            fi
+          done
+
+      - name: Commit and push
+        if: steps.guard.outputs.enabled == 'true'
+        working-directory: ${{ runner.temp }}/wiki
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date; nothing to push." >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          git commit -m "docs: sync wiki from doc/wiki @ ${GITHUB_SHA:0:7}"
+          git push origin HEAD
+          echo "Wiki synced from doc/wiki @ ${GITHUB_SHA:0:7}." >> "${GITHUB_STEP_SUMMARY}"

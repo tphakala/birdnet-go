@@ -34,21 +34,34 @@ type Note struct {
 	EndTime     time.Time
 	SpeciesCode string
 	// ScientificName includes optimized index (scientific_name, date) for new species tracking performance
-	ScientificName string  `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:1"`
-	CommonName     string  `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`
-	Confidence     float64 `gorm:"index:idx_notes_date_commonname_confidence"`
-	Latitude       float64
-	Longitude      float64
-	Threshold      float64
-	Sensitivity    float64
-	ClipName       string
-	ProcessingTime time.Duration
-	Unlikely       bool          `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
-	Occurrence     float64       `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
-	Results        []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
-	Review         *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
-	Comments       []NoteComment `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-many relationship with cascade delete
-	Lock           *NoteLock     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
+	ScientificName string `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:1"`
+	CommonName     string `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`
+	// RawScientificName preserves the exact scientific name the model emitted before
+	// canonical-name normalization collapsed it into ScientificName. Nullable column:
+	// NULL/empty means the raw name equals ScientificName (no taxonomic alias applied).
+	// Persisted so a future re-split can un-merge; json:"-" keeps it out of API/MQTT/SSE
+	// payloads while GORM maps it to the raw_scientific_name column.
+	// NOTE: only the legacy notes datastore persists this column. The v2only normalized
+	// datastore (the default for fresh installs and migrated databases) drops it; the
+	// canonical ScientificName still flows there, so de-duplication works, but the raw
+	// name is not retained on that path. See PR discussion / follow-up for v2 support.
+	RawScientificName string  `json:"-"`
+	Confidence        float64 `gorm:"index:idx_notes_date_commonname_confidence"`
+	Latitude          float64
+	Longitude         float64
+	Threshold         float64
+	Sensitivity       float64
+	ClipName          string
+	ProcessingTime    time.Duration
+	Unlikely          bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
+	Occurrence        float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
+	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
+	// not persisted. Used at Save time to classify non-bird sound classes correctly.
+	RawLabel string        `gorm:"-"`
+	Results  []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
+	Review   *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
+	Comments []NoteComment `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-many relationship with cascade delete
+	Lock     *NoteLock     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
 
 	// Virtual fields to maintain compatibility with templates
 	Verified string `gorm:"-"` // This will be populated from Review.Verified
@@ -61,6 +74,9 @@ type Results struct {
 	NoteID     uint `gorm:"index;not null;constraint:OnDelete:CASCADE,OnUpdate:CASCADE;foreignKey:NoteID;references:ID"` // Foreign key to associate with Note
 	Species    string
 	Confidence float32
+	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
+	// not persisted. Used at Save time to classify non-bird sound classes correctly.
+	RawLabel string `gorm:"-"`
 }
 
 // Copy creates a deep copy of the Results struct
@@ -70,6 +86,7 @@ func (r Results) Copy() Results {
 		NoteID:     r.NoteID,
 		Species:    r.Species,
 		Confidence: r.Confidence,
+		RawLabel:   r.RawLabel,
 	}
 }
 
@@ -180,6 +197,7 @@ type DetectionRecord struct {
 	Device         string    `json:"device,omitempty"`
 	Source         string    `json:"source,omitempty"`
 	TimeOfDay      string    `json:"timeOfDay,omitempty"`
+	ModelType      string    `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 }
 
 // DynamicThreshold represents a persisted dynamic threshold for a species

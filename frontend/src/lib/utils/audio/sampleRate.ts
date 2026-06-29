@@ -4,6 +4,9 @@
 
 export const CANDIDATE_SAMPLE_RATES = [48000, 96000, 192000, 256000, 384000] as const;
 
+/** Conventional default capture rate, supported by virtually every device. */
+export const DEFAULT_SAMPLE_RATE = 48000;
+
 export type SampleRateOption = { value: string; label: string };
 
 export interface DeviceCapabilitiesResult {
@@ -79,4 +82,24 @@ export async function fetchDeviceCapabilities(
     if (error instanceof Error && error.name === 'AbortError') throw error;
     return { options: fallbackOptions(), verified: false };
   }
+}
+
+/**
+ * Choose a sample rate that the device actually supports.
+ *
+ * Returns `current` when it is among `options`. Otherwise it falls back to the
+ * conventional 48 kHz default when the device offers it, and to the first
+ * supported rate when it does not (e.g. a specialised interface that only
+ * supports 96 kHz and up), so an unsupported rate is never selected. An empty
+ * option list yields the default.
+ */
+export function coerceSupportedRate(options: SampleRateOption[], current: number): number {
+  if (options.length === 0) {
+    return DEFAULT_SAMPLE_RATE;
+  }
+  if (options.some(opt => Number(opt.value) === current)) {
+    return current;
+  }
+  const preferred = options.find(opt => Number(opt.value) === DEFAULT_SAMPLE_RATE) ?? options[0];
+  return Number(preferred.value);
 }

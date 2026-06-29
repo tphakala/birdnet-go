@@ -58,8 +58,13 @@
 
 <!-- Render toast containers for each position that has toasts -->
 {#each Object.entries(toastsByPosition) as [position, positionToasts] (position)}
+  <!-- z-[2000] = Z_INDEX.TOAST: toasts must stay above all overlays, including the mobile sidebar drawer (z-[200]) -->
   <div
-    class="fixed z-50 pointer-events-none {safeGet(positionClasses, position as ToastPosition, '')}"
+    class="fixed z-[2000] pointer-events-none {safeGet(
+      positionClasses,
+      position as ToastPosition,
+      ''
+    )}"
     role="region"
     aria-live="polite"
     aria-label="{position} notifications"

@@ -105,7 +105,7 @@ type ModelInferenceInfo struct {
 	ModelID   string
 	ModelName string
 	AvgMS     float64
-	P99MS     float64
+	P95MS     float64 // rolling-window p95 single-inference latency in ms
 	WindowMS  float64 // model-specific analysis window (BufferInterval in ms)
 }
 
@@ -178,19 +178,19 @@ func (c *PerModelInferenceLatencyCheck) RunMulti(_ context.Context) []health.Res
 			continue
 		}
 
-		ratio := s.P99MS / s.WindowMS
+		ratio := s.P95MS / s.WindowMS
 		status := health.StatusHealthy
-		msg := fmt.Sprintf("%s latency OK (p99=%.1fms, window=%.1fms)", s.ModelName, s.P99MS, s.WindowMS)
+		msg := fmt.Sprintf("%s latency OK (p95=%.1fms, window=%.1fms)", s.ModelName, s.P95MS, s.WindowMS)
 
 		switch {
 		case ratio >= latencyCriticalRatio:
 			status = health.StatusCritical
-			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
-				s.ModelName, s.P99MS, latencyCriticalRatio*100, s.WindowMS)
+			msg = fmt.Sprintf("%s p95 latency (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
+				s.ModelName, s.P95MS, latencyCriticalRatio*100, s.WindowMS)
 		case ratio >= latencyWarningRatio:
 			status = health.StatusWarning
-			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
-				s.ModelName, s.P99MS, latencyWarningRatio*100, s.WindowMS)
+			msg = fmt.Sprintf("%s p95 latency (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
+				s.ModelName, s.P95MS, latencyWarningRatio*100, s.WindowMS)
 		}
 
 		results = append(results, health.Result{
@@ -202,7 +202,7 @@ func (c *PerModelInferenceLatencyCheck) RunMulti(_ context.Context) []health.Res
 				"model_id":   s.ModelID,
 				"model_name": s.ModelName,
 				"avg_ms":     s.AvgMS,
-				"p99_ms":     s.P99MS,
+				"p95_ms":     s.P95MS,
 				"window_ms":  s.WindowMS,
 			},
 			Timestamp: time.Now(),
@@ -408,6 +408,61 @@ func (c *ORTAvailabilityCheck) Run(_ context.Context) health.Result {
 		Status:     health.StatusWarning,
 		Message:    errMsg,
 		Details:    details,
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
+}
+
+// OpenVINOAvailabilityCheck reports whether the optional OpenVINO acceleration
+// backend is compiled in and active. Unlike ORT (required for several models),
+// OpenVINO is optional, so absence is never an error: the check is skipped on
+// builds without the backend, and otherwise reports active vs. fell-back-to-ORT.
+type OpenVINOAvailabilityCheck struct {
+	getStatus func() (supported, active bool)
+}
+
+// NewOpenVINOAvailabilityCheck creates an OpenVINOAvailabilityCheck using the
+// given status provider. active reports whether a classifier is actually running
+// on OpenVINO (not merely that the core was loaded for device probing).
+func NewOpenVINOAvailabilityCheck(getStatus func() (supported, active bool)) *OpenVINOAvailabilityCheck {
+	return &OpenVINOAvailabilityCheck{getStatus: getStatus}
+}
+
+// Name returns the check identifier.
+func (c *OpenVINOAvailabilityCheck) Name() string { return "openvino_availability" }
+
+// Category returns the analysis category.
+func (c *OpenVINOAvailabilityCheck) Category() health.Category { return health.CategoryAnalysis }
+
+// Run reports OpenVINO backend state. It is skipped on builds without the
+// backend (the common case), and healthy otherwise: OpenVINO is an optional
+// accelerator, so falling back to ORT is normal, not a fault.
+func (c *OpenVINOAvailabilityCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
+
+	if c.getStatus == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	supported, active := c.getStatus()
+	if !supported {
+		// Not an OpenVINO build: report Skipped rather than a misleading
+		// always-"inactive" line. Skipped checks remain in the diagnostics payload
+		// (like every other optional check) but do not count toward the aggregate
+		// health status, so default builds are not penalized for lacking OpenVINO.
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	msg := "OpenVINO compiled in, not in use (ONNX Runtime active)"
+	if active {
+		msg = "OpenVINO backend active"
+	}
+	return health.Result{
+		Name:       c.Name(),
+		Category:   c.Category(),
+		Status:     health.StatusHealthy,
+		Message:    msg,
+		Details:    map[string]any{"supported": supported, "active": active},
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 	}

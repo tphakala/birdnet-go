@@ -1,6 +1,10 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+)
 
 // Cache duration constants for HTTP responses
 const (
@@ -17,18 +21,6 @@ const (
 	SpectrogramCacheDuration = 30 * 24 * time.Hour
 )
 
-// Cache duration in seconds for HTTP headers
-const (
-	// ImageCacheSeconds is the cache duration for species images in seconds
-	ImageCacheSeconds = 2592000 // 30 days
-
-	// NotFoundCacheSeconds is the cache duration for 404 responses in seconds
-	NotFoundCacheSeconds = 86400 // 24 hours
-
-	// SpectrogramCacheSeconds is the cache duration for spectrograms in seconds
-	SpectrogramCacheSeconds = 2592000 // 30 days
-)
-
 // Log level constants
 const (
 	LogLevelError   = "error"
@@ -36,29 +28,9 @@ const (
 	LogLevelInfo    = "info"
 )
 
-// Notification type constants (for mapping to notification.Type)
-const (
-	NotificationTypeError     = "error"
-	NotificationTypeWarning   = "warning"
-	NotificationTypeInfo      = "info"
-	NotificationTypeDetection = "detection"
-	NotificationTypeSystem    = "system"
-)
-
-// Weather provider constants
-const (
-	WeatherProviderOpenWeather  = "openweather"
-	WeatherProviderWunderground = "wunderground"
-	WeatherProviderYrno         = "yrno"
-	WeatherUnitMetric           = "metric"
-)
-
-// Verification status constants for detections
-const (
-	VerificationStatusCorrect       = "correct"
-	VerificationStatusFalsePositive = "false_positive"
-	VerificationStatusUnverified    = "unverified"
-)
+// Notification type constants moved with the debug domain to
+// internal/api/v2/app (app.NotificationType*); they were only used by debug.go's
+// mapNotificationType.
 
 // Settings section name constants
 const (
@@ -69,11 +41,8 @@ const (
 	SettingsSectionSpecies   = "species"
 )
 
-// SSE connection status constants
-const (
-	SSEStatusConnected    = "connected"
-	SSEStatusDisconnected = "disconnected"
-)
+// SSE connection status constants are defined in apicore and re-exported via
+// apicore_bridge.go (SSEStatusConnected / SSEStatusDisconnected).
 
 // Toast notification type constants
 const (
@@ -85,7 +54,6 @@ const (
 
 // Query parameter value constants
 const (
-	QueryValueAny  = "any"
 	QueryValueTrue = "true"
 )
 
@@ -103,20 +71,13 @@ const (
 
 // Numeric constants for calculations
 const (
-	// PercentageMultiplier is used for converting fractions to percentages
-	PercentageMultiplier = 100.0
-
-	// HoursPerDay is the number of hours in a day
-	HoursPerDay = 24
+	// PercentageMultiplier is used for converting fractions to percentages.
+	// Aliased from apicore so the detections/search confidence parsing (now in
+	// apicore) and the analytics percentage parsing here share one source.
+	PercentageMultiplier = apicore.PercentageMultiplier
 
 	// SecondsPerMinute is the number of seconds in a minute
 	SecondsPerMinute = 60
-
-	// SecondsPerHour is the number of seconds in an hour
-	SecondsPerHour = 3600
-
-	// MillisecondsPerSecond converts seconds to milliseconds
-	MillisecondsPerSecond = 1000
 )
 
 // Timeout and duration constants
@@ -128,12 +89,6 @@ const (
 	DefaultCacheDurationMinutes = 30
 )
 
-// Default path constants
-const (
-	// defaultExportPath is the default audio clip export directory, matching internal/conf/defaults.go.
-	defaultExportPath = "clips/"
-)
-
 // File permission constants
 const (
 	// FilePermReadWrite is the permission for read/write files (0o644)
@@ -141,9 +96,6 @@ const (
 
 	// FilePermExecutable is the permission for executable files (0o755)
 	FilePermExecutable = 0o755
-
-	// FilePermOwnerOnly is the permission for owner-only read/write (0o600)
-	FilePermOwnerOnly = 0o600
 )
 
 // Buffer and channel size constants

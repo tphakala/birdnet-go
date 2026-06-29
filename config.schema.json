@@ -1,0 +1,2798 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/tphakala/birdnet-go/main/config.schema.json",
+  "$ref": "#/$defs/Settings",
+  "$defs": {
+    "AlertSettings": {
+      "properties": {
+        "history_retention_days": {
+          "type": "integer",
+          "description": "Days to retain alert history (0 = unlimited)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "AlertSettings configures the alerting rules engine."
+    },
+    "AllowSubnetBypass": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable subnet bypass"
+        },
+        "subnet": {
+          "type": "string",
+          "description": "disable OAuth2 in subnet"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "AudioSettings": {
+      "properties": {
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/AudioSourceConfig"
+          },
+          "type": "array",
+          "description": "Audio capture devices"
+        },
+        "source": {
+          "type": "string",
+          "description": "Legacy: migrated to Sources on load"
+        },
+        "ffmpegpath": {
+          "type": "string",
+          "description": "path to ffmpeg, runtime value"
+        },
+        "soxpath": {
+          "type": "string",
+          "description": "path to sox, runtime value"
+        },
+        "streamtransport": {
+          "type": "string",
+          "description": "preferred transport for audio streaming: \"auto\", \"sse\", or \"ws\""
+        },
+        "export": {
+          "$ref": "#/$defs/ExportSettings",
+          "description": "export settings"
+        },
+        "soundlevel": {
+          "$ref": "#/$defs/SoundLevelSettings",
+          "description": "sound level monitoring settings"
+        },
+        "equalizer": {
+          "$ref": "#/$defs/EqualizerSettings",
+          "description": "equalizer settings (global default)"
+        },
+        "quietHours": {
+          "$ref": "#/$defs/QuietHoursConfig",
+          "description": "quiet hours (global default, legacy)"
+        },
+        "watchdog": {
+          "$ref": "#/$defs/WatchdogSettings",
+          "description": "liveness watchdog tuning (0 = use default)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "AudioSourceConfig": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Required: descriptive name like \"Front Yard Mic\""
+        },
+        "device": {
+          "type": "string",
+          "description": "Required: ALSA device ID (e.g., \"sysdefault\", \"hw:0,0\", \"Loopback\")"
+        },
+        "samplerate": {
+          "type": "integer",
+          "description": "Capture rate in Hz (0 = default 48000; set 256000 for bat detectors)"
+        },
+        "gain": {
+          "type": "number",
+          "description": "Input gain in dB (0 = no adjustment)"
+        },
+        "model": {
+          "type": "string",
+          "description": "AI model: \"\" or \"birdnet\" (default), \"perch_v2\", \"bat\" (future)"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Model IDs for this source (e.g., [\"birdnet\", \"perch_v2\"])"
+        },
+        "equalizer": {
+          "$ref": "#/$defs/EqualizerSettings",
+          "description": "Per-source EQ (nil = use global)"
+        },
+        "quietHours": {
+          "$ref": "#/$defs/QuietHoursConfig",
+          "description": "Per-source quiet hours"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "AudioSourceConfig represents a single audio capture device with per-source settings."
+    },
+    "BSGConfig": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to BSG ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to BSG label file"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for species label translation"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BSGConfig holds configuration for BSG regional bird models."
+    },
+    "BackupConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur."
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "If true, enables detailed debug logging for backup operations."
+        },
+        "encryption": {
+          "type": "boolean",
+          "description": "If true, enables encryption for backup archives. Requires EncryptionKey to be set."
+        },
+        "encryption_key": {
+          "type": "string",
+          "description": "Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe."
+        },
+        "sanitize_config": {
+          "type": "boolean",
+          "description": "If true, sensitive information (like passwords, API keys) will be removed from the configuration file copy that is included in the backup archive."
+        },
+        "retention": {
+          "$ref": "#/$defs/BackupRetention",
+          "description": "Defines policies for how long and how many backups are kept."
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/BackupTarget"
+          },
+          "type": "array",
+          "description": "A list of configured backup targets (destinations) where backup archives will be stored."
+        },
+        "schedules": {
+          "items": {
+            "$ref": "#/$defs/BackupScheduleConfig"
+          },
+          "type": "array",
+          "description": "A list of schedules (e.g., daily, weekly) that define when automatic backups should run."
+        },
+        "operationtimeouts": {
+          "properties": {
+            "backup": {
+              "type": "string",
+              "examples": [
+                "10s",
+                "5m",
+                "1h"
+              ]
+            },
+            "store": {
+              "type": "string",
+              "examples": [
+                "10s",
+                "5m",
+                "1h"
+              ]
+            },
+            "cleanup": {
+              "type": "string",
+              "examples": [
+                "10s",
+                "5m",
+                "1h"
+              ]
+            },
+            "delete": {
+              "type": "string",
+              "examples": [
+                "10s",
+                "5m",
+                "1h"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "OperationTimeouts defines timeouts for various backup operations"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BackupConfig contains backup-related configuration"
+    },
+    "BackupRetention": {
+      "properties": {
+        "maxage": {
+          "type": "string",
+          "description": "Duration string for the maximum age of backups to keep (e.g., \"30d\" for 30 days, \"6m\" for 6 months, \"1y\" for 1 year). Backups older than this may be deleted."
+        },
+        "maxbackups": {
+          "type": "integer",
+          "description": "Maximum total number of backups to keep for a given source. If 0, no limit by count (only by age or MinBackups)."
+        },
+        "minbackups": {
+          "type": "integer",
+          "description": "Minimum number of recent backups to keep for a given source, regardless of their age. This ensures a baseline number of backups are always available."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BackupRetention defines backup retention policy"
+    },
+    "BackupScheduleConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "If true, this specific schedule is active and backups will be attempted at the defined interval. (Valid: true or false)"
+        },
+        "hour": {
+          "type": "integer",
+          "description": "The hour of the day when the backup is scheduled to run. (Valid range: 0-23, where 0 is midnight and 23 is 11 PM)"
+        },
+        "minute": {
+          "type": "integer",
+          "description": "The minute of the hour when the backup is scheduled to run. (Valid range: 0-59)"
+        },
+        "weekday": {
+          "type": "string",
+          "description": "For weekly schedules, the day of the week. Accepts: \"Sunday\", \"Monday\", \"Tuesday\", \"Wednesday\", \"Thursday\", \"Friday\", \"Saturday\" (case-insensitive), or numeric: \"0\" (Sunday) through \"6\" (Saturday). Empty or ignored for daily schedules."
+        },
+        "isweekly": {
+          "type": "boolean",
+          "description": "If true, this schedule is weekly (runs on the specified Weekday at Hour:Minute). If false, it's a daily schedule (runs every day at Hour:Minute). (Valid: true or false)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BackupScheduleConfig defines a single backup schedule"
+    },
+    "BackupTarget": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Specifies the type of the backup target (e.g., \"local\", \"s3\", \"ftp\", \"sftp\"). This determines the storage mechanism."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "If true, this backup target will be used for storing backups. At least one target should be enabled for backups to be stored."
+        },
+        "settings": {
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BackupTarget defines settings for a backup target"
+    },
+    "BannerConfig": {
+      "properties": {
+        "showimage": {
+          "type": "boolean",
+          "description": "whether to show a custom image"
+        },
+        "imagepath": {
+          "type": "string",
+          "description": "relative path or URL to the banner image"
+        },
+        "title": {
+          "type": "string",
+          "description": "station name or custom title"
+        },
+        "description": {
+          "type": "string",
+          "description": "brief description text"
+        },
+        "showlocationmap": {
+          "type": "boolean",
+          "description": "whether to show the location map"
+        },
+        "showweather": {
+          "type": "boolean",
+          "description": "whether to show weather conditions"
+        },
+        "mapzoom": {
+          "type": "integer",
+          "description": "zoom level for the location map (default 11)"
+        },
+        "showpin": {
+          "type": "boolean",
+          "description": "whether to show the location pin marker (default false)"
+        },
+        "mapexpandable": {
+          "type": "boolean",
+          "description": "whether visitors can expand the map (default true)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BannerConfig holds configuration for the dashboard banner element."
+    },
+    "BasicAuth": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable password authentication"
+        },
+        "password": {
+          "type": "string",
+          "description": "password for admin interface"
+        },
+        "clientid": {
+          "type": "string",
+          "description": "client id for OAuth2"
+        },
+        "clientsecret": {
+          "type": "string",
+          "description": "client secret for OAuth2"
+        },
+        "redirecturi": {
+          "type": "string",
+          "description": "redirect uri for OAuth2"
+        },
+        "authcodeexp": {
+          "type": "string",
+          "description": "duration for authorization code",
+          "examples": [
+            "10s",
+            "5m",
+            "1h"
+          ]
+        },
+        "accesstokenexp": {
+          "type": "string",
+          "description": "duration for access token",
+          "examples": [
+            "10s",
+            "5m",
+            "1h"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BasicAuth holds settings for the password authentication"
+    },
+    "BatConfig": {
+      "properties": {
+        "embeddingmodel": {
+          "type": "string",
+          "description": "path to BirdNET v2.4 embeddings ONNX model"
+        },
+        "classifiermodel": {
+          "type": "string",
+          "description": "path to bat species classifier ONNX model"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to bat species labels file"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for bat detections"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for species label translation"
+        },
+        "nighttimeonly": {
+          "type": "boolean",
+          "description": "restrict bat detection to nighttime (civil dusk to civil dawn)"
+        },
+        "falsepositivefilter": {
+          "$ref": "#/$defs/FalsePositiveFilterSettings",
+          "description": "false positive filtering for bat detections (level 0-5)"
+        },
+        "ultrasonicfilter": {
+          "$ref": "#/$defs/UltrasonicFilterConfig",
+          "description": "post-detection ultrasonic validation filter"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings."
+    },
+    "BirdNETConfig": {
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "model version: \"2.4\", \"3.0\""
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "sensitivity": {
+          "type": "number",
+          "description": "birdnet analysis sigmoid sensitivity"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "threshold for prediction confidence to report"
+        },
+        "overlap": {
+          "type": "number",
+          "description": "birdnet analysis overlap between chunks"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "longitude of recording location for prediction filtering"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "latitude of recording location for prediction filtering"
+        },
+        "locationconfigured": {
+          "type": "boolean",
+          "description": "true when location has been explicitly configured by the user"
+        },
+        "threads": {
+          "type": "integer",
+          "description": "number of CPU threads to use for analysis"
+        },
+        "locale": {
+          "type": "string",
+          "description": "language to use for labels"
+        },
+        "rangefilter": {
+          "$ref": "#/$defs/RangeFilterSettings",
+          "description": "range filter settings"
+        },
+        "modelpath": {
+          "type": "string",
+          "description": "path to external model file (empty for embedded)"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to external label file (empty for embedded)"
+        },
+        "usexnnpack": {
+          "type": "boolean",
+          "description": "true to use XNNPACK delegate for inference acceleration"
+        },
+        "onnxruntimepath": {
+          "type": "string",
+          "description": "path to ONNX Runtime shared library (required for ONNX models)"
+        },
+        "openvinopath": {
+          "type": "string",
+          "description": "path to libopenvino_c shared library (OpenVINO image variants only)"
+        },
+        "backend": {
+          "type": "string",
+          "description": "inference backend preference: \"auto\" (default), \"onnx\", or \"openvino\""
+        },
+        "openvinodevice": {
+          "type": "string",
+          "description": "OpenVINO device preference: \"auto\" (default), \"cpu\", or \"gpu\""
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "BirdweatherSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable birdweather uploads"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "id": {
+          "type": "string",
+          "description": "birdweather ID"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "threshold for prediction confidence for uploads"
+        },
+        "locationaccuracy": {
+          "type": "number",
+          "description": "accuracy of location in meters"
+        },
+        "retrysettings": {
+          "$ref": "#/$defs/RetrySettings",
+          "description": "settings for retry mechanism"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BirdweatherSettings contains settings for BirdWeather API integration."
+    },
+    "CircuitBreakerConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "max_failures": {
+          "type": "integer"
+        },
+        "timeout": {
+          "$ref": "#/$defs/Duration"
+        },
+        "half_open_max_requests": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "CircuitBreakerConfig holds circuit breaker configuration."
+    },
+    "ConsoleOutput": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "enable console output"
+        },
+        "level": {
+          "type": "string",
+          "description": "log level for console output"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConsoleOutput represents console logging configuration."
+    },
+    "CustomColors": {
+      "properties": {
+        "primary": {
+          "type": "string",
+          "description": "primary hex color, e.g. \"#2563eb\""
+        },
+        "accent": {
+          "type": "string",
+          "description": "accent hex color, e.g. \"#0284c7\""
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "CustomColors holds the user-defined primary and accent hex colors for the \"custom\" color scheme."
+    },
+    "DailySummaryConfig": {
+      "properties": {
+        "summarylimit": {
+          "type": "integer",
+          "description": "number of species to show"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DailySummaryConfig holds configuration for the daily summary element."
+    },
+    "Dashboard": {
+      "properties": {
+        "thumbnails": {
+          "$ref": "#/$defs/Thumbnails",
+          "description": "thumbnails settings"
+        },
+        "summarylimit": {
+          "type": "integer",
+          "description": "limit for the number of species shown in the summary table"
+        },
+        "locale": {
+          "type": "string",
+          "description": "UI locale setting"
+        },
+        "spectrogram": {
+          "$ref": "#/$defs/SpectrogramPreRender",
+          "description": "Spectrogram pre-rendering settings"
+        },
+        "temperatureunit": {
+          "type": "string",
+          "description": "display unit for temperature: \"celsius\" or \"fahrenheit\""
+        },
+        "colorscheme": {
+          "type": "string",
+          "description": "color scheme: \"blue\", \"forest\", \"amber\", \"violet\", \"rose\", \"custom\""
+        },
+        "customcolors": {
+          "$ref": "#/$defs/CustomColors",
+          "description": "custom scheme colors (used when colorScheme is \"custom\")"
+        },
+        "logostyle": {
+          "type": "string",
+          "description": "logo display style: \"gradient\" or \"solid\""
+        },
+        "layout": {
+          "$ref": "#/$defs/DashboardLayout",
+          "description": "configurable dashboard element layout"
+        },
+        "defaultaudiogain": {
+          "type": "number",
+          "description": "Default playback gain in dB (0-24)"
+        },
+        "livespectrogram": {
+          "type": "boolean",
+          "description": "auto-start live spectrogram on dashboard"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Dashboard contains settings for the web dashboard."
+    },
+    "DashboardElement": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "unique identifier (e.g., \"daily-summary-0\"); generated by migration if empty"
+        },
+        "type": {
+          "type": "string",
+          "description": "\"banner\", \"daily-summary\", \"new-species-highlights\", \"currently-hearing\", \"detections-grid\", \"live-spectrogram\", \"video-embed\""
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "whether this element is visible"
+        },
+        "width": {
+          "type": "string",
+          "description": "\"full\" or \"half\"; defaults to \"full\" if empty"
+        },
+        "banner": {
+          "$ref": "#/$defs/BannerConfig",
+          "description": "config for banner element"
+        },
+        "video": {
+          "$ref": "#/$defs/VideoEmbedConfig",
+          "description": "config for video embed element"
+        },
+        "summary": {
+          "$ref": "#/$defs/DailySummaryConfig",
+          "description": "config for daily summary element"
+        },
+        "grid": {
+          "$ref": "#/$defs/DetectionsGridConfig",
+          "description": "config for detections grid element"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DashboardElement represents a single configurable element on the dashboard."
+    },
+    "DashboardLayout": {
+      "properties": {
+        "elements": {
+          "items": {
+            "$ref": "#/$defs/DashboardElement"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DashboardLayout defines the ordered list of elements displayed on the dashboard."
+    },
+    "DaylightFilterSettings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug logging"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable daylight filter"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict)"
+        },
+        "species": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "species, families, orders, or genera to filter during daylight"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DaylightFilterSettings contains settings for the daylight species filter."
+    },
+    "DetectionsGridConfig": {
+      "properties": {},
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DetectionsGridConfig holds configuration for the detections grid element."
+    },
+    "DiskMonitorConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable disk monitoring"
+        },
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "filesystem paths to monitor"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DiskMonitorConfig controls disk monitoring and which paths to check."
+    },
+    "DogBarkFilterSettings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable dog bark filter"
+        },
+        "confidence": {
+          "type": "number",
+          "description": "confidence threshold for dog bark detection"
+        },
+        "remember": {
+          "type": "integer",
+          "description": "how long we should remember bark for filtering?"
+        },
+        "species": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "species list for filtering"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DogBarkFilterSettings contains settings for the dog bark filter."
+    },
+    "Duration": {
+      "type": "string",
+      "description": "Duration string (e.g. \"30s\", \"5m\", \"1h30m\")",
+      "examples": [
+        "10s",
+        "5m",
+        "1h"
+      ]
+    },
+    "DynamicThresholdSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable dynamic threshold"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "trigger": {
+          "type": "number",
+          "description": "trigger threshold for dynamic threshold"
+        },
+        "min": {
+          "type": "number",
+          "description": "minimum threshold for dynamic threshold"
+        },
+        "validhours": {
+          "type": "integer",
+          "description": "number of hours to consider for dynamic threshold"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DynamicThresholdSettings contains settings for dynamic threshold adjustment."
+    },
+    "EBirdSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable eBird integration"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "eBird API key"
+        },
+        "cachettl": {
+          "type": "integer",
+          "description": "cache time-to-live in hours (default: 24)"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for eBird data (e.g., \"en\", \"es\")"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EBirdSettings contains settings for eBird API integration."
+    },
+    "EqualizerFilter": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "e.g., \"LowPass\", \"HighPass\", \"BandPass\", etc."
+        },
+        "frequency": {
+          "type": "number"
+        },
+        "q": {
+          "type": "number"
+        },
+        "gain": {
+          "type": "number",
+          "description": "Only used for certain filter types like Peaking"
+        },
+        "width": {
+          "type": "number",
+          "description": "Only used for certain filter types like BandPass and BandReject"
+        },
+        "passes": {
+          "type": "integer",
+          "description": "Filter passes for added attenuation or gain"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EqualizerFilter is a struct for equalizer filter settings"
+    },
+    "EqualizerSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "global flag to enable/disable equalizer filters"
+        },
+        "filters": {
+          "items": {
+            "$ref": "#/$defs/EqualizerFilter"
+          },
+          "type": "array",
+          "description": "equalizer filter configuration"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EqualizerSettings is a struct for audio EQ settings"
+    },
+    "ExportSettings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable audio export debug"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "export audio clips containing indentified bird calls"
+        },
+        "path": {
+          "type": "string",
+          "description": "path to audio clip export directory"
+        },
+        "type": {
+          "type": "string",
+          "description": "audio file type, wav, mp3 or flac"
+        },
+        "bitrate": {
+          "type": "string",
+          "description": "bitrate for audio export"
+        },
+        "retention": {
+          "$ref": "#/$defs/RetentionSettings",
+          "description": "retention settings"
+        },
+        "length": {
+          "type": "integer",
+          "description": "audio capture length in seconds"
+        },
+        "precapture": {
+          "type": "integer",
+          "description": "pre-capture in seconds"
+        },
+        "gain": {
+          "type": "number",
+          "description": "gain in dB for audio capture"
+        },
+        "normalization": {
+          "$ref": "#/$defs/NormalizationSettings",
+          "description": "audio normalization settings (EBU R128)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ExtendedCaptureSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxduration": {
+          "type": "integer"
+        },
+        "capturebufferseconds": {
+          "type": "integer"
+        },
+        "species": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ExtendedCaptureSettings contains settings for extended capture mode."
+    },
+    "FalsePositiveFilterSettings": {
+      "properties": {
+        "level": {
+          "type": "integer",
+          "description": "Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "FalsePositiveFilterSettings contains settings for false positive filtering aggressivity levels."
+    },
+    "FileOutput": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "enable file output"
+        },
+        "path": {
+          "type": "string",
+          "description": "log file path"
+        },
+        "max_size": {
+          "type": "integer",
+          "description": "maximum size in MB before rotation (0 = disabled)"
+        },
+        "max_age": {
+          "type": "integer",
+          "description": "maximum age in days to keep rotated logs (0 = no limit)"
+        },
+        "max_rotated_files": {
+          "type": "integer",
+          "description": "maximum number of rotated log files to keep (0 = no limit)"
+        },
+        "compress": {
+          "type": "boolean",
+          "description": "compress rotated logs with gzip"
+        },
+        "level": {
+          "type": "string",
+          "description": "log level for file output"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "FileOutput represents file logging configuration."
+    },
+    "HealthCheckConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "$ref": "#/$defs/Duration"
+        },
+        "timeout": {
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "HealthCheckConfig holds health check configuration."
+    },
+    "HomeAssistantSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable HA auto-discovery"
+        },
+        "discovery_prefix": {
+          "type": "string",
+          "description": "HA discovery topic prefix (default: homeassistant)"
+        },
+        "device_name": {
+          "type": "string",
+          "description": "base name for devices (default: BirdNET-Go)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "HomeAssistantSettings contains settings for Home Assistant MQTT auto-discovery."
+    },
+    "ImportConfig": {
+      "properties": {
+        "allowinappelevation": {
+          "type": "boolean",
+          "description": "AllowInAppElevation enables the in-app sudo elevation ladder for native\nimports of unreadable source data. Default true. When false, the UI only\noffers copy-paste remediation and never prompts for a sudo password."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ImportConfig controls the BirdNET-Pi import feature behavior."
+    },
+    "LiveStreamSettings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "bitrate": {
+          "type": "integer",
+          "description": "bitrate for live stream in kbps"
+        },
+        "samplerate": {
+          "type": "integer",
+          "description": "sample rate for live stream in Hz"
+        },
+        "segmentlength": {
+          "type": "integer",
+          "description": "length of each segment in seconds"
+        },
+        "ffmpegloglevel": {
+          "type": "string",
+          "description": "log level for ffmpeg"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "LogDeduplicationSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable log deduplication"
+        },
+        "healthcheckintervalseconds": {
+          "type": "integer",
+          "description": "Health check interval in seconds (default: 60)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "LogDeduplicationSettings contains settings for log deduplication"
+    },
+    "LoggingConfig": {
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "debug, info, warn, error (deprecated, use DefaultLevel)"
+        },
+        "timezone": {
+          "type": "string",
+          "description": "\"Local\", \"UTC\", or IANA timezone name like \"Europe/Helsinki\""
+        },
+        "file": {
+          "type": "string",
+          "description": "optional log file path (deprecated, use FileOutput)"
+        },
+        "debug_webhooks": {
+          "type": "boolean",
+          "description": "if true, logs full webhook details (headers, body, etc.)"
+        },
+        "default_level": {
+          "type": "string",
+          "description": "default log level for all modules"
+        },
+        "console": {
+          "$ref": "#/$defs/ConsoleOutput",
+          "description": "console output configuration"
+        },
+        "file_output": {
+          "$ref": "#/$defs/FileOutput",
+          "description": "file output configuration"
+        },
+        "modules": {
+          "oneOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/ModuleOutput"
+              },
+              "type": "object",
+              "description": "per-module output configuration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "module_levels": {
+          "oneOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object",
+              "description": "per-module log levels"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "LoggingConfig represents logging configuration"
+    },
+    "LowMemoryConfig": {
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "\"auto\" (default), \"on\", \"off\""
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "LowMemoryConfig is the manual override for the runtime memory policy."
+    },
+    "MQTTSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable MQTT"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable MQTT debug"
+        },
+        "broker": {
+          "type": "string",
+          "description": "MQTT broker URL"
+        },
+        "topic": {
+          "type": "string",
+          "description": "MQTT topic"
+        },
+        "username": {
+          "type": "string",
+          "description": "MQTT username"
+        },
+        "password": {
+          "type": "string",
+          "description": "MQTT password"
+        },
+        "retain": {
+          "type": "boolean",
+          "description": "true to retain messages"
+        },
+        "retrysettings": {
+          "$ref": "#/$defs/RetrySettings",
+          "description": "settings for retry mechanism"
+        },
+        "tls": {
+          "$ref": "#/$defs/MQTTTLSSettings",
+          "description": "TLS/SSL configuration"
+        },
+        "homeassistant": {
+          "$ref": "#/$defs/HomeAssistantSettings",
+          "description": "Home Assistant auto-discovery settings"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "MQTTSettings contains settings for MQTT integration."
+    },
+    "MQTTTLSSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable TLS (auto-detected from broker URL)"
+        },
+        "insecureskipverify": {
+          "type": "boolean",
+          "description": "true to skip certificate verification (for self-signed certs)"
+        },
+        "cacert": {
+          "type": "string",
+          "description": "path to CA certificate file (managed internally)"
+        },
+        "clientcert": {
+          "type": "string",
+          "description": "path to client certificate file (managed internally)"
+        },
+        "clientkey": {
+          "type": "string",
+          "description": "path to client key file (managed internally)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections"
+    },
+    "ModelsConfig": {
+      "properties": {
+        "enabled": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "list of model IDs to load (e.g., \"birdnet\", \"perch_v2\")"
+        },
+        "directory": {
+          "type": "string",
+          "description": "base directory for downloaded model files"
+        },
+        "installed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "list of installed model IDs managed by the model gallery"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ModelsConfig holds global model enablement and management settings."
+    },
+    "ModuleOutput": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "enable module-specific output"
+        },
+        "file_path": {
+          "type": "string",
+          "description": "dedicated file path for this module"
+        },
+        "level": {
+          "type": "string",
+          "description": "log level override for this module"
+        },
+        "console_also": {
+          "type": "boolean",
+          "description": "also log to console"
+        },
+        "max_size": {
+          "type": "integer",
+          "description": "maximum size in MB before rotation (0 = use FileOutput default)"
+        },
+        "max_age": {
+          "type": "integer",
+          "description": "maximum age in days (0 = use FileOutput default)"
+        },
+        "max_rotated_files": {
+          "type": "integer",
+          "description": "maximum number of rotated files (0 = use FileOutput default)"
+        },
+        "compress": {
+          "type": "boolean",
+          "description": "compress rotated logs (nil = use FileOutput default)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ModuleOutput represents per-module output configuration"
+    },
+    "MonitoringSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable system resource monitoring"
+        },
+        "checkinterval": {
+          "type": "integer",
+          "description": "interval in seconds between resource checks"
+        },
+        "cpu": {
+          "$ref": "#/$defs/ResourceEnabled",
+          "description": "CPU metric collection"
+        },
+        "memory": {
+          "$ref": "#/$defs/ResourceEnabled",
+          "description": "Memory metric collection"
+        },
+        "disk": {
+          "$ref": "#/$defs/DiskMonitorConfig",
+          "description": "Disk metric collection"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "MonitoringSettings controls system resource metric collection."
+    },
+    "NewSpeciesTemplate": {
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "NewSpeciesTemplate contains templates for new species detection notifications."
+    },
+    "NormalizationSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable loudness normalization"
+        },
+        "targetlufs": {
+          "type": "number",
+          "description": "target integrated loudness in LUFS (default: -23)"
+        },
+        "loudnessrange": {
+          "type": "number",
+          "description": "loudness range in LU (default: 7)"
+        },
+        "truepeak": {
+          "type": "number",
+          "description": "true peak limit in dBTP (default: -2)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "NormalizationSettings contains audio normalization configuration based on EBU R128 standard"
+    },
+    "NotificationConfig": {
+      "properties": {
+        "push": {
+          "$ref": "#/$defs/PushSettings"
+        },
+        "templates": {
+          "$ref": "#/$defs/NotificationTemplates"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "NotificationConfig is the root for notification-specific settings."
+    },
+    "NotificationTemplates": {
+      "properties": {
+        "newspecies": {
+          "$ref": "#/$defs/NewSpeciesTemplate"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "NotificationTemplates contains customizable notification message templates."
+    },
+    "OAuthProviderConfig": {
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Provider ID: \"google\", \"github\", \"microsoft\""
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable this provider"
+        },
+        "clientId": {
+          "type": "string",
+          "description": "OAuth2 client ID"
+        },
+        "clientSecret": {
+          "type": "string",
+          "description": "OAuth2 client secret"
+        },
+        "redirectUri": {
+          "type": "string",
+          "description": "OAuth2 redirect URI (optional, auto-generated if empty)"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Allowed user ID/email for this provider"
+        },
+        "issuerUrl": {
+          "type": "string",
+          "description": "OIDC issuer/discovery URL (required when provider is \"oidc\")"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Custom OAuth scopes (OIDC default: openid, profile, email)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "OAuthProviderConfig holds settings for a single OAuth2 provider in the new array-based format."
+    },
+    "OpenWeatherSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable OpenWeather integration, for legacy support"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "OpenWeather API key"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "OpenWeather API endpoint"
+        },
+        "units": {
+          "type": "string",
+          "description": "units of measurement: standard, metric, or imperial"
+        },
+        "language": {
+          "type": "string",
+          "description": "language code for the response"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "OpenWeatherSettings contains settings for OpenWeather integration."
+    },
+    "PerchConfig": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to Perch v2 ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to Perch v2 label CSV file"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for detections"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for species label translation"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PerchConfig holds configuration for the Google Perch v2 model."
+    },
+    "PrivacyFilterSettings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable privacy filter"
+        },
+        "confidence": {
+          "type": "number",
+          "description": "confidence threshold for human detection"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PrivacyFilterSettings contains settings for the privacy filter."
+    },
+    "PublicAccess": {
+      "properties": {
+        "liveaudio": {
+          "type": "boolean",
+          "description": "allow unauthenticated users to start/listen to live audio streams"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PublicAccess defines which features are accessible without authentication."
+    },
+    "PushFilterConfig": {
+      "properties": {
+        "types": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "priorities": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "components": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "metadata_filters": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PushFilterConfig limits which notifications a provider receives."
+    },
+    "PushProviderConfig": {
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "filter": {
+          "$ref": "#/$defs/PushFilterConfig"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Shoutrrr-specific"
+        },
+        "timeout": {
+          "$ref": "#/$defs/Duration"
+        },
+        "command": {
+          "type": "string",
+          "description": "Script-specific"
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "environment": {
+          "oneOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_format": {
+          "type": "string"
+        },
+        "endpoints": {
+          "items": {
+            "$ref": "#/$defs/WebhookEndpointConfig"
+          },
+          "type": "array",
+          "description": "Webhook-specific"
+        },
+        "template": {
+          "type": "string",
+          "description": "Custom JSON template"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PushProviderConfig configures a single push provider instance."
+    },
+    "PushSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "default_timeout": {
+          "$ref": "#/$defs/Duration"
+        },
+        "max_retries": {
+          "type": "integer"
+        },
+        "retry_delay": {
+          "$ref": "#/$defs/Duration"
+        },
+        "circuit_breaker": {
+          "$ref": "#/$defs/CircuitBreakerConfig"
+        },
+        "health_check": {
+          "$ref": "#/$defs/HealthCheckConfig"
+        },
+        "rate_limiting": {
+          "$ref": "#/$defs/RateLimitingConfig"
+        },
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/PushProviderConfig"
+          },
+          "type": "array"
+        },
+        "min_confidence_threshold": {
+          "type": "number",
+          "description": "Detection filtering settings"
+        },
+        "species_cooldown_minutes": {
+          "type": "integer",
+          "description": "0 = disabled"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PushSettings controls global push delivery and provider list."
+    },
+    "QuietHoursConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable quiet hours"
+        },
+        "mode": {
+          "type": "string",
+          "description": "\"fixed\" or \"solar\""
+        },
+        "startTime": {
+          "type": "string",
+          "description": "\"HH:MM\" format for fixed mode (e.g., \"22:00\")"
+        },
+        "endTime": {
+          "type": "string",
+          "description": "\"HH:MM\" format for fixed mode (e.g., \"06:00\")"
+        },
+        "startEvent": {
+          "type": "string",
+          "description": "\"sunset\" or \"sunrise\" for solar mode"
+        },
+        "startOffset": {
+          "type": "integer",
+          "description": "minutes relative to start event (positive = after, negative = before)"
+        },
+        "endEvent": {
+          "type": "string",
+          "description": "\"sunset\" or \"sunrise\" for solar mode"
+        },
+        "endOffset": {
+          "type": "integer",
+          "description": "minutes relative to end event (positive = after, negative = before)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "QuietHoursConfig defines a time window during which an audio source is stopped to reduce CPU usage when birds are unlikely to be active."
+    },
+    "RTSPHealthSettings": {
+      "properties": {
+        "healthydatathreshold": {
+          "type": "integer",
+          "description": "seconds before stream considered unhealthy (default: 60)"
+        },
+        "monitoringinterval": {
+          "type": "integer",
+          "description": "health check interval in seconds (default: 30)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RTSPHealthSettings contains settings for RTSP stream health monitoring."
+    },
+    "RTSPSettings": {
+      "properties": {
+        "streams": {
+          "items": {
+            "$ref": "#/$defs/StreamConfig"
+          },
+          "type": "array",
+          "description": "Stream configurations"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Legacy: accepts old format, migrated on load"
+        },
+        "transport": {
+          "type": "string",
+          "description": "Legacy: global default, migrated on load"
+        },
+        "health": {
+          "$ref": "#/$defs/RTSPHealthSettings",
+          "description": "Health monitoring settings"
+        },
+        "ffmpegParameters": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Custom FFmpeg parameters"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RTSPSettings contains settings for audio streaming (supports multiple protocols)."
+    },
+    "RangeFilterSettings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "model": {
+          "type": "string",
+          "description": "range filter model version: \"legacy\" for v1, \"v3\" for geomodel v3.0, or empty/default for v2"
+        },
+        "modelpath": {
+          "type": "string",
+          "description": "path to external meta model file (empty for embedded)"
+        },
+        "labelspath": {
+          "type": "string",
+          "description": "path to geomodel labels file (required when geomodel differs from classifier labels)"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "rangefilter species occurrence threshold"
+        },
+        "passunmappedspecies": {
+          "type": "boolean",
+          "description": "true to pass through species absent from geomodel (score 1.0); false to filter them out (score 0.0)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RangeFilterSettings contains settings for the range filter"
+    },
+    "RateLimitingConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "requests_per_minute": {
+          "type": "integer"
+        },
+        "burst_size": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RateLimitingConfig holds rate limiting configuration."
+    },
+    "RealtimeSettings": {
+      "properties": {
+        "interval": {
+          "type": "integer",
+          "description": "minimum interval between log messages in seconds"
+        },
+        "processingtime": {
+          "type": "boolean",
+          "description": "true to report processing time for each prediction"
+        },
+        "audio": {
+          "$ref": "#/$defs/AudioSettings",
+          "description": "Audio processing settings"
+        },
+        "dashboard": {
+          "$ref": "#/$defs/Dashboard",
+          "description": "Dashboard settings"
+        },
+        "dynamicthreshold": {
+          "$ref": "#/$defs/DynamicThresholdSettings",
+          "description": "Dynamic threshold settings"
+        },
+        "falsepositivefilter": {
+          "$ref": "#/$defs/FalsePositiveFilterSettings",
+          "description": "False positive filtering aggressivity settings"
+        },
+        "log": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
+        },
+        "logdeduplication": {
+          "$ref": "#/$defs/LogDeduplicationSettings",
+          "description": "Log deduplication settings"
+        },
+        "birdweather": {
+          "$ref": "#/$defs/BirdweatherSettings",
+          "description": "Birdweather integration settings"
+        },
+        "ebird": {
+          "$ref": "#/$defs/EBirdSettings",
+          "description": "eBird integration settings"
+        },
+        "privacyfilter": {
+          "$ref": "#/$defs/PrivacyFilterSettings",
+          "description": "Privacy filter settings"
+        },
+        "dogbarkfilter": {
+          "$ref": "#/$defs/DogBarkFilterSettings",
+          "description": "Dog bark filter settings"
+        },
+        "daylightfilter": {
+          "$ref": "#/$defs/DaylightFilterSettings",
+          "description": "Daylight filter settings"
+        },
+        "rtsp": {
+          "$ref": "#/$defs/RTSPSettings",
+          "description": "RTSP settings"
+        },
+        "mqtt": {
+          "$ref": "#/$defs/MQTTSettings",
+          "description": "MQTT settings"
+        },
+        "telemetry": {
+          "$ref": "#/$defs/TelemetrySettings",
+          "description": "Telemetry settings"
+        },
+        "monitoring": {
+          "$ref": "#/$defs/MonitoringSettings",
+          "description": "System resource monitoring settings"
+        },
+        "species": {
+          "$ref": "#/$defs/SpeciesSettings",
+          "description": "Custom thresholds and actions for species"
+        },
+        "weather": {
+          "$ref": "#/$defs/WeatherSettings",
+          "description": "Weather provider related settings"
+        },
+        "speciestracking": {
+          "$ref": "#/$defs/SpeciesTrackingSettings",
+          "description": "New species tracking settings"
+        },
+        "extendedcapture": {
+          "$ref": "#/$defs/ExtendedCaptureSettings",
+          "description": "Extended capture for long calling species"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RealtimeSettings contains all settings related to realtime processing."
+    },
+    "ResourceEnabled": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable monitoring for this resource"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ResourceEnabled controls whether a resource type is monitored."
+    },
+    "RetentionSettings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable retention debug"
+        },
+        "policy": {
+          "type": "string",
+          "description": "retention policy, \"none\", \"age\" or \"usage\""
+        },
+        "maxage": {
+          "type": "string",
+          "description": "maximum age of audio clips to keep"
+        },
+        "maxusage": {
+          "type": "string",
+          "description": "maximum disk usage percentage before cleanup"
+        },
+        "minclips": {
+          "type": "integer",
+          "description": "minimum number of clips per species to keep"
+        },
+        "keepspectrograms": {
+          "type": "boolean",
+          "description": "true to keep spectrograms"
+        },
+        "checkinterval": {
+          "type": "integer",
+          "description": "cleanup check interval in minutes (default: 15)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "RetrySettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable retry mechanism"
+        },
+        "maxretries": {
+          "type": "integer",
+          "description": "maximum number of retry attempts"
+        },
+        "initialdelay": {
+          "type": "integer",
+          "description": "initial delay before first retry in seconds"
+        },
+        "maxdelay": {
+          "type": "integer",
+          "description": "maximum delay between retries in seconds"
+        },
+        "backoffmultiplier": {
+          "type": "number",
+          "description": "multiplier for exponential backoff"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RetrySettings contains common settings for retry mechanisms"
+    },
+    "Season": {
+      "properties": {
+        "startmonth": {
+          "type": "integer",
+          "description": "Month when season starts (1-12)"
+        },
+        "startday": {
+          "type": "integer",
+          "description": "Day when season starts (1-31)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Season defines the start date for a season"
+    },
+    "SeasonalTrackingSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable seasonal tracking"
+        },
+        "windowdays": {
+          "type": "integer",
+          "description": "Days to show \"new this season\" indicator (default: 21)"
+        },
+        "seasons": {
+          "oneOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/Season"
+              },
+              "type": "object",
+              "description": "Season definitions"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SeasonalTrackingSettings contains settings for tracking first arrivals each season"
+    },
+    "Security": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "baseurl": {
+          "type": "string",
+          "description": "BaseURL is the complete external URL for this instance, including\nscheme, host, and optional port (e.g., \"https://birdnet.example.com:5500\").\nUsed for generating OAuth redirect URLs and notification links.\nTakes precedence over Host when set.\nCan be overridden with BIRDNET_URL environment variable.\nNOTE: This field is prepared for future implementation (issue #1462)"
+        },
+        "host": {
+          "type": "string",
+          "description": "Host is the primary hostname used for TLS certificates,\nOAuth redirect URLs, and notification link generation.\nRequired when using AutoTLS or authentication providers.\nAlso used to generate URLs in push notifications - set this\nto your public hostname when using a reverse proxy.\nCan be overridden with BIRDNET_HOST environment variable."
+        },
+        "autoTls": {
+          "type": "boolean",
+          "description": "Deprecated: AutoTLS is replaced by TLSMode. Kept for backward-compatible\nconfig migration. Will be removed in a future version."
+        },
+        "tlsMode": {
+          "type": "string",
+          "description": "TLSMode controls TLS certificate management. Valid values:\n  \"\" (none)      - TLS disabled\n  \"autotls\"      - automatic via Let's Encrypt\n  \"manual\"       - user-provided certificates\n  \"selfsigned\"   - auto-generated self-signed certificates"
+        },
+        "selfSignedValidity": {
+          "type": "string",
+          "description": "SelfSignedValidity is the validity duration for self-signed certificates.\nUses Go duration format with day/month suffixes (e.g., \"365d\", \"1y\")."
+        },
+        "tlsport": {
+          "type": "string",
+          "description": "port for HTTPS (default: 8443)"
+        },
+        "redirecttohttps": {
+          "type": "boolean",
+          "description": "true to redirect to HTTPS"
+        },
+        "allowsubnetbypass": {
+          "$ref": "#/$defs/AllowSubnetBypass",
+          "description": "subnet bypass configuration"
+        },
+        "trustedproxies": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose\nforwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP)\nmay be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always\ntrusted in addition to these, so a default port-forwarded install and the\ncommon local cloudflared topology work without configuration. When the\nimmediate peer is not trusted, forwarded headers are ignored and the real\nconnection address is used, preventing source-IP spoofing on a directly\nexposed instance. The reserved value \"cloudflare\" (TrustedProxyCloudflarePreset)\nexpands to Cloudflare's published edge ranges. Hot-reloadable."
+        },
+        "publicaccess": {
+          "$ref": "#/$defs/PublicAccess",
+          "description": "features accessible without authentication"
+        },
+        "privatemode": {
+          "type": "boolean",
+          "description": "PrivateMode, when true, requires the user to authenticate before any\nUI data is shown. Enforcement lives at the v2 API data layer, which\nreturns 401 to unauthenticated requests; the public SPA shell is still\nserved so it can render a login form instead of the dashboard,\ndetections, analytics, search, about, and notifications views. Settings\nand system routes are additionally auth-gated at the HTTP layer.\nPublicAccess.LiveAudio still applies independently.\nDefault is false to preserve guest-friendly upstream behavior."
+        },
+        "basicauth": {
+          "$ref": "#/$defs/BasicAuth",
+          "description": "password authentication configuration"
+        },
+        "oauthProviders": {
+          "items": {
+            "$ref": "#/$defs/OAuthProviderConfig"
+          },
+          "type": "array",
+          "description": "OAuthProviders is the new array-based OAuth configuration.\nThis is the preferred format for configuring OAuth providers."
+        },
+        "googleAuth": {
+          "$ref": "#/$defs/SocialProvider",
+          "description": "Legacy OAuth fields - kept for backwards compatibility.\nThese are migrated to OAuthProviders on startup and ignored thereafter.\nWill be removed in a future version."
+        },
+        "githubAuth": {
+          "$ref": "#/$defs/SocialProvider"
+        },
+        "microsoftAuth": {
+          "$ref": "#/$defs/SocialProvider"
+        },
+        "sessionsecret": {
+          "type": "string",
+          "description": "secret for session cookie"
+        },
+        "sessionduration": {
+          "type": "string",
+          "description": "duration for browser session cookies",
+          "examples": [
+            "10s",
+            "5m",
+            "1h"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SecurityConfig handles all security-related settings and validations for the application, including authentication, TLS, and access control."
+    },
+    "SentrySettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable Sentry error tracking (opt-in)"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable transparent telemetry logging"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SentrySettings contains settings for Sentry error tracking"
+    },
+    "Settings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "logging": {
+          "$ref": "#/$defs/LoggingConfig",
+          "description": "Logging configuration"
+        },
+        "main": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "timeas24h": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
+        },
+        "birdnet": {
+          "$ref": "#/$defs/BirdNETConfig",
+          "description": "BirdNET configuration"
+        },
+        "perch": {
+          "$ref": "#/$defs/PerchConfig",
+          "description": "Perch v2 model configuration"
+        },
+        "bat": {
+          "$ref": "#/$defs/BatConfig",
+          "description": "Bat detection configuration"
+        },
+        "bsg": {
+          "$ref": "#/$defs/BSGConfig",
+          "description": "BSG regional bird model configuration"
+        },
+        "models": {
+          "$ref": "#/$defs/ModelsConfig",
+          "description": "Global model enablement and management"
+        },
+        "lowmemory": {
+          "$ref": "#/$defs/LowMemoryConfig",
+          "description": "Low-memory mode override (auto/on/off) for constrained systems"
+        },
+        "taxonomySynonyms": {
+          "oneOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object",
+              "description": "Optional scientific-name synonym overrides merged with built-ins"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "realtime": {
+          "$ref": "#/$defs/RealtimeSettings",
+          "description": "Realtime processing settings"
+        },
+        "webserver": {
+          "$ref": "#/$defs/WebServerSettings",
+          "description": "web server configuration"
+        },
+        "security": {
+          "$ref": "#/$defs/Security",
+          "description": "security configuration"
+        },
+        "sentry": {
+          "$ref": "#/$defs/SentrySettings",
+          "description": "Sentry error tracking configuration"
+        },
+        "output": {
+          "properties": {
+            "file": {
+              "properties": {},
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "sqlite": {
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "mysql": {
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "username": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                },
+                "database": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
+        },
+        "backup": {
+          "$ref": "#/$defs/BackupConfig",
+          "description": "Backup configuration"
+        },
+        "import": {
+          "$ref": "#/$defs/ImportConfig",
+          "description": "BirdNET-Pi import behavior"
+        },
+        "notification": {
+          "$ref": "#/$defs/NotificationConfig",
+          "description": "Configuration for push notifications"
+        },
+        "alerting": {
+          "$ref": "#/$defs/AlertSettings",
+          "description": "Alerting rules engine settings"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "title": "BirdNET-Go Configuration",
+      "description": "Top-level configuration for BirdNET-Go."
+    },
+    "SocialProvider": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable social provider"
+        },
+        "clientid": {
+          "type": "string",
+          "description": "client id for OAuth2"
+        },
+        "clientsecret": {
+          "type": "string",
+          "description": "client secret for OAuth2"
+        },
+        "redirecturi": {
+          "type": "string",
+          "description": "redirect uri for OAuth2"
+        },
+        "userid": {
+          "type": "string",
+          "description": "valid user id for OAuth2"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SocialProvider holds settings for an OAuth2 identity provider"
+    },
+    "SoundLevelSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable sound level monitoring"
+        },
+        "interval": {
+          "type": "integer",
+          "description": "measurement interval in seconds (default: 10)"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug logging for sound level monitoring"
+        },
+        "debug_realtime_logging": {
+          "type": "boolean",
+          "description": "true to log debug messages for every realtime update, false to log only at configured interval"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "AudioSettings contains settings for audio processing and export."
+    },
+    "SpeciesAction": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Type of action (ExecuteCommand, etc)"
+        },
+        "command": {
+          "type": "string",
+          "description": "Path to the command to execute"
+        },
+        "parameters": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Action parameters"
+        },
+        "executeDefaults": {
+          "type": "boolean",
+          "description": "Whether to also execute default actions"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SpeciesAction represents a single action configuration"
+    },
+    "SpeciesConfig": {
+      "properties": {
+        "threshold": {
+          "type": "number",
+          "description": "Confidence threshold"
+        },
+        "interval": {
+          "type": "integer",
+          "description": "Custom interval in seconds (0 = use default)"
+        },
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/SpeciesAction"
+          },
+          "type": "array",
+          "description": "List of actions to execute"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SpeciesConfig represents configuration for a specific species"
+    },
+    "SpeciesSettings": {
+      "properties": {
+        "include": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Always include these species"
+        },
+        "exclude": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Always exclude these species"
+        },
+        "config": {
+          "oneOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/SpeciesConfig"
+              },
+              "type": "object",
+              "description": "Per-species configuration (keys normalized to lowercase)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SpeciesSettings contains all species-specific settings."
+    },
+    "SpeciesTrackingSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable new species tracking"
+        },
+        "newspecieswindowdays": {
+          "type": "integer",
+          "description": "Days to consider a species \"new\" (default: 14)"
+        },
+        "syncintervalminutes": {
+          "type": "integer",
+          "description": "Interval to sync with database (default: 60)"
+        },
+        "notificationsuppressionhours": {
+          "type": "integer",
+          "description": "Hours to suppress duplicate notifications (default: 168)"
+        },
+        "yearlytracking": {
+          "$ref": "#/$defs/YearlyTrackingSettings",
+          "description": "Settings for yearly species tracking"
+        },
+        "seasonaltracking": {
+          "$ref": "#/$defs/SeasonalTrackingSettings",
+          "description": "Settings for seasonal species tracking"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SpeciesTrackingSettings contains settings for tracking new species"
+    },
+    "SpectrogramPreRender": {
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "Generation mode: \"auto\" (default), \"prerender\", \"user-requested\""
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "DEPRECATED: Use Mode instead. Kept for backward compatibility (true = \"prerender\", false = \"auto\")"
+        },
+        "size": {
+          "type": "string",
+          "description": "Default size for all modes (see recommendations below)"
+        },
+        "raw": {
+          "type": "boolean",
+          "description": "Generate raw spectrogram without axes/legend (default: true)"
+        },
+        "style": {
+          "type": "string",
+          "description": "Visual style preset: \"default\", \"scientific_dark\", \"high_contrast_dark\", \"scientific\""
+        },
+        "dynamicrange": {
+          "type": "string",
+          "description": "Dynamic range in dB: \"80\" (high contrast), \"100\" (standard), \"120\" (extended)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SpectrogramPreRender contains settings for spectrogram generation modes."
+    },
+    "StreamConfig": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Required: descriptive name like \"Front Yard\""
+        },
+        "url": {
+          "type": "string",
+          "description": "Required: stream URL"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "true when the configured stream should be active"
+        },
+        "type": {
+          "type": "string",
+          "description": "Stream type: rtsp, http, hls, rtmp, udp"
+        },
+        "transport": {
+          "type": "string",
+          "description": "Transport: tcp or udp (for RTSP/RTMP)"
+        },
+        "channelMode": {
+          "type": "string",
+          "description": "Channel handling: downmix, left, or right"
+        },
+        "equalizer": {
+          "$ref": "#/$defs/EqualizerSettings",
+          "description": "Per-stream EQ (nil = use global)"
+        },
+        "quietHours": {
+          "$ref": "#/$defs/QuietHoursConfig",
+          "description": "Quiet hours configuration"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Model IDs for this stream (e.g., [\"birdnet\", \"perch_v2\"])"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "StreamConfig represents a single audio stream source"
+    },
+    "TelemetrySettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable Prometheus compatible telemetry endpoint"
+        },
+        "listen": {
+          "type": "string",
+          "description": "IP address and port to listen on"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "TelemetrySettings contains settings for telemetry."
+    },
+    "Thumbnails": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "summary": {
+          "type": "boolean",
+          "description": "show thumbnails on summary table"
+        },
+        "recent": {
+          "type": "boolean",
+          "description": "show thumbnails on recent table"
+        },
+        "imageprovider": {
+          "type": "string",
+          "description": "preferred image provider: \"auto\", \"wikimedia\", \"avicommons\""
+        },
+        "fallbackpolicy": {
+          "type": "string",
+          "description": "fallback policy: \"none\", \"all\" - try all available providers if preferred fails"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "UltrasonicFilterConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "enable ultrasonic validation filter"
+        },
+        "cvthreshold": {
+          "type": "number",
+          "description": "detections with US frame CV below this are tagged unlikely"
+        },
+        "fftsize": {
+          "type": "integer",
+          "description": "FFT window size in samples (must be power of 2)"
+        },
+        "hopsize": {
+          "type": "integer",
+          "description": "STFT hop size in samples"
+        },
+        "frequencysplithz": {
+          "type": "integer",
+          "description": "boundary between audible and ultrasonic bands in Hz"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "UltrasonicFilterConfig controls the post-detection ultrasonic validation filter for bat detections."
+    },
+    "VideoEmbedConfig": {
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "YouTube URL or video ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "optional display title"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "VideoEmbedConfig holds configuration for the YouTube video embed element."
+    },
+    "WatchdogSettings": {
+      "properties": {
+        "checkInterval": {
+          "type": "integer",
+          "description": "tick period (default 10s)"
+        },
+        "silenceThreshold": {
+          "type": "integer",
+          "description": "silence before alarm (default 30s)"
+        },
+        "maxRetries": {
+          "type": "integer",
+          "description": "restart attempts before escalation (default 3)"
+        },
+        "retryBackoff": {
+          "type": "integer",
+          "description": "wait between retries (default 5s)"
+        },
+        "cooldown": {
+          "type": "integer",
+          "description": "alarm suppression after recovery (default 60s)"
+        },
+        "escalationTimeout": {
+          "type": "integer",
+          "description": "time in ESCALATED before FAILED (default 60s)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "WatchdogSettings holds user-tunable parameters for the audio liveness watchdog."
+    },
+    "WeatherSettings": {
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "\"none\", \"yrno\", \"openweather\", or \"wunderground\""
+        },
+        "pollinterval": {
+          "type": "integer",
+          "description": "weather data polling interval in minutes"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "openweather": {
+          "$ref": "#/$defs/OpenWeatherSettings",
+          "description": "OpenWeather integration settings"
+        },
+        "wunderground": {
+          "$ref": "#/$defs/WundergroundSettings",
+          "description": "WeatherUnderground integration settings"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "WeatherSettings contains all weather-related settings"
+    },
+    "WebServerSettings": {
+      "properties": {
+        "debug": {
+          "type": "boolean",
+          "description": "true to enable debug mode"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable web server"
+        },
+        "port": {
+          "type": "string",
+          "description": "port for web server"
+        },
+        "basepath": {
+          "type": "string",
+          "description": "reverse proxy subpath prefix (e.g., \"/birdnet\")"
+        },
+        "allowembedding": {
+          "type": "boolean",
+          "description": "true to allow embedding in iframes (e.g., Home Assistant)"
+        },
+        "livestream": {
+          "$ref": "#/$defs/LiveStreamSettings",
+          "description": "live stream configuration"
+        },
+        "enableterminal": {
+          "type": "boolean",
+          "description": "Enable browser terminal (security risk)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "WebhookAuthConfig": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "\"none\", \"bearer\", \"basic\", \"custom\""
+        },
+        "token": {
+          "type": "string",
+          "description": "Bearer authentication"
+        },
+        "tokenfile": {
+          "type": "string",
+          "description": "Path to file containing token"
+        },
+        "user": {
+          "type": "string",
+          "description": "Basic authentication"
+        },
+        "userfile": {
+          "type": "string",
+          "description": "Path to file containing username"
+        },
+        "pass": {
+          "type": "string",
+          "description": "Password value or ${ENV_VAR}"
+        },
+        "passfile": {
+          "type": "string",
+          "description": "Path to file containing password"
+        },
+        "header": {
+          "type": "string",
+          "description": "Custom header authentication"
+        },
+        "value": {
+          "type": "string",
+          "description": "Header value or ${ENV_VAR}"
+        },
+        "valuefile": {
+          "type": "string",
+          "description": "Path to file containing header value"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "WebhookAuthConfig configures authentication for webhook requests."
+    },
+    "WebhookEndpointConfig": {
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string",
+          "description": "POST, PUT, PATCH (default: POST)"
+        },
+        "headers": {
+          "oneOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object",
+              "description": "Custom HTTP headers"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeout": {
+          "$ref": "#/$defs/Duration",
+          "description": "Per-endpoint timeout (default: use provider timeout)"
+        },
+        "auth": {
+          "$ref": "#/$defs/WebhookAuthConfig",
+          "description": "Authentication configuration"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "WebhookEndpointConfig configures a single webhook endpoint."
+    },
+    "WundergroundSettings": {
+      "properties": {
+        "apikey": {
+          "type": "string",
+          "description": "WeatherUnderground API key"
+        },
+        "stationid": {
+          "type": "string",
+          "description": "WeatherUnderground station ID"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "WeatherUnderground API endpoint"
+        },
+        "units": {
+          "type": "string",
+          "description": "units of measurement: \"e\" (imperial), \"m\" (metric), \"h\" (UK hybrid)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "WundergroundSettings contains settings for WeatherUnderground integration."
+    },
+    "YearlyTrackingSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable yearly tracking"
+        },
+        "resetmonth": {
+          "type": "integer",
+          "description": "Month to reset yearly tracking (1=January, default: 1)"
+        },
+        "resetday": {
+          "type": "integer",
+          "description": "Day to reset yearly tracking (default: 1)"
+        },
+        "windowdays": {
+          "type": "integer",
+          "description": "Days to show \"new this year\" indicator (default: 30)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "YearlyTrackingSettings contains settings for tracking first arrivals each year"
+    }
+  },
+  "title": "BirdNET-Go Configuration",
+  "description": "Configuration schema for BirdNET-Go's config.yaml file."
+}

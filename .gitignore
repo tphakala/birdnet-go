@@ -4,6 +4,9 @@ assets/tailwind.css
 log/
 clips/
 models/
+# The bare models/ pattern above ignores the runtime ML-model download dir, but
+# it also matches the api/v2 models domain package; keep that source tracked.
+!internal/api/v2/models/
 plans/
 superpowers/
 docs/plans/
@@ -57,3 +60,7 @@ REFACTOR_CHANGELOG.md
 .serena/*
 !.serena/project.yml
 .gstack/
+
+# Python bytecode caches (db-doctor and other tools/ scripts)
+__pycache__/
+*.pyc

@@ -1,16 +1,12 @@
 package api
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -19,20 +15,31 @@ const testMQTTTopic = "birdnet/detections"
 
 // Test controller constants
 const (
-	testControlChanBuffer     = 10               // Buffer size for control channel in tests
-	testNewYorkLongitude      = -74.0060         // New York City longitude for test data
-	testResponseHeaderTimeout = 30 * time.Second // HTTP response header timeout for tests
+	testControlChanBuffer = 10       // Buffer size for control channel in tests
+	testNewYorkLongitude  = -74.0060 // New York City longitude for test data
+	// testFailFastTimeout is a short timeout injected into deliberate-failure
+	// waits (unreachable ntfy host, audio file that never appears) so those
+	// tests reach the expected timeout state quickly instead of waiting the full
+	// production defaults. It is intentionally well above any local/CI dial or
+	// scheduling latency while staying far below the production timeouts.
+	testFailFastTimeout = 200 * time.Millisecond
 )
 
+// passthroughMiddleware returns a middleware that does nothing (allows all requests).
+// Used for testing endpoints that require authentication middleware.
+func passthroughMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			return next(c)
+		}
+	}
+}
+
 // getTestController creates a test controller with disabled saving
-// Note: DisableHTTPKeepAlivesForTesting() is called in TestMain before any tests run
+// Note: apitest.DisableHTTPKeepAlivesForTesting() is called in TestMain before any tests run
 func getTestController(t *testing.T, e *echo.Echo) *Controller {
 	t.Helper()
-	c := &Controller{
-		Echo:                e,
-		controlChan:         make(chan string, testControlChanBuffer),
-		DisableSaveSettings: true, // Disable saving to disk during tests
-	}
+	c := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, testControlChanBuffer), DisableSaveSettings: true}
 	c.Settings.Store(getTestSettings(t))
 	return c
 }
@@ -105,68 +112,4 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings.Realtime.MQTT.RetrySettings.BackoffMultiplier = 2.0
 
 	return settings
-}
-
-// assertControllerError is a helper function that asserts controller error responses
-// It handles both cases: when the controller returns an HTTP error or sends an HTTP response
-func assertControllerError(t *testing.T, err error, rec *httptest.ResponseRecorder, expectedCode int, expectedMessage string) {
-	t.Helper()
-
-	if err == nil {
-		// Controller handled the error and sent an HTTP response
-		assert.Equal(t, expectedCode, rec.Code, "Expected HTTP status code")
-
-		var response map[string]any
-		jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, jsonErr, "Response should be valid JSON")
-
-		// Check that the error response contains the expected message (if specified)
-		if expectedMessage != "" {
-			if message, exists := response["message"]; exists {
-				assert.Contains(t, message, expectedMessage, "Error message should contain expected text")
-			}
-		}
-	} else {
-		// Controller returned an error directly
-		var httpErr *echo.HTTPError
-		require.ErrorAs(t, err, &httpErr, "Error should be an echo.HTTPError")
-		assert.Equal(t, expectedCode, httpErr.Code, "Error should have expected HTTP code")
-		if expectedMessage != "" {
-			assert.Contains(t, httpErr.Message, expectedMessage, "Error message should contain expected text")
-		}
-	}
-}
-
-// createTestHTTPClient creates an HTTP client optimized for tests to prevent goroutine leaks
-func createTestHTTPClient(timeout time.Duration) *http.Client {
-	// Create custom transport that disables keep-alive to prevent persistent connection goroutines
-	transport := &http.Transport{
-		DisableKeepAlives:     true, // This prevents persistent connections and their goroutines
-		IdleConnTimeout:       1 * time.Second,
-		MaxIdleConns:          0, // Disable connection pooling
-		MaxIdleConnsPerHost:   0,
-		DisableCompression:    false, // Keep compression for realistic testing
-		ForceAttemptHTTP2:     false, // Disable HTTP/2 for simplicity in tests
-		ResponseHeaderTimeout: timeout,
-	}
-
-	return &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
-	}
-}
-
-// DisableHTTPKeepAlivesForTesting configures the default HTTP client transport
-// to prevent goroutine leaks from persistent connections during testing
-func DisableHTTPKeepAlivesForTesting() {
-	// Override the default transport to prevent goroutine leaks in ALL HTTP clients
-	http.DefaultTransport = &http.Transport{
-		DisableKeepAlives:     true,
-		IdleConnTimeout:       1 * time.Second,
-		MaxIdleConns:          0,
-		MaxIdleConnsPerHost:   0,
-		DisableCompression:    false,
-		ForceAttemptHTTP2:     false,
-		ResponseHeaderTimeout: testResponseHeaderTimeout,
-	}
 }

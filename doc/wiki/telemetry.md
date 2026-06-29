@@ -164,7 +164,6 @@ The same sensitive data always produces the same anonymized identifier, allowing
 - **[Privacy Statement](../../PRIVACY.md)** - **⭐ COMPREHENSIVE** privacy information covering all data collection and external integrations
 - **[Privacy & Data Collection](telemetry-privacy.md)** - Detailed privacy information and data handling (telemetry-specific)
 - **[Setup & Configuration](telemetry-setup.md)** - Step-by-step configuration guide
-- **[Troubleshooting](telemetry-troubleshooting.md)** - Common issues and solutions
 
 **Important**: The main [Privacy Statement](../../PRIVACY.md) contains complete information about all external services including BirdWeather, MQTT, backup services, weather APIs, and image services in addition to telemetry.
 

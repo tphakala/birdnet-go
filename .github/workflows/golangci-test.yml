@@ -31,7 +31,7 @@ jobs:
         ports:
           - 1883:1883
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
@@ -51,7 +51,7 @@ jobs:
         timeout-minutes: 3
 
       - name: Cache Go tools
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-go-tools-gotestfmt-v2-${{ hashFiles('go.mod') }}
@@ -81,7 +81,12 @@ jobs:
           CI: true
           MQTT_TEST_BROKER: tcp://localhost:1883
         run: |
-          set -euo pipefail
+          # Drop errexit (-e) but keep nounset + pipefail: a failing `go test`
+          # makes the pipeline non-zero, and with -e the shell would abort right
+          # here, before TEST_EXIT_CODE=${PIPESTATUS[0]} runs, so the failure
+          # summary below never renders. The explicit `exit $TEST_EXIT_CODE` still
+          # fails the step. (macos-test.yml / windows-test.yml use the same pattern.)
+          set -uo pipefail
 
           # Run tests with JSON output
           # Note: We must capture PIPESTATUS immediately after the pipeline
@@ -172,7 +177,7 @@ jobs:
   testcontainer-tests:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
@@ -204,7 +209,7 @@ jobs:
   integration-tests:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'

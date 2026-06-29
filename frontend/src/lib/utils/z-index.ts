@@ -23,6 +23,12 @@ export const Z_INDEX = {
   STICKY_HEADER: 10,
   STICKY_FOOTER: 10,
 
+  // Mobile sidebar drawer (must exceed card z-indices: z-[11], z-50, z-[60])
+  SIDEBAR_DRAWER: 200,
+  // Collapsed-sidebar tooltip (must exceed SIDEBAR_DRAWER so it stays visible
+  // when the persisted collapsed state carries over to a mobile viewport)
+  SIDEBAR_TOOLTIP: 210,
+
   // Overlays and dropdowns
   DROPDOWN: 100,
   AUTOCOMPLETE: 150,

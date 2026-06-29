@@ -19,6 +19,13 @@ var sourcesJSON []byte
 //go:embed data/manifest.json
 var manifestJSON []byte
 
+// aliasesJSON is the compiled OpenFauna taxonomic alias map (legacy scientific
+// name -> canonical scientific name). It is small, so it is embedded uncompressed
+// to keep the vendored diff reviewable. See CanonicalName for how it is applied.
+//
+//go:embed data/aliases.json
+var aliasesJSON []byte
+
 //go:embed data/locales.txt
 var localesList []byte
 

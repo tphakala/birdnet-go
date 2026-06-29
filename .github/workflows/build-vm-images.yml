@@ -40,7 +40,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -58,10 +58,15 @@ jobs:
           echo "📦 Building VM images for version: $VERSION"
 
       - name: Install build dependencies
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+        # Route through the shared composite for the continue-on-error +
+        # outcome-checked reinstall fallback, so a corrupt apt cache (tar exit 2)
+        # cannot hard-fail this build. execute-install-scripts: 'false' preserves
+        # the prior behavior (qemu binfmt is set up explicitly below).
+        uses: ./.github/actions/setup-apt-packages
         with:
           packages: qemu-kvm qemu-utils qemu-system-x86 qemu-system-arm libvirt-daemon-system libvirt-clients bridge-utils virt-manager ovmf qemu-efi-aarch64 zstd
-          version: 1.0
+          cache-version: '1.0'
+          execute-install-scripts: 'false'
       - name: Verify QEMU
         run: |
           echo "Available QEMU components:"
@@ -75,10 +80,15 @@ jobs:
 
       - name: Install QEMU cross-platform support
         if: matrix.arch == 'arm64'
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+        # Route through the shared composite for the continue-on-error +
+        # outcome-checked reinstall fallback, so a corrupt apt cache (tar exit 2)
+        # cannot hard-fail this build. execute-install-scripts: 'false' preserves
+        # the prior behavior (qemu binfmt is reset explicitly below).
+        uses: ./.github/actions/setup-apt-packages
         with:
           packages: qemu-user-static binfmt-support
-          version: 1.0
+          cache-version: '1.0'
+          execute-install-scripts: 'false'
       - name: Setup QEMU binfmt
         if: matrix.arch == 'arm64'
         run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
@@ -192,7 +202,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Determine version
         id: version

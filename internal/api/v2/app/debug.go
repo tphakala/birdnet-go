@@ -1,0 +1,317 @@
+// internal/api/v2/app/debug.go
+package app
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
+)
+
+// Notification type constants (for mapping to notification.Type)
+const (
+	NotificationTypeError     = "error"
+	NotificationTypeWarning   = "warning"
+	NotificationTypeInfo      = "info"
+	NotificationTypeDetection = "detection"
+	NotificationTypeSystem    = "system"
+)
+
+// DebugErrorRequest represents the request for triggering a test error
+type DebugErrorRequest struct {
+	Component string         `json:"component"`
+	Category  string         `json:"category"`
+	Message   string         `json:"message"`
+	Context   map[string]any `json:"context,omitempty"`
+}
+
+// DebugNotificationRequest represents the request for triggering a test notification
+type DebugNotificationRequest struct {
+	Type    string         `json:"type"`
+	Title   string         `json:"title"`
+	Message string         `json:"message"`
+	Data    map[string]any `json:"data,omitempty"`
+}
+
+// DebugResponse represents the response for debug operations
+type DebugResponse struct {
+	Success bool           `json:"success"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
+}
+
+// DebugSystemStatus represents the current system status for debugging
+type DebugSystemStatus struct {
+	Timestamp     string         `json:"timestamp"`
+	Debug         bool           `json:"debug"`
+	Telemetry     map[string]any `json:"telemetry,omitempty"`
+	Notifications map[string]any `json:"notifications,omitempty"`
+}
+
+// requireDebugMode is middleware that returns 403 if debug mode is not enabled.
+// This is defense-in-depth - debug routes are already conditionally registered.
+func (c *Handler) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		if s := c.ControllerSettings(); s == nil || !s.Debug {
+			return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
+		}
+		return next(ctx)
+	}
+}
+
+// RegisterDebugRoutes registers debug-related routes on the provided v2 API
+// group, preserving the exact route order, middleware, and the debug-mode gate
+// the monolithic initDebugRoutes used.
+func (c *Handler) RegisterDebugRoutes(g *echo.Group) {
+	// Only register debug routes if debug mode is enabled. Read via ControllerSettings()
+	// (a nil-safe atomic Load) to match requireDebugMode; it returns nil when no
+	// snapshot has been stored (standalone/test controllers), which the guard handles.
+	if s := c.ControllerSettings(); s == nil || !s.Debug {
+		apicore.GetLogger().Debug("Debug mode not enabled, skipping debug routes")
+		return
+	}
+
+	// Debug endpoints require authentication and debug mode (defense-in-depth)
+	debugGroup := g.Group("/debug", c.AuthMiddleware, c.requireDebugMode)
+
+	debugGroup.POST("/trigger-error", c.DebugTriggerError)
+	debugGroup.POST("/trigger-notification", c.DebugTriggerNotification)
+	debugGroup.GET("/status", c.DebugSystemStatus)
+
+	apicore.GetLogger().Info("Debug routes initialized")
+}
+
+// DebugTriggerError triggers a test error for telemetry testing
+func (c *Handler) DebugTriggerError(ctx echo.Context) error {
+	var req DebugErrorRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
+
+	// Default values
+	if req.Component == "" {
+		req.Component = "debug"
+	}
+	if req.Category == "" {
+		req.Category = "test"
+	}
+	if req.Message == "" {
+		req.Message = "Test error triggered via debug endpoint"
+	}
+
+	// Map category string to error category
+	category := mapErrorCategory(req.Category)
+
+	// Create and report the error
+	testErr := errors.Newf("%s", req.Message).
+		Component(req.Component).
+		Category(category).
+		Context("triggered_at", time.Now().Format(time.RFC3339)).
+		Context("debug_endpoint", true)
+
+	// Add any additional context
+	for k, v := range req.Context {
+		testErr = testErr.Context(k, v)
+	}
+
+	// Build and report the error
+	err := testErr.Build()
+
+	// Log the error which will trigger telemetry if enabled
+	c.LogErrorIfEnabled("Debug error triggered",
+		logger.Error(err),
+		logger.String("component", req.Component),
+		logger.String("category", req.Category))
+
+	response := DebugResponse{
+		Success: true,
+		Message: "Test error triggered successfully",
+		Details: map[string]any{
+			"component": req.Component,
+			"category":  req.Category,
+			"message":   req.Message,
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// DebugTriggerNotification triggers a test notification
+func (c *Handler) DebugTriggerNotification(ctx echo.Context) error {
+	var req DebugNotificationRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
+
+	// Default values
+	if req.Type == "" {
+		req.Type = "test"
+	}
+	if req.Title == "" {
+		req.Title = "Test Notification"
+	}
+	if req.Message == "" {
+		req.Message = "This is a test notification triggered via debug endpoint"
+	}
+
+	// Get notification service
+	notificationService := c.getNotificationService()
+	if notificationService == nil {
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
+	}
+
+	// Map string type to notification.Type
+	notifType := mapNotificationType(req.Type)
+
+	// Create notification using the service
+	_, err := notificationService.CreateWithComponent(
+		notifType,
+		notification.PriorityMedium,
+		req.Title,
+		req.Message,
+		"debug",
+	)
+
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to create notification", http.StatusInternalServerError)
+	}
+
+	response := DebugResponse{
+		Success: true,
+		Message: "Test notification sent successfully",
+		Details: map[string]any{
+			"type":      req.Type,
+			"title":     req.Title,
+			"message":   req.Message,
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// DebugSystemStatus returns current system status for debugging
+func (c *Handler) DebugSystemStatus(ctx echo.Context) error {
+	settings := c.ControllerSettings()
+	debug := false
+	if settings != nil {
+		debug = settings.Debug
+	}
+	status := DebugSystemStatus{
+		Timestamp: time.Now().Format(time.RFC3339),
+		Debug:     debug,
+	}
+
+	// Get telemetry status
+	if telemetryStatus := getTelemetryStatus(settings); telemetryStatus != nil {
+		status.Telemetry = telemetryStatus
+	}
+
+	// Get notification status. The map is only populated when a service is
+	// available (the enclosing guard), so both fields are unconditionally true
+	// here; they report "a notification service is wired and active".
+	if notificationService := c.getNotificationService(); notificationService != nil {
+		status.Notifications = map[string]any{
+			"initialized": true,
+			"enabled":     true,
+		}
+	}
+
+	return ctx.JSON(http.StatusOK, status)
+}
+
+// Helper functions
+
+func mapErrorCategory(category string) errors.ErrorCategory {
+	switch category {
+	case "network":
+		return errors.CategoryNetwork
+	case "database":
+		return errors.CategoryDatabase
+	case "system":
+		return errors.CategorySystem
+	case "config":
+		return errors.CategoryConfiguration
+	case "audio":
+		return errors.CategoryAudio
+	default:
+		return errors.CategorySystem
+	}
+}
+
+func getTelemetryStatus(settings *conf.Settings) map[string]any {
+	// Get more detailed telemetry status
+	status := map[string]any{
+		"enabled": false, // Default to false for safety
+	}
+
+	// Check if settings are available
+	if settings != nil {
+		status["enabled"] = settings.Sentry.Enabled
+	}
+
+	// Add health check info if available
+	if healthHandler := telemetry.NewHealthCheckHandler(); healthHandler != nil {
+		// Get coordinator from global instance
+		if coord := getGlobalInitCoordinator(); coord != nil {
+			health := coord.HealthCheck()
+			status["healthy"] = health.Healthy
+
+			// Build the components map in a local variable and assign it once, instead
+			// of re-asserting status["components"].(map[string]any) every iteration. The
+			// repeated unchecked assertion was robust only as long as the make() above it
+			// stayed adjacent; a local keeps the type concrete and the loop panic-free.
+			components := make(map[string]any)
+			for name, compHealth := range health.Components {
+				components[name] = map[string]any{
+					"state":   compHealth.State.String(),
+					"healthy": compHealth.Healthy,
+					"error":   compHealth.Error,
+				}
+			}
+			status["components"] = components
+		}
+	}
+
+	// Add worker stats if available
+	if worker := telemetry.GetTelemetryWorker(); worker != nil {
+		stats := worker.GetStats()
+		status["worker"] = map[string]any{
+			"events_processed": stats.EventsProcessed,
+			"events_dropped":   stats.EventsDropped,
+			"events_failed":    stats.EventsFailed,
+			"circuit_state":    stats.CircuitState,
+		}
+	}
+
+	return status
+}
+
+func mapNotificationType(typeStr string) notification.Type {
+	switch typeStr {
+	case NotificationTypeError:
+		return notification.TypeError
+	case NotificationTypeWarning:
+		return notification.TypeWarning
+	case NotificationTypeInfo:
+		return notification.TypeInfo
+	case NotificationTypeDetection:
+		return notification.TypeDetection
+	case NotificationTypeSystem:
+		return notification.TypeSystem
+	default:
+		return notification.TypeInfo
+	}
+}
+
+func getGlobalInitCoordinator() *telemetry.InitCoordinator {
+	// Use the exported getter function from the telemetry package
+	return telemetry.GetGlobalInitCoordinator()
+}

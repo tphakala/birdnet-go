@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
@@ -89,7 +90,7 @@ func TestProbableSpeciesScores_MemoizesUnderConcurrency(t *testing.T) {
 	s.BirdNET.Longitude = 24.94
 	conftest.SetTestSettings(s)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(s)
 	pred := &fakePredictor{scores: []classifier.SpeciesScore{{Label: sciEurasianBlackbird, Score: 0.9}}}
 
@@ -122,7 +123,7 @@ func TestProbableSpeciesScores_InvalidatesOnLocationChange(t *testing.T) {
 	s.BirdNET.Longitude = 20.0
 	conftest.SetTestSettings(s)
 
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(s)
 	pred := &fakePredictor{scores: []classifier.SpeciesScore{{Label: "X", Score: 0.5}}}
 

@@ -472,7 +472,21 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		GetLogger().Info("API controller common name map updated with new labels")
 	}
 
+	// Reload OV-capable secondary models (e.g. Perch) so a backend/OpenVINO-device
+	// change moves them onto the new device without a restart. No-ops when the
+	// backend/device is unchanged. The primary already reloaded above, so a
+	// secondary failure is surfaced but does not fail the overall reload.
+	if err := cm.bn.ReloadSecondaryModels(); err != nil {
+		GetLogger().Error("Failed to reload secondary models", logger.Error(err))
+		cm.notifyError("Failed to reload secondary models", err)
+	}
+
 	emitHotReload("birdnet_model")
+	// Signal the metrics SSE stream that the inference topology changed so the
+	// AI Models page re-fetches its snapshot.
+	if cm.apiController != nil {
+		cm.apiController.BroadcastInferenceTopologyChanged()
+	}
 }
 
 // handleReconfigureMQTT reconfigures the MQTT connection
@@ -546,6 +560,10 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 
 	audiocore.GetLogger().Info("Audio streams reconfigured successfully")
 	emitHotReload("rtsp_sources")
+	// Source reassignment changes the inference topology; notify the metrics SSE stream.
+	if cm.apiController != nil {
+		cm.apiController.BroadcastInferenceTopologyChanged()
+	}
 }
 
 // handleReconfigureBirdWeather reconfigures the BirdWeather integration
@@ -963,6 +981,10 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 
 	audiocore.GetLogger().Info("Audio sources reconfigured successfully")
 	emitHotReload("audio_sources")
+	// Source reassignment changes the inference topology; notify the metrics SSE stream.
+	if cm.apiController != nil {
+		cm.apiController.BroadcastInferenceTopologyChanged()
+	}
 }
 
 // handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries

@@ -195,15 +195,15 @@ realtime:
         - type: LowPass
           frequency: 15000
           passes: 0 
-    quiethours:
+    quietHours:
       enabled: false      # true to enable quiet hours (stop capture during specified times)
       mode: fixed         # "fixed" for clock times, "solar" for sunrise/sunset based
-      starttime: "22:00"  # start of quiet period (HH:MM, fixed mode)
-      endtime: "06:00"    # end of quiet period (HH:MM, fixed mode)
-      startevent: sunset  # solar event for start (solar mode): "sunrise" or "sunset"
-      startoffset: 0      # minutes offset from start event (solar mode, -180 to 180)
-      endevent: sunrise   # solar event for end (solar mode): "sunrise" or "sunset"
-      endoffset: 0        # minutes offset from end event (solar mode, -180 to 180)
+      startTime: "22:00"  # start of quiet period (HH:MM, fixed mode)
+      endTime: "06:00"    # end of quiet period (HH:MM, fixed mode)
+      startEvent: sunset  # solar event for start (solar mode): "sunrise" or "sunset"
+      startOffset: 0      # minutes offset from start event (solar mode, -180 to 180)
+      endEvent: sunrise   # solar event for end (solar mode): "sunrise" or "sunset"
+      endOffset: 0        # minutes offset from end event (solar mode, -180 to 180)
     export:
       enabled: true       # true to export audio clips containing indentified bird calls
       debug: false        # true to enable audio export debug messages
@@ -216,7 +216,7 @@ realtime:
         maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction
         minclips: 10      # minumum number of clips per species to keep before starting evictions
         keepspectrograms: true # true to keep spectrograms even when clips are deleted
-        checkInterval: 15 # cleanup check interval in minutes (default: 15)
+        checkinterval: 15 # cleanup check interval in minutes (default: 15)
 
 
   dashboard:
@@ -256,8 +256,8 @@ realtime:
     #     url: udp://192.168.1.5:1234
     #     type: udp
     health:
-      healthyDataThreshold: 60  # Seconds of data to consider stream healthy
-      monitoringInterval: 30    # Seconds between health checks
+      healthydatathreshold: 60  # Seconds of data to consider stream healthy
+      monitoringinterval: 30    # Seconds between health checks
   
   log:
     enabled: false        # true to enable OBS chat log
@@ -353,7 +353,7 @@ realtime:
 
 webserver:
   enabled: true           # true to enable web server
-  port: 8080              # port for web server
+  port: "8080"            # port for web server
   allowembedding: false   # true to allow embedding in iframes (e.g., Home Assistant)
   livestream:
     debug: false
@@ -361,13 +361,6 @@ webserver:
     samplerate: 48000     # sample rate for live stream in Hz
     segmentlength: 2      # length of each HLS segment in seconds (1-30)
     ffmpegloglevel: warning
-  log:
-    enabled: false        # true to enable log file
-    path: webui.log       # path to log file
-    rotation: daily       # daily, weekly or size
-    maxsize: 1048576      # max size in bytes for size rotation
-    rotationday: 0        # day of the week for weekly rotation, 0 = Sunday
-
 security:
   # host is used for:
   # - AutoTLS certificate generation (when autotls: true)
@@ -399,7 +392,7 @@ security:
   # - Ports 80 and 443 must be accessible from the internet
   # - Domain must point to this server's IP address
   # - When using Docker, use docker-compose.autotls.yml instead of docker-compose.yml
-  autotls: false
+  autoTls: false
   
   # redirecttohttps forces HTTP connections to redirect to HTTPS
   # Only works when autotls is enabled or manual TLS certificates are configured
@@ -429,17 +422,17 @@ security:
     redirecturi: ""          # redirect uri prefix
     authcodeexp: 10m           # authorization code expiration
     accesstokenexp: 1h        # access token expiration
-  googleauth:
+  googleAuth:
     enabled: false           # true to enable Google OAuth2
     clientid: ""             # client id
     clientsecret: ""         # client secret
     userid: ""               # user id
-  githubauth:
+  githubAuth:
     enabled: false           # true to enable GitHub OAuth2
     clientid: ""             # client id
     clientsecret: ""         # client secret
     userid: ""               # user id
-  microsoftauth:
+  microsoftAuth:
     enabled: false           # true to enable Microsoft Account OAuth2
     clientid: ""             # client id from Azure App Registration
     clientsecret: ""         # client secret
@@ -448,10 +441,7 @@ security:
 # Ouput settings
 
 output:
-  file:
-    enabled: true         # true to enable file output for file and directory analysis
-    path: output/         # path to output directory
-    type: table           # ouput format, Raven table or csv
+  file: {}                # file output is configured via CLI flags, not config
   # Only one database is supported at a time
   # if both are enabled, SQLite will be used.
   sqlite:
@@ -463,7 +453,7 @@ output:
     password: secret      # mysql database user password
     database: birdnet     # mysql database name
     host: localhost       # mysql database host
-    port: 3306            # mysql database port
+    port: "3306"          # mysql database port
 
 # Sentry telemetry configuration (opt-in, respects EU privacy laws)
 sentry:

@@ -25,6 +25,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 )
 
 // TestConcurrentUpdates verifies the system handles concurrent updates safely
@@ -72,11 +73,7 @@ func TestConcurrentUpdates(t *testing.T) {
 			// Initialize test settings with known values
 
 			e := echo.New()
-			controller := &Controller{
-				Echo:                e,
-				controlChan:         make(chan string, 100),
-				DisableSaveSettings: true,
-			}
+			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 100), DisableSaveSettings: true}
 			controller.Settings.Store(getTestSettings(t))
 
 			var wg sync.WaitGroup
@@ -331,11 +328,7 @@ func TestRaceConditionScenarios(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := &Controller{
-				Echo:                e,
-				controlChan:         make(chan string, 100),
-				DisableSaveSettings: true,
-			}
+			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 100), DisableSaveSettings: true}
 			controller.Settings.Store(getTestSettings(t))
 
 			tt.scenario(t, controller)

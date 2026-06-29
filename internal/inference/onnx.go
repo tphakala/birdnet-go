@@ -184,6 +184,14 @@ func (c *onnxCustomClassifier) NumClasses() int {
 	return c.classifier.NumClasses()
 }
 
+// InputDim returns the embedding vector length the classifier expects as input.
+func (c *onnxCustomClassifier) InputDim() int {
+	if c.classifier == nil {
+		return 0
+	}
+	return c.classifier.InputDim()
+}
+
 // Labels returns the classification labels.
 func (c *onnxCustomClassifier) Labels() []string {
 	if c.classifier == nil {
@@ -333,10 +341,19 @@ func findONNXRuntimeLibrary() string {
 }
 
 // DestroyONNXRuntime tears down the ONNX Runtime environment.
-// Resets initialization state so InitONNXRuntime can be called again.
+// Resets initialization state so InitONNXRuntime can be called again. It is a
+// no-op (returns nil) when the runtime was never initialized, mirroring
+// DestroyOpenVINO, so a shutdown teardown can call it unconditionally without
+// ort.DestroyORT reporting "InitializeRuntime has not been called".
 func DestroyONNXRuntime() error {
 	ortInitMu.Lock()
 	defer ortInitMu.Unlock()
+	if !ortInitialized {
+		return nil
+	}
+	if err := ort.DestroyORT(); err != nil {
+		return err
+	}
 	ortInitialized = false
-	return ort.DestroyORT()
+	return nil
 }

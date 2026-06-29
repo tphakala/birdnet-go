@@ -696,6 +696,12 @@ func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) bool {
 //  2. A migration state record with COMPLETED status
 //
 // This prevents false positives from partially initialized databases.
+//
+// Unlike CheckMySQLHasFreshV2Schema, this intentionally does NOT also require the
+// detections data table to exist. SQLite stores the v2 schema in a dedicated file
+// (not prefix-shared tables), and initializeV2OnlyMode's SQLite branch always runs
+// Initialize()/AutoMigrate on the chosen file in both outcomes, so a marker-without-data
+// file is repaired in place rather than wedging the app. The #3575 wedge is MySQL-only.
 func CheckSQLiteHasV2Schema(dbPath string) bool {
 	// Check if file exists first - GORM/SQLite with mode=ro may still create an empty file
 	// even when opening in read-only mode, which causes issues when checking non-existent
@@ -747,9 +753,18 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 	return state.State == entities.MigrationStatusCompleted
 }
 
-// CheckMySQLHasFreshV2Schema checks if a MySQL database has fresh v2 tables (without v2_ prefix).
-// This is used to determine whether to use v2_ prefix for migration mode or no prefix for fresh installs.
-// Returns true if the fresh v2 schema exists (migration_states table without prefix).
+// CheckMySQLHasFreshV2Schema reports whether a MySQL database holds a complete,
+// usable fresh (no v2_ prefix) v2 schema. It drives the prefix decision in
+// initializeV2OnlyMode: no prefix for fresh installs, v2_ prefix for migration mode.
+//
+// It returns true only when BOTH conditions hold:
+//  1. a no-prefix migration_states row exists with state == COMPLETED, AND
+//  2. the no-prefix `detections` data table physically exists.
+//
+// Requiring the real data table (not just the completed marker) prevents a stale
+// marker left by a backend switch (e.g. SQLite -> MySQL) or a partial/aborted init
+// from wedging the app in enhanced mode against a missing `detections` table
+// (GitHub #3575).
 func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 	dsn := buildMySQLStartupDSN(settings)
 
@@ -766,30 +781,49 @@ func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Check if fresh v2 migration_states table exists (no prefix).
-	// Also check for the old singular name "migration_state" (pre-PR #2165).
-	var tableCount int64
-	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name IN ('migration_states', 'migration_state')",
-		settings.Output.MySQL.Database).Scan(&tableCount).Error
-	if err != nil || tableCount == 0 {
+	return hasCompleteFreshV2Schema(db)
+}
+
+// hasCompleteFreshV2Schema is the dialect-agnostic core behind CheckMySQLHasFreshV2Schema.
+// It reports whether the connected database holds a complete, usable fresh (no v2_
+// prefix) v2 schema: a no-prefix migration_states (or pre-PR #2165 singular
+// migration_state) row with state == COMPLETED AND a physical no-prefix `detections`
+// data table.
+//
+// It uses GORM's migrator for table existence so the same code path can be unit-tested
+// against SQLite (in CI, where MySQL is unavailable) while production calls it for MySQL.
+func hasCompleteFreshV2Schema(db *gorm.DB) bool {
+	// Resolve the migration-state table name. Plural is current; the singular
+	// "migration_state" predates PR #2165 (which removed TableName() overrides).
+	migrationTable := ""
+	for _, name := range []string{"migration_states", "migration_state"} {
+		if db.Migrator().HasTable(name) {
+			migrationTable = name
+			break
+		}
+	}
+	if migrationTable == "" {
 		return false
 	}
 
-	// Determine which table name exists
-	var tableName string
-	err = db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN ('migration_states', 'migration_state') LIMIT 1",
-		settings.Output.MySQL.Database).Scan(&tableName).Error
-	if err != nil || tableName == "" {
-		return false
-	}
-
-	// Check if migration state is COMPLETED
+	// The migration must be marked COMPLETED.
 	var state entities.MigrationState
-	if err := db.Table(tableName).First(&state).Error; err != nil {
+	if err := db.Table(migrationTable).First(&state).Error; err != nil {
+		return false
+	}
+	if state.State != entities.MigrationStatusCompleted {
 		return false
 	}
 
-	return state.State == entities.MigrationStatusCompleted
+	// A COMPLETED marker alone is NOT sufficient evidence of a usable fresh v2 schema:
+	// the real `detections` data table must also exist. A stale marker can survive a
+	// backend switch (e.g. SQLite -> MySQL) or a partial/aborted init, and without this
+	// guard the prefix decision in initializeV2OnlyMode would pick the no-prefix schema
+	// so every v2 query targets a bare `detections` table that was never created,
+	// wedging the app in enhanced mode (GitHub #3575). Returning false makes
+	// initializeV2OnlyMode fall back to the v2_ prefixed schema, whose tables are
+	// (re)created by the subsequent Initialize()/AutoMigrate.
+	return db.Migrator().HasTable("detections")
 }
 
 // cleanupOrphanedBareV2Tables removes bare v2 tables that were created by a broken nightly
@@ -814,18 +848,23 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 
 	// Bare v2-only tables that do NOT collide with legacy tables.
 	// Drop in reverse dependency order (children before parents).
-	// Table names use the OLD singular forms (migration_state, alert_history) because
-	// the orphaned tables were created by code with TableName() overrides.
+	// Both naming forms are listed: the OLD singular forms (migration_state,
+	// alert_history) left by pre-PR #2165 code with TableName() overrides, and the
+	// current GORM-pluralized forms (migration_states, alert_histories) that a more
+	// recent broken nightly would leave behind. FK checks are disabled below, so an
+	// entry that does not exist is a harmless no-op (DROP TABLE IF EXISTS).
 	orphanedTables := []string{
 		// Alert children first, then parent
 		"alert_actions",
 		"alert_conditions",
 		"alert_history",
+		"alert_histories",
 		"alert_rules",
 		// Detection children first, then parent
 		"detection_locks",
 		"detection_comments",
 		"detection_reviews",
+		"detection_model_contributions",
 		"detection_predictions",
 		"detections",
 		// Labels before its reference tables (labels has FKs to ai_models, label_types, taxonomic_classes)
@@ -834,29 +873,40 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 		"ai_models",
 		"taxonomic_classes",
 		"label_types",
+		// Application metadata and event log (no FK dependencies)
+		"app_events",
+		"app_metadata",
 		// Migration tracking
 		"migration_dirty_ids",
 		"migration_state",
+		"migration_states",
 	}
 
 	// Use db.Connection to pin all operations to a single pooled connection,
 	// ensuring SET FOREIGN_KEY_CHECKS applies to the same connection as the DROPs.
 	// FK checks must be disabled because preserved legacy tables (dynamic_thresholds,
 	// notification_histories, etc.) may have FK constraints pointing to orphaned tables.
-	if err := db.Connection(func(tx *gorm.DB) error {
+	if err := db.Connection(func(tx *gorm.DB) (retErr error) {
 		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
 			reportStartupError("mysql", "cleanupOrphanedTables_disableFK", err, database)
 			return err
 		}
+		// Re-enable FK checks via defer so the pooled connection is never returned
+		// with referential integrity disabled, even if a DROP panics. On a clean run,
+		// surface a re-enable failure as the closure error (skipping the success
+		// telemetry below), preserving the original inline behavior.
+		defer func() {
+			if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error; err != nil {
+				reportStartupError("mysql", "cleanupOrphanedTables_enableFK", err, database)
+				if retErr == nil {
+					retErr = err
+				}
+			}
+		}()
 		for _, table := range orphanedTables {
 			if err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", table)).Error; err != nil {
 				reportStartupError("mysql", "cleanupOrphanedTable_"+table, err, database)
 			}
-		}
-
-		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error; err != nil {
-			reportStartupError("mysql", "cleanupOrphanedTables_enableFK", err, database)
-			return err
 		}
 		return nil
 	}); err != nil {

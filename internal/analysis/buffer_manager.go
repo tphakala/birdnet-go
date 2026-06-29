@@ -154,7 +154,8 @@ func (m *BufferManager) AddMonitor(source string) error {
 	// Fallback to primary model for backward compatibility when no
 	// models are registered via the orchestrator's model map.
 	if len(configs) == 0 {
-		cfg := buildMonitorConfig(source, &m.bn.ModelInfo)
+		primaryInfo := m.bn.PrimaryModelInfo()
+		cfg := buildMonitorConfig(source, &primaryInfo)
 		configs = []monitorConfig{cfg}
 	}
 

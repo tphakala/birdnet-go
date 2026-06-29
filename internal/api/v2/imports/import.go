@@ -1,0 +1,640 @@
+// internal/api/v2/imports/import.go
+package importsapi
+
+import (
+	"context"
+	"fmt"
+	"io/fs"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/imports"
+	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
+
+	"golang.org/x/time/rate"
+)
+
+// resolveNativeImportSourcePath validates an absolute path to a BirdNET-Pi
+// birds.db on a native install. Unlike the container branch there is no root
+// confinement: reading any file the service user can read is no privilege
+// escalation. The path must be absolute and resolve to an existing regular
+// file; BirdNET-Pi schema validation is deferred to the shared factory +
+// Validate step in StartBirdNETPiImport (the container branch does the same).
+func resolveNativeImportSourcePath(userPath string) (string, error) {
+	if userPath == "" || !filepath.IsAbs(userPath) {
+		return "", errInvalidSourcePath
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Clean(userPath))
+	if err != nil {
+		return "", errInvalidSourcePath
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", errInvalidSourcePath
+	}
+	// Path-only resolution: confirm it is an absolute, existing, regular file.
+	// Schema validation (open + BirdNET-Pi schema check) is done once by the
+	// shared factory + Validate path in StartBirdNETPiImport, using the request
+	// context and surfacing distinct "failed to open" vs "validation failed"
+	// errors. Mirrors the container branch (resolveImportSourcePath), which also
+	// defers schema validation to that shared step.
+	return resolved, nil
+}
+
+// Import mode constants.
+const (
+	importModeDBOnly  = "db-only"
+	importModeDBaudio = "db-audio"
+)
+
+// Import SSE event type constants.
+const (
+	importEventProgress  = "progress"
+	importEventComplete  = "complete"
+	importEventCancelled = "cancelled"
+	importEventError     = "error"
+	importEventHeartbeat = "heartbeat"
+)
+
+// Import status constants.
+const (
+	importStatusStarted    = "started"
+	importStatusRunning    = "running"
+	importStatusCancelling = "cancelling"
+	importStatusDone       = "done"
+	importStatusIdle       = "idle"
+)
+
+// importEnginePhaseDone matches the engine's terminal phase string.
+// Progress events with this phase are suppressed; the terminal complete/cancelled/error
+// event is the authoritative completion signal.
+const importEnginePhaseDone = "done"
+
+// importErrorMessage is the generic, non-leaking message reported when an import fails.
+const importErrorMessage = "import failed"
+
+// errImportInProgress is returned when a second start is attempted while one is running.
+var errImportInProgress = errors.NewStd("import already in progress")
+
+// errInvalidSourcePath is returned when the source path fails containment validation.
+var errInvalidSourcePath = errors.NewStd("invalid source path")
+
+// startImportRequest is the JSON body for POST /import/birdnet-pi.
+type startImportRequest struct {
+	Mode       string `json:"mode"`        // accepted values: "db-only", "db-audio"
+	SourcePath string `json:"source_path"` // container: relative to the external mount root; native: absolute path to the source birds.db
+	Location   string `json:"location"`    // optional IANA timezone name e.g. "Europe/Helsinki"
+}
+
+// startImportResponse is the 202 Accepted reply body.
+type startImportResponse struct {
+	JobID  string `json:"job_id"`
+	Status string `json:"status"`
+}
+
+// cancelImportResponse is the reply body for the cancel endpoint.
+type cancelImportResponse struct {
+	Status string `json:"status"`
+}
+
+// importProgress is the SSE payload carrying live import stats.
+type importProgress struct {
+	Total     int    `json:"total"`
+	Processed int    `json:"processed"`
+	Inserted  int    `json:"inserted"`
+	Skipped   int    `json:"skipped"`
+	Errors    int    `json:"errors"`
+	Phase     string `json:"phase"`
+}
+
+// importErrorPayload is the SSE payload for the error terminal event.
+// importProgress is embedded so the wire format is identical to the progress event
+// (flattened snake_case fields), with an additional "message" field prepended.
+type importErrorPayload struct {
+	Message string `json:"message"`
+	importProgress
+}
+
+// importStatusResponse is the JSON body for GET /import/status.
+type importStatusResponse struct {
+	Running  bool            `json:"running"`
+	JobID    string          `json:"job_id,omitempty"`
+	Status   string          `json:"status"`
+	Progress *importProgress `json:"progress,omitempty"`
+	Error    string          `json:"error,omitempty"`
+}
+
+// toImportProgress converts engine stats to the API DTO.
+func toImportProgress(s imports.ImportStats) importProgress {
+	return importProgress{
+		Total:     s.Total,
+		Processed: s.Processed,
+		Inserted:  s.Inserted,
+		Skipped:   s.Skipped,
+		Errors:    s.Errors,
+		Phase:     s.Phase,
+	}
+}
+
+// resolveImportSourcePath resolves userPath under root with traversal and symlink-escape protection.
+// userPath may be either a relative path (joined under root) or an absolute path (accepted only when
+// it resolves within root). Returns the resolved absolute path on success.
+func resolveImportSourcePath(root, userPath string) (string, error) {
+	if userPath == "" {
+		return "", errInvalidSourcePath
+	}
+
+	var candidate string
+	if filepath.IsAbs(userPath) {
+		// Accept absolute paths; containment is still enforced below via
+		// EvalSymlinks + isContained, so an absolute path outside root is rejected.
+		candidate = filepath.Clean(userPath)
+	} else {
+		// Relative path: join under root and perform an early traversal check before
+		// the symlink walk so a plaintext "../../../etc/passwd" is caught cheaply.
+		cleaned := filepath.Clean(userPath)
+		full := filepath.Join(root, cleaned)
+		rel, err := filepath.Rel(root, full)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", errInvalidSourcePath
+		}
+		candidate = full
+	}
+
+	rootResolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", errInvalidSourcePath
+		}
+		rootResolved = root
+	}
+	// Find the deepest existing ancestor of candidate, resolving symlinks, and
+	// verify it is physically contained within root. This rejects a symlinked
+	// ancestor that escapes root even when the target (or several intermediate
+	// dirs) do not yet exist, closing the TOCTOU window at any depth.
+	ancestor := candidate
+	for {
+		resolved, evalErr := filepath.EvalSymlinks(ancestor)
+		if evalErr == nil {
+			if !isContained(rootResolved, resolved) {
+				return "", errInvalidSourcePath
+			}
+			suffix, relErr := filepath.Rel(ancestor, candidate)
+			if relErr != nil {
+				return "", errInvalidSourcePath
+			}
+			return filepath.Join(resolved, suffix), nil
+		}
+		if !errors.Is(evalErr, fs.ErrNotExist) {
+			return "", errInvalidSourcePath
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			// Reached the filesystem root without finding an existing ancestor.
+			return "", errInvalidSourcePath
+		}
+		ancestor = parent
+	}
+}
+
+// isContained reports whether target resides within root after both have been
+// resolved to their physical (symlink-free) forms.
+func isContained(root, target string) bool {
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// RegisterImportRoutes registers all import-related API routes on the supplied
+// v2 group.
+//
+// These endpoints start, cancel, and inspect a database import, so the group
+// must fail closed. c.AuthMiddleware is non-nil in every real deployment: the
+// server always injects it via WithAuthMiddleware, and that middleware itself
+// enforces or passes through based on the auth configuration. It can only be nil
+// in unit tests or a misconfiguration; in that case install a middleware that
+// denies access with 401 rather than registering the routes unprotected (Echo's
+// applyMiddleware would also panic on a literal nil entry).
+// Elevation endpoint rate limit: POST /import/elevate feeds a submitted sudo
+// password to `sudo -S`, and the ladder runs `sudo -k` before each attempt
+// (clearing the timestamp cache), so without an app-level limit an authenticated
+// LAN client could brute-force the host sudo password (OWASP ASVS V2.4.1). Bound
+// it to a small burst per client IP with slow refill; legitimate use needs only a
+// couple of attempts.
+const (
+	elevateRateLimitBurst  = 10
+	elevateRateLimitWindow = 5 * time.Minute
+)
+
+func (c *Handler) RegisterImportRoutes(g *echo.Group) {
+	authMiddleware := c.AuthMiddleware
+	if authMiddleware == nil {
+		authMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
+			return func(ctx echo.Context) error {
+				return c.HandleError(ctx, nil, "authentication is not configured", http.StatusUnauthorized)
+			}
+		}
+	}
+
+	// Per-client-IP rate limiter applied only to the elevation endpoint.
+	elevateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Skipper: middleware.DefaultSkipper,
+		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+			middleware.RateLimiterMemoryStoreConfig{
+				Rate:      rate.Limit(float64(elevateRateLimitBurst) / elevateRateLimitWindow.Seconds()),
+				Burst:     elevateRateLimitBurst,
+				ExpiresIn: elevateRateLimitWindow,
+			},
+		),
+		IdentifierExtractor: func(ctx echo.Context) (string, error) { return ctx.RealIP(), nil },
+		ErrorHandler: func(ctx echo.Context, err error) error {
+			c.LogSecurityWarnIfEnabled("import: elevation rate limit exceeded", logger.String("ip", ctx.RealIP()))
+			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
+		},
+		DenyHandler: func(ctx echo.Context, _ string, err error) error {
+			c.LogSecurityWarnIfEnabled("import: elevation attempt denied by rate limit", logger.String("ip", ctx.RealIP()))
+			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)
+		},
+	})
+
+	importGroup := g.Group("/import", authMiddleware)
+	importGroup.GET("/sources", c.GetImportSources)
+	importGroup.POST("/validate", c.ValidateImportSource)
+	importGroup.POST("/elevate", c.ElevateImport, elevateLimiter)
+	importGroup.POST("/birdnet-pi", c.StartBirdNETPiImport)
+	importGroup.GET("/jobs/:jobId/progress", c.StreamImportProgress)
+	importGroup.POST("/jobs/:jobId/cancel", c.CancelImport)
+	importGroup.GET("/status", c.GetImportStatus)
+}
+
+// StartBirdNETPiImport validates a BirdNET-Pi SQLite source and starts a DB-only import.
+// Returns 202 Accepted with a job_id on success.
+func (c *Handler) StartBirdNETPiImport(ctx echo.Context) error {
+	// Verify datastore is available.
+	if err := c.RequireDatastore(ctx); err != nil {
+		return err
+	}
+	if c.Repo == nil {
+		return c.HandleError(ctx, apicore.ErrDatastoreUnavailable, "datastore is not available", http.StatusServiceUnavailable)
+	}
+
+	// Parse and bind request body.
+	var req startImportRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
+	}
+
+	// Validate import mode.
+	switch req.Mode {
+	case importModeDBOnly:
+		// accepted
+	case importModeDBaudio:
+		// accepted; audio options configured below when building opts
+	default:
+		return c.HandleError(ctx, nil, "unsupported import mode", http.StatusBadRequest)
+	}
+
+	// Resolve and validate source path. Dispatch depends on whether we run in a
+	// container (relative path under an external mount root) or natively (absolute
+	// path validated on the spot by the service user).
+	var (
+		resolvedPath string
+		err          error
+	)
+	if c.isContainerEnv == nil || c.isContainerEnv() {
+		root := c.importSourceRoot
+		if root == "" {
+			root = sysinfo.DefaultExternalMountPath
+		}
+		resolvedPath, err = resolveImportSourcePath(root, req.SourcePath)
+		if err != nil {
+			return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
+		}
+		info, statErr := os.Stat(resolvedPath)
+		if statErr != nil || !info.Mode().IsRegular() {
+			return c.HandleError(ctx, statErr, "source file not found or not a regular file", http.StatusBadRequest)
+		}
+	} else {
+		resolvedPath, err = resolveNativeImportSourcePath(req.SourcePath)
+		if err != nil {
+			return c.HandleError(ctx, err, "invalid source path", http.StatusBadRequest)
+		}
+	}
+
+	// Parse optional timezone before delegating to launchImport.
+	var loc *time.Location
+	if req.Location != "" {
+		loc, err = time.LoadLocation(req.Location)
+		if err != nil {
+			return c.HandleError(ctx, err, "invalid location", http.StatusBadRequest)
+		}
+	}
+
+	id, err := c.launchImport(ctx, resolvedPath, req.Mode, loc, "")
+	if err != nil {
+		return err
+	}
+	return ctx.JSON(http.StatusAccepted, startImportResponse{
+		JobID:  id,
+		Status: importStatusStarted,
+	})
+}
+
+// launchImport builds the import source from an already-resolved, validated path,
+// reserves the single import slot, and runs the engine in a tracked goroutine,
+// returning the job id on success. loc is the optional timezone for timestamp
+// normalization; pass nil to use the source timezone as-is.
+//
+// When stagingCleanupDir is non-empty it is a per-import staging directory
+// created by the elevation ladder. The engine goroutine removes it on every
+// terminal path so a privileged staged copy never outlives the import. If
+// launchImport returns synchronously before the goroutine starts (e.g. the slot
+// is already in use), it removes the staging directory itself so no elevated
+// copy is left on disk.
+func (c *Handler) launchImport(ctx echo.Context, resolvedPath, mode string, loc *time.Location, stagingCleanupDir string) (string, error) {
+	// Guard: clean up the staging dir if we return before the engine goroutine
+	// takes ownership. transferred flips to true right before c.Go() so that the
+	// deferred cleanup here is skipped once the goroutine is responsible.
+	staged := stagingCleanupDir != ""
+	transferred := false
+	defer func() {
+		if staged && !transferred {
+			c.cleanupStagingDir(stagingCleanupDir)
+		}
+	}()
+
+	// Build source using the injectable factory (defaults to birdnetpi.New).
+	factory := c.importSourceFactory
+	if factory == nil {
+		factory = func(p string) (imports.Source, error) {
+			return birdnetpi.New(p)
+		}
+	}
+	src, err := factory(resolvedPath)
+	if err != nil {
+		return "", c.HandleError(ctx, err, "failed to open source", http.StatusBadRequest)
+	}
+
+	// Validate source synchronously for an immediate error response.
+	if err := src.Validate(ctx.Request().Context()); err != nil {
+		_ = src.Close()
+		return "", c.HandleError(ctx, err, "source validation failed", http.StatusBadRequest)
+	}
+
+	// For db-audio mode, resolve the export path before reserving the import slot
+	// so an unconfigured path returns 400 without occupying the slot.
+	var clipExportPath string
+	if mode == importModeDBaudio {
+		if settings := c.CurrentSettings(); settings != nil {
+			clipExportPath = settings.Realtime.Audio.Export.Path
+		}
+		if clipExportPath == "" {
+			_ = src.Close()
+			return "", c.HandleError(ctx, nil, "audio export path is not configured; set the audio export path to import audio", http.StatusBadRequest)
+		}
+	}
+
+	// Reserve the single import slot.
+	id := apicore.GenerateCorrelationID()
+	parent := c.Context()
+	if parent == nil {
+		parent = context.Background()
+	}
+	jobCtx, jobCancel := context.WithCancel(parent)
+	job := newImportJob(id, jobCancel)
+	if !c.importMgr.start(job) {
+		jobCancel()
+		_ = src.Close()
+		return "", c.HandleError(ctx, errImportInProgress, "an import is already in progress", http.StatusConflict)
+	}
+
+	// Run the engine in a goroutine tracked by the controller WaitGroup.
+	opts := imports.ImportOptions{
+		SourceNode: imports.DefaultSourceNode,
+		Location:   loc,
+	}
+	if mode == importModeDBaudio {
+		opts.IncludeAudio = true
+		opts.AudioSourceDir = filepath.Dir(resolvedPath)
+		opts.ClipExportPath = clipExportPath
+	}
+	eng := imports.NewEngine(c.Repo)
+
+	transferred = true // goroutine now owns the staging dir lifetime
+	c.Go(func() {
+		var stats imports.ImportStats
+		var runErr error
+
+		defer func() {
+			if r := recover(); r != nil {
+				runErr = errors.Newf("import panicked: %v", r).Component("api").Category(errors.CategoryGeneric).Build()
+
+				stats, _, _, _, _ = job.snapshot()
+			}
+			job.finish(stats, runErr)
+		}()
+		defer jobCancel()
+		defer func() { _ = src.Close() }()
+		if stagingCleanupDir != "" {
+			defer c.cleanupStagingDir(stagingCleanupDir)
+		}
+		stats, runErr = eng.Run(jobCtx, src, &opts, job)
+	})
+
+	return id, nil
+}
+
+// cleanupStagingDir best-effort removes a per-import staging directory. It only
+// removes a path that is strictly under the handler's resolved staging base, so a
+// caller cannot turn this into an arbitrary-delete primitive; a path outside the
+// base is logged and skipped.
+func (c *Handler) cleanupStagingDir(dir string) {
+	base, _ := c.resolveStagingBase()
+	if base == "" || !isStrictlyUnder(base, dir) {
+		c.LogWarnIfEnabled("import: refusing to clean staging dir outside base", logger.String("dir", dir))
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		c.LogWarnIfEnabled("import: failed to remove staging dir", logger.String("dir", dir), logger.String("error", err.Error()))
+	}
+}
+
+// isStrictlyUnder reports whether child is a proper descendant of parent after
+// cleaning both. Equal paths return false (never remove the base itself).
+func isStrictlyUnder(parent, child string) bool {
+	rel, err := filepath.Rel(filepath.Clean(parent), filepath.Clean(child))
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+// StreamImportProgress streams import progress as Server-Sent Events.
+// Closing the SSE connection does NOT cancel the import; use the cancel endpoint.
+func (c *Handler) StreamImportProgress(ctx echo.Context) error {
+	id := ctx.Param("jobId")
+	job := c.importMgr.get(id)
+	if job == nil {
+		return c.HandleError(ctx, nil, "import job not found", http.StatusNotFound)
+	}
+
+	apicore.SetSSEHeaders(ctx)
+
+	// Bound the stream lifetime independently of the import itself.
+	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), apicore.MaxSSEStreamDuration)
+	defer cancel()
+
+	// Send initial snapshot before entering the event loop. If the job already
+	// finished, emit only the terminal event so the latest sequence number is
+	// not reused for both a progress and a terminal event (event ids stay unique).
+	stats, seq, done, changed, runErr := job.snapshot()
+	if done {
+		_ = c.sendImportTerminal(ctx, seq, stats, runErr)
+		return nil
+	}
+	if stats.Phase != importEnginePhaseDone {
+		if err := c.sendImportEvent(ctx, seq, importEventProgress, toImportProgress(stats)); err != nil {
+			return nil
+		}
+	}
+
+	hb := time.NewTicker(apicore.SSEHeartbeatInterval)
+	defer hb.Stop()
+
+	// Capture shutdown channel defensively; c.Context() may be nil in isolated unit tests.
+	var shutdown <-chan struct{}
+	if c.Context() != nil {
+		shutdown = c.Context().Done()
+	} else {
+		neverClose := make(chan struct{})
+		shutdown = neverClose
+	}
+
+	for {
+		select {
+		case <-reqCtx.Done():
+			return nil
+		case <-shutdown:
+			return nil
+		case <-hb.C:
+			if err := c.sendImportHeartbeat(ctx); err != nil {
+				return nil
+			}
+		case <-changed:
+			stats, seq, done, changed, runErr = job.snapshot()
+			// On the terminal transition emit only the terminal event so the
+			// sequence number is not reused for both a progress and a terminal
+			// event (event ids stay unique even when updates coalesce).
+			if done {
+				_ = c.sendImportTerminal(ctx, seq, stats, runErr)
+				return nil
+			}
+			if stats.Phase != importEnginePhaseDone {
+				if err := c.sendImportEvent(ctx, seq, importEventProgress, toImportProgress(stats)); err != nil {
+					return nil
+				}
+			}
+		}
+	}
+}
+
+// CancelImport requests cancellation of a running import job.
+// Returns 200 with status "cancelling" (or "done" if already finished).
+func (c *Handler) CancelImport(ctx echo.Context) error {
+	id := ctx.Param("jobId")
+	job := c.importMgr.get(id)
+	if job == nil {
+		return c.HandleError(ctx, nil, "import job not found", http.StatusNotFound)
+	}
+	job.cancel()
+	status := importStatusCancelling
+	if job.isDone() {
+		status = importStatusDone
+	}
+	return ctx.JSON(http.StatusOK, cancelImportResponse{Status: status})
+}
+
+// GetImportStatus returns the current import state for polling UIs.
+func (c *Handler) GetImportStatus(ctx echo.Context) error {
+	job := c.importMgr.active()
+	if job == nil {
+		return ctx.JSON(http.StatusOK, importStatusResponse{
+			Running: false,
+			Status:  importStatusIdle,
+		})
+	}
+	stats, _, done, _, runErr := job.snapshot()
+	prog := toImportProgress(stats)
+	if done {
+		resp := importStatusResponse{
+			Running:  false,
+			JobID:    job.id,
+			Status:   importStatusDone,
+			Progress: &prog,
+		}
+		if runErr != nil {
+			resp.Error = importErrorMessage
+		}
+		return ctx.JSON(http.StatusOK, resp)
+	}
+	return ctx.JSON(http.StatusOK, importStatusResponse{
+		Running:  true,
+		JobID:    job.id,
+		Status:   importStatusRunning,
+		Progress: &prog,
+	})
+}
+
+// sendImportEvent sends a single SSE event with a monotonic id field.
+func (c *Handler) sendImportEvent(ctx echo.Context, id uint64, event string, data any) error {
+	payload, err := c.SafeMarshalJSON(event, data)
+	if err != nil {
+		return fmt.Errorf("marshal import event: %w", err)
+	}
+	msg := fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", id, event, payload)
+	if conn, ok := ctx.Response().Writer.(apicore.WriteDeadlineSetter); ok {
+		if err := conn.SetWriteDeadline(time.Now().Add(apicore.SSEWriteDeadline)); err != nil {
+			// Best-effort: not all response writers support deadlines; log and proceed,
+			// matching SendSSEMessage in apicore.
+			c.LogDebugIfEnabled("Failed to set write deadline for import SSE event", logger.Error(err))
+		}
+	}
+	if _, err := ctx.Response().Write([]byte(msg)); err != nil {
+		return fmt.Errorf("write import event: %w", err)
+	}
+	if f, ok := ctx.Response().Writer.(http.Flusher); ok {
+		f.Flush()
+	}
+	return nil
+}
+
+// sendImportHeartbeat sends a lightweight SSE event to keep the connection alive.
+func (c *Handler) sendImportHeartbeat(ctx echo.Context) error {
+	return c.SendSSEMessage(ctx, importEventHeartbeat, map[string]int64{"ts": time.Now().Unix()})
+}
+
+// sendImportTerminal sends the final SSE event based on the import outcome.
+func (c *Handler) sendImportTerminal(ctx echo.Context, seq uint64, stats imports.ImportStats, runErr error) error {
+	switch {
+	case runErr == nil:
+		return c.sendImportEvent(ctx, seq, importEventComplete, toImportProgress(stats))
+	case errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded):
+		return c.sendImportEvent(ctx, seq, importEventCancelled, toImportProgress(stats))
+	default:
+		return c.sendImportEvent(ctx, seq, importEventError, importErrorPayload{
+			Message:        importErrorMessage,
+			importProgress: toImportProgress(stats),
+		})
+	}
+}

@@ -13,13 +13,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// TempExt is the temporary file extension used when exporting audio with FFmpeg.
-// Audio files are written with this suffix during encoding and renamed upon
-// completion to ensure atomic file operations.
-const TempExt = ".temp"
+// osWindows is runtime.GOOS on Windows, where the sox and ffprobe binaries carry
+// a .exe suffix (see getSoxBinaryName / getFfprobeBinaryName).
+const osWindows = "windows"
+
+// TempExt is the temporary file extension used when exporting audio. It aliases
+// audiotemp.Ext; the process-unique temp name and the atomic, Windows-safe rename
+// live in the shared audiotemp package (see ExportAudio / GitHub #3323).
+const TempExt = audiotemp.Ext
 
 // minExportPhaseTimeout is the minimum time allowed for a single FFmpeg export phase.
 const minExportPhaseTimeout = 30 * time.Second
@@ -124,8 +129,10 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 			Build()
 	}
 
-	// Write to a temp file first for atomic finalisation.
-	tempPath := opts.OutputPath + TempExt
+	// Write to a unique temp file first for atomic finalisation, so concurrent
+	// exports targeting the same final path do not share one temp file (see
+	// audiotemp / GitHub #3323).
+	tempPath := audiotemp.UniquePath(opts.OutputPath)
 	defer func() {
 		// Best-effort cleanup of the temp file if export failed.
 		if _, statErr := os.Stat(tempPath); statErr == nil {
@@ -165,8 +172,8 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 		return err
 	}
 
-	// Atomic rename to final path.
-	if err := os.Rename(tempPath, opts.OutputPath); err != nil {
+	// Atomic rename to final path (Windows-safe under concurrent dedup).
+	if err := audiotemp.Finalize(tempPath, opts.OutputPath); err != nil {
 		return errors.Newf("failed to finalize export output: %w", err).
 			Component("audiocore/ffmpeg").
 			Category(errors.CategoryFileIO).

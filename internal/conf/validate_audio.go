@@ -397,6 +397,15 @@ func (s *AudioSettings) applyFfmpegFormatFallback() {
 	}
 }
 
+// ffmpegVersionDetector resolves the version of the ffmpeg binary at a validated
+// path by executing it. It is a package variable so unit tests can replace it
+// with a stub. validateAudioSettings runs across many parallel test cases that
+// configure placeholder ffmpeg paths (stub files under t.TempDir()), and
+// concurrently exec'ing such a non-executable stub crashes the Windows race
+// detector with STATUS_STACK_BUFFER_OVERRUN. Production always uses the real
+// detector; only tests override it (see validate_audio_export_test.go).
+var ffmpegVersionDetector = GetFfmpegVersionFrom
+
 // validateAudioSettings validates the audio settings and sets ffmpeg and sox paths
 func validateAudioSettings(settings *AudioSettings) error {
 	// Validate and determine the effective FFmpeg path
@@ -408,7 +417,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 		settings.FfmpegPath = validatedFfmpegPath // Store the validated path (explicit or from PATH)
 
 		// Detect FFmpeg version using the validated path (not PATH lookup)
-		version, major, minor := GetFfmpegVersionFrom(validatedFfmpegPath)
+		version, major, minor := ffmpegVersionDetector(validatedFfmpegPath)
 		settings.FfmpegVersion = version
 		settings.FfmpegMajor = major
 		settings.FfmpegMinor = minor

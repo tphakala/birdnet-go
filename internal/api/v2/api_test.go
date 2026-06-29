@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -77,17 +78,16 @@ func TestHealthCheck(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/health")
 
-	// Record start time to measure response time
-	startTime := time.Now()
-
 	// Test
 	require.NoError(t, controller.HealthCheck(c))
 	{
-		// Calculate response time
-		responseTime := time.Since(startTime)
-
-		// Check response time is reasonable (under 100ms for a simple health check)
-		assert.Less(t, responseTime.Milliseconds(), int64(100), "Health check should respond quickly")
+		// Note: response time is deliberately NOT asserted. HealthCheck gathers
+		// system metrics via gopsutil (mem.VirtualMemory, disk.Usage), whose
+		// syscalls are environment-dependent and can exceed 100ms on a loaded,
+		// coarse-timer CI runner under -race (notably windows-amd64). A wall-clock
+		// SLA on a directly-invoked handler measures the runner, not correctness,
+		// and was an intermittent CI flake. The response contents below are the
+		// real contract and are asserted deterministically.
 
 		// Check response code
 		assert.Equal(t, http.StatusOK, rec.Code)
@@ -176,50 +176,19 @@ func TestNewErrorResponseDebugMode(t *testing.T) {
 	testErr := echo.NewHTTPError(http.StatusBadRequest, "Test error")
 
 	// Test 1: Non-debug mode — Error field should use sanitized message
-	c := &Controller{}
+	c := &Controller{Core: &apicore.Core{}}
 	c.Settings.Store(&conf.Settings{
 		WebServer: conf.WebServerSettings{Debug: false},
 	})
 
-	resp := c.newErrorResponse(testErr, "Safe message", http.StatusBadRequest)
+	resp := c.NewErrorResponse(testErr, "Safe message", http.StatusBadRequest)
 	assert.Equal(t, "Safe message", resp.Error, "Non-debug mode should use sanitized message")
 	assert.Equal(t, "Safe message", resp.Message)
 
 	// Test 2: Debug mode — Error field should expose raw err.Error()
 	c.Settings.Load().WebServer.Debug = true
 
-	resp = c.newErrorResponse(testErr, "Safe message", http.StatusBadRequest)
+	resp = c.NewErrorResponse(testErr, "Safe message", http.StatusBadRequest)
 	assert.Equal(t, "code=400, message=Test error", resp.Error, "Debug mode should expose raw error")
 	assert.Equal(t, "Safe message", resp.Message)
-}
-
-// TestParseIPFromHeader tests IP parsing with zone ID stripping.
-func TestParseIPFromHeader(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{name: "empty string", input: "", expected: ""},
-		{name: "valid IPv4", input: "192.168.1.1", expected: "192.168.1.1"},
-		{name: "valid IPv6", input: "2001:db8::1", expected: "2001:db8::1"},
-		{name: "IPv6 link-local with zone ID", input: "fe80::1%eth0", expected: "fe80::1"},
-		{name: "IPv6 link-local with wlan zone", input: "fe80::1cb6:63bc:5462:71c5%wlan0", expected: "fe80::1cb6:63bc:5462:71c5"},
-		{name: "IPv4 with spurious percent", input: "192.168.1.1%zone", expected: "192.168.1.1"},
-		{name: "just a percent sign", input: "%", expected: ""},
-		{name: "garbage with percent", input: "not_an_ip%zone", expected: ""},
-		{name: "multiple percent signs", input: "fe80::1%wlan0%extra", expected: "fe80::1"},
-		{name: "invalid IP", input: "999.999.999.999", expected: ""},
-		{name: "IPv6 loopback", input: "::1", expected: "::1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := parseIPFromHeader(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
 }

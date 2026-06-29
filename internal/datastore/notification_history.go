@@ -22,7 +22,7 @@ import (
 // SaveNotificationHistory saves or updates a notification history record in the database
 // This uses an upsert operation to either create a new record or update an existing one
 // The combination of (ScientificName, NotificationType) is unique
-func (ds *DataStore) SaveNotificationHistory(history *NotificationHistory) error {
+func (ds *DataStore) SaveNotificationHistory(ctx context.Context, history *NotificationHistory) error {
 	if history == nil {
 		return validationError("notification history cannot be nil", "history", nil)
 	}
@@ -39,8 +39,8 @@ func (ds *DataStore) SaveNotificationHistory(history *NotificationHistory) error
 
 	// Upsert: Use GORM's OnConflict clause for efficient upsert
 	// This handles the composite unique index on (scientific_name, notification_type)
-	return RetryOnLock(context.Background(), "save_notification_history", func() error {
-		result := ds.DB.Clauses(clause.OnConflict{
+	return RetryOnLock(ctx, "save_notification_history", func() error {
+		result := ds.DB.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "scientific_name"},
 				{Name: "notification_type"},
@@ -65,7 +65,7 @@ func (ds *DataStore) SaveNotificationHistory(history *NotificationHistory) error
 }
 
 // GetNotificationHistory retrieves a notification history record for a specific species and type
-func (ds *DataStore) GetNotificationHistory(scientificName, notificationType string) (*NotificationHistory, error) {
+func (ds *DataStore) GetNotificationHistory(ctx context.Context, scientificName, notificationType string) (*NotificationHistory, error) {
 	if scientificName == "" {
 		return nil, validationError("scientific name cannot be empty", "scientific_name", "")
 	}
@@ -74,7 +74,7 @@ func (ds *DataStore) GetNotificationHistory(scientificName, notificationType str
 	}
 
 	var history NotificationHistory
-	err := ds.DB.Where("scientific_name = ? AND notification_type = ?", scientificName, notificationType).
+	err := ds.DB.WithContext(ctx).Where("scientific_name = ? AND notification_type = ?", scientificName, notificationType).
 		First(&history).Error
 
 	if err != nil {
@@ -94,12 +94,12 @@ func (ds *DataStore) GetNotificationHistory(scientificName, notificationType str
 // This is used during initialization to load recent notification history into memory
 // Typical usage: Load notifications from past 2x suppression window (14 days)
 // Currently filters to only "new_species" type as that's the only type consumed by the tracker
-func (ds *DataStore) GetActiveNotificationHistory(after time.Time) ([]NotificationHistory, error) {
+func (ds *DataStore) GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]NotificationHistory, error) {
 	var histories []NotificationHistory
 
 	// Filter by notification_type to reduce data transfer (optimization)
 	// Currently only "new_species" notifications are used by the species tracker
-	err := ds.DB.Where("notification_type = ? AND last_sent >= ?", "new_species", after).
+	err := ds.DB.WithContext(ctx).Where("notification_type = ? AND last_sent >= ?", "new_species", after).
 		Order("last_sent DESC").
 		Find(&histories).Error
 
@@ -116,10 +116,10 @@ func (ds *DataStore) GetActiveNotificationHistory(after time.Time) ([]Notificati
 // DeleteExpiredNotificationHistory removes all notification history records that have expired
 // Returns the count of deleted records
 // This is typically called periodically by a cleanup job
-func (ds *DataStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+func (ds *DataStore) DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) {
 	var rowsAffected int64
-	err := RetryOnLock(context.Background(), "delete_expired_notification_history", func() error {
-		result := ds.DB.Where("expires_at < ?", before).Delete(&NotificationHistory{})
+	err := RetryOnLock(ctx, "delete_expired_notification_history", func() error {
+		result := ds.DB.WithContext(ctx).Where("expires_at < ?", before).Delete(&NotificationHistory{})
 		if result.Error != nil {
 			return result.Error
 		}

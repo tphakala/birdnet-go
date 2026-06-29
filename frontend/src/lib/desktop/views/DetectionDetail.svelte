@@ -888,6 +888,7 @@
               className="w-full"
               enableClipExtraction={clipExtractionEnabled}
               clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
+              modelType={detection.modelType}
             />
           </div>
         </div>

@@ -248,15 +248,17 @@ func (f *batEmbeddingExtractor) PredictWithEmbeddings(_ []float32) (logits, embe
 
 // batCustomClassifier is a fake inference.CustomClassifier for the Bat tests.
 type batCustomClassifier struct {
-	scores []float32
-	labels []string
-	err    error
+	scores   []float32
+	labels   []string
+	inputDim int
+	err      error
 }
 
 func (f *batCustomClassifier) PredictEmbedding(_ []float32) ([]float32, error) {
 	return f.scores, f.err
 }
 func (f *batCustomClassifier) NumClasses() int  { return len(f.labels) }
+func (f *batCustomClassifier) InputDim() int    { return f.inputDim }
 func (f *batCustomClassifier) Labels() []string { return f.labels }
 func (f *batCustomClassifier) Close()           {}
 

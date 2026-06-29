@@ -19,6 +19,8 @@
     className?: string;
     size?: 'xs' | 'sm' | 'md' | 'lg';
     validationMessage?: string;
+    /** Links the input to an external description element for screen readers. */
+    'aria-describedby'?: string;
     onchange?: (_value: string) => void;
     oninput?: (_value: string) => void;
   }
@@ -40,6 +42,7 @@
     className = '',
     size = 'sm',
     validationMessage,
+    'aria-describedby': ariaDescribedBy,
     onchange,
     oninput,
     ...rest
@@ -126,6 +129,7 @@
     {pattern}
     {minlength}
     {maxlength}
+    aria-describedby={ariaDescribedBy}
     class={cn('input  w-full', safeGet(sizeClasses, size, ''), !isValid && 'input-error')}
     onchange={handleChange}
     oninput={handleInput}
