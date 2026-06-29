@@ -1916,6 +1916,7 @@
       "speciesList": "Fajlista",
       "switchToGrid": "Rács nézetre váltás",
       "switchToList": "Lista nézetre váltás",
+      "switchToManage": "Váltás kezelő nézetre",
       "noSpeciesFound": "A szűrőknek megfelelő faj nem található.",
       "headers": {
         "species": "Faj",
@@ -1929,6 +1930,24 @@
         "detections": "Detektálások:",
         "confidence": "Megbízhatóság:",
         "first": "Első:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Kizárva",
+          "included": "Beleértve",
+          "reviewRatio": "Helyes",
+          "rangeProbability": "Tartomány",
+          "confirmed": "Megerősítve",
+          "actions": "Műveletek"
+        },
+        "delete": "A faj összes detektálásának törlése",
+        "deleteTitle": "Faj detektálásainak törlése",
+        "deleteConfirm": "Törlés",
+        "deleteMessage": "Törli a(z) {species} faj mind a(z) {count} detektálását? A zárolt detektálások megmaradnak.",
+        "deleteWarning": "Ez véglegesen eltávolítja a detektálásokat és azok hangklipjeit, és nem vonható vissza.",
+        "deleteFailed": "A detektálások törlése nem sikerült. Kérjük, próbálja újra.",
+        "membershipFailed": "A fajlisták frissítése sikertelen. Kérjük, próbálja újra.",
+        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
       }
     },
     "advanced": {

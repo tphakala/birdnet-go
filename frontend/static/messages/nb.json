@@ -1916,6 +1916,7 @@
       "speciesList": "Artsliste",
       "switchToGrid": "Bytt til rutenettvisning",
       "switchToList": "Bytt til listevisning",
+      "switchToManage": "Bytt til administrasjonsvisning",
       "noSpeciesFound": "Ingen arter funnet som matcher filtrene dine.",
       "headers": {
         "species": "Art",
@@ -1929,6 +1930,24 @@
         "detections": "Registreringer:",
         "confidence": "Sikkerhet:",
         "first": "Første:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Ekskludert",
+          "included": "Inkludert",
+          "reviewRatio": "Korrekt",
+          "rangeProbability": "Utvalg",
+          "confirmed": "Bekreftet",
+          "actions": "Handlinger"
+        },
+        "delete": "Slett alle registreringer for denne arten",
+        "deleteTitle": "Slett artsregistreringer",
+        "deleteConfirm": "Slett",
+        "deleteMessage": "Slette alle {count} registreringer for {species}? Låste registreringer beholdes.",
+        "deleteWarning": "Dette fjerner registreringene og lydklippene deres permanent og kan ikke angres.",
+        "deleteFailed": "Kunne ikke slette registreringer. Prøv igjen.",
+        "membershipFailed": "Kunne ikke oppdatere artslistene. Prøv igjen.",
+        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
       }
     },
     "advanced": {

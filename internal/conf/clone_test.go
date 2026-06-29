@@ -118,6 +118,7 @@ func newPopulatedSettings() *Settings {
 
 	s.Realtime.Species.Include = []string{"Corvus corax"}
 	s.Realtime.Species.Exclude = []string{"Passer domesticus"}
+	s.Realtime.Species.Confirmed = []string{"Turdus merula"}
 	s.Realtime.Species.Config = map[string]SpeciesConfig{
 		"Turdus merula": {
 			Threshold: 0.5,
@@ -241,6 +242,7 @@ func mutateCloneEverywhere(dst *Settings) {
 
 	dst.Realtime.Species.Include[0] = mutated
 	dst.Realtime.Species.Exclude[0] = mutated
+	dst.Realtime.Species.Confirmed[0] = mutated
 	sc := dst.Realtime.Species.Config["Turdus merula"]
 	sc.Threshold = 0.99
 	sc.Actions[0].Parameters[0] = mutated
@@ -374,6 +376,7 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 
 	assert.Equal(t, []string{"Corvus corax"}, src.Realtime.Species.Include)
 	assert.Equal(t, []string{"Passer domesticus"}, src.Realtime.Species.Exclude)
+	assert.Equal(t, []string{"Turdus merula"}, src.Realtime.Species.Confirmed)
 	sc, ok := src.Realtime.Species.Config["Turdus merula"]
 	require.True(t, ok)
 	assert.InDelta(t, 0.5, sc.Threshold, 0.0001)

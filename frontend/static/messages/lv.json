@@ -1916,6 +1916,7 @@
       "speciesList": "Sugu saraksts",
       "switchToGrid": "Pārslēgt uz režģa skatu",
       "switchToList": "Pārslēgt uz saraksta skatu",
+      "switchToManage": "Pārslēgties uz pārvaldības skatu",
       "noSpeciesFound": "Sugas, kas atbilst jūsu filtriem, nav atrastas.",
       "headers": {
         "species": "Suga",
@@ -1929,6 +1930,24 @@
         "detections": "Atpazīšanas:",
         "confidence": "Ticamība:",
         "first": "Pirmā:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Izslēgta",
+          "included": "Iekļauta",
+          "reviewRatio": "Pareizi",
+          "rangeProbability": "Areāls",
+          "confirmed": "Apstiprināta",
+          "actions": "Darbības"
+        },
+        "delete": "Dzēst visas šīs sugas atpazīšanas",
+        "deleteTitle": "Dzēst sugas atpazīšanas",
+        "deleteConfirm": "Dzēst",
+        "deleteMessage": "Dzēst visas {count} sugas {species} atpazīšanas? Bloķētās atpazīšanas tiek saglabātas.",
+        "deleteWarning": "Tādējādi neatgriezeniski tiek noņemtas atpazīšanas un to audioklipi, un šo darbību nevar atsaukt.",
+        "deleteFailed": "Neizdevās dzēst atpazīšanas. Lūdzu, mēģiniet vēlreiz.",
+        "membershipFailed": "Neizdevās atjaunināt sugu sarakstus. Lūdzu, mēģiniet vēlreiz.",
+        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
       }
     },
     "advanced": {

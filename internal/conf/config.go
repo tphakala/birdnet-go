@@ -861,9 +861,10 @@ type SpeciesConfig struct {
 // species names in any case (e.g., "American Robin", "american robin")
 // and they will all resolve to the same lowercase key.
 type SpeciesSettings struct {
-	Include []string                 `yaml:"include" json:"include"`                     // Always include these species
-	Exclude []string                 `yaml:"exclude" json:"exclude"`                     // Always exclude these species
-	Config  map[string]SpeciesConfig `yaml:"config" json:"config" jsonschema:"nullable"` // Per-species configuration (keys normalized to lowercase)
+	Include   []string                 `yaml:"include" json:"include"`                     // Always include these species
+	Exclude   []string                 `yaml:"exclude" json:"exclude"`                     // Always exclude these species
+	Confirmed []string                 `yaml:"confirmed" json:"confirmed"`                 // Species marked as confirmed (analytics-only; does not affect detection processing)
+	Config    map[string]SpeciesConfig `yaml:"config" json:"config" jsonschema:"nullable"` // Per-species configuration (keys normalized to lowercase)
 }
 
 // LogDeduplicationSettings contains settings for log deduplication

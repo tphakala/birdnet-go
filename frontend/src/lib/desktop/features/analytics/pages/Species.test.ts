@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
+import { settingsActions } from '$lib/stores/settings';
+import { initAuthContext } from '$lib/utils/auth';
 import Species from './Species.svelte';
 
 /* eslint-disable security/detect-object-injection -- bracket access in this file is constant numeric indexing into NodeLists (querySelectorAll(...)[CONSTANT]) in assertions, not user-controlled keys. */
@@ -255,5 +257,224 @@ describe('Species (analytics page) — sortable column headers', () => {
     expect(
       container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
     ).toBe('ascending');
+  });
+});
+
+describe('Species (analytics page) — Manage view', () => {
+  const originalFetch = globalThis.fetch;
+
+  // View toggle order: grid(0), list(1), manage(2 — only when authenticated).
+  const MANAGE_VIEW_TOGGLE_INDEX = 2;
+  // Manage table body cell order: name(0), count(1), maxConf(2), lastSeen(3),
+  // excluded(4), included(5), correct(6), range(7), confirmed(8), delete(9).
+  const CORRECT_CELL_INDEX = 6;
+  const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
+
+  const summary = [
+    {
+      common_name: 'American Robin',
+      scientific_name: 'Turdus migratorius',
+      count: 5,
+      avg_confidence: 0.8,
+      max_confidence: 0.9,
+      first_heard: '2026-04-01',
+      last_heard: '2026-04-20',
+    },
+  ];
+
+  function mockManageFetch(reviewStats: unknown) {
+    globalThis.fetch = mockFetchSequence({
+      '/api/v2/analytics/species/review-stats': () => reviewStats,
+      '/api/v2/analytics/species/summary': () => summary,
+      '/api/v2/analytics/species/thumbnails': () => ({}),
+      '/api/v2/detections/included': () => ({ species: [] }),
+      '/api/v2/detections/confirmed': () => ({ species: [] }),
+      '/api/v2/detections/ignored': () => ({ species: [] }),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initAuthContext(false); // security disabled => authenticated
+    vi.spyOn(settingsActions, 'loadRangeFilterSpecies').mockResolvedValue({
+      count: 0,
+      species: [],
+    });
+    mockManageFetch([
+      { scientificName: 'Turdus migratorius', total: 10, verified: 7, rejected: 3 },
+    ]);
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetBasePath();
+    globalThis.fetch = originalFetch;
+    window.localStorage.clear();
+    initAuthContext(false);
+    vi.restoreAllMocks();
+  });
+
+  const speciesTest = createComponentTestFactory(Species);
+
+  async function renderManageView() {
+    const { container } = speciesTest.render({});
+    await waitFor(() => {
+      if (container.querySelectorAll('.join button').length < 3)
+        throw new Error('toggle not ready');
+    });
+    await fireEvent.click(container.querySelectorAll('.join button')[MANAGE_VIEW_TOGGLE_INDEX]);
+    await waitFor(
+      () => {
+        if (!container.querySelector('table tbody tr'))
+          throw new Error('manage table not yet rendered');
+      },
+      { timeout: 2000 }
+    );
+    return { container };
+  }
+
+  it('renders the Manage toggle only when authenticated', async () => {
+    const { container } = speciesTest.render({});
+    await waitFor(() => {
+      if (container.querySelectorAll('.join button').length === 0)
+        throw new Error('toggle not ready');
+    });
+    expect(container.querySelectorAll('.join button')).toHaveLength(3);
+    cleanup();
+
+    initAuthContext(true, false); // security enabled, access denied => not authenticated
+    const { container: guest } = speciesTest.render({});
+    await waitFor(() => {
+      if (guest.querySelectorAll('.join button').length === 0) throw new Error('toggle not ready');
+    });
+    expect(guest.querySelectorAll('.join button')).toHaveLength(2);
+  });
+
+  it('hides average confidence and first detected columns', async () => {
+    const { container } = await renderManageView();
+    const headText = container.querySelector('table thead')?.textContent ?? '';
+    expect(headText).not.toContain('avgConfidence');
+    expect(headText).not.toContain('firstDetected');
+    // Sanity: the shared maxConfidence/lastDetected columns remain.
+    expect(headText).toContain('maxConfidence');
+    expect(headText).toContain('lastDetected');
+  });
+
+  it('shows the correct rate as an integer percentage', async () => {
+    // verified 7 of 10 reviewed -> round(7 / (7 + 3) * 100) = 70%.
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      const cell = container.querySelectorAll('table tbody tr td')[CORRECT_CELL_INDEX];
+      expect(cell.textContent.trim()).toBe('70%');
+    });
+  });
+
+  it('shows — in the correct column when a species has no reviews', async () => {
+    mockManageFetch([{ scientificName: 'Turdus migratorius', total: 5, verified: 0, rejected: 0 }]);
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      const cell = container.querySelectorAll('table tbody tr td')[CORRECT_CELL_INDEX];
+      expect(cell.textContent.trim()).toBe('—');
+    });
+  });
+
+  it('makes the membership columns sortable and does not persist a Manage-only sort', async () => {
+    const { container } = await renderManageView();
+    // Manage sortable header buttons: name(0), count(1), maxConf(2), lastSeen(3),
+    // excluded(4), included(5), correct(6), range(7), confirmed(8). The excluded,
+    // included, and confirmed columns are now SortableHeaders (9 buttons total).
+    const sortButtons = container.querySelectorAll('table thead th button');
+    expect(sortButtons).toHaveLength(9);
+    // fetchData persists the default grid/list sort on mount.
+    const persistedBefore = window.localStorage.getItem(SORT_STORAGE_KEY);
+    await fireEvent.click(sortButtons[4]); // excluded — a Manage-only column
+    // Sorting by a Manage-only column must not change the grid/list persisted sort.
+    expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe(persistedBefore);
+  });
+
+  it('sorts by the Included column, grouping included species first', async () => {
+    // Two rows: Turdus (summary) and Corvus (review-stats only). Only Corvus is on
+    // the included list, so sorting Included (default desc) must put it first.
+    globalThis.fetch = mockFetchSequence({
+      '/api/v2/analytics/species/review-stats': () => [
+        { scientificName: 'Turdus migratorius', total: 10, verified: 7, rejected: 3 },
+        {
+          scientificName: 'Corvus corax',
+          commonName: 'Common Raven',
+          total: 4,
+          verified: 0,
+          rejected: 4,
+        },
+      ],
+      '/api/v2/analytics/species/summary': () => summary,
+      '/api/v2/analytics/species/thumbnails': () => ({}),
+      '/api/v2/detections/included': () => ({ species: ['Corvus corax'] }),
+      '/api/v2/detections/confirmed': () => ({ species: [] }),
+      '/api/v2/detections/ignored': () => ({ species: [] }),
+    });
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      if (container.querySelectorAll('table tbody tr').length < 2)
+        throw new Error('both rows not yet rendered');
+    });
+    // Included is the 6th sortable header (index 5).
+    const sortButtons = container.querySelectorAll('table thead th button');
+    await fireEvent.click(sortButtons[5]);
+    await waitFor(() => {
+      const rows = container.querySelectorAll('table tbody tr');
+      expect(rows[0].textContent).toContain('Common Raven');
+    });
+  });
+
+  it('surfaces a fully-rejected species that is absent from the period summary', async () => {
+    // Corvus corax has detections but every one was rejected, so the summary
+    // (which excludes false positives) omits it. review-stats still reports it and
+    // now carries the common name, so Manage can render a deletable row for it.
+    mockManageFetch([
+      { scientificName: 'Turdus migratorius', total: 10, verified: 7, rejected: 3 },
+      {
+        scientificName: 'Corvus corax',
+        commonName: 'Common Raven',
+        total: 4,
+        verified: 0,
+        rejected: 4,
+      },
+    ]);
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      if (container.querySelectorAll('table tbody tr').length < 2)
+        throw new Error('synthesized row not yet rendered');
+    });
+    const rows = Array.from(container.querySelectorAll('table tbody tr'));
+    const ravenRow = rows.find(r => r.textContent.includes('Common Raven'));
+    if (!ravenRow) throw new Error('Common Raven row not rendered');
+    const cells = ravenRow.querySelectorAll('td');
+    expect(cells[1].textContent.trim()).toBe('4'); // all-time detection count
+    expect(cells[2].textContent.trim()).toBe('—'); // no max-confidence data survives
+    expect(cells[3].textContent.trim()).toBe('—'); // no last-detected data survives
+    expect(cells[CORRECT_CELL_INDEX].textContent.trim()).toBe('0%'); // 0 of 4 reviewed correct
+  });
+
+  it('checks the included toggle when the list stores the scientific-name alias', async () => {
+    // The included list holds the scientific name; the row is American Robin /
+    // Turdus migratorius, so the alias match must render the checkbox checked.
+    globalThis.fetch = mockFetchSequence({
+      '/api/v2/analytics/species/review-stats': () => [
+        { scientificName: 'Turdus migratorius', total: 10, verified: 7, rejected: 3 },
+      ],
+      '/api/v2/analytics/species/summary': () => summary,
+      '/api/v2/analytics/species/thumbnails': () => ({}),
+      '/api/v2/detections/included': () => ({ species: ['Turdus migratorius'] }),
+      '/api/v2/detections/confirmed': () => ({ species: [] }),
+      '/api/v2/detections/ignored': () => ({ species: [] }),
+    });
+    const INCLUDED_CELL_INDEX = 5;
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      const cell = container.querySelectorAll('table tbody tr td')[INCLUDED_CELL_INDEX];
+      const checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      expect(checkbox?.checked).toBe(true);
+    });
   });
 });

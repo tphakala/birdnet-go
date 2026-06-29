@@ -155,6 +155,13 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
 
+	// Managed species lists (analytics Manage view): always-include and confirmed.
+	detectionGroup.POST("/include", c.IncludeSpecies)
+	detectionGroup.GET("/included", c.GetIncludedSpecies)
+	detectionGroup.POST("/confirm", c.ConfirmSpecies)
+	detectionGroup.GET("/confirmed", c.GetConfirmedSpecies)
+	detectionGroup.POST("/species/delete", c.DeleteSpeciesDetections)
+
 	// Batch operation endpoints
 	batchGroup := detectionGroup.Group("/batch")
 	batchGroup.POST("/delete", c.BatchDeleteDetections)

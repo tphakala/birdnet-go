@@ -1,9 +1,11 @@
 package detections
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -79,12 +81,25 @@ func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 			"Batch size exceeds maximum", http.StatusBadRequest)
 	}
 
-	ids := deduplicateIDs(req.IDs)
-	var processed, skipped int
+	processed, skipped := c.deleteNotesByIDs(deduplicateIDs(req.IDs))
+
+	c.invalidateDetectionCache()
+
+	return ctx.JSON(http.StatusOK, BatchResult{
+		Processed: processed,
+		Skipped:   skipped,
+	})
+}
+
+// deleteNotesByIDs deletes the given detections, skipping locked ones, and removes
+// any associated audio/spectrogram files. It returns the number of deletions
+// performed and the number skipped (missing or locked). Callers are responsible
+// for deduplicating IDs and invalidating the detection cache.
+func (c *Handler) deleteNotesByIDs(ids []string) (deleted, skipped int) {
 	for _, idStr := range ids {
 		note, err := c.DS.Get(idStr)
 		if err != nil {
-			c.LogWarnIfEnabled("Batch delete: failed to get detection",
+			c.LogWarnIfEnabled("Delete: failed to get detection",
 				logger.String("id", idStr),
 				logger.Error(err))
 			skipped++
@@ -97,25 +112,19 @@ func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 
 		clipName := note.ClipName
 		if err := c.DS.Delete(idStr); err != nil {
-			c.LogWarnIfEnabled("Batch delete: failed to delete detection",
+			c.LogWarnIfEnabled("Delete: failed to delete detection",
 				logger.String("id", idStr),
 				logger.Error(err))
 			skipped++
 			continue
 		}
 
-		processed++
+		deleted++
 		if clipName != "" {
 			c.removeDetectionFiles(clipName)
 		}
 	}
-
-	c.invalidateDetectionCache()
-
-	return ctx.JSON(http.StatusOK, BatchResult{
-		Processed: processed,
-		Skipped:   skipped,
-	})
+	return deleted, skipped
 }
 
 // BatchReviewDetections sets the verification status on multiple detections, skipping locked ones.
@@ -270,5 +279,65 @@ func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, BatchResolveResult{
 		IDs:   ids,
 		Count: len(ids),
+	})
+}
+
+// SpeciesDeleteRequest is the request body for deleting all detections of a species.
+type SpeciesDeleteRequest struct {
+	ScientificName string `json:"scientific_name"`
+}
+
+// SpeciesDeleteResult reports the outcome of a species-wide delete.
+type SpeciesDeleteResult struct {
+	Deleted int `json:"deleted"`
+	Skipped int `json:"skipped"`
+}
+
+// speciesNoteIDsDatastore is the optional datastore capability required to resolve
+// every detection ID for a species. Datastores that do not implement it cause
+// DeleteSpeciesDetections to return HTTP 501.
+type speciesNoteIDsDatastore interface {
+	GetSpeciesNoteIDs(ctx context.Context, scientificName string) ([]string, error)
+}
+
+// DeleteSpeciesDetections deletes every (unlocked) detection for the given
+// scientific name. Locked detections are skipped and counted, mirroring the
+// batch delete semantics. Returns HTTP 501 when the active datastore cannot
+// resolve a species' detection IDs.
+func (c *Handler) DeleteSpeciesDetections(ctx echo.Context) error {
+	var req SpeciesDeleteRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
+	}
+	req.ScientificName = strings.TrimSpace(req.ScientificName)
+	if req.ScientificName == "" {
+		return c.HandleError(ctx, fmt.Errorf("no scientific name provided"),
+			"Scientific name is required", http.StatusBadRequest)
+	}
+
+	ds, ok := c.DS.(speciesNoteIDsDatastore)
+	if !ok {
+		return c.HandleError(ctx, fmt.Errorf("datastore does not support species note lookup"),
+			"Species deletion is not supported by the active datastore", http.StatusNotImplemented)
+	}
+
+	ids, err := ds.GetSpeciesNoteIDs(ctx.Request().Context(), req.ScientificName)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to look up detections for species", http.StatusInternalServerError)
+	}
+
+	deleted, skipped := c.deleteNotesByIDs(deduplicateIDs(ids))
+
+	c.invalidateDetectionCache()
+
+	c.LogInfoIfEnabled("Species detections deleted",
+		logger.String("scientific_name", req.ScientificName),
+		logger.Int("deleted", deleted),
+		logger.Int("skipped", skipped),
+		logger.String("ip", ctx.RealIP()))
+
+	return ctx.JSON(http.StatusOK, SpeciesDeleteResult{
+		Deleted: deleted,
+		Skipped: skipped,
 	})
 }

@@ -1916,6 +1916,7 @@
       "speciesList": "Liste des espèces",
       "switchToGrid": "Passer à la vue en grille",
       "switchToList": "Passer à la vue en liste",
+      "switchToManage": "Passer à la vue de gestion",
       "noSpeciesFound": "Aucune espèce trouvée correspondant à vos filtres.",
       "headers": {
         "species": "Espèce",
@@ -1929,6 +1930,24 @@
         "detections": "Détections :",
         "confidence": "Confiance :",
         "first": "Première :"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Exclue",
+          "included": "Incluse",
+          "reviewRatio": "Correctes",
+          "rangeProbability": "Portée",
+          "confirmed": "Confirmée",
+          "actions": "Actions"
+        },
+        "delete": "Supprimer toutes les détections de cette espèce",
+        "deleteTitle": "Supprimer les détections de l'espèce",
+        "deleteConfirm": "Supprimer",
+        "deleteMessage": "Supprimer les {count} détections de {species} ? Les détections verrouillées sont conservées.",
+        "deleteWarning": "Cette action supprime définitivement les détections et leurs extraits audio et ne peut pas être annulée.",
+        "deleteFailed": "Échec de la suppression des détections. Veuillez réessayer.",
+        "membershipFailed": "Échec de la mise à jour des listes d'espèces. Veuillez réessayer.",
+        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
       }
     },
     "advanced": {
