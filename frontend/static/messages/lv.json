@@ -218,6 +218,7 @@
   },
   "navigation": {
     "dashboard": "Informācijas panelis",
+    "liveAudio": "Tiešraides audio",
     "settingsMenu": "Iestatījumu izvēlne",
     "theme": "Tēma",
     "github": "GitHub",
@@ -245,7 +246,13 @@
     "reportBugAriaLabel": "Ziņot par kļūdu GitHub (atveras jaunā logā)",
     "askQuestionAriaLabel": "Uzdot jautājumu GitHub Discussions (atveras jaunā logā)",
     "viewOnGithubAriaLabel": "Skatīt BirdNET-Go GitHub (atveras jaunā logā)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Izpētīt",
+      "patterns": "Modeļi",
+      "environment": "Vide",
+      "dataQuality": "Datu kvalitāte"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
