@@ -34,7 +34,7 @@
     routeCache: Record<string, boolean>;
     onToggleExpanded: () => void;
     onNavigate: (_url: string) => void;
-    showTooltip: (_event: MouseEvent, _text: string) => void;
+    showTooltip: (_event: MouseEvent | FocusEvent, _text: string) => void;
     hideTooltip: () => void;
     activeFlyout: string | null;
     sectionId: string;
@@ -106,6 +106,8 @@
         onclick={handleToggleFlyout}
         onmouseenter={e => !flyoutOpen && showTooltip(e, label)}
         onmouseleave={hideTooltip}
+        onfocus={e => !flyoutOpen && showTooltip(e, label)}
+        onblur={hideTooltip}
         class={cn(
           menuItemBase,
           menuItemCollapsed,

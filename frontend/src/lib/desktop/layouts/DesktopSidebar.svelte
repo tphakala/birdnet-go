@@ -145,7 +145,7 @@ Performance Optimizations:
   let tooltipVisible = $state(false);
 
   // Show tooltip with calculated position
-  function showTooltip(event: MouseEvent, text: string) {
+  function showTooltip(event: MouseEvent | FocusEvent, text: string) {
     const target = event.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
     tooltipPosition = {

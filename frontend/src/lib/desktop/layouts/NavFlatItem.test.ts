@@ -136,4 +136,49 @@ describe('NavFlatItem', () => {
     const button = screen.getByRole('button');
     expect(button.className).toContain('focus-visible:ring-2');
   });
+
+  // -------------------------------------------------------------------------
+  // Keyboard focus tooltip (a11y)
+  // -------------------------------------------------------------------------
+
+  it('calls showTooltip on focus when collapsed', async () => {
+    const showTooltip = vi.fn();
+    const hideTooltip = vi.fn();
+    itemTest.render({
+      ...defaultProps,
+      isCollapsed: true,
+      showTooltip,
+      hideTooltip,
+      label: 'Search',
+    });
+    const button = screen.getByRole('button');
+    await fireEvent.focus(button);
+    expect(showTooltip).toHaveBeenCalledTimes(1);
+    expect(showTooltip.mock.calls[0][1]).toBe('Search');
+  });
+
+  it('does NOT call showTooltip on focus when expanded', async () => {
+    const showTooltip = vi.fn();
+    itemTest.render({
+      ...defaultProps,
+      isCollapsed: false,
+      showTooltip,
+      label: 'Search',
+    });
+    const button = screen.getByRole('button');
+    await fireEvent.focus(button);
+    expect(showTooltip).not.toHaveBeenCalled();
+  });
+
+  it('calls hideTooltip on blur in collapsed mode', async () => {
+    const hideTooltip = vi.fn();
+    itemTest.render({
+      ...defaultProps,
+      isCollapsed: true,
+      hideTooltip,
+    });
+    const button = screen.getByRole('button');
+    await fireEvent.blur(button);
+    expect(hideTooltip).toHaveBeenCalledTimes(1);
+  });
 });

@@ -10,7 +10,7 @@
     active: boolean;
     isCollapsed: boolean;
     onNavigate: (_url: string) => void;
-    showTooltip: (_event: MouseEvent, _text: string) => void;
+    showTooltip: (_event: MouseEvent | FocusEvent, _text: string) => void;
     hideTooltip: () => void;
     comingSoon?: boolean;
     ariaLabel?: string;
@@ -49,6 +49,8 @@
   onclick={() => onNavigate(url)}
   onmouseenter={e => isCollapsed && showTooltip(e, tooltipText)}
   onmouseleave={hideTooltip}
+  onfocus={e => isCollapsed && showTooltip(e, tooltipText)}
+  onblur={hideTooltip}
   aria-label={computedAriaLabel}
   aria-current={active ? 'page' : undefined}
   class={cn(
