@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Artensteckbrief",
-        "description": "Reichern Sie Erkennungsdetails mit Beschreibungen, Notizen und ähnlichen Arten aus Wikipedia und eBird an.",
+        "description": "Reichern Sie Erkennungen mit Taxonomie, Trivialnamen, externen Links und ähnlichen Arten an – offline über OpenFauna; Wikipedia-Beschreibungen sind eine optionale Online-Ergänzung.",
         "enabled": {
           "label": "Artensteckbrief aktivieren",
           "helpText": "Kontextbezogene Steckbrief-Informationen in den Erkennungsdetails und im Arten-Dialog anzeigen."

@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Sprievodca druhmi",
-        "description": "Obohaťte podrobnosti detekcie o popisy, poznámky a podobné druhy z Wikipédie a eBird.",
+        "description": "Obohaťte detekcie o taxonómiu, bežné názvy, externé odkazy a podobné druhy — offline cez OpenFauna; popisy z Wikipédie sú voliteľný online doplnok.",
         "enabled": {
           "label": "Povoliť sprievodcu druhmi",
           "helpText": "Zobraziť kontextové informácie sprievodcu v podrobnostiach detekcie a v okne druhu."

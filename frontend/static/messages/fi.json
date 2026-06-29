@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Lajiopas",
-        "description": "Rikasta havaintotietoja kuvauksilla, muistiinpanoilla ja samankaltaisilla lajeilla Wikipediasta ja eBirdistä.",
+        "description": "Rikasta havaintoja taksonomialla, yleisnimillä, ulkoisilla linkeillä ja samankaltaisilla lajeilla — offline-tilassa OpenFaunan kautta; Wikipedia-kuvaukset ovat valinnainen verkkolisä.",
         "enabled": {
           "label": "Ota lajiopas käyttöön",
           "helpText": "Näytä oppaan kontekstitiedot havaintojen tiedoissa ja lajin ikkunassa."

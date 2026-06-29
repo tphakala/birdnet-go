@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Fajútmutató",
-        "description": "Gazdagítsa az észlelési adatokat leírásokkal, jegyzetekkel és hasonló fajokkal a Wikipédiáról és az eBirdről.",
+        "description": "Gazdagítsa az észleléseket rendszertannal, köznevekkel, külső hivatkozásokkal és hasonló fajokkal — offline az OpenFauna révén; a Wikipédia-leírások opcionális online kiegészítők.",
         "enabled": {
           "label": "Fajútmutató engedélyezése",
           "helpText": "Kontextusfüggő útmutató-információk megjelenítése az észlelési adatoknál és a faj ablakában."

@@ -225,7 +225,7 @@ Props:
           onclick={guideEnabled ? () => openGuide(detection) : undefined}
           role={guideEnabled ? 'button' : undefined}
           aria-label={guideEnabled
-            ? `${t('analytics.species.guide.title')}: ${displayName}`
+            ? t('analytics.species.viewGuide', { species: displayName })
             : undefined}
           transition:fade={{ duration: 200 }}
         >

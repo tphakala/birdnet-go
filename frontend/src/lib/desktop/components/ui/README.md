@@ -529,6 +529,23 @@ interface Props {
 
 ---
 
+### ExternalLinkBadge
+
+Renders a single external resource link (Wikipedia, iNaturalist, GBIF, eBird, Xeno-canto, …) as a compact badge. Maps the link's `icon` hint to a bundled glyph, with a generic external-link icon fallback so any future source still renders. Opens in a new tab with `rel="noopener noreferrer"`.
+
+**Props:**
+
+- `link: GuideExternalLink` - `{ name, url, icon? }` (from the species guide / similar-species API response)
+- `className?: string`
+
+**Example:**
+
+```svelte
+<ExternalLinkBadge {link} />
+```
+
+---
+
 ### SimilarSpeciesPanel
 
 Selectable similar-species comparison. Renders a picker rail of the focal species' similar species; selecting one fetches that species' guide (`/api/v2/species/:scientific_name/guide`) and shows its canonical sections (Appearance, Voice, Habitat & range) under a "vs {focal}" header, so the user can tell the two apart attribute by attribute. Rendered inside `SpeciesComparison`'s "Similar species" section.
@@ -547,7 +564,7 @@ interface Props {
 
 - Auto-selects the first species that has a guide so the card is never empty
 - Per-species fetch cache (keyed by scientific name) avoids re-hitting the rate-limited guide endpoint
-- Species without a guide (`has_guide: false`) are shown disabled with a reason, never a silent 404
+- Species without a guide (`has_guide: false`) remain selectable and render their external resource links instead of a comparison card, never a silent 404
 - Explicit loading / no-guide (404) / error / no-sections states
 - Reuses the shared canonical-section vocabulary (`extractCanonicalSections`) in `types/species.ts`
 

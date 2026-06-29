@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Artsguide",
-        "description": "Berig detektionsdetaljer med beskrivelser, noter og lignende arter fra Wikipedia og eBird.",
+        "description": "Berig detektioner med taksonomi, almindelige navne, eksterne links og lignende arter — offline via OpenFauna; Wikipedia-beskrivelser er en valgfri online-tilføjelse.",
         "enabled": {
           "label": "Aktivér artsguide",
           "helpText": "Vis kontekstuel guideinformation i detektionsdetaljer og artsvinduet."

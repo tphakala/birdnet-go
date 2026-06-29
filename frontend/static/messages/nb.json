@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Artsguide",
-        "description": "Berik deteksjonsdetaljer med beskrivelser, notater og lignende arter fra Wikipedia og eBird.",
+        "description": "Berik deteksjoner med taksonomi, vanlige navn, eksterne lenker og lignende arter — offline via OpenFauna; Wikipedia-beskrivelser er et valgfritt nettbasert tillegg.",
         "enabled": {
           "label": "Aktiver artsguide",
           "helpText": "Vis kontekstuell guideinformasjon i deteksjonsdetaljer og artsvinduet."

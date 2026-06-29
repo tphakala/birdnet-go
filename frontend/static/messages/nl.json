@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Soortengids",
-        "description": "Verrijk detectiedetails met beschrijvingen, notities en vergelijkbare soorten van Wikipedia en eBird.",
+        "description": "Verrijk detecties met taxonomie, gangbare namen, externe links en vergelijkbare soorten — offline via OpenFauna; Wikipedia-beschrijvingen zijn een optionele online aanvulling.",
         "enabled": {
           "label": "Soortengids inschakelen",
           "helpText": "Contextuele gidsinformatie tonen bij detectiedetails en in het soortvenster."

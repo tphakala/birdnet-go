@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Przewodnik po gatunkach",
-        "description": "Wzbogać szczegóły wykrycia o opisy, notatki i podobne gatunki z Wikipedii i eBird.",
+        "description": "Wzbogać wykrycia o taksonomię, nazwy zwyczajowe, linki zewnętrzne i podobne gatunki — offline dzięki OpenFauna; opisy z Wikipedii są opcjonalnym dodatkiem online.",
         "enabled": {
           "label": "Włącz przewodnik po gatunkach",
           "helpText": "Pokazuj kontekstowe informacje przewodnika w szczegółach wykrycia i w oknie gatunku."

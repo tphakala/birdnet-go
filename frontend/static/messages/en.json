@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Species Guide",
-        "description": "Enrich detection details with descriptions, notes, and similar species from Wikipedia and eBird.",
+        "description": "Enrich detections with taxonomy, common names, external links, and similar species — offline via OpenFauna; Wikipedia descriptions are an optional online add-on.",
         "enabled": {
           "label": "Enable species guide",
           "helpText": "Show contextual guide information on detection details and the species modal."

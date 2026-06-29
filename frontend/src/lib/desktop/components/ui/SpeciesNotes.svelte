@@ -219,7 +219,7 @@
 
   {#if loading}
     <div role="status" aria-live="polite" class="text-sm text-base-content/70 py-2">
-      {t('analytics.species.guide.loading')}
+      {t('common.loading')}
     </div>
   {:else if error}
     <div role="alert" class="p-3 rounded-lg bg-error/10 text-error text-sm">{error}</div>

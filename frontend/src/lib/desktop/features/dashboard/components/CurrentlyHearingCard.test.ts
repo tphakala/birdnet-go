@@ -118,12 +118,16 @@ describe('CurrentlyHearingCard guide click affordance', () => {
   it('renders each species as a button when the guide is enabled', () => {
     enableGuide();
     const { getByRole } = card.render({ props: { detections: [pending()] } });
-    // Accessible name is "<guide title>: <species>"; match on the species.
-    expect(getByRole('button', { name: /Punarinta/ })).toBeInTheDocument();
+    // The card is interactive: a button whose accessible name uses the
+    // parameterized viewGuide key (the test i18n mock returns the bare key) and
+    // whose visible content is the localized species name.
+    const button = getByRole('button', { name: 'analytics.species.viewGuide' });
+    expect(button).toHaveTextContent('Punarinta');
   });
 
   it('is not interactive when the guide is disabled (default)', () => {
     const { queryByRole } = card.render({ props: { detections: [pending()] } });
-    expect(queryByRole('button', { name: /Punarinta/ })).toBeNull();
+    // No species-guide button is rendered when the feature is off.
+    expect(queryByRole('button', { name: 'analytics.species.viewGuide' })).toBeNull();
   });
 });

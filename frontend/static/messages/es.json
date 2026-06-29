@@ -4599,7 +4599,7 @@
       },
       "speciesGuide": {
         "title": "Guía de especies",
-        "description": "Enriquece los detalles de detección con descripciones, notas y especies similares de Wikipedia y eBird.",
+        "description": "Enriquece las detecciones con taxonomía, nombres comunes, enlaces externos y especies similares, sin conexión mediante OpenFauna; las descripciones de Wikipedia son un complemento opcional en línea.",
         "enabled": {
           "label": "Activar guía de especies",
           "helpText": "Mostrar información contextual de la guía en los detalles de detección y en la ventana de especie."
