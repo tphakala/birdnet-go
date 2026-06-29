@@ -219,19 +219,6 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(screen.queryByLabelText('navigation.analyticsSubmenu')).toBeNull();
   });
 
-  it('shows the coming-soon chip for Weather and Soundscape (expanded) but not Nocturnal', () => {
-    sidebarTest.render({ currentRoute: '/ui/dashboard' });
-
-    const badge = 'analytics.comingSoon.badge';
-    const weatherBtn = getBtn('analytics.hub.tabs.weather');
-    const soundscapeBtn = getBtn('analytics.hub.tabs.soundscape');
-    const nocturnalBtn = getBtn('analytics.hub.tabs.nocturnal');
-
-    expect(weatherBtn.textContent).toContain(badge);
-    expect(soundscapeBtn.textContent).toContain(badge);
-    expect(nocturnalBtn.textContent).not.toContain(badge);
-  });
-
   it('does not render About as a top-level item; it lives under Help and activates the Help section on /ui/about', async () => {
     sidebarTest.render({ currentRoute: '/ui/about' });
 
@@ -274,6 +261,22 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(patternsLabels[1]).toContain('analytics.hub.tabs.trends');
     expect(patternsLabels[2]).toContain('analytics.hub.tabs.nocturnal');
     expect(patternsLabels[3]).toContain('analytics.hub.tabs.biodiversity');
+  });
+
+  it('ENVIRONMENT section renders Weather and Soundscape items without a coming-soon chip', () => {
+    sidebarTest.render({ currentRoute: '/ui/dashboard' });
+
+    // Both items must be accessible buttons (t() mock returns key verbatim).
+    const weatherBtn = screen.getByRole('button', { name: 'analytics.hub.tabs.weather' });
+    const soundscapeBtn = screen.getByRole('button', { name: 'analytics.hub.tabs.soundscape' });
+    expect(weatherBtn).toBeInTheDocument();
+    expect(soundscapeBtn).toBeInTheDocument();
+
+    // The ENVIRONMENT group must not contain any badge or chip element that
+    // would indicate a coming-soon state. Resolve the group by its accessible
+    // name (aria-labelledby -> the section header) rather than a raw selector.
+    const envGroup = screen.getByRole('group', { name: 'navigation.sections.environment' });
+    expect(envGroup.querySelector('[class*="badge"], [class*="chip"]')).toBeNull();
   });
 
   it('deep-link: analytics item URLs carry the active query while Search/Dashboard stay query-less', async () => {

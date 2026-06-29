@@ -22,11 +22,7 @@
   });
 </script>
 
-<section class="flex flex-col gap-4" aria-labelledby="analytics-page-title">
-  <h1 id="analytics-page-title" class="text-2xl font-bold text-[var(--color-base-content)]">
-    {t(titleKey)}
-  </h1>
-
+<section class="col-span-12 flex flex-col gap-4" aria-label={t(titleKey)}>
   <div
     class="flex flex-col items-center gap-4 rounded-xl border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-8 text-center shadow-sm"
   >

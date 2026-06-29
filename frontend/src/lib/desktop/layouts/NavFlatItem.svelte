@@ -1,6 +1,5 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { t } from '$lib/i18n';
   import type { Component } from 'svelte';
 
   export interface NavFlatItemProps {
@@ -12,7 +11,6 @@
     onNavigate: (_url: string) => void;
     showTooltip: (_event: MouseEvent | FocusEvent, _text: string) => void;
     hideTooltip: () => void;
-    comingSoon?: boolean;
     ariaLabel?: string;
   }
 
@@ -25,7 +23,6 @@
     onNavigate,
     showTooltip,
     hideTooltip,
-    comingSoon = false,
     ariaLabel,
   }: NavFlatItemProps = $props();
 
@@ -37,11 +34,12 @@
   const focusRingClasses =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]';
 
-  let badgeText = $derived(t('analytics.comingSoon.badge'));
-
-  let computedAriaLabel = $derived(ariaLabel ?? (comingSoon ? `${label} (${badgeText})` : label));
-
-  let tooltipText = $derived(comingSoon ? `${label} (${badgeText})` : label);
+  // When expanded the visible <span>{label}</span> is the accessible name, so an
+  // identical aria-label would be a redundant (sometimes double-announced) name;
+  // set aria-label only when collapsed (icon-only) or when a caller overrides it.
+  let computedAriaLabel = $derived(isCollapsed ? (ariaLabel ?? label) : ariaLabel);
+  // Collapsed-only tooltip text; keep it equal to the collapsed accessible name.
+  let tooltipText = $derived(ariaLabel ?? label);
 </script>
 
 <button
@@ -63,8 +61,5 @@
   <Icon class="size-5 shrink-0" />
   {#if !isCollapsed}
     <span>{label}</span>
-    {#if comingSoon}
-      <span class="badge badge-primary badge-sm ml-auto">{badgeText}</span>
-    {/if}
   {/if}
 </button>
