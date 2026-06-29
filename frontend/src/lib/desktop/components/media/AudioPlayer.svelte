@@ -1206,7 +1206,8 @@
     audibleBatsError = null;
 
     if (hadDerivedAudio) {
-      swapAudioSource(audioUrl);
+      // Restore to the processed copy if one is active, otherwise to the original.
+      swapAudioSource(processedAudioUrl ?? audioUrl);
     }
     if (audibleBatsUrl) {
       URL.revokeObjectURL(audibleBatsUrl);
