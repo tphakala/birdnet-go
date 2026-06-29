@@ -1,15 +1,16 @@
 package openfauna
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestEmbeddedSchemaMajorIsTwo(t *testing.T) {
 	major, ok := embeddedSchemaMajor()
-	if !ok {
-		t.Fatalf("embedded manifest schema_version did not parse")
-	}
-	if major != 2 {
-		t.Fatalf("embedded OpenFauna schema major = %d, want 2 (re-vendor with refresh-data.sh)", major)
-	}
+	require.True(t, ok, "embedded manifest schema_version did not parse")
+	assert.Equal(t, 2, major, "embedded OpenFauna schema major must be 2 (re-vendor with refresh-data.sh)")
 }
 
 func TestParseSchemaMajor(t *testing.T) {
@@ -26,9 +27,8 @@ func TestParseSchemaMajor(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			major, ok := parseSchemaMajor([]byte(tc.in))
-			if ok != tc.ok || major != tc.major {
-				t.Fatalf("parseSchemaMajor(%q) = (%d,%v), want (%d,%v)", tc.in, major, ok, tc.major, tc.ok)
-			}
+			assert.Equal(t, tc.ok, ok)
+			assert.Equal(t, tc.major, major)
 		})
 	}
 }

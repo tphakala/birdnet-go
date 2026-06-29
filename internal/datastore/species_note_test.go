@@ -19,6 +19,12 @@ func setupSpeciesNoteTestDB(t *testing.T) *DataStore {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err, "Failed to create test database")
+	// Pin to a single connection: a bare `:memory:` DSN gives each pooled
+	// connection its own independent database, so a write on one connection is
+	// invisible to a read on another, making CRUD round-trips flaky.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.AutoMigrate(&SpeciesNote{}), "Failed to migrate schema")
 	return &DataStore{DB: db}
 }

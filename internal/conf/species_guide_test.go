@@ -81,12 +81,22 @@ func TestCloneSettings_SpeciesGuideShowFlagsIndependence(t *testing.T) {
 
 	dst := CloneSettings(src)
 	require.NotNil(t, dst)
-	require.NotNil(t, dst.Realtime.Dashboard.SpeciesGuide.ShowNotes)
+	dstGuide := &dst.Realtime.Dashboard.SpeciesGuide
+	srcGuide := &src.Realtime.Dashboard.SpeciesGuide
+	require.NotNil(t, dstGuide.ShowNotes)
+	require.NotNil(t, dstGuide.ShowEnrichments)
+	require.NotNil(t, dstGuide.ShowSimilarSpecies)
 
-	// Pointers must not be aliased.
-	assert.NotSame(t, src.Realtime.Dashboard.SpeciesGuide.ShowNotes, dst.Realtime.Dashboard.SpeciesGuide.ShowNotes)
+	// None of the three Show* pointers may be aliased with the source.
+	assert.NotSame(t, srcGuide.ShowNotes, dstGuide.ShowNotes)
+	assert.NotSame(t, srcGuide.ShowEnrichments, dstGuide.ShowEnrichments)
+	assert.NotSame(t, srcGuide.ShowSimilarSpecies, dstGuide.ShowSimilarSpecies)
 
-	// Mutating the clone must not affect the source.
-	*dst.Realtime.Dashboard.SpeciesGuide.ShowNotes = false
-	assert.True(t, *src.Realtime.Dashboard.SpeciesGuide.ShowNotes)
+	// Mutating the clone must not affect the source, for every flag.
+	*dstGuide.ShowNotes = false
+	*dstGuide.ShowEnrichments = false
+	*dstGuide.ShowSimilarSpecies = false
+	assert.True(t, *srcGuide.ShowNotes)
+	assert.True(t, *srcGuide.ShowEnrichments)
+	assert.True(t, *srcGuide.ShowSimilarSpecies)
 }

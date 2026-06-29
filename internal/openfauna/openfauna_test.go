@@ -446,21 +446,15 @@ func TestDecodeMetadataJSONL(t *testing.T) {
 		got[sci] = m
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("decodeMetadataRows: %v", err)
-	}
+	require.NoError(t, err)
 	eagle, ok := got["Aquila chrysaetos"]
-	if !ok {
-		t.Fatal("missing Aquila chrysaetos")
-	}
-	if eagle.Family != "Accipitridae" || eagle.FamilyCommon != "Hawks" || eagle.Class != "Aves" {
-		t.Fatalf("eagle taxonomy wrong: %+v", eagle)
-	}
-	if eagle.Links["inaturalist"].ID != "5074" || eagle.Links["wikipedia"].ID != "Q41181" {
-		t.Fatalf("eagle links wrong: %+v", eagle.Links)
-	}
+	require.True(t, ok, "missing Aquila chrysaetos")
+	assert.Equal(t, "Accipitridae", eagle.Family)
+	assert.Equal(t, "Hawks", eagle.FamilyCommon)
+	assert.Equal(t, "Aves", eagle.Class)
+	assert.Equal(t, "5074", eagle.Links["inaturalist"].ID)
+	assert.Equal(t, "Q41181", eagle.Links["wikipedia"].ID)
 	blackbird := got["Turdus merula"]
-	if blackbird.Links["wikipedia"].URL != "https://en.wikipedia.org/wiki/Common_blackbird" {
-		t.Fatalf("blackbird wikipedia url override missing: %+v", blackbird.Links["wikipedia"])
-	}
+	assert.Equal(t, "https://en.wikipedia.org/wiki/Common_blackbird", blackbird.Links["wikipedia"].URL,
+		"blackbird wikipedia url override missing")
 }
