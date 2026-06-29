@@ -13,7 +13,6 @@ import type { AnalyticsParams, ChartDef } from '../registry/types';
 afterEach(() => cleanup());
 
 const params: AnalyticsParams = parseAnalyticsParams('?range=week', {
-  defaultTab: 'patterns',
   now: new Date(2026, 5, 19, 12, 0, 0),
 });
 
@@ -127,7 +126,6 @@ describe('ChartCard chrome', () => {
 describe('ChartCard refetch gating', () => {
   const withSpecies = (species: string[]): AnalyticsParams => ({
     ...parseAnalyticsParams('?range=week', {
-      defaultTab: 'patterns',
       now: new Date(2026, 5, 19, 12, 0, 0),
     }),
     species,
