@@ -5,9 +5,22 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// histogramSampleCount returns the number of observations recorded on a single
+// histogram series. Unlike testutil.CollectAndCount (which counts exported
+// series), this fails if an Observe call is missing.
+func histogramSampleCount(t *testing.T, o prometheus.Observer) uint64 {
+	t.Helper()
+	m, ok := o.(prometheus.Metric)
+	require.True(t, ok, "observer is not a prometheus.Metric")
+	var pb dto.Metric
+	require.NoError(t, m.Write(&pb))
+	return pb.GetHistogram().GetSampleCount()
+}
 
 // newTestGuideMetrics builds a GuideProviderMetrics backed by a fresh registry so
 // each test is isolated from the global default registry.
@@ -79,8 +92,10 @@ func TestGuideProviderMetrics_RecordFetch(t *testing.T) {
 
 	assert.InDelta(t, 2, testutil.ToFloat64(m.Fetches.WithLabelValues("wikipedia", "success")), 0.0001)
 	assert.InDelta(t, 1, testutil.ToFloat64(m.Fetches.WithLabelValues("ebird", "not_found")), 0.0001)
-	// FetchDuration histogram observed two samples for the success outcome.
-	assert.Equal(t, 2, testutil.CollectAndCount(m.FetchDuration))
+	// FetchDuration histogram observed exactly two samples for the success outcome
+	// and one for the not-found outcome (asserting samples, not just series count).
+	assert.Equal(t, uint64(2), histogramSampleCount(t, m.FetchDuration.WithLabelValues("wikipedia", "success")))
+	assert.Equal(t, uint64(1), histogramSampleCount(t, m.FetchDuration.WithLabelValues("ebird", "not_found")))
 }
 
 func TestGuideProviderMetrics_RecordDBError(t *testing.T) {

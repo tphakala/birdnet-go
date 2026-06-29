@@ -22,6 +22,7 @@ func newTestStore(t *testing.T) *GORMGuideStore {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	store, err := NewGORMGuideStoreWithMetrics(db, nil)
 	require.NoError(t, err)
 	return store

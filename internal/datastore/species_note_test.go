@@ -25,6 +25,7 @@ func setupSpeciesNoteTestDB(t *testing.T) *DataStore {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	require.NoError(t, db.AutoMigrate(&SpeciesNote{}), "Failed to migrate schema")
 	return &DataStore{DB: db}
 }
