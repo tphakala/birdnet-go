@@ -57,14 +57,24 @@
     loading = true;
     error = null;
     try {
-      notes =
+      const res =
         (await api.get<SpeciesNoteData[]>(`/api/v2/species/${encodeURIComponent(name)}/notes`)) ??
         [];
+      // Guard against a stale request: the component instance is reused across
+      // species, so if scientificName changed while this fetch was in flight, a
+      // late resolution must not overwrite the current species' notes/state.
+      if (name === scientificName.trim()) {
+        notes = res;
+      }
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      if (name === scientificName.trim()) {
+        error = e instanceof Error ? e.message : String(e);
+      }
       logger.error('Failed to load species notes', e, { component: 'SpeciesNotes' });
     } finally {
-      loading = false;
+      if (name === scientificName.trim()) {
+        loading = false;
+      }
     }
   }
 
