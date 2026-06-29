@@ -221,7 +221,7 @@ export function createAnalyticsControls(): AnalyticsControls {
 
   function ensureSpecies(): void {
     const key = rangeKey(params);
-    if (key === speciesKey && availableSpecies.length > 0) return;
+    if (key === speciesKey && (availableSpecies.length > 0 || loadingSpecies)) return;
     speciesKey = key;
     void fetchAvailableSpecies();
   }

@@ -66,4 +66,47 @@ describe('analyticsControls', () => {
     c.applyParams({ range: 'year' }, 'push');
     expect(c.queryString).toContain('range=year');
   });
+
+  describe('init() popstate listener', () => {
+    let cleanups: Array<() => void>;
+
+    beforeEach(() => {
+      cleanups = [];
+    });
+
+    afterEach(() => {
+      cleanups.forEach(fn => fn());
+    });
+
+    it('popstate event after init() calls syncFromUrl and updates params', () => {
+      setLocation('?range=day');
+      const c = createAnalyticsControls();
+      cleanups.push(c.init());
+      setLocation('?range=month');
+      window.dispatchEvent(new Event('popstate'));
+      expect(c.params.range).toBe('month');
+    });
+
+    it('init() is idempotent: a second call does not add a second popstate listener', () => {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+      const c = createAnalyticsControls();
+      cleanups.push(c.init()); // first call: adds listener
+      cleanups.push(c.init()); // second call: no-op, returns empty cleanup
+      const popstateCalls = addSpy.mock.calls.filter(call => call[0] === 'popstate');
+      expect(popstateCalls).toHaveLength(1);
+    });
+
+    it('cleanup returned by init() removes the popstate listener', () => {
+      setLocation('?range=day');
+      const c = createAnalyticsControls();
+      const cleanup = c.init();
+      setLocation('?range=week');
+      window.dispatchEvent(new Event('popstate'));
+      expect(c.params.range).toBe('week');
+      cleanup();
+      setLocation('?range=year');
+      window.dispatchEvent(new Event('popstate'));
+      expect(c.params.range).toBe('week'); // unchanged after listener removed
+    });
+  });
 });
