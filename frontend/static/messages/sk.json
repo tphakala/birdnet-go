@@ -206,7 +206,12 @@
     "componentError": "Chyba načítania komponentu",
     "speciesAnalytics": "Analytika druhov",
     "detectionDetails": "Podrobnosti detekcie",
-    "settingsNotAvailable": "Nastavenia nie sú k dispozícii"
+    "settingsNotAvailable": "Nastavenia nie sú k dispozícii",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Prehľad",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Prehľad",
         "patterns": "Vzorce aktivity",
         "trends": "Trendy",
         "biodiversity": "Biodiverzita",
-        "quality": "Kontrola a presnosť"
+        "quality": "Kontrola a presnosť",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Sekcie analýzy"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Tento graf potrebuje aspoň {min} dátových bodov. Pokračujte v nahrávaní a vráťte sa čoskoro.",
         "export": "Exportovať",
         "exportComingSoon": "Export do CSV čoskoro príde."
-      },
-      "comingSoon": {
-        "description": "Táto sekcia sa pripravuje a príde v niektorej z budúcich aktualizácií."
       }
     },
-    "title": "Prehľad",
     "loadingError": "Nepodarilo sa načítať niektoré analytické dáta. Skúste to neskôr.",
     "stats": {
       "totalDetections": "Celkovo detekcií",

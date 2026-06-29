@@ -206,7 +206,12 @@
     "componentError": "Error de carga del componente",
     "speciesAnalytics": "Análisis de especies",
     "detectionDetails": "Detalles de detección",
-    "settingsNotAvailable": "Configuración no disponible"
+    "settingsNotAvailable": "Configuración no disponible",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Panel de control",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Resumen",
         "patterns": "Patrones de actividad",
         "trends": "Tendencias",
         "biodiversity": "Biodiversidad",
-        "quality": "Revisión y precisión"
+        "quality": "Revisión y precisión",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Secciones de análisis"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Este gráfico necesita al menos {min} puntos de datos. Sigue grabando y vuelve pronto.",
         "export": "Exportar",
         "exportComingSoon": "La exportación CSV llegará pronto."
-      },
-      "comingSoon": {
-        "description": "Esta sección está en construcción y llegará en una próxima actualización."
       }
     },
-    "title": "Resumen",
     "loadingError": "Error al cargar algunos datos analíticos. Por favor, inténtalo más tarde.",
     "stats": {
       "totalDetections": "Detecciones totales",

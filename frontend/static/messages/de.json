@@ -206,7 +206,12 @@
     "componentError": "Komponentenladefehler",
     "speciesAnalytics": "Arten-Analysen",
     "detectionDetails": "Erkennungsdetails",
-    "settingsNotAvailable": "Einstellungen nicht verfügbar"
+    "settingsNotAvailable": "Einstellungen nicht verfügbar",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Übersicht",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Übersicht",
         "patterns": "Aktivitätsmuster",
         "trends": "Trends",
         "biodiversity": "Artenvielfalt",
-        "quality": "Überprüfung & Genauigkeit"
+        "quality": "Überprüfung & Genauigkeit",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analysebereiche"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Dieses Diagramm benötigt mindestens {min} Datenpunkte. Nimm weiter auf und schau bald wieder vorbei.",
         "export": "Exportieren",
         "exportComingSoon": "CSV-Export kommt bald."
-      },
-      "comingSoon": {
-        "description": "Dieser Bereich befindet sich im Aufbau und kommt in einem kommenden Update."
       }
     },
-    "title": "Übersicht",
     "loadingError": "Fehler beim Laden einiger Analysedaten. Bitte versuchen Sie es später erneut.",
     "stats": {
       "totalDetections": "Erkennungen gesamt",

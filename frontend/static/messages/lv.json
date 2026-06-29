@@ -206,7 +206,12 @@
     "componentError": "Komponentes ielādes kļūda",
     "speciesAnalytics": "Sugu analītika",
     "detectionDetails": "Noteikšanas detaļas",
-    "settingsNotAvailable": "Iestatījumi nav pieejami"
+    "settingsNotAvailable": "Iestatījumi nav pieejami",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Informācijas panelis",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Pārskats",
         "patterns": "Aktivitātes modeļi",
         "trends": "Tendences",
         "biodiversity": "Bioloģiskā daudzveidība",
-        "quality": "Pārskatīšana un precizitāte"
+        "quality": "Pārskatīšana un precizitāte",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analīzes sadaļas"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Šai diagrammai nepieciešami vismaz {min} datu punkti. Turpiniet ierakstīšanu un atgriezieties drīz.",
         "export": "Eksportēt",
         "exportComingSoon": "CSV eksports būs pieejams drīz."
-      },
-      "comingSoon": {
-        "description": "Šī sadaļa tiek izstrādāta un būs pieejama kādā no nākamajiem atjauninājumiem."
       }
     },
-    "title": "Pārskats",
     "loadingError": "Neizdevās ielādēt dažus analītikas datus. Lūdzu, mēģiniet vēlāk.",
     "stats": {
       "totalDetections": "Kopējās atpazīšanas",

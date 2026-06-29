@@ -24,7 +24,6 @@ const overviewTest = createComponentTestFactory(AnalyticsOverview);
 // range, which is what drives a refetch (the old standalone page used a form).
 function makeParams(start: string, end: string): AnalyticsParams {
   return {
-    tab: 'overview',
     range: 'custom',
     start,
     end,

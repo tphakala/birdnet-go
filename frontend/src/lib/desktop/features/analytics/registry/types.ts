@@ -37,8 +37,6 @@ export type DateRangePreset = 'week' | 'month' | 'quarter' | 'year' | 'custom';
  * re-parse.
  */
 export interface AnalyticsParams {
-  /** Active tab. */
-  tab: ChartGroup;
   /** Selected date-range preset. */
   range: DateRangePreset;
   /** Effective range start (YYYY-MM-DD, local). */

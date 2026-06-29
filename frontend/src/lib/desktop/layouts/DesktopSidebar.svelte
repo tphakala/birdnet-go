@@ -56,7 +56,6 @@ Performance Optimizations:
     LogIn,
     ChevronsLeft,
     ChevronsRight,
-    LineChart,
     Bird,
     Monitor,
     Database,
@@ -76,6 +75,9 @@ Performance Optimizations:
     ExternalLink,
     Activity,
     ArrowDownToLine,
+    TrendingUp,
+    Leaf,
+    BadgeCheck,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import CollapsibleNavSection from './CollapsibleNavSection.svelte';
@@ -169,7 +171,11 @@ Performance Optimizations:
     dashboard: actualRoute === '/ui/dashboard' || actualRoute === '/ui/',
     liveStream: actualRoute.startsWith('/ui/live-stream'),
     analytics: actualRoute.startsWith('/ui/analytics'),
-    analyticsExact: actualRoute === '/ui/analytics',
+    analyticsSummary: actualRoute === '/ui/analytics/summary',
+    analyticsActivity: actualRoute === '/ui/analytics/activity',
+    analyticsTrends: actualRoute === '/ui/analytics/trends',
+    analyticsBiodiversity: actualRoute === '/ui/analytics/biodiversity',
+    analyticsReview: actualRoute === '/ui/analytics/review',
     analyticsSpecies: actualRoute === '/ui/analytics/species',
     search: actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
@@ -218,7 +224,11 @@ Performance Optimizations:
   let navigationUrls = $derived({
     dashboard: onNavigate ? '/' : '/ui/dashboard',
     liveStream: onNavigate ? '/live-stream' : '/ui/live-stream',
-    analytics: onNavigate ? '/analytics' : '/ui/analytics',
+    analyticsSummary: onNavigate ? '/analytics/summary' : '/ui/analytics/summary',
+    analyticsActivity: onNavigate ? '/analytics/activity' : '/ui/analytics/activity',
+    analyticsTrends: onNavigate ? '/analytics/trends' : '/ui/analytics/trends',
+    analyticsBiodiversity: onNavigate ? '/analytics/biodiversity' : '/ui/analytics/biodiversity',
+    analyticsReview: onNavigate ? '/analytics/review' : '/ui/analytics/review',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
@@ -245,16 +255,40 @@ Performance Optimizations:
   // Nav item definitions for collapsible sections
   let analyticsItems: NavItem[] = $derived([
     {
-      icon: LineChart,
-      label: t('analytics.title'),
-      url: navigationUrls.analytics,
-      routeKey: 'analyticsExact',
+      icon: BarChart3,
+      label: t('analytics.hub.tabs.summary'),
+      url: navigationUrls.analyticsSummary,
+      routeKey: 'analyticsSummary',
     },
     {
       icon: Bird,
       label: t('analytics.species.title'),
       url: navigationUrls.analyticsSpecies,
       routeKey: 'analyticsSpecies',
+    },
+    {
+      icon: Activity,
+      label: t('analytics.hub.tabs.patterns'),
+      url: navigationUrls.analyticsActivity,
+      routeKey: 'analyticsActivity',
+    },
+    {
+      icon: TrendingUp,
+      label: t('analytics.hub.tabs.trends'),
+      url: navigationUrls.analyticsTrends,
+      routeKey: 'analyticsTrends',
+    },
+    {
+      icon: Leaf,
+      label: t('analytics.hub.tabs.biodiversity'),
+      url: navigationUrls.analyticsBiodiversity,
+      routeKey: 'analyticsBiodiversity',
+    },
+    {
+      icon: BadgeCheck,
+      label: t('analytics.hub.tabs.quality'),
+      url: navigationUrls.analyticsReview,
+      routeKey: 'analyticsReview',
     },
   ]);
 

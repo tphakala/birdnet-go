@@ -206,7 +206,12 @@
     "componentError": "Component laadfout",
     "speciesAnalytics": "Soortanalyses",
     "detectionDetails": "Detectiedetails",
-    "settingsNotAvailable": "Instellingen niet beschikbaar"
+    "settingsNotAvailable": "Instellingen niet beschikbaar",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Overzicht",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Overzicht",
         "patterns": "Activiteitspatronen",
         "trends": "Trends",
         "biodiversity": "Biodiversiteit",
-        "quality": "Controle en nauwkeurigheid"
+        "quality": "Controle en nauwkeurigheid",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analysesecties"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Deze grafiek heeft minstens {min} gegevenspunten nodig. Blijf opnemen en kom snel terug.",
         "export": "Exporteren",
         "exportComingSoon": "CSV-export komt binnenkort."
-      },
-      "comingSoon": {
-        "description": "Deze sectie is in aanbouw en komt in een toekomstige update."
       }
     },
-    "title": "Aantallen",
     "loadingError": "Kon analyse gegevens niet inladen. Probeer het later opnieuw.",
     "stats": {
       "totalDetections": "Totaal herkend",

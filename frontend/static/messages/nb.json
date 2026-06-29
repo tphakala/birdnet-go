@@ -206,7 +206,12 @@
     "componentError": "Feil ved lasting av komponent",
     "speciesAnalytics": "Artsanalyse",
     "detectionDetails": "Registreringsdetaljer",
-    "settingsNotAvailable": "Innstillinger ikke tilgjengelig"
+    "settingsNotAvailable": "Innstillinger ikke tilgjengelig",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Dashbord",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Oversikt",
         "patterns": "Aktivitetsmønstre",
         "trends": "Trender",
         "biodiversity": "Biologisk mangfold",
-        "quality": "Gjennomgang og nøyaktighet"
+        "quality": "Gjennomgang og nøyaktighet",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analyseseksjoner"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Dette diagrammet trenger minst {min} datapunkter. Fortsett å ta opp, og kom tilbake snart.",
         "export": "Eksporter",
         "exportComingSoon": "CSV-eksport kommer snart."
-      },
-      "comingSoon": {
-        "description": "Denne seksjonen er under utvikling og kommer i en kommende oppdatering."
       }
     },
-    "title": "Oversikt",
     "loadingError": "Innlasting av noen analysedata mislyktes. Prøv igjen senere.",
     "stats": {
       "totalDetections": "Totalt registreringer",

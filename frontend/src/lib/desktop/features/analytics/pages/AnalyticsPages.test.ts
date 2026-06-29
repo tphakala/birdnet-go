@@ -1,0 +1,63 @@
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { render } from '@testing-library/svelte';
+
+vi.mock('$lib/i18n', () => ({ t: (k: string) => k }));
+vi.mock('../registry/analyticsControls.svelte', () => ({
+  analyticsControls: {
+    params: {
+      range: 'month',
+      start: '',
+      end: '',
+      species: [],
+      source: '',
+      startDate: new Date(),
+      endDate: new Date(),
+    },
+    availableSpecies: [],
+    loadingSpecies: false,
+    availableSources: [],
+    loadingSources: false,
+    speciesNames: new Map(),
+    applyParams: vi.fn(),
+    ensureSpecies: vi.fn(),
+    ensureSources: vi.fn(),
+    init: vi.fn(() => () => {}),
+  },
+}));
+
+// Stub body children to avoid dragging in chart/fetch stack under jsdom.
+// Uses the same real Svelte stub components as Analytics.test.ts.
+vi.mock('../components/ChartGrid.svelte', async () => ({
+  default: (await import('../components/__tests__/StubChart.svelte')).default,
+}));
+vi.mock('../components/AnalyticsOverview.svelte', async () => ({
+  default: (await import('../components/__tests__/StubOverview.svelte')).default,
+}));
+
+import SummaryPage from './SummaryPage.svelte';
+import ActivityPage from './ActivityPage.svelte';
+import TrendsPage from './TrendsPage.svelte';
+import BiodiversityPage from './BiodiversityPage.svelte';
+import ReviewPage from './ReviewPage.svelte';
+
+describe('analytics route pages render without throwing', () => {
+  // Reset the shared analyticsControls mock so vi.fn() call history does not leak
+  // between parametrized cases.
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    ['summary', SummaryPage, 'analytics.hub.tabs.summary'],
+    ['activity', ActivityPage, 'analytics.hub.tabs.patterns'],
+    ['trends', TrendsPage, 'analytics.hub.tabs.trends'],
+    ['biodiversity', BiodiversityPage, 'analytics.hub.tabs.biodiversity'],
+    ['review', ReviewPage, 'analytics.hub.tabs.quality'],
+  ])('%s page mounts with the correct title', (_name, Comp, expectedTitleKey) => {
+    const { container } = render(Comp as never);
+    const titleEl = container.querySelector('#analytics-page-title');
+    // The t() mock echoes keys verbatim, so textContent equals the i18n key.
+    expect(titleEl).toBeTruthy();
+    // titleEl is the nullable querySelector result, so optional chaining keeps this lint-clean.
+    const text = (titleEl?.textContent ?? '').trim();
+    expect(text).toBe(expectedTitleKey);
+  });
+});

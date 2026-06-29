@@ -206,7 +206,12 @@
     "componentError": "Komponentin latausvirhe",
     "speciesAnalytics": "Lajianalytiikka",
     "detectionDetails": "Tunnistuksen tiedot",
-    "settingsNotAvailable": "Asetukset eivät ole käytettävissä"
+    "settingsNotAvailable": "Asetukset eivät ole käytettävissä",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Yleiskatsaus",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Yleiskatsaus",
         "patterns": "Aktiivisuuskuviot",
         "trends": "Trendit",
         "biodiversity": "Luonnon monimuotoisuus",
-        "quality": "Tarkistus ja tarkkuus"
+        "quality": "Tarkistus ja tarkkuus",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analyysiosiot"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Tämä kaavio tarvitsee vähintään {min} datapistettä. Jatka tallentamista ja palaa pian takaisin.",
         "export": "Vie",
         "exportComingSoon": "CSV-vienti tulee pian."
-      },
-      "comingSoon": {
-        "description": "Tämä osio on rakenteilla ja tulee tulevassa päivityksessä."
       }
     },
-    "title": "Yleiskatsaus",
     "loadingError": "Joidenkin analytiikkatietojen lataus epäonnistui. Yritä myöhemmin uudelleen.",
     "stats": {
       "totalDetections": "Havainnot yhteensä",

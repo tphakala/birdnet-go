@@ -206,7 +206,12 @@
     "componentError": "Erro ao carregar componente",
     "speciesAnalytics": "Análise de espécies",
     "detectionDetails": "Detalhes da detecção",
-    "settingsNotAvailable": "Configurações não disponíveis"
+    "settingsNotAvailable": "Configurações não disponíveis",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Painel",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Visão geral",
         "patterns": "Padrões de atividade",
         "trends": "Tendências",
         "biodiversity": "Biodiversidade",
-        "quality": "Revisão e precisão"
+        "quality": "Revisão e precisão",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Seções de análise"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Este gráfico precisa de pelo menos {min} pontos de dados. Continue gravando e volte em breve.",
         "export": "Exportar",
         "exportComingSoon": "A exportação CSV chegará em breve."
-      },
-      "comingSoon": {
-        "description": "Esta seção está em construção e chegará numa atualização futura."
       }
     },
-    "title": "Visão geral",
     "loadingError": "Falha ao carregar alguns dados analíticos. Por favor, tente novamente mais tarde.",
     "stats": {
       "totalDetections": "Total de detecções",

@@ -206,7 +206,12 @@
     "componentError": "Komponens betöltési hiba",
     "speciesAnalytics": "Faj elemzés",
     "detectionDetails": "Detektálás részletei",
-    "settingsNotAvailable": "Beállítások nem elérhetők"
+    "settingsNotAvailable": "Beállítások nem elérhetők",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Irányítópult",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Áttekintés",
         "patterns": "Tevékenységi minták",
         "trends": "Trendek",
         "biodiversity": "Biodiverzitás",
-        "quality": "Ellenőrzés és pontosság"
+        "quality": "Ellenőrzés és pontosság",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Elemzési szakaszok"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Ehhez a diagramhoz legalább {min} adatpont szükséges. Folytassa a rögzítést, és nézzen vissza hamarosan.",
         "export": "Exportálás",
         "exportComingSoon": "A CSV-exportálás hamarosan érkezik."
-      },
-      "comingSoon": {
-        "description": "Ez a szakasz fejlesztés alatt áll, és egy közelgő frissítésben érkezik."
       }
     },
-    "title": "Áttekintés",
     "loadingError": "Néhány analitikai adat betöltése sikertelen. Próbálja később újra.",
     "stats": {
       "totalDetections": "Összes detektálás",

@@ -206,7 +206,12 @@
     "componentError": "Chyba načítání komponenty",
     "speciesAnalytics": "Analýza druhů",
     "detectionDetails": "Podrobnosti detekce",
-    "settingsNotAvailable": "Nastavení není k dispozici"
+    "settingsNotAvailable": "Nastavení není k dispozici",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Přehled",
         "patterns": "Vzorce aktivity",
         "trends": "Trendy",
         "biodiversity": "Biodiverzita",
-        "quality": "Kontrola a přesnost"
+        "quality": "Kontrola a přesnost",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Sekce analýzy"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "Tento graf potřebuje alespoň {min} datových bodů. Pokračujte v nahrávání a vraťte se brzy.",
         "export": "Exportovat",
         "exportComingSoon": "Export do CSV brzy přijde."
-      },
-      "comingSoon": {
-        "description": "Tato sekce se připravuje a přijde v některé z příštích aktualizací."
       }
     },
-    "title": "Přehled",
     "loadingError": "Nepodařilo se načíst některá analytická data. Zkuste to prosím později.",
     "stats": {
       "totalDetections": "Celkem detekcí",

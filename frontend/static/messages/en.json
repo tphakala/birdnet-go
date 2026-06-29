@@ -206,7 +206,12 @@
     "componentError": "Component Load Error",
     "speciesAnalytics": "Species Analytics",
     "detectionDetails": "Detection Details",
-    "settingsNotAvailable": "Settings Not Available"
+    "settingsNotAvailable": "Settings Not Available",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1794,11 +1799,11 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Overview",
         "patterns": "Activity Patterns",
         "trends": "Trends",
         "biodiversity": "Biodiversity",
-        "quality": "Review & Accuracy"
+        "quality": "Review & Accuracy",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analytics sections"
@@ -1818,12 +1823,8 @@
         "notEnoughDataHint": "This chart needs at least {min} data points. Keep recording and check back soon.",
         "export": "Export",
         "exportComingSoon": "CSV export is coming soon."
-      },
-      "comingSoon": {
-        "description": "This section is under construction and will arrive in an upcoming update."
       }
     },
-    "title": "Overview",
     "loadingError": "Failed to load some analytics data. Please try again later.",
     "stats": {
       "totalDetections": "Total Detections",
