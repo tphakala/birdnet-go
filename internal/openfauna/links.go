@@ -2,6 +2,7 @@ package openfauna
 
 import (
 	"encoding/json"
+	"maps"
 	"net/url"
 	"sort"
 	"strings"
@@ -38,6 +39,9 @@ var (
 // Sources returns the embedded OpenFauna sources registry, parsed once. A parse
 // failure yields an empty registry (links simply do not render) and is logged.
 func Sources() map[string]Source {
+	// Surface a vendored-schema mismatch on the on-demand links path too (not just
+	// BuildIndex); the call is sync.Once-guarded so it logs at most once per run.
+	warnOnSchemaMismatch()
 	sourcesOnce.Do(func() {
 		var reg map[string]Source
 		if err := json.Unmarshal(sourcesJSON, &reg); err != nil {
@@ -46,7 +50,9 @@ func Sources() map[string]Source {
 		}
 		sourcesReg = reg
 	})
-	return sourcesReg
+	// Return a clone so a caller mutating the result cannot corrupt the shared,
+	// process-wide registry or race concurrent ExternalLinks() reads.
+	return maps.Clone(sourcesReg)
 }
 
 // Placeholder keys substituted into source URL templates. substituteTemplate

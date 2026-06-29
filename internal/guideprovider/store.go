@@ -29,9 +29,12 @@ type GuideCacheEntry struct {
 	License        string
 	LicenseURL     string
 	SimilarSpecies string `gorm:"type:text"` // JSON-encoded []SimilarSpecies
-	Negative       bool
+	Negative       bool      `gorm:"index:idx_guide_cache_negative_cached,priority:1"`
 	Partial        bool
-	CachedAt       time.Time `gorm:"index"`
+	// Standalone cached_at index serves GetRecent's ORDER BY and the full-retention
+	// sweep; the composite (negative, cached_at) keeps the negative-entry cleanup
+	// (`WHERE negative = ? AND cached_at < ?`) off a full-table scan.
+	CachedAt  time.Time `gorm:"index;index:idx_guide_cache_negative_cached,priority:2"`
 	UpdatedAt      time.Time `gorm:"autoUpdateTime"`
 }
 

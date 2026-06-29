@@ -1832,7 +1832,8 @@ func (ds *Datastore) GetSpeciesNotes(ctx context.Context, scientificName string)
 	name := strings.TrimSpace(scientificName)
 	if name == "" {
 		return nil, errors.Newf("scientific name cannot be empty").
-			Component("datastore").Category(errors.CategoryValidation).Build()
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "get_species_notes_validate").Build()
 	}
 	var notes []datastore.SpeciesNote
 	if err := ds.manager.DB().WithContext(ctx).
@@ -1867,12 +1868,14 @@ func (ds *Datastore) GetSpeciesNoteByID(ctx context.Context, id uint) (*datastor
 func (ds *Datastore) SaveSpeciesNote(ctx context.Context, note *datastore.SpeciesNote) error {
 	if note == nil {
 		return errors.Newf("note cannot be nil").
-			Component("datastore").Category(errors.CategoryValidation).Build()
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "save_species_note_validate").Build()
 	}
 	note.ScientificName = strings.TrimSpace(note.ScientificName)
 	if note.ScientificName == "" {
 		return errors.Newf("scientific name cannot be empty").
-			Component("datastore").Category(errors.CategoryValidation).Build()
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "save_species_note_validate").Build()
 	}
 	entry, err := datastore.NormalizeSpeciesNoteEntry(note.Entry)
 	if err != nil {
@@ -1880,7 +1883,8 @@ func (ds *Datastore) SaveSpeciesNote(ctx context.Context, note *datastore.Specie
 	}
 	if entry == "" {
 		return errors.Newf("entry cannot be empty").
-			Component("datastore").Category(errors.CategoryValidation).Build()
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "save_species_note_validate").Build()
 	}
 	note.Entry = entry
 	return datastore.RetryOnLock(ctx, "save_species_note", func() error {
@@ -1907,7 +1911,8 @@ func (ds *Datastore) UpdateSpeciesNote(ctx context.Context, noteID, entry string
 	}
 	if normalized == "" {
 		return errors.Newf("entry cannot be empty").
-			Component("datastore").Category(errors.CategoryValidation).Build()
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "update_species_note_validate").Build()
 	}
 	return datastore.RetryOnLock(ctx, "update_species_note", func() error {
 		result := ds.manager.DB().WithContext(ctx).
@@ -1956,7 +1961,8 @@ func parseSpeciesNoteID(noteID string) (uint, error) {
 	id, err := strconv.ParseUint(strings.TrimSpace(noteID), 10, 64)
 	if err != nil || id == 0 || id > uint64(math.MaxUint) {
 		return 0, errors.Newf("invalid note ID").
-			Component("datastore").Category(errors.CategoryValidation).Build()
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "parse_species_note_id").Build()
 	}
 	return uint(id), nil
 }

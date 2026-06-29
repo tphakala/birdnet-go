@@ -639,6 +639,9 @@ func storeMetaCache(key string, e *metaCacheEntry) {
 // memoized so repeat lookups are O(1). The dataset-scan cost (see Lookup) is paid
 // only on the first, uncached lookup of each name.
 func LookupMeta(scientific string) (Meta, bool) {
+	// The guide metadata path can be reached without BuildIndex, so run the
+	// schema gate here too (sync.Once-guarded; logs at most once per run).
+	warnOnSchemaMismatch()
 	target := normalizeName(scientific)
 	if v, ok := metaCache.Load(target); ok {
 		if e, ok := v.(metaCacheEntry); ok {

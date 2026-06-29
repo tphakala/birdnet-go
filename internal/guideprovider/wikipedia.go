@@ -129,6 +129,7 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 		return nil, NewTransientError(errors.Newf("wikipedia returned status %d", resp.StatusCode).
 			Component("guideprovider").
 			Category(errors.CategoryHTTP).
+			Context("operation", "wikipedia_status_transient").
 			Build())
 	case resp.StatusCode != http.StatusOK:
 		// Any other non-OK status is non-definitive: wrap it transient so an
@@ -154,6 +155,8 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 			Component("guideprovider").
 			Category(errors.CategoryHTTP).
 			Context("operation", "wikipedia_decode").
+			Context("expected_path", "query.pages").
+			Context("error_detail", err.Error()).
 			Build())
 	}
 
