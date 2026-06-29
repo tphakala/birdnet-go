@@ -8,7 +8,9 @@ import { chartsForGroup } from './charts';
 describe('chart group membership', () => {
   it('places nocturnal-clock in the nocturnal group', () => {
     const ids = chartsForGroup('nocturnal').map(c => c.id);
-    expect(ids).toContain('nocturnal-clock');
+    // Exact list (not toContain): the comment above promises an extra chart in
+    // the group trips this test, so assert the full membership.
+    expect(ids).toEqual(['nocturnal-clock']);
   });
 
   it('removes nocturnal-clock from the patterns group, leaving exactly five charts', () => {

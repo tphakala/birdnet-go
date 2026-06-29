@@ -1845,7 +1845,7 @@
         "description": "Spojrzenie na ogólny charakter akustyczny środowiska, z użyciem indeksów akustycznych do podsumowania różnorodności krajobrazu dźwiękowego w czasie.",
         "feature1": "Indeksy akustyczne podsumowujące złożoność krajobrazu dźwiękowego",
         "feature2": "Śledzenie bioróżnorodności poprzez dźwięki otoczenia w czasie",
-        "feature3": "Wykrywanie rannych i wieczornych chórów w zapisie akustycznym"
+        "feature3": "Wykrywanie porannych i wieczornych chórów w zapisie akustycznym"
       }
     },
     "stats": {
