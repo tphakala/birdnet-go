@@ -51,6 +51,24 @@ func processingCacheKey(detectionID string, normalize bool, denoise string, gain
 	return fmt.Sprintf("%s_%s_%s_%.1f.wav", safeID, norm, denoise, gainDB)
 }
 
+// audibleBatsCacheKey builds a deterministic filename for a derived "audible
+// bats" review clip. The key embeds the time-expansion factor alongside the
+// normalize/gain parameters so different settings never collide in the cache.
+func audibleBatsCacheKey(detectionID string, expansion int, normalize bool, gainDB float64) string {
+	// Sanitize detection ID to prevent path traversal in cache filenames
+	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
+
+	// Canonicalize -0.0 to 0.0
+	if gainDB == 0 {
+		gainDB = math.Copysign(0, 1) // force positive zero
+	}
+	norm := "0"
+	if normalize {
+		norm = "1"
+	}
+	return fmt.Sprintf("%s_bat%dx_%s_%.1f.wav", safeID, expansion, norm, gainDB)
+}
+
 // get returns cached file data or nil if not found / expired.
 func (c *processingCache) get(key string) []byte {
 	c.mu.Lock()

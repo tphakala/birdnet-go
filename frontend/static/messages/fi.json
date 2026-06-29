@@ -4757,7 +4757,19 @@
       "streamTitleDefault": "Lintujen äänistriimi",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Suora lähetys",
-      "playbackError": "Toistovirhe: {details}"
+      "playbackError": "Toistovirhe: {details}",
+      "audibleBats": {
+        "title": "Audible bat playback",
+        "subtitle": "Slow ultrasonic calls into human hearing range.",
+        "timeExpansion": "Time expansion",
+        "volumeGain": "Volume gain",
+        "normalize": "Normalize",
+        "remember": "Remember setting",
+        "enable": "Enable audible bats mode",
+        "disable": "Disable audible bats mode",
+        "generating": "Generating derived audio…",
+        "error": "Failed to generate audible bats audio"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",
