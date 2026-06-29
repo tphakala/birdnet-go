@@ -76,53 +76,12 @@ describe('NavFlatItem', () => {
     expect(onNavigate).toHaveBeenCalledWith('/ui/search');
   });
 
-  it('shows comingSoon badge when expanded and comingSoon=true', () => {
-    itemTest.render({ ...defaultProps, isCollapsed: false, comingSoon: true, label: 'Weather' });
-    // The badge text is the i18n key (mocked to return the key)
-    expect(screen.getByText('analytics.comingSoon.badge')).toBeInTheDocument();
-    expect(screen.getByText('analytics.comingSoon.badge')).toHaveClass('badge');
-  });
-
-  it('does not show comingSoon badge when comingSoon=false', () => {
-    itemTest.render({ ...defaultProps, isCollapsed: false, comingSoon: false });
-    expect(screen.queryByText('analytics.comingSoon.badge')).not.toBeInTheDocument();
-  });
-
-  it('hides text label and badge in collapsed mode', () => {
-    itemTest.render({
-      ...defaultProps,
-      isCollapsed: true,
-      comingSoon: true,
-      label: 'Weather',
-    });
-    // Text span should not be visible (not rendered)
-    expect(screen.queryByText('Weather')).not.toBeInTheDocument();
-    // Badge should also be absent in collapsed mode
-    expect(screen.queryByText('analytics.comingSoon.badge')).not.toBeInTheDocument();
-  });
-
   it('keeps accessible name when collapsed (icon-only)', () => {
     itemTest.render({ ...defaultProps, isCollapsed: true, label: 'Search' });
     const button = screen.getByRole('button');
     expect(button).toHaveAttribute('aria-label', 'Search');
     // No visible text label rendered
     expect(screen.queryByText('Search')).not.toBeInTheDocument();
-  });
-
-  it('suffixes aria-label with coming-soon text when collapsed and comingSoon=true', () => {
-    itemTest.render({ ...defaultProps, isCollapsed: true, comingSoon: true, label: 'Weather' });
-    const button = screen.getByRole('button');
-    // aria-label should include the badge text suffix
-    expect(button.getAttribute('aria-label')).toContain('Weather');
-    expect(button.getAttribute('aria-label')).toContain('analytics.comingSoon.badge');
-  });
-
-  it('suffixes aria-label with coming-soon text when expanded and comingSoon=true', () => {
-    itemTest.render({ ...defaultProps, isCollapsed: false, comingSoon: true, label: 'Weather' });
-    const button = screen.getByRole('button');
-    // Screen readers must hear the coming-soon state in expanded mode too
-    expect(button.getAttribute('aria-label')).toContain('Weather');
-    expect(button.getAttribute('aria-label')).toContain('analytics.comingSoon.badge');
   });
 
   it('does NOT have role="menuitem"', () => {

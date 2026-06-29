@@ -47,11 +47,7 @@
   });
 </script>
 
-<section class="flex flex-col gap-4" aria-labelledby="analytics-page-title">
-  <h1 id="analytics-page-title" class="text-2xl font-bold text-[var(--color-base-content)]">
-    {t(titleKey)}
-  </h1>
-
+<section class="col-span-12 flex flex-col gap-4" aria-label={t(titleKey)}>
   <AnalyticsControlBar
     params={analyticsControls.params}
     availableSpecies={analyticsControls.availableSpecies}

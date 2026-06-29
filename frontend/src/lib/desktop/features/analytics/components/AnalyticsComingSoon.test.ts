@@ -39,9 +39,9 @@ describe('AnalyticsComingSoon', () => {
     cleanup();
   });
 
-  it('renders the title key and feature keys', () => {
+  it('renders the section with aria-label set to the title key and renders feature keys', () => {
     render(AnalyticsComingSoon, { props: defaultProps });
-    expect(screen.getByText('analytics.hub.tabs.weather')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'analytics.hub.tabs.weather' })).toBeInTheDocument();
     expect(screen.getByText('analytics.comingSoon.weather.feature1')).toBeInTheDocument();
   });
 

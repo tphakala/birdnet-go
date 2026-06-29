@@ -60,11 +60,10 @@ describe('analytics route pages render without throwing', () => {
     ['soundscape', SoundscapePage, 'analytics.hub.tabs.soundscape'],
   ])('%s page mounts with the correct title', (_name, Comp, expectedTitleKey) => {
     const { container } = render(Comp as never);
-    const titleEl = container.querySelector('#analytics-page-title');
-    // The t() mock echoes keys verbatim, so textContent equals the i18n key.
-    expect(titleEl).toBeTruthy();
-    // titleEl is the nullable querySelector result, so optional chaining keeps this lint-clean.
-    const text = (titleEl?.textContent ?? '').trim();
-    expect(text).toBe(expectedTitleKey);
+    // The title is now in the section's aria-label (the h1 was removed to avoid
+    // a duplicate title with the global Header). The t() mock echoes keys verbatim.
+    const section = container.querySelector('section[aria-label]');
+    expect(section).toBeTruthy();
+    expect(section?.getAttribute('aria-label')).toBe(expectedTitleKey);
   });
 });

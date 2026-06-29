@@ -1,6 +1,5 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { t } from '$lib/i18n';
   import type { Component } from 'svelte';
 
   export interface NavFlatItemProps {
@@ -12,7 +11,6 @@
     onNavigate: (_url: string) => void;
     showTooltip: (_event: MouseEvent | FocusEvent, _text: string) => void;
     hideTooltip: () => void;
-    comingSoon?: boolean;
     ariaLabel?: string;
   }
 
@@ -25,7 +23,6 @@
     onNavigate,
     showTooltip,
     hideTooltip,
-    comingSoon = false,
     ariaLabel,
   }: NavFlatItemProps = $props();
 
@@ -37,11 +34,9 @@
   const focusRingClasses =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]';
 
-  let badgeText = $derived(t('analytics.comingSoon.badge'));
+  let computedAriaLabel = $derived(ariaLabel ?? label);
 
-  let computedAriaLabel = $derived(ariaLabel ?? (comingSoon ? `${label} (${badgeText})` : label));
-
-  let tooltipText = $derived(comingSoon ? `${label} (${badgeText})` : label);
+  let tooltipText = $derived(label);
 </script>
 
 <button
@@ -63,8 +58,5 @@
   <Icon class="size-5 shrink-0" />
   {#if !isCollapsed}
     <span>{label}</span>
-    {#if comingSoon}
-      <span class="badge badge-primary badge-sm ml-auto">{badgeText}</span>
-    {/if}
   {/if}
 </button>

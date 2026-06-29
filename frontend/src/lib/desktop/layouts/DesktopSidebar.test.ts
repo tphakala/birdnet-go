@@ -219,19 +219,6 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(screen.queryByLabelText('navigation.analyticsSubmenu')).toBeNull();
   });
 
-  it('shows the coming-soon chip for Weather and Soundscape (expanded) but not Nocturnal', () => {
-    sidebarTest.render({ currentRoute: '/ui/dashboard' });
-
-    const badge = 'analytics.comingSoon.badge';
-    const weatherBtn = getBtn('analytics.hub.tabs.weather');
-    const soundscapeBtn = getBtn('analytics.hub.tabs.soundscape');
-    const nocturnalBtn = getBtn('analytics.hub.tabs.nocturnal');
-
-    expect(weatherBtn.textContent).toContain(badge);
-    expect(soundscapeBtn.textContent).toContain(badge);
-    expect(nocturnalBtn.textContent).not.toContain(badge);
-  });
-
   it('does not render About as a top-level item; it lives under Help and activates the Help section on /ui/about', async () => {
     sidebarTest.render({ currentRoute: '/ui/about' });
 

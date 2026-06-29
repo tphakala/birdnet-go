@@ -55,11 +55,11 @@ describe('AnalyticsPageShell', () => {
     cleanup();
   });
 
-  it('renders the title key and the slotted body', () => {
+  it('renders the section with aria-label set to the title key and renders the slotted body', () => {
     render(AnalyticsPageShell, {
       props: { ...defaultProps, children: makeBody() },
     });
-    expect(screen.getByText('analytics.hub.tabs.trends')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'analytics.hub.tabs.trends' })).toBeInTheDocument();
     expect(screen.getByTestId('body')).toBeInTheDocument();
   });
 

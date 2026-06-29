@@ -277,7 +277,6 @@ Performance Optimizations:
     label: string;
     url: string;
     routeKey: string;
-    comingSoon?: boolean;
   }
   interface NavSection {
     id: string;
@@ -356,14 +355,12 @@ Performance Optimizations:
             label: t('analytics.hub.tabs.weather'),
             url: withQuery(navigationUrls.analyticsWeather),
             routeKey: 'analyticsWeather',
-            comingSoon: true,
           },
           {
             icon: AudioLines,
             label: t('analytics.hub.tabs.soundscape'),
             url: withQuery(navigationUrls.analyticsSoundscape),
             routeKey: 'analyticsSoundscape',
-            comingSoon: true,
           },
         ],
       },
@@ -685,7 +682,6 @@ Performance Optimizations:
                 onNavigate={navigate}
                 {showTooltip}
                 {hideTooltip}
-                comingSoon={item.comingSoon}
               />
             {/each}
           </div>
