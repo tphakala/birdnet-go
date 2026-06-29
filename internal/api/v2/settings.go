@@ -2558,6 +2558,7 @@ func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bo
 		return false
 	}
 	return o.EnableWikipedia != n.EnableWikipedia ||
+		o.EnableSupplementaryLinks != n.EnableSupplementaryLinks ||
 		o.WarmTopN != n.WarmTopN ||
 		o.PreFetchEnabled != n.PreFetchEnabled ||
 		o.IsShowNotes() != n.IsShowNotes() ||
