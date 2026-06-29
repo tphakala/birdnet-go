@@ -161,7 +161,10 @@
     cancelEdit();
     confirmingDeleteId = null;
     draft = '';
-    if (!name) {
+    // Notes are auth-gated for reads too, so never fetch for an anonymous user
+    // (the request would 401). Parents also gate the section on auth; this is a
+    // standalone safeguard. Reactive on $isAuthenticated, so login refetches.
+    if (!name || !$isAuthenticated) {
       notes = [];
       loading = false;
       error = null;

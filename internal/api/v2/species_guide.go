@@ -215,8 +215,10 @@ func (c *Controller) initSpeciesGuideRoutes() {
 	c.Group.GET("/species/:scientific_name/guide", c.GetSpeciesGuide, guideRateLimiter)
 	c.Group.GET("/species/:scientific_name/similar", c.GetSimilarSpecies, guideRateLimiter)
 
-	// Notes — reads public, writes auth-gated.
-	c.Group.GET("/species/:scientific_name/notes", c.GetSpeciesNotes)
+	// Notes are auth-gated for both reads and writes: they are user-authored and
+	// may contain sensitive content (e.g. precise locations of rare species), so
+	// they must not be world-readable on a publicly exposed instance.
+	c.Group.GET("/species/:scientific_name/notes", c.GetSpeciesNotes, c.GetAuthMiddleware())
 	c.Group.POST("/species/:scientific_name/notes", c.CreateSpeciesNote, c.GetAuthMiddleware())
 	c.Group.PUT("/species/notes/:id", c.UpdateSpeciesNote, c.GetAuthMiddleware())
 	c.Group.DELETE("/species/notes/:id", c.DeleteSpeciesNote, c.GetAuthMiddleware())

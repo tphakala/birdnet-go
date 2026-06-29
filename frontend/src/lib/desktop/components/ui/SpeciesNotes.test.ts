@@ -67,12 +67,15 @@ describe('SpeciesNotes', () => {
     ).toBeInTheDocument();
   });
 
-  it('hides the editor when not authenticated', async () => {
+  it('does not load or show notes when not authenticated', async () => {
     mocks.authStore.set(false);
     vi.mocked(api.get).mockResolvedValue([note()] as never);
     render(SpeciesNotes, { props: { scientificName: 'Turdus merula' } });
-    await screen.findByText('A note about this bird.', {}, { timeout: 5000 });
-    // No add button / textarea for unauthenticated users.
+    // Reads are auth-gated: anonymous users trigger no fetch and see neither the
+    // editor nor any notes (the section is hidden by parents in the real app).
+    await Promise.resolve();
+    expect(api.get).not.toHaveBeenCalled();
+    expect(screen.queryByText('A note about this bird.')).not.toBeInTheDocument();
     expect(screen.queryByText('analytics.species.notes.save')).not.toBeInTheDocument();
   });
 

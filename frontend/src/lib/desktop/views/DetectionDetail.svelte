@@ -924,7 +924,7 @@
                 </button>
               {/if}
             {/if}
-            {#if showNotes}
+            {#if showNotes && $isAuthenticated}
               <SpeciesNotes scientificName={detection.scientificName} />
             {/if}
           {/key}

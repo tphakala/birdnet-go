@@ -113,10 +113,12 @@ performs **no** background network requests.
 ## Notes
 
 When `shownotes` is on, you can keep free-form notes per species (e.g. field
-marks, local sightings). **Reading** notes is public; **creating, editing, and
-deleting** notes requires authentication, so configure
-[authentication](cloudflare_tunnel_guide.md#enabling-authentication) if your
-instance is exposed.
+marks, local sightings). Notes require authentication for **all** operations —
+reading as well as creating, editing, and deleting — because they are
+user-authored and may contain sensitive details (such as the precise location
+of a rare species). The notes section is hidden for unauthenticated visitors, so
+configure [authentication](cloudflare_tunnel_guide.md#enabling-authentication)
+to use notes on an exposed instance.
 
 ## Data sources & licensing
 

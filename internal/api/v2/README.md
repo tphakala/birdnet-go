@@ -253,13 +253,13 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 ### Species Guide (`species_guide.go`)
 
-Gated by `realtime.dashboard.speciesguide.enabled` (404 when disabled). Guide and similar are rate-limited; note writes require authentication, note reads are public.
+Guide/similar are gated by `realtime.dashboard.speciesguide.enabled` (404 when disabled) and rate-limited. All notes endpoints — reads included — require authentication, since notes are user-authored and may contain sensitive content.
 
 | Method | Route                               | Handler             | Auth | Description                                                                                                           |
 | ------ | ----------------------------------- | ------------------- | ---- | --------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/species/:scientific_name/guide`   | `GetSpeciesGuide`   | ❌   | Offline species guide: taxonomy, localized common name, external links; optional Wikipedia description. Rate-limited. |
 | GET    | `/species/:scientific_name/similar` | `GetSimilarSpecies` | ❌   | Similar-species (same-genus) comparison with per-candidate guide summaries/links. Rate-limited.                       |
-| GET    | `/species/:scientific_name/notes`   | `GetSpeciesNotes`   | ❌   | List user notes for a species (public read)                                                                           |
+| GET    | `/species/:scientific_name/notes`   | `GetSpeciesNotes`   | ✅   | List user notes for a species                                                                                         |
 | POST   | `/species/:scientific_name/notes`   | `CreateSpeciesNote` | ✅   | Create a user note for a species                                                                                      |
 | PUT    | `/species/notes/:id`                | `UpdateSpeciesNote` | ✅   | Update a user note by id                                                                                              |
 | DELETE | `/species/notes/:id`                | `DeleteSpeciesNote` | ✅   | Delete a user note by id                                                                                              |

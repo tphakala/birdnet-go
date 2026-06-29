@@ -8,6 +8,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -480,7 +481,7 @@ func TestDeleteSpeciesNote_NotFoundReturns404(t *testing.T) {
 
 // --- auth gating (route-level: writes require auth, reads are public) ---
 
-func TestSpeciesGuideRoutes_WritesAreAuthGated(t *testing.T) {
+func TestSpeciesGuideRoutes_NotesAreAuthGated(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
 	c := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
@@ -494,24 +495,24 @@ func TestSpeciesGuideRoutes_WritesAreAuthGated(t *testing.T) {
 	}
 	c.initSpeciesGuideRoutes()
 
-	writes := []struct{ method, target string }{
-		{http.MethodPost, "/api/v2/species/Turdus/notes"},
-		{http.MethodPut, "/api/v2/species/notes/1"},
-		{http.MethodDelete, "/api/v2/species/notes/1"},
+	// All notes endpoints — reads included — are auth-gated, because notes are
+	// user-authored and may hold sensitive content. The concrete 401 (vs a 404)
+	// also confirms each route is registered and reachable.
+	gated := []struct{ method, target, body string }{
+		{http.MethodGet, "/api/v2/species/Turdus/notes", ""},
+		{http.MethodPost, "/api/v2/species/Turdus/notes", `{"entry":"x"}`},
+		{http.MethodPut, "/api/v2/species/notes/1", `{"entry":"x"}`},
+		{http.MethodDelete, "/api/v2/species/notes/1", ""},
 	}
-	for _, w := range writes {
-		req := httptest.NewRequest(w.method, w.target, strings.NewReader(`{"entry":"x"}`))
+	for _, g := range gated {
+		var body io.Reader = http.NoBody
+		if g.body != "" {
+			body = strings.NewReader(g.body)
+		}
+		req := httptest.NewRequest(g.method, g.target, body)
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
-		assert.Equalf(t, http.StatusUnauthorized, rec.Code, "%s %s must be auth-gated", w.method, w.target)
+		assert.Equalf(t, http.StatusUnauthorized, rec.Code, "%s %s must be auth-gated", g.method, g.target)
 	}
-
-	// The public read endpoint must NOT be auth-gated (no DS wired -> 503, not 401).
-	// Assert the concrete status so the test also fails if the route is missing
-	// (404) or otherwise unreachable, not just when it's auth-gated.
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/Turdus/notes", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusServiceUnavailable, rec.Code, "notes read must be public and reachable")
 }

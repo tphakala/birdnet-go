@@ -5,6 +5,7 @@
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { isAuthenticated } from '$lib/utils/auth';
   import { dashboardSettings } from '$lib/stores/settings';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
@@ -149,9 +150,10 @@
             </div>
           {/if}
 
-          {#if guideEnabled && showNotes}
-            <!-- Key on the species so notes remount (and refetch) when the modal
-                 is reused for a different species without closing. -->
+          {#if guideEnabled && showNotes && $isAuthenticated}
+            <!-- Notes are auth-gated (reads included), so only render the section
+                 for authenticated users. Key on the species so notes remount
+                 (and refetch) when the modal is reused for a different species. -->
             <div class="border-t border-[var(--color-base-300)] pt-4">
               {#key displaySpecies.scientific_name}
                 <SpeciesNotes scientificName={displaySpecies.scientific_name} />
