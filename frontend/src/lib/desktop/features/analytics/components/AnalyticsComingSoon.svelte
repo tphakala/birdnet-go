@@ -12,12 +12,14 @@
 
   let { titleKey, icon: Icon, descriptionKey, featureKeys }: Props = $props();
 
-  // Register the single popstate listener for the lifetime this view is mounted.
-  // Mirrors AnalyticsPageShell so landing/reloading directly on a coming-soon
-  // route still attaches the listener and a browser Back keeps the in-memory
-  // filters in sync with the URL. Coming-soon views need no data, so unlike the
-  // shell we do not fetch species/source option lists.
-  $effect(() => analyticsControls.init());
+  // Apply any filter query carried in the URL we mounted on, then register the
+  // popstate listener. Mirrors AnalyticsPageShell - see its comment for the
+  // full rationale (#1275 part B). Coming-soon views need no data fetches, so
+  // unlike the shell we do not call ensureSpecies/ensureSources.
+  $effect(() => {
+    analyticsControls.syncFromUrl(); // honor filter query carried in the URL we mounted on (#1275)
+    return analyticsControls.init(); // register the ref-counted popstate listener; its cleanup is the teardown
+  });
 </script>
 
 <section class="flex flex-col gap-4" aria-labelledby="analytics-page-title">

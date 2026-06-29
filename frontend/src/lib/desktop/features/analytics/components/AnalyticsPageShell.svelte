@@ -21,8 +21,16 @@
   const speciesApplicable = $derived(groupCharts.some(c => c.supports.species));
   const sourceApplicable = $derived(groupCharts.some(c => c.supports.source));
 
-  // Register the single popstate listener for the lifetime this shell is mounted.
-  $effect(() => analyticsControls.init());
+  // Apply any filter query carried in the URL we mounted on, then register the
+  // popstate listener. syncFromUrl runs first so an in-session deep link (e.g.
+  // /ui/analytics/trends?range=year) is honored on mount (#1275 part B). With
+  // Part A sidebar links carry the active query, so a sidebar navigation lands
+  // on a URL that already encodes the current filters - syncFromUrl reads the
+  // same filters back and persistence is preserved.
+  $effect(() => {
+    analyticsControls.syncFromUrl(); // honor filter query carried in the URL we mounted on (#1275)
+    return analyticsControls.init(); // register the ref-counted popstate listener; its cleanup is the teardown
+  });
 
   // Load the filter option lists the active view needs; re-runs when the range
   // changes (ensureSpecies dedupes by range key, ensureSources fetches once).
