@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytiikka - Yöaktiviteetti",
+    "analyticsWeather": "Analytiikka - Sääkorrelaatio",
+    "analyticsSoundscape": "Analytiikka - Äänimaisema"
   },
   "navigation": {
     "dashboard": "Yleiskatsaus",
@@ -1803,7 +1806,10 @@
         "trends": "Trendit",
         "biodiversity": "Luonnon monimuotoisuus",
         "quality": "Tarkistus ja tarkkuus",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Yöaktiviteetti",
+        "weather": "Sää",
+        "soundscape": "Äänimaisema"
       },
       "aria": {
         "tabs": "Analyysiosiot"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Joidenkin analytiikkatietojen lataus epäonnistui. Yritä myöhemmin uudelleen.",
+    "comingSoon": {
+      "badge": "Tulossa pian",
+      "plannedTitle": "Suunnitellut ominaisuudet",
+      "weather": {
+        "description": "Lintujen aktiivisuus suhteessa paikallisiin sääoloihin. Tämä näkymä yhdistää havainnot lämpötilaan, tuuleen ja sateeseen.",
+        "feature1": "Yhdistä havainnot lämpötilaan, tuuleen ja sateeseen",
+        "feature2": "Katso, miten säärintamat muuttavat lajien aktiivisuutta",
+        "feature3": "Vertaa kausiluonteista aktiivisuutta historialliseen säähän"
+      },
+      "soundscape": {
+        "description": "Katsaus ympäristösi akustiseen luonteeseen, käyttäen akustisia indeksejä äänimaiseman monimuotoisuuden yhteenvetoon ajan myötä.",
+        "feature1": "Akustiset indeksit, jotka tiivistävät äänimaiseman monimutkaisuuden",
+        "feature2": "Seuraa biodiversiteettiä ympäristön äänen avulla ajan myötä",
+        "feature3": "Tunnista aamun ja auringonlaskun kuorot akustisesta tallenteesta"
+      }
+    },
     "stats": {
       "totalDetections": "Havainnot yhteensä",
       "uniqueSpecies": "Ainutlaatuiset lajit",

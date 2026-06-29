@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytics - Nocturnal Activity",
+    "analyticsWeather": "Analytics - Weather Correlation",
+    "analyticsSoundscape": "Analytics - Soundscape"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1803,7 +1806,10 @@
         "trends": "Trends",
         "biodiversity": "Biodiversity",
         "quality": "Review & Accuracy",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Nocturnal Activity",
+        "weather": "Weather",
+        "soundscape": "Soundscape"
       },
       "aria": {
         "tabs": "Analytics sections"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Failed to load some analytics data. Please try again later.",
+    "comingSoon": {
+      "badge": "Coming soon",
+      "plannedTitle": "Planned capabilities",
+      "weather": {
+        "description": "Bird activity tracked against local weather conditions. This view will correlate your detections with temperature, wind, and rainfall.",
+        "feature1": "Correlate detections with temperature, wind, and precipitation",
+        "feature2": "See how weather fronts shift species activity",
+        "feature3": "Compare seasonal activity against historical weather"
+      },
+      "soundscape": {
+        "description": "A look at the overall acoustic character of your environment, using acoustic indices to summarize soundscape diversity over time.",
+        "feature1": "Acoustic indices that summarize soundscape complexity",
+        "feature2": "Track biodiversity through ambient sound over time",
+        "feature3": "Spot dawn and dusk choruses in the acoustic record"
+      }
+    },
     "stats": {
       "totalDetections": "Total Detections",
       "uniqueSpecies": "Unique Species",

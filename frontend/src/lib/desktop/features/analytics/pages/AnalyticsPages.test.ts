@@ -39,6 +39,9 @@ import ActivityPage from './ActivityPage.svelte';
 import TrendsPage from './TrendsPage.svelte';
 import BiodiversityPage from './BiodiversityPage.svelte';
 import ReviewPage from './ReviewPage.svelte';
+import NocturnalPage from './NocturnalPage.svelte';
+import WeatherPage from './WeatherPage.svelte';
+import SoundscapePage from './SoundscapePage.svelte';
 
 describe('analytics route pages render without throwing', () => {
   // Reset the shared analyticsControls mock so vi.fn() call history does not leak
@@ -51,6 +54,9 @@ describe('analytics route pages render without throwing', () => {
     ['trends', TrendsPage, 'analytics.hub.tabs.trends'],
     ['biodiversity', BiodiversityPage, 'analytics.hub.tabs.biodiversity'],
     ['review', ReviewPage, 'analytics.hub.tabs.quality'],
+    ['nocturnal', NocturnalPage, 'analytics.hub.tabs.nocturnal'],
+    ['weather', WeatherPage, 'analytics.hub.tabs.weather'],
+    ['soundscape', SoundscapePage, 'analytics.hub.tabs.soundscape'],
   ])('%s page mounts with the correct title', (_name, Comp, expectedTitleKey) => {
     const { container } = render(Comp as never);
     const titleEl = container.querySelector('#analytics-page-title');

@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analityka - Aktywność nocna",
+    "analyticsWeather": "Analityka - Korelacja pogodowa",
+    "analyticsSoundscape": "Analityka - Krajobraz dźwiękowy"
   },
   "navigation": {
     "dashboard": "Panel",
@@ -1803,7 +1806,10 @@
         "trends": "Trendy",
         "biodiversity": "Bioróżnorodność",
         "quality": "Przegląd i dokładność",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Aktywność nocna",
+        "weather": "Pogoda",
+        "soundscape": "Krajobraz dźwiękowy"
       },
       "aria": {
         "tabs": "Sekcje analizy"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Nie udało się załadować niektórych danych analitycznych. Spróbuj ponownie później.",
+    "comingSoon": {
+      "badge": "Wkrótce",
+      "plannedTitle": "Planowane funkcje",
+      "weather": {
+        "description": "Aktywność ptaków zestawiona z lokalnymi warunkami pogodowymi. Ten widok skoreluje wykrycia z temperaturą, wiatrem i opadami.",
+        "feature1": "Koreluj wykrycia z temperaturą, wiatrem i opadami",
+        "feature2": "Zobacz, jak fronty pogodowe wpływają na aktywność gatunków",
+        "feature3": "Porównuj aktywność sezonową z historycznymi danymi pogodowymi"
+      },
+      "soundscape": {
+        "description": "Spojrzenie na ogólny charakter akustyczny środowiska, z użyciem indeksów akustycznych do podsumowania różnorodności krajobrazu dźwiękowego w czasie.",
+        "feature1": "Indeksy akustyczne podsumowujące złożoność krajobrazu dźwiękowego",
+        "feature2": "Śledzenie bioróżnorodności poprzez dźwięki otoczenia w czasie",
+        "feature3": "Wykrywanie rannych i wieczornych chórów w zapisie akustycznym"
+      }
+    },
     "stats": {
       "totalDetections": "Wszystkie Detekcje",
       "uniqueSpecies": "Unikalne Gatunki",

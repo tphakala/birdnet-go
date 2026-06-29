@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Análise - Atividade noturna",
+    "analyticsWeather": "Análise - Correlação climática",
+    "analyticsSoundscape": "Análise - Paisagem sonora"
   },
   "navigation": {
     "dashboard": "Painel",
@@ -1803,7 +1806,10 @@
         "trends": "Tendências",
         "biodiversity": "Biodiversidade",
         "quality": "Revisão e precisão",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Atividade noturna",
+        "weather": "Clima",
+        "soundscape": "Paisagem sonora"
       },
       "aria": {
         "tabs": "Seções de análise"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Falha ao carregar alguns dados analíticos. Por favor, tente novamente mais tarde.",
+    "comingSoon": {
+      "badge": "Em breve",
+      "plannedTitle": "Funcionalidades previstas",
+      "weather": {
+        "description": "Atividade das aves rastreada em relação às condições meteorológicas locais. Esta vista correlacionará as deteções com temperatura, vento e chuva.",
+        "feature1": "Correlacionar deteções com temperatura, vento e precipitação",
+        "feature2": "Ver como as frentes meteorológicas alteram a atividade das espécies",
+        "feature3": "Comparar a atividade sazonal com dados climáticos históricos"
+      },
+      "soundscape": {
+        "description": "Uma análise do caráter acústico global do ambiente, utilizando índices acústicos para resumir a diversidade da paisagem sonora ao longo do tempo.",
+        "feature1": "Índices acústicos que resumem a complexidade da paisagem sonora",
+        "feature2": "Rastrear a biodiversidade através do som ambiente ao longo do tempo",
+        "feature3": "Identificar coros do amanhecer e do entardecer no registo acústico"
+      }
+    },
     "stats": {
       "totalDetections": "Total de detecções",
       "uniqueSpecies": "Espécies únicas",

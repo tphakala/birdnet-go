@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analītika - Nakts aktivitāte",
+    "analyticsWeather": "Analītika - Laika apstākļu korelācija",
+    "analyticsSoundscape": "Analītika - Skaņu ainava"
   },
   "navigation": {
     "dashboard": "Informācijas panelis",
@@ -1803,7 +1806,10 @@
         "trends": "Tendences",
         "biodiversity": "Bioloģiskā daudzveidība",
         "quality": "Pārskatīšana un precizitāte",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Nakts aktivitāte",
+        "weather": "Laika apstākļi",
+        "soundscape": "Skaņu ainava"
       },
       "aria": {
         "tabs": "Analīzes sadaļas"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Neizdevās ielādēt dažus analītikas datus. Lūdzu, mēģiniet vēlāk.",
+    "comingSoon": {
+      "badge": "Drīzumā",
+      "plannedTitle": "Plānotās iespējas",
+      "weather": {
+        "description": "Putnu aktivitāte saistīta ar vietējiem laika apstākļiem. Šis skats korelēs atklājumus ar temperatūru, vēju un nokrišņiem.",
+        "feature1": "Korelēt atklājumus ar temperatūru, vēju un nokrišņiem",
+        "feature2": "Redzēt, kā laika frontes maina sugu aktivitāti",
+        "feature3": "Salīdzināt sezonālo aktivitāti ar vēsturiskajiem laika apstākļiem"
+      },
+      "soundscape": {
+        "description": "Skatiens uz jūsu vides kopējo akustisko raksturu, izmantojot akustiskos indeksus, lai apkopotu skaņu ainavas daudzveidību laika gaitā.",
+        "feature1": "Akustiskie indeksi, kas apkopo skaņu ainavas sarežģītību",
+        "feature2": "Izsekot bioloģiskajai daudzveidībai, izmantojot apkārtnes skaņu laika gaitā",
+        "feature3": "Atklāt rītausmas un krēslas korus akustiskajā ierakstā"
+      }
+    },
     "stats": {
       "totalDetections": "Kopējās atpazīšanas",
       "uniqueSpecies": "Unikālās sugas",

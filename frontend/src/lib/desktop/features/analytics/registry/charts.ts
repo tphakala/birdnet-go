@@ -884,7 +884,7 @@ export const CHART_REGISTRY: ChartDef[] = [
   },
   {
     id: 'nocturnal-clock',
-    group: 'patterns',
+    group: 'nocturnal',
     titleKey: 'analytics.advanced.charts.nocturnal.title',
     descKey: 'analytics.advanced.charts.nocturnal.description',
     emptyKey: 'analytics.advanced.charts.nocturnal.noData',

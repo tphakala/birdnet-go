@@ -46,6 +46,9 @@
   let ActivityPage = $state<Component | null>(null);
   let TrendsPage = $state<Component | null>(null);
   let BiodiversityPage = $state<Component | null>(null);
+  let NocturnalPage = $state<Component | null>(null);
+  let WeatherPage = $state<Component | null>(null);
+  let SoundscapePage = $state<Component | null>(null);
   let ReviewPage = $state<Component | null>(null);
   let Species = $state<Component | null>(null);
   let Search = $state<Component | null>(null);
@@ -159,6 +162,24 @@
       component: 'analytics-biodiversity',
     },
     {
+      route: 'analytics-nocturnal',
+      page: 'analytics/nocturnal',
+      titleKey: 'pageTitle.analyticsNocturnal',
+      component: 'analytics-nocturnal',
+    },
+    {
+      route: 'analytics-weather',
+      page: 'analytics/weather',
+      titleKey: 'pageTitle.analyticsWeather',
+      component: 'analytics-weather',
+    },
+    {
+      route: 'analytics-soundscape',
+      page: 'analytics/soundscape',
+      titleKey: 'pageTitle.analyticsSoundscape',
+      component: 'analytics-soundscape',
+    },
+    {
       route: 'analytics-review',
       page: 'analytics/review',
       titleKey: 'pageTitle.analyticsReview',
@@ -255,6 +276,27 @@
             const module =
               await import('./lib/desktop/features/analytics/pages/BiodiversityPage.svelte');
             BiodiversityPage = module.default;
+          }
+          break;
+        case 'analytics-nocturnal':
+          if (!NocturnalPage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/NocturnalPage.svelte');
+            NocturnalPage = module.default;
+          }
+          break;
+        case 'analytics-weather':
+          if (!WeatherPage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/WeatherPage.svelte');
+            WeatherPage = module.default;
+          }
+          break;
+        case 'analytics-soundscape':
+          if (!SoundscapePage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/SoundscapePage.svelte');
+            SoundscapePage = module.default;
           }
           break;
         case 'analytics-review':
@@ -412,6 +454,9 @@
     [uiPath('analytics', 'activity')]: findRouteConfig('analytics-activity'),
     [uiPath('analytics', 'trends')]: findRouteConfig('analytics-trends'),
     [uiPath('analytics', 'biodiversity')]: findRouteConfig('analytics-biodiversity'),
+    [uiPath('analytics', 'nocturnal')]: findRouteConfig('analytics-nocturnal'),
+    [uiPath('analytics', 'weather')]: findRouteConfig('analytics-weather'),
+    [uiPath('analytics', 'soundscape')]: findRouteConfig('analytics-soundscape'),
     [uiPath('analytics', 'review')]: findRouteConfig('analytics-review'),
     [uiPath('search')]: findRouteConfig('search'),
     [uiPath('detections')]: findRouteConfig('detections'),
@@ -740,6 +785,12 @@
       {@render renderRoute(TrendsPage)}
     {:else if currentRoute === 'analytics-biodiversity'}
       {@render renderRoute(BiodiversityPage)}
+    {:else if currentRoute === 'analytics-nocturnal'}
+      {@render renderRoute(NocturnalPage)}
+    {:else if currentRoute === 'analytics-weather'}
+      {@render renderRoute(WeatherPage)}
+    {:else if currentRoute === 'analytics-soundscape'}
+      {@render renderRoute(SoundscapePage)}
     {:else if currentRoute === 'analytics-review'}
       {@render renderRoute(ReviewPage)}
     {:else if currentRoute === 'species'}

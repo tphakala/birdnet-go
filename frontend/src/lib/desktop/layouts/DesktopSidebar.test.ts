@@ -177,4 +177,48 @@ describe('DesktopSidebar - analytics submenu', () => {
     await fireEvent.click(getBtn('analytics.hub.tabs.quality'));
     expect(onNavigate).toHaveBeenCalledWith('/analytics/review');
   });
+
+  it('routes the nocturnal, weather, and soundscape items to their correct URLs', async () => {
+    const onNavigate = vi.fn();
+    sidebarTest.render({ currentRoute: '/ui/analytics/nocturnal', onNavigate });
+
+    await waitFor(() => {
+      expect(screen.getByText('analytics.hub.tabs.nocturnal')).toBeTruthy();
+    });
+
+    const getBtn = (text: string): HTMLButtonElement => {
+      const el = screen.getByText(text).closest('button');
+      if (!el) throw new Error(`Button with text "${text}" not found in sidebar`);
+      return el;
+    };
+
+    await fireEvent.click(getBtn('analytics.hub.tabs.nocturnal'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/nocturnal');
+
+    await fireEvent.click(getBtn('analytics.hub.tabs.weather'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/weather');
+
+    await fireEvent.click(getBtn('analytics.hub.tabs.soundscape'));
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/soundscape');
+  });
+
+  it('marks only the weather item active when on the exact /ui/analytics/weather path', async () => {
+    // routeCache keys off the exact actualRoute, so landing on /weather must
+    // light up the weather item and leave its sibling coming-soon items inert.
+    sidebarTest.render({ currentRoute: '/ui/analytics/weather' });
+
+    await waitFor(() => {
+      expect(screen.getByText('analytics.hub.tabs.weather')).toBeTruthy();
+    });
+
+    const btnFor = (text: string): HTMLButtonElement => {
+      const el = screen.getByText(text).closest('button');
+      if (!el) throw new Error(`Button with text "${text}" not found in sidebar`);
+      return el;
+    };
+
+    expect(btnFor('analytics.hub.tabs.weather').className).toContain('menu-subitem-active');
+    expect(btnFor('analytics.hub.tabs.nocturnal').className).not.toContain('menu-subitem-active');
+    expect(btnFor('analytics.hub.tabs.soundscape').className).not.toContain('menu-subitem-active');
+  });
 });

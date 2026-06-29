@@ -211,7 +211,10 @@
     "analyticsActivity": "Analytics - Activity Patterns",
     "analyticsTrends": "Analytics - Trends",
     "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy"
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytika - Nočná aktivita",
+    "analyticsWeather": "Analytika - Korelácia s počasím",
+    "analyticsSoundscape": "Analytika - Zvuková krajina"
   },
   "navigation": {
     "dashboard": "Prehľad",
@@ -1803,7 +1806,10 @@
         "trends": "Trendy",
         "biodiversity": "Biodiverzita",
         "quality": "Kontrola a presnosť",
-        "summary": "Summary"
+        "summary": "Summary",
+        "nocturnal": "Nočná aktivita",
+        "weather": "Počasie",
+        "soundscape": "Zvuková krajina"
       },
       "aria": {
         "tabs": "Sekcie analýzy"
@@ -1826,6 +1832,22 @@
       }
     },
     "loadingError": "Nepodarilo sa načítať niektoré analytické dáta. Skúste to neskôr.",
+    "comingSoon": {
+      "badge": "Čoskoro k dispozícii",
+      "plannedTitle": "Plánované funkcie",
+      "weather": {
+        "description": "Aktivita vtákov sledovaná oproti miestnym poveternostným podmienkam. Toto zobrazenie bude korelovať detekcie s teplotou, vetrom a zrážkami.",
+        "feature1": "Korelovať detekcie s teplotou, vetrom a zrážkami",
+        "feature2": "Zistiť, ako atmosferické fronty ovplyvňujú aktivitu druhov",
+        "feature3": "Porovnať sezónnu aktivitu s historickými meteorologickými údajmi"
+      },
+      "soundscape": {
+        "description": "Pohľad na celkový akustický charakter vášho prostredia pomocou akustických indexov na zhrnutie rozmanitosti zvukovej krajiny v čase.",
+        "feature1": "Akustické indexy zhŕňajúce zložitosť zvukovej krajiny",
+        "feature2": "Sledovanie biodiverzity prostredníctvom okolitého zvuku v priebehu času",
+        "feature3": "Odhalenie úsvitových a súmračných zborov v akustickom zázname"
+      }
+    },
     "stats": {
       "totalDetections": "Celkovo detekcií",
       "uniqueSpecies": "Unikátne druhy",
