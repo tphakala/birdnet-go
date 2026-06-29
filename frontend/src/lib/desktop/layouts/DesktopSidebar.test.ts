@@ -264,7 +264,7 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
   });
 
   it('ENVIRONMENT section renders Weather and Soundscape items without a coming-soon chip', () => {
-    const { container } = sidebarTest.render({ currentRoute: '/ui/dashboard' });
+    sidebarTest.render({ currentRoute: '/ui/dashboard' });
 
     // Both items must be accessible buttons (t() mock returns key verbatim).
     const weatherBtn = screen.getByRole('button', { name: 'analytics.hub.tabs.weather' });
@@ -273,10 +273,10 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(soundscapeBtn).toBeInTheDocument();
 
     // The ENVIRONMENT group must not contain any badge or chip element that
-    // would indicate a coming-soon state.
-    const envGroup = container.querySelector('#nav-section-environment')?.closest('[role="group"]');
-    expect(envGroup).not.toBeNull();
-    expect(envGroup?.querySelector('[class*="badge"], [class*="chip"]')).toBeNull();
+    // would indicate a coming-soon state. Resolve the group by its accessible
+    // name (aria-labelledby -> the section header) rather than a raw selector.
+    const envGroup = screen.getByRole('group', { name: 'navigation.sections.environment' });
+    expect(envGroup.querySelector('[class*="badge"], [class*="chip"]')).toBeNull();
   });
 
   it('deep-link: analytics item URLs carry the active query while Search/Dashboard stay query-less', async () => {

@@ -34,15 +34,20 @@
   const focusRingClasses =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]';
 
-  let computedAriaLabel = $derived(ariaLabel ?? label);
+  // When expanded the visible <span>{label}</span> is the accessible name, so an
+  // identical aria-label would be a redundant (sometimes double-announced) name;
+  // set aria-label only when collapsed (icon-only) or when a caller overrides it.
+  let computedAriaLabel = $derived(isCollapsed ? (ariaLabel ?? label) : ariaLabel);
+  // Collapsed-only tooltip text; keep it equal to the collapsed accessible name.
+  let tooltipText = $derived(ariaLabel ?? label);
 </script>
 
 <button
   type="button"
   onclick={() => onNavigate(url)}
-  onmouseenter={e => isCollapsed && showTooltip(e, label)}
+  onmouseenter={e => isCollapsed && showTooltip(e, tooltipText)}
   onmouseleave={hideTooltip}
-  onfocus={e => isCollapsed && showTooltip(e, label)}
+  onfocus={e => isCollapsed && showTooltip(e, tooltipText)}
   onblur={hideTooltip}
   aria-label={computedAriaLabel}
   aria-current={active ? 'page' : undefined}

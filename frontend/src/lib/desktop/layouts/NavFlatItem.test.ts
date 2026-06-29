@@ -34,10 +34,12 @@ describe('NavFlatItem', () => {
     expect(button.querySelector('svg')).toBeInTheDocument();
   });
 
-  it('aria-label is always present (defaults to label)', () => {
+  it('exposes the label as the accessible name without a redundant aria-label when expanded', () => {
     itemTest.render({ ...defaultProps, isCollapsed: false });
-    const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('aria-label', 'Search');
+    // Visible <span>{label}</span> provides the accessible name; aria-label is
+    // intentionally omitted when expanded to avoid a duplicate announcement.
+    const button = screen.getByRole('button', { name: 'Search' });
+    expect(button).not.toHaveAttribute('aria-label');
   });
 
   it('aria-label is present in collapsed icon-only mode', () => {
