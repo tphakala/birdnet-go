@@ -206,7 +206,12 @@
     "componentError": "Komponentes ielādes kļūda",
     "speciesAnalytics": "Sugu analītika",
     "detectionDetails": "Noteikšanas detaļas",
-    "settingsNotAvailable": "Iestatījumi nav pieejami"
+    "settingsNotAvailable": "Iestatījumi nav pieejami",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Informācijas panelis",
@@ -1798,7 +1803,8 @@
         "patterns": "Aktivitātes modeļi",
         "trends": "Tendences",
         "biodiversity": "Bioloģiskā daudzveidība",
-        "quality": "Pārskatīšana un precizitāte"
+        "quality": "Pārskatīšana un precizitāte",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analīzes sadaļas"

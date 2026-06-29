@@ -206,7 +206,12 @@
     "componentError": "Component Load Error",
     "speciesAnalytics": "Species Analytics",
     "detectionDetails": "Detection Details",
-    "settingsNotAvailable": "Settings Not Available"
+    "settingsNotAvailable": "Settings Not Available",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1798,7 +1803,8 @@
         "patterns": "Activity Patterns",
         "trends": "Trends",
         "biodiversity": "Biodiversity",
-        "quality": "Review & Accuracy"
+        "quality": "Review & Accuracy",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analytics sections"

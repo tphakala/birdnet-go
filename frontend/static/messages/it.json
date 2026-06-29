@@ -206,7 +206,12 @@
     "componentError": "Errore caricamento componente",
     "speciesAnalytics": "Analisi specie",
     "detectionDetails": "Dettagli rilevamento",
-    "settingsNotAvailable": "Impostazioni non disponibili"
+    "settingsNotAvailable": "Impostazioni non disponibili",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1798,7 +1803,8 @@
         "patterns": "Modelli di attività",
         "trends": "Tendenze",
         "biodiversity": "Biodiversità",
-        "quality": "Revisione e accuratezza"
+        "quality": "Revisione e accuratezza",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Sezioni di analisi"

@@ -206,7 +206,12 @@
     "componentError": "Komponentladdningsfel",
     "speciesAnalytics": "Artanalys",
     "detectionDetails": "Detektionsdetaljer",
-    "settingsNotAvailable": "Inställningar ej tillgängliga"
+    "settingsNotAvailable": "Inställningar ej tillgängliga",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Instrumentpanel",
@@ -1798,7 +1803,8 @@
         "patterns": "Aktivitetsmönster",
         "trends": "Trender",
         "biodiversity": "Biologisk mångfald",
-        "quality": "Granskning och noggrannhet"
+        "quality": "Granskning och noggrannhet",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analysavsnitt"

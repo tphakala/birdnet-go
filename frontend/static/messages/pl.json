@@ -206,7 +206,12 @@
     "componentError": "Błąd ładowania komponentu",
     "speciesAnalytics": "Analityka gatunków",
     "detectionDetails": "Szczegóły wykrycia",
-    "settingsNotAvailable": "Ustawienia niedostępne"
+    "settingsNotAvailable": "Ustawienia niedostępne",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Panel",
@@ -1798,7 +1803,8 @@
         "patterns": "Wzorce aktywności",
         "trends": "Trendy",
         "biodiversity": "Bioróżnorodność",
-        "quality": "Przegląd i dokładność"
+        "quality": "Przegląd i dokładność",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Sekcje analizy"

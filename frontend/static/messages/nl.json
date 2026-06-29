@@ -206,7 +206,12 @@
     "componentError": "Component laadfout",
     "speciesAnalytics": "Soortanalyses",
     "detectionDetails": "Detectiedetails",
-    "settingsNotAvailable": "Instellingen niet beschikbaar"
+    "settingsNotAvailable": "Instellingen niet beschikbaar",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Overzicht",
@@ -1798,7 +1803,8 @@
         "patterns": "Activiteitspatronen",
         "trends": "Trends",
         "biodiversity": "Biodiversiteit",
-        "quality": "Controle en nauwkeurigheid"
+        "quality": "Controle en nauwkeurigheid",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analysesecties"

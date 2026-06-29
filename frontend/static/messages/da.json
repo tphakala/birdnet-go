@@ -206,7 +206,12 @@
     "componentError": "Komponentindlæsningsfejl",
     "speciesAnalytics": "Artsanalyse",
     "detectionDetails": "Detektionsdetaljer",
-    "settingsNotAvailable": "Indstillinger ikke tilgængelige"
+    "settingsNotAvailable": "Indstillinger ikke tilgængelige",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Instrumentpanel",
@@ -1798,7 +1803,8 @@
         "patterns": "Aktivitetsmønstre",
         "trends": "Tendenser",
         "biodiversity": "Biodiversitet",
-        "quality": "Gennemgang og nøjagtighed"
+        "quality": "Gennemgang og nøjagtighed",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analyseafsnit"

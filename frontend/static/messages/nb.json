@@ -206,7 +206,12 @@
     "componentError": "Feil ved lasting av komponent",
     "speciesAnalytics": "Artsanalyse",
     "detectionDetails": "Registreringsdetaljer",
-    "settingsNotAvailable": "Innstillinger ikke tilgjengelig"
+    "settingsNotAvailable": "Innstillinger ikke tilgjengelig",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Dashbord",
@@ -1798,7 +1803,8 @@
         "patterns": "Aktivitetsmønstre",
         "trends": "Trender",
         "biodiversity": "Biologisk mangfold",
-        "quality": "Gjennomgang og nøyaktighet"
+        "quality": "Gjennomgang og nøyaktighet",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Analyseseksjoner"

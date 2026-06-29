@@ -206,7 +206,12 @@
     "componentError": "Komponens betöltési hiba",
     "speciesAnalytics": "Faj elemzés",
     "detectionDetails": "Detektálás részletei",
-    "settingsNotAvailable": "Beállítások nem elérhetők"
+    "settingsNotAvailable": "Beállítások nem elérhetők",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity & Rhythm",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy"
   },
   "navigation": {
     "dashboard": "Irányítópult",
@@ -1798,7 +1803,8 @@
         "patterns": "Tevékenységi minták",
         "trends": "Trendek",
         "biodiversity": "Biodiverzitás",
-        "quality": "Ellenőrzés és pontosság"
+        "quality": "Ellenőrzés és pontosság",
+        "summary": "Summary"
       },
       "aria": {
         "tabs": "Elemzési szakaszok"
