@@ -1399,7 +1399,6 @@ export type TranslationKey =
   | 'terminal.detached'
   | 'terminal.detachedDescription'
   | 'terminal.reattach'
-  | 'analytics.hub.tabs.overview'
   | 'analytics.hub.tabs.patterns'
   | 'analytics.hub.tabs.trends'
   | 'analytics.hub.tabs.biodiversity'

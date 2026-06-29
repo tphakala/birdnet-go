@@ -1799,7 +1799,6 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Vue d'ensemble",
         "patterns": "Schémas d'activité",
         "trends": "Tendances",
         "biodiversity": "Biodiversité",
