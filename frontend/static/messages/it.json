@@ -218,6 +218,7 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "liveAudio": "Audio in diretta",
     "settingsMenu": "Menu impostazioni",
     "theme": "Tema",
     "github": "GitHub",
@@ -245,7 +246,13 @@
     "reportBugAriaLabel": "Segnala un bug su GitHub (si apre in una nuova finestra)",
     "askQuestionAriaLabel": "Fai una domanda su GitHub Discussions (si apre in una nuova finestra)",
     "viewOnGithubAriaLabel": "Visualizza BirdNET-Go su GitHub (si apre in una nuova finestra)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Esplora",
+      "patterns": "Modelli",
+      "environment": "Ambiente",
+      "dataQuality": "Qualità dei dati"
+    }
   },
   "about": {
     "title": "BirdNET-Go",

@@ -218,6 +218,7 @@
   },
   "navigation": {
     "dashboard": "Irányítópult",
+    "liveAudio": "Élő hang",
     "settingsMenu": "Beállítások menü",
     "theme": "Téma",
     "github": "GitHub",
@@ -245,7 +246,13 @@
     "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
     "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
     "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)",
-    "health": "Rendszerállapot"
+    "health": "Rendszerállapot",
+    "sections": {
+      "explore": "Felfedezés",
+      "patterns": "Minták",
+      "environment": "Környezet",
+      "dataQuality": "Adatminőség"
+    }
   },
   "about": {
     "title": "BirdNET-Go",

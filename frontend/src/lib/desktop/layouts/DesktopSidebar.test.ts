@@ -6,6 +6,8 @@ import {
   waitFor,
 } from '../../../test/render-helpers';
 import DesktopSidebar from './DesktopSidebar.svelte';
+import { sidebar } from '$lib/stores/sidebar';
+import { analyticsControls } from '$lib/desktop/features/analytics/registry/analyticsControls.svelte';
 
 // Translation mock: return the key so aria-labels are stable and queryable.
 vi.mock('$lib/i18n', () => ({
@@ -90,8 +92,15 @@ describe('DesktopSidebar - post-login redirect wiring (#3306)', () => {
   });
 });
 
-describe('DesktopSidebar - analytics submenu', () => {
+describe('DesktopSidebar - flat task-grouped sections', () => {
   const sidebarTest = createComponentTestFactory(DesktopSidebar);
+
+  // Resolve a button by its (mocked-key) text; throw with a clear message if missing.
+  const getBtn = (text: string): HTMLButtonElement => {
+    const el = screen.getByText(text).closest('button');
+    if (!el) throw new Error(`Button with text "${text}" not found in sidebar`);
+    return el;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -104,121 +113,189 @@ describe('DesktopSidebar - analytics submenu', () => {
       writable: true,
     });
     Object.defineProperty(HTMLElement.prototype, 'focus', { value: vi.fn(), writable: true });
+    // The sidebar collapse state is a persisted singleton store; force expanded so
+    // tests start from a known baseline and the collapsed test opts in explicitly.
+    sidebar.expand();
+    // analyticsControls is a module-level singleton shared across the suite; reset
+    // its filters to defaults so item URLs stay query-less unless a test opts in.
+    analyticsControls.applyParams({ range: 'month', start: '', end: '', species: [], source: '' });
   });
 
-  it('surfaces all six analytics views in the submenu when the analytics route is active', async () => {
-    // Rendering with an analytics sub-route causes the $effect to set analyticsExpanded=true,
-    // which makes CollapsibleNavSection render the item buttons in the DOM.
-    sidebarTest.render({ currentRoute: '/ui/analytics/summary' });
+  afterEach(() => {
+    sidebar.expand();
+    analyticsControls.applyParams({ range: 'month', start: '', end: '', species: [], source: '' });
+  });
 
-    // Wait for the $effect to fire and the submenu items to appear.
-    await waitFor(() => {
-      // Each item renders as a button with text content equal to its i18n key
-      // (the mock returns the key verbatim).
-      expect(screen.getByText('analytics.hub.tabs.summary')).toBeTruthy();
+  it('renders Dashboard, Live Audio, then the four section headers in order, each wired to its group via aria-labelledby', () => {
+    const { container } = sidebarTest.render({ currentRoute: '/ui/dashboard' });
+
+    // Top-level flat items.
+    expect(screen.getByText('navigation.dashboard')).toBeInTheDocument();
+    expect(screen.getByText('navigation.liveAudio')).toBeInTheDocument();
+
+    // Four section headers in the spec'd order.
+    const headerLabels = [
+      'navigation.sections.explore',
+      'navigation.sections.patterns',
+      'navigation.sections.environment',
+      'navigation.sections.dataQuality',
+    ];
+    headerLabels.forEach(label => expect(screen.getByText(label)).toBeInTheDocument());
+
+    // Each section is a role="group" labelled by its header id, in document order.
+    const groups = Array.from(
+      container.querySelectorAll<HTMLElement>('[aria-labelledby^="nav-section-"]')
+    );
+    expect(groups.map(g => g.getAttribute('aria-labelledby'))).toEqual([
+      'nav-section-explore',
+      'nav-section-patterns',
+      'nav-section-environment',
+      'nav-section-dataQuality',
+    ]);
+
+    // Each group's aria-labelledby resolves to a header element carrying that id.
+    groups.forEach(g => {
+      const id = g.getAttribute('aria-labelledby');
+      expect(id).not.toBeNull();
+      expect(container.querySelector(`#${id}`)).toBeInTheDocument();
     });
-
-    expect(screen.getByText('analytics.species.title')).toBeTruthy();
-    expect(screen.getByText('analytics.hub.tabs.patterns')).toBeTruthy();
-    expect(screen.getByText('analytics.hub.tabs.trends')).toBeTruthy();
-    expect(screen.getByText('analytics.hub.tabs.biodiversity')).toBeTruthy();
-    expect(screen.getByText('analytics.hub.tabs.quality')).toBeTruthy();
-
-    // Each item renders as a button (onclick calls the internal navigate handler).
-    const summaryBtn = screen.getByText('analytics.hub.tabs.summary').closest('button');
-    const speciesBtn = screen.getByText('analytics.species.title').closest('button');
-    const activityBtn = screen.getByText('analytics.hub.tabs.patterns').closest('button');
-    const trendsBtn = screen.getByText('analytics.hub.tabs.trends').closest('button');
-    const biodiversityBtn = screen.getByText('analytics.hub.tabs.biodiversity').closest('button');
-    const reviewBtn = screen.getByText('analytics.hub.tabs.quality').closest('button');
-
-    expect(summaryBtn).toBeTruthy();
-    expect(speciesBtn).toBeTruthy();
-    expect(activityBtn).toBeTruthy();
-    expect(trendsBtn).toBeTruthy();
-    expect(biodiversityBtn).toBeTruthy();
-    expect(reviewBtn).toBeTruthy();
   });
 
-  it('each analytics submenu button routes to its correct URL via the onNavigate prop', async () => {
-    // With onNavigate provided, navigationUrls uses the short form without the /ui/ prefix.
+  it('renders every analytics item plus Search and navigates each to its route', async () => {
     const onNavigate = vi.fn();
-    sidebarTest.render({ currentRoute: '/ui/analytics/summary', onNavigate });
+    sidebarTest.render({ currentRoute: '/ui/dashboard', onNavigate });
 
-    // Wait for the submenu to expand (the $effect fires on route match).
+    const expectations: Array<[string, string]> = [
+      ['analytics.hub.tabs.summary', '/analytics/summary'],
+      ['analytics.species.title', '/analytics/species'],
+      ['navigation.search', '/search'],
+      ['analytics.hub.tabs.patterns', '/analytics/activity'],
+      ['analytics.hub.tabs.trends', '/analytics/trends'],
+      ['analytics.hub.tabs.nocturnal', '/analytics/nocturnal'],
+      ['analytics.hub.tabs.biodiversity', '/analytics/biodiversity'],
+      ['analytics.hub.tabs.weather', '/analytics/weather'],
+      ['analytics.hub.tabs.soundscape', '/analytics/soundscape'],
+      ['analytics.hub.tabs.quality', '/analytics/review'],
+    ];
+
+    for (const [text] of expectations) {
+      expect(screen.getByText(text)).toBeInTheDocument();
+    }
+
+    for (const [text, url] of expectations) {
+      onNavigate.mockClear();
+      await fireEvent.click(getBtn(text));
+      expect(onNavigate).toHaveBeenCalledWith(url);
+    }
+  });
+
+  it('exposes aria-current="page" on the active item', () => {
+    sidebarTest.render({ currentRoute: '/ui/analytics/trends' });
+
+    const trendsBtn = getBtn('analytics.hub.tabs.trends');
+    expect(trendsBtn.getAttribute('aria-current')).toBe('page');
+
+    // Siblings are not marked current.
+    expect(getBtn('analytics.hub.tabs.summary').getAttribute('aria-current')).toBeNull();
+  });
+
+  it('collapsed mode: headers are sr-only, items keep an accessible name, and no analytics flyout is used', () => {
+    sidebar.collapse();
+    sidebarTest.render({ currentRoute: '/ui/dashboard' });
+
+    // The section headers are present in the DOM (so aria-labelledby stays valid) but sr-only.
+    // Use getByText to get a non-nullable reference for the class assertion.
+    const exploreHeader = screen.getByText('navigation.sections.explore');
+    expect(exploreHeader).toBeInTheDocument();
+    expect(exploreHeader.className).toContain('sr-only');
+
+    // Collapsed items render icon-only (no visible label text) but still expose an aria-label.
+    const searchBtn = screen.getByRole('button', { name: 'navigation.search' });
+    expect(searchBtn).toBeInTheDocument();
+    const summaryBtn = screen.getByRole('button', { name: 'analytics.hub.tabs.summary' });
+    expect(summaryBtn).toBeInTheDocument();
+
+    // No analytics flyout/collapsible: the analytics submenu trigger aria-label must be absent.
+    expect(screen.queryByLabelText('navigation.analyticsSubmenu')).toBeNull();
+  });
+
+  it('shows the coming-soon chip for Weather and Soundscape (expanded) but not Nocturnal', () => {
+    sidebarTest.render({ currentRoute: '/ui/dashboard' });
+
+    const badge = 'analytics.comingSoon.badge';
+    const weatherBtn = getBtn('analytics.hub.tabs.weather');
+    const soundscapeBtn = getBtn('analytics.hub.tabs.soundscape');
+    const nocturnalBtn = getBtn('analytics.hub.tabs.nocturnal');
+
+    expect(weatherBtn.textContent).toContain(badge);
+    expect(soundscapeBtn.textContent).toContain(badge);
+    expect(nocturnalBtn.textContent).not.toContain(badge);
+  });
+
+  it('does not render About as a top-level item; it lives under Help and activates the Help section on /ui/about', async () => {
+    sidebarTest.render({ currentRoute: '/ui/about' });
+
+    // About is now a Help subitem. With the Help section auto-expanded on /ui/about,
+    // the About entry is rendered and marked current.
     await waitFor(() => {
-      expect(screen.getByText('analytics.hub.tabs.summary')).toBeTruthy();
+      expect(screen.getByText('navigation.about')).toBeInTheDocument();
     });
 
-    // Resolve each item's button; throw rather than use a non-null assertion so
-    // the error message is clear if a button is missing.
-    const getBtn = (text: string): HTMLButtonElement => {
-      const el = screen.getByText(text).closest('button');
-      if (!el) throw new Error(`Button with text "${text}" not found in sidebar`);
-      return el;
-    };
+    const aboutBtn = getBtn('navigation.about');
+    expect(aboutBtn.getAttribute('aria-current')).toBe('page');
 
-    // Click each item and assert the spy receives the correct route segment.
-    await fireEvent.click(getBtn('analytics.hub.tabs.summary'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/summary');
+    // Negative: it is NOT a flat nav-section item (not at the top level).
+    expect(aboutBtn.closest('[aria-labelledby^="nav-section-"]')).toBeNull();
 
-    await fireEvent.click(getBtn('analytics.species.title'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/species');
+    // Positive: it IS inside the Help collapsible section container.
+    const helpContainer = screen.getByText('navigation.help').closest('.flyout-container');
+    expect(helpContainer).not.toBeNull();
+    expect(helpContainer?.contains(aboutBtn)).toBe(true);
+  });
 
-    await fireEvent.click(getBtn('analytics.hub.tabs.patterns'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/activity');
+  it('renders analytics items within their sections in spec order', () => {
+    const { container } = sidebarTest.render({ currentRoute: '/ui/dashboard' });
 
+    // EXPLORE: Summary, Species, Search
+    const exploreGroup = container.querySelector('#nav-section-explore')?.closest('[role="group"]');
+    const exploreButtons = Array.from(exploreGroup?.querySelectorAll('button') ?? []);
+    const exploreLabels = exploreButtons.map(b => b.textContent.trim()).filter(Boolean);
+    expect(exploreLabels[0]).toContain('analytics.hub.tabs.summary');
+    expect(exploreLabels[1]).toContain('analytics.species.title');
+    expect(exploreLabels[2]).toContain('navigation.search');
+
+    // PATTERNS: Activity, Trends, Nocturnal, Biodiversity
+    const patternsGroup = container
+      .querySelector('#nav-section-patterns')
+      ?.closest('[role="group"]');
+    const patternsButtons = Array.from(patternsGroup?.querySelectorAll('button') ?? []);
+    const patternsLabels = patternsButtons.map(b => b.textContent.trim()).filter(Boolean);
+    expect(patternsLabels[0]).toContain('analytics.hub.tabs.patterns');
+    expect(patternsLabels[1]).toContain('analytics.hub.tabs.trends');
+    expect(patternsLabels[2]).toContain('analytics.hub.tabs.nocturnal');
+    expect(patternsLabels[3]).toContain('analytics.hub.tabs.biodiversity');
+  });
+
+  it('deep-link: analytics item URLs carry the active query while Search/Dashboard stay query-less', async () => {
+    const onNavigate = vi.fn();
+    // Set a non-default filter so queryString is non-empty.
+    analyticsControls.applyParams({ range: 'year' });
+    expect(analyticsControls.queryString).toBe('range=year');
+
+    sidebarTest.render({ currentRoute: '/ui/dashboard', onNavigate });
+
+    // Analytics item carries the query.
     await fireEvent.click(getBtn('analytics.hub.tabs.trends'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/trends');
+    expect(onNavigate).toHaveBeenCalledWith('/analytics/trends?range=year');
 
-    await fireEvent.click(getBtn('analytics.hub.tabs.biodiversity'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/biodiversity');
+    // Search does not.
+    onNavigate.mockClear();
+    await fireEvent.click(getBtn('navigation.search'));
+    expect(onNavigate).toHaveBeenCalledWith('/search');
 
-    await fireEvent.click(getBtn('analytics.hub.tabs.quality'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/review');
-  });
-
-  it('routes the nocturnal, weather, and soundscape items to their correct URLs', async () => {
-    const onNavigate = vi.fn();
-    sidebarTest.render({ currentRoute: '/ui/analytics/nocturnal', onNavigate });
-
-    await waitFor(() => {
-      expect(screen.getByText('analytics.hub.tabs.nocturnal')).toBeTruthy();
-    });
-
-    const getBtn = (text: string): HTMLButtonElement => {
-      const el = screen.getByText(text).closest('button');
-      if (!el) throw new Error(`Button with text "${text}" not found in sidebar`);
-      return el;
-    };
-
-    await fireEvent.click(getBtn('analytics.hub.tabs.nocturnal'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/nocturnal');
-
-    await fireEvent.click(getBtn('analytics.hub.tabs.weather'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/weather');
-
-    await fireEvent.click(getBtn('analytics.hub.tabs.soundscape'));
-    expect(onNavigate).toHaveBeenCalledWith('/analytics/soundscape');
-  });
-
-  it('marks only the weather item active when on the exact /ui/analytics/weather path', async () => {
-    // routeCache keys off the exact actualRoute, so landing on /weather must
-    // light up the weather item and leave its sibling coming-soon items inert.
-    sidebarTest.render({ currentRoute: '/ui/analytics/weather' });
-
-    await waitFor(() => {
-      expect(screen.getByText('analytics.hub.tabs.weather')).toBeTruthy();
-    });
-
-    const btnFor = (text: string): HTMLButtonElement => {
-      const el = screen.getByText(text).closest('button');
-      if (!el) throw new Error(`Button with text "${text}" not found in sidebar`);
-      return el;
-    };
-
-    expect(btnFor('analytics.hub.tabs.weather').className).toContain('menu-subitem-active');
-    expect(btnFor('analytics.hub.tabs.nocturnal').className).not.toContain('menu-subitem-active');
-    expect(btnFor('analytics.hub.tabs.soundscape').className).not.toContain('menu-subitem-active');
+    // Dashboard does not.
+    onNavigate.mockClear();
+    await fireEvent.click(getBtn('navigation.dashboard'));
+    expect(onNavigate).toHaveBeenCalledWith('/');
   });
 });

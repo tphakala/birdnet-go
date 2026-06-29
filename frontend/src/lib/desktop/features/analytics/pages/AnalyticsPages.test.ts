@@ -21,6 +21,7 @@ vi.mock('../registry/analyticsControls.svelte', () => ({
     applyParams: vi.fn(),
     ensureSpecies: vi.fn(),
     ensureSources: vi.fn(),
+    syncFromUrl: vi.fn(),
     init: vi.fn(() => () => {}),
   },
 }));

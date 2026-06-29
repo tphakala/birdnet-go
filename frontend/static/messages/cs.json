@@ -218,6 +218,7 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "liveAudio": "Živý zvuk",
     "settingsMenu": "Nabídka nastavení",
     "theme": "Motiv",
     "github": "GitHub",
@@ -245,7 +246,13 @@
     "reportBugAriaLabel": "Nahlásit chybu na GitHubu (otevře se v novém okně)",
     "askQuestionAriaLabel": "Položit dotaz na GitHub Discussions (otevře se v novém okně)",
     "viewOnGithubAriaLabel": "Zobrazit BirdNET-Go na GitHubu (otevře se v novém okně)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Prozkoumat",
+      "patterns": "Vzorce",
+      "environment": "Prostředí",
+      "dataQuality": "Kvalita dat"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
