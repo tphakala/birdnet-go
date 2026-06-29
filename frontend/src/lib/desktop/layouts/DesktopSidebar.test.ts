@@ -89,3 +89,55 @@ describe('DesktopSidebar - post-login redirect wiring (#3306)', () => {
     });
   });
 });
+
+describe('DesktopSidebar - analytics submenu', () => {
+  const sidebarTest = createComponentTestFactory(DesktopSidebar);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(window, 'getComputedStyle', {
+      value: vi.fn(() => ({
+        getPropertyValue: vi.fn(() => ''),
+        visibility: 'visible',
+        display: 'block',
+      })),
+      writable: true,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'focus', { value: vi.fn(), writable: true });
+  });
+
+  it('surfaces all six analytics views in the submenu when the analytics route is active', async () => {
+    // Rendering with an analytics sub-route causes the $effect to set analyticsExpanded=true,
+    // which makes CollapsibleNavSection render the item buttons in the DOM.
+    sidebarTest.render({ currentRoute: '/ui/analytics/summary' });
+
+    // Wait for the $effect to fire and the submenu items to appear.
+    await waitFor(() => {
+      // Each item renders as a button with text content equal to its i18n key
+      // (the mock returns the key verbatim).
+      expect(screen.getByText('analytics.hub.tabs.summary')).toBeTruthy();
+    });
+
+    expect(screen.getByText('analytics.species.title')).toBeTruthy();
+    expect(screen.getByText('analytics.hub.tabs.patterns')).toBeTruthy();
+    expect(screen.getByText('analytics.hub.tabs.trends')).toBeTruthy();
+    expect(screen.getByText('analytics.hub.tabs.biodiversity')).toBeTruthy();
+    expect(screen.getByText('analytics.hub.tabs.quality')).toBeTruthy();
+
+    // Verify the hrefs point to the correct UI routes (no onNavigate handler,
+    // so the sidebar uses the /ui/ prefix paths).
+    const summaryBtn = screen.getByText('analytics.hub.tabs.summary').closest('button');
+    const speciesBtn = screen.getByText('analytics.species.title').closest('button');
+    const activityBtn = screen.getByText('analytics.hub.tabs.patterns').closest('button');
+    const trendsBtn = screen.getByText('analytics.hub.tabs.trends').closest('button');
+    const biodiversityBtn = screen.getByText('analytics.hub.tabs.biodiversity').closest('button');
+    const reviewBtn = screen.getByText('analytics.hub.tabs.quality').closest('button');
+
+    expect(summaryBtn).toBeTruthy();
+    expect(speciesBtn).toBeTruthy();
+    expect(activityBtn).toBeTruthy();
+    expect(trendsBtn).toBeTruthy();
+    expect(biodiversityBtn).toBeTruthy();
+    expect(reviewBtn).toBeTruthy();
+  });
+});
