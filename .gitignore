@@ -59,7 +59,6 @@ REFACTOR_CHANGELOG.md
 # Track the shared Serena project config; ignore caches, logs, memories, and local overrides
 .serena/*
 !.serena/project.yml
-.gstack/
 
 # Python bytecode caches (db-doctor and other tools/ scripts)
 __pycache__/
