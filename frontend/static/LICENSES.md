@@ -299,7 +299,7 @@ Source: Apache-2.0
 
 ### github.com/prometheus/procfs
 
-License: https://github.com/prometheus/procfs/blob/v0.20.1/LICENSE
+License: https://github.com/prometheus/procfs/blob/v0.21.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/ringsaturn/tzf
@@ -574,6 +574,6 @@ Source: MIT
 
 ### gorm.io/gorm
 
-License: https://github.com/go-gorm/gorm/blob/v1.31.1/LICENSE
+License: https://github.com/go-gorm/gorm/blob/v1.31.2/LICENSE
 Source: MIT
 
