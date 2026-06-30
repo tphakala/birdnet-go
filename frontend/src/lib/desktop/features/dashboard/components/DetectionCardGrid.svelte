@@ -37,8 +37,13 @@
     setExcluded,
     hydrateExcludedSpecies,
   } from '$lib/stores/excludedSpecies.svelte';
+  import { appState } from '$lib/stores/appState.svelte';
 
   const logger = loggers.ui;
+
+  // When audio clip export is disabled, no clips/spectrograms exist, so the
+  // detection cards render in their compact (media-free) form.
+  let audioEnabled = $derived(appState.audioExportEnabled);
 
   interface Props {
     data: Detection[];
@@ -271,6 +276,7 @@
           {#each data.slice(0, selectedLimit) as detection (detection.id)}
             <DetectionCard
               {detection}
+              {audioEnabled}
               isNew={newDetectionIds.has(detection.id)}
               isExcluded={isSpeciesExcluded(detection.commonName)}
               {onFreezeStart}

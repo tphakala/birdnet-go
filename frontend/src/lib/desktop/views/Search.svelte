@@ -37,6 +37,7 @@
     PER_VISITOR_SPECIES_LOCALE_ENABLED,
   } from '$lib/stores/speciesDictionary.svelte';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { appState } from '$lib/stores/appState.svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -86,6 +87,8 @@
   type SortBy = 'date_desc' | 'date_asc' | 'species_asc' | 'confidence_desc';
 
   let clipExtractionEnabled = $derived($isAuthenticated);
+  // Hide audio players/triggers when audio clip export is disabled.
+  let audioEnabled = $derived(appState.audioExportEnabled);
   let canReview = $derived($hasReviewPermission);
 
   const logger = loggers.ui;
@@ -1141,23 +1144,25 @@
                             </div>
                           </div>
 
-                          <!-- Audio Player -->
-                          <div class="bg-[var(--color-base-200)] rounded-box p-4">
-                            <h3 class="text-lg font-semibold mb-2">
-                              {t('search.detailsPanel.audioPlayer')}
-                            </h3>
-                            <AudioPlayer
-                              audioUrl={buildAppUrl(`/api/v2/audio/${result.id}`)}
-                              detectionId={result.id}
-                              width={400}
-                              height={200}
-                              showDownload={true}
-                              showSpectrogram={true}
-                              enableClipExtraction={clipExtractionEnabled}
-                              clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
-                              modelType={result.modelType}
-                            />
-                          </div>
+                          <!-- Audio Player (hidden when audio clip export is disabled) -->
+                          {#if audioEnabled}
+                            <div class="bg-[var(--color-base-200)] rounded-box p-4">
+                              <h3 class="text-lg font-semibold mb-2">
+                                {t('search.detailsPanel.audioPlayer')}
+                              </h3>
+                              <AudioPlayer
+                                audioUrl={buildAppUrl(`/api/v2/audio/${result.id}`)}
+                                detectionId={result.id}
+                                width={400}
+                                height={200}
+                                showDownload={true}
+                                showSpectrogram={true}
+                                enableClipExtraction={clipExtractionEnabled}
+                                clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
+                                modelType={result.modelType}
+                              />
+                            </div>
+                          {/if}
                         </div>
                       </div>
                     </td>
@@ -1303,17 +1308,19 @@
                         {/if}
                       </div>
                     {/if}
-                    <button
-                      class="btn btn-primary btn-sm"
-                      onclick={() => openMobilePlayer(result)}
-                      disabled={!result.hasAudio}
-                      aria-label={t('search.detailsPanel.playAudio', {
-                        species: displayName || t('search.detailsPanel.unknownSpecies'),
-                      })}
-                    >
-                      <Volume2 class="size-4" />
-                      {t('common.actions.play')}
-                    </button>
+                    {#if audioEnabled}
+                      <button
+                        class="btn btn-primary btn-sm"
+                        onclick={() => openMobilePlayer(result)}
+                        disabled={!result.hasAudio}
+                        aria-label={t('search.detailsPanel.playAudio', {
+                          species: displayName || t('search.detailsPanel.unknownSpecies'),
+                        })}
+                      >
+                        <Volume2 class="size-4" />
+                        {t('common.actions.play')}
+                      </button>
+                    {/if}
                     <button
                       class="btn btn-outline btn-sm"
                       onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
@@ -1329,7 +1336,7 @@
             </section>
           {/each}
 
-          {#if showMobilePlayer}
+          {#if audioEnabled && showMobilePlayer}
             <div class="md:hidden">
               <MobileAudioPlayer
                 audioUrl={selectedAudioUrl}
