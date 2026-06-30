@@ -336,6 +336,7 @@ jobs:
             echo "## CI Test Verdict: no-data" >> "$GITHUB_STEP_SUMMARY"
             echo "No gotestsum event files were produced." >> "$GITHUB_STEP_SUMMARY"
             echo '[]' > ci-failures.json
+            echo '[]' > ci-flaky.json
             exit 0
           fi
 
@@ -369,14 +370,24 @@ jobs:
             ci-flaky.json
           if-no-files-found: warn
 
-      - name: Fail if regressions present
+      - name: Fail if regressions present or an upstream job failed
         run: |
-          # The individual test jobs already fail on a real regression; this gate
-          # makes the consolidated verdict authoritative too. A run that only had
-          # flaky-on-rerun failures stays green here.
+          # Make the consolidated verdict authoritative. Two ways it must go red:
+          # 1. A required test job did not succeed. A job that fails at setup
+          #    (before gotestsum runs) uploads no events, so the report would
+          #    otherwise see zero failures and falsely pass. The individual job is
+          #    already red, but this keeps the consolidated gate honest too.
+          # 2. A real regression survived reruns. Flaky-on-rerun failures stay green.
+          UNIT='${{ needs.unit-tests.result }}'
+          TC='${{ needs.testcontainer-tests.result }}'
+          INTEG='${{ needs.integration-tests.result }}'
+          if [ "$UNIT" != "success" ] || [ "$TC" != "success" ] || [ "$INTEG" != "success" ]; then
+            echo "::error::An upstream test job did not succeed (unit-tests=$UNIT, testcontainer-tests=$TC, integration-tests=$INTEG)"
+            exit 1
+          fi
           REG=$(jq 'length' ci-failures.json 2>/dev/null || echo 0)
           if [ "${REG:-0}" -gt 0 ]; then
             echo "::error::${REG} regression(s) failed after reruns - see the test-report summary and ci-failures.json artifact"
             exit 1
           fi
-          echo "No regressions."
+          echo "No regressions and all upstream test jobs succeeded."

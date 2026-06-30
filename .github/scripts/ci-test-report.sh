@@ -62,7 +62,9 @@ fi
 # Per (package, test): count fail/pass events and capture output. A regression
 # never passed (passes==0); a flaky test failed then passed (passes>0, fails>0).
 JQ_PROG='
-  [ inputs | try fromjson catch empty | select(.Test != null) ]
+  [ inputs | try fromjson catch empty
+    | select(.Action=="fail" or .Action=="pass" or .Action=="output")
+    | {Package, Test: (.Test // "(package)"), Action, Output} ]
   | group_by([.Package, .Test])
   | map({
       pkg:    .[0].Package,
@@ -74,8 +76,17 @@ JQ_PROG='
 '
 
 # -R reads each line as raw text so the per-line `try fromjson` above can skip a
-# corrupt line; without -R a single bad line aborts the whole parse.
-ALL=$(jq -R -n "$JQ_PROG" "${EXISTING[@]}" 2>/dev/null || echo "[]")
+# corrupt line; without -R a single bad line aborts the whole parse. Do NOT mask a
+# hard jq failure (e.g. OOM on a huge log) with a `|| echo "[]"` fallback: that
+# would report zero failures and turn a broken run green. Fail loudly instead.
+jq_err=$(mktemp)
+if ! ALL=$(jq -R -n "$JQ_PROG" "${EXISTING[@]}" 2>"$jq_err"); then
+  echo "ci-test-report: jq failed to parse test events (refusing to report a false pass):" >&2
+  cat "$jq_err" >&2
+  rm -f "$jq_err"
+  exit 3
+fi
+rm -f "$jq_err"
 
 # here-strings instead of `echo "$ALL" |`: avoids a subshell and any echo
 # backslash/leading-dash interpretation of the JSON payload.
