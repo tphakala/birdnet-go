@@ -169,7 +169,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: nightly
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Get Build Version
         id: get_build_version
@@ -233,7 +233,7 @@ jobs:
       contents: write
 
   get-version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
@@ -268,7 +268,7 @@ jobs:
   cleanup:
     name: Cleanup old nightly releases
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Run cleanup even if some builds failed, but not if cancelled
     if: ${{ !cancelled() }}
     steps:

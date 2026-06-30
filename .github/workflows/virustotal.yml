@@ -11,7 +11,7 @@ permissions:
 jobs:
   scan:
     name: Scan Release Assets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Get latest release ID
         if: github.event_name == 'workflow_dispatch'

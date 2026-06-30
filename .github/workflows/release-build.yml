@@ -182,7 +182,7 @@ jobs:
   checksums:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -222,7 +222,7 @@ jobs:
 
   get-version:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
