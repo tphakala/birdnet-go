@@ -28,7 +28,7 @@ permissions:
 jobs:
   lint:
     name: Lint & Type Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -62,7 +62,7 @@ jobs:
 
   test:
     name: Unit Tests & Security
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -97,7 +97,7 @@ jobs:
 
   build:
     name: Build & Analyze
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -137,7 +137,7 @@ jobs:
     name: Frontend Quality Gate
     needs: [lint, test, build]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check results
         run: |
