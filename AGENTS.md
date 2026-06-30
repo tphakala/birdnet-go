@@ -55,6 +55,30 @@ PRs missing the preflight certification will require multiple review
 rounds. The gate catches the same issues reviewers find; running it
 locally saves a day of back-and-forth.
 
+## Interpreting CI Failures
+
+The `golangci-test` workflow runs Go tests through `gotestsum` with one
+automatic rerun of any failed test, then publishes a consolidated result in the
+`test-report` job. Before assuming a red run means your code is broken:
+
+1. Read the `test-report` job summary. It states one verdict:
+   - `REGRESSION` - real failures that persisted after a rerun. Fix these.
+   - `PASS (with flakes)` - tests that failed once then passed on rerun. These
+     are flaky/infra (a reaped container, a registry blip), NOT a code
+     regression. Do not "fix" them; re-run or report instead.
+   - `PASS` - all green.
+2. For machine-readable detail, download the `ci-failures` artifact:
+   - `ci-failures.json` - array of real regressions (`{pkg, test, output}`).
+   - `ci-flaky.json` - tests that passed on rerun (informational).
+   Prefer reading these small files over scrolling the raw multi-thousand-line
+   logs.
+3. If a testcontainer job failed, the job summary includes a "Testcontainer
+   diagnostics" block (docker state, memory, OOM kills) to distinguish an
+   infra flake from a logic bug.
+
+Do not spend time debugging a failure classified as flaky/infra. If a test is
+persistently flaky, raise it rather than patching around it.
+
 ## Project Context
 
 - Tech stack: Go 1.24+, Svelte 5, TypeScript, Tailwind v4.1
