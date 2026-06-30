@@ -1021,12 +1021,10 @@ export const CHART_REGISTRY: ChartDef[] = [
     // (the species count) drives the not-enough-data gate; a one-bar Gantt is not a comparison.
     mapProps: (data, _params, ctx) => ({
       data: {
-        rows: (data as PhenologyDatum[]).map(
-          (d): PhenologyRow => ({
-            ...d,
-            commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-          })
-        ),
+        rows: (data as PhenologyDatum[]).map((d): PhenologyRow => ({
+          ...d,
+          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+        })),
       } as PhenologyData,
     }),
     size: 'full',

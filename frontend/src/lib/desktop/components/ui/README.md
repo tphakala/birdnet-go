@@ -216,15 +216,7 @@ Comprehensive input component supporting multiple input types.
 ```typescript
 interface Props {
   type?:
-    | 'text'
-    | 'email'
-    | 'password'
-    | 'number'
-    | 'date'
-    | 'datetime-local'
-    | 'time'
-    | 'url'
-    | 'tel';
+    'text' | 'email' | 'password' | 'number' | 'date' | 'datetime-local' | 'time' | 'url' | 'tel';
   value?: string | number;
   id?: string;
   name?: string;

@@ -73,13 +73,7 @@
 
   // Stream health status type
   export type StreamStatus =
-    | 'connected'
-    | 'connecting'
-    | 'disabled'
-    | 'error'
-    | 'idle'
-    | 'suppressed'
-    | 'unknown';
+    'connected' | 'connecting' | 'disabled' | 'error' | 'idle' | 'suppressed' | 'unknown';
 
   interface Props {
     stream: StreamConfig;
