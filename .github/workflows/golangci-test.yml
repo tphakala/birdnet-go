@@ -191,6 +191,7 @@ jobs:
             --jsonfile events-tc-mysql.json \
             --junitfile junit-tc-mysql.xml \
             --rerun-fails=1 \
+            --rerun-fails-abort-on-data-race \
             --rerun-fails-max-failures=10 \
             --rerun-fails-report=rerun-tc-mysql.txt \
             --packages "./internal/datastore/v2 ./internal/datastore/v2/repository/... ./internal/datastore/v2only" \
@@ -208,6 +209,7 @@ jobs:
             --jsonfile events-tc-other.json \
             --junitfile junit-tc-other.xml \
             --rerun-fails=1 \
+            --rerun-fails-abort-on-data-race \
             --rerun-fails-max-failures=10 \
             --rerun-fails-report=rerun-tc-other.txt \
             --packages "./internal/mqtt/... ./internal/spectrogram/... ./internal/testutil/containers/..." \
@@ -270,6 +272,7 @@ jobs:
             --jsonfile events-integration.json \
             --junitfile junit-integration.xml \
             --rerun-fails=1 \
+            --rerun-fails-abort-on-data-race \
             --rerun-fails-max-failures=10 \
             --rerun-fails-report=rerun-integration.txt \
             --packages "./internal/datastore/v2/migration/..." \
@@ -285,6 +288,7 @@ jobs:
             --jsonfile events-integration-full.json \
             --junitfile junit-integration-full.xml \
             --rerun-fails=1 \
+            --rerun-fails-abort-on-data-race \
             --rerun-fails-max-failures=10 \
             --packages "./internal/datastore/v2/migration/..." \
             -- -tags=integration -race -timeout 600s

@@ -62,7 +62,7 @@ fi
 # Per (package, test): count fail/pass events and capture output. A regression
 # never passed (passes==0); a flaky test failed then passed (passes>0, fails>0).
 JQ_PROG='
-  [ inputs | select(.Test != null) ]
+  [ inputs | try fromjson catch empty | select(.Test != null) ]
   | group_by([.Package, .Test])
   | map({
       pkg:    .[0].Package,
@@ -73,10 +73,14 @@ JQ_PROG='
     })
 '
 
-ALL=$(jq -n "$JQ_PROG" "${EXISTING[@]}" 2>/dev/null || echo "[]")
+# -R reads each line as raw text so the per-line `try fromjson` above can skip a
+# corrupt line; without -R a single bad line aborts the whole parse.
+ALL=$(jq -R -n "$JQ_PROG" "${EXISTING[@]}" 2>/dev/null || echo "[]")
 
-echo "$ALL" | jq '[ .[] | select(.fails > 0 and .passes == 0) | {pkg, test, output} ]' > "$FAILURES_JSON"
-echo "$ALL" | jq '[ .[] | select(.fails > 0 and .passes > 0) | {pkg, test} ]' > "$FLAKY_JSON"
+# here-strings instead of `echo "$ALL" |`: avoids a subshell and any echo
+# backslash/leading-dash interpretation of the JSON payload.
+jq '[ .[] | select(.fails > 0 and .passes == 0) | {pkg, test, output} ]' <<< "$ALL" > "$FAILURES_JSON"
+jq '[ .[] | select(.fails > 0 and .passes > 0) | {pkg, test} ]' <<< "$ALL" > "$FLAKY_JSON"
 
 REG_COUNT=$(jq 'length' "$FAILURES_JSON")
 FLAKY_COUNT=$(jq 'length' "$FLAKY_JSON")
