@@ -18,15 +18,7 @@ Props:
   interface Props {
     size?: 'sm' | 'md' | 'lg';
     variant?:
-      | 'sunset'
-      | 'ocean'
-      | 'forest'
-      | 'aurora'
-      | 'amber'
-      | 'violet'
-      | 'rose'
-      | 'scheme'
-      | 'solid';
+      'sunset' | 'ocean' | 'forest' | 'aurora' | 'amber' | 'violet' | 'rose' | 'scheme' | 'solid';
     className?: string;
   }
 

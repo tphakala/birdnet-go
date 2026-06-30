@@ -656,15 +656,9 @@ export default defineConfig({
 // ❌ Before: Duplicate mocks in every test file
 import { vi } from 'vitest';
 
-vi.mock('$lib/utils/api', () => ({
-  /* duplicate */
-}));
-vi.mock('$lib/stores/toast', () => ({
-  /* duplicate */
-}));
-vi.mock('$lib/i18n', () => ({
-  /* duplicate */
-}));
+vi.mock('$lib/utils/api', () => ({/* duplicate */}));
+vi.mock('$lib/stores/toast', () => ({/* duplicate */}));
+vi.mock('$lib/i18n', () => ({/* duplicate */}));
 
 describe('Component Tests', () => {
   // tests...
@@ -896,13 +890,7 @@ Create dedicated types for test scenarios:
 export type DeepPartial<T> = T extends object ? { [P in keyof T]?: DeepPartial<T[P]> } : T;
 
 export type MalformedData =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | unknown[]
-  | Record<string, unknown>;
+  string | number | boolean | null | undefined | unknown[] | Record<string, unknown>;
 
 export type TestSettings = DeepPartial<SettingsFormData> & {
   [key: string]: MalformedData;

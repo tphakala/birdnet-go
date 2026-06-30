@@ -27,14 +27,7 @@
 
   type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown' | 'skipped';
   type HealthCategory =
-    | 'system'
-    | 'audio'
-    | 'analysis'
-    | 'streams'
-    | 'database'
-    | 'network'
-    | 'config'
-    | 'logs';
+    'system' | 'audio' | 'analysis' | 'streams' | 'database' | 'network' | 'config' | 'logs';
 
   interface SparklineBucket {
     t: string;
