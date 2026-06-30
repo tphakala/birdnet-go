@@ -4759,16 +4759,16 @@
       "streamAlbum": "Transmissão ao vivo",
       "playbackError": "Erro de reprodução: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Reprodução audível de morcegos",
+        "subtitle": "Desacelera chamadas ultrassónicas para a faixa audível humana.",
+        "timeExpansion": "Expansão de tempo",
+        "volumeGain": "Ganho de volume",
+        "normalize": "Normalizar",
+        "remember": "Memorizar definição",
+        "enable": "Ativar modo de morcegos audíveis",
+        "disable": "Desativar modo de morcegos audíveis",
+        "generating": "A gerar áudio derivado…",
+        "error": "Falha ao gerar áudio audível de morcegos"
       }
     },
     "spectrogram": {

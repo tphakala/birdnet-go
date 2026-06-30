@@ -4759,16 +4759,16 @@
       "streamAlbum": "Diffusion en direct",
       "playbackError": "Erreur de lecture : {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Lecture audible des chauves-souris",
+        "subtitle": "Ralentit les cris ultrasoniques dans la plage audible humaine.",
+        "timeExpansion": "Expansion temporelle",
+        "volumeGain": "Gain de volume",
+        "normalize": "Normaliser",
+        "remember": "Mémoriser le réglage",
+        "enable": "Activer le mode chauves-souris audibles",
+        "disable": "Désactiver le mode chauves-souris audibles",
+        "generating": "Génération de l’audio dérivé…",
+        "error": "Impossible de générer l’audio audible des chauves-souris"
       }
     },
     "spectrogram": {

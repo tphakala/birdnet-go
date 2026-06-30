@@ -4759,16 +4759,16 @@
       "streamAlbum": "Tiešraide",
       "playbackError": "Atskaņošanas kļūda: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Dzirdama sikspārņu atskaņošana",
+        "subtitle": "Palēnina ultraskaņas saucienus līdz cilvēka dzirdes diapazonam.",
+        "timeExpansion": "Laika izplešana",
+        "volumeGain": "Skaļuma pastiprinājums",
+        "normalize": "Normalizēt",
+        "remember": "Atcerēties iestatījumu",
+        "enable": "Ieslēgt dzirdamo sikspārņu režīmu",
+        "disable": "Izslēgt dzirdamo sikspārņu režīmu",
+        "generating": "Tiek ģenerēts atvasinātais audio…",
+        "error": "Neizdevās ģenerēt dzirdamu sikspārņu audio"
       }
     },
     "spectrogram": {

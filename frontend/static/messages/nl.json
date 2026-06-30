@@ -4759,16 +4759,16 @@
       "streamAlbum": "Livestream",
       "playbackError": "Afspeelfout: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Hoorbare vleermuisweergave",
+        "subtitle": "Vertraag ultrasone roepen naar het menselijke gehoorbereik.",
+        "timeExpansion": "Tijdsexpansie",
+        "volumeGain": "Volumeversterking",
+        "normalize": "Normaliseren",
+        "remember": "Instelling onthouden",
+        "enable": "Hoorbare-vleermuizenmodus inschakelen",
+        "disable": "Hoorbare-vleermuizenmodus uitschakelen",
+        "generating": "Afgeleide audio genereren…",
+        "error": "Kan hoorbare vleermuisaudio niet genereren"
       }
     },
     "spectrogram": {

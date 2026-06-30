@@ -4759,16 +4759,16 @@
       "streamAlbum": "Livestream",
       "playbackError": "Uppspelningsfel: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Hörbar fladdermusuppspelning",
+        "subtitle": "Sakta ned ultraljudsläten till människans hörselområde.",
+        "timeExpansion": "Tidsutvidgning",
+        "volumeGain": "Volymförstärkning",
+        "normalize": "Normalisera",
+        "remember": "Kom ihåg inställning",
+        "enable": "Aktivera läge för hörbara fladdermöss",
+        "disable": "Inaktivera läge för hörbara fladdermöss",
+        "generating": "Genererar härlett ljud…",
+        "error": "Det gick inte att generera hörbart fladdermusljud"
       }
     },
     "spectrogram": {

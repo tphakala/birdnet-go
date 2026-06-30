@@ -4759,16 +4759,16 @@
       "streamAlbum": "Transmisja na żywo",
       "playbackError": "Błąd odtwarzania: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Słyszalne odtwarzanie nietoperzy",
+        "subtitle": "Spowalnia ultradźwiękowe odgłosy do zakresu słyszalnego dla człowieka.",
+        "timeExpansion": "Rozciągnięcie czasu",
+        "volumeGain": "Wzmocnienie głośności",
+        "normalize": "Normalizuj",
+        "remember": "Zapamiętaj ustawienie",
+        "enable": "Włącz tryb słyszalnych nietoperzy",
+        "disable": "Wyłącz tryb słyszalnych nietoperzy",
+        "generating": "Generowanie pochodnego dźwięku…",
+        "error": "Nie udało się wygenerować słyszalnego dźwięku nietoperzy"
       }
     },
     "spectrogram": {

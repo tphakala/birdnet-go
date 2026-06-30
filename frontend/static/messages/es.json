@@ -4759,16 +4759,16 @@
       "streamAlbum": "Transmisión en vivo",
       "playbackError": "Error de reproducción: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Reproducción audible de murciélagos",
+        "subtitle": "Ralentiza las llamadas ultrasónicas hasta el rango audible humano.",
+        "timeExpansion": "Expansión de tiempo",
+        "volumeGain": "Ganancia de volumen",
+        "normalize": "Normalizar",
+        "remember": "Recordar ajuste",
+        "enable": "Activar modo de murciélagos audibles",
+        "disable": "Desactivar modo de murciélagos audibles",
+        "generating": "Generando audio derivado…",
+        "error": "No se pudo generar el audio de murciélagos audibles"
       }
     },
     "spectrogram": {

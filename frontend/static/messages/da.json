@@ -4759,16 +4759,16 @@
       "streamAlbum": "Live stream",
       "playbackError": "Afspilningsfejl: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Hørbar flagermusafspilning",
+        "subtitle": "Sænk ultralydskald til det menneskelige høreområde.",
+        "timeExpansion": "Tidsudvidelse",
+        "volumeGain": "Volumenforstærkning",
+        "normalize": "Normaliser",
+        "remember": "Husk indstilling",
+        "enable": "Aktivér hørbar flagermustilstand",
+        "disable": "Deaktivér hørbar flagermustilstand",
+        "generating": "Genererer afledt lyd…",
+        "error": "Kunne ikke generere hørbar flagermuslyd"
       }
     },
     "spectrogram": {

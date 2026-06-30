@@ -4759,16 +4759,16 @@
       "streamAlbum": "Živé vysielanie",
       "playbackError": "Chyba prehrávania: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Počuteľné prehrávanie netopierov",
+        "subtitle": "Spomalí ultrazvukové volania do rozsahu počuteľného pre človeka.",
+        "timeExpansion": "Časové roztiahnutie",
+        "volumeGain": "Zosilnenie hlasitosti",
+        "normalize": "Normalizovať",
+        "remember": "Zapamätať nastavenie",
+        "enable": "Zapnúť režim počuteľných netopierov",
+        "disable": "Vypnúť režim počuteľných netopierov",
+        "generating": "Generuje sa odvodený zvuk…",
+        "error": "Nepodarilo sa vygenerovať počuteľný zvuk netopierov"
       }
     },
     "spectrogram": {

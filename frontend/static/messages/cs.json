@@ -4759,16 +4759,16 @@
       "streamAlbum": "Živý přenos",
       "playbackError": "Chyba přehrávání: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Slyšitelné přehrávání netopýrů",
+        "subtitle": "Zpomalí ultrazvuková volání do rozsahu slyšitelného člověkem.",
+        "timeExpansion": "Časové roztažení",
+        "volumeGain": "Zesílení hlasitosti",
+        "normalize": "Normalizovat",
+        "remember": "Zapamatovat nastavení",
+        "enable": "Zapnout režim slyšitelných netopýrů",
+        "disable": "Vypnout režim slyšitelných netopýrů",
+        "generating": "Generuje se odvozený zvuk…",
+        "error": "Nepodařilo se vygenerovat zvuk slyšitelných netopýrů"
       }
     },
     "spectrogram": {

@@ -4759,16 +4759,16 @@
       "streamAlbum": "Livestream",
       "playbackError": "Wiedergabefehler: {details}",
       "audibleBats": {
-        "title": "Audible bat playback",
-        "subtitle": "Slow ultrasonic calls into human hearing range.",
-        "timeExpansion": "Time expansion",
-        "volumeGain": "Volume gain",
-        "normalize": "Normalize",
-        "remember": "Remember setting",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
-        "generating": "Generating derived audio…",
-        "error": "Failed to generate audible bats audio"
+        "title": "Hörbare Fledermaus-Wiedergabe",
+        "subtitle": "Verlangsamt Ultraschallrufe in den menschlichen Hörbereich.",
+        "timeExpansion": "Zeitdehnung",
+        "volumeGain": "Lautstärkeverstärkung",
+        "normalize": "Normalisieren",
+        "remember": "Einstellung merken",
+        "enable": "Modus für hörbare Fledermäuse aktivieren",
+        "disable": "Modus für hörbare Fledermäuse deaktivieren",
+        "generating": "Abgeleitetes Audio wird erzeugt…",
+        "error": "Audio für hörbare Fledermäuse konnte nicht erzeugt werden"
       }
     },
     "spectrogram": {
