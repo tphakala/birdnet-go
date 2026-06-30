@@ -28,7 +28,7 @@ name, ok = openfauna.Lookup("Barbastella barbastellus", "de")
 codes := openfauna.Locales()
 
 // Provenance of the embedded data (also logged when an index is built):
-v := openfauna.DataVersion() // e.g. "openfauna@6a663ef 2026-06-07"
+v := openfauna.DataVersion() // e.g. "openfauna@eed01f8 2026-06-28"
 ```
 
 `BuildIndex` streams the embedded gzip once and keeps only the rows you ask for. Translations are CSV; metadata is newline-delimited JSON (`metadata.jsonl`), one species object per line with nested `taxonomy` and a `links` map keyed by source id. Unknown JSON fields (e.g. an upstream `media` array) are ignored, so additions upstream do not break this package or a shipped binary.
@@ -44,7 +44,7 @@ embeds its other large data assets:
 | `data/metadata.jsonl.gz` | one JSON object per species: `scientific_name`, nested `taxonomy` (`class,order,family,family_common`), and `links` map (source id -> `{id, url?}`; `url` is an optional override) |
 | `data/sources.json` | external-link source registry: source id -> `{name, order, icon, url}` template (`{id}`/`{lang}` placeholders) |
 | `data/manifest.json` | `schema_version` (gated on major 2), `species_count`, `alias_count` |
-| `data/aliases.json` | legacy scientific name -> canonical (vendored; not yet embedded) |
+| `data/aliases.json` | legacy scientific name -> canonical (embedded; applied by `CanonicalName`, e.g. legacy v2.4 labels -> current eBird/Clements names) |
 | `data/locales.txt` | sorted distinct locale codes, one per line |
 | `data/SOURCE.txt` | provenance: the openfauna commit + date the snapshot was generated from |
 
