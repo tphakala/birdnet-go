@@ -357,6 +357,19 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		return nil
 	}
 
+	// Hot-reload race guard: a detection created while export was disabled carries
+	// an empty ClipName. If export was enabled between createDetection and this
+	// action running, there is no valid output path to write to
+	// (filepath.Join(Export.Path, "") collapses to the export directory itself),
+	// so skip the export rather than encode a clip onto the directory path.
+	if a.ClipName == "" {
+		GetLogger().Debug("Skipping audio export: empty clip name",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("operation", "audio_export_empty_clipname"))
+		return nil
+	}
+
 	// Deferred-read path: Extended Capture may schedule an export whose tail
 	// still has not been written to the ring buffer. buildSaveAudioAction
 	// populates bufferMgr/sourceID/beginTime/duration/readyAt and leaves

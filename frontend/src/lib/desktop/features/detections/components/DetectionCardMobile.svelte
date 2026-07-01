@@ -25,8 +25,6 @@
   // passes them in as callbacks plus the server-hydrated isExcluded state.
   interface Props {
     detection: Detection;
-    /** When false (audio export disabled), the card hides the spectrogram and play button */
-    audioEnabled?: boolean;
     isExcluded?: boolean;
     onDetailsClick?: (_id: number) => void;
     onReview?: () => void;
@@ -39,7 +37,6 @@
 
   let {
     detection,
-    audioEnabled = true,
     isExcluded = false,
     onDetailsClick,
     onReview,
@@ -61,7 +58,7 @@
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
 
   $effect(() => {
-    if (audioEnabled && isVisible) {
+    if (detection.clipName && isVisible) {
       loader.start(detection.id);
     } else {
       loader.stop();
@@ -114,9 +111,9 @@
 >
   <!-- Inner container with overflow-hidden for spectrogram clipping -->
   <!-- Compact (shorter) layout when there is no spectrogram to display -->
-  <div class="detection-card-inner" class:compact={!audioEnabled}>
-    <!-- Spectrogram Background (hidden when audio export is disabled) -->
-    {#if audioEnabled}
+  <div class="detection-card-inner" class:compact={!detection.clipName}>
+    <!-- Spectrogram Background (hidden when this detection has no clip) -->
+    {#if detection.clipName}
       <div class="spectrogram-container">
         {#if loader.showSpinner}
           <div class="spectrogram-loading">
@@ -175,8 +172,8 @@
       <SourceBadge {detection} variant="overlay" />
     </div>
 
-    <!-- Center Play Button (hidden when audio export is disabled) -->
-    {#if audioEnabled}
+    <!-- Center Play Button (hidden when this detection has no clip) -->
+    {#if detection.clipName}
       <PlayOverlay
         detectionId={detection.id}
         gainValue={audioGainValue}
@@ -208,7 +205,7 @@
       {onToggleSpecies}
       {onToggleLock}
       {onDelete}
-      onDownload={audioEnabled ? () => downloadDetectionAudio(detection) : undefined}
+      onDownload={detection.clipName ? () => downloadDetectionAudio(detection) : undefined}
       onMenuOpen={handleMenuOpen}
       onMenuClose={handleMenuClose}
     />

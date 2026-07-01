@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -219,6 +220,9 @@ func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 func (m *mockStore) IsNoteLocked(noteID string) (bool, error)            { return false, nil }
 func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)          { return nil, nil }
 func (m *mockStore) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
+func (m *mockStore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
+	return nil, nil
+}
 func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	return 0, nil
 }

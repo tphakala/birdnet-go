@@ -1097,17 +1097,12 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) createDetection(settings *conf.Settings, item classifier.Results, result datastore.Results, scientificName, commonName, speciesCode, rawScientificName string) Detections {
-	// Create file name for audio clip
-	clipName := p.generateClipName(settings, scientificName, result.Confidence)
-
-	// Bat models at high sample rates need WAV when the configured format
-	// (MP3/Opus/AAC) cannot carry rates above 48kHz. Override the extension
-	// now so the database stores the same filename the export will write.
-	mInfo := classifier.DetectionModelInfoForID(item.ModelID)
-	sourceRate := p.resolveAudioSource(item.Source).SampleRate
-	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
-		clipName = replaceExtension(clipName, ".wav")
-	}
+	// Create file name for audio clip. When audio export is disabled the clip
+	// name is left empty so it stays a truthful per-detection signal: no file
+	// is or will be written, so nothing must reference one. The media API and
+	// the UI gate on a non-empty ClipName, and no SaveAudioAction is scheduled
+	// when export is off, so there is no async-export race to preserve here.
+	clipName := p.resolveClipName(settings, &item, scientificName, result.Confidence)
 
 	// Get capture length and pre-capture length for detection end time calculation
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
@@ -1363,6 +1358,29 @@ func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonNa
 		return float32(settings.Bat.Threshold)
 	}
 	return float32(settings.BirdNET.Threshold)
+}
+
+// resolveClipName returns the clip filename to persist for a detection, or an
+// empty string when audio export is disabled. Keeping ClipName empty while
+// export is off makes it a truthful per-detection signal (no clip exists or is
+// being encoded), which the media endpoint and the frontend rely on to gate
+// audio playback per detection under runtime toggling of the export setting.
+func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Results, scientificName string, confidence float32) string {
+	if !settings.Realtime.Audio.Export.Enabled {
+		return ""
+	}
+
+	clipName := p.generateClipName(settings, scientificName, confidence)
+
+	// Bat models at high sample rates need WAV when the configured format
+	// (MP3/Opus/AAC) cannot carry rates above 48kHz. Override the extension
+	// now so the database stores the same filename the export will write.
+	mInfo := classifier.DetectionModelInfoForID(item.ModelID)
+	sourceRate := p.resolveAudioSource(item.Source).SampleRate
+	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
+		clipName = replaceExtension(clipName, ".wav")
+	}
+	return clipName
 }
 
 // generateClipName generates a clip name for the given scientific name and confidence.

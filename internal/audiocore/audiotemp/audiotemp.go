@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -49,6 +51,36 @@ var seq atomic.Uint64
 // happens to share the recordings directory.
 func UniquePath(outputPath string) string {
 	return fmt.Sprintf("%s.%d.%d%s", outputPath, os.Getpid(), seq.Add(1), Ext)
+}
+
+// IsTempFor reports whether name is an in-progress temp file for the clip whose
+// base filename is base. It is the single source of truth for the temp-file
+// grammar UniquePath writes, so callers that serve or reconcile clips (the media
+// handler and the reconcile crawler) recognize an actively-writing clip as
+// present rather than missing. It matches both the legacy fixed form
+// "<base>.temp" and the process-unique form "<base>.<pid>.<seq>.temp" (pid and
+// seq are integers).
+func IsTempFor(name, base string) bool {
+	if name == base+Ext {
+		return true
+	}
+	middle, ok := strings.CutPrefix(name, base+".")
+	if !ok {
+		return false
+	}
+	middle, ok = strings.CutSuffix(middle, Ext)
+	if !ok {
+		return false
+	}
+	pidStr, seqStr, ok := strings.Cut(middle, ".")
+	if !ok {
+		return false
+	}
+	if _, err := strconv.Atoi(pidStr); err != nil {
+		return false
+	}
+	_, err := strconv.Atoi(seqStr)
+	return err == nil
 }
 
 // Finalize atomically renames the unique temp file onto the final clip path. On

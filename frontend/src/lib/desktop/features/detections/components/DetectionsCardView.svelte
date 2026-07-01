@@ -14,7 +14,6 @@
   import type { Detection } from '$lib/types/detection.types';
   import { isExcluded as isSpeciesExcluded, setExcluded } from '$lib/stores/excludedSpecies.svelte';
   import { useDetectionActions } from '../composables/useDetectionActions.svelte';
-  import { appState } from '$lib/stores/appState.svelte';
 
   interface Props {
     detections: Detection[];
@@ -23,8 +22,8 @@
 
   let { detections, onRefresh }: Props = $props();
 
-  // Hide spectrogram/audio on the cards when audio clip export is disabled.
-  let audioEnabled = $derived(appState.audioExportEnabled);
+  // Each DetectionCard gates its own spectrogram/audio on detection.clipName, so
+  // no card-level audio flag is threaded through here.
 
   // Exclusion state is the shared, server-hydrated excludedSpecies store
   // (hydrated by the parent DetectionsList).
@@ -39,7 +38,6 @@
   {#each detections as detection (detection.id)}
     <DetectionCard
       {detection}
-      {audioEnabled}
       isExcluded={isSpeciesExcluded(detection.commonName)}
       onMarkCorrect={() => actions.handleMarkCorrect(detection)}
       onMarkFalsePositive={() => actions.handleMarkFalsePositive(detection)}

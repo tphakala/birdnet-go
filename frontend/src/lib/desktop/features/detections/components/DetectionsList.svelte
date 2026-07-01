@@ -69,10 +69,6 @@
   import DetectionsCardView from './DetectionsCardView.svelte';
   import { appState } from '$lib/stores/appState.svelte';
 
-  // When audio clip export is disabled there are no clips/spectrograms, so the
-  // Recording column (and the mobile/card spectrogram) is hidden.
-  let audioEnabled = $derived(appState.audioExportEnabled);
-
   type SortField = 'dateTime' | 'species' | 'confidence' | 'status';
   type SortDirection = 'asc' | 'desc';
 
@@ -99,6 +95,14 @@
     onSortChange,
     className = '',
   }: Props = $props();
+
+  // Show the Recording column when audio export is enabled (so it stays visible
+  // even for a page that happens to have no clips yet) OR when any visible row
+  // actually has a clip (so historical clips remain reachable after export is
+  // turned off). The per-row spectrogram is still gated on detection.clipName.
+  let showRecordingColumn = $derived(
+    appState.audioExportEnabled || (data?.notes ?? []).some(d => Boolean(d.clipName))
+  );
 
   // Generate title based on query type
   const title = $derived.by(() => {
@@ -623,7 +627,7 @@
                   direction={sortDirection}
                   onSort={handleSort}
                 />
-                {#if audioEnabled}
+                {#if showRecordingColumn}
                   <th scope="col" class="hidden md:table-cell"
                     >{t('detections.headers.recording')}</th
                   >
@@ -644,7 +648,7 @@
                 >
                   <DetectionRow
                     {detection}
-                    {audioEnabled}
+                    {showRecordingColumn}
                     {onDetailsClick}
                     isExcluded={isSpeciesExcluded(detection.commonName)}
                     selectionActive={selection.selectionActive}
@@ -671,7 +675,6 @@
         {#each data.notes as detection (detection.id)}
           <DetectionCardMobile
             {detection}
-            {audioEnabled}
             {onDetailsClick}
             isExcluded={isSpeciesExcluded(detection.commonName)}
             onReview={() => detectionActions.handleReview(detection)}

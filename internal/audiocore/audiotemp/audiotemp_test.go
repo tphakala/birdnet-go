@@ -148,3 +148,33 @@ func TestFinalizeWith_PropagatesRenameError(t *testing.T) {
 		assert.Equal(t, 1, calls, "non-Windows must not retry a failed rename")
 	}
 }
+
+func TestIsTempFor(t *testing.T) {
+	t.Parallel()
+
+	const base = "clip.wav"
+	tests := []struct {
+		name string
+		file string
+		want bool
+	}{
+		{"legacy fixed temp", "clip.wav" + audiotemp.Ext, true},
+		{"process-unique temp", "clip.wav.1234.5" + audiotemp.Ext, true},
+		{"final file is not a temp", "clip.wav", false},
+		{"temp for a different clip", "other.wav" + audiotemp.Ext, false},
+		{"non-integer pid", "clip.wav.abc.5" + audiotemp.Ext, false},
+		{"missing seq segment", "clip.wav.1234" + audiotemp.Ext, false},
+		{"unrelated suffix", "clip.wav.1234.5.bak", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, audiotemp.IsTempFor(tt.file, base))
+		})
+	}
+
+	// The real UniquePath output must be recognized for its own base.
+	unique := audiotemp.UniquePath("clip.wav")
+	assert.True(t, audiotemp.IsTempFor(filepath.Base(unique), "clip.wav"),
+		"UniquePath output must match IsTempFor for the same base")
+}
