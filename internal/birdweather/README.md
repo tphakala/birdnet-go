@@ -60,6 +60,12 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error)
 ```
 
+BirdWeather FLAC uploads use a short-lived, disk-backed temporary file before
+the upload buffer is created. FLAC muxers need seekable output to finalize
+`STREAMINFO` metadata such as the total sample count; without that metadata
+BirdWeather can store the soundscape duration as `0.0`. The temporary file is
+removed after the finalized FLAC bytes are read into the upload buffer.
+
 ### Loudness Normalization
 
 When FFmpeg is available, the package applies loudness normalization to FLAC audio files to ensure consistent playback quality:
@@ -190,7 +196,7 @@ Client connections are properly managed to prevent resource leaks:
 - HTTP client timeouts to prevent hanging connections
 - Proper cleanup of resources in the `Close()` method
 - Idle connection cleanup
-- **In-Memory Processing**: Audio export via FFmpeg now occurs entirely in memory to reduce disk I/O, especially beneficial for systems using SD cards. However, be mindful that very large audio inputs could lead to increased memory consumption during this process.
+- **Seekable FLAC Uploads**: BirdWeather FLAC uploads use a short-lived temporary file so FFmpeg and the native FLAC encoder can finalize seek metadata before upload. The finalized bytes are then read into memory for the existing HTTP upload path.
 - Temporary files and directories are properly cleaned up
 
 ## Debug Capabilities

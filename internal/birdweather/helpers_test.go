@@ -17,18 +17,36 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
+const (
+	flacMagic                  = "fLaC"
+	flacMagicLen               = 4
+	flacMetadataBlockHeaderLen = 4
+	flacStreamInfoPayloadLen   = 34
+	flacStreamInfoMinLen       = flacMagicLen + flacMetadataBlockHeaderLen + flacStreamInfoPayloadLen
+	flacMetadataBlockTypeMask  = 0x7f
+	flacStreamInfoBlockType    = 0
+	flacMetadataLengthOffset   = 5
+	flacStreamInfoFieldsStart  = 18
+	flacStreamInfoFieldsEnd    = 26
+	flacSampleRateShift        = 44
+	flacSampleRateMask         = 0xfffff
+	flacTotalSamplesBitCount   = 36
+)
+
 func flacStreamInfo(t *testing.T, data []byte) (sampleRate, totalSamples uint64) {
 	t.Helper()
-	require.GreaterOrEqual(t, len(data), 42, "FLAC data too short for STREAMINFO")
-	require.Equal(t, "fLaC", string(data[:4]), "FLAC signature not found")
-	require.Equal(t, byte(0), data[4]&0x7f, "first FLAC metadata block must be STREAMINFO")
+	require.GreaterOrEqual(t, len(data), flacStreamInfoMinLen, "FLAC data too short for STREAMINFO")
+	require.Equal(t, flacMagic, string(data[:flacMagicLen]), "FLAC signature not found")
+	require.Equal(t, byte(flacStreamInfoBlockType), data[flacMagicLen]&flacMetadataBlockTypeMask, "first FLAC metadata block must be STREAMINFO")
 
-	payloadLen := int(data[5])<<16 | int(data[6])<<8 | int(data[7])
-	require.Equal(t, 34, payloadLen, "unexpected STREAMINFO length")
+	payloadLen := int(data[flacMetadataLengthOffset])<<16 |
+		int(data[flacMetadataLengthOffset+1])<<8 |
+		int(data[flacMetadataLengthOffset+2])
+	require.Equal(t, flacStreamInfoPayloadLen, payloadLen, "unexpected STREAMINFO length")
 
-	fields := binary.BigEndian.Uint64(data[18:26])
-	sampleRate = (fields >> 44) & 0xfffff
-	totalSamples = fields & ((1 << 36) - 1)
+	fields := binary.BigEndian.Uint64(data[flacStreamInfoFieldsStart:flacStreamInfoFieldsEnd])
+	sampleRate = (fields >> flacSampleRateShift) & flacSampleRateMask
+	totalSamples = fields & ((1 << flacTotalSamplesBitCount) - 1)
 	return sampleRate, totalSamples
 }
 

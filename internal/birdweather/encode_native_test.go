@@ -48,7 +48,8 @@ func TestEncodeWithNativeFLAC(t *testing.T) {
 	client := &BwClient{Settings: &conf.Settings{}}
 
 	// A quiet (-30 dBFS) 1 s sine; normalization should boost it toward -23 LUFS.
-	pcm := sinePCM(conf.SampleRate, -30)
+	sampleCount := conf.SampleRate
+	pcm := sinePCM(sampleCount, -30)
 
 	res, err := client.encodeWithNativeFLAC(pcm, testTimestamp)
 	require.NoError(t, err)
@@ -61,7 +62,7 @@ func TestEncodeWithNativeFLAC(t *testing.T) {
 	assert.Equal(t, "fLaC", string(flacBytes[:4]), "FLAC signature not found")
 	sampleRate, totalSamples := flacStreamInfo(t, flacBytes)
 	assert.Equal(t, uint64(conf.SampleRate), sampleRate, "FLAC STREAMINFO sample rate mismatch")
-	assert.Equal(t, uint64(conf.SampleRate), totalSamples, "FLAC STREAMINFO total samples should be finalized")
+	assert.Equal(t, uint64(sampleCount), totalSamples, "FLAC STREAMINFO total samples should be finalized")
 
 	// Re-measure the decoded output: it should sit near the target loudness.
 	out := decodeToInt16(t, flacBytes)

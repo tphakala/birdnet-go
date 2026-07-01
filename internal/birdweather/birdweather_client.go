@@ -596,6 +596,8 @@ func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ff
 	return buffer, nil
 }
 
+// exportFlacFileToBuffer encodes through a seekable temporary FLAC file, then
+// reads the finalized bytes back into memory for the existing upload path.
 func (b *BwClient) exportFlacFileToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string, gainDB float64) (*bytes.Buffer, error) {
 	return encodeUploadAudioToBuffer("flac", func(outputPath string) error {
 		return ffmpeg.ExportAudio(ctx, &ffmpeg.ExportOptions{
