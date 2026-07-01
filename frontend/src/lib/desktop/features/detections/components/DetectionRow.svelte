@@ -49,6 +49,8 @@
   // passes them in as callbacks plus the server-hydrated isExcluded state.
   interface Props {
     detection: Detection;
+    /** When false (audio export disabled), the Recording cell is omitted */
+    audioEnabled?: boolean;
     isExcluded?: boolean;
     onDetailsClick?: (_id: number) => void;
     selectionActive?: boolean;
@@ -64,6 +66,7 @@
 
   let {
     detection,
+    audioEnabled = true,
     isExcluded = false,
     onDetailsClick,
     selectionActive = false,
@@ -277,14 +280,16 @@
   <VerificationBadges {detection} />
 </td>
 
-<!-- Recording/Spectrogram -->
-<td class="hidden md:table-cell">
-  <SpectrogramPlayer
-    audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-    detectionId={detection.id.toString()}
-    spectrogramSize="md"
-  />
-</td>
+<!-- Recording/Spectrogram (omitted when audio export is disabled) -->
+{#if audioEnabled}
+  <td class="hidden md:table-cell">
+    <SpectrogramPlayer
+      audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
+      detectionId={detection.id.toString()}
+      spectrogramSize="md"
+    />
+  </td>
+{/if}
 
 <!-- Action Menu -->
 <td onclick={e => e.stopPropagation()}>

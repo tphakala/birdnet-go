@@ -67,6 +67,11 @@
   import DetectionCardMobile from './DetectionCardMobile.svelte';
   import DetectionRow from './DetectionRow.svelte';
   import DetectionsCardView from './DetectionsCardView.svelte';
+  import { appState } from '$lib/stores/appState.svelte';
+
+  // When audio clip export is disabled there are no clips/spectrograms, so the
+  // Recording column (and the mobile/card spectrogram) is hidden.
+  let audioEnabled = $derived(appState.audioExportEnabled);
 
   type SortField = 'dateTime' | 'species' | 'confidence' | 'status';
   type SortDirection = 'asc' | 'desc';
@@ -618,8 +623,11 @@
                   direction={sortDirection}
                   onSort={handleSort}
                 />
-                <th scope="col" class="hidden md:table-cell">{t('detections.headers.recording')}</th
-                >
+                {#if audioEnabled}
+                  <th scope="col" class="hidden md:table-cell"
+                    >{t('detections.headers.recording')}</th
+                  >
+                {/if}
                 <th scope="col">{t('detections.headers.actions')}</th>
               </tr>
             </thead>
@@ -636,6 +644,7 @@
                 >
                   <DetectionRow
                     {detection}
+                    {audioEnabled}
                     {onDetailsClick}
                     isExcluded={isSpeciesExcluded(detection.commonName)}
                     selectionActive={selection.selectionActive}
@@ -662,6 +671,7 @@
         {#each data.notes as detection (detection.id)}
           <DetectionCardMobile
             {detection}
+            {audioEnabled}
             {onDetailsClick}
             isExcluded={isSpeciesExcluded(detection.commonName)}
             onReview={() => detectionActions.handleReview(detection)}

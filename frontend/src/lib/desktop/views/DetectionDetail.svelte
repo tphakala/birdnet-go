@@ -29,6 +29,7 @@
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
+  import { appState } from '$lib/stores/appState.svelte';
   import {
     Download,
     Camera,
@@ -105,6 +106,8 @@
   // Use the existing auth store pattern (same as DesktopSidebar)
   let canReview = $derived($hasReviewPermission);
   let clipExtractionEnabled = $derived($isAuthenticated);
+  // Hide the spectrogram/audio Media section when audio clip export is disabled.
+  let audioEnabled = $derived(appState.audioExportEnabled);
   let detection = $state<Detection | null>(null);
   let speciesInfo = $state<SpeciesInfo | null>(null);
   let taxonomyInfo = $state<TaxonomyInfo | null>(null);
@@ -848,42 +851,44 @@
     <!-- Hero Section -->
     {@render heroSection(detection)}
 
-    <!-- Media Section -->
-    <section class="surface-card" aria-labelledby="media-heading">
-      <div class="p-5 md:p-6">
-        <h2 id="media-heading" class="section-heading !mb-0">
-          {t('detections.media.title')}
-        </h2>
-        {#if clipExtractionEnabled}
-          <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
-            {t('detections.media.clipHint')}
-          </p>
-        {:else}
-          <div class="mb-3"></div>
-        {/if}
-        <div
-          role="region"
-          aria-label={t('detections.detail.aria.audioRecordingFor', {
-            name: localizeSpeciesName(detection.scientificName, detection.commonName),
-          })}
-        >
-          <div class="detail-audio-container">
-            <AudioPlayer
-              audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-              detectionId={detection.id.toString()}
-              showSpectrogram={true}
-              spectrogramSize="lg"
-              spectrogramRaw={false}
-              responsive={true}
-              className="w-full"
-              enableClipExtraction={clipExtractionEnabled}
-              clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
-              modelType={detection.modelType}
-            />
+    <!-- Media Section (hidden when audio clip export is disabled) -->
+    {#if audioEnabled}
+      <section class="surface-card" aria-labelledby="media-heading">
+        <div class="p-5 md:p-6">
+          <h2 id="media-heading" class="section-heading !mb-0">
+            {t('detections.media.title')}
+          </h2>
+          {#if clipExtractionEnabled}
+            <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
+              {t('detections.media.clipHint')}
+            </p>
+          {:else}
+            <div class="mb-3"></div>
+          {/if}
+          <div
+            role="region"
+            aria-label={t('detections.detail.aria.audioRecordingFor', {
+              name: localizeSpeciesName(detection.scientificName, detection.commonName),
+            })}
+          >
+            <div class="detail-audio-container">
+              <AudioPlayer
+                audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
+                detectionId={detection.id.toString()}
+                showSpectrogram={true}
+                spectrogramSize="lg"
+                spectrogramRaw={false}
+                responsive={true}
+                className="w-full"
+                enableClipExtraction={clipExtractionEnabled}
+                clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
+                modelType={detection.modelType}
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    {/if}
 
     <!-- Tabbed Content -->
     <section class="surface-card" aria-labelledby="tabs-heading">

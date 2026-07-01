@@ -13,6 +13,7 @@
   import { t } from '$lib/i18n';
   import { safeArrayAccess } from '$lib/utils/security';
   import { isAuthenticated } from '$lib/utils/auth';
+  import { appState } from '$lib/stores/appState.svelte';
 
   interface Props {
     isOpen: boolean;
@@ -30,6 +31,8 @@
   let { isOpen = false, detection = null, isExcluded = false, onClose, onSave }: Props = $props();
 
   let clipExtractionEnabled = $derived($isAuthenticated);
+  // Hide the audio/spectrogram block when audio clip export is disabled.
+  let audioEnabled = $derived(appState.audioExportEnabled);
 
   let reviewStatus = $state<'correct' | 'false_positive'>('correct');
   let lockDetection = $state(false);
@@ -204,21 +207,23 @@
             </div>
           </div>
 
-          <!-- Audio and Spectrogram -->
-          <div class="relative bg-[var(--color-base-200)] rounded-lg p-4">
-            <AudioPlayer
-              audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-              detectionId={detection.id.toString()}
-              showSpectrogram={true}
-              spectrogramSize="lg"
-              spectrogramRaw={false}
-              responsive={true}
-              className="w-full mx-auto"
-              enableClipExtraction={clipExtractionEnabled}
-              clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
-              modelType={detection.modelType}
-            />
-          </div>
+          <!-- Audio and Spectrogram (hidden when audio clip export is disabled) -->
+          {#if audioEnabled}
+            <div class="relative bg-[var(--color-base-200)] rounded-lg p-4">
+              <AudioPlayer
+                audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
+                detectionId={detection.id.toString()}
+                showSpectrogram={true}
+                spectrogramSize="lg"
+                spectrogramRaw={false}
+                responsive={true}
+                className="w-full mx-auto"
+                enableClipExtraction={clipExtractionEnabled}
+                clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
+                modelType={detection.modelType}
+              />
+            </div>
+          {/if}
         </div>
 
         <!-- Right Column: Review Controls -->

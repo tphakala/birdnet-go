@@ -107,3 +107,25 @@ describe('DetectionRow action callbacks', () => {
     expect(onMarkFalsePositive).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('DetectionRow recording cell gating (audioEnabled)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders the spectrogram/recording cell by default', () => {
+    const { container } = render(DetectionRow, {
+      props: { detection: createMockDetection({ id: 600 }) },
+    });
+
+    expect(container.querySelector('.spectrogram-player')).not.toBeNull();
+  });
+
+  it('omits the spectrogram/recording cell when audioEnabled is false', () => {
+    const { container } = render(DetectionRow, {
+      props: { detection: createMockDetection({ id: 601 }), audioEnabled: false },
+    });
+
+    expect(container.querySelector('.spectrogram-player')).toBeNull();
+  });
+});
