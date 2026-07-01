@@ -21,8 +21,9 @@ import (
 // limit so a near-silent clip is not over-amplified into loud static.
 const maxGainDB = 30.0
 
-// encodeWithNativeFLAC encodes PCM to an in-memory FLAC buffer using the native
-// go-flac encoder and audionorm loudness normalization, with no FFmpeg
+// encodeWithNativeFLAC encodes PCM to a seekable FLAC file, reads it into an
+// upload buffer, and uses the native go-flac encoder and audionorm loudness
+// normalization, with no FFmpeg
 // dependency. Pass 1 measures integrated loudness and true peak; the planned
 // gain (clamped to +/-maxGainDB) is then applied in Go while the original bytes
 // are streamed into the encoder. pcmData is not modified.
@@ -79,13 +80,18 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 		logger.Float64("gain_db", gainDB),
 		logger.Bool("peak_limited", res.PeakLimited))
 
-	// Pass 2: apply the gain in Go and encode to FLAC in memory.
-	buf, err := flac.EncodePCMToBuffer(ctx, &flac.BufferOptions{
-		PCMData:    pcmData,
-		SampleRate: conf.SampleRate,
-		Channels:   conf.NumChannels,
-		BitDepth:   conf.BitDepth,
-		GainDB:     gainDB,
+	// Pass 2: apply the gain in Go and encode to seekable FLAC. BirdWeather
+	// derives soundscape duration from FLAC STREAMINFO, so uploads must not use
+	// the non-seekable buffer encoder that leaves total samples unknown.
+	buf, err := encodeUploadAudioToBuffer("flac", func(outputPath string) error {
+		return flac.EncodePCM(ctx, &flac.Options{
+			PCMData:    pcmData,
+			OutputPath: outputPath,
+			SampleRate: conf.SampleRate,
+			Channels:   conf.NumChannels,
+			BitDepth:   conf.BitDepth,
+			GainDB:     gainDB,
+		})
 	})
 	if err != nil {
 		// logFLACEncodingError downgrades timeout/cancel to WARN to avoid Sentry

@@ -59,6 +59,9 @@ func TestEncodeWithNativeFLAC(t *testing.T) {
 	flacBytes := res.buffer.Bytes()
 	require.GreaterOrEqual(t, len(flacBytes), 4)
 	assert.Equal(t, "fLaC", string(flacBytes[:4]), "FLAC signature not found")
+	sampleRate, totalSamples := flacStreamInfo(t, flacBytes)
+	assert.Equal(t, uint64(conf.SampleRate), sampleRate, "FLAC STREAMINFO sample rate mismatch")
+	assert.Equal(t, uint64(conf.SampleRate), totalSamples, "FLAC STREAMINFO total samples should be finalized")
 
 	// Re-measure the decoded output: it should sit near the target loudness.
 	out := decodeToInt16(t, flacBytes)

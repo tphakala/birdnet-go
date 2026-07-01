@@ -3,6 +3,7 @@ package birdweather
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,6 +16,21 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+func flacStreamInfo(t *testing.T, data []byte) (sampleRate, totalSamples uint64) {
+	t.Helper()
+	require.GreaterOrEqual(t, len(data), 42, "FLAC data too short for STREAMINFO")
+	require.Equal(t, "fLaC", string(data[:4]), "FLAC signature not found")
+	require.Equal(t, byte(0), data[4]&0x7f, "first FLAC metadata block must be STREAMINFO")
+
+	payloadLen := int(data[5])<<16 | int(data[6])<<8 | int(data[7])
+	require.Equal(t, 34, payloadLen, "unexpected STREAMINFO length")
+
+	fields := binary.BigEndian.Uint64(data[18:26])
+	sampleRate = (fields >> 44) & 0xfffff
+	totalSamples = fields & ((1 << 36) - 1)
+	return sampleRate, totalSamples
+}
 
 // TestParseSoundscapeResponse tests the JSON response parsing helper
 func TestParseSoundscapeResponse(t *testing.T) {
