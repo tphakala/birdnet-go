@@ -108,7 +108,13 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
       if (abortController !== controller) return;
       active = false;
       error = err instanceof Error ? err.message : t('media.audio.audibleBats.error');
-      logger.error('Audible bats generation failed', err as Error);
+      logger.error('Audible bats generation failed', err);
+      // If there was an active derived URL, deactivate cleanly before revoking it
+      // so the player can swap back to the original source before the blob is freed.
+      if (url !== null) {
+        options.onDeactivate?.();
+        revokeUrl();
+      }
     } finally {
       if (abortController === controller) {
         generating = false;
