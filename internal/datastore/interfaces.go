@@ -26,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
 	"github.com/tphakala/birdnet-go/internal/datastore/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -181,6 +182,7 @@ type Interface interface {
 	GetAllImageCaches(providerName string) ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
 	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
+	GetNoteClipReferences(afterID uint, limit int) ([]diskmanager.ClipReference, error)
 	CountHourlyDetections(date, hour string, duration int) (int64, error)
 	// Analytics methods
 	GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]SpeciesSummaryData, error)
@@ -2045,6 +2047,54 @@ func (ds *DataStore) ClearNoteClipPathsByNames(clipNames []string) (int64, error
 	}
 
 	return totalAffected, nil
+}
+
+// GetNoteClipReferences returns up to limit notes with a non-empty clip_name and
+// ID greater than afterID, ordered by ID ascending (keyset pagination, like
+// GetReviewsBatch). It is used by the clip reconcile crawler to walk clip
+// references in bounded chunks. CompletionTime is Note.EndTime, the capture
+// completion time used for the crawler's recency guard.
+func (ds *DataStore) GetNoteClipReferences(afterID uint, limit int) ([]diskmanager.ClipReference, error) {
+	if limit <= 0 {
+		return nil, validationError("limit must be positive", "limit", limit)
+	}
+
+	// EndTime is scanned as *time.Time: the end_time column is nullable, and a NULL
+	// (legacy/incomplete row) must scan as nil rather than erroring out and aborting
+	// the whole reconcile pass. A nil end time yields a zero CompletionTime, which
+	// the crawler treats as unknown-age and skips.
+	var rows []struct {
+		ID       uint
+		ClipName string
+		EndTime  *time.Time
+	}
+	err := ds.DB.Model(&Note{}).
+		Select("id", "clip_name", "end_time").
+		Where("id > ? AND clip_name <> ''", afterID).
+		Order("id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_note_clip_references").
+			Build()
+	}
+
+	refs := make([]diskmanager.ClipReference, len(rows))
+	for i := range rows {
+		var completion time.Time
+		if rows[i].EndTime != nil {
+			completion = *rows[i].EndTime
+		}
+		refs[i] = diskmanager.ClipReference{
+			ID:             rows[i].ID,
+			ClipName:       rows[i].ClipName,
+			CompletionTime: completion,
+		}
+	}
+	return refs, nil
 }
 
 // CountHourlyDetections counts the number of detections for a specific date and hour.

@@ -108,22 +108,39 @@ describe('DetectionRow action callbacks', () => {
   });
 });
 
-describe('DetectionRow recording cell gating (audioEnabled)', () => {
+describe('DetectionRow recording cell gating', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders the spectrogram/recording cell by default', () => {
+  it('renders the spectrogram player when the detection has a clip', () => {
     const { container } = render(DetectionRow, {
-      props: { detection: createMockDetection({ id: 600 }) },
+      props: { detection: createMockDetection({ id: 600, clipName: 'clip_600.wav' }) },
     });
 
     expect(container.querySelector('.spectrogram-player')).not.toBeNull();
   });
 
-  it('omits the spectrogram/recording cell when audioEnabled is false', () => {
+  // Per-detection gating: the widget must depend on the real clipName signal, not a
+  // global flag. An empty clipName means no clip exists, so no player must render
+  // even though the Recording column itself is shown.
+  it('omits the spectrogram player when the detection has no clip', () => {
     const { container } = render(DetectionRow, {
-      props: { detection: createMockDetection({ id: 601 }), audioEnabled: false },
+      props: {
+        detection: createMockDetection({ id: 601, clipName: '' }),
+        showRecordingColumn: true,
+      },
+    });
+
+    expect(container.querySelector('.spectrogram-player')).toBeNull();
+  });
+
+  it('omits the entire recording cell when the column is hidden', () => {
+    const { container } = render(DetectionRow, {
+      props: {
+        detection: createMockDetection({ id: 602, clipName: 'clip_602.wav' }),
+        showRecordingColumn: false,
+      },
     });
 
     expect(container.querySelector('.spectrogram-player')).toBeNull();

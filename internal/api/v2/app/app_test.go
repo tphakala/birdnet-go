@@ -897,6 +897,7 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"customColors":       true,
 		"logoStyle":          true,
 		"liveSpectrogram":    true,
+		"audioExportEnabled": true,
 		"freshInstall":       true,
 		"newVersion":         true,
 		"projectLinks":       true,

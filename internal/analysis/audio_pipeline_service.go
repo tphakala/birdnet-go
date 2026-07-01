@@ -353,6 +353,14 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 		})
 	}
 
+	// Start clip reconcile monitor. Runs unconditionally (regardless of retention
+	// policy and regardless of whether audio export is enabled) because orphaned
+	// clip_name references persist across runtime toggling of export, and clearing
+	// them keeps clip_name a truthful per-detection signal for the media API and UI.
+	p.wg.Go(func() {
+		clipReconcileMonitor(p.done, dataStore)
+	})
+
 	// Start weather polling.
 	if settings.Realtime.Weather.Provider != policyNone {
 		p.startWeatherPolling(metrics)
