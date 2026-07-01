@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -75,6 +76,55 @@ func newClipGatingProcessor(exportEnabled bool) *Processor {
 			},
 		},
 	}
+}
+
+// TestApplyBatFormatFallback verifies the shared bat WAV fallback used by both the
+// createDetection and extended-capture paths: a bat model above 48kHz exported to a
+// format that cannot carry that rate keeps the .wav extension the exporter writes.
+func TestApplyBatFormatFallback(t *testing.T) {
+	t.Parallel()
+
+	reg := audiocore.NewSourceRegistry(audiocore.GetLogger())
+	_, err := reg.Register(&audiocore.SourceConfig{
+		ID:               "bat_src",
+		Type:             audiocore.SourceTypeRTSP,
+		ConnectionString: "rtsp://cam/ultrasonic",
+		DisplayName:      "Bat mic",
+		SampleRate:       96000, // above 48kHz -> triggers the bat WAV fallback
+		BitDepth:         16,
+		Channels:         1,
+	})
+	require.NoError(t, err)
+
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Audio: conf.AudioSettings{
+					Export: conf.ExportSettings{Enabled: true, Type: "mp3"},
+				},
+			},
+		},
+	}
+	p.registry = reg
+	batSource := datastore.AudioSource{ID: "bat_src"}
+
+	t.Run("empty clip name is returned unchanged", func(t *testing.T) {
+		t.Parallel()
+		assert.Empty(t, p.applyBatFormatFallback(p.Settings, "", classifier.RegistryIDBat, batSource))
+	})
+
+	t.Run("bat model above 48kHz with mp3 export forces .wav", func(t *testing.T) {
+		t.Parallel()
+		got := p.applyBatFormatFallback(p.Settings, "2024/01/myotis_85p_x.mp3", classifier.RegistryIDBat, batSource)
+		assert.Equal(t, "2024/01/myotis_85p_x.wav", got,
+			"a bat detection above 48kHz must keep the .wav extension the exporter writes")
+	})
+
+	t.Run("non-bat model keeps the configured extension", func(t *testing.T) {
+		t.Parallel()
+		got := p.applyBatFormatFallback(p.Settings, "2024/01/parus_85p_x.mp3", "", batSource)
+		assert.Equal(t, "2024/01/parus_85p_x.mp3", got)
+	})
 }
 
 // TestResolveClipName_ExportGating verifies that a clip name is only generated

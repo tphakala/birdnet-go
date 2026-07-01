@@ -89,7 +89,10 @@ func TestEvaluateClipChunk(t *testing.T) {
 		{ID: 6, ClipName: "../../etc/passwd", CompletionTime: now.Add(testOld)}, // traversal -> skipped
 	}
 
-	res := evaluateClipChunk(baseDir, refs, now)
+	root, err := os.OpenRoot(baseDir)
+	require.NoError(t, err)
+	defer func() { _ = root.Close() }()
+	res := evaluateClipChunk(root, refs, now)
 
 	// present + encoding -> positive evidence storage is attached.
 	assert.Equal(t, 2, res.positiveCount, "present.wav and encoding.wav are positive evidence")
@@ -112,10 +115,44 @@ func TestEvaluateClipChunk_StaleTempIsOrphan(t *testing.T) {
 	refs := []ClipReference{
 		{ID: 1, ClipName: "2024/01/stale.wav", CompletionTime: now.Add(testOld)},
 	}
-	res := evaluateClipChunk(baseDir, refs, now)
+	root, err := os.OpenRoot(baseDir)
+	require.NoError(t, err)
+	defer func() { _ = root.Close() }()
+	res := evaluateClipChunk(root, refs, now)
 
 	assert.Zero(t, res.positiveCount, "a stale temp is not an active encode")
 	assert.Equal(t, []string{"2024/01/stale.wav"}, res.orphans)
+}
+
+// TestEvaluateClipChunk_SymlinkEscapeIsIndeterminate verifies that a persisted
+// clip_name resolving (via a symlink) outside the export root is treated as
+// indeterminate: os.Root rejects the escape, so it is neither counted as
+// attached-storage evidence nor cleared as an orphan.
+func TestEvaluateClipChunk_SymlinkEscapeIsIndeterminate(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	baseDir := t.TempDir()
+	outside := t.TempDir()
+	external := filepath.Join(outside, "external.wav")
+	require.NoError(t, os.WriteFile(external, []byte("audio"), 0o600))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(baseDir, "2024", "01"), 0o750))
+	link := filepath.Join(baseDir, "2024", "01", "escape.wav")
+	if err := os.Symlink(external, link); err != nil {
+		t.Skipf("symlink not supported in this environment: %v", err)
+	}
+
+	refs := []ClipReference{
+		{ID: 1, ClipName: "2024/01/escape.wav", CompletionTime: now.Add(testOld)},
+	}
+	root, err := os.OpenRoot(baseDir)
+	require.NoError(t, err)
+	defer func() { _ = root.Close() }()
+	res := evaluateClipChunk(root, refs, now)
+
+	assert.Zero(t, res.positiveCount, "escaping symlink is not attached-storage evidence")
+	assert.Empty(t, res.orphans, "escaping symlink must not be cleared as an orphan")
 }
 
 // --- ReconcileClipOrphansPass tests ---

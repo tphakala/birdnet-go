@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
@@ -255,13 +256,18 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 		if settings.Realtime.Audio.Export.Enabled {
 			preCapture := settings.Realtime.Audio.Export.PreCapture
 			durationSeconds := int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
-			item.Detection.Result.ClipName = p.generateClipNameWithDuration(
+			clipName := p.generateClipNameWithDuration(
 				settings,
 				item.Detection.Result.Species.ScientificName,
 				float32(item.Confidence),
 				durationSeconds,
 				item.Detection.Result.Timestamp,
 			)
+			// Reapply the bat WAV fallback so a bat detection above 48kHz keeps the
+			// .wav extension the exporter writes, instead of the configured
+			// MP3/Opus/AAC extension (matches createDetection's resolveClipName).
+			item.Detection.Result.ClipName = p.applyBatFormatFallback(
+				settings, clipName, item.BestModelID, datastore.AudioSource{ID: item.Source})
 		}
 	} else {
 		// For non-extended detections, recalculate EndTime to maintain the configured

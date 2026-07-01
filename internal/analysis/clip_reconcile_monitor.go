@@ -29,7 +29,7 @@ const clipReconcilePassInterval = 1 * time.Hour
 // export path via conf.Setting() each pass so hot-reload takes effect, and the
 // underlying diskmanager pass applies fail-safe guards so a detached/unmounted
 // export volume never causes mass clearing.
-func clipReconcileMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
+func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interface) {
 	log := GetLogger()
 	log.Info("clip reconcile monitor initialized",
 		logger.String("operation", "clip_reconcile_init"))
@@ -70,7 +70,7 @@ func clipReconcileMonitor(quitChan chan struct{}, dataStore datastore.Interface)
 
 // reconcileMonitorWait waits for d or until quitChan closes. It returns false if
 // quitChan closed (shutdown requested), true if the full duration elapsed.
-func reconcileMonitorWait(quitChan chan struct{}, d time.Duration) bool {
+func reconcileMonitorWait(quitChan <-chan struct{}, d time.Duration) bool {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {

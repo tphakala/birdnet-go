@@ -132,6 +132,18 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 		return result
 	}
 
+	// Resolve every clip lookup through an os.Root anchored at the export dir so a
+	// persisted clip_name can never escape it (absolute path, "..", or a symlink
+	// pointing outside): os.Root rejects such names, and the crawler treats the
+	// resulting error as indeterminate rather than as a missing/orphan file.
+	root, err := os.OpenRoot(baseDir)
+	if err != nil {
+		result.Aborted = true
+		result.AbortReason = "export directory inaccessible"
+		return result
+	}
+	defer func() { _ = root.Close() }()
+
 	var afterID uint
 	for {
 		select {
@@ -160,7 +172,7 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 
 		// Recompute now per chunk so the recency window tracks wall-clock across a
 		// long, throttled walk.
-		chunk := evaluateClipChunk(baseDir, refs, time.Now())
+		chunk := evaluateClipChunk(root, refs, time.Now())
 		candidates := chunk.positiveCount + len(chunk.orphans)
 
 		// Detached-storage guard.
@@ -205,14 +217,15 @@ type chunkResult struct {
 }
 
 // evaluateClipChunk classifies each non-recent clip reference in refs against the
-// files under baseDir at time now. Recent rows (within ClipRecencyWindow), rows
-// with an unknown completion time, and rows whose path escapes baseDir are skipped
-// entirely (neither cleared nor counted).
-func evaluateClipChunk(baseDir string, refs []ClipReference, now time.Time) chunkResult {
+// files under root at time now. Recent rows (within ClipRecencyWindow), rows with
+// an unknown completion time, and rows whose lookup is indeterminate (unreadable
+// directory, escaping symlink, transient I/O error) are skipped entirely (neither
+// cleared nor counted as evidence), so an ambiguous state never causes clearing.
+func evaluateClipChunk(root *os.Root, refs []ClipReference, now time.Time) chunkResult {
 	var res chunkResult
 	// Per-chunk cache of directory listings so a chunk of missing files sharing a
 	// directory does not re-read it once per file. A present map key means the dir
-	// was read (entries may be nil when unreadable or empty).
+	// was read (entries may be nil for an absent or empty directory).
 	dirCache := make(map[string][]os.DirEntry)
 
 	for i := range refs {
@@ -224,50 +237,64 @@ func evaluateClipChunk(baseDir string, refs []ClipReference, now time.Time) chun
 			continue // recent -> may still be encoding
 		}
 
-		relClean := filepath.Clean(filepath.FromSlash(ref.ClipName))
-		if filepath.IsAbs(relClean) || relClean == ".." ||
-			strings.HasPrefix(relClean, ".."+string(os.PathSeparator)) {
-			continue // path escapes the export root -> refuse to act on it
-		}
-
-		switch clipFileStateAt(baseDir, relClean, dirCache, now) {
+		switch clipFileStateAt(root, filepath.FromSlash(ref.ClipName), dirCache, now) {
 		case clipPresent, clipEncoding:
 			res.positiveCount++
 		case clipOrphan:
 			res.orphans = append(res.orphans, ref.ClipName)
 		case clipIndeterminate:
-			// Ambiguous (e.g. permission error) -> leave the reference untouched.
+			// Ambiguous (permission/IO error, or a name that escapes the export
+			// root) -> leave the reference untouched, never counted or cleared.
 		}
 	}
 	return res
 }
 
-// clipFileStateAt reports the on-disk state of a single clip whose cleaned relative
-// path is relClean under baseDir.
-func clipFileStateAt(baseDir, relClean string, dirCache map[string][]os.DirEntry, now time.Time) clipState {
-	fullPath := filepath.Join(baseDir, relClean)
-	if _, err := os.Stat(fullPath); err == nil {
+// clipFileStateAt reports the on-disk state of a single clip whose OS-native
+// relative path is rel, resolved inside root. A name that escapes the root or a
+// non-ErrNotExist stat error resolves to clipIndeterminate (never orphan).
+func clipFileStateAt(root *os.Root, rel string, dirCache map[string][]os.DirEntry, now time.Time) clipState {
+	if _, err := root.Stat(rel); err == nil {
 		return clipPresent
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return clipIndeterminate
 	}
 	// Final file missing: an active encode writes to a sibling temp file.
-	if hasFreshEncodingTemp(filepath.Dir(fullPath), filepath.Base(fullPath), dirCache, now) {
+	hasTemp, indeterminate := hasFreshEncodingTemp(root, filepath.Dir(rel), filepath.Base(rel), dirCache, now)
+	switch {
+	case indeterminate:
+		return clipIndeterminate
+	case hasTemp:
 		return clipEncoding
+	default:
+		return clipOrphan
 	}
-	return clipOrphan
 }
 
-// hasFreshEncodingTemp reports whether dir contains a not-yet-finalized export temp
-// file for the clip basename base, written within reconcileEncodingMaxAge.
-func hasFreshEncodingTemp(dir, base string, dirCache map[string][]os.DirEntry, now time.Time) bool {
+// hasFreshEncodingTemp reports whether dir (relative to root) contains a
+// not-yet-finalized export temp file for the clip basename base, written within
+// reconcileEncodingMaxAge. The second return value is true when the directory or a
+// temp entry could not be read (permission/IO error), which the caller must treat
+// as indeterminate rather than as "no temp" -> orphan. An absent directory is not
+// indeterminate: the final file is genuinely missing, so the clip is an orphan.
+func hasFreshEncodingTemp(root *os.Root, dir, base string, dirCache map[string][]os.DirEntry, now time.Time) (found, indeterminate bool) {
 	entries, seen := dirCache[dir]
 	if !seen {
-		read, err := os.ReadDir(dir)
-		if err == nil {
-			entries = read
+		d, err := root.Open(dir)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				dirCache[dir] = nil // absent dir -> no temp; cacheable
+				return false, false
+			}
+			return false, true // unreadable dir -> indeterminate (do not cache)
 		}
-		dirCache[dir] = entries // cache nil on error/empty so we do not re-read
+		read, readErr := d.ReadDir(0)
+		_ = d.Close()
+		if readErr != nil {
+			return false, true
+		}
+		entries = read
+		dirCache[dir] = entries
 	}
 	for _, entry := range entries {
 		if !isExportTempName(entry.Name(), base) {
@@ -275,13 +302,13 @@ func hasFreshEncodingTemp(dir, base string, dirCache map[string][]os.DirEntry, n
 		}
 		info, err := entry.Info()
 		if err != nil {
-			continue
+			return false, true // cannot age the temp -> indeterminate
 		}
 		if now.Sub(info.ModTime()) < reconcileEncodingMaxAge {
-			return true
+			return true, false
 		}
 	}
-	return false
+	return false, false
 }
 
 // isExportTempName reports whether name is an in-progress export temp file for the

@@ -1371,14 +1371,23 @@ func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Re
 	}
 
 	clipName := p.generateClipName(settings, scientificName, confidence)
+	return p.applyBatFormatFallback(settings, clipName, item.ModelID, item.Source)
+}
 
-	// Bat models at high sample rates need WAV when the configured format
-	// (MP3/Opus/AAC) cannot carry rates above 48kHz. Override the extension
-	// now so the database stores the same filename the export will write.
-	mInfo := classifier.DetectionModelInfoForID(item.ModelID)
-	sourceRate := p.resolveAudioSource(item.Source).SampleRate
+// applyBatFormatFallback overrides a clip name's extension to .wav when a bat model
+// at a high source sample rate is exported to a format (MP3/Opus/AAC) that cannot
+// carry rates above 48kHz, so the stored ClipName matches the file the exporter
+// actually writes. It is shared by the createDetection and extended-capture paths
+// so both persist the same fallback extension. An empty clip name is returned
+// unchanged.
+func (p *Processor) applyBatFormatFallback(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
+	if clipName == "" {
+		return clipName
+	}
+	mInfo := classifier.DetectionModelInfoForID(modelID)
+	sourceRate := p.resolveAudioSource(source).SampleRate
 	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
-		clipName = replaceExtension(clipName, ".wav")
+		return replaceExtension(clipName, ".wav")
 	}
 	return clipName
 }

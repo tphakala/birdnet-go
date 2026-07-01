@@ -2059,10 +2059,14 @@ func (ds *DataStore) GetNoteClipReferences(afterID uint, limit int) ([]diskmanag
 		return nil, validationError("limit must be positive", "limit", limit)
 	}
 
+	// EndTime is scanned as *time.Time: the end_time column is nullable, and a NULL
+	// (legacy/incomplete row) must scan as nil rather than erroring out and aborting
+	// the whole reconcile pass. A nil end time yields a zero CompletionTime, which
+	// the crawler treats as unknown-age and skips.
 	var rows []struct {
 		ID       uint
 		ClipName string
-		EndTime  time.Time
+		EndTime  *time.Time
 	}
 	err := ds.DB.Model(&Note{}).
 		Select("id", "clip_name", "end_time").
@@ -2080,10 +2084,14 @@ func (ds *DataStore) GetNoteClipReferences(afterID uint, limit int) ([]diskmanag
 
 	refs := make([]diskmanager.ClipReference, len(rows))
 	for i := range rows {
+		var completion time.Time
+		if rows[i].EndTime != nil {
+			completion = *rows[i].EndTime
+		}
 		refs[i] = diskmanager.ClipReference{
 			ID:             rows[i].ID,
 			ClipName:       rows[i].ClipName,
-			CompletionTime: rows[i].EndTime,
+			CompletionTime: completion,
 		}
 	}
 	return refs, nil
