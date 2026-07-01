@@ -348,7 +348,15 @@
 
   .settings-menu {
     position: fixed;
-    min-width: 15rem;
+    min-width: 14rem;
+
+    /* Same size logic as AudioSettingsButton's popup: cap the box itself so it
+       can never exceed the viewport on narrow/short screens, independent of the
+       JS position clamp in anchorPosition.ts (which only clamps the left/top
+       offset, not the box's own dimensions). */
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    overflow-y: auto;
     padding: 0.75rem;
     background-color: rgb(30 41 59 / 0.95);
     border: 1px solid rgb(51 65 85);

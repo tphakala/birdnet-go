@@ -8,6 +8,7 @@
   import PlayOverlay from '$lib/desktop/features/dashboard/components/PlayOverlay.svelte';
   import SpeciesInfoBar from '$lib/desktop/features/dashboard/components/SpeciesInfoBar.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
+  import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
   import AudibleBatsButton from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
   import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import { cn } from '$lib/utils/cn';
@@ -58,6 +59,7 @@
   let audioGainValue = $state(getDefaultAudioGain());
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
+  let audioContextAvailable = $state(true);
 
   // Audible bats: only offered for bat detections (matches DetectionCard). The
   // request lifecycle lives in the shared composable; PlayOverlay swaps to the
@@ -84,6 +86,22 @@
       loader.stop();
     }
   });
+
+  function handleGainChange(value: number) {
+    audioGainValue = value;
+  }
+
+  function handleFilterChange(value: number) {
+    audioFilterFreq = value;
+  }
+
+  function handleSpeedChange(value: number) {
+    audioPlaybackSpeed = value;
+  }
+
+  function handleAudioContextAvailable(available: boolean) {
+    audioContextAvailable = available;
+  }
 
   function handleMenuOpen() {
     isMenuOpen = true;
@@ -200,6 +218,7 @@
         gainValue={audioGainValue}
         filterFreq={audioFilterFreq}
         playbackSpeed={audioPlaybackSpeed}
+        onAudioContextAvailable={handleAudioContextAvailable}
         audibleBatsSrc={audibleBats.url}
       />
     {/if}
@@ -217,13 +236,27 @@
 
   <!-- Top-Right Controls - OUTSIDE overflow-hidden container -->
   <div class="absolute top-2 right-2 z-50 flex items-center gap-1.5">
-    {#if audioEnabled && isBatDetection}
-      <AudibleBatsButton
-        active={audibleBats.active}
-        generating={audibleBats.generating}
-        error={audibleBats.error}
-        onEnable={settings => audibleBats.enable(settings)}
-        onDisable={() => audibleBats.disable()}
+    {#if detection.clipName}
+      {#if isBatDetection}
+        <AudibleBatsButton
+          active={audibleBats.active}
+          generating={audibleBats.generating}
+          error={audibleBats.error}
+          onEnable={settings => audibleBats.enable(settings)}
+          onDisable={() => audibleBats.disable()}
+          onMenuOpen={handleMenuOpen}
+          onMenuClose={handleMenuClose}
+        />
+      {/if}
+      <AudioSettingsButton
+        gainValue={audioGainValue}
+        filterFreq={audioFilterFreq}
+        playbackSpeed={audioPlaybackSpeed}
+        defaultGainValue={getDefaultAudioGain()}
+        onGainChange={handleGainChange}
+        onFilterChange={handleFilterChange}
+        onSpeedChange={handleSpeedChange}
+        disabled={!audioContextAvailable}
         onMenuOpen={handleMenuOpen}
         onMenuClose={handleMenuClose}
       />
