@@ -12,6 +12,7 @@
 package alerts
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -114,11 +115,12 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 	// Initialize repository lazily from V2Manager
 	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB(), nil)
+	speciesListRepo := repository.NewSpeciesListRepository(c.V2Manager.DB(), nil)
 
 	// Initialize the alerting engine - seeds default rules and starts event processing
 	alertTelemetry := alerting.NewAlertingTelemetry()
 	eventBus := alerting.NewAlertEventBus(alertTelemetry)
-	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, apicore.GetLogger(), alertTelemetry)
+	engine, err := alerting.Initialize(c.alertRuleRepo, speciesListRepo, eventBus, apicore.GetLogger(), alertTelemetry)
 	if err != nil {
 		apicore.GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
 		eventBus.Stop() // Stop the bus goroutine since Initialize didn't set it as global
@@ -128,6 +130,14 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	} else {
 		c.alertEngine = engine
 	}
+}
+
+// RefreshSpeciesLists reloads the species lists cache in the alerting engine.
+func (c *Handler) RefreshSpeciesLists(ctx context.Context) error {
+	if c.alertEngine != nil {
+		return c.alertEngine.RefreshSpeciesLists(ctx)
+	}
+	return nil
 }
 
 // alertsAvailable reports whether the enhanced (v2) database backing the

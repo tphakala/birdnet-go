@@ -4046,6 +4046,66 @@
         "description": "Arten in dieser Liste werden immer von der Erkennung ausgeschlossen",
         "noSpeciesMessage": "Keine Arten zur Ausschlussliste hinzugefügt"
       },
+      "managedLists": {
+        "title": "Verwaltete Artenlisten",
+        "tabLabel": "Artenlisten",
+        "description": "Datenbankgestützte benutzerdefinierte Artenlisten, die in Alarmregeln und Filtern für die erweiterte Erfassung verwendet werden können",
+        "createList": "Liste erstellen",
+        "searchPlaceholder": "Listen suchen...",
+        "noListsFound": "Keine Artenlisten gefunden",
+        "noListsHint": "Erstellen Sie Ihre erste verwaltete Artenliste, um zu beginnen.",
+        "yamlBacked": "YAML-Basiert",
+        "speciesCount": "{count} Arten",
+        "speciesCountOne": "{count} Art",
+        "noDescription": "Keine Beschreibung angegeben.",
+        "moreCount": "+{count} weitere",
+        "confirmDelete": "Sind Sie sicher?",
+        "yesDelete": "Ja, löschen",
+        "cancel": "Abbrechen",
+        "edit": "Bearbeiten",
+        "delete": "Löschen",
+        "editTitle": "Artenliste bearbeiten",
+        "createTitle": "Artenliste erstellen",
+        "editSub": "Aktualisieren Sie die Details und Mitglieder dieser Liste.",
+        "createSub": "Fügen Sie eine neue Liste hinzu und konfigurieren Sie deren Arten.",
+        "listName": "Listenname",
+        "listNamePlaceholder": "z. B. Seltene Vögel, Eulen im Garten",
+        "descriptionLabel": "Beschreibung",
+        "descriptionPlaceholder": "Beschreiben Sie den Zweck dieser Artenliste",
+        "addHeader": "Arten zur Liste hinzufügen",
+        "searchLabel": "Arten suchen (Autovervollständigung)",
+        "manualLabel": "Manueller wissenschaftlicher Name...",
+        "addManual": "Manuell hinzufügen",
+        "unrecognizedTitle": "Nicht erkannte Art (Liste bearbeiten zum Korrigieren)",
+        "save": "Speichern",
+        "cancelEditor": "Abbrechen",
+        "saving": "Wird gespeichert...",
+        "backTitle": "Zurück zu den Listen",
+        "clearAll": "Alle leeren",
+        "noSpeciesInList": "Noch keine Arten zu dieser Liste hinzugefügt.",
+        "system": {
+          "extendedCapture": {
+            "name": "YAML: Erweiterte Erfassung",
+            "description": "Konfiguriert über realtime.extendedcapture.species-Einstellungen in config.yaml"
+          },
+          "dogBark": {
+            "name": "YAML: Hundegebell-Filter",
+            "description": "Konfiguriert über realtime.dogbarkfilter.species-Einstellungen in config.yaml"
+          },
+          "daylight": {
+            "name": "YAML: Tageslicht-Filter",
+            "description": "Konfiguriert über realtime.daylightfilter.species-Einstellungen in config.yaml"
+          }
+        },
+        "usage": {
+          "usageLabel": "Verwendet in",
+          "usedInAlertRule": "Alarmregel: {name}",
+          "usedInExtendedCapture": "Erweiterte Erfassung",
+          "usedInDogBarkFilter": "Hundebellenfilter",
+          "usedInDaylightFilter": "Tageslichtfilter",
+          "notUsed": "In keiner aktiven Konfiguration verwendet"
+        }
+      },
       "customConfiguration": {
         "title": "Benutzerdefinierte Artenkonfiguration",
         "tabLabel": "Benutzer.",
@@ -4414,7 +4474,11 @@
         "eventsCount": "Ereignisse",
         "metricsCount": "Metriken",
         "durationFor": "für",
-        "durationSec": "Sek"
+        "durationSec": "Sek",
+        "noSpeciesLists": "Keine Artenlisten gefunden.",
+        "createSpeciesList": "Artenliste erstellen",
+        "manageLists": "Listen verwalten",
+        "readOnlyYaml": "Schreibgeschützt (in config.yaml konfiguriert)"
       },
       "export": "Exportieren",
       "import": "Importieren",

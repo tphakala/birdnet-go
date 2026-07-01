@@ -9,19 +9,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// SpeciesListResolver resolves a species list ID into a slice of species names.
+type SpeciesListResolver interface {
+	ResolveSpeciesList(id uint) []string
+}
+
 // EvaluateConditions checks if all conditions match against event properties.
 // Returns true if ALL conditions are satisfied (AND logic).
 // Empty conditions list returns true (no conditions = always match).
-func EvaluateConditions(conditions []entities.AlertCondition, properties map[string]any) bool {
+func EvaluateConditions(conditions []entities.AlertCondition, properties map[string]any, resolver SpeciesListResolver) bool {
 	for i := range conditions {
-		if !evaluateCondition(&conditions[i], properties) {
+		if !evaluateCondition(&conditions[i], properties, resolver) {
 			return false
 		}
 	}
 	return true
 }
 
-func evaluateCondition(cond *entities.AlertCondition, properties map[string]any) bool {
+func evaluateCondition(cond *entities.AlertCondition, properties map[string]any, resolver SpeciesListResolver) bool {
 	propVal, exists := properties[cond.Property]
 	if !exists {
 		return false
@@ -29,6 +34,44 @@ func evaluateCondition(cond *entities.AlertCondition, properties map[string]any)
 
 	propStr := fmt.Sprintf("%v", propVal)
 	condVal := cond.Value
+
+	// Handle managed species list expansion for 'in'/'not_in' on species/scientific_name.
+	// Members are stored as canonical lowercase scientific names (OpenFauna convention),
+	// so we compare against the detection's scientific_name property directly.
+	if resolver != nil &&
+		(cond.Property == PropertyScientificName || cond.Property == PropertySpeciesName) &&
+		(cond.Operator == OperatorIn || cond.Operator == OperatorNotIn) &&
+		strings.HasPrefix(condVal, "list:") {
+
+		listIDStr := strings.TrimPrefix(condVal, "list:")
+		listID64, err := strconv.ParseUint(listIDStr, 10, 32)
+		if err == nil {
+			listID := uint(listID64)
+			sciNames := resolver.ResolveSpeciesList(listID)
+			
+			// We compare list members (which are canonical scientific names) against
+			// the event's scientific name.
+			var searchName string
+			if sciVal, ok := properties[PropertyScientificName]; ok {
+				searchName = fmt.Sprintf("%v", sciVal)
+			} else {
+				searchName = propStr
+			}
+			
+			propLower := strings.ToLower(searchName)
+			found := false
+			for _, sci := range sciNames {
+				if sci == propLower {
+					found = true
+					break
+				}
+			}
+			if cond.Operator == OperatorIn {
+				return found
+			}
+			return !found
+		}
+	}
 
 	switch cond.Operator {
 	case OperatorIs:

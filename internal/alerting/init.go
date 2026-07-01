@@ -304,6 +304,7 @@ func renderDetectionTemplates(props map[string]any) (title, message string) {
 // action dispatcher, subscribes to the event bus, and loads rules.
 func Initialize(
 	repo repository.AlertRuleRepository,
+	speciesListRepo repository.SpeciesListRepository,
 	eventBus *AlertEventBus,
 	log logger.Logger,
 	at *AlertingTelemetry,
@@ -319,6 +320,10 @@ func Initialize(
 	// Create dispatcher and engine (adapter lazily resolves notification service)
 	dispatcher := NewActionDispatcher(&notificationAdapter{}, log, at)
 	engine := NewEngine(repo, dispatcher.Dispatch, log, at)
+	engine.SetSpeciesListRepository(speciesListRepo)
+	if err := engine.RefreshSpeciesLists(ctx); err != nil {
+		log.Error("failed to initial load species lists", logger.Error(err))
+	}
 	engine.SetTestActionFunc(dispatcher.DispatchTest)
 
 	// Load rules from database

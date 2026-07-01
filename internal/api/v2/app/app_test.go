@@ -888,18 +888,20 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 
 	// Only these top-level keys should exist
 	expectedKeys := map[string]bool{
-		"csrfToken":          true,
-		"security":           true,
-		"version":            true,
-		"speciesDictVersion": true,
-		"basePath":           true,
-		"colorScheme":        true,
-		"customColors":       true,
-		"logoStyle":          true,
-		"liveSpectrogram":    true,
-		"freshInstall":       true,
-		"newVersion":         true,
-		"projectLinks":       true,
+		"csrfToken":           true,
+		"security":            true,
+		"version":             true,
+		"speciesDictVersion":  true,
+		"basePath":            true,
+		"colorScheme":         true,
+		"customColors":        true,
+		"logoStyle":           true,
+		"liveSpectrogram":     true,
+		"freshInstall":        true,
+		"newVersion":          true,
+		"projectLinks":        true,
+		"audioExportEnabled":  true,
+		"isEnhancedDatabase":  true,
 	}
 
 	for key := range rawResponse {

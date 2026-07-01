@@ -71,6 +71,9 @@ var (
 	// ErrAlertRuleNotFound indicates the requested alert rule does not exist.
 	ErrAlertRuleNotFound = errors.NewStd("alert rule not found")
 
+	// ErrSpeciesListNotFound indicates the requested species list does not exist.
+	ErrSpeciesListNotFound = errors.NewStd("species list not found")
+
 	// ErrCommonNameSearchUnsupported indicates a free-text query reached the
 	// dual-write read path, which has no name-map source to resolve common names
 	// to label IDs. Honoring the query would silently degrade to scientific-name-only

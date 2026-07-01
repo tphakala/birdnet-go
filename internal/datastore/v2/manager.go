@@ -316,6 +316,9 @@ func v2Entities() []any {
 		&entities.AppMetadata{},
 		// Application event log
 		&entities.AppEvent{},
+		// Managed species lists
+		&entities.SpeciesList{},
+		&entities.SpeciesListMember{},
 	}
 }
 
