@@ -179,7 +179,7 @@
     audioElement.load();
     if (wasPlaying) {
       void audioElement.play().catch((err: unknown) => {
-        logger.warn('Resume after audio source swap failed', err as Error);
+        logger.warn('Resume after audio source swap failed', err);
       });
     }
   });
