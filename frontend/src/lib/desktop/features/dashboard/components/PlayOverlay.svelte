@@ -110,6 +110,10 @@
   // svelte-ignore state_referenced_locally
   let previousEffectiveSrc = audibleBatsSrc ?? audioUrl;
   let pendingFraction: number | null = null;
+  // Whether playback should resume once the swapped-in source's metadata (and
+  // restored position) are ready — avoids a race where play() starts from 0
+  // before handleLoadedMetadata applies pendingFraction.
+  let pendingAutoplayAfterSwap = false;
 
   // Update audio nodes when gain/filter props change
   // Read values unconditionally to ensure they're tracked as dependencies
@@ -172,16 +176,17 @@
     }
 
     // Audible-bats overlay toggled: swap source, preserving proportional position.
+    // Read the live element position (not the reactive `currentTime` state,
+    // which only updates on the progress interval/timeupdate and can lag a
+    // recent seek) so the restored position matches what the user last saw.
     previousEffectiveSrc = src;
-    pendingFraction = isFinite(duration) && duration > 0 ? currentTime / duration : 0;
-    const wasPlaying = isPlaying;
+    const liveCurrentTime = audioElement.currentTime;
+    pendingFraction = isFinite(duration) && duration > 0 ? liveCurrentTime / duration : 0;
+    // Defer resuming playback until handleLoadedMetadata has restored the
+    // position from pendingFraction, so playback doesn't briefly start from 0.
+    pendingAutoplayAfterSwap = isPlaying;
     audioElement.src = src;
     audioElement.load();
-    if (wasPlaying) {
-      void audioElement.play().catch((err: unknown) => {
-        logger.warn('Resume after audio source swap failed', err);
-      });
-    }
   });
 
   async function handlePlayPause(event: MouseEvent) {
@@ -322,6 +327,13 @@
         progress = (currentTime / duration) * 100;
       }
       pendingFraction = null;
+
+      if (pendingAutoplayAfterSwap) {
+        pendingAutoplayAfterSwap = false;
+        void audioElement.play().catch((err: unknown) => {
+          logger.warn('Resume after audio source swap failed', err);
+        });
+      }
     }
   }
 

@@ -11,9 +11,6 @@ import type { AudibleBatsSettings } from '$lib/desktop/features/dashboard/compon
 
 const SETTINGS: AudibleBatsSettings = {
   expansion: 10,
-  gainDb: 6,
-  normalize: true,
-  remember: true,
 };
 
 function okResponse() {
@@ -59,7 +56,7 @@ describe('useAudibleBats', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toContain('/api/v2/audio/123/audible-bats');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({ expansion: 10, normalize: true, gain_db: 6 });
+    expect(JSON.parse(init.body)).toEqual({ expansion: 10, normalize: false, gain_db: 0 });
 
     expect(bats.active).toBe(true);
     expect(bats.generating).toBe(false);

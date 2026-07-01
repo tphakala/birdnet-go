@@ -52,6 +52,13 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
     }
   }
 
+  // Loudness normalization and gain are intentionally not exposed as audible-bats
+  // settings: gain is already covered by the player's own Web Audio gain node
+  // (applies regardless of source), and normalization is left off by default for
+  // this review copy.
+  const AUDIBLE_BATS_NORMALIZE = false;
+  const AUDIBLE_BATS_GAIN_DB = 0;
+
   // Generate (or regenerate) the derived audible-bats audio.
   async function enable(settings: AudibleBatsSettings) {
     // Abort any in-flight generation so a stale response can't win.
@@ -73,8 +80,8 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
           signal: controller.signal,
           body: JSON.stringify({
             expansion: settings.expansion,
-            normalize: settings.normalize,
-            gain_db: settings.gainDb,
+            normalize: AUDIBLE_BATS_NORMALIZE,
+            gain_db: AUDIBLE_BATS_GAIN_DB,
           }),
         }
       );

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -66,7 +67,10 @@ func audibleBatsCacheKey(detectionID string, expansion int, normalize bool, gain
 	if normalize {
 		norm = "1"
 	}
-	return fmt.Sprintf("%s_bat%dx_%s_%.1f.wav", safeID, expansion, norm, gainDB)
+	// Full precision (shortest round-trip representation) so distinct gain
+	// values never collapse onto the same cache entry, unlike a fixed %.1f.
+	gainStr := strconv.FormatFloat(gainDB, 'f', -1, 64)
+	return fmt.Sprintf("%s_bat%dx_%s_%s.wav", safeID, expansion, norm, gainStr)
 }
 
 // get returns cached file data or nil if not found / expired.

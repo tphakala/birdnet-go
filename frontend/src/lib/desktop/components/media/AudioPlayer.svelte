@@ -278,6 +278,10 @@
   // Proportional position (0-1) to restore after an audio source swap, applied
   // once the new source's metadata (and therefore its duration) is available.
   let audibleBatsPendingFraction: number | null = null;
+  // Whether playback should resume once the swapped-in source's metadata (and
+  // restored position) are ready — avoids a race where play() starts from 0
+  // before handleLoadedMetadata applies audibleBatsPendingFraction.
+  let audibleBatsPendingAutoplay = false;
 
   // Constants
   const GAIN_MAX_DB = 24;
@@ -1067,6 +1071,13 @@
       progress = (currentTime / duration) * 100;
     }
     audibleBatsPendingFraction = null;
+
+    if (audibleBatsPendingAutoplay) {
+      audibleBatsPendingAutoplay = false;
+      audioElement.play().catch((err: unknown) => {
+        logger.warn('Resume after audio source swap failed', err as Error);
+      });
+    }
   };
 
   const handleProgressClick = (event: MouseEvent) => {
@@ -1113,20 +1124,21 @@
   // --- Audible bats derived playback ---
 
   // Swap the player's audio source, preserving the proportional playback
-  // position and play/pause state across the change. The actual seek happens in
-  // handleLoadedMetadata once the new source reports its duration.
+  // position and play/pause state across the change. The actual seek (and any
+  // resumed playback) happens in handleLoadedMetadata once the new source
+  // reports its duration, avoiding a race where play() would otherwise start
+  // from position 0 before the proportional position is restored.
   function swapAudioSource(newSrc: string) {
     if (!audioElement) return;
-    const frac = isFinite(duration) && duration > 0 ? currentTime / duration : 0;
-    const wasPlaying = isPlaying;
+    // Read the live element position rather than the reactive `currentTime`
+    // state, which only updates on the progress interval/timeupdate and can
+    // lag a recent direct seek.
+    const liveCurrentTime = audioElement.currentTime;
+    const frac = isFinite(duration) && duration > 0 ? liveCurrentTime / duration : 0;
     audibleBatsPendingFraction = frac;
+    audibleBatsPendingAutoplay = isPlaying;
     audioElement.src = newSrc;
     audioElement.load();
-    if (wasPlaying) {
-      audioElement.play().catch((err: unknown) => {
-        logger.warn('Resume after audio source swap failed', err as Error);
-      });
-    }
   }
 
   // The generate/disable lifecycle lives in the useAudibleBats composable; the
@@ -1700,7 +1712,14 @@
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
           audioRetryTimer = setTimeout(() => {
             if (audioElement) {
-              audioElement.src = audioUrl;
+              // Retry against whichever source is currently active — reverting
+              // to the original audioUrl here would silently drop out of an
+              // active audible-bats or processed-audio derived clip while
+              // leaving its state flagged as still active.
+              audioElement.src =
+                audibleBats.active && audibleBats.url
+                  ? audibleBats.url
+                  : (processedAudioUrl ?? audioUrl);
               audioElement.load();
             }
           }, AUDIO_RETRY_DELAY_MS);
