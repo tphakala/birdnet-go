@@ -8,6 +8,8 @@
   import PlayOverlay from '$lib/desktop/features/dashboard/components/PlayOverlay.svelte';
   import SpeciesInfoBar from '$lib/desktop/features/dashboard/components/SpeciesInfoBar.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
+  import AudibleBatsButton from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
+  import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import { cn } from '$lib/utils/cn';
   import { downloadDetectionAudio } from '$lib/utils/audioDownload';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
@@ -57,6 +59,24 @@
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
 
+  // Audible bats: only offered for bat detections (matches DetectionCard). The
+  // request lifecycle lives in the shared composable; PlayOverlay swaps to the
+  // generated `url` while the spectrogram keeps spanning the full original clip.
+  const MODEL_TYPE_BAT = 'bat';
+  const isBatDetection = $derived(detection.modelType === MODEL_TYPE_BAT);
+  const audibleBats = useAudibleBats({ getDetectionId: () => detection.id });
+
+  // Reset derived playback if this card instance is recycled to a different
+  // detection (keyed {#each} normally avoids this, but guard defensively).
+  // svelte-ignore state_referenced_locally
+  let previousDetectionId = detection.id;
+  $effect(() => {
+    if (detection.id !== previousDetectionId) {
+      previousDetectionId = detection.id;
+      audibleBats.reset();
+    }
+  });
+
   $effect(() => {
     if (detection.clipName && isVisible) {
       loader.start(detection.id);
@@ -102,6 +122,7 @@
   onDestroy(() => {
     observer?.disconnect();
     loader.destroy();
+    audibleBats.cleanup();
   });
 </script>
 
@@ -179,6 +200,7 @@
         gainValue={audioGainValue}
         filterFreq={audioFilterFreq}
         playbackSpeed={audioPlaybackSpeed}
+        audibleBatsSrc={audibleBats.url}
       />
     {/if}
 
@@ -193,8 +215,19 @@
     </button>
   </div>
 
-  <!-- Top-Right Action Menu - OUTSIDE overflow-hidden container -->
-  <div class="absolute top-2 right-2 z-50">
+  <!-- Top-Right Controls - OUTSIDE overflow-hidden container -->
+  <div class="absolute top-2 right-2 z-50 flex items-center gap-1.5">
+    {#if audioEnabled && isBatDetection}
+      <AudibleBatsButton
+        active={audibleBats.active}
+        generating={audibleBats.generating}
+        error={audibleBats.error}
+        onEnable={settings => audibleBats.enable(settings)}
+        onDisable={() => audibleBats.disable()}
+        onMenuOpen={handleMenuOpen}
+        onMenuClose={handleMenuClose}
+      />
+    {/if}
     <ActionMenu
       {detection}
       variant="overlay"

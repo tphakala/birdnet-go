@@ -3,11 +3,12 @@
 
   A button + popup that controls "Audible bats" playback for bat detections.
   Ultrasonic bat calls are slowed (time-expanded) into the human hearing range,
-  producing a derived review copy of the audio. The popup is modeled on the
-  Audio Settings popup and exposes: time expansion factor, volume gain,
-  normalization, and a local "remember" preference.
+  producing a derived review copy of the audio. The popup only exposes the time
+  expansion factor: volume gain and normalization are already covered by the
+  regular Audio Settings popup (gain applies via the shared Web Audio graph
+  regardless of source), and the chosen factor is always remembered.
 
-  The component owns the UI preferences only. The parent (AudioPlayer) owns the
+  The component owns the UI preference only. The parent (AudioPlayer) owns the
   actual generation/playback of the derived audio and reports back via the
   `active`, `generating` and `error` props.
 
@@ -15,7 +16,8 @@
   - active: boolean - Whether audible bats playback is currently active
   - generating: boolean - Whether the derived audio is being generated
   - error?: string | null - Error message from the last generation attempt
-  - disabled?: boolean - Whether the trigger button is disabled
+  - disabled?: boolean - Whether the control is disabled
+  - disabledReason?: string | null - Explanation shown when disabled is true
   - onEnable: (settings) => void - Enable audible bats mode with the chosen settings
   - onDisable: () => void - Disable audible bats mode, returning to normal playback
   - onMenuOpen / onMenuClose - Open-menu tracking callbacks (mirror AudioSettingsButton)
@@ -23,9 +25,6 @@
 <script lang="ts" module>
   export interface AudibleBatsSettings {
     expansion: number;
-    gainDb: number;
-    normalize: boolean;
-    remember: boolean;
   }
 </script>
 
@@ -34,13 +33,14 @@
   import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
   import { t } from '$lib/i18n';
   import BatIcon from '$lib/components/icons/BatIcon.svelte';
-  import { getStoredValue, setStoredValue, removeStoredValue } from '$lib/utils/storage';
+  import { getStoredValue, setStoredValue } from '$lib/utils/storage';
 
   interface Props {
     active: boolean;
     generating: boolean;
     error?: string | null;
     disabled?: boolean;
+    disabledReason?: string | null;
     onEnable: (_settings: AudibleBatsSettings) => void;
     onDisable: () => void;
     onMenuOpen?: () => void;
@@ -52,6 +52,7 @@
     generating,
     error = null,
     disabled = false,
+    disabledReason = null,
     onEnable,
     onDisable,
     onMenuOpen,
@@ -61,32 +62,22 @@
   // Constants
   const EXPANSION_OPTIONS = [5, 10, 16, 20] as const;
   const DEFAULT_EXPANSION = 5;
-  const GAIN_MAX_DB = 24;
-  const GAIN_MIN_DB = -20;
   // Gap in px between the trigger button and the popup.
   const MENU_OFFSET = 8;
-  // localStorage key for the remembered UI preference.
+  // localStorage key for the remembered time-expansion preference.
   const STORAGE_KEY = 'birdnet:audibleBats';
 
-  // Generate unique IDs for this component instance
+  // Generate a unique ID for this component instance (used by the disabled-reason description).
   const instanceId = Math.random().toString(36).slice(2, 9);
-  const gainSliderId = `bat-gain-slider-${instanceId}`;
-  const normalizeId = `bat-normalize-${instanceId}`;
-  const rememberId = `bat-remember-${instanceId}`;
+  const disabledDescId = `bat-disabled-reason-${instanceId}`;
 
   // Validate a persisted settings object before trusting it.
   function isStoredSettings(v: unknown): v is AudibleBatsSettings {
     if (typeof v !== 'object' || v === null) return false;
-    const s = v as Record<string, unknown>;
-    return (
-      typeof s.expansion === 'number' &&
-      typeof s.gainDb === 'number' &&
-      typeof s.normalize === 'boolean' &&
-      typeof s.remember === 'boolean'
-    );
+    return typeof (v as Record<string, unknown>).expansion === 'number';
   }
 
-  // Load remembered preferences (defaults: 5x, 0 dB, normalize on, remember on).
+  // Load the remembered time-expansion factor (default: 5x).
   const stored = getStoredValue<AudibleBatsSettings | null>(
     STORAGE_KEY,
     null,
@@ -98,60 +89,32 @@
       ? stored.expansion
       : DEFAULT_EXPANSION
   );
-  let gainDb = $state(stored ? Math.max(GAIN_MIN_DB, Math.min(GAIN_MAX_DB, stored.gainDb)) : 0);
-  let normalize = $state(stored ? stored.normalize : true);
-  let remember = $state(stored ? stored.remember : true);
 
   let showSettings = $state(false);
   let buttonElement: HTMLButtonElement;
   // svelte-ignore non_reactive_update
   let menuElement: HTMLDivElement;
 
-  const currentSettings = (): AudibleBatsSettings => ({ expansion, gainDb, normalize, remember });
+  const currentSettings = (): AudibleBatsSettings => ({ expansion });
 
-  // Persist (or clear) the remembered preference.
+  // The chosen time-expansion factor is always remembered.
   function persist() {
-    if (remember) {
-      setStoredValue(STORAGE_KEY, currentSettings());
-    } else {
-      removeStoredValue(STORAGE_KEY);
-    }
+    setStoredValue(STORAGE_KEY, currentSettings());
   }
 
-  // Changing any setting invalidates the active derived copy: drop back to normal
-  // playback until the user presses Enable again.
-  function onSettingChanged() {
+  function handleExpansionChange(value: number) {
+    if (disabled || expansion === value) return;
+    expansion = value;
     persist();
+    // Changing the setting invalidates the active derived copy: drop back to
+    // normal playback until the user presses Enable again.
     if (active) {
       onDisable();
     }
   }
 
-  function handleExpansionChange(value: number) {
-    if (expansion === value) return;
-    expansion = value;
-    onSettingChanged();
-  }
-
-  function handleGainChange(value: number) {
-    gainDb = Math.max(GAIN_MIN_DB, Math.min(GAIN_MAX_DB, value));
-    onSettingChanged();
-  }
-
-  function handleNormalizeToggle() {
-    normalize = !normalize;
-    onSettingChanged();
-  }
-
-  function handleRememberToggle() {
-    remember = !remember;
-    // Remember is a local UI preference; toggling it does not invalidate the
-    // active derived copy, but it does change what we persist.
-    persist();
-  }
-
   function handlePrimaryAction() {
-    if (generating) return;
+    if (disabled || generating) return;
     if (active) {
       onDisable();
     } else {
@@ -159,6 +122,14 @@
       onEnable(currentSettings());
     }
   }
+
+  // Force-close the popup if it becomes disabled while open (e.g. a conflicting
+  // mode activates elsewhere) so the user can't interact with a stale control.
+  $effect(() => {
+    if (disabled && showSettings) {
+      closeMenu();
+    }
+  });
 
   function updateMenuPosition() {
     if (!menuElement || !buttonElement) return;
@@ -175,6 +146,7 @@
 
   function handleToggle(event: MouseEvent) {
     event.stopPropagation();
+    if (disabled) return;
     showSettings = !showSettings;
 
     if (showSettings) {
@@ -251,7 +223,8 @@
     aria-label={t('media.audio.audibleBats.title')}
     aria-haspopup="true"
     aria-expanded={showSettings}
-    title={t('media.audio.audibleBats.title')}
+    aria-describedby={disabled && disabledReason ? disabledDescId : undefined}
+    title={disabled && disabledReason ? disabledReason : t('media.audio.audibleBats.title')}
     {disabled}
   >
     <BatIcon class="size-5" />
@@ -259,6 +232,9 @@
       <span class="active-indicator" aria-hidden="true"></span>
     {/if}
   </button>
+  {#if disabled && disabledReason}
+    <span id={disabledDescId} class="sr-only">{disabledReason}</span>
+  {/if}
 
   {#if showSettings}
     <div
@@ -296,60 +272,13 @@
               class="option-button"
               class:active={expansion === option}
               onclick={() => handleExpansionChange(option)}
+              disabled={disabled || undefined}
               aria-pressed={expansion === option}
             >
               {option}×
             </button>
           {/each}
         </div>
-      </div>
-
-      <!-- Volume gain -->
-      <div class="setting-item">
-        <label class="setting-label" for={gainSliderId}>
-          {t('media.audio.audibleBats.volumeGain')}
-        </label>
-        <div class="slider-container">
-          <input
-            id={gainSliderId}
-            type="range"
-            min={GAIN_MIN_DB}
-            max={GAIN_MAX_DB}
-            step="1"
-            value={gainDb}
-            oninput={e => handleGainChange(Number((e.target as HTMLInputElement).value))}
-            class="slider"
-          />
-          <span class="slider-value">{gainDb > 0 ? '+' : ''}{gainDb} dB</span>
-        </div>
-      </div>
-
-      <!-- Normalize toggle -->
-      <div class="toggle-row">
-        <input
-          id={normalizeId}
-          type="checkbox"
-          checked={normalize}
-          onchange={handleNormalizeToggle}
-          class="toggle-checkbox"
-        />
-        <label class="toggle-label" for={normalizeId}>
-          {t('media.audio.audibleBats.normalize')}
-        </label>
-      </div>
-
-      <!-- Remember toggle -->
-      <div class="toggle-row">
-        <input
-          id={rememberId}
-          type="checkbox"
-          checked={remember}
-          onchange={handleRememberToggle}
-          class="toggle-checkbox"
-        />
-        <label class="toggle-label" for={rememberId}>
-          {t('media.audio.audibleBats.remember')}
-        </label>
       </div>
 
       {#if error}
@@ -361,7 +290,7 @@
         class="action-button"
         class:is-active={active}
         onclick={handlePrimaryAction}
-        disabled={generating}
+        disabled={disabled || generating}
         aria-busy={generating}
       >
         {#if generating}
@@ -477,61 +406,6 @@
     color: var(--color-base-content);
   }
 
-  .slider-container {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .slider {
-    flex: 1;
-    height: 4px;
-    border-radius: 2px;
-    background: rgb(51 65 85);
-    appearance: none;
-    cursor: pointer;
-  }
-
-  :global([data-theme='light']) .slider {
-    background: var(--color-base-300);
-  }
-
-  .slider::-webkit-slider-thumb {
-    appearance: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: rgb(59 130 246);
-    cursor: pointer;
-    transition: transform 0.1s ease;
-  }
-
-  .slider::-webkit-slider-thumb:hover {
-    transform: scale(1.15);
-  }
-
-  .slider::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    border: none;
-    border-radius: 50%;
-    background: rgb(59 130 246);
-    cursor: pointer;
-  }
-
-  .slider-value {
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: rgb(148 163 184);
-    min-width: 3.5rem;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-
-  :global([data-theme='light']) .slider-value {
-    color: var(--color-base-content);
-  }
-
   /* Expansion option buttons */
   .option-button-group {
     display: flex;
@@ -560,6 +434,11 @@
     color: white;
   }
 
+  .option-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   :global([data-theme='light']) .option-button {
     color: var(--color-base-content);
     background-color: var(--color-base-200);
@@ -572,31 +451,6 @@
   :global([data-theme='light']) .option-button.active {
     background-color: rgb(59 130 246);
     color: white;
-  }
-
-  /* Toggles */
-  .toggle-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .toggle-checkbox {
-    width: 0.9rem;
-    height: 0.9rem;
-    accent-color: rgb(59 130 246);
-    cursor: pointer;
-  }
-
-  .toggle-label {
-    font-size: 0.75rem;
-    color: rgb(226 232 240);
-    cursor: pointer;
-  }
-
-  :global([data-theme='light']) .toggle-label {
-    color: var(--color-base-content);
   }
 
   .settings-error {

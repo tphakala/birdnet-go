@@ -2,6 +2,7 @@ package ffmpeg_test
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,10 +47,15 @@ func TestAudibleBatsOutputSampleRate(t *testing.T) {
 
 // TestTimeExpandBatAudioValidation verifies the input validation performed before
 // any FFmpeg process is launched, so these cases need no real FFmpeg binary.
+// ValidateFFmpegPath only checks the path's shape (non-empty, absolute, not
+// contaminated) and never touches the filesystem, so an absolute placeholder
+// path under t.TempDir() satisfies it on any OS without requiring FFmpeg to
+// actually be installed.
 func TestTimeExpandBatAudioValidation(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
+	placeholderFFmpegPath := filepath.Join(t.TempDir(), "ffmpeg")
 
 	t.Run("empty ffmpeg path rejected", func(t *testing.T) {
 		t.Parallel()
@@ -60,14 +66,14 @@ func TestTimeExpandBatAudioValidation(t *testing.T) {
 
 	t.Run("invalid expansion factor rejected", func(t *testing.T) {
 		t.Parallel()
-		err := ffmpeg.TimeExpandBatAudio(ctx, "/tmp/in.wav", "/usr/bin/ffmpeg", 7, 256000, "/tmp/out.wav")
+		err := ffmpeg.TimeExpandBatAudio(ctx, "/tmp/in.wav", placeholderFFmpegPath, 7, 256000, "/tmp/out.wav")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "time-expansion factor")
 	})
 
 	t.Run("non-positive source sample rate rejected", func(t *testing.T) {
 		t.Parallel()
-		err := ffmpeg.TimeExpandBatAudio(ctx, "/tmp/in.wav", "/usr/bin/ffmpeg", 10, 0, "/tmp/out.wav")
+		err := ffmpeg.TimeExpandBatAudio(ctx, "/tmp/in.wav", placeholderFFmpegPath, 10, 0, "/tmp/out.wav")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "source sample rate")
 	})
