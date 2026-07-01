@@ -1605,11 +1605,16 @@ func (r *detectionRepository) GetSpeciesReviewStats(ctx context.Context) ([]Spec
 	revTable := r.reviewsTable()
 
 	query := r.db.WithContext(ctx).Table(detTable).
+		// DetectionReview.DetectionID carries a uniqueIndex (at most one review per
+		// detection), so the LEFT JOIN below is 1:1 and cannot multiply rows per
+		// detection (same reasoning as GetSourceActivitySummaries). Plain COUNT is
+		// already fan-out-immune here; DISTINCT would add a needless dedup pass,
+		// computed three times per group.
 		Select(fmt.Sprintf(`
 			%s.scientific_name,
-			COUNT(DISTINCT %s.id) as total,
-			COUNT(DISTINCT CASE WHEN %s.verified = ? THEN %s.id END) as verified,
-			COUNT(DISTINCT CASE WHEN %s.verified = ? THEN %s.id END) as rejected
+			COUNT(%s.id) as total,
+			COUNT(CASE WHEN %s.verified = ? THEN %s.id END) as verified,
+			COUNT(CASE WHEN %s.verified = ? THEN %s.id END) as rejected
 		`, labTable, detTable, revTable, detTable, revTable, detTable),
 			string(entities.VerificationCorrect), string(entities.VerificationFalsePositive)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id", labTable, labTable, detTable)).

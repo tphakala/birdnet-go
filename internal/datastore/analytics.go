@@ -428,13 +428,17 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 func (ds *DataStore) GetSpeciesReviewStats(ctx context.Context) ([]SpeciesReviewStat, error) {
 	stats := make([]SpeciesReviewStat, 0, 100)
 
+	// note_reviews.note_id carries a uniqueIndex (at most one review per note), so
+	// the LEFT JOIN below is 1:1 and cannot multiply rows per note. Plain COUNT is
+	// therefore already fan-out-immune; DISTINCT would only add a needless dedup
+	// pass (computed three times per group) on what can be a large table.
 	const query = `
 		SELECT
 			notes.scientific_name AS scientific_name,
 			COALESCE(MAX(notes.common_name), '') AS common_name,
-			COUNT(DISTINCT notes.id) AS total,
-			COUNT(DISTINCT CASE WHEN note_reviews.verified = ? THEN notes.id END) AS verified,
-			COUNT(DISTINCT CASE WHEN note_reviews.verified = ? THEN notes.id END) AS rejected
+			COUNT(notes.id) AS total,
+			COUNT(CASE WHEN note_reviews.verified = ? THEN notes.id END) AS verified,
+			COUNT(CASE WHEN note_reviews.verified = ? THEN notes.id END) AS rejected
 		FROM notes
 		LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
 		GROUP BY notes.scientific_name`
