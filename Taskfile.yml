@@ -16,7 +16,11 @@ vars:
       if [ ! -z "$BUILD_VERSION" ]; then
         echo "$BUILD_VERSION"
       else
-        git describe --tags --always 2>/dev/null || echo "unknown"
+        # Describe only against real release tags (semver v* and nightly-*).
+        # The auto-update feature publishes a permanent "manifest" prerelease
+        # whose git tag would otherwise be the nearest ancestor, making local
+        # builds report a confusing "manifest-<n>-g<hash>" version.
+        git describe --tags --always --match 'v*' --match 'nightly-*' 2>/dev/null || echo "unknown"
       fi
   UNAME_S:
     sh: uname -s

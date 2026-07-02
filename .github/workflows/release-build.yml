@@ -165,7 +165,9 @@ jobs:
         id: latest_release
         run: |
           # Get the latest release tag
-          LATEST_TAG=$(git describe --tags --abbrev=0)
+          # Restrict to stable release tags; the auto-update "manifest"
+          # prerelease tag would otherwise be picked as the nearest ancestor.
+          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'v*')
           echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
           echo "latest_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
       
@@ -207,7 +209,9 @@ jobs:
       - name: Get latest release tag
         if: github.event_name == 'workflow_dispatch'
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0)
+          # Restrict to stable release tags; the auto-update "manifest"
+          # prerelease tag would otherwise be picked as the nearest ancestor.
+          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'v*')
           echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
 
       - name: Add checksums to GitHub Release
@@ -234,7 +238,9 @@ jobs:
       - name: Get version
         id: get_version
         run: |
-          VERSION=$(git describe --tags --always)
+          # Restrict to stable release tags so a workflow_dispatch from a
+          # non-tagged ref does not resolve to the "manifest" prerelease tag.
+          VERSION=$(git describe --tags --always --match 'v*')
           echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
