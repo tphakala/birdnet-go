@@ -1,4 +1,7 @@
-package api
+// speciesguide_test.go: pure-helper tests for the species guide domain (quality
+// classification, expectedness mapping, rarity memoization, season computation,
+// external-link assembly, locale handling, and description summarization).
+package speciesguide
 
 import (
 	"strings"
@@ -15,6 +18,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
+
+// withRestoredGlobalSettings snapshots the package-global settings pointer and
+// restores it on cleanup so a test that publishes its own snapshot via
+// conftest.SetTestSettings does not leak into sibling tests.
+func withRestoredGlobalSettings(t *testing.T) {
+	t.Helper()
+	orig := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(orig) })
+}
 
 func TestClassifyGuideQuality(t *testing.T) {
 	t.Parallel()
@@ -90,7 +102,7 @@ func TestProbableSpeciesScores_MemoizesUnderConcurrency(t *testing.T) {
 	s.BirdNET.Longitude = 24.94
 	conftest.SetTestSettings(s)
 
-	c := &Controller{Core: &apicore.Core{}}
+	c := New(&apicore.Core{})
 	c.Settings.Store(s)
 	pred := &fakePredictor{scores: []classifier.SpeciesScore{{Label: sciEurasianBlackbird, Score: 0.9}}}
 
@@ -123,7 +135,7 @@ func TestProbableSpeciesScores_InvalidatesOnLocationChange(t *testing.T) {
 	s.BirdNET.Longitude = 20.0
 	conftest.SetTestSettings(s)
 
-	c := &Controller{Core: &apicore.Core{}}
+	c := New(&apicore.Core{})
 	c.Settings.Store(s)
 	pred := &fakePredictor{scores: []classifier.SpeciesScore{{Label: "X", Score: 0.5}}}
 

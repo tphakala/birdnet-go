@@ -1,9 +1,9 @@
-// species_guide_handler_test.go: HTTP handler-level tests for the species guide,
+// handler_test.go: HTTP handler-level tests for the species guide,
 // similar-species, and notes endpoints. These exercise status-code mapping,
 // feature gating, cache-unavailable handling, datastore error translation, and
-// the auth gating on note writes — the wiring the pure-helper tests in
-// species_guide_test.go do not cover.
-package api
+// the auth gating on note reads/writes — the wiring the pure-helper tests in
+// speciesguide_test.go do not cover.
+package speciesguide
 
 import (
 	"context"
@@ -111,14 +111,14 @@ func guideEnabledSettings() *conf.Settings {
 	return s
 }
 
-// guideTestController publishes s both globally (for currentSettings) and
-// per-controller (for nil-safe error responses), restoring the global snapshot
+// guideTestHandler publishes s both globally (for CurrentSettings) and
+// per-handler (for nil-safe error responses), restoring the global snapshot
 // on cleanup. Tests using it must be serial (the global snapshot is process-wide).
-func guideTestController(t *testing.T, s *conf.Settings) *Controller {
+func guideTestHandler(t *testing.T, s *conf.Settings) *Handler {
 	t.Helper()
 	withRestoredGlobalSettings(t)
 	conftest.SetTestSettings(s)
-	c := &Controller{Core: &apicore.Core{}}
+	c := New(&apicore.Core{})
 	c.Settings.Store(s)
 	return c
 }
@@ -139,21 +139,21 @@ func guideCtx(t *testing.T, name string) (echo.Context, *httptest.ResponseRecord
 // --- GetSpeciesGuide ---
 
 func TestGetSpeciesGuide_DisabledReturns404(t *testing.T) {
-	c := guideTestController(t, &conf.Settings{}) // SpeciesGuide.Enabled == false
+	c := guideTestHandler(t, &conf.Settings{}) // SpeciesGuide.Enabled == false
 	ctx, rec := guideCtx(t, sciEurasianBlackbird)
 	require.NoError(t, c.GetSpeciesGuide(ctx))
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestGetSpeciesGuide_CacheUnavailableReturns503(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings()) // enabled, but no cache wired
+	c := guideTestHandler(t, guideEnabledSettings()) // enabled, but no cache wired
 	ctx, rec := guideCtx(t, sciEurasianBlackbird)
 	require.NoError(t, c.GetSpeciesGuide(ctx))
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 func TestGetSpeciesGuide_NotFoundReturns404(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings())
+	c := guideTestHandler(t, guideEnabledSettings())
 	c.SetGuideCache(newStubGuideCache(t, nil)) // provider yields ErrGuideNotFound -> negative entry
 	ctx, rec := guideCtx(t, "Nonexistent species")
 	require.NoError(t, c.GetSpeciesGuide(ctx))
@@ -161,7 +161,7 @@ func TestGetSpeciesGuide_NotFoundReturns404(t *testing.T) {
 }
 
 func TestGetSpeciesGuide_SuccessReturns200(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings())
+	c := guideTestHandler(t, guideEnabledSettings())
 	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{
 		CommonName:  commonBlackbird,
 		Description: "A widespread thrush of gardens and woodland across much of Europe, Asia, and North Africa.",
@@ -179,7 +179,7 @@ func TestGetSpeciesGuide_SuccessReturns200(t *testing.T) {
 // A client that disconnects mid-fetch (canceled request context) must get the
 // client-closed status, not a misleading 502 Bad Gateway.
 func TestGetSpeciesGuide_ClientCanceledReturns499(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings())
+	c := guideTestHandler(t, guideEnabledSettings())
 	gc := guideprovider.NewGuideCache(emptyGuideStore{}, noopGuideMetrics{})
 	gc.RegisterProvider(guideprovider.WikipediaProviderName, blockingGuideProvider{})
 	t.Cleanup(gc.Close)
@@ -199,7 +199,7 @@ func TestGetSpeciesGuide_ClientCanceledReturns499(t *testing.T) {
 }
 
 func TestGetSpeciesGuide_EmptyNameReturns400(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings())
+	c := guideTestHandler(t, guideEnabledSettings())
 	ctx, rec := guideCtx(t, "")
 	require.NoError(t, c.GetSpeciesGuide(ctx))
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -209,7 +209,7 @@ func TestGetSpeciesGuide_EmptyNameReturns400(t *testing.T) {
 // can reach the providers (an outbound Wikipedia title) or the embedded-dataset memo,
 // rather than being passed through and 404-ing later.
 func TestGetSpeciesGuide_InvalidCharactersReturns400(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings())
+	c := guideTestHandler(t, guideEnabledSettings())
 	// A cache wired here would only matter if the handler reached it; it must not.
 	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{Description: "should never be returned"}))
 	for _, name := range []string{
@@ -256,14 +256,14 @@ func TestIsPlausibleScientificName(t *testing.T) {
 // --- GetSimilarSpecies (gating branches; full resolution needs a TaxonomyDB) ---
 
 func TestGetSimilarSpecies_DisabledReturns404(t *testing.T) {
-	c := guideTestController(t, &conf.Settings{})
+	c := guideTestHandler(t, &conf.Settings{})
 	ctx, rec := guideCtx(t, sciEurasianBlackbird)
 	require.NoError(t, c.GetSimilarSpecies(ctx))
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestGetSimilarSpecies_NoTaxonomyReturns503(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings()) // c.TaxonomyDB is nil
+	c := guideTestHandler(t, guideEnabledSettings()) // c.TaxonomyDB is nil
 	ctx, rec := guideCtx(t, sciEurasianBlackbird)
 	require.NoError(t, c.GetSimilarSpecies(ctx))
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
@@ -274,7 +274,7 @@ func TestGetSimilarSpecies_NoTaxonomyReturns503(t *testing.T) {
 // has_guide, and (with enrichments on) must carry localized resource links so the
 // picker rail can offer links instead of an empty comparison card.
 func TestResolveSimilarSpecies_StubWithoutDescriptionGetsLocalizedLinks(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings())
+	c := guideTestHandler(t, guideEnabledSettings())
 	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{
 		CommonName:  commonCarrionCrow,
 		Description: "",
@@ -300,7 +300,7 @@ func TestResolveSimilarSpecies_StubWithoutDescriptionGetsLocalizedLinks(t *testi
 // With enrichments off, a description-less entry carries no links (links are
 // enrichment data, consistent with the main guide modal).
 func TestResolveSimilarSpecies_StubWithEnrichmentsOffHasNoLinks(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings())
+	c := guideTestHandler(t, guideEnabledSettings())
 	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{
 		CommonName:  commonCarrionCrow,
 		Description: "",
@@ -316,7 +316,7 @@ func TestResolveSimilarSpecies_StubWithEnrichmentsOffHasNoLinks(t *testing.T) {
 }
 
 func TestResolveSimilarSpecies_WithDescriptionIsMarkedHasGuideAndNoLinks(t *testing.T) {
-	c := guideTestController(t, guideEnabledSettings())
+	c := guideTestHandler(t, guideEnabledSettings())
 	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{
 		CommonName:  commonCarrionCrow,
 		Description: "The carrion crow is a passerine bird of the family Corvidae.",
@@ -334,11 +334,11 @@ func TestResolveSimilarSpecies_WithDescriptionIsMarkedHasGuideAndNoLinks(t *test
 
 // --- Notes (no global-settings dependency, so these can run in parallel) ---
 
-// notesController returns a controller backed by a fresh mock datastore.
-func notesController(t *testing.T) (*Controller, *mocks.MockInterface) {
+// notesHandler returns a handler backed by a fresh mock datastore.
+func notesHandler(t *testing.T) (*Handler, *mocks.MockInterface) {
 	t.Helper()
 	mockDS := mocks.NewMockInterface(t)
-	c := &Controller{Core: &apicore.Core{DS: mockDS}}
+	c := New(&apicore.Core{DS: mockDS})
 	c.Settings.Store(&conf.Settings{})
 	return c, mockDS
 }
@@ -370,7 +370,7 @@ func notesCtx(t *testing.T, method, target, body string, params map[string]strin
 
 func TestGetSpeciesNotes_Returns200(t *testing.T) {
 	t.Parallel()
-	c, mockDS := notesController(t)
+	c, mockDS := notesHandler(t)
 	mockDS.EXPECT().GetSpeciesNotes(mock.Anything, sciEurasianBlackbird).Return(
 		[]datastore.SpeciesNote{{ID: 1, ScientificName: sciEurasianBlackbird, Entry: "Seen at dawn", CreatedAt: time.Now(), UpdatedAt: time.Now()}},
 		nil).Once()
@@ -388,12 +388,12 @@ func TestGetSpeciesNotes_Returns200(t *testing.T) {
 
 func TestGetSpeciesNotes_DatastoreUnavailableReturns503(t *testing.T) {
 	t.Parallel()
-	c := &Controller{Core: &apicore.Core{}} // DS nil
+	c := New(&apicore.Core{}) // DS nil
 	c.Settings.Store(&conf.Settings{})
 
 	ctx, rec := notesCtx(t, http.MethodGet, "/api/v2/species/Turdus/notes", "",
 		map[string]string{paramScientificName: sciEurasianBlackbird})
-	// requireDatastore writes the 503 response AND returns the error, so the
+	// RequireDatastore writes the 503 response AND returns the error, so the
 	// handler returns non-nil here; assert on the written status, not the return.
 	_ = c.GetSpeciesNotes(ctx)
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
@@ -401,7 +401,7 @@ func TestGetSpeciesNotes_DatastoreUnavailableReturns503(t *testing.T) {
 
 func TestCreateSpeciesNote_Returns201(t *testing.T) {
 	t.Parallel()
-	c, mockDS := notesController(t)
+	c, mockDS := notesHandler(t)
 	mockDS.EXPECT().SaveSpeciesNote(mock.Anything, mock.AnythingOfType("*datastore.SpeciesNote")).
 		Return(nil).Once()
 
@@ -413,7 +413,7 @@ func TestCreateSpeciesNote_Returns201(t *testing.T) {
 
 func TestCreateSpeciesNote_TooLongReturns400WithKey(t *testing.T) {
 	t.Parallel()
-	c, mockDS := notesController(t)
+	c, mockDS := notesHandler(t)
 	mockDS.EXPECT().SaveSpeciesNote(mock.Anything, mock.Anything).
 		Return(datastore.ErrSpeciesNoteTooLong).Once()
 
@@ -422,7 +422,7 @@ func TestCreateSpeciesNote_TooLongReturns400WithKey(t *testing.T) {
 	require.NoError(t, c.CreateSpeciesNote(ctx))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var body ErrorResponse
+	var body apicore.ErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, "analytics.species.notes.tooLong", body.ErrorKey)
 }
@@ -432,7 +432,7 @@ func TestCreateSpeciesNote_TooLongReturns400WithKey(t *testing.T) {
 // key — that conflation was the bug this mapping fixes.
 func TestCreateSpeciesNote_OtherValidationErrorReturns400WithoutTooLongKey(t *testing.T) {
 	t.Parallel()
-	c, mockDS := notesController(t)
+	c, mockDS := notesHandler(t)
 	valErr := errors.Newf("entry cannot be empty").
 		Component("datastore").Category(errors.CategoryValidation).Build()
 	mockDS.EXPECT().SaveSpeciesNote(mock.Anything, mock.Anything).Return(valErr).Once()
@@ -442,14 +442,14 @@ func TestCreateSpeciesNote_OtherValidationErrorReturns400WithoutTooLongKey(t *te
 	require.NoError(t, c.CreateSpeciesNote(ctx))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var body ErrorResponse
+	var body apicore.ErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.NotEqual(t, "analytics.species.notes.tooLong", body.ErrorKey)
 }
 
 func TestUpdateSpeciesNote_NotFoundReturns404(t *testing.T) {
 	t.Parallel()
-	c, mockDS := notesController(t)
+	c, mockDS := notesHandler(t)
 	mockDS.EXPECT().UpdateSpeciesNote(mock.Anything, "42", "edited").
 		Return(datastore.ErrSpeciesNoteNotFound).Once()
 
@@ -461,7 +461,7 @@ func TestUpdateSpeciesNote_NotFoundReturns404(t *testing.T) {
 
 func TestUpdateSpeciesNote_EmptyIDReturns400(t *testing.T) {
 	t.Parallel()
-	c, _ := notesController(t) // no DS call expected: empty id is rejected first
+	c, _ := notesHandler(t) // no DS call expected: empty id is rejected first
 	ctx, rec := notesCtx(t, http.MethodPut, "/api/v2/species/notes/", `{"entry":"edited"}`,
 		map[string]string{"id": ""})
 	require.NoError(t, c.UpdateSpeciesNote(ctx))
@@ -470,7 +470,7 @@ func TestUpdateSpeciesNote_EmptyIDReturns400(t *testing.T) {
 
 func TestDeleteSpeciesNote_NotFoundReturns404(t *testing.T) {
 	t.Parallel()
-	c, mockDS := notesController(t)
+	c, mockDS := notesHandler(t)
 	mockDS.EXPECT().DeleteSpeciesNote(mock.Anything, "42").
 		Return(datastore.ErrSpeciesNoteNotFound).Once()
 
@@ -480,21 +480,22 @@ func TestDeleteSpeciesNote_NotFoundReturns404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-// --- auth gating (route-level: writes require auth, reads are public) ---
+// --- auth gating (route-level: reads AND writes require auth) ---
 
 func TestSpeciesGuideRoutes_NotesAreAuthGated(t *testing.T) {
 	t.Parallel()
 	e := echo.New()
-	c := &Controller{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
-	c.Settings.Store(&conf.Settings{})
+	core := &apicore.Core{Echo: e}
+	core.Settings.Store(&conf.Settings{})
 	// A denying middleware stands in for the real authenticator: it short-circuits
 	// before the handler, so a gated route returns 401 without touching the DS.
-	c.AuthMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
+	core.AuthMiddleware = func(echo.HandlerFunc) echo.HandlerFunc {
 		return func(ctx echo.Context) error {
 			return ctx.NoContent(http.StatusUnauthorized)
 		}
 	}
-	c.initSpeciesGuideRoutes()
+	c := New(core)
+	c.RegisterRoutes(e.Group("/api/v2"))
 
 	// All notes endpoints — reads included — are auth-gated, because notes are
 	// user-authored and may hold sensitive content. The concrete 401 (vs a 404)

@@ -251,7 +251,7 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 | GET    | `/species/:code/thumbnail`    | `GetSpeciesThumbnail`    | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
 | GET    | `/species/dictionary/:locale` | `ServeSpeciesDictionary` | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
-### Species Guide (`species_guide.go`)
+### Species Guide (`speciesguide/speciesguide.go`)
 
 Guide/similar are gated by `realtime.dashboard.speciesguide.enabled` (404 when disabled) and rate-limited. All notes endpoints — reads included — require authentication, since notes are user-authored and may contain sensitive content.
 

@@ -1,6 +1,8 @@
-// species_guide.go implements the species guide, notes, and similar-species API
-// endpoints backed by the guideprovider cache and the species-notes datastore.
-package api
+// Package speciesguide implements the species guide, notes, and similar-species
+// API endpoints backed by the guideprovider cache and the species-notes
+// datastore. It follows the standard domain-handler pattern: Handler embeds
+// *apicore.Core by pointer and registers its routes via RegisterRoutes.
+package speciesguide
 
 import (
 	"context"
@@ -66,12 +68,16 @@ const defaultWikiLang = "en"
 // embedded-dataset lookups. It is a byte cap (cheap, and names are ASCII Latin).
 const scientificNameMaxLength = 128
 
+// secondsPerMinute converts the per-minute rate-limit budget to Echo's
+// requests-per-second limiter rate.
+const secondsPerMinute = 60
+
 const (
 	// guideRateLimitPerMinute bounds calls to the external-API-backed endpoints.
 	// The limiter runs as middleware (before the handler), so it cannot tell a
 	// warm cache hit from a live external fetch and counts both. Echo's limiter
 	// Rate is in requests-per-second, so this per-minute value is divided by
-	// SecondsPerMinute at construction; the cache's singleflight + stale-refresh
+	// secondsPerMinute at construction; the cache's singleflight + stale-refresh
 	// dedup already bounds the actual number of external provider calls.
 	guideRateLimitPerMinute = 60
 	// guideRateLimitBurst is the limiter burst allowance. The species comparison
@@ -100,6 +106,36 @@ var errGuideCacheUnavailable = errors.Newf("species guide cache unavailable").
 	Component("api-species-guide").
 	Category(errors.CategorySystem).
 	Build()
+
+// Handler serves the species guide domain: the guide and similar-species
+// endpoints (rate-limited; backed by the guideprovider cache) and the
+// auth-gated species-notes CRUD endpoints. Beyond the shared *apicore.Core it
+// owns the guide cache slot (hot-reload swaps a new cache in via SetGuideCache;
+// the handler is the canonical owner and closes it on Shutdown) and the
+// guide-rarity memoization for the expectedness badge.
+type Handler struct {
+	*apicore.Core
+
+	// guideCache is the species guide cache, guarded by guideCacheMu. May be
+	// nil when the feature is disabled.
+	guideCache   *guideprovider.GuideCache
+	guideCacheMu sync.RWMutex
+
+	// guideRarity* memoize the daily probable-species score map (normalized
+	// scientific name -> score) for the guide expectedness badge, so a burst of
+	// guide requests doesn't re-run the geomodel prediction per call. Keyed on the
+	// configured location (guideRarityLocKey) and the TTL so a location change
+	// invalidates it immediately.
+	guideRarityMu     sync.RWMutex
+	guideRarityExpiry time.Time
+	guideRarityScores map[string]float64
+	guideRarityLocKey string
+}
+
+// New creates the species guide domain handler around the shared core.
+func New(core *apicore.Core) *Handler {
+	return &Handler{Core: core}
+}
 
 // --- Response shapes (authoritative; mirrored by frontend types in species.ts) ---
 
@@ -177,12 +213,12 @@ type createSpeciesNoteRequest struct {
 	Entry string `json:"entry"`
 }
 
-// --- Controller cache plumbing (hot-reload safe) ---
+// --- Guide cache plumbing (hot-reload safe) ---
 
 // WithGuideCache snapshots the guide cache pointer under a read lock and runs fn
 // outside the lock, so hot-reload swaps never block readers. Returns
 // errGuideCacheUnavailable when no cache is configured.
-func (c *Controller) WithGuideCache(fn func(*guideprovider.GuideCache) error) error {
+func (c *Handler) WithGuideCache(fn func(*guideprovider.GuideCache) error) error {
 	c.guideCacheMu.RLock()
 	gc := c.guideCache
 	c.guideCacheMu.RUnlock()
@@ -194,7 +230,7 @@ func (c *Controller) WithGuideCache(fn func(*guideprovider.GuideCache) error) er
 
 // SetGuideCache atomically swaps in a new guide cache and closes the previous one
 // OUTSIDE the lock so it never blocks concurrent WithGuideCache readers.
-func (c *Controller) SetGuideCache(gc *guideprovider.GuideCache) {
+func (c *Handler) SetGuideCache(gc *guideprovider.GuideCache) {
 	c.guideCacheMu.Lock()
 	old := c.guideCache
 	c.guideCache = gc
@@ -204,32 +240,45 @@ func (c *Controller) SetGuideCache(gc *guideprovider.GuideCache) {
 	}
 }
 
+// Shutdown closes and nils the guide cache (the handler is its canonical owner).
+// Snapshot under the lock, then close outside it. Called by the facade during
+// controller teardown.
+func (c *Handler) Shutdown() {
+	c.guideCacheMu.Lock()
+	gc := c.guideCache
+	c.guideCache = nil
+	c.guideCacheMu.Unlock()
+	if gc != nil {
+		gc.Close()
+	}
+}
+
 // --- Routes ---
 
-// initSpeciesGuideRoutes registers the species guide, similar-species, and notes
-// endpoints. Called from initSpeciesRoutes.
-func (c *Controller) initSpeciesGuideRoutes() {
+// RegisterRoutes registers the species guide, similar-species, and notes
+// endpoints on the /api/v2 group. Called from the facade's initRoutes.
+func (c *Handler) RegisterRoutes(g *echo.Group) {
 	guideRateLimiter := c.newGuideRateLimiter()
 
 	// Guide + similar are rate-limited (external API calls).
-	c.Group.GET("/species/:scientific_name/guide", c.GetSpeciesGuide, guideRateLimiter)
-	c.Group.GET("/species/:scientific_name/similar", c.GetSimilarSpecies, guideRateLimiter)
+	g.GET("/species/:scientific_name/guide", c.GetSpeciesGuide, guideRateLimiter)
+	g.GET("/species/:scientific_name/similar", c.GetSimilarSpecies, guideRateLimiter)
 
 	// Notes are auth-gated for both reads and writes: they are user-authored and
 	// may contain sensitive content (e.g. precise locations of rare species), so
 	// they must not be world-readable on a publicly exposed instance.
-	c.Group.GET("/species/:scientific_name/notes", c.GetSpeciesNotes, c.GetAuthMiddleware())
-	c.Group.POST("/species/:scientific_name/notes", c.CreateSpeciesNote, c.GetAuthMiddleware())
-	c.Group.PUT("/species/notes/:id", c.UpdateSpeciesNote, c.GetAuthMiddleware())
-	c.Group.DELETE("/species/notes/:id", c.DeleteSpeciesNote, c.GetAuthMiddleware())
+	g.GET("/species/:scientific_name/notes", c.GetSpeciesNotes, c.GetAuthMiddleware())
+	g.POST("/species/:scientific_name/notes", c.CreateSpeciesNote, c.GetAuthMiddleware())
+	g.PUT("/species/notes/:id", c.UpdateSpeciesNote, c.GetAuthMiddleware())
+	g.DELETE("/species/notes/:id", c.DeleteSpeciesNote, c.GetAuthMiddleware())
 }
 
 // newGuideRateLimiter builds the shared rate limiter for guide/similar endpoints.
-func (c *Controller) newGuideRateLimiter() echo.MiddlewareFunc {
+func (c *Handler) newGuideRateLimiter() echo.MiddlewareFunc {
 	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      rate.Limit(float64(guideRateLimitPerMinute) / float64(SecondsPerMinute)),
+				Rate:      rate.Limit(float64(guideRateLimitPerMinute) / float64(secondsPerMinute)),
 				Burst:     guideRateLimitBurst,
 				ExpiresIn: 1 * time.Minute,
 			},
@@ -318,7 +367,7 @@ func isPlausibleScientificName(s string) bool {
 }
 
 // handleScientificNameError maps a scientific-name parse error to a 400 response.
-func (c *Controller) handleScientificNameError(ctx echo.Context, err error) error {
+func (c *Handler) handleScientificNameError(ctx echo.Context, err error) error {
 	return c.HandleError(ctx, err, "Invalid scientific name", http.StatusBadRequest)
 }
 
@@ -349,7 +398,7 @@ func guideLocale(ctx echo.Context, settings *conf.Settings) string {
 
 // GetSpeciesGuide returns the species guide for a detected species.
 // GET /api/v2/species/:scientific_name/guide
-func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
+func (c *Handler) GetSpeciesGuide(ctx echo.Context) error {
 	name, err := parseScientificNameParam(ctx)
 	if err != nil {
 		return c.handleScientificNameError(ctx, err)
@@ -441,7 +490,7 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 
 // GetSimilarSpecies returns same-genus / same-family / similar species with summaries.
 // GET /api/v2/species/:scientific_name/similar
-func (c *Controller) GetSimilarSpecies(ctx echo.Context) error {
+func (c *Handler) GetSimilarSpecies(ctx echo.Context) error {
 	name, err := parseScientificNameParam(ctx)
 	if err != nil {
 		return c.handleScientificNameError(ctx, err)
@@ -485,7 +534,7 @@ type similarCandidate struct {
 
 // similarSpeciesCandidates resolves same-genus then same-family candidates,
 // excluding the focal species and capped at maxSimilarSpecies.
-func (c *Controller) similarSpeciesCandidates(focal string) (genus string, candidates []similarCandidate) {
+func (c *Handler) similarSpeciesCandidates(focal string) (genus string, candidates []similarCandidate) {
 	genusName, meta, err := c.TaxonomyDB.GetGenusByScientificName(focal)
 	if err != nil || genusName == "" {
 		// Fall back to the first token of the scientific name. meta stays nil,
@@ -523,7 +572,7 @@ func (c *Controller) similarSpeciesCandidates(focal string) (genus string, candi
 
 // resolveSimilarSpecies fetches each candidate's guide in parallel and builds the
 // response entries, preserving candidate order.
-func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks, supplementary bool) []SimilarSpeciesEntry {
+func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks, supplementary bool) []SimilarSpeciesEntry {
 	// Bound the whole fan-out so a cold cache (live external fetches) cannot
 	// block the request indefinitely; unresolved candidates fall back to
 	// name-only below.
@@ -570,9 +619,9 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 }
 
 // GetSpeciesNotes returns all notes for a species (authenticated; notes are
-// user-authored and may contain sensitive content, see initSpeciesGuideRoutes).
+// user-authored and may contain sensitive content, see RegisterRoutes).
 // GET /api/v2/species/:scientific_name/notes
-func (c *Controller) GetSpeciesNotes(ctx echo.Context) error {
+func (c *Handler) GetSpeciesNotes(ctx echo.Context) error {
 	name, err := parseScientificNameParam(ctx)
 	if err != nil {
 		return c.handleScientificNameError(ctx, err)
@@ -595,7 +644,7 @@ func (c *Controller) GetSpeciesNotes(ctx echo.Context) error {
 
 // CreateSpeciesNote creates a note for a species (auth-gated).
 // POST /api/v2/species/:scientific_name/notes
-func (c *Controller) CreateSpeciesNote(ctx echo.Context) error {
+func (c *Handler) CreateSpeciesNote(ctx echo.Context) error {
 	name, err := parseScientificNameParam(ctx)
 	if err != nil {
 		return c.handleScientificNameError(ctx, err)
@@ -618,7 +667,7 @@ func (c *Controller) CreateSpeciesNote(ctx echo.Context) error {
 
 // UpdateSpeciesNote updates a note's entry (auth-gated).
 // PUT /api/v2/species/notes/:id
-func (c *Controller) UpdateSpeciesNote(ctx echo.Context) error {
+func (c *Handler) UpdateSpeciesNote(ctx echo.Context) error {
 	id, err := parseNoteIDParam(ctx)
 	if err != nil {
 		return c.HandleError(ctx, err, "Missing note id", http.StatusBadRequest)
@@ -643,7 +692,7 @@ func (c *Controller) UpdateSpeciesNote(ctx echo.Context) error {
 
 // DeleteSpeciesNote deletes a note (auth-gated).
 // DELETE /api/v2/species/notes/:id
-func (c *Controller) DeleteSpeciesNote(ctx echo.Context) error {
+func (c *Handler) DeleteSpeciesNote(ctx echo.Context) error {
 	id, err := parseNoteIDParam(ctx)
 	if err != nil {
 		return c.HandleError(ctx, err, "Missing note id", http.StatusBadRequest)
@@ -665,7 +714,7 @@ func (c *Controller) DeleteSpeciesNote(ctx echo.Context) error {
 // specific too-long case gets the localized "too long" key, other validation
 // failures (empty entry, invalid note ID) get a plain 400 so they are not
 // mislabeled as too long, and everything else is a 500.
-func (c *Controller) handleSpeciesNoteWriteError(ctx echo.Context, err error, message string) error {
+func (c *Handler) handleSpeciesNoteWriteError(ctx echo.Context, err error, message string) error {
 	switch {
 	case errors.Is(err, datastore.ErrSpeciesNoteTooLong):
 		return c.HandleErrorWithKey(ctx, err, message, http.StatusBadRequest,
@@ -711,7 +760,7 @@ const guideRarityTTL = 60 * time.Second
 // when the rarity model is unavailable or has no coverage for the species. It
 // uses a short-lived cache of the probable-species scores so a rate-limited
 // burst of guide requests doesn't re-run the geomodel prediction per call.
-func (c *Controller) guideExpectedness(scientificName string) string {
+func (c *Handler) guideExpectedness(scientificName string) string {
 	proc := c.Processor
 	if proc == nil || proc.Bn == nil {
 		return ""
@@ -735,7 +784,7 @@ func (c *Controller) guideExpectedness(scientificName string) string {
 // guideRarityLocationKey returns a stable key for the configured observer
 // location. The memoized probable-species map is invalidated when this changes so
 // a location update is reflected immediately rather than after the TTL window.
-func (c *Controller) guideRarityLocationKey() string {
+func (c *Handler) guideRarityLocationKey() string {
 	settings := c.CurrentSettings()
 	if settings == nil {
 		return ""
@@ -755,7 +804,7 @@ type probableSpeciesPredictor interface {
 // geomodel occurrence score, rebuilding it when the TTL expires or the configured
 // location changes. Returns nil when the prediction is unavailable (caller omits
 // expectedness).
-func (c *Controller) probableSpeciesScores(bn probableSpeciesPredictor) map[string]float64 {
+func (c *Handler) probableSpeciesScores(bn probableSpeciesPredictor) map[string]float64 {
 	locKey := c.guideRarityLocationKey()
 
 	// Fast path: while the memoized map is fresh AND was computed for the current
@@ -800,15 +849,14 @@ func (c *Controller) probableSpeciesScores(bn probableSpeciesPredictor) map[stri
 	return scores
 }
 
-// scoreToExpectedness maps a geomodel occurrence score to an expectedness label.
 // Rarity score thresholds for the guide expectedness badge. These mirror the
-// geomodel occurrence-probability bands the species rarity domain uses; they are
-// defined locally because the guide's expectedness logic lives in package api
-// while the species rarity domain moved to the species subpackage.
+// geomodel occurrence-probability bands the species rarity domain uses
+// (internal/api/v2/species); they are defined locally so the two domains stay
+// decoupled (domains depend only on apicore and dto, never on each other).
 const (
-	RarityThresholdCommon   = 0.5
-	RarityThresholdUncommon = 0.2
-	RarityThresholdRare     = 0.05
+	rarityThresholdCommon   = 0.5
+	rarityThresholdUncommon = 0.2
+	rarityThresholdRare     = 0.05
 )
 
 // speciesHasGeomodelCoverage reports whether the scientific name is in the primary
@@ -824,13 +872,14 @@ func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName stri
 	return false
 }
 
+// scoreToExpectedness maps a geomodel occurrence score to an expectedness label.
 func scoreToExpectedness(score float64) string {
 	switch {
-	case score > RarityThresholdCommon:
+	case score > rarityThresholdCommon:
 		return expectednessExpected
-	case score > RarityThresholdUncommon:
+	case score > rarityThresholdUncommon:
 		return expectednessUncommon
-	case score > RarityThresholdRare:
+	case score > rarityThresholdRare:
 		return expectednessRare
 	default:
 		return expectednessUnexpected
@@ -881,7 +930,7 @@ func seasonForHemisphere(northern bool, northSeason, southSeason string) string 
 // the loaded BirdNET taxonomy. Returns "" when no real code is available — the
 // resolver returns a generated placeholder in that case, which is not a valid
 // eBird URL slug, so callers must treat the missing-code case as "no eBird link".
-func (c *Controller) ebirdSpeciesCode(scientificName string) string {
+func (c *Handler) ebirdSpeciesCode(scientificName string) string {
 	if c.Processor == nil || c.Processor.Bn == nil {
 		return ""
 	}

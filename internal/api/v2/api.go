@@ -32,6 +32,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/notifications"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
+	"github.com/tphakala/birdnet-go/internal/api/v2/speciesguide"
 	"github.com/tphakala/birdnet-go/internal/api/v2/sse"
 	"github.com/tphakala/birdnet-go/internal/api/v2/support"
 	"github.com/tphakala/birdnet-go/internal/api/v2/system"
@@ -169,20 +170,13 @@ type Controller struct {
 
 	controlChan chan string
 
-	// guideCache is the species guide cache. The facade is its canonical owner
-	// (hot-reload swaps it in via SetGuideCache), guarded by guideCacheMu. May be
-	// nil when the feature is disabled.
-	guideCache   *guideprovider.GuideCache
-	guideCacheMu sync.RWMutex
-	// guideRarity* memoize the daily probable-species score map (normalized
-	// scientific name -> score) for the guide expectedness badge, so a burst of
-	// guide requests doesn't re-run the geomodel prediction per call. Keyed on the
-	// configured location (guideRarityLocKey) and the TTL so a location change
-	// invalidates it immediately.
-	guideRarityMu     sync.RWMutex
-	guideRarityExpiry time.Time
-	guideRarityScores map[string]float64
-	guideRarityLocKey string
+	// speciesGuide serves the species guide domain: the rate-limited
+	// /species/:name/guide and /species/:name/similar endpoints and the
+	// auth-gated species-notes CRUD. Beyond the shared *apicore.Core it OWNS the
+	// guide cache slot (hot-reload swaps a new cache in through the facade's
+	// SetGuideCache delegator; the handler closes it on Shutdown) and the
+	// guide-rarity memoization for the expectedness badge.
+	speciesGuide *speciesguide.Handler
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -335,11 +329,13 @@ func WithNotificationService(svc *notification.Service) Option {
 	}
 }
 
-// WithGuideCache injects the species guide cache. The controller becomes the
-// canonical owner and closes it on shutdown (hot-reload may swap it later).
+// WithGuideCache injects the species guide cache. The species guide handler
+// becomes the canonical owner and closes it on shutdown (hot-reload may swap it
+// later via the SetGuideCache delegator). The handler is constructed before the
+// functional options are applied (see NewWithOptions), so the slot exists here.
 func WithGuideCache(gc *guideprovider.GuideCache) Option {
 	return func(c *Controller) {
-		c.guideCache = gc
+		c.speciesGuide.SetGuideCache(gc)
 	}
 }
 
@@ -490,6 +486,11 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
 	// is fully constructed here, so the method values are stable for its lifetime.
 	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
+	// The species guide handler needs only the shared core; it owns the guide
+	// cache slot, which the WithGuideCache functional option (applied below) and
+	// the hot-reload path (the facade's SetGuideCache delegator) populate, so it
+	// MUST be constructed before the options loop.
+	c.speciesGuide = speciesguide.New(c.Core)
 	// The models handler needs only the shared core (ModelManager and the
 	// settings/error/log/goroutine helpers all promote from it).
 	c.models = models.New(c.Core)
@@ -628,6 +629,22 @@ func (c *Controller) SetSourceRestarter(fn control.SourceRestarterFunc) {
 	c.control.SetSourceRestarter(fn)
 }
 
+// WithGuideCache runs fn against the current species guide cache (hot-reload
+// safe; see the handler's accessor for locking semantics). It delegates to the
+// species guide domain handler, which owns the cache slot. The hot-reload path
+// (internal/analysis control monitor) calls this on *Controller, so the method
+// stays on the facade as a one-line delegator.
+func (c *Controller) WithGuideCache(fn func(*guideprovider.GuideCache) error) error {
+	return c.speciesGuide.WithGuideCache(fn)
+}
+
+// SetGuideCache atomically swaps in a new species guide cache, closing the
+// previous one. It delegates to the species guide domain handler; the hot-reload
+// path (internal/analysis control monitor) calls this on *Controller.
+func (c *Controller) SetGuideCache(gc *guideprovider.GuideCache) {
+	c.speciesGuide.SetGuideCache(gc)
+}
+
 // initRoutes registers all API endpoints
 func (c *Controller) initRoutes() {
 	// Health check endpoint - publicly accessible
@@ -670,7 +687,7 @@ func (c *Controller) initRoutes() {
 		{"support routes", func() { c.support.RegisterRoutes(c.Group) }},
 		{"debug routes", func() { c.appHandler.RegisterDebugRoutes(c.Group) }},
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
-		{"species guide routes", c.initSpeciesGuideRoutes},
+		{"species guide routes", func() { c.speciesGuide.RegisterRoutes(c.Group) }},
 		{"dynamic threshold routes", func() { c.dynamicThresholds.RegisterRoutes(c.Group) }},
 		{"alert routes", func() { c.alerts.RegisterRoutes(c.Group) }},
 		{"model routes", func() { c.models.RegisterRoutes(c.Group) }},
@@ -809,14 +826,10 @@ func (c *Controller) Shutdown() {
 		c.SSEManager.CloseAllClients()
 	}
 
-	// Close and nil the species guide cache (the facade is its canonical owner).
-	// Snapshot under the lock, then close outside it.
-	c.guideCacheMu.Lock()
-	gc := c.guideCache
-	c.guideCache = nil
-	c.guideCacheMu.Unlock()
-	if gc != nil {
-		gc.Close()
+	// Close and nil the species guide cache (the species guide handler is its
+	// canonical owner). Nil-guarded for manually constructed test controllers.
+	if c.speciesGuide != nil {
+		c.speciesGuide.Shutdown()
 	}
 
 	// Stop the alerting engine background goroutines and its global event bus.
