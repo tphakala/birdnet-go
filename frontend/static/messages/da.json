@@ -4762,8 +4762,8 @@
         "title": "Hørbar flagermusafspilning",
         "subtitle": "Sænk ultralydskald til det menneskelige høreområde.",
         "timeExpansion": "Tidsudvidelse",
-        "enable": "Aktivér hørbar flagermustilstand",
-        "disable": "Deaktivér hørbar flagermustilstand",
+        "enable": "Aktivér",
+        "disable": "Deaktivér",
         "generating": "Genererer afledt lyd…",
         "error": "Kunne ikke generere hørbar flagermuslyd"
       }

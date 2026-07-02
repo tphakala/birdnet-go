@@ -4762,8 +4762,8 @@
         "title": "Počuteľné prehrávanie netopierov",
         "subtitle": "Spomalí ultrazvukové volania do rozsahu počuteľného pre človeka.",
         "timeExpansion": "Časové roztiahnutie",
-        "enable": "Zapnúť režim počuteľných netopierov",
-        "disable": "Vypnúť režim počuteľných netopierov",
+        "enable": "Zapnúť",
+        "disable": "Vypnúť",
         "generating": "Generuje sa odvodený zvuk…",
         "error": "Nepodarilo sa vygenerovať počuteľný zvuk netopierov"
       }

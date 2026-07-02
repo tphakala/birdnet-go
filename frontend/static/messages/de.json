@@ -4762,8 +4762,8 @@
         "title": "Hörbare Fledermaus-Wiedergabe",
         "subtitle": "Verlangsamt Ultraschallrufe in den menschlichen Hörbereich.",
         "timeExpansion": "Zeitdehnung",
-        "enable": "Modus für hörbare Fledermäuse aktivieren",
-        "disable": "Modus für hörbare Fledermäuse deaktivieren",
+        "enable": "Aktivieren",
+        "disable": "Deaktivieren",
         "generating": "Abgeleitetes Audio wird erzeugt…",
         "error": "Audio für hörbare Fledermäuse konnte nicht erzeugt werden"
       }

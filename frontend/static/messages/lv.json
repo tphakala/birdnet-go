@@ -4762,8 +4762,8 @@
         "title": "Dzirdama sikspārņu atskaņošana",
         "subtitle": "Palēnina ultraskaņas saucienus līdz cilvēka dzirdes diapazonam.",
         "timeExpansion": "Laika izplešana",
-        "enable": "Ieslēgt dzirdamo sikspārņu režīmu",
-        "disable": "Izslēgt dzirdamo sikspārņu režīmu",
+        "enable": "Ieslēgt",
+        "disable": "Izslēgt",
         "generating": "Tiek ģenerēts atvasinātais audio…",
         "error": "Neizdevās ģenerēt dzirdamu sikspārņu audio"
       }

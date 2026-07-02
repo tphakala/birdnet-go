@@ -4762,8 +4762,8 @@
         "title": "Reproducción audible de murciélagos",
         "subtitle": "Ralentiza las llamadas ultrasónicas hasta el rango audible humano.",
         "timeExpansion": "Expansión de tiempo",
-        "enable": "Activar modo de murciélagos audibles",
-        "disable": "Desactivar modo de murciélagos audibles",
+        "enable": "Activar",
+        "disable": "Desactivar",
         "generating": "Generando audio derivado…",
         "error": "No se pudo generar el audio de murciélagos audibles"
       }

@@ -4762,8 +4762,8 @@
         "title": "Hoorbare vleermuisweergave",
         "subtitle": "Vertraag ultrasone roepen naar het menselijke gehoorbereik.",
         "timeExpansion": "Tijdsexpansie",
-        "enable": "Hoorbare-vleermuizenmodus inschakelen",
-        "disable": "Hoorbare-vleermuizenmodus uitschakelen",
+        "enable": "Inschakelen",
+        "disable": "Uitschakelen",
         "generating": "Afgeleide audio genereren…",
         "error": "Kan hoorbare vleermuisaudio niet genereren"
       }

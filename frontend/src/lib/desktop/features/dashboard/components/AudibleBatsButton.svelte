@@ -18,6 +18,8 @@
   - error?: string | null - Error message from the last generation attempt
   - disabled?: boolean - Whether the control is disabled
   - disabledReason?: string | null - Explanation shown when disabled is true
+  - closeSignal?: number - Bump this to force-close an open popup (e.g. a sibling
+    settings popup just opened); mirrors AudioSettingsButton
   - onEnable: (settings) => void - Enable audible bats mode with the chosen settings
   - onDisable: () => void - Disable audible bats mode, returning to normal playback
   - onMenuOpen / onMenuClose - Open-menu tracking callbacks (mirror AudioSettingsButton)
@@ -29,6 +31,7 @@
 </script>
 
 <script lang="ts">
+  /* global ResizeObserver */
   import { dropdown } from '$lib/utils/transitions';
   import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
   import { t } from '$lib/i18n';
@@ -41,6 +44,7 @@
     error?: string | null;
     disabled?: boolean;
     disabledReason?: string | null;
+    closeSignal?: number;
     onEnable: (_settings: AudibleBatsSettings) => void;
     onDisable: () => void;
     onMenuOpen?: () => void;
@@ -53,6 +57,7 @@
     error = null,
     disabled = false,
     disabledReason = null,
+    closeSignal = 0,
     onEnable,
     onDisable,
     onMenuOpen,
@@ -131,6 +136,29 @@
     }
   });
 
+  // Force-close when the parent bumps closeSignal (e.g. the sibling Audio
+  // Settings popup was just opened) so only one popup is ever visible at once.
+  // svelte-ignore state_referenced_locally
+  let previousCloseSignal = closeSignal;
+  $effect(() => {
+    if (closeSignal !== previousCloseSignal) {
+      previousCloseSignal = closeSignal;
+      closeMenu();
+    }
+  });
+
+  // Auto-close once the derived audio finishes generating successfully (i.e.
+  // becomes active) — the user's goal was to get it playing, not to keep
+  // fiddling with the popup. Leave it open on failure so the error is visible.
+  // svelte-ignore state_referenced_locally
+  let previousGenerating = generating;
+  $effect(() => {
+    if (previousGenerating && !generating && active) {
+      closeMenu();
+    }
+    previousGenerating = generating;
+  });
+
   function updateMenuPosition() {
     if (!menuElement || !buttonElement) return;
     const position = computeAnchorPosition({
@@ -195,11 +223,23 @@
       window.addEventListener('resize', handleResize);
       window.addEventListener('scroll', handleResize, true);
 
+      // The popup's own width/height can change after it opens (e.g. the
+      // primary action label grows from "Activate" to the longer
+      // "Generating derived audio…" while busy). Re-anchor whenever that
+      // happens so a now-wider box stays clamped inside the viewport instead
+      // of overflowing off the edge it was aligned to.
+      let resizeObserver: ResizeObserver | undefined;
+      if (menuElement) {
+        resizeObserver = new ResizeObserver(() => updateMenuPosition());
+        resizeObserver.observe(menuElement);
+      }
+
       return () => {
         document.removeEventListener('click', handleClickOutside);
         document.removeEventListener('keydown', handleKeydown);
         window.removeEventListener('resize', handleResize);
         window.removeEventListener('scroll', handleResize, true);
+        resizeObserver?.disconnect();
       };
     }
   });

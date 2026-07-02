@@ -4762,8 +4762,8 @@
         "title": "Kuultava lepakoiden toisto",
         "subtitle": "Hidasta ultraäänikutsut ihmisen kuuloalueelle.",
         "timeExpansion": "Aikavenytys",
-        "enable": "Ota kuultavien lepakoiden tila käyttöön",
-        "disable": "Poista kuultavien lepakoiden tila käytöstä",
+        "enable": "Aktivoi",
+        "disable": "Deaktivoi",
         "generating": "Luodaan johdettua ääntä…",
         "error": "Kuultavaa lepakkoääntä ei voitu luoda"
       }

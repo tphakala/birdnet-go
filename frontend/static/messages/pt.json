@@ -4762,8 +4762,8 @@
         "title": "Reprodução audível de morcegos",
         "subtitle": "Desacelera chamadas ultrassónicas para a faixa audível humana.",
         "timeExpansion": "Expansão de tempo",
-        "enable": "Ativar modo de morcegos audíveis",
-        "disable": "Desativar modo de morcegos audíveis",
+        "enable": "Ativar",
+        "disable": "Desativar",
         "generating": "A gerar áudio derivado…",
         "error": "Falha ao gerar áudio audível de morcegos"
       }

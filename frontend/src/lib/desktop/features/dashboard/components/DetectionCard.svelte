@@ -77,6 +77,11 @@
   let isMenuOpen = $state(false);
   let isAudioSettingsOpen = $state(false);
 
+  // Mutual-exclusion signals: bumping one forces the sibling popup (Audible
+  // Bats vs Audio Settings) closed, so only one is ever open at a time.
+  let closeAudibleBatsSignal = $state(0);
+  let closeAudioSettingsSignal = $state(0);
+
   // Audio settings state (per-card, not shared)
   let audioGainValue = $state(getDefaultAudioGain());
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
@@ -117,8 +122,15 @@
     audioContextAvailable = available;
   }
 
+  function handleAudibleBatsOpen() {
+    isAudioSettingsOpen = true;
+    closeAudioSettingsSignal++;
+    onFreezeStart?.();
+  }
+
   function handleAudioSettingsOpen() {
     isAudioSettingsOpen = true;
+    closeAudibleBatsSignal++;
     onFreezeStart?.();
   }
 
@@ -270,9 +282,10 @@
           generating={audibleBats.generating}
           error={audibleBats.error}
           disabled={!audioContextAvailable}
+          closeSignal={closeAudibleBatsSignal}
           onEnable={settings => audibleBats.enable(settings)}
           onDisable={() => audibleBats.disable()}
-          onMenuOpen={handleAudioSettingsOpen}
+          onMenuOpen={handleAudibleBatsOpen}
           onMenuClose={handleAudioSettingsClose}
         />
       {/if}
@@ -285,6 +298,7 @@
         onFilterChange={handleFilterChange}
         onSpeedChange={handleSpeedChange}
         disabled={!audioContextAvailable}
+        closeSignal={closeAudioSettingsSignal}
         onMenuOpen={handleAudioSettingsOpen}
         onMenuClose={handleAudioSettingsClose}
       />

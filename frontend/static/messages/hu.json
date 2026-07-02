@@ -4762,8 +4762,8 @@
         "title": "Hallható denevérlejátszás",
         "subtitle": "Az ultrahangos hívásokat az emberi hallástartományba lassítja.",
         "timeExpansion": "Időnyújtás",
-        "enable": "Hallható denevér mód bekapcsolása",
-        "disable": "Hallható denevér mód kikapcsolása",
+        "enable": "Aktiválás",
+        "disable": "Deaktiválás",
         "generating": "Származtatott hang generálása…",
         "error": "Nem sikerült létrehozni a hallható denevérhangot"
       }

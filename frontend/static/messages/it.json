@@ -4762,8 +4762,8 @@
         "title": "Riproduzione udibile dei pipistrelli",
         "subtitle": "Rallenta i richiami ultrasonici fino alla gamma udibile dall’uomo.",
         "timeExpansion": "Espansione temporale",
-        "enable": "Attiva modalità pipistrelli udibili",
-        "disable": "Disattiva modalità pipistrelli udibili",
+        "enable": "Attiva",
+        "disable": "Disattiva",
         "generating": "Generazione audio derivato…",
         "error": "Impossibile generare l’audio udibile dei pipistrelli"
       }
