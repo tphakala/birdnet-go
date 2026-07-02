@@ -34,6 +34,7 @@
   /* global ResizeObserver */
   import { dropdown } from '$lib/utils/transitions';
   import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
+  import { useCloseSignal } from '$lib/utils/useCloseSignal.svelte';
   import { t } from '$lib/i18n';
   import BatIcon from '$lib/components/icons/BatIcon.svelte';
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
@@ -138,14 +139,10 @@
 
   // Force-close when the parent bumps closeSignal (e.g. the sibling Audio
   // Settings popup was just opened) so only one popup is ever visible at once.
-  // svelte-ignore state_referenced_locally
-  let previousCloseSignal = closeSignal;
-  $effect(() => {
-    if (closeSignal !== previousCloseSignal) {
-      previousCloseSignal = closeSignal;
-      closeMenu();
-    }
-  });
+  useCloseSignal(
+    () => closeSignal,
+    () => closeMenu()
+  );
 
   // Auto-close once the derived audio finishes generating successfully (i.e.
   // becomes active) — the user's goal was to get it playing, not to keep
