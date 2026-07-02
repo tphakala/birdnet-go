@@ -42,8 +42,6 @@
     detection: Detection;
     isNew?: boolean;
     isExcluded?: boolean;
-    /** When false (audio export disabled), the card hides the spectrogram and audio controls */
-    audioEnabled?: boolean;
     onFreezeStart?: () => void;
     onFreezeEnd?: () => void;
     onReview?: () => void;
@@ -58,7 +56,6 @@
     detection,
     isNew = false,
     isExcluded = false,
-    audioEnabled = true,
     onFreezeStart,
     onFreezeEnd,
     onReview,
@@ -110,10 +107,10 @@
     onFreezeEnd?.();
   }
 
-  // Start/stop loader based on visibility. Skip entirely when audio export is
-  // disabled: no clips exist, so there is no spectrogram to fetch.
+  // Start/stop loader based on visibility. Skip entirely when this detection has
+  // no clip: there is no spectrogram to fetch.
   $effect(() => {
-    if (audioEnabled && isVisible) {
+    if (detection.clipName && isVisible) {
       loader.start(detection.id);
     } else {
       loader.stop();
@@ -164,9 +161,9 @@
 >
   <!-- Inner container with overflow-hidden for spectrogram clipping -->
   <!-- Compact (shorter) layout when there is no spectrogram to display -->
-  <div class="detection-card-inner" class:compact={!audioEnabled}>
-    <!-- Spectrogram Background (hidden when audio export is disabled) -->
-    {#if audioEnabled}
+  <div class="detection-card-inner" class:compact={!detection.clipName}>
+    <!-- Spectrogram Background (hidden when this detection has no clip) -->
+    {#if detection.clipName}
       <div class="spectrogram-container">
         {#if loader.showSpinner}
           <div class="spectrogram-loading">
@@ -225,8 +222,8 @@
       <SourceBadge {detection} variant="overlay" />
     </div>
 
-    <!-- Center Play Button (hidden when audio export is disabled) -->
-    {#if audioEnabled}
+    <!-- Center Play Button (hidden when this detection has no clip) -->
+    {#if detection.clipName}
       <PlayOverlay
         detectionId={detection.id}
         {onFreezeStart}
@@ -244,7 +241,7 @@
 
   <!-- Top-Right Controls - OUTSIDE overflow-hidden container -->
   <div class="absolute top-2 right-2 z-50 flex items-center gap-1.5">
-    {#if audioEnabled}
+    {#if detection.clipName}
       <AudioSettingsButton
         gainValue={audioGainValue}
         filterFreq={audioFilterFreq}
@@ -268,7 +265,7 @@
       {onToggleSpecies}
       {onToggleLock}
       {onDelete}
-      onDownload={audioEnabled ? () => downloadDetectionAudio(detection) : undefined}
+      onDownload={detection.clipName ? () => downloadDetectionAudio(detection) : undefined}
       onMenuOpen={handleMenuOpen}
       onMenuClose={handleMenuClose}
     />

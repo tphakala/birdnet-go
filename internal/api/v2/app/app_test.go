@@ -186,6 +186,20 @@ func TestGetAppConfig_AudioExportEnabled(t *testing.T) {
 
 			assert.Equal(t, tt.exportEnabled, response.AudioExportEnabled,
 				"AudioExportEnabled should mirror Realtime.Audio.Export.Enabled")
+
+			// Also assert against the raw JSON payload, pinning the full wire
+			// contract independent of the struct's json tag. The typed unmarshal
+			// above cannot distinguish a present-but-false value from an omitted
+			// key (both decode to false), so an accidental `omitempty` on the field
+			// would silently drop the key when export is disabled and leave the
+			// frontend guessing. Comparing the raw value catches both an omitted
+			// key (decodes to nil, != false) and a wrong value.
+			var raw map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+			require.Contains(t, raw, "audioExportEnabled",
+				"response must always include the audioExportEnabled key, even when false")
+			assert.Equal(t, tt.exportEnabled, raw["audioExportEnabled"],
+				"raw audioExportEnabled must carry the correct boolean value")
 		})
 	}
 }
@@ -887,7 +901,6 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 	require.NoError(t, err)
 
 	// Only these top-level keys should exist
-	expectedKeys := map[string]bool{
 		"csrfToken":           true,
 		"security":            true,
 		"version":             true,
@@ -897,10 +910,10 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"customColors":        true,
 		"logoStyle":           true,
 		"liveSpectrogram":     true,
+		"audioExportEnabled":  true,
 		"freshInstall":        true,
 		"newVersion":          true,
 		"projectLinks":        true,
-		"audioExportEnabled":  true,
 		"isEnhancedDatabase":  true,
 	}
 

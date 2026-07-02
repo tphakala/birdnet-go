@@ -13,7 +13,6 @@
   import { t } from '$lib/i18n';
   import { safeArrayAccess } from '$lib/utils/security';
   import { isAuthenticated } from '$lib/utils/auth';
-  import { appState } from '$lib/stores/appState.svelte';
 
   interface Props {
     isOpen: boolean;
@@ -31,8 +30,6 @@
   let { isOpen = false, detection = null, isExcluded = false, onClose, onSave }: Props = $props();
 
   let clipExtractionEnabled = $derived($isAuthenticated);
-  // Hide the audio/spectrogram block when audio clip export is disabled.
-  let audioEnabled = $derived(appState.audioExportEnabled);
 
   let reviewStatus = $state<'correct' | 'false_positive'>('correct');
   let lockDetection = $state(false);
@@ -207,8 +204,8 @@
             </div>
           </div>
 
-          <!-- Audio and Spectrogram (hidden when audio clip export is disabled) -->
-          {#if audioEnabled}
+          <!-- Audio and Spectrogram (shown only when this detection has a clip) -->
+          {#if detection.clipName}
             <div class="relative bg-[var(--color-base-200)] rounded-lg p-4">
               <AudioPlayer
                 audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}

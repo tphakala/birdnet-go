@@ -153,6 +153,7 @@ type DetectionResponse struct {
 	ScientificName     string            `json:"scientificName"`
 	CommonName         string            `json:"commonName"`
 	Confidence         float64           `json:"confidence"`
+	ClipName           string            `json:"clipName,omitempty"`  // Audio clip filename (basename only, no path); empty when no clip exists
 	ModelType          string            `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
@@ -689,8 +690,13 @@ func (c *Handler) noteToDetectionResponse(note *datastore.Note, includeWeather b
 		ScientificName: note.ScientificName,
 		CommonName:     note.CommonName,
 		Confidence:     note.Confidence,
-		Locked:         note.Locked,
-		Unlikely:       note.Unlikely,
+		// ClipName is the per-detection signal the frontend gates audio playback
+		// on. It is basename-stripped to match the SSE privacy contract
+		// (apicore.SafeBaseName): only the filename is exposed, never the on-disk
+		// directory layout, and an empty clip name stays empty (no clip exists).
+		ClipName: apicore.SafeBaseName(note.ClipName),
+		Locked:   note.Locked,
+		Unlikely: note.Unlikely,
 	}
 
 	// populate source info if available

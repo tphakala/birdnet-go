@@ -41,6 +41,15 @@ const (
 	defaultMaxLogSizeMB     = 50   // Default maximum log size in MB
 	defaultLogDurationWeeks = 4    // Default log collection duration in weeks
 
+	// logScannerBufferBytes is the maximum single-line token size for log
+	// scanning. The default bufio.Scanner limit (64KB) errors on long structured
+	// log lines (bufio.ErrTooLong), which previously truncated a whole log file
+	// silently mid-collection. Mirrors logger/reader.scannerBufferSize (1 MiB).
+	logScannerBufferBytes = 1 << 20 // 1 MiB
+	// logDeadlineCheckLines is how many scanned lines pass between context
+	// deadline checks inside a single large file.
+	logDeadlineCheckLines = 4096
+
 	// Memory and disk thresholds
 	bytesPerMB                = 1024 * 1024
 	minDiskSizeMB             = 100 // Skip disks smaller than 100MB
@@ -103,6 +112,87 @@ const (
 // Fetched dynamically to ensure it uses the current centralized logger.
 func getLogger() logger.Logger {
 	return logger.Global().Module("support")
+}
+
+// logCollectionSafetyMargin reserves wall-clock time before the context
+// deadline so the dump can be archived and the HTTP response written within the
+// handler's window. Without this margin a system with very large logs could
+// spend the entire timeout reading logs, blow the write deadline, and have the
+// connection closed before any response is sent (observed as a generic
+// "server error" in the UI). This must stay comfortably smaller than the
+// caller's context timeout (currently supportDumpTimeout = 120s in
+// internal/api/v2/support): if the deadline were ever set below this margin,
+// nearDeadline would report true from the start and collection would yield an
+// empty dump.
+const logCollectionSafetyMargin = 15 * time.Second
+
+// nearDeadline reports whether ctx is cancelled or within the safety margin of
+// its deadline, signalling that log collection/archiving should stop early and
+// finalize a partial dump rather than risk exceeding the handler timeout. A nil
+// context (no production caller passes one, but a test might) is treated as
+// having no deadline.
+func nearDeadline(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	if ctx.Err() != nil {
+		return true
+	}
+	if dl, ok := ctx.Deadline(); ok && time.Until(dl) <= logCollectionSafetyMargin {
+		return true
+	}
+	return false
+}
+
+// logScanAccum accumulates lightweight statistics while counting log entries
+// during the collection phase. The entry content is intentionally discarded:
+// the raw (scrubbed) log files are what ship in the archive, so the collection
+// phase only needs counts and the observed time range for diagnostics. The raw
+// files are still re-read when the archive is built; what this avoids is
+// retaining a parsed, scrubbed copy of every log line in memory (the old code
+// kept them all in SupportDump.Logs, which grew with total log volume).
+type logScanAccum struct {
+	entries  int
+	size     int64
+	earliest time.Time
+	latest   time.Time
+}
+
+// track folds a parsed entry timestamp into the accumulator's time range.
+func (a *logScanAccum) track(t time.Time) {
+	if t.IsZero() {
+		return
+	}
+	if a.earliest.IsZero() || t.Before(a.earliest) {
+		a.earliest = t
+	}
+	if a.latest.IsZero() || t.After(a.latest) {
+		a.latest = t
+	}
+}
+
+// seekToTail positions f to read at most maxBytes from the end of a file of the
+// given size, starting at the next line boundary. When maxBytes <= 0 or the
+// file already fits, the whole file is read from the start (so maxBytes == 0
+// means unbounded, not "read nothing"). Returns a reader for the remaining
+// content. Reading the tail (rather than skipping an oversized file entirely)
+// keeps the most recent, most relevant log lines.
+func seekToTail(f *os.File, size, maxBytes int64) (io.Reader, error) {
+	if maxBytes <= 0 || size <= maxBytes {
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+		return f, nil
+	}
+	if _, err := f.Seek(size-maxBytes, io.SeekStart); err != nil {
+		return nil, err
+	}
+	// Discard the partial first line so the archived tail starts cleanly on a
+	// line boundary. Best effort: a file with no newline in the tail yields no
+	// output, which is acceptable.
+	br := bufio.NewReader(f)
+	_, _ = br.ReadBytes('\n')
+	return br, nil
 }
 
 // Collector collects support data for troubleshooting
@@ -400,7 +490,8 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		getLogger().Debug("support: collecting logs", logger.Duration("duration", opts.LogDuration), logger.Int64("max_size", opts.MaxLogSize), logger.Bool("anonymize_pii", opts.AnonymizePII))
 		logs := c.collectLogs(ctx, opts.LogDuration, opts.MaxLogSize, opts.AnonymizePII, &dump.Diagnostics.LogCollection)
 		dump.Logs = logs
-		getLogger().Debug("support: logs collected", logger.Int("log_count", len(logs)))
+		getLogger().Debug("support: logs collected",
+			logger.Int("log_count", dump.Diagnostics.LogCollection.Summary.TotalEntries))
 	}
 
 	// Collect database information
@@ -439,7 +530,7 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 
 	getLogger().Info("support: collection completed successfully",
 		logger.String("dump_id", dump.ID),
-		logger.Int("log_count", len(dump.Logs)))
+		logger.Int("log_count", dump.Diagnostics.LogCollection.Summary.TotalEntries))
 
 	return dump, nil
 }
@@ -483,7 +574,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 		"timestamp":               dump.Timestamp,
 		"system_id":               dump.SystemID,
 		"version":                 dump.Version,
-		"log_count":               len(dump.Logs),
+		"log_count":               dump.Diagnostics.LogCollection.Summary.TotalEntries,
 		"includes_diagnostics":    true,
 		"config_collection_error": dump.Diagnostics.ConfigCollection.Error != "",
 		"log_collection_summary": map[string]any{
@@ -895,12 +986,13 @@ func (c *Collector) processNonSensitiveValue(key string, value any, sensitiveKey
 }
 
 // collectLogs collects recent log entries and captures detailed diagnostic information.
-// This method NEVER returns an error - it always returns logs (even empty) with diagnostics.
+// This method NEVER returns an error - it always returns the (bounded) journal
+// log slice, even empty, with diagnostics populated.
 //
 // Collection strategy:
 //  1. First attempts journal logs (systemd) - may fail on Docker/non-systemd systems
-//  2. Then attempts file logs from known paths - gracefully handles missing/inaccessible paths
-//  3. Combines and sorts all logs by timestamp
+//  2. Then COUNTS file-log entries from known paths (gracefully handling missing/inaccessible paths). File-log content is not retained here, only counted for diagnostics, because the archive ships the raw files separately.
+//  3. Folds journal and file counts, sizes and time ranges into the diagnostics summary and sorts only the (small) journal slice
 //  4. Populates comprehensive diagnostics about what was attempted and what failed
 //
 // The diagnostics parameter is populated with detailed information about:
@@ -914,8 +1006,11 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 		logger.Int64("maxSize", maxSize),
 		logger.Bool("anonymizePII", anonymizePII))
 
-	var logs []LogEntry
-	var totalSize int64
+	// journalLogs holds only the (bounded) journal entries. File log entries are
+	// counted, not retained, because the raw files ship in the archive; keeping
+	// parsed copies here would read every log file twice.
+	var journalLogs []LogEntry
+	var acc logScanAccum
 
 	// Try to collect from journald first (systemd systems).
 	// Skip journal collection in container runtimes (Docker, Podman, LXC,
@@ -933,7 +1028,7 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	} else {
 		getLogger().Debug("support: attempting to collect journal logs")
 		diagnostics.JournalLogs.Attempted = true
-		journalLogs, err := c.collectJournalLogs(ctx, duration, anonymizePII, &diagnostics.JournalLogs)
+		jl, err := c.collectJournalLogs(ctx, duration, anonymizePII, &diagnostics.JournalLogs)
 		if err != nil {
 			diagnostics.JournalLogs.Error = err.Error()
 			if errors.Is(err, ErrJournalNotAvailable) {
@@ -942,62 +1037,72 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 				getLogger().Warn("support: error collecting journal logs", logger.Error(err))
 			}
 		} else {
-			getLogger().Debug("support: collected journal logs", logger.Int("count", len(journalLogs)))
+			getLogger().Debug("support: collected journal logs", logger.Int("count", len(jl)))
 			diagnostics.JournalLogs.Successful = true
-			diagnostics.JournalLogs.EntriesFound = len(journalLogs)
-			logs = append(logs, journalLogs...)
-			// Estimate size for journal logs
-			for _, entry := range journalLogs {
-				totalSize += int64(len(entry.Message))
+			diagnostics.JournalLogs.EntriesFound = len(jl)
+			journalLogs = jl
+			acc.entries += len(jl)
+			for i := range jl {
+				acc.size += int64(len(jl[i].Message))
+				acc.track(jl[i].Timestamp)
 			}
 		}
 	}
 
-	// Also check for log files in the data directory
-	getLogger().Debug("support: attempting to collect log files")
+	// Count entries in on-disk log files. Content is discarded (only counts and
+	// the time range feed diagnostics); the raw files are added to the archive
+	// separately by addLogFilesToArchive. A separate accumulator keeps the file
+	// size budget independent of the journal size already consumed.
+	getLogger().Debug("support: attempting to count log files")
 	diagnostics.FileLogs.Attempted = true
-	logFiles, fileSize, err := c.collectLogFilesWithDiagnostics(duration, maxSize-totalSize, anonymizePII, &diagnostics.FileLogs)
-	if err != nil {
+	// Count file logs against the full maxSize, matching the archive path
+	// (addLogFilesToArchive uses the full cap for files and writes journald
+	// separately), so the counted tail boundary aligns with the archived one
+	// even when journal logs are present.
+	var fileAcc logScanAccum
+	if err := c.collectLogFilesWithDiagnostics(ctx, duration, maxSize, &fileAcc, &diagnostics.FileLogs); err != nil {
 		diagnostics.FileLogs.Error = err.Error()
-		getLogger().Warn("support: error collecting log files", logger.Error(err))
+		getLogger().Warn("support: error counting log files", logger.Error(err))
 	} else {
-		getLogger().Debug("support: collected log files", logger.Int("count", len(logFiles)))
+		getLogger().Debug("support: counted log files", logger.Int("count", fileAcc.entries))
 		diagnostics.FileLogs.Successful = true
-		diagnostics.FileLogs.EntriesFound = len(logFiles)
-		logs = append(logs, logFiles...)
-		totalSize += fileSize
+		diagnostics.FileLogs.EntriesFound = fileAcc.entries
+		acc.entries += fileAcc.entries
+		acc.size += fileAcc.size
+		acc.track(fileAcc.earliest)
+		acc.track(fileAcc.latest)
 	}
 
-	// Sort logs by timestamp
-	getLogger().Debug("support: sorting logs by timestamp", logger.Int("total_logs", len(logs)))
-	sortLogsByTime(logs)
+	// Sort the (small) journal slice by timestamp for stable output.
+	sortLogsByTime(journalLogs)
 
-	// Update summary diagnostics
-	diagnostics.Summary.TotalEntries = len(logs)
-	diagnostics.Summary.SizeBytes = totalSize
-	diagnostics.Summary.TruncatedBySize = totalSize >= maxSize
+	// Update summary diagnostics from the accumulator.
+	diagnostics.Summary.TotalEntries = acc.entries
+	diagnostics.Summary.SizeBytes = acc.size
+	// Only the file-log collection is bounded by the byte budget; journald is
+	// line-limited, not size-limited, so base the size-truncation flag on the
+	// file accumulator alone to avoid reporting truncation that did not happen.
+	diagnostics.Summary.TruncatedBySize = fileAcc.size >= maxSize
 
-	// Set TruncatedByTime only when entries were actually filtered out by time window
-	var truncatedByTime bool
-	if duration > 0 && len(logs) > 0 {
+	// Set TruncatedByTime only when entries were likely filtered out by the time
+	// window (earliest observed entry is within a minute of the cutoff).
+	if duration > 0 && !acc.earliest.IsZero() {
 		cutoff := time.Now().Add(-duration)
-		// If the earliest log is very close to the cutoff time (within 1 minute),
-		// it's likely that older entries were filtered out
-		earliestLog := logs[0].Timestamp
-		if earliestLog.Sub(cutoff).Abs() <= time.Minute {
-			truncatedByTime = true
+		if acc.earliest.Sub(cutoff).Abs() <= time.Minute {
+			diagnostics.Summary.TruncatedByTime = true
 		}
 	}
-	diagnostics.Summary.TruncatedByTime = truncatedByTime
 
-	// Set the actual time range of collected logs
-	if len(logs) > 0 {
-		diagnostics.Summary.TimeRange.From = logs[0].Timestamp
-		diagnostics.Summary.TimeRange.To = logs[len(logs)-1].Timestamp
+	// Set the actual time range of collected logs.
+	if !acc.earliest.IsZero() {
+		diagnostics.Summary.TimeRange.From = acc.earliest
+	}
+	if !acc.latest.IsZero() {
+		diagnostics.Summary.TimeRange.To = acc.latest
 	}
 
-	getLogger().Debug("support: collectLogs completed", logger.Int("total_logs", len(logs)))
-	return logs
+	getLogger().Debug("support: collectLogs completed", logger.Int("total_entries", acc.entries))
+	return journalLogs
 }
 
 // collectJournalLogs collects logs from systemd journal with diagnostics
@@ -1142,30 +1247,33 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 // Note: The Details map in diagnostics may be accessed concurrently if this method
 // is called from multiple goroutines. Currently this is not the case, but if that
 // changes in the future, synchronization should be added.
-func (c *Collector) collectLogFilesWithDiagnostics(duration time.Duration, maxSize int64, anonymizePII bool, diagnostics *LogSourceDiagnostics) ([]LogEntry, int64, error) {
-	var logs []LogEntry
+func (c *Collector) collectLogFilesWithDiagnostics(ctx context.Context, duration time.Duration, maxSize int64, acc *logScanAccum, diagnostics *LogSourceDiagnostics) error {
 	cutoffTime := time.Now().Add(-duration)
-	totalSize := int64(0)
 
-	// Get unique log paths and capture diagnostic information for each
-	// These paths include both configured paths and common default locations
+	// Get unique log paths and capture diagnostic information for each.
+	// These paths include both configured paths and common default locations.
 	uniquePaths := c.getUniqueLogPaths()
 	// TODO: Add mutex protection if this method becomes concurrent
 	diagnostics.Details["total_paths_to_search"] = len(uniquePaths)
 
 	for _, logPath := range uniquePaths {
+		if nearDeadline(ctx) {
+			diagnostics.Details["stopped_reason"] = "deadline"
+			break
+		}
+
 		searchedPath := SearchedPath{Path: logPath}
 
 		// Check if path exists
-		info, err := os.Stat(logPath)
-		if err != nil {
-			if os.IsNotExist(err) {
+		info, statErr := os.Stat(logPath)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
 				searchedPath.Exists = false
 				searchedPath.Error = "path does not exist"
 			} else {
 				searchedPath.Exists = true
 				searchedPath.Accessible = false
-				searchedPath.Error = err.Error()
+				searchedPath.Error = statErr.Error()
 			}
 			diagnostics.PathsSearched = append(diagnostics.PathsSearched, searchedPath)
 			continue
@@ -1174,54 +1282,53 @@ func (c *Collector) collectLogFilesWithDiagnostics(duration time.Duration, maxSi
 		searchedPath.Exists = true
 		searchedPath.Accessible = true
 
-		// Process directory or file
+		// Count entries in the directory or single file, honoring the byte budget.
 		if info.IsDir() {
-			logCount, dirSize, err := c.processLogDirectory(logPath, cutoffTime, maxSize-totalSize, anonymizePII, &logs, &searchedPath)
-			if err != nil {
+			fileCount, dirErr := c.countLogDirectory(ctx, logPath, cutoffTime, maxSize, acc)
+			if dirErr != nil {
 				// Enhanced error context for directory processing failures
-				if os.IsPermission(err) {
-					searchedPath.Error = fmt.Sprintf("permission denied: %v", err)
+				if os.IsPermission(dirErr) {
+					searchedPath.Error = fmt.Sprintf("permission denied: %v", dirErr)
 				} else {
-					searchedPath.Error = err.Error()
+					searchedPath.Error = dirErr.Error()
 				}
 			} else {
-				searchedPath.FileCount = logCount
-				totalSize += dirSize
+				searchedPath.FileCount = fileCount
 			}
 		} else if strings.HasSuffix(strings.ToLower(logPath), "log") {
-			// Single file
-			fileLogs, size := c.parseLogFile(logPath, cutoffTime, maxSize-totalSize, anonymizePII)
-			logs = append(logs, fileLogs...)
+			c.countLogFile(ctx, logPath, cutoffTime, maxSize-acc.size, acc)
 			searchedPath.FileCount = 1
-			totalSize += size
 		}
 
 		diagnostics.PathsSearched = append(diagnostics.PathsSearched, searchedPath)
 
-		if totalSize >= maxSize {
+		if acc.size >= maxSize {
 			diagnostics.Details["stopped_reason"] = "max_size_reached"
 			break
 		}
 	}
 
 	diagnostics.Details["files_processed"] = len(diagnostics.PathsSearched)
-	diagnostics.Details["total_size_bytes"] = totalSize
+	diagnostics.Details["total_size_bytes"] = acc.size
 
-	return logs, totalSize, nil
+	return nil
 }
 
-// processLogDirectory processes all log files in a directory and returns count and size
-// processLogDirectory processes a directory for log files.
-// Returns the number of log files processed, total size of logs, and any error encountered.
-// Errors are non-fatal and just mean some files couldn't be processed.
-func (c *Collector) processLogDirectory(dirPath string, cutoffTime time.Time, maxSize int64, anonymizePII bool, logs *[]LogEntry, searchedPath *SearchedPath) (logFileCount int, totalSize int64, err error) {
+// countLogDirectory counts entries across log files in a directory, folding
+// results into acc while honoring the absolute size budget (maxSize) and the
+// context deadline. Returns the number of log files inspected. Errors are
+// non-fatal and just mean some files could not be read.
+func (c *Collector) countLogDirectory(ctx context.Context, dirPath string, cutoffTime time.Time, maxSize int64, acc *logScanAccum) (logFileCount int, err error) {
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	for _, file := range files {
-		if totalSize >= maxSize {
+		if acc.size >= maxSize {
+			break
+		}
+		if nearDeadline(ctx) {
 			break
 		}
 
@@ -1232,53 +1339,75 @@ func (c *Collector) processLogDirectory(dirPath string, cutoffTime time.Time, ma
 
 		logFileCount++
 		fullPath := filepath.Join(dirPath, filename)
-		fileLogs, size := c.parseLogFile(fullPath, cutoffTime, maxSize-totalSize, anonymizePII)
-		*logs = append(*logs, fileLogs...)
-		totalSize += size
+		c.countLogFile(ctx, fullPath, cutoffTime, maxSize-acc.size, acc)
 	}
 
-	return logFileCount, totalSize, nil
+	return logFileCount, nil
 }
 
-// Legacy collectLogFiles method - keeping for compatibility but using new implementation
-func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
-	// Use the new diagnostics-enabled method but discard the diagnostic info
-	diagnostics := &LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)}
-	logs, _, err := c.collectLogFilesWithDiagnostics(duration, maxSize, anonymizePII, diagnostics)
-	return logs, err
-}
-
-// parseLogFile parses a log file and extracts entries
-func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int64, anonymizePII bool) (logs []LogEntry, totalSize int64) {
+// countLogFile scans up to remaining bytes of a log file, counting entries
+// within the retention window and folding size and time range into acc. The
+// parsed content is discarded (the raw file ships in the archive), so lines are
+// parsed without PII scrubbing. A large scanner buffer avoids bufio.ErrTooLong
+// on long structured log lines, and the context deadline is honored so a very
+// large file cannot consume the whole timeout.
+func (c *Collector) countLogFile(ctx context.Context, path string, cutoffTime time.Time, remaining int64, acc *logScanAccum) {
+	if remaining <= 0 {
+		return
+	}
 
 	file, err := os.Open(path) //nolint:gosec // G304: path is from known log file locations
 	if err != nil {
-		// Log file might not exist or be inaccessible, which is fine
-		return logs, 0
+		// Log file might not exist or be inaccessible, which is fine.
+		return
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			getLogger().Warn("Failed to close log file", logger.String("path", path), logger.Error(err))
+		if cerr := file.Close(); cerr != nil {
+			getLogger().Warn("Failed to close log file", logger.String("path", path), logger.Error(cerr))
 		}
 	}()
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		totalSize += int64(len(line))
-
-		if totalSize > maxSize {
-			break
-		}
-
-		// Simple log parsing - adjust based on actual log format
-		entry := c.parseLogLine(line, anonymizePII)
-		if entry != nil && entry.Timestamp.After(cutoffTime) {
-			logs = append(logs, *entry)
+	// Align with the archive path (seekToTail): when the file is larger than the
+	// remaining budget, count its recent TAIL rather than its head, so the
+	// diagnostics entry count and time range describe the same bytes the archive
+	// keeps instead of an older window that is discarded before shipping.
+	var reader io.Reader = file
+	if info, statErr := file.Stat(); statErr == nil && info.Size() > remaining {
+		if r, seekErr := seekToTail(file, info.Size(), remaining); seekErr == nil {
+			reader = r
 		}
 	}
 
-	return logs, totalSize
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), logScannerBufferBytes)
+
+	var scanned int64
+	lines := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		lineBytes := int64(len(line)) + 1 // include the newline
+		if scanned+lineBytes > remaining {
+			// Exclude the overflowing line so acc.size stays within the budget.
+			break
+		}
+		scanned += lineBytes
+		lines++
+		if lines%logDeadlineCheckLines == 0 && nearDeadline(ctx) {
+			break
+		}
+
+		if entry := c.parseLogLine(line, false); entry != nil && entry.Timestamp.After(cutoffTime) {
+			acc.entries++
+			acc.track(entry.Timestamp)
+		}
+	}
+
+	acc.size += scanned
+
+	if serr := scanner.Err(); serr != nil {
+		getLogger().Debug("support: log file scan stopped early",
+			logger.String("path", path), logger.Error(serr))
+	}
 }
 
 // parseLogLine parses a single log line
@@ -1460,6 +1589,15 @@ func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, dur
 			break
 		}
 
+		// Stop adding logs when the deadline is near so the dump can still be
+		// finalized and returned within the handler window (a partial dump is
+		// far better than a closed connection and a generic error).
+		if nearDeadline(lfc.ctx) {
+			getLogger().Warn("support: stopping log archive early - deadline approaching",
+				logger.Int64("totalSize", lfc.totalSize))
+			break
+		}
+
 		getLogger().Debug("support: processing log path for archive", logger.String("path", logPath))
 		if err := lfc.processLogPath(w, logPath); err != nil {
 			getLogger().Warn("support: error processing log path", logger.String("path", logPath), logger.Error(err))
@@ -1475,9 +1613,14 @@ func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, dur
 	// event every time a support dump was generated. Use the shared
 	// sysinfo.IsContainer() detector so we cover all container flavours,
 	// not just Docker.
-	if sysinfo.IsContainer() {
+	switch {
+	case sysinfo.IsContainer():
 		getLogger().Debug("support: skipping journald collection (container runtime)")
-	} else {
+	case nearDeadline(lfc.ctx):
+		// journalctl runs an external command that can be slow; skip it when the
+		// deadline is near so it cannot overrun the handler window.
+		getLogger().Warn("support: skipping journald collection - deadline approaching")
+	default:
 		getLogger().Debug("support: attempting to add journald logs to archive")
 		if err := lfc.addJournaldLogs(w, duration); err == nil {
 			lfc.logsAdded++
@@ -1605,6 +1748,15 @@ func (lfc *logFileCollector) processLogDirectory(w *zip.Writer, dirPath string) 
 			break
 		}
 
+		// Stop opening more files once the deadline is near, so a directory of
+		// many rotated logs cannot overrun the handler window. The top-level
+		// addLogFilesToArchive loop only checks between paths, and there is
+		// usually a single logs/ directory, so without this the deadline would
+		// not be re-checked between files.
+		if nearDeadline(lfc.ctx) {
+			break
+		}
+
 		if !lfc.isLogFile(file.Name()) {
 			continue
 		}
@@ -1637,14 +1789,22 @@ func (lfc *logFileCollector) processLogFileEntry(w *zip.Writer, dirPath string, 
 		return nil
 	}
 
-	// Check if adding file would exceed size limit
-	if !lfc.canAddFile(fileInfo.Size()) {
+	// Decide how many bytes to add. If the whole file fits under the size budget,
+	// add it entirely; otherwise add the most recent bytes (tail) up to the
+	// remaining budget rather than skipping the file completely, so users with a
+	// single very large log still get their recent entries.
+	remaining := lfc.maxSize - lfc.totalSize
+	if remaining <= 0 {
 		return nil
+	}
+	addBytes := fileInfo.Size()
+	if !lfc.canAddFile(fileInfo.Size()) {
+		addBytes = remaining
 	}
 
 	// Add file to archive with optional anonymization
 	archivePath := filepath.Join("logs", file.Name())
-	if err := lfc.collector.addLogFileToArchive(w, filePath, archivePath, lfc.anonymizePII); err != nil {
+	if err := lfc.collector.addLogFileToArchive(lfc.ctx, w, filePath, archivePath, lfc.anonymizePII, addBytes); err != nil {
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
@@ -1654,19 +1814,26 @@ func (lfc *logFileCollector) processLogFileEntry(w *zip.Writer, dirPath string, 
 			Build()
 	}
 
-	lfc.totalSize += fileInfo.Size()
+	lfc.totalSize += addBytes
 	lfc.logsAdded++
 	return nil
 }
 
 // processSingleLogFile processes a single log file (not in a directory)
 func (lfc *logFileCollector) processSingleLogFile(w *zip.Writer, logPath string, info os.FileInfo) error {
-	if !lfc.canAddFile(info.Size()) {
+	remaining := lfc.maxSize - lfc.totalSize
+	if remaining <= 0 {
 		return nil
+	}
+	addBytes := info.Size()
+	if !lfc.canAddFile(info.Size()) {
+		// Oversized for the remaining budget: add the recent tail rather than
+		// skipping the file entirely.
+		addBytes = remaining
 	}
 
 	archivePath := filepath.Join("logs", filepath.Base(logPath))
-	if err := lfc.collector.addLogFileToArchive(w, logPath, archivePath, lfc.anonymizePII); err != nil {
+	if err := lfc.collector.addLogFileToArchive(lfc.ctx, w, logPath, archivePath, lfc.anonymizePII, addBytes); err != nil {
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
@@ -1676,7 +1843,7 @@ func (lfc *logFileCollector) processSingleLogFile(w *zip.Writer, logPath string,
 			Build()
 	}
 
-	lfc.totalSize += info.Size()
+	lfc.totalSize += addBytes
 	lfc.logsAdded++
 	return nil
 }
@@ -1753,7 +1920,11 @@ func (lfc *logFileCollector) addNoLogsNote(w *zip.Writer) {
 }
 
 // addFileToArchive adds a single file to the zip archive
-func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath string) error {
+// addFileToArchive copies sourcePath into the archive. When maxBytes > 0 and the
+// file is larger, only the most recent maxBytes (aligned to a line boundary) are
+// written; the zip.Writer computes the stored size from the bytes actually
+// written, so a truncated tail produces a valid entry.
+func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath string, maxBytes int64) error {
 	file, err := os.Open(sourcePath) //nolint:gosec // G304: sourcePath is from known log/config file locations
 	if err != nil {
 		return err
@@ -1781,15 +1952,26 @@ func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath stri
 		return err
 	}
 
-	_, err = io.Copy(writer, file)
+	reader, err := seekToTail(file, fileInfo.Size(), maxBytes)
+	if err != nil {
+		return err
+	}
+
+	// No intra-file deadline check here: this non-anonymized copy is bounded by
+	// maxBytes (<= the 50MB MaxLogSize cap), so one file cannot overrun the
+	// safety margin; the directory loop checks nearDeadline between files.
+	_, err = io.Copy(writer, reader)
 	return err
 }
 
-// addLogFileToArchive adds a log file to the zip archive with optional anonymization
-func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath string, anonymizePII bool) error {
+// addLogFileToArchive adds a log file to the zip archive with optional
+// anonymization. When maxBytes > 0 and the file is larger, only the most recent
+// maxBytes (aligned to a line boundary) are written. The context deadline is
+// honored so anonymizing a large file cannot consume the whole handler window.
+func (c *Collector) addLogFileToArchive(ctx context.Context, w *zip.Writer, sourcePath, archivePath string, anonymizePII bool, maxBytes int64) error {
 	if !anonymizePII {
-		// If no anonymization needed, use the regular file copy
-		return c.addFileToArchive(w, sourcePath, archivePath)
+		// If no anonymization needed, use the regular file copy.
+		return c.addFileToArchive(w, sourcePath, archivePath, maxBytes)
 	}
 
 	// Read the file content for anonymization
@@ -1820,18 +2002,39 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 		return err
 	}
 
-	// Process the file line by line for anonymization
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		anonymizedLine := privacy.ScrubMessage(line)
+	reader, err := seekToTail(file, fileInfo.Size(), maxBytes)
+	if err != nil {
+		return err
+	}
 
-		if _, err := writer.Write([]byte(anonymizedLine + "\n")); err != nil {
+	// Process the file line by line for anonymization. A large buffer avoids
+	// bufio.ErrTooLong on long structured log lines (which previously truncated
+	// the file silently). Writes go through a buffered writer so each line does
+	// not allocate a new []byte (avoids the per-line "line + \n" concatenation
+	// and conversion across hundreds of thousands of lines).
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), logScannerBufferBytes)
+	bw := bufio.NewWriter(writer)
+	lines := 0
+	for scanner.Scan() {
+		if _, err := bw.WriteString(privacy.ScrubMessage(scanner.Text())); err != nil {
 			return err
+		}
+		if err := bw.WriteByte('\n'); err != nil {
+			return err
+		}
+		lines++
+		if lines%logDeadlineCheckLines == 0 && nearDeadline(ctx) {
+			getLogger().Warn("support: stopping log anonymization early - deadline approaching",
+				logger.String("source_path", sourcePath))
+			break
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return bw.Flush()
 }
 
 // getJournaldLogs retrieves logs from journald as a string

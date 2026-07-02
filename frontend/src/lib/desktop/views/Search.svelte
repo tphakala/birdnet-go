@@ -18,7 +18,6 @@
     ChevronDown,
     Eye,
     FrownIcon,
-    Music,
     Search,
     SquarePen,
     Volume2,
@@ -37,7 +36,6 @@
     PER_VISITOR_SPECIES_LOCALE_ENABLED,
   } from '$lib/stores/speciesDictionary.svelte';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
-  import { appState } from '$lib/stores/appState.svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -87,8 +85,6 @@
   type SortBy = 'date_desc' | 'date_asc' | 'species_asc' | 'confidence_desc';
 
   let clipExtractionEnabled = $derived($isAuthenticated);
-  // Hide audio players/triggers when audio clip export is disabled.
-  let audioEnabled = $derived(appState.audioExportEnabled);
   let canReview = $derived($hasReviewPermission);
 
   const logger = loggers.ui;
@@ -1038,20 +1034,6 @@
                       {/if}
                       <button
                         class="btn btn-xs btn-square"
-                        onclick={e => {
-                          e.preventDefault();
-                          // TODO: Implement audio playback function
-                        }}
-                        disabled={!result.hasAudio}
-                        aria-label={t('search.detailsPanel.playAudio', {
-                          species: displayName || t('search.detailsPanel.unknownSpecies'),
-                        })}
-                        aria-pressed="false"
-                      >
-                        <Music class="size-4" />
-                      </button>
-                      <button
-                        class="btn btn-xs btn-square"
                         onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
                         aria-label={t('search.detailsPanel.viewDetails', {
                           species: displayName || t('search.detailsPanel.unknownSpecies'),
@@ -1144,8 +1126,8 @@
                             </div>
                           </div>
 
-                          <!-- Audio Player (hidden when audio clip export is disabled) -->
-                          {#if audioEnabled}
+                          <!-- Audio Player (shown only when this detection has a clip) -->
+                          {#if result.hasAudio}
                             <div class="bg-[var(--color-base-200)] rounded-box p-4">
                               <h3 class="text-lg font-semibold mb-2">
                                 {t('search.detailsPanel.audioPlayer')}
@@ -1308,11 +1290,10 @@
                         {/if}
                       </div>
                     {/if}
-                    {#if audioEnabled}
+                    {#if result.hasAudio}
                       <button
                         class="btn btn-primary btn-sm"
                         onclick={() => openMobilePlayer(result)}
-                        disabled={!result.hasAudio}
                         aria-label={t('search.detailsPanel.playAudio', {
                           species: displayName || t('search.detailsPanel.unknownSpecies'),
                         })}
@@ -1336,7 +1317,7 @@
             </section>
           {/each}
 
-          {#if audioEnabled && showMobilePlayer}
+          {#if showMobilePlayer}
             <div class="md:hidden">
               <MobileAudioPlayer
                 audioUrl={selectedAudioUrl}

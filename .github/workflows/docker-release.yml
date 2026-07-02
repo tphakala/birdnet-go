@@ -23,7 +23,9 @@ jobs:
       - name: Get latest tag
         id: get_latest_tag
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0)
+          # Restrict to stable release tags; the auto-update "manifest"
+          # prerelease tag would otherwise be picked as the nearest ancestor.
+          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'v*')
           echo "VERSION=${LATEST_TAG}" >> $GITHUB_ENV
           echo "VERSION_NO_V=${LATEST_TAG#v}" >> $GITHUB_ENV
 
@@ -89,7 +91,9 @@ jobs:
       - name: Get latest tag
         id: get_latest_tag
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0)
+          # Restrict to stable release tags; the auto-update "manifest"
+          # prerelease tag would otherwise be picked as the nearest ancestor.
+          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'v*')
           echo "VERSION=${LATEST_TAG}" >> $GITHUB_ENV
           echo "VERSION_NO_V=${LATEST_TAG#v}" >> $GITHUB_ENV
 

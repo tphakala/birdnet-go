@@ -29,7 +29,6 @@
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
-  import { appState } from '$lib/stores/appState.svelte';
   import {
     Download,
     Camera,
@@ -106,8 +105,6 @@
   // Use the existing auth store pattern (same as DesktopSidebar)
   let canReview = $derived($hasReviewPermission);
   let clipExtractionEnabled = $derived($isAuthenticated);
-  // Hide the spectrogram/audio Media section when audio clip export is disabled.
-  let audioEnabled = $derived(appState.audioExportEnabled);
   let detection = $state<Detection | null>(null);
   let speciesInfo = $state<SpeciesInfo | null>(null);
   let taxonomyInfo = $state<TaxonomyInfo | null>(null);
@@ -851,8 +848,8 @@
     <!-- Hero Section -->
     {@render heroSection(detection)}
 
-    <!-- Media Section (hidden when audio clip export is disabled) -->
-    {#if audioEnabled}
+    <!-- Media Section (shown only when this detection has a clip) -->
+    {#if detection.clipName}
       <section class="surface-card" aria-labelledby="media-heading">
         <div class="p-5 md:p-6">
           <h2 id="media-heading" class="section-heading !mb-0">

@@ -21,7 +21,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/middleware"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"gorm.io/gorm"
 )
@@ -1479,6 +1481,93 @@ func TestServeAudioClipNoTempFileReturns404(t *testing.T) {
 	} else {
 		assert.Equal(t, http.StatusNotFound, rec.Code,
 			"Should return 404 when no temp file exists")
+	}
+}
+
+// TestIsRecentClipCompletion covers the recency predicate shared with the
+// reconcile crawler: a zero completion time is treated as recent (fail-safe),
+// times inside the window are recent, and times older than the window are not.
+func TestIsRecentClipCompletion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		endTime time.Time
+		want    bool
+	}{
+		{name: "zero time is recent (unknown, fail-safe)", endTime: time.Time{}, want: true},
+		{name: "just now is recent", endTime: time.Now(), want: true},
+		{name: "inside window is recent", endTime: time.Now().Add(-diskmanager.ClipRecencyWindow / 2), want: true},
+		{name: "older than window is not recent", endTime: time.Now().Add(-2 * diskmanager.ClipRecencyWindow), want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isRecentClipCompletion(tt.endTime))
+		})
+	}
+}
+
+// TestServeAudioByID_GraceSkippedForOldDetections verifies the defense-in-depth
+// grace-poll skip: a 404 for a detection whose capture completed long ago returns
+// immediately (no grace wait), while a recent detection still waits out the grace
+// period. Timing bounds around audioGracePeriod distinguish the two paths.
+func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
+	// clipPath resolves but the file does not exist on disk, forcing the 404 path.
+	const missingClip = "2024/01/ghost_95p_20240101T000000Z.wav"
+
+	tests := []struct {
+		name       string
+		endTime    time.Time
+		maxElapsed time.Duration // set: proves grace was skipped
+		minElapsed time.Duration // set: proves grace ran
+	}{
+		{
+			name:       "old detection skips grace and 404s immediately",
+			endTime:    time.Now().Add(-time.Hour),
+			maxElapsed: audioGracePeriod,
+		},
+		{
+			name:       "recent detection still waits the grace period",
+			endTime:    time.Now(),
+			minElapsed: audioGracePeriod,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e, controller, _ := setupMediaTestEnvironment(t)
+
+			mockDS := mocks.NewMockInterface(t)
+			mockDS.On("GetNoteClipPath", "42").Return(missingClip, nil)
+			mockDS.On("Get", "42").Return(datastore.Note{ID: 42, EndTime: tc.endTime}, nil).Maybe()
+			controller.DS = mockDS
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/42", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues("42")
+
+			start := time.Now()
+			handlerErr := controller.ServeAudioByID(c)
+			elapsed := time.Since(start)
+
+			// The missing clip resolves to a 404, returned as an echo.HTTPError
+			// (the framework translates it to the HTTP response).
+			require.Error(t, handlerErr, "missing clip must error")
+			httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
+			require.True(t, ok, "expected an echo.HTTPError")
+			assert.Equal(t, http.StatusNotFound, httpErr.Code, "missing clip must 404")
+			if tc.maxElapsed > 0 {
+				assert.Less(t, elapsed, tc.maxElapsed,
+					"old detection must skip the grace wait")
+			}
+			if tc.minElapsed > 0 {
+				assert.GreaterOrEqual(t, elapsed, tc.minElapsed,
+					"recent detection must wait out the grace period")
+			}
+		})
 	}
 }
 
