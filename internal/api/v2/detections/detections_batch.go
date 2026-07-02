@@ -344,6 +344,25 @@ func (c *Handler) DeleteSpeciesDetections(ctx echo.Context) error {
 
 	deleted, skipped := c.deleteNotesByIDs(chunk)
 
+	if deleted == 0 && remaining > 0 {
+		// Every attempted detection in this chunk was skipped (locked, or a
+		// transient per-row error) and locked detections are never removed, so
+		// an identical all-skipped chunk (unique[:maxBatchSize] is unchanged)
+		// would repeat on every subsequent call. Report no further remaining
+		// work instead of leaving the caller looping forever against a set
+		// that can never shrink - see the client-side loop in confirmDelete.
+		//
+		// Known limitation: chunk selection always takes the front of the
+		// current ID list, so if a species has >= maxBatchSize locked
+		// detections that happen to sort ahead of its unlocked ones, this
+		// stops before ever attempting those unlocked ones. Fully solving that
+		// would mean excluding locked detections at the query level (a
+		// datastore-layer change across two backends) rather than filtering
+		// post-fetch; left as a follow-up since it's an unproven edge case
+		// gated behind a large, specifically-ordered locked set.
+		remaining = 0
+	}
+
 	c.invalidateDetectionCache()
 
 	c.LogInfoIfEnabled("Species detections deleted",
