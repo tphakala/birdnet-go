@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -40,7 +41,7 @@ type Config struct {
 	AutoTLS     bool   // Use Let's Encrypt automatic TLS
 	TLSCertFile string // Path to TLS certificate file (manual TLS)
 	TLSKeyFile  string // Path to TLS key file (manual TLS)
-	TLSPort     string // Port for HTTPS (when using manual/self-signed TLS)
+	TLSPort     string // Port for HTTPS (when TLS is enabled)
 
 	// Security settings
 	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
@@ -85,6 +86,26 @@ func DefaultConfig() *Config {
 	}
 }
 
+// resolveTLSPort sets cfg.TLSPort, defaulting to "8443" when empty and
+// resolving conflicts when TLSPort equals the HTTP port.
+func resolveTLSPort(cfg *Config) {
+	if cfg.TLSPort == "" {
+		cfg.TLSPort = "8443"
+	}
+	if cfg.TLSPort == cfg.Port {
+		fallback := "8443"
+		if cfg.Port == "8443" {
+			fallback = "8444"
+		}
+		GetLogger().Warn("TLS port must differ from HTTP port",
+			logger.String("http_port", cfg.Port),
+			logger.String("configured_tls_port", cfg.TLSPort),
+			logger.String("resolved_tls_port", fallback),
+		)
+		cfg.TLSPort = fallback
+	}
+}
+
 // ConfigFromSettings creates a Config from the application settings.
 // This bridges the existing conf.Settings structure to the new server config.
 func ConfigFromSettings(settings *conf.Settings) *Config {
@@ -102,7 +123,17 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	case conf.TLSModeAutoTLS:
 		cfg.AutoTLS = true
 		cfg.TLSEnabled = true
-		cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+		// Default to redirecting HTTP→HTTPS for AutoTLS. Only override if the
+		// user explicitly set the key (via config file or env var). Note: viper.IsSet
+		// returns true for any source (file, env, Set()), so a user who has
+		// "redirecttohttps: false" in YAML for a different TLS mode and then switches
+		// to AutoTLS will keep their explicit false — this is intentional.
+		cfg.RedirectToHTTPS = true
+		if viper.IsSet("security.redirecttohttps") {
+			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+		}
+		cfg.TLSPort = settings.Security.TLSPort
+		resolveTLSPort(cfg)
 	case conf.TLSModeManual, conf.TLSModeSelfSigned:
 		tm := conf.GetTLSManager()
 		certPath := tm.GetCertificatePath("webserver", conf.TLSCertTypeServerCert)
@@ -114,21 +145,7 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 			cfg.TLSKeyFile = keyPath
 			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
 			cfg.TLSPort = settings.Security.TLSPort
-			if cfg.TLSPort == "" {
-				cfg.TLSPort = "8443"
-			}
-			if cfg.TLSPort == cfg.Port {
-				fallback := "8443"
-				if cfg.Port == "8443" {
-					fallback = "8444"
-				}
-				GetLogger().Warn("TLS port must differ from HTTP port",
-					logger.String("http_port", cfg.Port),
-					logger.String("configured_tls_port", cfg.TLSPort),
-					logger.String("resolved_tls_port", fallback),
-				)
-				cfg.TLSPort = fallback
-			}
+			resolveTLSPort(cfg)
 		}
 	default:
 		// TLSModeNone — plain HTTP

@@ -90,7 +90,7 @@ type Server struct {
 	staticServer *StaticFileServer
 	spaHandler   *SPAHandler
 
-	// HTTP redirect server (when TLS is enabled with manual/self-signed certs)
+	// HTTP server for redirect/ACME challenges (when TLS is enabled)
 	httpRedirectServer *http.Server
 
 	// Lifecycle management
@@ -611,8 +611,6 @@ func (s *Server) startBlocking() error {
 	var err error
 	switch {
 	case s.config.AutoTLS:
-		// AutoTLS with Let's Encrypt
-		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)")
 		// Configure persistent cert cache so certificates survive restarts.
 		// Without this, Echo's AutoTLSManager has no storage backend and certs
 		// are lost on every shutdown, triggering a fresh ACME request each time
@@ -639,7 +637,43 @@ func (s *Server) startBlocking() error {
 				Build()
 		}
 		s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(host)
-		err = s.echo.StartAutoTLS(addr)
+
+		// Start HTTP server on the configured port for ACME HTTP-01 challenges.
+		// The fallback handler determines what happens to non-ACME traffic:
+		// - RedirectToHTTPS=false: serve the app over plain HTTP
+		// - RedirectToHTTPS=true + port 443: nil lets autocert redirect (no port in URL)
+		// - RedirectToHTTPS=true + custom port: custom handler includes port in redirect
+		var httpFallback http.Handler
+		if !s.config.RedirectToHTTPS {
+			httpFallback = s.echo
+		} else if s.config.TLSPort != "443" {
+			httpFallback = httpsRedirectHandler(s.config.TLSPort)
+		}
+		s.httpRedirectServer = &http.Server{
+			Addr:         addr,
+			Handler:      s.echo.AutoTLSManager.HTTPHandler(httpFallback),
+			ReadTimeout:  s.config.ReadTimeout,
+			WriteTimeout: s.config.WriteTimeout,
+		}
+
+		// Pre-bind the HTTP listener so ACME challenges work. Fail fast if the
+		// port is unavailable rather than discovering it asynchronously.
+		httpLn, listenErr := net.Listen("tcp", addr)
+		if listenErr != nil {
+			return fmt.Errorf("AutoTLS: cannot bind HTTP listener on %s (required for ACME HTTP-01 challenges): %w", addr, listenErr)
+		}
+		go s.serveHTTPOnListener(httpLn)
+
+		// Start HTTPS server on TLS port (this blocks)
+		tlsAddr := s.config.TLSAddress()
+		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)",
+			logger.String("https_address", tlsAddr),
+			logger.String("http_address", addr),
+		)
+		err = s.echo.StartAutoTLS(tlsAddr)
+		if err != nil && s.httpRedirectServer != nil {
+			_ = s.httpRedirectServer.Close()
+		}
 	case s.config.TLSEnabled:
 		// Manual/Self-signed TLS: HTTPS on TLSPort, HTTP stays on configured port
 		tlsAddr := s.config.TLSAddress()
@@ -742,6 +776,29 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 	return nil
 }
 
+// httpsRedirectHandler returns an http.Handler that 308-redirects requests to
+// HTTPS on the given tlsPort. IPv6 addresses are handled correctly.
+func httpsRedirectHandler(tlsPort string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		host = strings.TrimRight(strings.TrimLeft(host, "["), "]")
+		var hostPort string
+		if tlsPort == "443" {
+			hostPort = host
+			if strings.Contains(host, ":") {
+				hostPort = "[" + host + "]"
+			}
+		} else {
+			hostPort = net.JoinHostPort(host, tlsPort)
+		}
+		target := "https://" + hostPort + r.URL.RequestURI()
+		http.Redirect(w, r, target, http.StatusPermanentRedirect)
+	})
+}
+
 // newHTTPRedirectServer creates an HTTP server that redirects all requests to HTTPS.
 // The server is created synchronously to avoid a race between assignment and shutdown.
 func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
@@ -749,23 +806,9 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 		tlsPort = "8443"
 	}
 
-	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract hostname, stripping any port from the Host header
-		host := r.Host
-		if h, _, err := net.SplitHostPort(r.Host); err == nil {
-			host = h
-		}
-		target := "https://" + host
-		if tlsPort != "443" {
-			target += ":" + tlsPort
-		}
-		target += r.URL.RequestURI()
-		http.Redirect(w, r, target, http.StatusPermanentRedirect)
-	})
-
 	return &http.Server{
 		Addr:         httpAddr,
-		Handler:      redirectHandler,
+		Handler:      httpsRedirectHandler(tlsPort),
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
@@ -779,6 +822,17 @@ func (s *Server) serveHTTPRedirect() {
 	)
 
 	if err := s.httpRedirectServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.slogger.Error("HTTP redirect server error", logger.Error(err))
+	}
+}
+
+// serveHTTPOnListener serves the HTTP redirect/ACME server on a pre-bound listener.
+func (s *Server) serveHTTPOnListener(ln net.Listener) {
+	s.slogger.Info("Starting HTTP->HTTPS redirect server",
+		logger.String("http_address", s.httpRedirectServer.Addr),
+	)
+
+	if err := s.httpRedirectServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.slogger.Error("HTTP redirect server error", logger.Error(err))
 	}
 }
