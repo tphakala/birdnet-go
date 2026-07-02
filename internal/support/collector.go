@@ -1055,8 +1055,12 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	// size budget independent of the journal size already consumed.
 	getLogger().Debug("support: attempting to count log files")
 	diagnostics.FileLogs.Attempted = true
+	// Count file logs against the full maxSize, matching the archive path
+	// (addLogFilesToArchive uses the full cap for files and writes journald
+	// separately), so the counted tail boundary aligns with the archived one
+	// even when journal logs are present.
 	var fileAcc logScanAccum
-	if err := c.collectLogFilesWithDiagnostics(ctx, duration, maxSize-acc.size, &fileAcc, &diagnostics.FileLogs); err != nil {
+	if err := c.collectLogFilesWithDiagnostics(ctx, duration, maxSize, &fileAcc, &diagnostics.FileLogs); err != nil {
 		diagnostics.FileLogs.Error = err.Error()
 		getLogger().Warn("support: error counting log files", logger.Error(err))
 	} else {
@@ -1378,10 +1382,12 @@ func (c *Collector) countLogFile(ctx context.Context, path string, cutoffTime ti
 	lines := 0
 	for scanner.Scan() {
 		line := scanner.Text()
-		scanned += int64(len(line)) + 1 // include the newline
-		if scanned > remaining {
+		lineBytes := int64(len(line)) + 1 // include the newline
+		if scanned+lineBytes > remaining {
+			// Exclude the overflowing line so acc.size stays within the budget.
 			break
 		}
+		scanned += lineBytes
 		lines++
 		if lines%logDeadlineCheckLines == 0 && nearDeadline(ctx) {
 			break
@@ -1604,9 +1610,14 @@ func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, dur
 	// event every time a support dump was generated. Use the shared
 	// sysinfo.IsContainer() detector so we cover all container flavours,
 	// not just Docker.
-	if sysinfo.IsContainer() {
+	switch {
+	case sysinfo.IsContainer():
 		getLogger().Debug("support: skipping journald collection (container runtime)")
-	} else {
+	case nearDeadline(lfc.ctx):
+		// journalctl runs an external command that can be slow; skip it when the
+		// deadline is near so it cannot overrun the handler window.
+		getLogger().Warn("support: skipping journald collection - deadline approaching")
+	default:
 		getLogger().Debug("support: attempting to add journald logs to archive")
 		if err := lfc.addJournaldLogs(w, duration); err == nil {
 			lfc.logsAdded++
