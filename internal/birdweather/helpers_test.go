@@ -3,6 +3,7 @@ package birdweather
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,6 +16,39 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+const (
+	flacMagic                  = "fLaC"
+	flacMagicLen               = 4
+	flacMetadataBlockHeaderLen = 4
+	flacStreamInfoPayloadLen   = 34
+	flacStreamInfoMinLen       = flacMagicLen + flacMetadataBlockHeaderLen + flacStreamInfoPayloadLen
+	flacMetadataBlockTypeMask  = 0x7f
+	flacStreamInfoBlockType    = 0
+	flacMetadataLengthOffset   = 5
+	flacStreamInfoFieldsStart  = 18
+	flacStreamInfoFieldsEnd    = 26
+	flacSampleRateShift        = 44
+	flacSampleRateMask         = 0xfffff
+	flacTotalSamplesBitCount   = 36
+)
+
+func flacStreamInfo(t *testing.T, data []byte) (sampleRate, totalSamples uint64) {
+	t.Helper()
+	require.GreaterOrEqual(t, len(data), flacStreamInfoMinLen, "FLAC data too short for STREAMINFO")
+	require.Equal(t, flacMagic, string(data[:flacMagicLen]), "FLAC signature not found")
+	require.Equal(t, byte(flacStreamInfoBlockType), data[flacMagicLen]&flacMetadataBlockTypeMask, "first FLAC metadata block must be STREAMINFO")
+
+	payloadLen := int(data[flacMetadataLengthOffset])<<16 |
+		int(data[flacMetadataLengthOffset+1])<<8 |
+		int(data[flacMetadataLengthOffset+2])
+	require.Equal(t, flacStreamInfoPayloadLen, payloadLen, "unexpected STREAMINFO length")
+
+	fields := binary.BigEndian.Uint64(data[flacStreamInfoFieldsStart:flacStreamInfoFieldsEnd])
+	sampleRate = (fields >> flacSampleRateShift) & flacSampleRateMask
+	totalSamples = fields & ((1 << flacTotalSamplesBitCount) - 1)
+	return sampleRate, totalSamples
+}
 
 // TestParseSoundscapeResponse tests the JSON response parsing helper
 func TestParseSoundscapeResponse(t *testing.T) {
