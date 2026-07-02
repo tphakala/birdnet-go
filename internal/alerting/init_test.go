@@ -109,7 +109,7 @@ func TestInitialize_SeedsAndCreatesEngine(t *testing.T) {
 	repo := &initMockRepo{}
 	bus := NewAlertEventBus(nil)
 
-	engine, err := Initialize(repo, bus, initTestLogger(), nil)
+	engine, err := Initialize(repo, nil, bus, initTestLogger(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, engine)
 
@@ -126,7 +126,7 @@ func TestInitialize_SeedsOnlyMissingDefaults(t *testing.T) {
 	}
 	bus := NewAlertEventBus(nil)
 
-	engine, err := Initialize(repo, bus, initTestLogger(), nil)
+	engine, err := Initialize(repo, nil, bus, initTestLogger(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, engine)
 
@@ -138,7 +138,7 @@ func TestInitialize_SubscribesToEventBus(t *testing.T) {
 	repo := &initMockRepo{}
 	bus := NewAlertEventBus(nil)
 
-	_, err := Initialize(repo, bus, initTestLogger(), nil)
+	_, err := Initialize(repo, nil, bus, initTestLogger(), nil)
 	require.NoError(t, err)
 
 	// The bus should have at least one handler registered

@@ -119,6 +119,18 @@ export default defineConfig({
           console.error('[copy-messages] Error during message file copying:', err.message);
         }
       }
+    },
+    // Dev SPA fallback plugin to redirect /ui/* routes to /ui/assets/ index
+    {
+      name: 'dev-spa-fallback',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url && req.url.startsWith('/ui/') && !req.url.startsWith('/ui/assets/')) {
+            req.url = '/ui/assets/index.html';
+          }
+          next();
+        });
+      }
     }
   ],
   resolve: {

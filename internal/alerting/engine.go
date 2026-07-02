@@ -37,12 +37,13 @@ type ActionFunc func(rule *entities.AlertRule, event *AlertEvent)
 
 // Engine evaluates incoming alert events against configured rules.
 type Engine struct {
-	repo           repository.AlertRuleRepository
-	metricTracker  *MetricTracker
-	actionFunc     ActionFunc
-	testActionFunc ActionFunc // Used by TestFireRule to tag notifications as test
-	log            logger.Logger
-	telemetry      *AlertingTelemetry // nil-safe engine health reporter
+	repo            repository.AlertRuleRepository
+	speciesListRepo repository.SpeciesListRepository
+	metricTracker   *MetricTracker
+	actionFunc      ActionFunc
+	testActionFunc  ActionFunc // Used by TestFireRule to tag notifications as test
+	log             logger.Logger
+	telemetry       *AlertingTelemetry // nil-safe engine health reporter
 
 	// Cooldown tracking (in-memory, resets on restart).
 	// Key is rule ID for event rules, or "ruleID|metricKey" for metric
@@ -60,6 +61,10 @@ type Engine struct {
 	rules   []entities.AlertRule
 	rulesMu sync.RWMutex
 
+	// Cached species lists
+	lists   map[uint][]string
+	listsMu sync.RWMutex
+
 	// History cleanup
 	cleanupStop chan struct{}
 }
@@ -74,7 +79,43 @@ func NewEngine(repo repository.AlertRuleRepository, actionFunc ActionFunc, log l
 		telemetry:     at,
 		cooldowns:     make(map[string]time.Time),
 		escalations:   make(map[string]float64),
+		lists:         make(map[uint][]string),
 	}
+}
+
+// SetSpeciesListRepository sets the repository for fetching species lists.
+func (e *Engine) SetSpeciesListRepository(repo repository.SpeciesListRepository) {
+	e.speciesListRepo = repo
+}
+
+// RefreshSpeciesLists reloads the species lists from the database into the in-memory cache.
+func (e *Engine) RefreshSpeciesLists(ctx context.Context) error {
+	if e.speciesListRepo == nil {
+		return nil
+	}
+	lists, err := e.speciesListRepo.ListSpeciesLists(ctx)
+	if err != nil {
+		return err
+	}
+	newLists := make(map[uint][]string)
+	for _, l := range lists {
+		var sciNames []string
+		for _, m := range l.Members {
+			sciNames = append(sciNames, m.ScientificName)
+		}
+		newLists[l.ID] = sciNames
+	}
+	e.listsMu.Lock()
+	e.lists = newLists
+	e.listsMu.Unlock()
+	return nil
+}
+
+// ResolveSpeciesList resolves a species list ID into a slice of species names.
+func (e *Engine) ResolveSpeciesList(id uint) []string {
+	e.listsMu.RLock()
+	defer e.listsMu.RUnlock()
+	return e.lists[id]
 }
 
 // SetTestActionFunc sets the function called when a rule is test-fired.
@@ -510,7 +551,7 @@ func (e *Engine) ruleMatches(rule *entities.AlertRule, event *AlertEvent) bool {
 	}
 
 	// For event triggers, evaluate conditions directly
-	return EvaluateConditions(rule.Conditions, event.Properties)
+	return EvaluateConditions(rule.Conditions, event.Properties, e)
 }
 
 func (e *Engine) evaluateMetricConditions(rule *entities.AlertRule, event *AlertEvent) bool {
@@ -524,7 +565,7 @@ func (e *Engine) evaluateMetricConditions(rule *entities.AlertRule, event *Alert
 			if !e.metricTracker.IsSustained(trackerKey, cond.Operator, cond.Value, duration, event.Timestamp) {
 				return false
 			}
-		} else if !evaluateCondition(cond, event.Properties) {
+		} else if !evaluateCondition(cond, event.Properties, e) {
 			// Instant check
 			return false
 		}
