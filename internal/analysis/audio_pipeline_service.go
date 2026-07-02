@@ -1609,6 +1609,41 @@ func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metric
 	})
 }
 
+// exportDirState classifies the clip export directory for a cleanup pass.
+type exportDirState int
+
+const (
+	// exportDirUsable means the path exists and is a directory: run cleanup.
+	exportDirUsable exportDirState = iota
+	// exportDirMissing means the path does not exist. This is the benign default
+	// when audio export is disabled (the directory is created lazily on the first
+	// clip save) or when a Docker clips volume is unmounted.
+	exportDirMissing
+	// exportDirBad means the path could not be stat-ed (permissions, I/O) or exists
+	// but is not a directory: an unexpected condition worth surfacing.
+	exportDirBad
+)
+
+// classifyExportDir reports whether the clip export directory at path is usable
+// for a cleanup pass. It mirrors the guard used by ReconcileClipOrphansPass
+// (missing or non-directory paths are skipped) so the two cleanup tasks agree on
+// what counts as a valid export directory. The returned error is the underlying
+// os.Stat error when one occurred (nil for a path that exists but is not a
+// directory), so the caller can include it in a diagnostic log.
+func classifyExportDir(path string) (exportDirState, error) {
+	info, err := os.Stat(path)
+	switch {
+	case err != nil && os.IsNotExist(err):
+		return exportDirMissing, err
+	case err != nil:
+		return exportDirBad, err
+	case !info.IsDir():
+		return exportDirBad, nil
+	default:
+		return exportDirUsable, nil
+	}
+}
+
 // clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	log := GetLogger()
@@ -1648,6 +1683,39 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 				log.Debug("skipping clip cleanup: export path not configured",
 					logger.String("operation", "clip_cleanup_skip"))
 				continue
+			}
+
+			// Skip the pass when the export directory is not a usable directory.
+			// When audio export is disabled the directory is never created (it is
+			// made lazily on the first clip save), and in Docker the clips volume
+			// may be unmounted. Without this guard the usage-based path below calls
+			// GetDiskUsage against a missing directory and warns on every interval.
+			// The check runs each iteration so re-enabling export (which recreates
+			// the directory) resumes cleanup without a restart. The DB reconcile
+			// crawler is a separate task that must run regardless of export state.
+			switch state, statErr := classifyExportDir(exportCfg.Path); state {
+			case exportDirMissing:
+				// Benign default state when export is off: log at Debug and skip.
+				log.Debug("skipping clip cleanup: export directory does not exist",
+					logger.String("path", exportCfg.Path),
+					logger.Error(statErr),
+					logger.String("operation", "clip_cleanup_skip"))
+				continue
+			case exportDirBad:
+				// Genuine access failure or a non-directory path: log at Warn so a
+				// real misconfiguration still surfaces. statErr is nil when the path
+				// exists but is not a directory.
+				fields := []logger.Field{
+					logger.String("path", exportCfg.Path),
+					logger.String("operation", "clip_cleanup_skip"),
+				}
+				if statErr != nil {
+					fields = append(fields, logger.Error(statErr))
+				}
+				log.Warn("skipping clip cleanup: export path is not a usable directory", fields...)
+				continue
+			case exportDirUsable:
+				// Fall through to run the cleanup pass.
 			}
 
 			log.Info("starting clip cleanup task",
