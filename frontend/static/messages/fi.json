@@ -1946,6 +1946,7 @@
       "speciesList": "Lajiluettelo",
       "switchToGrid": "Vaihda ruudukkonäkymään",
       "switchToList": "Vaihda listanäkymään",
+      "switchToManage": "Vaihda hallintanäkymään",
       "noSpeciesFound": "Suodattimia vastaavia lajeja ei löytynyt.",
       "headers": {
         "species": "Laji",
@@ -1959,6 +1960,26 @@
         "detections": "Havainnot:",
         "confidence": "Luottamus:",
         "first": "Ensimmäinen:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Poissuljettu",
+          "included": "Sisällytetty",
+          "reviewRatio": "Oikein",
+          "rangeProbability": "Alue",
+          "confirmed": "Vahvistettu",
+          "actions": "Toiminnot"
+        },
+        "delete": "Poista kaikki tämän lajin havainnot",
+        "deleteTitle": "Poista lajin havainnot",
+        "deleteConfirm": "Poista",
+        "deleteMessage": "Poistetaanko {count, plural, one {# havainto} other {# havaintoa}} lajille {species}? Lukitut havainnot säilytetään.",
+        "deleteWarning": "Tämä poistaa havainnot ja niiden äänileikkeet pysyvästi, eikä toimintoa voi kumota.",
+        "deleteFailed": "Havaintojen poistaminen epäonnistui. Yritä uudelleen.",
+        "deleteProgress": "Poistettu {deleted} tähän mennessä, {remaining} jäljellä…",
+        "membershipFailed": "Lajiluetteloiden päivitys epäonnistui. Yritä uudelleen.",
+        "loadFailed": "Lajitietojen päivitys epäonnistui. Näytetään aiemmin ladatut tulokset.",
+        "allTimeNote": "Hallinta näyttää kaikki havainnot kaikilta ajoilta; yllä oleva päivämääräsuodatin ei koske tätä näkymää."
       }
     },
     "advanced": {

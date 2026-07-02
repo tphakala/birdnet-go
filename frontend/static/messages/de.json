@@ -1946,6 +1946,7 @@
       "speciesList": "Artenliste",
       "switchToGrid": "Zur Gitteransicht wechseln",
       "switchToList": "Zur Listenansicht wechseln",
+      "switchToManage": "Zur Verwaltungsansicht wechseln",
       "noSpeciesFound": "Keine Arten gefunden, die Ihren Filtern entsprechen.",
       "headers": {
         "species": "Art",
@@ -1959,6 +1960,26 @@
         "detections": "Erkennungen:",
         "confidence": "Konfidenz:",
         "first": "Erste:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Ausgeschlossen",
+          "included": "Eingeschlossen",
+          "reviewRatio": "Korrekt",
+          "rangeProbability": "Reichweite",
+          "confirmed": "Bestätigt",
+          "actions": "Aktionen"
+        },
+        "delete": "Alle Erkennungen dieser Art löschen",
+        "deleteTitle": "Arterkennungen löschen",
+        "deleteConfirm": "Löschen",
+        "deleteMessage": "Alle {count} Erkennungen für {species} löschen? Gesperrte Erkennungen bleiben erhalten.",
+        "deleteWarning": "Dadurch werden die Erkennungen und ihre Audioclips dauerhaft entfernt und können nicht rückgängig gemacht werden.",
+        "deleteFailed": "Erkennungen konnten nicht gelöscht werden. Bitte versuchen Sie es erneut.",
+        "deleteProgress": "Bisher {deleted} gelöscht, noch {remaining} übrig…",
+        "membershipFailed": "Artenlisten konnten nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
+        "loadFailed": "Artdaten konnten nicht aktualisiert werden. Zuvor geladene Ergebnisse werden angezeigt.",
+        "allTimeNote": "Verwalten zeigt alle Erkennungen über den gesamten Zeitraum; der Datumsfilter oben gilt hier nicht."
       }
     },
     "advanced": {

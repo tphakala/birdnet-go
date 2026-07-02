@@ -1946,6 +1946,7 @@
       "speciesList": "Lista de espécies",
       "switchToGrid": "Mudar para visualização em grade",
       "switchToList": "Mudar para visualização em lista",
+      "switchToManage": "Mudar para a vista de gestão",
       "noSpeciesFound": "Nenhuma espécie encontrada que corresponda aos seus filtros.",
       "headers": {
         "species": "Espécie",
@@ -1959,6 +1960,26 @@
         "detections": "Detecções:",
         "confidence": "Confiança:",
         "first": "Primeira:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Excluída",
+          "included": "Incluída",
+          "reviewRatio": "Corretas",
+          "rangeProbability": "Alcance",
+          "confirmed": "Confirmada",
+          "actions": "Ações"
+        },
+        "delete": "Eliminar todas as detecções desta espécie",
+        "deleteTitle": "Eliminar detecções da espécie",
+        "deleteConfirm": "Eliminar",
+        "deleteMessage": "Eliminar todas as {count} detecções de {species}? As detecções bloqueadas são mantidas.",
+        "deleteWarning": "Isto remove permanentemente as detecções e os respetivos clipes de áudio e não pode ser desfeito.",
+        "deleteFailed": "Não foi possível eliminar as detecções. Tente novamente.",
+        "deleteProgress": "Eliminadas {deleted} até agora, faltam {remaining}…",
+        "membershipFailed": "Não foi possível atualizar as listas de espécies. Tente novamente.",
+        "loadFailed": "Não foi possível atualizar os dados das espécies. A mostrar os últimos resultados carregados.",
+        "allTimeNote": "Gerir mostra todas as detecções de sempre; o filtro de data acima não se aplica aqui."
       }
     },
     "advanced": {

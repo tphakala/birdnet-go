@@ -2644,6 +2644,60 @@ func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 	return result, nil
 }
 
+// GetSpeciesReviewStats retrieves per-species detection and review counts across
+// all time, including false positives.
+func (ds *Datastore) GetSpeciesReviewStats(ctx context.Context) ([]datastore.SpeciesReviewStat, error) {
+	v2Data, err := ds.detection.GetSpeciesReviewStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// The repository groups by the raw label scientific_name. A legacy
+	// "ScientificName_CommonName" label and the clean scientific name are distinct
+	// label rows that both normalize to the same species here, so merge their counts
+	// rather than emitting duplicate rows: the Manage view keys stats by scientific
+	// name, so duplicates would otherwise silently drop (undercount) one label's counts.
+	byName := make(map[string]*datastore.SpeciesReviewStat, len(v2Data))
+	order := make([]string, 0, len(v2Data))
+	for _, d := range v2Data {
+		sciName := detection.ExtractScientificName(d.ScientificName)
+		stat, ok := byName[sciName]
+		if !ok {
+			stat = &datastore.SpeciesReviewStat{
+				ScientificName: sciName,
+				CommonName:     ds.resolveCommonName(sciName),
+			}
+			byName[sciName] = stat
+			order = append(order, sciName)
+		}
+		stat.Total += int(d.Total)
+		stat.Verified += int(d.Verified)
+		stat.Rejected += int(d.Rejected)
+	}
+
+	result := make([]datastore.SpeciesReviewStat, 0, len(order))
+	for _, sciName := range order {
+		result = append(result, *byName[sciName])
+	}
+	return result, nil
+}
+
+// GetSpeciesNoteIDs returns the string IDs of all detections for the given
+// scientific name, matching legacy "ScientificName_CommonName" labels on the
+// scientific-name portion.
+func (ds *Datastore) GetSpeciesNoteIDs(ctx context.Context, scientificName string) ([]string, error) {
+	ids, err := ds.detection.GetDetectionIDsByScientificName(ctx, scientificName)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		result = append(result, strconv.FormatUint(uint64(id), 10))
+	}
+	return result, nil
+}
+
 // GetHourlyAnalyticsData retrieves hourly analytics data for a specific date and species.
 func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
 	start, end, err := ds.parseDateRange(date, date)

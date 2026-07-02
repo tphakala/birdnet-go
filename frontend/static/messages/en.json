@@ -1946,6 +1946,7 @@
       "speciesList": "Species List",
       "switchToGrid": "Switch to grid view",
       "switchToList": "Switch to list view",
+      "switchToManage": "Switch to manage view",
       "noSpeciesFound": "No species found matching your filters.",
       "headers": {
         "species": "Species",
@@ -1959,6 +1960,26 @@
         "detections": "Detections:",
         "confidence": "Confidence:",
         "first": "First:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Excluded",
+          "included": "Included",
+          "reviewRatio": "Correct",
+          "rangeProbability": "Range",
+          "confirmed": "Confirmed",
+          "actions": "Actions"
+        },
+        "delete": "Delete all detections for this species",
+        "deleteTitle": "Delete species detections",
+        "deleteConfirm": "Delete",
+        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
+        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
+        "deleteFailed": "Failed to delete detections. Please try again.",
+        "deleteProgress": "Deleted {deleted} so far, {remaining} remaining…",
+        "membershipFailed": "Failed to update species lists. Please try again.",
+        "loadFailed": "Failed to refresh species data. Showing previously loaded results.",
+        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
       }
     },
     "advanced": {

@@ -1946,6 +1946,7 @@
       "speciesList": "Lista Gatunków",
       "switchToGrid": "Przełącz na widok siatki",
       "switchToList": "Przełącz na widok listy",
+      "switchToManage": "Przełącz na widok zarządzania",
       "noSpeciesFound": "Nie znaleziono gatunków pasujących do twoich filtrów.",
       "headers": {
         "species": "Gatunek",
@@ -1959,6 +1960,26 @@
         "detections": "Detekcje:",
         "confidence": "Pewność:",
         "first": "Pierwsze:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Wykluczony",
+          "included": "Uwzględniony",
+          "reviewRatio": "Poprawne",
+          "rangeProbability": "Zasięg",
+          "confirmed": "Potwierdzony",
+          "actions": "Akcje"
+        },
+        "delete": "Usuń wszystkie detekcje tego gatunku",
+        "deleteTitle": "Usuń detekcje gatunku",
+        "deleteConfirm": "Usuń",
+        "deleteMessage": "{count, plural, one {Usunąć # detekcję gatunku {species}?} few {Usunąć # detekcje gatunku {species}?} many {Usunąć # detekcji gatunku {species}?} other {Usunąć # detekcji gatunku {species}?}} Zablokowane detekcje zostaną zachowane.",
+        "deleteWarning": "Spowoduje to trwałe usunięcie detekcji oraz ich klipów audio i nie można tego cofnąć.",
+        "deleteFailed": "Nie udało się usunąć detekcji. Spróbuj ponownie.",
+        "deleteProgress": "Usunięto dotychczas: {deleted}, pozostało: {remaining}…",
+        "membershipFailed": "Nie udało się zaktualizować list gatunków. Spróbuj ponownie.",
+        "loadFailed": "Nie udało się odświeżyć danych o gatunkach. Wyświetlane są wcześniej wczytane wyniki.",
+        "allTimeNote": "Zarządzanie pokazuje wszystkie detekcje z całego okresu; powyższy filtr daty tutaj nie obowiązuje."
       }
     },
     "advanced": {
