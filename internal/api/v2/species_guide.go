@@ -569,7 +569,8 @@ func (c *Controller) resolveSimilarSpecies(ctx context.Context, candidates []sim
 	return entries
 }
 
-// GetSpeciesNotes returns all notes for a species (public).
+// GetSpeciesNotes returns all notes for a species (authenticated; notes are
+// user-authored and may contain sensitive content, see initSpeciesGuideRoutes).
 // GET /api/v2/species/:scientific_name/notes
 func (c *Controller) GetSpeciesNotes(ctx echo.Context) error {
 	name, err := parseScientificNameParam(ctx)

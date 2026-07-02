@@ -17,8 +17,8 @@ import (
 const SpeciesNoteMaxLength = 10_000
 
 // SpeciesNotesMaxResults bounds how many notes GetSpeciesNotes returns for a
-// single species. The read endpoint is public, so this caps the worst-case
-// result size; newest-first ordering means the most recent notes are retained.
+// single species, capping the worst-case result size even for authenticated
+// callers; newest-first ordering means the most recent notes are retained.
 const SpeciesNotesMaxResults = 500
 
 // GormDBProvider exposes the underlying GORM handle for features that need direct
