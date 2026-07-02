@@ -150,6 +150,10 @@
   let currentTime = $state(0);
   let duration = $state(0);
   let audioContextAvailable = $state(true);
+  // Mutual-exclusion signals: bumping one forces the sibling popup (Audible
+  // Bats vs Audio Settings) closed, so only one is ever open at a time.
+  let closeAudibleBatsSignal = $state(0);
+  let closeAudioSettingsSignal = $state(0);
   let progress = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -2036,8 +2040,10 @@
           generating={audibleBats.generating}
           error={audibleBats.error}
           disabled={!audioContextAvailable}
+          closeSignal={closeAudibleBatsSignal}
           onEnable={settings => audibleBats.enable(settings)}
           onDisable={() => audibleBats.disable()}
+          onMenuOpen={() => closeAudioSettingsSignal++}
         />
       {/if}
       <AudioSettingsButton
@@ -2049,6 +2055,8 @@
         onFilterChange={updateFilter}
         onSpeedChange={handleSpeedChange}
         disabled={!audioContextAvailable}
+        closeSignal={closeAudioSettingsSignal}
+        onMenuOpen={() => closeAudibleBatsSignal++}
       />
     </div>
   {/if}

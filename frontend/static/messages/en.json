@@ -4859,8 +4859,8 @@
         "title": "Audible bat playback",
         "subtitle": "Slow ultrasonic calls into human hearing range.",
         "timeExpansion": "Time expansion",
-        "enable": "Enable audible bats mode",
-        "disable": "Disable audible bats mode",
+        "enable": "Activate",
+        "disable": "Deactivate",
         "generating": "Generating derived audio…",
         "error": "Failed to generate audible bats audio"
       }

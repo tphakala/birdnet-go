@@ -12,6 +12,8 @@
   - onFilterChange: (value: number) => void - Callback when filter changes
   - onSpeedChange: (value: number) => void - Callback when speed changes
   - disabled?: boolean - Whether the button is disabled (e.g., AudioContext not available)
+  - closeSignal?: number - Bump this to force-close an open popup (e.g. a sibling
+    Audible Bats popup just opened); mirrors AudibleBatsButton
 -->
 <script lang="ts">
   import { Volume2 } from '@lucide/svelte';
@@ -29,6 +31,7 @@
     onSpeedChange: (_value: number) => void;
     defaultGainValue?: number;
     disabled?: boolean;
+    closeSignal?: number;
     onMenuOpen?: () => void;
     onMenuClose?: () => void;
   }
@@ -42,6 +45,7 @@
     onSpeedChange,
     defaultGainValue = 0,
     disabled = false,
+    closeSignal = 0,
     onMenuOpen,
     onMenuClose,
   }: Props = $props();
@@ -133,6 +137,20 @@
     onFilterChange(FILTER_HP_MIN_FREQ);
     onSpeedChange(DEFAULT_PLAYBACK_SPEED);
   }
+
+  // Force-close when the parent bumps closeSignal (e.g. the sibling Audible
+  // Bats popup was just opened) so only one popup is ever visible at once.
+  // svelte-ignore state_referenced_locally
+  let previousCloseSignal = closeSignal;
+  $effect(() => {
+    if (closeSignal !== previousCloseSignal) {
+      previousCloseSignal = closeSignal;
+      if (showSettings) {
+        showSettings = false;
+        onMenuClose?.();
+      }
+    }
+  });
 
   $effect(() => {
     if (showSettings) {

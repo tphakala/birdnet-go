@@ -56,6 +56,11 @@
   let isVisible = $state(false);
   let isMenuOpen = $state(false);
 
+  // Mutual-exclusion signals: bumping one forces the sibling popup (Audible
+  // Bats vs Audio Settings) closed, so only one is ever open at a time.
+  let closeAudibleBatsSignal = $state(0);
+  let closeAudioSettingsSignal = $state(0);
+
   let audioGainValue = $state(getDefaultAudioGain());
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
@@ -109,6 +114,16 @@
 
   function handleMenuClose() {
     isMenuOpen = false;
+  }
+
+  function handleAudibleBatsOpen() {
+    isMenuOpen = true;
+    closeAudioSettingsSignal++;
+  }
+
+  function handleAudioSettingsOpen() {
+    isMenuOpen = true;
+    closeAudibleBatsSignal++;
   }
 
   function handleViewDetails() {
@@ -243,9 +258,10 @@
           generating={audibleBats.generating}
           error={audibleBats.error}
           disabled={!audioContextAvailable}
+          closeSignal={closeAudibleBatsSignal}
           onEnable={settings => audibleBats.enable(settings)}
           onDisable={() => audibleBats.disable()}
-          onMenuOpen={handleMenuOpen}
+          onMenuOpen={handleAudibleBatsOpen}
           onMenuClose={handleMenuClose}
         />
       {/if}
@@ -258,7 +274,8 @@
         onFilterChange={handleFilterChange}
         onSpeedChange={handleSpeedChange}
         disabled={!audioContextAvailable}
-        onMenuOpen={handleMenuOpen}
+        closeSignal={closeAudioSettingsSignal}
+        onMenuOpen={handleAudioSettingsOpen}
         onMenuClose={handleMenuClose}
       />
     {/if}
