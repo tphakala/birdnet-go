@@ -108,4 +108,14 @@ describe('AudibleBatsButton', () => {
     expect(describedBy).toBeTruthy();
     expect(document.getElementById(describedBy as string)?.textContent).toBe('Not available');
   });
+
+  it('closes an already-open popup when it becomes disabled', async () => {
+    const { container, rerender } = renderButton();
+    await openPopup(container);
+    expect(screen.getByText('media.audio.audibleBats.timeExpansion')).toBeInTheDocument();
+
+    await rerender({ disabled: true });
+
+    expect(screen.queryByText('media.audio.audibleBats.timeExpansion')).not.toBeInTheDocument();
+  });
 });

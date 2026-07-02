@@ -1137,6 +1137,16 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 		}
 		return c.HandleError(ctx, err, "Failed to probe audio sample rate", http.StatusInternalServerError)
 	}
+	// Sources below the minimum bat capture rate cannot carry ultrasonic content,
+	// so a derived "audible bats" clip would have nothing meaningful to reveal.
+	// Reject before spending CPU on time expansion.
+	if sampleRate < ffmpeg.MinBatSampleRate {
+		return c.HandleError(ctx,
+			fmt.Errorf("sample rate %d below minimum %d", sampleRate, ffmpeg.MinBatSampleRate),
+			fmt.Sprintf("Source audio must be at least %d Hz for audible bats mode", ffmpeg.MinBatSampleRate),
+			http.StatusUnprocessableEntity,
+		)
+	}
 
 	// Temp working directory under the SecureFS root (container-friendly with a
 	// read-only rootfs), reusing the existing processing temp dir.
