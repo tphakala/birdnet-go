@@ -1650,6 +1650,29 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 				continue
 			}
 
+			// Skip the pass when the export directory is inaccessible. When audio
+			// export is disabled the directory is never created (it is made lazily
+			// on the first clip save), and in Docker the clips volume may be
+			// unmounted. Without this guard the usage-based path below calls
+			// GetDiskUsage against a missing directory and warns on every interval.
+			// The check runs each iteration so re-enabling export (which recreates
+			// the directory) resumes cleanup without a restart. The DB reconcile
+			// crawler is a separate task that must run regardless of export state.
+			if _, statErr := os.Stat(exportCfg.Path); statErr != nil {
+				if os.IsNotExist(statErr) {
+					log.Debug("skipping clip cleanup: export directory does not exist",
+						logger.String("path", exportCfg.Path),
+						logger.Error(statErr),
+						logger.String("operation", "clip_cleanup_skip"))
+				} else {
+					log.Warn("skipping clip cleanup: export directory not accessible",
+						logger.String("path", exportCfg.Path),
+						logger.Error(statErr),
+						logger.String("operation", "clip_cleanup_skip"))
+				}
+				continue
+			}
+
 			log.Info("starting clip cleanup task",
 				logger.String("timestamp", t.Format(time.RFC3339)),
 				logger.String("policy", currentPolicy),
