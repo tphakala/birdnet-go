@@ -16,9 +16,9 @@ Environment=BIRDNET_UID=1000
 Environment=BIRDNET_GID=1000
 Environment=BIRDNET_SECURITY_AUTOTLS=true
 Environment=BIRDNET_SECURITY_HOST=%i
-Device=/dev/snd:/dev/snd
+AddDevice=-/dev/snd:/dev/snd
 Network=bridge
-Tmpfs=/config/hls:exec,size=50M,uid=1000,gid=1000,mode=0755
+Tmpfs=/config/hls:exec,size=50M,mode=0755
 AddCapability=NET_BIND_SERVICE
 
 [Service]

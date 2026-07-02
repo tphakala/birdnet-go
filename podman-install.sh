@@ -951,7 +951,7 @@ setup_logging
 CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
-WEB_PORT=8080  # Default web port
+WEB_PORT=8888  # Default web port
 COCKPIT_PORT=9090  # Default Cockpit port
 QUADLET_DIR="$HOME/.config/containers/systemd"
 # For Podman, always include device mapping
@@ -1788,11 +1788,11 @@ Volume=./config:/config
 Volume=./data:/data
 PublishPort=${WEB_PORT}:8080
 Environment=TZ=${CONFIGURED_TZ:-UTC}
-Environment=BIRDNET_UID=\$(id -u)
-Environment=BIRDNET_GID=\$(id -g)
-Device=/dev/snd:/dev/snd
+Environment=BIRDNET_UID=%U
+Environment=BIRDNET_GID=%G
+AddDevice=-/dev/snd:/dev/snd
 Network=birdnet-bridge
-Tmpfs=/config/hls:exec,size=50M,uid=\$(id -u),gid=\$(id -g),mode=0755
+Tmpfs=/config/hls:exec,size=50M,mode=0755
 
 [Service]
 Restart=always
@@ -1814,16 +1814,6 @@ EOF
 # Function to start Quadlet service
 start_quadlet_service() {
     log_message "INFO" "Starting BirdNET-Go Quadlet service"
-    
-    # Enable the service
-    if systemctl --user enable birdnet-go.service; then
-        log_command_result "systemctl --user enable birdnet-go.service" $? "service enable"
-        print_message "✅ BirdNET-Go service enabled" "$GREEN"
-    else
-        log_message "ERROR" "Failed to enable BirdNET-Go service"
-        print_message "❌ Failed to enable BirdNET-Go service" "$RED"
-        return 1
-    fi
     
     # Start the service
     if systemctl --user start birdnet-go.service; then
