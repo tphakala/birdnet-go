@@ -120,11 +120,11 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 	return nil
 }
 
-// encodeUploadAudioToBuffer lets encoders write to a seekable temporary file,
-// then reads the completed audio back into the in-memory upload buffer. FLAC
-// muxers need seekable output to patch STREAMINFO fields such as total samples;
-// when encoded directly to a pipe those fields remain unknown and BirdWeather
-// stores the soundscape duration as 0.
+// encodeUploadAudioToBuffer uses os.MkdirTemp to let encoders write to a
+// seekable temporary file, then os.ReadFile to load the completed audio back
+// into the in-memory upload buffer. FLAC muxers need seekable output to patch
+// STREAMINFO fields such as total samples; when encoded directly to a pipe those
+// fields remain unknown and BirdWeather stores the soundscape duration as 0.
 func encodeUploadAudioToBuffer(ext string, encode func(outputPath string) error) (*bytes.Buffer, error) {
 	dir, err := os.MkdirTemp("", "birdweather-upload-*")
 	if err != nil {

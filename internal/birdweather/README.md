@@ -63,8 +63,10 @@ func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error)
 BirdWeather FLAC uploads use a short-lived, disk-backed temporary file before
 the upload buffer is created. FLAC muxers need seekable output to finalize
 `STREAMINFO` metadata such as the total sample count; without that metadata
-BirdWeather can store the soundscape duration as `0.0`. The temporary file is
-removed after the finalized FLAC bytes are read into the upload buffer.
+BirdWeather can store the soundscape duration as `0.0`. The upload path creates
+the private temp directory with `os.MkdirTemp`, encodes the FLAC there, reads
+the finalized bytes with `os.ReadFile`, and removes the temporary file
+afterward.
 
 ### Loudness Normalization
 
@@ -196,7 +198,7 @@ Client connections are properly managed to prevent resource leaks:
 - HTTP client timeouts to prevent hanging connections
 - Proper cleanup of resources in the `Close()` method
 - Idle connection cleanup
-- **Seekable FLAC Uploads**: BirdWeather FLAC uploads use a short-lived temporary file so FFmpeg and the native FLAC encoder can finalize seek metadata before upload. The finalized bytes are then read into memory for the existing HTTP upload path.
+- **Seekable FLAC Uploads**: BirdWeather FLAC uploads use a short-lived temporary file so FFmpeg and the native FLAC encoder can finalize seek metadata before upload. The path creates the temporary workspace with `os.MkdirTemp`, reads the finalized bytes back with `os.ReadFile`, and then uploads through the existing in-memory HTTP path.
 - Temporary files and directories are properly cleaned up
 
 ## Debug Capabilities
@@ -270,7 +272,7 @@ When FFmpeg is available, bird call audio is processed using the `loudnorm` filt
 The normalization process involves:
 
 1.  **Pass 1 (Analysis)**: Reads raw PCM audio data and runs `loudnorm` in analysis mode (`print_format=json`) to measure the input audio's characteristics (I, LRA, TP, Threshold).
-2.  **Pass 2 (Normalization & Encoding)**: Reads the PCM data again, applies the `loudnorm` filter using the measured values from Pass 1 (`linear=true`, `measured_*` parameters), and encodes the normalized audio directly to FLAC format in a single step.
+2.  **Pass 2 (Normalization & Encoding)**: Reads the PCM data again, applies the `loudnorm` filter using the measured values from Pass 1 (`linear=true`, `measured_*` parameters), and encodes the normalized audio to a seekable temporary FLAC file before reading the finalized bytes for upload.
 
 Benefits:
 
@@ -299,7 +301,7 @@ Comprehensive tests are provided for all key functionality:
 - **Location coordinates** are currently ignored by BirdWeather's API. Despite the location randomization feature, BirdWeather always uses the coordinates assigned to your station ID/token rather than the coordinates submitted with detections.
 - FLAC encoding requires **FFmpeg to be installed and configured correctly** on the host system (Linux, macOS, Windows).
 - Loudness normalization requires FFmpeg with the `loudnorm` filter (available in most modern FFmpeg builds).
-- **Memory Usage**: The in-memory FFmpeg processing, while reducing disk writes, might consume significant memory for very long audio inputs.
+- **Memory Usage**: FFmpeg loudness analysis remains in memory, but finalized FLAC upload encoding uses a short-lived temp file so `STREAMINFO` duration metadata can be written.
 
 ## Dependencies
 

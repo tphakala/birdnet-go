@@ -503,9 +503,10 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 	return responseBody, nil
 }
 
-// encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
-// It applies a simple gain adjustment instead of dynamic loudness normalization to avoid pumping effects.
-// This avoids writing temporary files to disk.
+// encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg.
+// It applies a simple gain adjustment instead of dynamic loudness normalization
+// to avoid pumping effects. The final FLAC export uses a seekable temporary file
+// so FFmpeg can finalize STREAMINFO before the bytes are read into memory.
 // It accepts a context for timeout/cancellation control and the explicit path to the FFmpeg executable.
 func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath string, settings *conf.Settings) (*bytes.Buffer, error) {
 	log := GetLogger()
@@ -598,6 +599,8 @@ func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ff
 
 // exportFlacFileToBuffer encodes through a seekable temporary FLAC file, then
 // reads the finalized bytes back into memory for the existing upload path.
+// encodeUploadAudioToBuffer owns the os.MkdirTemp/os.ReadFile round-trip needed
+// for FFmpeg to patch STREAMINFO fields such as total samples.
 func (b *BwClient) exportFlacFileToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string, gainDB float64) (*bytes.Buffer, error) {
 	return encodeUploadAudioToBuffer("flac", func(outputPath string) error {
 		return ffmpeg.ExportAudio(ctx, &ffmpeg.ExportOptions{
@@ -1182,7 +1185,8 @@ func (b *BwClient) encodeAudioForUpload(settings *conf.Settings, pcmData []byte,
 	return b.encodeWithFFmpeg(settings, pcmData, ffmpegPathForExec, timestamp)
 }
 
-// encodeWithFFmpeg encodes PCM to FLAC format using FFmpeg
+// encodeWithFFmpeg encodes PCM to FLAC format using FFmpeg. The final FLAC mux
+// step is disk-backed so the upload contains finalized STREAMINFO metadata.
 func (b *BwClient) encodeWithFFmpeg(settings *conf.Settings, pcmData []byte, ffmpegPath, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
 

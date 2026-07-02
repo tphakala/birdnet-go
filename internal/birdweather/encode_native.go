@@ -21,12 +21,14 @@ import (
 // limit so a near-silent clip is not over-amplified into loud static.
 const maxGainDB = 30.0
 
-// encodeWithNativeFLAC encodes PCM to a seekable FLAC file, reads it into an
-// upload buffer, and uses the native go-flac encoder and audionorm loudness
-// normalization, with no FFmpeg
-// dependency. Pass 1 measures integrated loudness and true peak; the planned
-// gain (clamped to +/-maxGainDB) is then applied in Go while the original bytes
-// are streamed into the encoder. pcmData is not modified.
+// encodeWithNativeFLAC encodes PCM to a seekable temporary FLAC file, reads it
+// into an upload buffer, and uses the native go-flac encoder and audionorm
+// loudness normalization, with no FFmpeg dependency. The temp file round-trip is
+// handled by encodeUploadAudioToBuffer through os.MkdirTemp/os.ReadFile so
+// STREAMINFO total samples can be finalized. Pass 1 measures integrated loudness
+// and true peak; the planned gain (clamped to +/-maxGainDB) is then applied in
+// Go while the original bytes are streamed into the encoder. pcmData is not
+// modified.
 func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
 
