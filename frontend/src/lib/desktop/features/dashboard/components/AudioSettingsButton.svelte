@@ -19,6 +19,7 @@
   import { Volume2 } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
+  import { useCloseSignal } from '$lib/utils/useCloseSignal.svelte';
   import { t } from '$lib/i18n';
   import { SPEED_OPTIONS, DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
@@ -140,17 +141,15 @@
 
   // Force-close when the parent bumps closeSignal (e.g. the sibling Audible
   // Bats popup was just opened) so only one popup is ever visible at once.
-  // svelte-ignore state_referenced_locally
-  let previousCloseSignal = closeSignal;
-  $effect(() => {
-    if (closeSignal !== previousCloseSignal) {
-      previousCloseSignal = closeSignal;
+  useCloseSignal(
+    () => closeSignal,
+    () => {
       if (showSettings) {
         showSettings = false;
         onMenuClose?.();
       }
     }
-  });
+  );
 
   $effect(() => {
     if (showSettings) {
