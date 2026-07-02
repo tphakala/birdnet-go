@@ -18,7 +18,6 @@
     ChevronDown,
     Eye,
     FrownIcon,
-    Music,
     Search,
     SquarePen,
     Volume2,
@@ -1033,20 +1032,6 @@
                           {/if}
                         </div>
                       {/if}
-                      <button
-                        class="btn btn-xs btn-square"
-                        onclick={e => {
-                          e.preventDefault();
-                          // TODO: Implement audio playback function
-                        }}
-                        disabled={!result.hasAudio}
-                        aria-label={t('search.detailsPanel.playAudio', {
-                          species: displayName || t('search.detailsPanel.unknownSpecies'),
-                        })}
-                        aria-pressed="false"
-                      >
-                        <Music class="size-4" />
-                      </button>
                       <button
                         class="btn btn-xs btn-square"
                         onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
