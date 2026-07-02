@@ -964,6 +964,10 @@ func externalLinksForGuide(scientificName, ebirdCode, locale string, includeSupp
 	for _, l := range resolved {
 		out = append(out, GuideExternalLink{Name: l.Name, URL: l.URL, Icon: l.Icon})
 	}
+	// Appended after openfauna.ExternalLinks returns, so eBird sits OUTSIDE that
+	// resolver's icon-keyed supplementary de-dup. Safe while no registry ships an
+	// "ebird" icon; if eBird data ever enters a registry, drop this append or
+	// extend the de-dup to cover it, or the link will be emitted twice.
 	if ebirdCode != "" {
 		out = append(out, GuideExternalLink{
 			Name: linkNameEBird,

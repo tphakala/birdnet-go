@@ -2557,6 +2557,11 @@ func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bo
 	if !n.Enabled {
 		return false
 	}
+	// EnableSupplementaryLinks and the Show* flags are read per-request by the
+	// handlers and don't affect cached guide content, so a rebuild is not strictly
+	// required for them. They are included anyway so every guide setting emits the
+	// same reconfigure signal (and its confirmation toast) — a settings toggle is a
+	// rare manual action, and the uniform UX signal is worth the redundant rebuild.
 	return o.EnableWikipedia != n.EnableWikipedia ||
 		o.EnableSupplementaryLinks != n.EnableSupplementaryLinks ||
 		o.WarmTopN != n.WarmTopN ||

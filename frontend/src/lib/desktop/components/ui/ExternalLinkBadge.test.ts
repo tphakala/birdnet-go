@@ -22,4 +22,23 @@ describe('ExternalLinkBadge', () => {
     render(ExternalLinkBadge, { link: { name: 'NoIcon', url: 'https://z' } });
     expect(screen.getByRole('link', { name: /NoIcon/ })).toBeInTheDocument();
   });
+
+  it.each([
+    ['javascript', 'javascript:alert(1)'],
+    ['data', 'data:text/html,<script>alert(1)</script>'],
+    ['relative (no protocol)', '/species/x'],
+    ['empty', ''],
+  ])('suppresses the badge for a non-http(s) URL: %s', (_label, url) => {
+    render(ExternalLinkBadge, { link: { name: 'Evil', url, icon: 'wikipedia' } });
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByText('Evil')).not.toBeInTheDocument();
+  });
+
+  it('still renders a plain http URL (non-TLS home network sources)', () => {
+    render(ExternalLinkBadge, { link: { name: 'Http', url: 'http://example.org/a' } });
+    expect(screen.getByRole('link', { name: /Http/ })).toHaveAttribute(
+      'href',
+      'http://example.org/a'
+    );
+  });
 });
