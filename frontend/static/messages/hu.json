@@ -4104,6 +4104,15 @@
           "usedInDogBarkFilter": "Dog Bark Filter",
           "usedInDaylightFilter": "Daylight Filter",
           "notUsed": "Not used in any active configurations"
+        },
+        "toasts": {
+          "loadFailed": "Failed to load species lists",
+          "nameRequired": "Name is required",
+          "updateSuccess": "Species list updated",
+          "createSuccess": "Species list created",
+          "saveFailed": "Failed to save species list",
+          "deleteSuccess": "Species list deleted",
+          "deleteFailed": "Failed to delete species list"
         }
       },
       "customConfiguration": {
@@ -4477,6 +4486,7 @@
         "durationSec": "mp",
         "noSpeciesLists": "No species lists found.",
         "createSpeciesList": "Create a Species List",
+        "selectSpeciesList": "Select a species list...",
         "manageLists": "Manage Lists",
         "readOnlyYaml": "Read-only (configured in config.yaml)"
       },

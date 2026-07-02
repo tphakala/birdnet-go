@@ -58,4 +58,30 @@ func TestMigrateLegacyAlertLists(t *testing.T) {
 	assert.True(t, membersMap["cyanistes caeruleus"])
 	// "UnrecognizedBirdName" -> "unrecognizedbirdname" (imported as unrecognized)
 	assert.True(t, membersMap["unrecognizedbirdname"])
+
+	// Test case: Migrating a second condition for the same rule (duplicate list name test)
+	condSecond := entities.AlertCondition{
+		RuleID:   rule.ID,
+		Property: "scientific_name",
+		Operator: "in",
+		Value:    "parus major",
+	}
+	require.NoError(t, db.Create(&condSecond).Error)
+
+	err = MigrateLegacyAlertLists(ctx, db, "en-US")
+	require.NoError(t, err)
+
+	// Reload second condition
+	var updatedSecondCond entities.AlertCondition
+	err = db.First(&updatedSecondCond, condSecond.ID).Error
+	require.NoError(t, err)
+	assert.Contains(t, updatedSecondCond.Value, "list:")
+
+	// Get lists in database, should have 2 lists now, name of second should be "Migrated List (Test Rule) 2"
+	var lists []entities.SpeciesList
+	err = db.Order("id asc").Find(&lists).Error
+	require.NoError(t, err)
+	require.Len(t, lists, 2)
+	assert.Equal(t, "Migrated List (Test Rule)", lists[0].Name)
+	assert.Equal(t, "Migrated List (Test Rule) 2", lists[1].Name)
 }

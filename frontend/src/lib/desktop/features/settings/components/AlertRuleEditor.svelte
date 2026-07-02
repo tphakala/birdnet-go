@@ -767,13 +767,15 @@
                   {:else}
                     <div class="flex items-center gap-2">
                       <select
-                        value={condition.value.startsWith('list:') ? condition.value : ''}
+                        value={condition.value?.startsWith('list:') ? condition.value : ''}
                         onchange={e => {
                           condition.value = e.currentTarget.value;
                         }}
                         class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30 cursor-pointer"
                       >
-                        <option value="" disabled>Select a species list...</option>
+                        <option value="" disabled
+                          >{t('settings.alerts.editor.selectSpeciesList')}</option
+                        >
                         {#each speciesLists as list}
                           <option value={`list:${list.id}`}>{list.name}</option>
                         {/each}

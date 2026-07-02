@@ -5,7 +5,7 @@ import "time"
 // SpeciesList represents a database-backed list of species.
 type SpeciesList struct {
 	ID          uint                `gorm:"primaryKey" json:"id"`
-	Name        string              `gorm:"size:255;not null" json:"name"`
+	Name        string              `gorm:"size:255;not null;uniqueIndex" json:"name"`
 	Description string              `gorm:"size:1000;default:''" json:"description"`
 	IsSystem    bool                `gorm:"default:false" json:"is_system"`
 	CreatedAt   time.Time           `gorm:"autoCreateTime" json:"created_at"`

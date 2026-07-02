@@ -38,9 +38,13 @@ func (c *Handler) requireV2(ctx echo.Context) error {
 	})
 }
 
+func (c *Handler) listsAvailable() bool {
+	return c.V2Manager != nil && datastoreV2.IsEnhancedDatabase()
+}
+
 func (c *Handler) requireV2Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		if !datastoreV2.IsEnhancedDatabase() {
+		if !c.listsAvailable() {
 			return c.requireV2(ctx)
 		}
 		return next(ctx)
@@ -48,12 +52,10 @@ func (c *Handler) requireV2Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func (c *Handler) RegisterRoutes(g *echo.Group) {
-	if c.V2Manager == nil {
-		return
+	if c.V2Manager != nil {
+		// Initialize repository lazily from V2Manager
+		c.speciesListRepo = repository.NewSpeciesListRepository(c.V2Manager.DB(), nil)
 	}
-
-	// Initialize repository lazily from V2Manager
-	c.speciesListRepo = repository.NewSpeciesListRepository(c.V2Manager.DB(), nil)
 
 	lists := g.Group("/species-lists", c.requireV2Middleware)
 
@@ -167,6 +169,15 @@ func (c *Handler) CreateSpeciesList(ctx echo.Context) error {
 	if strings.TrimSpace(req.Name) == "" {
 		return c.HandleError(ctx, nil, "Name is required", http.StatusBadRequest)
 	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Name)), "yaml:") {
+		return c.HandleError(ctx, nil, "Name cannot start with 'YAML:' (reserved for system lists)", http.StatusBadRequest)
+	}
+	if len(req.Name) > 255 {
+		return c.HandleError(ctx, nil, "Name cannot exceed 255 characters", http.StatusBadRequest)
+	}
+	if len(req.Description) > 1000 {
+		return c.HandleError(ctx, nil, "Description cannot exceed 1000 characters", http.StatusBadRequest)
+	}
 
 	list := &entities.SpeciesList{
 		Name:        strings.TrimSpace(req.Name),
@@ -227,12 +238,21 @@ func (c *Handler) UpdateSpeciesList(ctx echo.Context) error {
 	if strings.TrimSpace(req.Name) == "" {
 		return c.HandleError(ctx, nil, "Name is required", http.StatusBadRequest)
 	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Name)), "yaml:") {
+		return c.HandleError(ctx, nil, "Name cannot start with 'YAML:' (reserved for system lists)", http.StatusBadRequest)
+	}
+	if len(req.Name) > 255 {
+		return c.HandleError(ctx, nil, "Name cannot exceed 255 characters", http.StatusBadRequest)
+	}
+	if len(req.Description) > 1000 {
+		return c.HandleError(ctx, nil, "Description cannot exceed 1000 characters", http.StatusBadRequest)
+	}
 
 	// Verify it exists first
 	existing, err := c.speciesListRepo.GetSpeciesList(ctx.Request().Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrSpeciesListNotFound) {
-			return ctx.NoContent(http.StatusNotFound)
+			return c.HandleError(ctx, err, "Species list not found", http.StatusNotFound)
 		}
 		c.LogErrorIfEnabled("failed to verify species list existence", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to update species list", http.StatusInternalServerError)
@@ -294,7 +314,7 @@ func (c *Handler) DeleteSpeciesList(ctx echo.Context) error {
 	existing, err := c.speciesListRepo.GetSpeciesList(ctx.Request().Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrSpeciesListNotFound) {
-			return ctx.NoContent(http.StatusNotFound)
+			return c.HandleError(ctx, err, "Species list not found", http.StatusNotFound)
 		}
 		c.LogErrorIfEnabled("failed to verify species list existence", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to delete species list", http.StatusInternalServerError)
@@ -305,7 +325,7 @@ func (c *Handler) DeleteSpeciesList(ctx echo.Context) error {
 
 	if err := c.speciesListRepo.DeleteSpeciesList(ctx.Request().Context(), id); err != nil {
 		if errors.Is(err, repository.ErrSpeciesListNotFound) {
-			return ctx.NoContent(http.StatusNotFound)
+			return c.HandleError(ctx, err, "Species list not found", http.StatusNotFound)
 		}
 		c.LogErrorIfEnabled("failed to delete species list", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to delete species list", http.StatusInternalServerError)

@@ -322,7 +322,8 @@ func Initialize(
 	engine := NewEngine(repo, dispatcher.Dispatch, log, at)
 	engine.SetSpeciesListRepository(speciesListRepo)
 	if err := engine.RefreshSpeciesLists(ctx); err != nil {
-		log.Error("failed to initial load species lists", logger.Error(err))
+		at.ReportInitFailed(err.Error())
+		return nil, err
 	}
 	engine.SetTestActionFunc(dispatcher.DispatchTest)
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -179,6 +180,37 @@ func TestSpeciesListAPI(t *testing.T) {
 	rec = httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusForbidden, rec.Code)
+
+	// 9. Test POST /api/v2/species-lists fails when name starts with "YAML:"
+	yamlPayload := `{"name":"YAML: Custom Extended Capture","description":"Fails","species":[]}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v2/species-lists", bytes.NewBufferString(yamlPayload))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// 10. Test PUT /api/v2/species-lists/:id fails when name is changed to start with "yaml:"
+	// Create another list first
+	validPayload := `{"name":"Valid List","description":"Valid","species":[]}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v2/species-lists", bytes.NewBufferString(validPayload))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var nextCreateResponse struct {
+		List entities.SpeciesList `json:"list"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &nextCreateResponse)
+	require.NoError(t, err)
+	validListID := nextCreateResponse.List.ID
+
+	yamlUpdatePayload := `{"name":"yaml: invalid rename","description":"Fails","species":[]}`
+	req = httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v2/species-lists/%d", validListID), bytes.NewBufferString(yamlUpdatePayload))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func passthroughMiddleware() echo.MiddlewareFunc {
