@@ -644,6 +644,10 @@
   let showDeleteModal = $state(false);
   let deleteInFlight = $state(false);
   let deleteError = $state<string | null>(null);
+  // Set while a species delete spans more than one chunked request (see
+  // DeleteSpeciesDetections' maxBatchSize cap), so the modal can show progress
+  // instead of looking hung on a species with a large detection count.
+  let deleteProgress = $state<{ deleted: number; remaining: number } | null>(null);
 
   // Inline error surfaced when an exclude/include/confirm toggle fails. The
   // checkbox reverts to its prior state on failure, so without this the failure
@@ -677,7 +681,13 @@
   function showScopedView(mode: 'grid' | 'list') {
     const wasManage = viewMode === 'manage';
     viewMode = mode;
-    if (wasManage) void fetchData();
+    if (wasManage) {
+      void fetchData();
+      // Force the next Manage visit to refetch membership/review data instead of
+      // reusing this session's cache, so edits made elsewhere (Settings species
+      // editor, another tab/session) while the user was away are picked up.
+      manageDataLoaded = false;
+    }
   }
 
   async function fetchManageData() {
@@ -692,6 +702,11 @@
         api.get<{ species: string[] }>('/api/v2/detections/confirmed'),
         api.get<{ species: string[] }>('/api/v2/detections/ignored'),
       ]);
+      // Only replace the local state once every request has succeeded, so a
+      // partial failure below (which throws before any .set/.add) can't land a
+      // half-updated table. Clearing here (rather than before the fetch) also
+      // means a failed refresh leaves the previous data displayed instead of
+      // flashing empty.
       reviewStats.clear();
       for (const s of stats) reviewStats.set(s.scientificName, s);
       includedSet.clear();
@@ -703,6 +718,13 @@
       manageDataLoaded = true;
     } catch (error) {
       logger.error('Error fetching manage data:', error);
+      // manageDataLoaded stays false, so the next call (e.g. re-entering Manage,
+      // or the delete-with-locked-rows refresh) retries instead of silently
+      // keeping stale data forever. The sets above were only mutated after a
+      // successful Promise.all, so a failure here leaves the last known-good
+      // data on screen; surface an explicit error so that data isn't mistaken
+      // for current.
+      membershipError = t('analytics.species.manage.loadFailed');
     }
     // Render the table immediately; range scores stream in asynchronously.
     void loadRangeScores();
@@ -952,14 +974,28 @@
     const target = deleteTarget;
     deleteInFlight = true;
     deleteError = null;
+    deleteProgress = null;
+    let totalDeleted = 0;
+    let totalSkipped = 0;
     try {
-      const result = await api.post<{ deleted: number; skipped: number }>(
-        '/api/v2/detections/species/delete',
-        { scientific_name: target.scientific_name }
-      );
+      // The server caps each call at maxBatchSize detections and reports how many
+      // are still pending, so a species with a very large detection count can't
+      // hold one request (and, on SQLite, its writer lock) open for minutes. Loop
+      // until the server reports nothing left.
+      for (;;) {
+        const result = await api.post<{ deleted: number; skipped: number; remaining: number }>(
+          '/api/v2/detections/species/delete',
+          { scientific_name: target.scientific_name }
+        );
+        totalDeleted += result?.deleted ?? 0;
+        totalSkipped += result?.skipped ?? 0;
+        const remaining = result?.remaining ?? 0;
+        if (remaining === 0) break;
+        deleteProgress = { deleted: totalDeleted, remaining };
+      }
       showDeleteModal = false;
       deleteTarget = null;
-      if ((result?.skipped ?? 0) > 0) {
+      if (totalSkipped > 0) {
         // The server kept some locked detections, so the species still owns rows.
         // Dropping it optimistically would hide those survivors and contradict the
         // delete dialog, which promises locked detections are kept. Refresh from
@@ -980,8 +1016,15 @@
     } catch (error) {
       logger.error('Error deleting species detections:', error);
       deleteError = t('analytics.species.manage.deleteFailed');
+      if (totalDeleted > 0 || totalSkipped > 0) {
+        // Earlier chunks committed server-side before this one failed, so the
+        // cached manage data (and this row's count) is no longer accurate.
+        manageDataLoaded = false;
+        void Promise.all([fetchData(), fetchManageData()]);
+      }
     } finally {
       deleteInFlight = false;
+      deleteProgress = null;
     }
   }
 
@@ -1455,6 +1498,14 @@
       })}
     </p>
     <p class="text-sm opacity-70 mt-2">{t('analytics.species.manage.deleteWarning')}</p>
+    {#if deleteProgress}
+      <p class="text-sm opacity-70 mt-2" role="status" aria-live="polite">
+        {t('analytics.species.manage.deleteProgress', {
+          deleted: formatNumber(deleteProgress.deleted),
+          remaining: formatNumber(deleteProgress.remaining),
+        })}
+      </p>
+    {/if}
     {#if deleteError}
       <p class="text-sm text-[var(--color-error)] mt-2" role="alert">{deleteError}</p>
     {/if}

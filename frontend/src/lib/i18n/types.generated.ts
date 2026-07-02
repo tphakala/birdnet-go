@@ -1512,7 +1512,9 @@ export type TranslationKey =
   | 'analytics.species.manage.deleteMessage' // params: count, species
   | 'analytics.species.manage.deleteWarning'
   | 'analytics.species.manage.deleteFailed'
+  | 'analytics.species.manage.deleteProgress' // params: deleted, remaining
   | 'analytics.species.manage.membershipFailed'
+  | 'analytics.species.manage.loadFailed'
   | 'analytics.species.manage.allTimeNote'
   | 'analytics.advanced.chartControls'
   | 'analytics.advanced.dateRange'
@@ -4168,6 +4170,10 @@ export type TranslationParams = {
   'system.inference.coDetectedHelp': { seconds: string | number };
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.species.manage.deleteMessage': { count: string | number; species: string | number };
+  'analytics.species.manage.deleteProgress': {
+    deleted: string | number;
+    remaining: string | number;
+  };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
   'analytics.advanced.charts.accumulation.totalSpecies': { species: string | number };

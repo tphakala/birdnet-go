@@ -1946,8 +1946,10 @@
         "deleteMessage": "¿Eliminar las {count} detecciones de {species}? Las detecciones bloqueadas se conservan.",
         "deleteWarning": "Esto elimina permanentemente las detecciones y sus clips de audio y no se puede deshacer.",
         "deleteFailed": "No se pudieron eliminar las detecciones. Inténtalo de nuevo.",
+        "deleteProgress": "Eliminadas {deleted} hasta ahora, quedan {remaining}…",
         "membershipFailed": "No se pudieron actualizar las listas de especies. Inténtelo de nuevo.",
-        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
+        "loadFailed": "No se pudieron actualizar los datos de especies. Mostrando los últimos resultados cargados.",
+        "allTimeNote": "Gestionar muestra todas las detecciones de todos los tiempos; el filtro de fecha de arriba no se aplica aquí."
       }
     },
     "advanced": {

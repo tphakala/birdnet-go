@@ -1946,8 +1946,10 @@
         "deleteMessage": "Supprimer les {count} détections de {species} ? Les détections verrouillées sont conservées.",
         "deleteWarning": "Cette action supprime définitivement les détections et leurs extraits audio et ne peut pas être annulée.",
         "deleteFailed": "Échec de la suppression des détections. Veuillez réessayer.",
+        "deleteProgress": "{deleted} supprimées jusqu'à présent, {remaining} restantes…",
         "membershipFailed": "Échec de la mise à jour des listes d'espèces. Veuillez réessayer.",
-        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
+        "loadFailed": "Échec de l'actualisation des données d'espèces. Affichage des derniers résultats chargés.",
+        "allTimeNote": "Gérer affiche toutes les détections depuis toujours ; le filtre de date ci-dessus ne s'applique pas ici."
       }
     },
     "advanced": {

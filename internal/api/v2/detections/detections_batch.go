@@ -287,10 +287,18 @@ type SpeciesDeleteRequest struct {
 	ScientificName string `json:"scientific_name"`
 }
 
-// SpeciesDeleteResult reports the outcome of a species-wide delete.
+// SpeciesDeleteResult reports the outcome of a species-wide delete. A single
+// call processes at most maxBatchSize detections (the deleteNotesByIDs loop is
+// a per-row Get+Delete, so an unbounded species-wide delete on a common species
+// with tens of thousands of detections could hold the request - and, on
+// SQLite, its single-writer lock - for minutes). Remaining reports how many
+// matching detections were not attempted this call; a non-zero Remaining means
+// the caller should invoke the endpoint again (it re-resolves the species' note
+// IDs each call, so already-deleted rows are not revisited) until Remaining is 0.
 type SpeciesDeleteResult struct {
-	Deleted int `json:"deleted"`
-	Skipped int `json:"skipped"`
+	Deleted   int `json:"deleted"`
+	Skipped   int `json:"skipped"`
+	Remaining int `json:"remaining"`
 }
 
 // speciesNoteIDsDatastore is the optional datastore capability required to resolve
@@ -300,10 +308,12 @@ type speciesNoteIDsDatastore interface {
 	GetSpeciesNoteIDs(ctx context.Context, scientificName string) ([]string, error)
 }
 
-// DeleteSpeciesDetections deletes every (unlocked) detection for the given
-// scientific name. Locked detections are skipped and counted, mirroring the
-// batch delete semantics. Returns HTTP 501 when the active datastore cannot
-// resolve a species' detection IDs.
+// DeleteSpeciesDetections deletes up to maxBatchSize (unlocked) detections for
+// the given scientific name. Locked detections are skipped and counted,
+// mirroring the batch delete semantics. Callers must repeat the request while
+// the response's Remaining is non-zero to delete the rest, which bounds each
+// call's DB/filesystem work regardless of how many detections the species has.
+// Returns HTTP 501 when the active datastore cannot resolve a species' detection IDs.
 func (c *Handler) DeleteSpeciesDetections(ctx echo.Context) error {
 	var req SpeciesDeleteRequest
 	if err := ctx.Bind(&req); err != nil {
@@ -326,7 +336,13 @@ func (c *Handler) DeleteSpeciesDetections(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to look up detections for species", http.StatusInternalServerError)
 	}
 
-	deleted, skipped := c.deleteNotesByIDs(deduplicateIDs(ids))
+	unique := deduplicateIDs(ids)
+	chunk, remaining := unique, 0
+	if len(unique) > maxBatchSize {
+		chunk, remaining = unique[:maxBatchSize], len(unique)-maxBatchSize
+	}
+
+	deleted, skipped := c.deleteNotesByIDs(chunk)
 
 	c.invalidateDetectionCache()
 
@@ -334,10 +350,12 @@ func (c *Handler) DeleteSpeciesDetections(ctx echo.Context) error {
 		logger.String("scientific_name", req.ScientificName),
 		logger.Int("deleted", deleted),
 		logger.Int("skipped", skipped),
+		logger.Int("remaining", remaining),
 		logger.String("ip", ctx.RealIP()))
 
 	return ctx.JSON(http.StatusOK, SpeciesDeleteResult{
-		Deleted: deleted,
-		Skipped: skipped,
+		Deleted:   deleted,
+		Skipped:   skipped,
+		Remaining: remaining,
 	})
 }

@@ -1946,7 +1946,9 @@
         "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
         "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
         "deleteFailed": "Failed to delete detections. Please try again.",
+        "deleteProgress": "Deleted {deleted} so far, {remaining} remaining…",
         "membershipFailed": "Failed to update species lists. Please try again.",
+        "loadFailed": "Failed to refresh species data. Showing previously loaded results.",
         "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
       }
     },

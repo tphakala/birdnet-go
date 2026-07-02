@@ -1946,8 +1946,10 @@
         "deleteMessage": "Poistetaanko {count, plural, one {# havainto} other {# havaintoa}} lajille {species}? Lukitut havainnot säilytetään.",
         "deleteWarning": "Tämä poistaa havainnot ja niiden äänileikkeet pysyvästi, eikä toimintoa voi kumota.",
         "deleteFailed": "Havaintojen poistaminen epäonnistui. Yritä uudelleen.",
+        "deleteProgress": "Poistettu {deleted} tähän mennessä, {remaining} jäljellä…",
         "membershipFailed": "Lajiluetteloiden päivitys epäonnistui. Yritä uudelleen.",
-        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
+        "loadFailed": "Lajitietojen päivitys epäonnistui. Näytetään aiemmin ladatut tulokset.",
+        "allTimeNote": "Hallinta näyttää kaikki havainnot kaikilta ajoilta; yllä oleva päivämääräsuodatin ei koske tätä näkymää."
       }
     },
     "advanced": {

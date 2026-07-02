@@ -1946,8 +1946,10 @@
         "deleteMessage": "Dzēst visas {count} sugas {species} atpazīšanas? Bloķētās atpazīšanas tiek saglabātas.",
         "deleteWarning": "Tādējādi neatgriezeniski tiek noņemtas atpazīšanas un to audioklipi, un šo darbību nevar atsaukt.",
         "deleteFailed": "Neizdevās dzēst atpazīšanas. Lūdzu, mēģiniet vēlreiz.",
+        "deleteProgress": "Līdz šim dzēstas {deleted}, atlikušas {remaining}…",
         "membershipFailed": "Neizdevās atjaunināt sugu sarakstus. Lūdzu, mēģiniet vēlreiz.",
-        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
+        "loadFailed": "Neizdevās atjaunināt sugu datus. Tiek rādīti iepriekš ielādētie rezultāti.",
+        "allTimeNote": "Pārvaldība rāda visas atpazīšanas par visu laiku; augstāk redzamais datuma filtrs šeit netiek piemērots."
       }
     },
     "advanced": {

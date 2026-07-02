@@ -1946,8 +1946,10 @@
         "deleteMessage": "Radera alla {count} detektioner för {species}? Låsta detektioner behålls.",
         "deleteWarning": "Detta tar bort detektionerna och deras ljudklipp permanent och kan inte ångras.",
         "deleteFailed": "Det gick inte att radera detektionerna. Försök igen.",
+        "deleteProgress": "Har raderat {deleted} hittills, {remaining} kvar…",
         "membershipFailed": "Det gick inte att uppdatera artlistorna. Försök igen.",
-        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
+        "loadFailed": "Det gick inte att uppdatera artdata. Visar tidigare inläst resultat.",
+        "allTimeNote": "Hantera visar alla detektioner genom tiderna; datumfiltret ovan gäller inte här."
       }
     },
     "advanced": {

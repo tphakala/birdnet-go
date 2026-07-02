@@ -1946,8 +1946,10 @@
         "deleteMessage": "Slet alle {count} registreringer for {species}? Låste registreringer bevares.",
         "deleteWarning": "Dette fjerner permanent registreringerne og deres lydklip og kan ikke fortrydes.",
         "deleteFailed": "Kunne ikke slette registreringer. Prøv igen.",
+        "deleteProgress": "Slettet {deleted} indtil videre, {remaining} tilbage…",
         "membershipFailed": "Kunne ikke opdatere artslisterne. Prøv igen.",
-        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
+        "loadFailed": "Kunne ikke opdatere artsdata. Viser tidligere indlæste resultater.",
+        "allTimeNote": "Administrer viser alle registreringer for hele perioden; datofilteret ovenfor gælder ikke her."
       }
     },
     "advanced": {

@@ -1946,8 +1946,10 @@
         "deleteMessage": "Alle {count} Erkennungen für {species} löschen? Gesperrte Erkennungen bleiben erhalten.",
         "deleteWarning": "Dadurch werden die Erkennungen und ihre Audioclips dauerhaft entfernt und können nicht rückgängig gemacht werden.",
         "deleteFailed": "Erkennungen konnten nicht gelöscht werden. Bitte versuchen Sie es erneut.",
+        "deleteProgress": "Bisher {deleted} gelöscht, noch {remaining} übrig…",
         "membershipFailed": "Artenlisten konnten nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
-        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
+        "loadFailed": "Artdaten konnten nicht aktualisiert werden. Zuvor geladene Ergebnisse werden angezeigt.",
+        "allTimeNote": "Verwalten zeigt alle Erkennungen über den gesamten Zeitraum; der Datumsfilter oben gilt hier nicht."
       }
     },
     "advanced": {

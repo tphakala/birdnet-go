@@ -54,7 +54,7 @@ func (c *Handler) IncludeSpecies(ctx echo.Context) error {
 
 // GetIncludedSpecies returns the always-include species list.
 func (c *Handler) GetIncludedSpecies(ctx echo.Context) error {
-	species := slices.Clone(c.getSettingsOrFallback().Realtime.Species.Include)
+	species := nonNilSpeciesList(c.getSettingsOrFallback().Realtime.Species.Include)
 
 	return ctx.JSON(http.StatusOK, SpeciesListResponse{
 		Species: species,
@@ -74,12 +74,23 @@ func (c *Handler) ConfirmSpecies(ctx echo.Context) error {
 
 // GetConfirmedSpecies returns the confirmed species list.
 func (c *Handler) GetConfirmedSpecies(ctx echo.Context) error {
-	species := slices.Clone(c.getSettingsOrFallback().Realtime.Species.Confirmed)
+	species := nonNilSpeciesList(c.getSettingsOrFallback().Realtime.Species.Confirmed)
 
 	return ctx.JSON(http.StatusOK, SpeciesListResponse{
 		Species: species,
 		Count:   len(species),
 	})
+}
+
+// nonNilSpeciesList clones list, substituting a non-nil empty slice when list
+// is nil. slices.Clone preserves nilness, which would otherwise encode an
+// unset list as JSON null instead of [], inconsistent with GetExcludedSpecies
+// (which builds its response via make([]string, len(...))).
+func nonNilSpeciesList(list []string) []string {
+	if list == nil {
+		return []string{}
+	}
+	return slices.Clone(list)
 }
 
 // toggleManagedSpecies binds and validates the request, toggles the species in
@@ -131,11 +142,21 @@ func (c *Handler) toggleSpeciesInList(species string, listOf func(*conf.Settings
 	defer c.settingsMutex.Unlock()
 
 	current := c.getSettingsOrFallback()
-	wasPresent := slices.Contains(listOf(current), species)
+	wasPresent := slices.ContainsFunc(listOf(current), func(s string) bool { return strings.EqualFold(s, species) })
 
 	updated := conf.CloneSettings(current)
 	if wasPresent {
-		setList(updated, slices.DeleteFunc(listOf(updated), func(s string) bool { return s == species }))
+		// Case-insensitive removal so an entry stored under a different casing
+		// (e.g. typed into the Settings editor, or added while a different UI
+		// locale was active) can still be toggled off instead of leaving an
+		// orphan that this exact-match string can never remove. Unlike the
+		// Exclude list (resolveExcludeName/excludeEntryMatches), entries are not
+		// canonicalized to a scientific name here: Confirmed has no other
+		// consumer, but Include is the pre-existing range-filter override field
+		// (internal/classifier/range_filter.go resolveOverrideLabels), which
+		// already has its own alias/locale resolution keyed on the verbatim
+		// stored string - rewriting that string at write time would fight it.
+		setList(updated, slices.DeleteFunc(listOf(updated), func(s string) bool { return strings.EqualFold(s, species) }))
 		action = speciesActionRemoved
 		present = false
 	} else {

@@ -1946,8 +1946,10 @@
         "deleteMessage": "Smazat všech {count} detekcí druhu {species}? Uzamčené detekce zůstanou zachovány.",
         "deleteWarning": "Tímto trvale odstraníte detekce i jejich zvukové nahrávky a tuto akci nelze vrátit zpět.",
         "deleteFailed": "Smazání detekcí se nezdařilo. Zkuste to prosím znovu.",
+        "deleteProgress": "Zatím smazáno {deleted}, zbývá {remaining}…",
         "membershipFailed": "Nepodařilo se aktualizovat seznamy druhů. Zkuste to znovu.",
-        "allTimeNote": "Manage shows all detections across all time; the date filter above does not apply here."
+        "loadFailed": "Nepodařilo se obnovit data o druzích. Zobrazují se dříve načtená data.",
+        "allTimeNote": "Správa zobrazuje všechny detekce za celou dobu; výše uvedený filtr data se zde neuplatňuje."
       }
     },
     "advanced": {
