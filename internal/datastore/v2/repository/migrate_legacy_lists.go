@@ -78,6 +78,7 @@ func migrateSingleCondition(tx *gorm.DB, log logger.Logger, cond entities.AlertC
 	if tx.First(&rule, cond.RuleID).Error == nil && rule.Name != "" {
 		ruleName = fmt.Sprintf("Migrated List (%s)", rule.Name)
 	}
+	ruleName = getUniqueListName(tx, ruleName)
 
 	// Create the new SpeciesList
 	list := entities.SpeciesList{
@@ -89,41 +90,54 @@ func migrateSingleCondition(tx *gorm.DB, log logger.Logger, cond entities.AlertC
 		return fmt.Errorf("failed to create migrated species list: %w", err)
 	}
 
-	// Add members
+	// Add members (deduplicating by canonical lowercase scientific name)
+	seenSci := make(map[string]struct{})
 	var members []entities.SpeciesListMember
+
+	resolved := openfauna.LookupScientificNames(cleanNames, locale)
+
 	for _, name := range cleanNames {
-		// Try to resolve as common name in specified locale
-		resolved := openfauna.LookupScientificNames([]string{name}, locale)
 		if sciNames, found := resolved[name]; found && len(sciNames) > 0 {
 			for _, sci := range sciNames {
-				members = append(members, entities.SpeciesListMember{
-					ListID:         list.ID,
-					ScientificName: strings.ToLower(sci),
-				})
+				sciLower := strings.ToLower(sci)
+				if _, dup := seenSci[sciLower]; !dup {
+					seenSci[sciLower] = struct{}{}
+					members = append(members, entities.SpeciesListMember{
+						ListID:         list.ID,
+						ScientificName: sciLower,
+					})
+				}
 			}
 		} else {
 			nameLower := strings.ToLower(name)
-			// Check if it's already a valid scientific name
 			if _, foundMeta := openfauna.LookupMeta(nameLower); foundMeta {
-				members = append(members, entities.SpeciesListMember{
-					ListID:         list.ID,
-					ScientificName: nameLower,
-				})
+				if _, dup := seenSci[nameLower]; !dup {
+					seenSci[nameLower] = struct{}{}
+					members = append(members, entities.SpeciesListMember{
+						ListID:         list.ID,
+						ScientificName: nameLower,
+					})
+				}
 			} else {
 				// Unrecognized - keep it but emit warning
 				log.Warn("migrated species name not recognized by OpenFauna; importing as unrecognized",
 					logger.String("species", name),
 					logger.String("list_name", ruleName))
-				members = append(members, entities.SpeciesListMember{
-					ListID:         list.ID,
-					ScientificName: nameLower,
-				})
+				if _, dup := seenSci[nameLower]; !dup {
+					seenSci[nameLower] = struct{}{}
+					members = append(members, entities.SpeciesListMember{
+						ListID:         list.ID,
+						ScientificName: nameLower,
+					})
+				}
 			}
 		}
 	}
 
-	if err := tx.Create(&members).Error; err != nil {
-		return fmt.Errorf("failed to insert migrated list members: %w", err)
+	if len(members) > 0 {
+		if err := tx.Create(&members).Error; err != nil {
+			return fmt.Errorf("failed to insert migrated list members: %w", err)
+		}
 	}
 
 	// Update the alert condition to point to the new list
@@ -138,4 +152,20 @@ func migrateSingleCondition(tx *gorm.DB, log logger.Logger, cond entities.AlertC
 		logger.String("list_name", ruleName))
 
 	return nil
+}
+
+func getUniqueListName(tx *gorm.DB, baseName string) string {
+	name := baseName
+	counter := 1
+	for {
+		var count int64
+		if err := tx.Model(&entities.SpeciesList{}).Where("name = ?", name).Count(&count).Error; err != nil {
+			return name
+		}
+		if count == 0 {
+			return name
+		}
+		counter++
+		name = fmt.Sprintf("%s %d", baseName, counter)
+	}
 }

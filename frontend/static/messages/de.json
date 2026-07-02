@@ -4104,6 +4104,15 @@
           "usedInDogBarkFilter": "Hundebellenfilter",
           "usedInDaylightFilter": "Tageslichtfilter",
           "notUsed": "In keiner aktiven Konfiguration verwendet"
+        },
+        "toasts": {
+          "loadFailed": "Laden der Artenlisten fehlgeschlagen",
+          "nameRequired": "Name ist erforderlich",
+          "updateSuccess": "Artenliste aktualisiert",
+          "createSuccess": "Artenliste erstellt",
+          "saveFailed": "Speichern der Artenliste fehlgeschlagen",
+          "deleteSuccess": "Artenliste gelöscht",
+          "deleteFailed": "Löschen der Artenliste fehlgeschlagen"
         }
       },
       "customConfiguration": {
@@ -4477,6 +4486,7 @@
         "durationSec": "Sek",
         "noSpeciesLists": "Keine Artenlisten gefunden.",
         "createSpeciesList": "Artenliste erstellen",
+        "selectSpeciesList": "Artenliste auswählen...",
         "manageLists": "Listen verwalten",
         "readOnlyYaml": "Schreibgeschützt (in config.yaml konfiguriert)"
       },

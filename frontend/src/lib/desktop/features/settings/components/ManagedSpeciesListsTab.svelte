@@ -66,7 +66,8 @@
     // Check alert rules
     for (const rule of alertRules) {
       const refersToList = rule.conditions?.some(
-        c => (c.property === 'species' || c.property === 'scientific_name') && c.value === listRef
+        c =>
+          (c.property === 'species_name' || c.property === 'scientific_name') && c.value === listRef
       );
       if (refersToList) {
         const displayName = translateField(rule.name_key, undefined, rule.name);
@@ -108,7 +109,7 @@
       const response = await api.get<{ lists: SpeciesList[] }>('/api/v2/species-lists');
       lists = response.lists ?? [];
     } catch (err) {
-      toastActions.error('Failed to load species lists');
+      toastActions.error(t('settings.species.managedLists.toasts.loadFailed'));
       console.error(err);
     } finally {
       loading = false;
@@ -242,7 +243,7 @@
 
   async function saveList() {
     if (!editorName.trim()) {
-      toastActions.error('Name is required');
+      toastActions.error(t('settings.species.managedLists.toasts.nameRequired'));
       return;
     }
     saving = true;
@@ -254,15 +255,15 @@
       };
       if (editorListId) {
         await api.put(`/api/v2/species-lists/${editorListId}`, payload);
-        toastActions.success('Species list updated');
+        toastActions.success(t('settings.species.managedLists.toasts.updateSuccess'));
       } else {
         await api.post('/api/v2/species-lists', payload);
-        toastActions.success('Species list created');
+        toastActions.success(t('settings.species.managedLists.toasts.createSuccess'));
       }
       isEditing = false;
       await loadLists();
     } catch (err) {
-      toastActions.error('Failed to save species list');
+      toastActions.error(t('settings.species.managedLists.toasts.saveFailed'));
       console.error(err);
     } finally {
       saving = false;
@@ -272,11 +273,11 @@
   async function deleteList(id: number) {
     try {
       await api.delete(`/api/v2/species-lists/${id}`);
-      toastActions.success('Species list deleted');
+      toastActions.success(t('settings.species.managedLists.toasts.deleteSuccess'));
       deleteConfirmId = null;
       await loadLists();
     } catch (err) {
-      toastActions.error('Failed to delete species list');
+      toastActions.error(t('settings.species.managedLists.toasts.deleteFailed'));
       console.error(err);
     }
   }

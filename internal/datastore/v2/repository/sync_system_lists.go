@@ -2,13 +2,13 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // SyncSystemLists mirrors species lists defined in config.yaml (Extended Capture,
@@ -38,21 +38,25 @@ func SyncSystemLists(ctx context.Context, db *gorm.DB, settings *conf.Settings) 
 
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, sl := range systemLists {
-			// Find or create the system list header
-			var list entities.SpeciesList
-			err := tx.Where("name = ? AND is_system = ?", sl.name, true).First(&list).Error
+			// Find or create the system list header using OnConflict
+			list := entities.SpeciesList{
+				Name:        sl.name,
+				Description: sl.desc,
+				IsSystem:    true,
+			}
+			err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "name"}},
+				DoUpdates: clause.AssignmentColumns([]string{"description"}),
+			}).Create(&list).Error
 			if err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					list = entities.SpeciesList{
-						Name:        sl.name,
-						Description: sl.desc,
-						IsSystem:    true,
-					}
-					if createErr := tx.Create(&list).Error; createErr != nil {
-						return fmt.Errorf("failed to create system list %s: %w", sl.name, createErr)
-					}
-				} else {
-					return fmt.Errorf("failed to check system list existence: %w", err)
+				return fmt.Errorf("failed to sync system list %s: %w", sl.name, err)
+			}
+
+			// GORM's Create with OnConflict might not update the ID in-memory on some dialects.
+			// Retrieve it if it was not populated.
+			if list.ID == 0 {
+				if err := tx.Where("name = ? AND is_system = ?", sl.name, true).First(&list).Error; err != nil {
+					return fmt.Errorf("failed to retrieve synced system list ID for %s: %w", sl.name, err)
 				}
 			}
 

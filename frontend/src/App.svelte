@@ -506,8 +506,8 @@
   function handleRouting(path: string): void {
     // If we loaded at Vite's dev-server fallback URL '/ui/assets/' or '/ui/assets',
     // redirect to the canonical '/ui/' path.
-    if (path === '/ui/assets/' || path === '/ui/assets') {
-      navigation.redirect('/ui/');
+    if (path === uiPath('assets') + '/' || path === uiPath('assets')) {
+      navigation.redirect(uiPath() + '/');
       return;
     }
 

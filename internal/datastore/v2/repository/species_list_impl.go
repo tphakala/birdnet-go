@@ -65,8 +65,18 @@ func (r *speciesListRepository) UpdateSpeciesList(ctx context.Context, list *ent
 			list.Members[i].ID = 0
 			list.Members[i].ListID = list.ID
 		}
-		if err := tx.Save(list).Error; err != nil {
-			return fmt.Errorf("failed to update species list: %w", err)
+		// Update header fields explicitly to avoid overwriting CreatedAt and other database columns with zero values.
+		if err := tx.Model(&entities.SpeciesList{}).Where("id = ?", list.ID).Updates(map[string]any{
+			"name":        list.Name,
+			"description": list.Description,
+		}).Error; err != nil {
+			return fmt.Errorf("failed to update species list header: %w", err)
+		}
+		// Insert members separately
+		if len(list.Members) > 0 {
+			if err := tx.Create(&list.Members).Error; err != nil {
+				return fmt.Errorf("failed to insert new list members: %w", err)
+			}
 		}
 		return nil
 	}, r.metrics)
