@@ -1079,7 +1079,10 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	// Update summary diagnostics from the accumulator.
 	diagnostics.Summary.TotalEntries = acc.entries
 	diagnostics.Summary.SizeBytes = acc.size
-	diagnostics.Summary.TruncatedBySize = acc.size >= maxSize
+	// Only the file-log collection is bounded by the byte budget; journald is
+	// line-limited, not size-limited, so base the size-truncation flag on the
+	// file accumulator alone to avoid reporting truncation that did not happen.
+	diagnostics.Summary.TruncatedBySize = fileAcc.size >= maxSize
 
 	// Set TruncatedByTime only when entries were likely filtered out by the time
 	// window (earliest observed entry is within a minute of the cutoff).
