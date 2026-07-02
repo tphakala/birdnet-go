@@ -269,6 +269,7 @@
           active={audibleBats.active}
           generating={audibleBats.generating}
           error={audibleBats.error}
+          disabled={!audioContextAvailable}
           onEnable={settings => audibleBats.enable(settings)}
           onDisable={() => audibleBats.disable()}
           onMenuOpen={handleAudioSettingsOpen}
