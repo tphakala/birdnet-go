@@ -30,10 +30,12 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
 
     export CGO_LDFLAGS="-L${TFLITE_LIB_DIR} -ltensorflowlite_c"
 
-    # Build the Go application with version and build date
+    # Build the Go application with version and build date.
+    # Match only real release tags (v* and nightly-*) so the auto-update
+    # "manifest" prerelease tag is not picked as the nearest ancestor.
     go build -ldflags "-s -w -r /usr/local/lib \
       -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)' \
-      -X 'main.version=$(git describe --tags --always)'" \
+      -X 'main.version=$(git describe --tags --always --match 'v*' --match 'nightly-*')'" \
       -o ./tmp/main .
 
     # On macOS, add the Homebrew library path to rpath since Go's -r flag
