@@ -1959,7 +1959,71 @@
         "detections": "Havainnot:",
         "confidence": "Luottamus:",
         "first": "Ensimmäinen:"
-      }
+      },
+      "guide": {
+        "title": "Opas",
+        "similar": "Samankaltaiset lajit",
+        "noSimilar": "Samankaltaisia lajeja ei löytynyt",
+        "loading": "Ladataan opasta…",
+        "unavailable": "Lajiopas on tilapäisesti pois käytöstä. Yritä myöhemmin uudelleen.",
+        "noGuide": "Tälle lajille ei ole opasta saatavilla.",
+        "expectedness": {
+          "expected": "Odotettavissa täällä",
+          "uncommon": "Epätavallinen täällä",
+          "rare": "Harvinainen täällä",
+          "unexpected": "Odottamaton täällä"
+        },
+        "season": {
+          "spring": "Kevät",
+          "summer": "Kesä",
+          "autumn": "Syksy",
+          "winter": "Talvi",
+          "wet1": "Sadekausi",
+          "dry1": "Kuiva kausi",
+          "wet2": "Sadekausi",
+          "dry2": "Kuiva kausi"
+        },
+        "description": "Kuvaus",
+        "songsAndCalls": "Laulu ja äänet",
+        "externalLinks": "Ulkoiset resurssit"
+      },
+      "notes": {
+        "title": "Muistiinpanot",
+        "placeholder": "Lisää muistiinpano tästä lajista…",
+        "editLabel": "Muokkaa muistiinpanoa",
+        "save": "Tallenna muistiinpano",
+        "empty": "Ei vielä muistiinpanoja.",
+        "deleteConfirm": "Poistetaanko tämä muistiinpano?",
+        "deleteFailed": "Muistiinpanon poistaminen epäonnistui.",
+        "saveFailed": "Muistiinpanon tallentaminen epäonnistui.",
+        "saveDisabledReason": "Kirjoita muistiinpanon teksti ottaaksesi tallennuksen käyttöön.",
+        "tooLong": "Muistiinpano on liian pitkä (enintään {max} merkkiä)."
+      },
+      "similar": {
+        "title": "Samankaltaiset lajit",
+        "compare": "Vertaa",
+        "show": "Näytä lajivertailu",
+        "loading": "Ladataan samankaltaisia lajeja…",
+        "empty": "Samankaltaisia lajeja ei löytynyt.",
+        "similar": "Samankaltainen",
+        "speciesGuide": "Lajiopas",
+        "versus": "vs {species}",
+        "selectPrompt": "Valitse laji vertailtavaksi lajin {species} kanssa.",
+        "noGuideAvailable": "Opasta ei saatavilla",
+        "linksOnly": "Vain linkit",
+        "exploreResources": "Ei vertailutietoja. Tutustu lähteisiin:",
+        "cardLoading": "Ladataan vertailua…",
+        "cardNoGuide": "Tälle lajille ei ole opasta saatavilla.",
+        "cardError": "Tämän lajin lataaminen epäonnistui. Kokeile toista.",
+        "cardNoSections": "Tälle lajille ei ole vertailutietoja saatavilla.",
+        "sections": {
+          "appearance": "Ulkonäkö",
+          "voice": "Ääni",
+          "habitat": "Elinympäristö ja levinneisyys",
+          "behaviour": "Käyttäytyminen"
+        }
+      },
+      "viewGuide": "Näytä opas lajille {species}"
     },
     "advanced": {
       "chartControls": "Kaavion hallinta",
@@ -4541,7 +4605,8 @@
         "appearance": "Ulkoasu",
         "language": "Kieli ja alue",
         "visualContent": "Visuaalinen sisältö",
-        "audioPlayback": "Äänentoisto"
+        "audioPlayback": "Äänentoisto",
+        "speciesGuide": "Lajiopas"
       },
       "appearance": {
         "title": "Ulkoasu",
@@ -4561,6 +4626,45 @@
         "defaultGain": "Oletusäänenvahvistus",
         "defaultGainHelpText": "Alkuvahvistus äänitteiden toistossa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB:n vahvistus on suositeltavaa.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Lajiopas",
+        "description": "Rikasta havaintoja taksonomialla, yleisnimillä, ulkoisilla linkeillä ja samankaltaisilla lajeilla — offline-tilassa OpenFaunan kautta; Wikipedia-kuvaukset ovat valinnainen verkkolisä.",
+        "enabled": {
+          "label": "Ota lajiopas käyttöön",
+          "helpText": "Näytä oppaan kontekstitiedot havaintojen tiedoissa ja lajin ikkunassa."
+        },
+        "enableWikipedia": {
+          "label": "Wikipedia-kuvaukset",
+          "helpText": "Hae myös artikkelikuvaukset Wikipediasta (vaatii internetyhteyden). Oletuksena pois päältä – taksonomia, yleisnimet ja ulkoiset linkit toimivat aina offline-tilassa OpenFaunan kautta."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Täydentävät linkit",
+          "helpText": "Lisää Xeno-canto-äänilinkit ja Wikipedia-linkki lajeille, joita offline-tietojoukko ei kata. Linkit avaavat ulkoisia sivustoja; taustalla ei haeta tietoja."
+        },
+        "warmTopN": {
+          "label": "Esilämmitä yleisimmät lajit",
+          "helpText": "Lataa eniten havaittujen lajien oppaat valmiiksi käynnistyksessä (0 poistaa esilämmityksen käytöstä)."
+        },
+        "preFetchEnabled": {
+          "label": "Esihae havaittaessa",
+          "helpText": "Hae opas, kun laji havaitaan ensimmäisen kerran, jotta se latautuu myöhemmin heti."
+        },
+        "sections": {
+          "title": "Oppaan osiot"
+        },
+        "showNotes": {
+          "label": "Näytä muistiinpanot",
+          "helpText": "Salli lajikohtaiset käyttäjän muistiinpanot."
+        },
+        "showEnrichments": {
+          "label": "Näytä rikastukset",
+          "helpText": "Näytä laatu-, odotettavuus- ja vuodenaikamerkit."
+        },
+        "showSimilarSpecies": {
+          "label": "Näytä samankaltaiset lajit",
+          "helpText": "Näytä samankaltaisten lajien vertailupaneeli."
+        }
       }
     },
     "restartRequired": "Jotkin muutokset vaativat palvelimen uudelleenkäynnistyksen astuakseen voimaan. Käynnistä BirdNET-Go uudelleen."

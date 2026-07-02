@@ -815,6 +815,53 @@ func (_c *MockInterface_DeleteNoteComment_Call) RunAndReturn(run func(string) er
 	return _c
 }
 
+// DeleteSpeciesNote provides a mock function with given fields: ctx, noteID
+func (_m *MockInterface) DeleteSpeciesNote(ctx context.Context, noteID string) error {
+	ret := _m.Called(ctx, noteID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteSpeciesNote")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, noteID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockInterface_DeleteSpeciesNote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteSpeciesNote'
+type MockInterface_DeleteSpeciesNote_Call struct {
+	*mock.Call
+}
+
+// DeleteSpeciesNote is a helper method to define mock.On call
+//   - ctx context.Context
+//   - noteID string
+func (_e *MockInterface_Expecter) DeleteSpeciesNote(ctx interface{}, noteID interface{}) *MockInterface_DeleteSpeciesNote_Call {
+	return &MockInterface_DeleteSpeciesNote_Call{Call: _e.mock.On("DeleteSpeciesNote", ctx, noteID)}
+}
+
+func (_c *MockInterface_DeleteSpeciesNote_Call) Run(run func(ctx context.Context, noteID string)) *MockInterface_DeleteSpeciesNote_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_DeleteSpeciesNote_Call) Return(_a0 error) *MockInterface_DeleteSpeciesNote_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockInterface_DeleteSpeciesNote_Call) RunAndReturn(run func(context.Context, string) error) *MockInterface_DeleteSpeciesNote_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeleteThresholdEvents provides a mock function with given fields: speciesName
 func (_m *MockInterface) DeleteThresholdEvents(speciesName string) error {
 	ret := _m.Called(speciesName)
@@ -3999,6 +4046,124 @@ func (_c *MockInterface_GetSpeciesFirstDetectionInPeriod_Call) RunAndReturn(run 
 	return _c
 }
 
+// GetSpeciesNoteByID provides a mock function with given fields: ctx, id
+func (_m *MockInterface) GetSpeciesNoteByID(ctx context.Context, id uint) (*datastore.SpeciesNote, error) {
+	ret := _m.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSpeciesNoteByID")
+	}
+
+	var r0 *datastore.SpeciesNote
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, uint) (*datastore.SpeciesNote, error)); ok {
+		return rf(ctx, id)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, uint) *datastore.SpeciesNote); ok {
+		r0 = rf(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*datastore.SpeciesNote)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = rf(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetSpeciesNoteByID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSpeciesNoteByID'
+type MockInterface_GetSpeciesNoteByID_Call struct {
+	*mock.Call
+}
+
+// GetSpeciesNoteByID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id uint
+func (_e *MockInterface_Expecter) GetSpeciesNoteByID(ctx interface{}, id interface{}) *MockInterface_GetSpeciesNoteByID_Call {
+	return &MockInterface_GetSpeciesNoteByID_Call{Call: _e.mock.On("GetSpeciesNoteByID", ctx, id)}
+}
+
+func (_c *MockInterface_GetSpeciesNoteByID_Call) Run(run func(ctx context.Context, id uint)) *MockInterface_GetSpeciesNoteByID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(uint))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesNoteByID_Call) Return(_a0 *datastore.SpeciesNote, _a1 error) *MockInterface_GetSpeciesNoteByID_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesNoteByID_Call) RunAndReturn(run func(context.Context, uint) (*datastore.SpeciesNote, error)) *MockInterface_GetSpeciesNoteByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetSpeciesNotes provides a mock function with given fields: ctx, scientificName
+func (_m *MockInterface) GetSpeciesNotes(ctx context.Context, scientificName string) ([]datastore.SpeciesNote, error) {
+	ret := _m.Called(ctx, scientificName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSpeciesNotes")
+	}
+
+	var r0 []datastore.SpeciesNote
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]datastore.SpeciesNote, error)); ok {
+		return rf(ctx, scientificName)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) []datastore.SpeciesNote); ok {
+		r0 = rf(ctx, scientificName)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SpeciesNote)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, scientificName)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetSpeciesNotes_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSpeciesNotes'
+type MockInterface_GetSpeciesNotes_Call struct {
+	*mock.Call
+}
+
+// GetSpeciesNotes is a helper method to define mock.On call
+//   - ctx context.Context
+//   - scientificName string
+func (_e *MockInterface_Expecter) GetSpeciesNotes(ctx interface{}, scientificName interface{}) *MockInterface_GetSpeciesNotes_Call {
+	return &MockInterface_GetSpeciesNotes_Call{Call: _e.mock.On("GetSpeciesNotes", ctx, scientificName)}
+}
+
+func (_c *MockInterface_GetSpeciesNotes_Call) Run(run func(ctx context.Context, scientificName string)) *MockInterface_GetSpeciesNotes_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesNotes_Call) Return(_a0 []datastore.SpeciesNote, _a1 error) *MockInterface_GetSpeciesNotes_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesNotes_Call) RunAndReturn(run func(context.Context, string) ([]datastore.SpeciesNote, error)) *MockInterface_GetSpeciesNotes_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetSpeciesPhenology provides a mock function with given fields: ctx, startDate, endDate, limit
 func (_m *MockInterface) GetSpeciesPhenology(ctx context.Context, startDate string, endDate string, limit int) ([]datastore.SpeciesPhenologyPoint, error) {
 	ret := _m.Called(ctx, startDate, endDate, limit)
@@ -5080,6 +5245,53 @@ func (_c *MockInterface_SaveNotificationHistory_Call) RunAndReturn(run func(cont
 	return _c
 }
 
+// SaveSpeciesNote provides a mock function with given fields: ctx, note
+func (_m *MockInterface) SaveSpeciesNote(ctx context.Context, note *datastore.SpeciesNote) error {
+	ret := _m.Called(ctx, note)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SaveSpeciesNote")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *datastore.SpeciesNote) error); ok {
+		r0 = rf(ctx, note)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockInterface_SaveSpeciesNote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SaveSpeciesNote'
+type MockInterface_SaveSpeciesNote_Call struct {
+	*mock.Call
+}
+
+// SaveSpeciesNote is a helper method to define mock.On call
+//   - ctx context.Context
+//   - note *datastore.SpeciesNote
+func (_e *MockInterface_Expecter) SaveSpeciesNote(ctx interface{}, note interface{}) *MockInterface_SaveSpeciesNote_Call {
+	return &MockInterface_SaveSpeciesNote_Call{Call: _e.mock.On("SaveSpeciesNote", ctx, note)}
+}
+
+func (_c *MockInterface_SaveSpeciesNote_Call) Run(run func(ctx context.Context, note *datastore.SpeciesNote)) *MockInterface_SaveSpeciesNote_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*datastore.SpeciesNote))
+	})
+	return _c
+}
+
+func (_c *MockInterface_SaveSpeciesNote_Call) Return(_a0 error) *MockInterface_SaveSpeciesNote_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockInterface_SaveSpeciesNote_Call) RunAndReturn(run func(context.Context, *datastore.SpeciesNote) error) *MockInterface_SaveSpeciesNote_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SaveThresholdEvent provides a mock function with given fields: event
 func (_m *MockInterface) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
 	ret := _m.Called(event)
@@ -5747,6 +5959,54 @@ func (_c *MockInterface_UpdateNoteComment_Call) Return(_a0 error) *MockInterface
 }
 
 func (_c *MockInterface_UpdateNoteComment_Call) RunAndReturn(run func(string, string) error) *MockInterface_UpdateNoteComment_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateSpeciesNote provides a mock function with given fields: ctx, noteID, entry
+func (_m *MockInterface) UpdateSpeciesNote(ctx context.Context, noteID string, entry string) error {
+	ret := _m.Called(ctx, noteID, entry)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateSpeciesNote")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = rf(ctx, noteID, entry)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockInterface_UpdateSpeciesNote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateSpeciesNote'
+type MockInterface_UpdateSpeciesNote_Call struct {
+	*mock.Call
+}
+
+// UpdateSpeciesNote is a helper method to define mock.On call
+//   - ctx context.Context
+//   - noteID string
+//   - entry string
+func (_e *MockInterface_Expecter) UpdateSpeciesNote(ctx interface{}, noteID interface{}, entry interface{}) *MockInterface_UpdateSpeciesNote_Call {
+	return &MockInterface_UpdateSpeciesNote_Call{Call: _e.mock.On("UpdateSpeciesNote", ctx, noteID, entry)}
+}
+
+func (_c *MockInterface_UpdateSpeciesNote_Call) Run(run func(ctx context.Context, noteID string, entry string)) *MockInterface_UpdateSpeciesNote_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_UpdateSpeciesNote_Call) Return(_a0 error) *MockInterface_UpdateSpeciesNote_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockInterface_UpdateSpeciesNote_Call) RunAndReturn(run func(context.Context, string, string) error) *MockInterface_UpdateSpeciesNote_Call {
 	_c.Call.Return(run)
 	return _c
 }

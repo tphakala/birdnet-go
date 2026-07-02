@@ -25,6 +25,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 - [BirdNET Detection Pipeline](guide.md#birdnet-detection-pipeline) - Understanding how settings affect detections
 - [BirdNET Range Filter](guide.md#birdnet-range-filter) - Location and time-based species filtering
 - [Web Dashboard](guide.md#web-dashboard) - Using the visualization dashboard
+- [Species Guide](species-guide.md) - Wikipedia/eBird species enrichment, similar-species comparison, and per-species notes
 - [Remote Internet Access](cloudflare_tunnel_guide.md) - Exposing BirdNET-Go to the internet securely
 - [Weather Integration](guide.md#weather-integration) - Connecting to weather data providers
 - [Audio Processing](guide.md#audio-processing) - Advanced audio processing capabilities

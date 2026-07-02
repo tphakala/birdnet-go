@@ -29,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -65,6 +66,7 @@ type Server struct {
 	processor      *processor.Processor
 	oauth2Server   *security.OAuth2Server
 	metrics        *observability.Metrics
+	guideCache     *guideprovider.GuideCache
 
 	// Auth components (owned by server, injected into controllers)
 	authService    auth.Service
@@ -224,6 +226,13 @@ func WithOAuth2Server(oauth *security.OAuth2Server) ServerOption {
 func WithMetrics(m *observability.Metrics) ServerOption {
 	return func(s *Server) {
 		s.metrics = m
+	}
+}
+
+// WithGuideCache sets the species guide cache, passed through to the v2 controller.
+func WithGuideCache(gc *guideprovider.GuideCache) ServerOption {
+	return func(s *Server) {
+		s.guideCache = gc
 	}
 }
 
@@ -512,6 +521,9 @@ func (s *Server) setupRoutes() error {
 	}
 	if s.healthErrors != nil {
 		v2Opts = append(v2Opts, apiv2.WithHealthErrorBuffer(s.healthErrors))
+	}
+	if s.guideCache != nil {
+		v2Opts = append(v2Opts, apiv2.WithGuideCache(s.guideCache))
 	}
 
 	// Initialize API v2 controller with auth middleware and service injected

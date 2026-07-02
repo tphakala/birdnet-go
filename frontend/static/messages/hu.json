@@ -1959,7 +1959,71 @@
         "detections": "Detektálások:",
         "confidence": "Megbízhatóság:",
         "first": "Első:"
-      }
+      },
+      "guide": {
+        "title": "Útmutató",
+        "similar": "Hasonló fajok",
+        "noSimilar": "Nem találhatók hasonló fajok",
+        "loading": "Útmutató betöltése…",
+        "unavailable": "A fajútmutató átmenetileg nem érhető el. Kérjük, próbálja újra később.",
+        "noGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
+        "expectedness": {
+          "expected": "Itt várható",
+          "uncommon": "Itt szokatlan",
+          "rare": "Itt ritka",
+          "unexpected": "Itt váratlan"
+        },
+        "season": {
+          "spring": "Tavasz",
+          "summer": "Nyár",
+          "autumn": "Ősz",
+          "winter": "Tél",
+          "wet1": "Esős évszak",
+          "dry1": "Száraz évszak",
+          "wet2": "Esős évszak",
+          "dry2": "Száraz évszak"
+        },
+        "description": "Leírás",
+        "songsAndCalls": "Ének és hangok",
+        "externalLinks": "Külső források"
+      },
+      "notes": {
+        "title": "Jegyzetek",
+        "placeholder": "Jegyzet hozzáadása erről a fajról…",
+        "editLabel": "Jegyzet szerkesztése",
+        "save": "Jegyzet mentése",
+        "empty": "Még nincsenek jegyzetek.",
+        "deleteConfirm": "Törli ezt a jegyzetet?",
+        "deleteFailed": "A jegyzet törlése nem sikerült.",
+        "saveFailed": "A jegyzet mentése nem sikerült.",
+        "saveDisabledReason": "Adjon meg jegyzetszöveget a Mentés engedélyezéséhez.",
+        "tooLong": "A jegyzet túl hosszú (legfeljebb {max} karakter)."
+      },
+      "similar": {
+        "title": "Hasonló fajok",
+        "compare": "Összehasonlítás",
+        "show": "Fajösszehasonlítás megjelenítése",
+        "loading": "Hasonló fajok betöltése…",
+        "empty": "Nem találhatók hasonló fajok.",
+        "similar": "Hasonló",
+        "speciesGuide": "Fajútmutató",
+        "versus": "vs {species}",
+        "selectPrompt": "Válasszon egy fajt a(z) {species} összehasonlításához.",
+        "noGuideAvailable": "Nincs elérhető útmutató",
+        "linksOnly": "Csak hivatkozások",
+        "exploreResources": "Nincs összehasonlítási részlet. Források felfedezése:",
+        "cardLoading": "Összehasonlítás betöltése…",
+        "cardNoGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
+        "cardError": "Nem sikerült betölteni ezt a fajt. Próbáljon másikat.",
+        "cardNoSections": "Ehhez a fajhoz nincsenek elérhető összehasonlítási adatok.",
+        "sections": {
+          "appearance": "Megjelenés",
+          "voice": "Hang",
+          "habitat": "Élőhely és elterjedés",
+          "behaviour": "Viselkedés"
+        }
+      },
+      "viewGuide": "Útmutató megtekintése: {species}"
     },
     "advanced": {
       "chartControls": "Diagram vezérlők",
@@ -4541,7 +4605,8 @@
         "appearance": "Megjelenés",
         "language": "Nyelv és terület",
         "visualContent": "Vizuális tartalom",
-        "audioPlayback": "Hang lejátszás"
+        "audioPlayback": "Hang lejátszás",
+        "speciesGuide": "Fajútmutató"
       },
       "appearance": {
         "title": "Megjelenés",
@@ -4561,6 +4626,45 @@
         "defaultGain": "Alapértelmezett hangerő növelés",
         "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Fajútmutató",
+        "description": "Gazdagítsa az észleléseket rendszertannal, köznevekkel, külső hivatkozásokkal és hasonló fajokkal — offline az OpenFauna révén; a Wikipédia-leírások opcionális online kiegészítők.",
+        "enabled": {
+          "label": "Fajútmutató engedélyezése",
+          "helpText": "Kontextusfüggő útmutató-információk megjelenítése az észlelési adatoknál és a faj ablakában."
+        },
+        "enableWikipedia": {
+          "label": "Wikipédia-leírások",
+          "helpText": "Cikkleírások lekérése a Wikipédiáról is (internet szükséges). Alapértelmezetten kikapcsolva – a rendszertan, a köznevek és a külső hivatkozások mindig offline működnek az OpenFaunán keresztül."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Kiegészítő hivatkozások",
+          "helpText": "Xeno-canto hangfelvétel-hivatkozások és egy Wikipédia-hivatkozás hozzáadása az offline adathalmaz által nem lefedett fajokhoz. A hivatkozások külső oldalakat nyitnak meg; a háttérben nem töltődnek le adatok."
+        },
+        "warmTopN": {
+          "label": "Leggyakoribb fajok előmelegítése",
+          "helpText": "A legtöbbször észlelt fajok útmutatóinak előtöltése indításkor (a 0 kikapcsolja az előmelegítést)."
+        },
+        "preFetchEnabled": {
+          "label": "Előzetes letöltés észleléskor",
+          "helpText": "Az útmutató lekérése egy faj első észlelésekor, hogy később azonnal betöltődjön."
+        },
+        "sections": {
+          "title": "Útmutató szakaszai"
+        },
+        "showNotes": {
+          "label": "Jegyzetek megjelenítése",
+          "helpText": "Fajonkénti felhasználói jegyzetek engedélyezése."
+        },
+        "showEnrichments": {
+          "label": "Bővítések megjelenítése",
+          "helpText": "Minőség-, várhatóság- és évszakjelvények megjelenítése."
+        },
+        "showSimilarSpecies": {
+          "label": "Hasonló fajok megjelenítése",
+          "helpText": "A hasonló fajok összehasonlító paneljének megjelenítése."
+        }
       }
     },
     "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t."

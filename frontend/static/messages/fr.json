@@ -1959,7 +1959,71 @@
         "detections": "Détections :",
         "confidence": "Confiance :",
         "first": "Première :"
-      }
+      },
+      "guide": {
+        "title": "Guide",
+        "similar": "Espèces similaires",
+        "noSimilar": "Aucune espèce similaire trouvée",
+        "loading": "Chargement du guide…",
+        "unavailable": "Le guide des espèces est temporairement indisponible. Veuillez réessayer plus tard.",
+        "noGuide": "Aucun guide disponible pour cette espèce.",
+        "expectedness": {
+          "expected": "Attendu ici",
+          "uncommon": "Peu commun ici",
+          "rare": "Rare ici",
+          "unexpected": "Inattendu ici"
+        },
+        "season": {
+          "spring": "Printemps",
+          "summer": "Été",
+          "autumn": "Automne",
+          "winter": "Hiver",
+          "wet1": "Saison des pluies",
+          "dry1": "Saison sèche",
+          "wet2": "Saison des pluies",
+          "dry2": "Saison sèche"
+        },
+        "description": "Description",
+        "songsAndCalls": "Chants et cris",
+        "externalLinks": "Ressources externes"
+      },
+      "notes": {
+        "title": "Notes",
+        "placeholder": "Ajouter une note sur cette espèce…",
+        "editLabel": "Modifier la note",
+        "save": "Enregistrer la note",
+        "empty": "Aucune note pour le moment.",
+        "deleteConfirm": "Supprimer cette note ?",
+        "deleteFailed": "Échec de la suppression de la note.",
+        "saveFailed": "Échec de l’enregistrement de la note.",
+        "saveDisabledReason": "Saisissez le texte de la note pour activer l’enregistrement.",
+        "tooLong": "La note est trop longue (maximum {max} caractères)."
+      },
+      "similar": {
+        "title": "Espèces similaires",
+        "compare": "Comparer",
+        "show": "Afficher la comparaison des espèces",
+        "loading": "Chargement des espèces similaires…",
+        "empty": "Aucune espèce similaire trouvée.",
+        "similar": "Similaire",
+        "speciesGuide": "Guide des espèces",
+        "versus": "vs {species}",
+        "selectPrompt": "Sélectionnez une espèce à comparer avec {species}.",
+        "noGuideAvailable": "Aucun guide disponible",
+        "linksOnly": "Liens uniquement",
+        "exploreResources": "Aucun détail de comparaison. Explorer les ressources :",
+        "cardLoading": "Chargement de la comparaison…",
+        "cardNoGuide": "Aucun guide disponible pour cette espèce.",
+        "cardError": "Impossible de charger cette espèce. Essayez-en une autre.",
+        "cardNoSections": "Aucun détail de comparaison disponible pour cette espèce.",
+        "sections": {
+          "appearance": "Apparence",
+          "voice": "Voix",
+          "habitat": "Habitat et répartition",
+          "behaviour": "Comportement"
+        }
+      },
+      "viewGuide": "Voir le guide de {species}"
     },
     "advanced": {
       "chartControls": "Contrôles du graphique",
@@ -4541,7 +4605,8 @@
         "appearance": "Apparence",
         "language": "Langue et régional",
         "visualContent": "Contenu visuel",
-        "audioPlayback": "Lecture audio"
+        "audioPlayback": "Lecture audio",
+        "speciesGuide": "Guide des espèces"
       },
       "appearance": {
         "title": "Apparence",
@@ -4561,6 +4626,45 @@
         "defaultGain": "Amplification du volume par défaut",
         "defaultGainHelpText": "Gain initial appliqué lors de la lecture des enregistrements. Les sons d'oiseaux sont souvent faibles, une amplification de 6 à 12 dB est recommandée.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Guide des espèces",
+        "description": "Enrichissez les détections avec la taxonomie, les noms communs, des liens externes et des espèces similaires — hors ligne via OpenFauna ; les descriptions Wikipedia sont un complément en ligne facultatif.",
+        "enabled": {
+          "label": "Activer le guide des espèces",
+          "helpText": "Afficher les informations contextuelles du guide dans les détails de détection et la fenêtre de l’espèce."
+        },
+        "enableWikipedia": {
+          "label": "Descriptions Wikipedia",
+          "helpText": "Récupérer aussi les descriptions d’articles depuis Wikipedia (nécessite Internet). Désactivé par défaut – la taxonomie, les noms communs et les liens externes fonctionnent toujours hors ligne via OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Liens complémentaires",
+          "helpText": "Ajouter des liens audio Xeno-canto et un lien Wikipedia pour les espèces non couvertes par le jeu de données hors ligne. Les liens ouvrent des sites externes ; aucune donnée n’est récupérée en arrière-plan."
+        },
+        "warmTopN": {
+          "label": "Préchauffer les espèces les plus fréquentes",
+          "helpText": "Précharger les guides des espèces les plus détectées au démarrage (0 désactive le préchauffage)."
+        },
+        "preFetchEnabled": {
+          "label": "Préchargement à la détection",
+          "helpText": "Récupérer le guide lors de la première détection d’une espèce pour qu’il se charge instantanément ensuite."
+        },
+        "sections": {
+          "title": "Sections du guide"
+        },
+        "showNotes": {
+          "label": "Afficher les notes",
+          "helpText": "Autoriser les notes utilisateur par espèce."
+        },
+        "showEnrichments": {
+          "label": "Afficher les enrichissements",
+          "helpText": "Afficher les badges de qualité, de prévisibilité et de saison."
+        },
+        "showSimilarSpecies": {
+          "label": "Afficher les espèces similaires",
+          "helpText": "Afficher le panneau de comparaison des espèces similaires."
+        }
       }
     },
     "restartRequired": "Certaines modifications nécessitent un redémarrage du serveur pour prendre effet. Veuillez redémarrer BirdNET-Go."

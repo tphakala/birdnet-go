@@ -43,6 +43,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -168,6 +169,20 @@ type Controller struct {
 
 	controlChan chan string
 
+	// guideCache is the species guide cache. The facade is its canonical owner
+	// (hot-reload swaps it in via SetGuideCache), guarded by guideCacheMu. May be
+	// nil when the feature is disabled.
+	guideCache   *guideprovider.GuideCache
+	guideCacheMu sync.RWMutex
+	// guideRarity* memoize the daily probable-species score map (normalized
+	// scientific name -> score) for the guide expectedness badge, so a burst of
+	// guide requests doesn't re-run the geomodel prediction per call. Keyed on the
+	// configured location (guideRarityLocKey) and the TTL so a location change
+	// invalidates it immediately.
+	guideRarityMu     sync.RWMutex
+	guideRarityExpiry time.Time
+	guideRarityScores map[string]float64
+	guideRarityLocKey string
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -317,6 +332,14 @@ func WithAuthService(svc auth.Service) Option {
 func WithNotificationService(svc *notification.Service) Option {
 	return func(c *Controller) {
 		c.notificationService = svc
+	}
+}
+
+// WithGuideCache injects the species guide cache. The controller becomes the
+// canonical owner and closes it on shutdown (hot-reload may swap it later).
+func WithGuideCache(gc *guideprovider.GuideCache) Option {
+	return func(c *Controller) {
+		c.guideCache = gc
 	}
 }
 
@@ -647,6 +670,7 @@ func (c *Controller) initRoutes() {
 		{"support routes", func() { c.support.RegisterRoutes(c.Group) }},
 		{"debug routes", func() { c.appHandler.RegisterDebugRoutes(c.Group) }},
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
+		{"species guide routes", c.initSpeciesGuideRoutes},
 		{"dynamic threshold routes", func() { c.dynamicThresholds.RegisterRoutes(c.Group) }},
 		{"alert routes", func() { c.alerts.RegisterRoutes(c.Group) }},
 		{"model routes", func() { c.models.RegisterRoutes(c.Group) }},
@@ -783,6 +807,16 @@ func (c *Controller) Shutdown() {
 	// which only closes when echo shuts down, creating a circular wait.
 	if c.SSEManager != nil {
 		c.SSEManager.CloseAllClients()
+	}
+
+	// Close and nil the species guide cache (the facade is its canonical owner).
+	// Snapshot under the lock, then close outside it.
+	c.guideCacheMu.Lock()
+	gc := c.guideCache
+	c.guideCache = nil
+	c.guideCacheMu.Unlock()
+	if gc != nil {
+		gc.Close()
 	}
 
 	// Stop the alerting engine background goroutines and its global event bus.

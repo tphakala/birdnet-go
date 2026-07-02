@@ -635,6 +635,10 @@
         "livespectrogram": {
           "type": "boolean",
           "description": "auto-start live spectrogram on dashboard"
+        },
+        "speciesguide": {
+          "$ref": "#/$defs/SpeciesGuideConfig",
+          "description": "species guide settings (offline OpenFauna; optional Wikipedia descriptions)"
         }
       },
       "additionalProperties": false,
@@ -2344,6 +2348,46 @@
       "additionalProperties": false,
       "type": "object",
       "description": "SpeciesConfig represents configuration for a specific species"
+    },
+    "SpeciesGuideConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "enablewikipedia": {
+          "type": "boolean",
+          "description": "opt in to online Wikipedia descriptions (default off)"
+        },
+        "enablesupplementarylinks": {
+          "type": "boolean",
+          "description": "opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off"
+        },
+        "warmtopn": {
+          "type": "integer",
+          "maximum": 1000,
+          "minimum": 0,
+          "description": "top-N species warmed on startup (0 = off; clamped to SpeciesGuideMaxWarmTopN)"
+        },
+        "prefetchenabled": {
+          "type": "boolean",
+          "description": "pre-fetch guides for newly detected species"
+        },
+        "shownotes": {
+          "type": "boolean",
+          "description": "default true"
+        },
+        "showenrichments": {
+          "type": "boolean",
+          "description": "default true"
+        },
+        "showsimilarspecies": {
+          "type": "boolean",
+          "description": "default true"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SpeciesGuideConfig holds configuration for the species guide."
     },
     "SpeciesSettings": {
       "properties": {

@@ -776,6 +776,41 @@ export function coerceNotificationSettings(
 /**
  * Main coercion function for all settings
  */
+/**
+ * coerceSpeciesGuideSettings normalizes the species guide config. The show*
+ * flags default to true to match the backend's *bool "unset means on" semantics.
+ */
+function coerceSpeciesGuideSettings(value: unknown): UnknownSettings {
+  const sg: Record<string, unknown> =
+    value != null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  // Taxonomy/common names/links come from the offline OpenFauna dataset; the only
+  // toggle is enableWikipedia (online descriptions), which defaults to off.
+  return {
+    enabled: coerceBoolean(sg.enabled, false),
+    enableWikipedia: coerceBoolean(sg.enableWikipedia, false),
+    enableSupplementaryLinks: coerceBoolean(sg.enableSupplementaryLinks, false),
+    warmTopN: coerceNumber(sg.warmTopN, 0, 1000, 50), // max mirrors backend SpeciesGuideMaxWarmTopN
+    preFetchEnabled: coerceBoolean(sg.preFetchEnabled, true),
+    showNotes: coerceBoolean(sg.showNotes, true),
+    showEnrichments: coerceBoolean(sg.showEnrichments, true),
+    showSimilarSpecies: coerceBoolean(sg.showSimilarSpecies, true),
+  };
+}
+
+/** coerceDashboardSettings passes dashboard through, coercing known sub-sections. */
+function coerceDashboardSettings(value: unknown): UnknownSettings {
+  const dash: Record<string, unknown> =
+    value != null && typeof value === 'object' && !Array.isArray(value)
+      ? { ...(value as Record<string, unknown>) }
+      : {};
+  if (Object.prototype.hasOwnProperty.call(dash, 'speciesGuide')) {
+    dash.speciesGuide = coerceSpeciesGuideSettings(dash.speciesGuide);
+  }
+  return dash;
+}
+
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
   switch (section) {
     case 'birdnet':
@@ -800,6 +835,10 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
 
       if (Object.prototype.hasOwnProperty.call(data, 'rtsp')) {
         coercedRealtime.rtsp = coerceRTSPSettings(data.rtsp);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(data, 'dashboard')) {
+        coercedRealtime.dashboard = coerceDashboardSettings(data.dashboard);
       }
 
       if (Object.prototype.hasOwnProperty.call(data, 'falsePositiveFilter')) {

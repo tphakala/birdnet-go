@@ -1959,7 +1959,71 @@
         "detections": "Detections:",
         "confidence": "Confidence:",
         "first": "First:"
-      }
+      },
+      "guide": {
+        "title": "Guide",
+        "similar": "Similar species",
+        "noSimilar": "No similar species found",
+        "loading": "Loading guide…",
+        "unavailable": "Species guide is temporarily unavailable. Please try again later.",
+        "noGuide": "No guide available for this species.",
+        "expectedness": {
+          "expected": "Expected here",
+          "uncommon": "Uncommon here",
+          "rare": "Rare here",
+          "unexpected": "Unexpected here"
+        },
+        "season": {
+          "spring": "Spring",
+          "summer": "Summer",
+          "autumn": "Autumn",
+          "winter": "Winter",
+          "wet1": "Wet season",
+          "dry1": "Dry season",
+          "wet2": "Wet season",
+          "dry2": "Dry season"
+        },
+        "description": "Description",
+        "songsAndCalls": "Songs & Calls",
+        "externalLinks": "External resources"
+      },
+      "notes": {
+        "title": "Notes",
+        "placeholder": "Add a note about this species…",
+        "editLabel": "Edit note",
+        "save": "Save note",
+        "empty": "No notes yet.",
+        "deleteConfirm": "Delete this note?",
+        "deleteFailed": "Failed to delete note.",
+        "saveFailed": "Failed to save note.",
+        "saveDisabledReason": "Enter note text to enable Save.",
+        "tooLong": "Note is too long (maximum {max} bytes)."
+      },
+      "similar": {
+        "title": "Similar species",
+        "compare": "Compare",
+        "show": "Show species comparison",
+        "loading": "Loading similar species…",
+        "empty": "No similar species found.",
+        "similar": "Similar",
+        "speciesGuide": "Species guide",
+        "versus": "vs {species}",
+        "selectPrompt": "Select a species to compare with {species}.",
+        "noGuideAvailable": "No guide available",
+        "linksOnly": "Links only",
+        "exploreResources": "No comparison details. Explore resources:",
+        "cardLoading": "Loading comparison…",
+        "cardNoGuide": "No guide available for this species.",
+        "cardError": "Couldn’t load this species. Try another.",
+        "cardNoSections": "No comparison details available for this species.",
+        "sections": {
+          "appearance": "Appearance",
+          "voice": "Voice",
+          "habitat": "Habitat & range",
+          "behaviour": "Behaviour"
+        }
+      },
+      "viewGuide": "View guide for {species}"
     },
     "advanced": {
       "chartControls": "Chart Controls",
@@ -4541,7 +4605,8 @@
         "appearance": "Appearance",
         "language": "Language & Regional",
         "visualContent": "Visual Content",
-        "audioPlayback": "Audio Playback"
+        "audioPlayback": "Audio Playback",
+        "speciesGuide": "Species Guide"
       },
       "appearance": {
         "title": "Appearance",
@@ -4561,6 +4626,45 @@
         "defaultGain": "Default Volume Boost",
         "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Species Guide",
+        "description": "Enrich detections with taxonomy, common names, external links, and similar species — offline via OpenFauna; Wikipedia descriptions are an optional online add-on.",
+        "enabled": {
+          "label": "Enable species guide",
+          "helpText": "Show contextual guide information on detection details and the species modal."
+        },
+        "enableWikipedia": {
+          "label": "Wikipedia descriptions",
+          "helpText": "Also fetch article descriptions from Wikipedia (requires internet). Off by default — taxonomy, common names, and external links always work offline via OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Supplementary links",
+          "helpText": "Add Xeno-canto audio links and a Wikipedia link for species not covered by the offline dataset. Links open external sites; no data is fetched in the background."
+        },
+        "warmTopN": {
+          "label": "Warm top species",
+          "helpText": "Pre-load guides for the most-detected species on startup (0 disables warming)."
+        },
+        "preFetchEnabled": {
+          "label": "Pre-fetch on detection",
+          "helpText": "Fetch the guide the first time a species is detected so it loads instantly later."
+        },
+        "sections": {
+          "title": "Guide Sections"
+        },
+        "showNotes": {
+          "label": "Show notes",
+          "helpText": "Allow per-species user notes."
+        },
+        "showEnrichments": {
+          "label": "Show enrichments",
+          "helpText": "Show quality, expectedness, and season badges."
+        },
+        "showSimilarSpecies": {
+          "label": "Show similar species",
+          "helpText": "Show the similar-species comparison panel."
+        }
       }
     },
     "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."

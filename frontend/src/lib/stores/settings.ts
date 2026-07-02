@@ -579,6 +579,22 @@ export interface Dashboard {
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
   defaultAudioGain?: number; // Default playback gain in dB (0-24)
+  speciesGuide?: SpeciesGuideSettings; // Species guide settings (offline OpenFauna + optional Wikipedia)
+}
+
+// Species guide settings. Taxonomy, localized common names, and external links
+// always come from the offline OpenFauna dataset; enableWikipedia opts into online
+// Wikipedia article descriptions (the one thing OpenFauna can't provide), off by default.
+// The three show* flags default to true when absent (matches backend *bool semantics).
+export interface SpeciesGuideSettings {
+  enabled: boolean;
+  enableWikipedia: boolean; // opt in to online Wikipedia descriptions (default off)
+  enableSupplementaryLinks?: boolean; // opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off
+  warmTopN?: number;
+  preFetchEnabled?: boolean;
+  showNotes?: boolean;
+  showEnrichments?: boolean;
+  showSimilarSpecies?: boolean;
 }
 
 // Dashboard layout configuration
@@ -1015,6 +1031,16 @@ function createEmptySettings(): SettingsFormData {
           ],
         },
         defaultAudioGain: 0,
+        speciesGuide: {
+          enabled: false,
+          enableWikipedia: false,
+          enableSupplementaryLinks: false,
+          warmTopN: 50,
+          preFetchEnabled: true,
+          showNotes: true,
+          showEnrichments: true,
+          showSimilarSpecies: true,
+        },
       },
     },
     webServer: {},

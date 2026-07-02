@@ -29,6 +29,9 @@
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
+  import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
+  import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
+  import { dashboardSettings } from '$lib/stores/settings';
   import {
     Download,
     Camera,
@@ -39,6 +42,7 @@
     Moon,
     Sunrise,
     Sunset,
+    BookOpen,
   } from '@lucide/svelte';
 
   // Interface definitions for API responses
@@ -98,6 +102,12 @@
 
   // State
   let activeTab = $state<TabType>('overview');
+
+  // Species guide panel (gated on settings; collapsible inline panel).
+  let guidePanelOpen = $state(true);
+  let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
+  let showSimilarSpecies = $derived($dashboardSettings?.speciesGuide?.showSimilarSpecies ?? true);
+  let showNotes = $derived($dashboardSettings?.speciesGuide?.showNotes ?? true);
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);
@@ -883,6 +893,43 @@
               />
             </div>
           </div>
+        </div>
+      </section>
+    {/if}
+
+    <!-- Species Guide panel (opt-in; gated on settings) -->
+    {#if guideEnabled && (showNotes || showSimilarSpecies)}
+      <section class="surface-card" aria-labelledby="species-guide-heading">
+        <div class="p-5 md:p-6 space-y-6">
+          <h2 id="species-guide-heading" class="sr-only">
+            {t('analytics.species.guide.title')}
+          </h2>
+          <!-- Key on the species so the guide + notes remount (and refetch) when
+               navigating between detections of different species in place. -->
+          {#key detection.scientificName}
+            {#if showSimilarSpecies}
+              {#if guidePanelOpen}
+                <SpeciesComparison
+                  scientificName={detection.scientificName}
+                  commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
+                  onclose={() => (guidePanelOpen = false)}
+                />
+              {:else}
+                <!-- Reopen affordance so closing the comparison is never a dead end. -->
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm gap-2"
+                  onclick={() => (guidePanelOpen = true)}
+                >
+                  <BookOpen class="h-4 w-4" />
+                  {t('analytics.species.similar.show')}
+                </button>
+              {/if}
+            {/if}
+            {#if showNotes && $isAuthenticated}
+              <SpeciesNotes scientificName={detection.scientificName} />
+            {/if}
+          {/key}
         </div>
       </section>
     {/if}

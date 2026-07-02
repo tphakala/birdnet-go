@@ -239,6 +239,13 @@ func New(cfg *Config) (*Datastore, error) {
 	dbCounters := &dbstats.Counters{}
 	dbstats.RegisterCallbacks(db, dbCounters)
 
+	// Auto-migrate the species_notes table. It is a v1-origin entity used by the
+	// species guide feature; the guide_caches table is migrated by the guide
+	// store itself once GormDB() is wired.
+	if err := db.AutoMigrate(&datastore.SpeciesNote{}); err != nil {
+		return nil, fmt.Errorf("failed to migrate species_notes table: %w", err)
+	}
+
 	// Get or verify species label type ID.
 	// Uses the helper so a zero id (FK orphan) causes construction to fail early.
 	speciesLabelTypeID := cfg.SpeciesLabelTypeID
@@ -1806,6 +1813,159 @@ func (ds *Datastore) DeleteNoteComment(commentID string) error {
 		return err
 	}
 	return ds.detection.DeleteComment(ctx, id)
+}
+
+// ============================================================
+// Species Guide Note Methods
+// ============================================================
+//
+// Species guide notes persist to the species_notes table on the v2 database
+// (auto-migrated in New). This mirrors the v1 DataStore implementation:
+// scientific names are trimmed, entries normalized and length-checked, and
+// writes wrapped in RetryOnLock for SQLite write contention.
+
+// GormDB exposes the underlying GORM handle so the species guide cache store can
+// build and query its guide_caches table on the v2 database.
+func (ds *Datastore) GormDB() *gorm.DB { return ds.manager.DB() }
+
+// GetSpeciesNotes returns all notes for a species, newest first.
+func (ds *Datastore) GetSpeciesNotes(ctx context.Context, scientificName string) ([]datastore.SpeciesNote, error) {
+	name := strings.TrimSpace(scientificName)
+	if name == "" {
+		return nil, errors.Newf("scientific name cannot be empty").
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "get_species_notes_validate").Build()
+	}
+	var notes []datastore.SpeciesNote
+	if err := ds.manager.DB().WithContext(ctx).
+		Where("scientific_name = ?", name).
+		Order("created_at DESC, id DESC").
+		Limit(datastore.SpeciesNotesMaxResults).
+		Find(&notes).Error; err != nil {
+		return nil, errors.New(err).Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_notes").
+			Context("table", "species_notes").Build()
+	}
+	return notes, nil
+}
+
+// GetSpeciesNoteByID returns a single note by ID, or ErrSpeciesNoteNotFound.
+func (ds *Datastore) GetSpeciesNoteByID(ctx context.Context, id uint) (*datastore.SpeciesNote, error) {
+	var note datastore.SpeciesNote
+	if err := ds.manager.DB().WithContext(ctx).First(&note, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, datastore.ErrSpeciesNoteNotFound
+		}
+		return nil, errors.New(err).Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_note_by_id").
+			Context("table", "species_notes").Build()
+	}
+	return &note, nil
+}
+
+// SaveSpeciesNote persists a new note after normalizing its fields.
+func (ds *Datastore) SaveSpeciesNote(ctx context.Context, note *datastore.SpeciesNote) error {
+	if note == nil {
+		return errors.Newf("note cannot be nil").
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "save_species_note_validate").Build()
+	}
+	note.ScientificName = strings.TrimSpace(note.ScientificName)
+	if note.ScientificName == "" {
+		return errors.Newf("scientific name cannot be empty").
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "save_species_note_validate").Build()
+	}
+	entry, err := datastore.NormalizeSpeciesNoteEntry(note.Entry)
+	if err != nil {
+		return err
+	}
+	if entry == "" {
+		return errors.Newf("entry cannot be empty").
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "save_species_note_validate").Build()
+	}
+	note.Entry = entry
+	return datastore.RetryOnLock(ctx, "save_species_note", func() error {
+		if createErr := ds.manager.DB().WithContext(ctx).Create(note).Error; createErr != nil {
+			return errors.New(createErr).Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_species_note").
+				Context("table", "species_notes").
+				Context("scientific_name", note.ScientificName).Build()
+		}
+		return nil
+	}, ds.metrics)
+}
+
+// UpdateSpeciesNote updates a note's entry, or returns ErrSpeciesNoteNotFound.
+func (ds *Datastore) UpdateSpeciesNote(ctx context.Context, noteID, entry string) error {
+	id, err := parseSpeciesNoteID(noteID)
+	if err != nil {
+		return err
+	}
+	normalized, err := datastore.NormalizeSpeciesNoteEntry(entry)
+	if err != nil {
+		return err
+	}
+	if normalized == "" {
+		return errors.Newf("entry cannot be empty").
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "update_species_note_validate").Build()
+	}
+	return datastore.RetryOnLock(ctx, "update_species_note", func() error {
+		result := ds.manager.DB().WithContext(ctx).
+			Model(&datastore.SpeciesNote{}).
+			Where("id = ?", id).
+			Update("entry", normalized)
+		if result.Error != nil {
+			return errors.New(result.Error).Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "update_species_note").
+				Context("table", "species_notes").Build()
+		}
+		if result.RowsAffected == 0 {
+			return datastore.ErrSpeciesNoteNotFound
+		}
+		return nil
+	}, ds.metrics)
+}
+
+// DeleteSpeciesNote removes a note by ID, or returns ErrSpeciesNoteNotFound.
+func (ds *Datastore) DeleteSpeciesNote(ctx context.Context, noteID string) error {
+	id, err := parseSpeciesNoteID(noteID)
+	if err != nil {
+		return err
+	}
+	return datastore.RetryOnLock(ctx, "delete_species_note", func() error {
+		result := ds.manager.DB().WithContext(ctx).Delete(&datastore.SpeciesNote{}, id)
+		if result.Error != nil {
+			return errors.New(result.Error).Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "delete_species_note").
+				Context("table", "species_notes").Build()
+		}
+		if result.RowsAffected == 0 {
+			return datastore.ErrSpeciesNoteNotFound
+		}
+		return nil
+	}, ds.metrics)
+}
+
+// parseSpeciesNoteID parses a string note ID into a uint, rejecting invalid input.
+// The range guard matters on 32-bit builds (e.g. 32-bit Raspberry Pi OS), where uint
+// is 32-bit: without it a value above math.MaxUint32 would silently wrap and address
+// the wrong row. The check is a no-op on 64-bit, where math.MaxUint == math.MaxUint64.
+func parseSpeciesNoteID(noteID string) (uint, error) {
+	id, err := strconv.ParseUint(strings.TrimSpace(noteID), 10, 64)
+	if err != nil || id == 0 || id > uint64(math.MaxUint) {
+		return 0, errors.Newf("invalid note ID").
+			Component("datastore").Category(errors.CategoryValidation).
+			Context("operation", "parse_species_note_id").Build()
+	}
+	return uint(id), nil
 }
 
 // ============================================================

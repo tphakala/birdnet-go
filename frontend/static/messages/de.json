@@ -1959,7 +1959,71 @@
         "detections": "Erkennungen:",
         "confidence": "Konfidenz:",
         "first": "Erste:"
-      }
+      },
+      "guide": {
+        "title": "Steckbrief",
+        "similar": "Ähnliche Arten",
+        "noSimilar": "Keine ähnlichen Arten gefunden",
+        "loading": "Steckbrief wird geladen…",
+        "unavailable": "Der Steckbrief ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.",
+        "noGuide": "Für diese Art ist kein Steckbrief verfügbar.",
+        "expectedness": {
+          "expected": "Hier zu erwarten",
+          "uncommon": "Hier ungewöhnlich",
+          "rare": "Hier selten",
+          "unexpected": "Hier unerwartet"
+        },
+        "season": {
+          "spring": "Frühling",
+          "summer": "Sommer",
+          "autumn": "Herbst",
+          "winter": "Winter",
+          "wet1": "Regenzeit",
+          "dry1": "Trockenzeit",
+          "wet2": "Regenzeit",
+          "dry2": "Trockenzeit"
+        },
+        "description": "Beschreibung",
+        "songsAndCalls": "Gesang & Rufe",
+        "externalLinks": "Externe Ressourcen"
+      },
+      "notes": {
+        "title": "Notizen",
+        "placeholder": "Notiz zu dieser Art hinzufügen…",
+        "editLabel": "Notiz bearbeiten",
+        "save": "Notiz speichern",
+        "empty": "Noch keine Notizen.",
+        "deleteConfirm": "Diese Notiz löschen?",
+        "deleteFailed": "Notiz konnte nicht gelöscht werden.",
+        "saveFailed": "Notiz konnte nicht gespeichert werden.",
+        "saveDisabledReason": "Geben Sie einen Notiztext ein, um Speichern zu aktivieren.",
+        "tooLong": "Notiz ist zu lang (maximal {max} Zeichen)."
+      },
+      "similar": {
+        "title": "Ähnliche Arten",
+        "compare": "Vergleichen",
+        "show": "Artenvergleich anzeigen",
+        "loading": "Ähnliche Arten werden geladen…",
+        "empty": "Keine ähnlichen Arten gefunden.",
+        "similar": "Ähnlich",
+        "speciesGuide": "Steckbrief",
+        "versus": "vs. {species}",
+        "selectPrompt": "Wählen Sie eine Art zum Vergleich mit {species}.",
+        "noGuideAvailable": "Kein Steckbrief verfügbar",
+        "linksOnly": "Nur Links",
+        "exploreResources": "Keine Vergleichsdetails. Ressourcen erkunden:",
+        "cardLoading": "Vergleich wird geladen…",
+        "cardNoGuide": "Für diese Art ist kein Steckbrief verfügbar.",
+        "cardError": "Diese Art konnte nicht geladen werden. Bitte eine andere wählen.",
+        "cardNoSections": "Für diese Art sind keine Vergleichsdetails verfügbar.",
+        "sections": {
+          "appearance": "Aussehen",
+          "voice": "Stimme",
+          "habitat": "Lebensraum & Verbreitung",
+          "behaviour": "Verhalten"
+        }
+      },
+      "viewGuide": "Steckbrief für {species} anzeigen"
     },
     "advanced": {
       "chartControls": "Diagrammsteuerung",
@@ -4541,7 +4605,8 @@
         "appearance": "Erscheinungsbild",
         "language": "Sprache & Region",
         "visualContent": "Visuelle Inhalte",
-        "audioPlayback": "Audiowiedergabe"
+        "audioPlayback": "Audiowiedergabe",
+        "speciesGuide": "Artensteckbrief"
       },
       "appearance": {
         "title": "Erscheinungsbild",
@@ -4561,6 +4626,45 @@
         "defaultGain": "Standard-Lautstärkeverstärkung",
         "defaultGainHelpText": "Anfangsverstärkung bei der Wiedergabe von Aufnahmen. Vogelstimmen sind oft leise, daher wird eine Verstärkung von 6-12 dB empfohlen.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Artensteckbrief",
+        "description": "Reichern Sie Erkennungen mit Taxonomie, Trivialnamen, externen Links und ähnlichen Arten an – offline über OpenFauna; Wikipedia-Beschreibungen sind eine optionale Online-Ergänzung.",
+        "enabled": {
+          "label": "Artensteckbrief aktivieren",
+          "helpText": "Kontextbezogene Steckbrief-Informationen in den Erkennungsdetails und im Arten-Dialog anzeigen."
+        },
+        "enableWikipedia": {
+          "label": "Wikipedia-Beschreibungen",
+          "helpText": "Zusätzlich Artikelbeschreibungen von Wikipedia abrufen (erfordert Internet). Standardmäßig aus – Taxonomie, Trivialnamen und externe Links funktionieren immer offline über OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Ergänzende Links",
+          "helpText": "Xeno-canto-Audiolinks und einen Wikipedia-Link für Arten hinzufügen, die nicht im Offline-Datensatz enthalten sind. Links öffnen externe Websites; im Hintergrund werden keine Daten abgerufen."
+        },
+        "warmTopN": {
+          "label": "Häufigste Arten vorladen",
+          "helpText": "Steckbriefe der am häufigsten erkannten Arten beim Start vorladen (0 deaktiviert das Vorladen)."
+        },
+        "preFetchEnabled": {
+          "label": "Bei Erkennung vorab laden",
+          "helpText": "Den Steckbrief beim ersten Erkennen einer Art abrufen, damit er später sofort lädt."
+        },
+        "sections": {
+          "title": "Steckbrief-Abschnitte"
+        },
+        "showNotes": {
+          "label": "Notizen anzeigen",
+          "helpText": "Benutzernotizen pro Art zulassen."
+        },
+        "showEnrichments": {
+          "label": "Anreicherungen anzeigen",
+          "helpText": "Abzeichen für Qualität, Erwartbarkeit und Jahreszeit anzeigen."
+        },
+        "showSimilarSpecies": {
+          "label": "Ähnliche Arten anzeigen",
+          "helpText": "Den Vergleichsbereich für ähnliche Arten anzeigen."
+        }
       }
     },
     "restartRequired": "Einige Änderungen erfordern einen Neustart des Servers. Bitte starten Sie BirdNET-Go neu."

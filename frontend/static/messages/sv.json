@@ -1959,7 +1959,71 @@
         "detections": "Detektioner:",
         "confidence": "Konfidens:",
         "first": "Först:"
-      }
+      },
+      "guide": {
+        "title": "Guide",
+        "similar": "Liknande arter",
+        "noSimilar": "Inga liknande arter hittades",
+        "loading": "Laddar guide…",
+        "unavailable": "Artguiden är tillfälligt otillgänglig. Försök igen senare.",
+        "noGuide": "Ingen guide tillgänglig för denna art.",
+        "expectedness": {
+          "expected": "Förväntad här",
+          "uncommon": "Ovanlig här",
+          "rare": "Sällsynt här",
+          "unexpected": "Oväntad här"
+        },
+        "season": {
+          "spring": "Vår",
+          "summer": "Sommar",
+          "autumn": "Höst",
+          "winter": "Vinter",
+          "wet1": "Regnperiod",
+          "dry1": "Torrperiod",
+          "wet2": "Regnperiod",
+          "dry2": "Torrperiod"
+        },
+        "description": "Beskrivning",
+        "songsAndCalls": "Sång och läten",
+        "externalLinks": "Externa resurser"
+      },
+      "notes": {
+        "title": "Anteckningar",
+        "placeholder": "Lägg till en anteckning om denna art…",
+        "editLabel": "Redigera anteckning",
+        "save": "Spara anteckning",
+        "empty": "Inga anteckningar ännu.",
+        "deleteConfirm": "Ta bort denna anteckning?",
+        "deleteFailed": "Det gick inte att ta bort anteckningen.",
+        "saveFailed": "Det gick inte att spara anteckningen.",
+        "saveDisabledReason": "Ange anteckningstext för att aktivera Spara.",
+        "tooLong": "Anteckningen är för lång (högst {max} tecken)."
+      },
+      "similar": {
+        "title": "Liknande arter",
+        "compare": "Jämför",
+        "show": "Visa artjämförelse",
+        "loading": "Laddar liknande arter…",
+        "empty": "Inga liknande arter hittades.",
+        "similar": "Liknande",
+        "speciesGuide": "Artguide",
+        "versus": "vs {species}",
+        "selectPrompt": "Välj en art att jämföra med {species}.",
+        "noGuideAvailable": "Ingen guide tillgänglig",
+        "linksOnly": "Endast länkar",
+        "exploreResources": "Inga jämförelsedetaljer. Utforska resurser:",
+        "cardLoading": "Laddar jämförelse…",
+        "cardNoGuide": "Ingen guide tillgänglig för denna art.",
+        "cardError": "Det gick inte att ladda denna art. Prova en annan.",
+        "cardNoSections": "Inga jämförelsedetaljer tillgängliga för denna art.",
+        "sections": {
+          "appearance": "Utseende",
+          "voice": "Läte",
+          "habitat": "Livsmiljö och utbredning",
+          "behaviour": "Beteende"
+        }
+      },
+      "viewGuide": "Visa guide för {species}"
     },
     "advanced": {
       "chartControls": "Diagramkontroller",
@@ -4541,7 +4605,8 @@
         "appearance": "Utseende",
         "language": "Språk och region",
         "visualContent": "Visuellt innehåll",
-        "audioPlayback": "Ljuduppspelning"
+        "audioPlayback": "Ljuduppspelning",
+        "speciesGuide": "Artguide"
       },
       "appearance": {
         "title": "Utseende",
@@ -4561,6 +4626,45 @@
         "defaultGain": "Standard volymförstärkning",
         "defaultGainHelpText": "Initial förstärkning vid uppspelning av inspelningar. Fågelljud är ofta svaga, så en förstärkning på 6–12 dB rekommenderas.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Artguide",
+        "description": "Berika detektioner med taxonomi, vanliga namn, externa länkar och liknande arter — offline via OpenFauna; Wikipedia-beskrivningar är ett valfritt onlinetillägg.",
+        "enabled": {
+          "label": "Aktivera artguide",
+          "helpText": "Visa kontextuell guideinformation i detektionsdetaljer och artfönstret."
+        },
+        "enableWikipedia": {
+          "label": "Wikipedia-beskrivningar",
+          "helpText": "Hämta även artikelbeskrivningar från Wikipedia (kräver internet). Av som standard – taxonomi, vanliga namn och externa länkar fungerar alltid offline via OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Kompletterande länkar",
+          "helpText": "Lägg till Xeno-canto-ljudlänkar och en Wikipedia-länk för arter som offline-datamängden inte täcker. Länkar öppnar externa webbplatser; inga data hämtas i bakgrunden."
+        },
+        "warmTopN": {
+          "label": "Förvärm vanligaste arter",
+          "helpText": "Förladda guider för de mest detekterade arterna vid start (0 inaktiverar förvärmning)."
+        },
+        "preFetchEnabled": {
+          "label": "Förhämta vid detektion",
+          "helpText": "Hämta guiden första gången en art detekteras, så att den laddas direkt senare."
+        },
+        "sections": {
+          "title": "Guideavsnitt"
+        },
+        "showNotes": {
+          "label": "Visa anteckningar",
+          "helpText": "Tillåt användaranteckningar per art."
+        },
+        "showEnrichments": {
+          "label": "Visa berikningar",
+          "helpText": "Visa märken för kvalitet, förväntbarhet och årstid."
+        },
+        "showSimilarSpecies": {
+          "label": "Visa liknande arter",
+          "helpText": "Visa jämförelsepanelen för liknande arter."
+        }
       }
     },
     "restartRequired": "Vissa ändringar kräver en omstart av servern för att träda i kraft. Starta om BirdNET-Go."

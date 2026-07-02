@@ -36,7 +36,7 @@
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
-  import { Palette, Globe, Image, Volume2 } from '@lucide/svelte';
+  import { Palette, Globe, Image, Volume2, BookOpen } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
 
@@ -219,6 +219,25 @@
     )
   );
 
+  let speciesGuideHasChanges = $derived(
+    hasSettingsChanged(
+      { speciesGuide: store.originalData.realtime?.dashboard?.speciesGuide },
+      { speciesGuide: store.formData.realtime?.dashboard?.speciesGuide }
+    )
+  );
+
+  // Species guide config with safe defaults (show* default to true).
+  let speciesGuide = $derived({
+    enabled: settings.dashboard.speciesGuide?.enabled ?? false,
+    enableWikipedia: settings.dashboard.speciesGuide?.enableWikipedia ?? false,
+    enableSupplementaryLinks: settings.dashboard.speciesGuide?.enableSupplementaryLinks ?? false,
+    preFetchEnabled: settings.dashboard.speciesGuide?.preFetchEnabled ?? true,
+    warmTopN: settings.dashboard.speciesGuide?.warmTopN ?? 50,
+    showNotes: settings.dashboard.speciesGuide?.showNotes ?? true,
+    showEnrichments: settings.dashboard.speciesGuide?.showEnrichments ?? true,
+    showSimilarSpecies: settings.dashboard.speciesGuide?.showSimilarSpecies ?? true,
+  });
+
   // --- Update handlers ---
   function updateDashboardSetting(key: string, value: string | number | boolean) {
     settingsActions.updateSection('realtime', {
@@ -247,6 +266,17 @@
   function updateUILocale(locale: string) {
     settingsActions.updateSection('realtime', {
       dashboard: { ...settings.dashboard, locale },
+    });
+  }
+
+  function updateSpeciesGuideSetting(key: string, value: string | number | boolean) {
+    // speciesGuide is the derived config with all required fields populated,
+    // so the merged object always satisfies SpeciesGuideSettings.
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        ...settings.dashboard,
+        speciesGuide: { ...speciesGuide, [key]: value },
+      },
     });
   }
 
@@ -279,6 +309,13 @@
       icon: Volume2,
       hasChanges: audioPlaybackHasChanges,
       content: audioPlaybackTabContent,
+    },
+    {
+      id: 'speciesGuide',
+      label: t('settings.userInterface.tabs.speciesGuide'),
+      icon: BookOpen,
+      hasChanges: speciesGuideHasChanges,
+      content: speciesGuideTabContent,
     },
   ]);
 </script>
@@ -401,6 +438,98 @@
           unit={t('settings.userInterface.audioPlayback.defaultGainUnit')}
           disabled={store.isLoading || store.isSaving}
         />
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+{#snippet speciesGuideTabContent()}
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('settings.userInterface.speciesGuide.title')}
+      description={t('settings.userInterface.speciesGuide.description')}
+      originalData={{ speciesGuide: store.originalData.realtime?.dashboard?.speciesGuide }}
+      currentData={{ speciesGuide: store.formData.realtime?.dashboard?.speciesGuide }}
+    >
+      <div class="space-y-6">
+        <Checkbox
+          checked={speciesGuide.enabled}
+          label={t('settings.userInterface.speciesGuide.enabled.label')}
+          helpText={t('settings.userInterface.speciesGuide.enabled.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateSpeciesGuideSetting('enabled', value)}
+        />
+
+        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
+          <Checkbox
+            checked={speciesGuide.enableWikipedia}
+            label={t('settings.userInterface.speciesGuide.enableWikipedia.label')}
+            helpText={t('settings.userInterface.speciesGuide.enableWikipedia.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('enableWikipedia', value)}
+          />
+        </div>
+
+        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
+          <Checkbox
+            checked={speciesGuide.enableSupplementaryLinks}
+            label={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.label')}
+            helpText={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('enableSupplementaryLinks', value)}
+          />
+        </div>
+
+        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
+          <Checkbox
+            checked={speciesGuide.preFetchEnabled}
+            label={t('settings.userInterface.speciesGuide.preFetchEnabled.label')}
+            helpText={t('settings.userInterface.speciesGuide.preFetchEnabled.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('preFetchEnabled', value)}
+          />
+
+          <InlineSlider
+            label={t('settings.userInterface.speciesGuide.warmTopN.label')}
+            helpText={t('settings.userInterface.speciesGuide.warmTopN.helpText')}
+            value={speciesGuide.warmTopN}
+            onUpdate={value => updateSpeciesGuideSetting('warmTopN', value)}
+            min={0}
+            max={500}
+            step={10}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+          />
+        </div>
+
+        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
+          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
+            {t('settings.userInterface.speciesGuide.sections.title')}
+          </h4>
+
+          <Checkbox
+            checked={speciesGuide.showNotes}
+            label={t('settings.userInterface.speciesGuide.showNotes.label')}
+            helpText={t('settings.userInterface.speciesGuide.showNotes.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('showNotes', value)}
+          />
+
+          <Checkbox
+            checked={speciesGuide.showEnrichments}
+            label={t('settings.userInterface.speciesGuide.showEnrichments.label')}
+            helpText={t('settings.userInterface.speciesGuide.showEnrichments.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('showEnrichments', value)}
+          />
+
+          <Checkbox
+            checked={speciesGuide.showSimilarSpecies}
+            label={t('settings.userInterface.speciesGuide.showSimilarSpecies.label')}
+            helpText={t('settings.userInterface.speciesGuide.showSimilarSpecies.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('showSimilarSpecies', value)}
+          />
+        </div>
       </div>
     </SettingsSection>
   </div>
