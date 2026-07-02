@@ -4757,7 +4757,16 @@
       "streamTitleDefault": "Transmisión de audio de aves",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Transmisión en vivo",
-      "playbackError": "Error de reproducción: {details}"
+      "playbackError": "Error de reproducción: {details}",
+      "audibleBats": {
+        "title": "Reproducción audible de murciélagos",
+        "subtitle": "Ralentiza las llamadas ultrasónicas hasta el rango audible humano.",
+        "timeExpansion": "Expansión de tiempo",
+        "enable": "Activar",
+        "disable": "Desactivar",
+        "generating": "Generando audio derivado…",
+        "error": "No se pudo generar el audio de murciélagos audibles"
+      }
     },
     "spectrogram": {
       "notGenerated": "Espectrograma aún no generado",

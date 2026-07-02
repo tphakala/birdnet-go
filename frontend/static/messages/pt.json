@@ -4757,7 +4757,16 @@
       "streamTitleDefault": "Transmissão de áudio de pássaros",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Transmissão ao vivo",
-      "playbackError": "Erro de reprodução: {details}"
+      "playbackError": "Erro de reprodução: {details}",
+      "audibleBats": {
+        "title": "Reprodução audível de morcegos",
+        "subtitle": "Desacelera chamadas ultrassónicas para a faixa audível humana.",
+        "timeExpansion": "Expansão de tempo",
+        "enable": "Ativar",
+        "disable": "Desativar",
+        "generating": "A gerar áudio derivado…",
+        "error": "Falha ao gerar áudio audível de morcegos"
+      }
     },
     "spectrogram": {
       "notGenerated": "Espectrograma ainda não gerado",

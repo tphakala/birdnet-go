@@ -4757,7 +4757,16 @@
       "streamTitleDefault": "Putnu audio straume",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Tiešraide",
-      "playbackError": "Atskaņošanas kļūda: {details}"
+      "playbackError": "Atskaņošanas kļūda: {details}",
+      "audibleBats": {
+        "title": "Dzirdama sikspārņu atskaņošana",
+        "subtitle": "Palēnina ultraskaņas saucienus līdz cilvēka dzirdes diapazonam.",
+        "timeExpansion": "Laika izplešana",
+        "enable": "Ieslēgt",
+        "disable": "Izslēgt",
+        "generating": "Tiek ģenerēts atvasinātais audio…",
+        "error": "Neizdevās ģenerēt dzirdamu sikspārņu audio"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogramma vēl nav ģenerēta",

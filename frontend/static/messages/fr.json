@@ -4757,7 +4757,16 @@
       "streamTitleDefault": "Flux audio d'oiseaux",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Diffusion en direct",
-      "playbackError": "Erreur de lecture : {details}"
+      "playbackError": "Erreur de lecture : {details}",
+      "audibleBats": {
+        "title": "Lecture audible des chauves-souris",
+        "subtitle": "Ralentit les cris ultrasoniques dans la plage audible humaine.",
+        "timeExpansion": "Expansion temporelle",
+        "enable": "Activer",
+        "disable": "Désactiver",
+        "generating": "Génération de l’audio dérivé…",
+        "error": "Impossible de générer l’audio audible des chauves-souris"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spectrogramme pas encore généré",

@@ -4757,7 +4757,16 @@
       "streamTitleDefault": "Strumień audio ptaków",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Transmisja na żywo",
-      "playbackError": "Błąd odtwarzania: {details}"
+      "playbackError": "Błąd odtwarzania: {details}",
+      "audibleBats": {
+        "title": "Słyszalne odtwarzanie nietoperzy",
+        "subtitle": "Spowalnia ultradźwiękowe odgłosy do zakresu słyszalnego dla człowieka.",
+        "timeExpansion": "Rozciągnięcie czasu",
+        "enable": "Włącz",
+        "disable": "Wyłącz",
+        "generating": "Generowanie pochodnego dźwięku…",
+        "error": "Nie udało się wygenerować słyszalnego dźwięku nietoperzy"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogram jeszcze niegenerowany",

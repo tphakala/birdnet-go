@@ -4757,7 +4757,16 @@
       "streamTitleDefault": "Fuglelydstrøm",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Live stream",
-      "playbackError": "Afspilningsfejl: {details}"
+      "playbackError": "Afspilningsfejl: {details}",
+      "audibleBats": {
+        "title": "Hørbar flagermusafspilning",
+        "subtitle": "Sænk ultralydskald til det menneskelige høreområde.",
+        "timeExpansion": "Tidsudvidelse",
+        "enable": "Aktivér",
+        "disable": "Deaktivér",
+        "generating": "Genererer afledt lyd…",
+        "error": "Kunne ikke generere hørbar flagermuslyd"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogram er endnu ikke genereret",

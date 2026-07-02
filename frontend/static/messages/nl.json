@@ -4757,7 +4757,16 @@
       "streamTitleDefault": "Vogelaudiostream",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Livestream",
-      "playbackError": "Afspeelfout: {details}"
+      "playbackError": "Afspeelfout: {details}",
+      "audibleBats": {
+        "title": "Hoorbare vleermuisweergave",
+        "subtitle": "Vertraag ultrasone roepen naar het menselijke gehoorbereik.",
+        "timeExpansion": "Tijdsexpansie",
+        "enable": "Inschakelen",
+        "disable": "Uitschakelen",
+        "generating": "Afgeleide audio genereren…",
+        "error": "Kan hoorbare vleermuisaudio niet genereren"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spectrogram nog niet beschikbaar",
