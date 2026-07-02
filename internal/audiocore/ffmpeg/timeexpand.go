@@ -99,8 +99,9 @@ func TimeExpandBatAudio(ctx context.Context, inputPath, ffmpegPath string, expan
 	if expandedRate <= 0 {
 		return fmt.Errorf("expanded sample rate is non-positive (source=%d, factor=%d)", sourceSampleRate, expansionFactor)
 	}
-	filterChain := fmt.Sprintf("asetrate=%d,aresample=%d", expandedRate, AudibleBatsOutputSampleRate)
-
+	// Use an expression to avoid integer-division truncation when the source rate
+	// isn't cleanly divisible by expansionFactor.
+	filterChain := fmt.Sprintf("asetrate=%d/%d,aresample=%d", sourceSampleRate, expansionFactor, AudibleBatsOutputSampleRate)
 	args := []string{
 		"-hide_banner",
 		"-loglevel", "error",
