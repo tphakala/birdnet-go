@@ -204,6 +204,11 @@ func TestWikipediaBuildURL_RegionalLocaleUsesBaseSubdomain(t *testing.T) {
 	assert.NotContains(t, url, "pt-br.wikipedia.org")
 }
 
+func TestWikipediaProvider_Name(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, WikipediaProviderName, NewWikipediaGuideProviderWithMetrics(noopMetrics{}).Name())
+}
+
 func TestConvertWikiSections(t *testing.T) {
 	t.Parallel()
 	in := "Intro text.\n\n== Voice ==\nSings.\n\n=== Subsong ===\nQuiet.\n\n== Habitat ==\nForests."

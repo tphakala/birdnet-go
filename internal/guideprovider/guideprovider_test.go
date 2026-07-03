@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -808,4 +809,147 @@ func utf8ValidString(s string) bool {
 		}
 	}
 	return true
+}
+
+// --- Background prefetch / warm ---
+
+func TestGuideCache_PreFetchWarmsThenIsReadable(t *testing.T) {
+	store := newFakeStore()
+	prov := &fakeProvider{name: WikipediaProviderName, result: &SpeciesGuide{CommonName: "Blackbird", Description: "A thrush."}}
+	c := newTestCache(t, store, prov)
+
+	c.PreFetch(t.Context(), "Turdus merula")
+	c.PreFetch(nil, "Corvus corone") //nolint:staticcheck // nil ctx exercises the cache-context fallback
+	c.PreFetch(t.Context(), "")      // empty name: no-op
+
+	// Wait for the background fetches to land before the cleanup Close (which
+	// would otherwise cancel in-flight warms via shouldQuit).
+	require.Eventually(t, func() bool { return prov.callCount() >= 2 }, 2*time.Second, 5*time.Millisecond)
+	assert.Positive(t, store.count(), "prefetched guides are persisted")
+}
+
+func TestGuideCache_PreFetchOnClosedCacheIsNoop(t *testing.T) {
+	c := newTestCache(t, newFakeStore(), &fakeProvider{name: WikipediaProviderName, result: &SpeciesGuide{Description: "x"}})
+	c.Close()
+	c.PreFetch(t.Context(), "Turdus merula") // must not panic or spawn work
+}
+
+func TestGuideCache_WarmForSpeciesUpdatesPopulationRatio(t *testing.T) {
+	store := newFakeStore()
+	prov := &fakeProvider{name: WikipediaProviderName, result: &SpeciesGuide{CommonName: "X", Description: "y"}}
+	c := newTestCache(t, store, prov)
+	c.SetWarmTopN(2)
+
+	c.WarmForSpecies([]string{"Turdus merula", "Corvus corone", "  "}) // blank is skipped
+	// Wait for the warm goroutine to fetch both; it then runs
+	// updateCachePopulationRatio before finishing (drained by the cleanup Close).
+	require.Eventually(t, func() bool { return prov.callCount() >= 2 }, 2*time.Second, 5*time.Millisecond)
+}
+
+func TestGuideCache_WarmForSpeciesGuards(t *testing.T) {
+	c := newTestCache(t, newFakeStore(), &fakeProvider{name: WikipediaProviderName, result: &SpeciesGuide{Description: "x"}})
+	c.WarmForSpecies(nil)               // empty slice: no-op
+	c.WarmForSpecies([]string{"", " "}) // all-blank after normalization: no-op
+	c.Close()
+	c.WarmForSpecies([]string{"Turdus merula"}) // closed: no-op
+}
+
+// --- Nil-receiver and empty-arg guards on the setup methods ---
+
+func TestGuideCache_SetupMethodGuards(t *testing.T) {
+	t.Parallel()
+	var nilCache *GuideCache
+	nilCache.SetWarmTopN(5)           // nil receiver: no-op
+	nilCache.SetFallbackPolicy("all") // nil receiver: no-op
+	nilCache.RegisterProvider("x", &fakeProvider{name: "x"})
+	nilCache.PreFetch(t.Context(), "x")    // nil receiver: no-op
+	nilCache.WarmForSpecies([]string{"x"}) // nil receiver: no-op
+
+	c := newTestCache(t, newFakeStore(), nil)
+	c.RegisterProvider("", &fakeProvider{name: "x"}) // empty name: skipped
+	c.RegisterProvider("x", nil)                     // nil provider: skipped
+	c.SetFallbackPolicy("")                          // empty policy: no-op
+	assert.False(t, c.HasProvider("x"), "no provider should have been registered")
+}
+
+func TestResolveProviderName(t *testing.T) {
+	t.Parallel()
+	// No providers: falls back to the default provider name.
+	c := newTestCache(t, newFakeStore(), nil)
+	assert.NotEmpty(t, c.resolveProviderName())
+
+	// First registered provider wins as the primary/DB-key provider.
+	c2 := newTestCache(t, newFakeStore(), nil)
+	c2.RegisterProvider(OpenFaunaProviderName, &fakeProvider{name: OpenFaunaProviderName})
+	c2.RegisterProvider(WikipediaProviderName, &fakeProvider{name: WikipediaProviderName})
+	assert.Equal(t, OpenFaunaProviderName, c2.resolveProviderName())
+}
+
+// --- Pure helpers ---
+
+func TestSplitCacheKey(t *testing.T) {
+	t.Parallel()
+	name, locale := splitCacheKey(cacheKey("Turdus merula", "en"))
+	assert.Equal(t, "Turdus merula", name)
+	assert.Equal(t, "en", locale)
+
+	// A key without the separator yields the whole string as the name and the
+	// default locale.
+	n2, l2 := splitCacheKey("noseparator")
+	assert.Equal(t, "noseparator", n2)
+	assert.Equal(t, defaultLocale, l2)
+}
+
+func TestEntryQuality(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, qualityNegative, entryQuality(&SpeciesGuide{Negative: true}))
+	assert.Equal(t, qualityStub, entryQuality(&SpeciesGuide{Description: ""}))
+	assert.Equal(t, qualityIntroOnly, entryQuality(&SpeciesGuide{Description: "short intro"}))
+	assert.Equal(t, qualityIntroOnly, entryQuality(&SpeciesGuide{Partial: true, Description: strings.Repeat("a", 300)}))
+	assert.Equal(t, qualityFull, entryQuality(&SpeciesGuide{Description: strings.Repeat("a", 250)}))
+}
+
+func TestTrimToUTF8Boundary_EdgeCases(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "abc", TrimToUTF8Boundary("abc", 10), "under the cap is unchanged")
+	assert.Equal(t, "ab", TrimToUTF8Boundary("abcd", 2), "ASCII trims at the cap")
+	// "é" is two bytes: a cap landing mid-rune must back off to a rune boundary.
+	trimmed := TrimToUTF8Boundary("aéb", 2)
+	assert.True(t, utf8.ValidString(trimmed), "result stays valid UTF-8")
+	assert.LessOrEqual(t, len(trimmed), 2)
+}
+
+// TestOpenFaunaProvider_EmbeddedLookup exercises the production embeddedOpenFauna
+// lookup (Meta + CommonName over the vendored dataset), not a stub.
+func TestOpenFaunaProvider_EmbeddedLookup(t *testing.T) {
+	t.Parallel()
+	p := NewOpenFaunaGuideProviderWithMetrics(noopMetrics{})
+
+	g, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{Locale: "en"})
+	require.NoError(t, err)
+	assert.Equal(t, "Turdus", g.Genus, "genus is the binomial's first token")
+	assert.Equal(t, OpenFaunaProviderName, g.SourceProvider)
+
+	// A species absent from the embedded dataset yields ErrGuideNotFound so it
+	// never downgrades an otherwise-complete primary guide.
+	_, err = p.Fetch(t.Context(), "Notarealgenus fakename", FetchOptions{Locale: "en"})
+	assert.True(t, errors.Is(err, ErrGuideNotFound))
+}
+
+// TestStoreMemoryGen_DropsPreInvalidationWrite verifies the generation guard:
+// a write derived from a read captured before InvalidateAll bumped the generation
+// is undone, while a write under the current generation is kept.
+func TestStoreMemoryGen_DropsPreInvalidationWrite(t *testing.T) {
+	t.Parallel()
+	c := newTestCache(t, newFakeStore(), nil)
+
+	staleGen := c.invalidateGen.Load()
+	c.invalidateGen.Add(1) // an InvalidateAll ran after staleGen was captured
+	c.storeMemoryGen(cacheKey("Stale", "en"), &SpeciesGuide{CommonName: "x"}, staleGen)
+	_, ok := c.memory.Load(cacheKey("Stale", "en"))
+	assert.False(t, ok, "a pre-invalidation write must be dropped")
+
+	c.storeMemoryGen(cacheKey("Fresh", "en"), &SpeciesGuide{CommonName: "y"}, c.invalidateGen.Load())
+	_, ok = c.memory.Load(cacheKey("Fresh", "en"))
+	assert.True(t, ok, "a current-generation write is kept")
 }

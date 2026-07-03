@@ -129,3 +129,38 @@ func TestGuideProviderMetrics_UpdateCachePopulationRatio(t *testing.T) {
 	m.UpdateCachePopulationRatio(0.75)
 	assert.InDelta(t, 0.75, testutil.ToFloat64(m.CachePopulationRatio), 0.0001)
 }
+
+// TestGuideProviderMetrics_GatherCollectsAllSeries drives the Collector.Collect
+// path via a registry Gather and confirms every metric family is exported.
+func TestGuideProviderMetrics_GatherCollectsAllSeries(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	m, err := NewGuideProviderMetrics(reg)
+	require.NoError(t, err)
+
+	// Touch every metric family so each appears in the gather output.
+	m.RecordCacheHit("memory", "full")
+	m.RecordCacheMiss("db")
+	m.RecordFetch("wikipedia", "success", 0.1)
+	m.RecordDBError("read", "get")
+	m.RecordNegativeEntry()
+	m.UpdateCachePopulationRatio(0.5)
+
+	families, err := reg.Gather() // invokes m.Collect
+	require.NoError(t, err)
+	names := make(map[string]bool, len(families))
+	for _, f := range families {
+		names[f.GetName()] = true
+	}
+	for _, want := range []string{
+		"guide_provider_cache_hits_total",
+		"guide_provider_cache_misses_total",
+		"guide_provider_fetches_total",
+		"guide_provider_fetch_duration_seconds",
+		"guide_provider_db_errors_total",
+		"guide_provider_negative_entries_total",
+		"guide_provider_cache_population_ratio",
+	} {
+		assert.Truef(t, names[want], "gather must export %s", want)
+	}
+}
