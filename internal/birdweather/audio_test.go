@@ -225,6 +225,10 @@ func TestEncodeFlacUsingFFmpeg(t *testing.T) {
 	// Check FLAC signature (should start with "fLaC")
 	assert.Equal(t, "fLaC", string(flacBytes[0:4]), "FLAC signature not found")
 
+	sampleRate, totalSamples := flacStreamInfo(t, flacBytes)
+	assert.Equal(t, uint64(conf.SampleRate), sampleRate, "FLAC STREAMINFO sample rate mismatch")
+	assert.Equal(t, uint64(sampleCount), totalSamples, "FLAC STREAMINFO total samples should be finalized")
+
 	// The FLAC data should be smaller than the raw PCM (compression)
 	if flacBuffer.Len() >= len(pcmData) {
 		t.Logf("Warning: FLAC data (%d bytes) is not smaller than PCM data (%d bytes)",

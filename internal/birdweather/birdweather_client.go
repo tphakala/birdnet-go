@@ -500,9 +500,10 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 	return responseBody, nil
 }
 
-// encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
-// It applies a simple gain adjustment instead of dynamic loudness normalization to avoid pumping effects.
-// This avoids writing temporary files to disk.
+// encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg.
+// It applies a simple gain adjustment instead of dynamic loudness normalization
+// to avoid pumping effects. The final FLAC export uses a seekable temporary file
+// so FFmpeg can finalize STREAMINFO before the bytes are read into memory.
 // It accepts a context for timeout/cancellation control and the explicit path to the FFmpeg executable.
 func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath string, settings *conf.Settings) (*bytes.Buffer, error) {
 	log := GetLogger()
@@ -532,16 +533,9 @@ func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ff
 		// Fallback to a conservative fixed gain adjustment
 		// A fixed gain of 15dB is a reasonable middle ground for bird call recordings
 		gainValue := 15.0
-		volumeArgs := fmt.Sprintf("volume=%.1fdB", gainValue)
-		customArgs := []string{
-			"-af", volumeArgs, // Simple gain adjustment
-			"-c:a", "flac",
-			"-f", "flac",
-		}
-
 		// Use the provided context for the fallback export operation
 		log.Debug("Starting fallback FLAC export with fixed gain", logger.Float64("gain_db", gainValue))
-		buffer, err := ffmpeg.ExportAudioToBuffer(ctx, pcmData, ffmpegPath, conf.SampleRate, conf.NumChannels, conf.BitDepth, customArgs)
+		buffer, err := b.exportFlacFileToBuffer(ctx, pcmData, ffmpegPath, gainValue)
 		if err != nil {
 			log.Error("Fallback FLAC export with fixed gain failed",
 				logger.Float64("gain_db", gainValue),
@@ -585,17 +579,8 @@ func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ff
 	// --- Pass 2: Apply simple gain adjustment and encode ---
 	log.Debug("Applying gain adjustment and encoding to FLAC (Pass 2)", logger.Float64("gain_db", gainNeeded))
 
-	// Use simple volume filter instead of loudnorm
-	volumeArgs := fmt.Sprintf("volume=%.2fdB", gainNeeded)
-
-	customArgs := []string{
-		"-af", volumeArgs, // Simple gain adjustment filter
-		"-c:a", "flac", // Output codec: FLAC
-		"-f", "flac", // Output format: FLAC
-	}
-
 	// Use the provided context for the final encoding operation
-	buffer, err := ffmpeg.ExportAudioToBuffer(ctx, pcmData, ffmpegPath, conf.SampleRate, conf.NumChannels, conf.BitDepth, customArgs)
+	buffer, err := b.exportFlacFileToBuffer(ctx, pcmData, ffmpegPath, gainNeeded)
 	if err != nil {
 		log.Error("FFmpeg FLAC encoding with gain adjustment failed",
 			logger.Float64("gain_db", gainNeeded),
@@ -607,6 +592,25 @@ func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ff
 
 	// Return the buffer containing the FLAC data
 	return buffer, nil
+}
+
+// exportFlacFileToBuffer encodes through a seekable temporary FLAC file, then
+// reads the finalized bytes back into memory for the existing upload path.
+// encodeUploadAudioToBuffer owns the os.MkdirTemp/os.ReadFile round-trip needed
+// for FFmpeg to patch STREAMINFO fields such as total samples.
+func (b *BwClient) exportFlacFileToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string, gainDB float64) (*bytes.Buffer, error) {
+	return encodeUploadAudioToBuffer("flac", func(outputPath string) error {
+		return ffmpeg.ExportAudio(ctx, &ffmpeg.ExportOptions{
+			PCMData:    pcmData,
+			OutputPath: outputPath,
+			Format:     ffmpeg.FormatFLAC,
+			SampleRate: conf.SampleRate,
+			Channels:   conf.NumChannels,
+			BitDepth:   conf.BitDepth,
+			GainDB:     gainDB,
+			FFmpegPath: ffmpegPath,
+		})
+	})
 }
 
 // parseDouble safely parses a string to float64, returning defaultValue on error.
@@ -1178,7 +1182,8 @@ func (b *BwClient) encodeAudioForUpload(settings *conf.Settings, pcmData []byte,
 	return b.encodeWithFFmpeg(settings, pcmData, ffmpegPathForExec, timestamp)
 }
 
-// encodeWithFFmpeg encodes PCM to FLAC format using FFmpeg
+// encodeWithFFmpeg encodes PCM to FLAC format using FFmpeg. The final FLAC mux
+// step is disk-backed so the upload contains finalized STREAMINFO metadata.
 func (b *BwClient) encodeWithFFmpeg(settings *conf.Settings, pcmData []byte, ffmpegPath, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
 

@@ -119,3 +119,41 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 
 	return nil
 }
+
+// encodeUploadAudioToBuffer uses os.MkdirTemp to let encoders write to a
+// seekable temporary file, then os.ReadFile to load the completed audio back
+// into the in-memory upload buffer. FLAC muxers need seekable output to patch
+// STREAMINFO fields such as total samples; when encoded directly to a pipe those
+// fields remain unknown and BirdWeather stores the soundscape duration as 0.
+func encodeUploadAudioToBuffer(ext string, encode func(outputPath string) error) (*bytes.Buffer, error) {
+	dir, err := os.MkdirTemp("", "birdweather-upload-*")
+	if err != nil {
+		return nil, errors.New(err).
+			Component("birdweather").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_upload_temp_dir").
+			Build()
+	}
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			GetLogger().Warn("Failed to remove BirdWeather upload temp dir", logger.Error(err))
+		}
+	}()
+
+	outputPath := filepath.Join(dir, "soundscape."+ext)
+	if err := encode(outputPath); err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(outputPath) //nolint:gosec // path is created under a private temp directory above
+	if err != nil {
+		return nil, errors.New(err).
+			Component("birdweather").
+			Category(errors.CategoryFileIO).
+			FileContext(outputPath, 0).
+			Context("operation", "read_upload_audio").
+			Build()
+	}
+
+	return bytes.NewBuffer(data), nil
+}
