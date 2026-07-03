@@ -619,8 +619,16 @@ var (
 // storeMetaCache records a LookupMeta result under the soft cap. A new key is only
 // added while under metaCacheMaxEntries: a slot is reserved up front and rolled back
 // on overflow or when a concurrent writer created the key first, so the memo stays
-// bounded and accurate under concurrent distinct-key lookups. Mirrors the bounded
-// in-memory pattern used by the guide cache.
+// bounded and accurate under concurrent distinct-key lookups.
+//
+// This lock-free reserve-then-LoadOrStore is exact WITHOUT a mutex because metaCache
+// is append-only: the immutable dataset means an entry is never updated in place or
+// deleted (unlike the guide cache, whose updates + invalidation/eviction race stores
+// and require a write lock). With only insert-if-absent, among N goroutines racing
+// the same new key exactly one wins the LoadOrStore and keeps its reservation (which
+// matches the one stored entry); every loser rolls back. So metaCacheCount always
+// equals the number of stored entries — a "winner also decrements" change would
+// UNDERcount. See TestStoreMetaCache_CountMatchesEntriesUnderConcurrency.
 func storeMetaCache(key string, e *metaCacheEntry) {
 	if _, loaded := metaCache.Load(key); loaded {
 		return

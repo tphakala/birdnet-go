@@ -3,6 +3,7 @@ package openfauna
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -457,4 +458,39 @@ func TestDecodeMetadataJSONL(t *testing.T) {
 	blackbird := got["Turdus merula"]
 	assert.Equal(t, "https://en.wikipedia.org/wiki/Common_blackbird", blackbird.Links["wikipedia"].URL,
 		"blackbird wikipedia url override missing")
+}
+
+// TestStoreMetaCache_CountMatchesEntriesUnderConcurrency proves the metaCache
+// counter stays exact under concurrent inserts of the SAME new key (Sentry flagged
+// a claimed overcount here). metaCache is append-only — insert-if-absent via
+// LoadOrStore, with no updates or deletes — so the reserve-then-LoadOrStore pattern
+// is race-correct: among N racers for one new key, exactly one wins the LoadOrStore
+// and keeps its +1 (matching the single stored entry); the rest roll back. The
+// invariant "metaCacheCount == live entry count" therefore holds. Not parallel: it
+// touches package-global state. Run under -race.
+func TestStoreMetaCache_CountMatchesEntriesUnderConcurrency(t *testing.T) {
+	const workers = 16
+	const perWorker = 200
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := range perWorker {
+				// Distinct keys AND a shared hot key, so both the distinct-key and
+				// same-key concurrent-insert paths run.
+				storeMetaCache(fmt.Sprintf("metacache-conc-%d-%d", w, i), &metaCacheEntry{found: true})
+				storeMetaCache("metacache-conc-shared", &metaCacheEntry{found: true})
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	// The counter must equal the actual number of live entries. Robust to entries
+	// other tests added (both are counted the same way); an overcount would make
+	// metaCacheCount exceed the Range total.
+	actual := 0
+	metaCache.Range(func(_, _ any) bool { actual++; return true })
+	assert.Equal(t, int64(actual), metaCacheCount.Load(),
+		"metaCacheCount must equal the live entry count (no over/undercount)")
 }
