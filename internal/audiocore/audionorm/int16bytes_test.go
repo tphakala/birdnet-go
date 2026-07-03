@@ -16,18 +16,6 @@ func int16sToLEBytes(samples []int16) []byte {
 	return b
 }
 
-// interleaveInt16 zips per-channel int16 signals into one interleaved buffer.
-func interleaveInt16(channels ...[]int16) []int16 {
-	frames := len(channels[0])
-	out := make([]int16, frames*len(channels))
-	for i := range frames {
-		for c, ch := range channels {
-			out[i*len(channels)+c] = ch[i]
-		}
-	}
-	return out
-}
-
 // boundaryInt16 fills n samples by cycling through int16 edge values so the
 // full-scale minimum (-32768) and maximum (32767) both appear. -32768 is the
 // two's-complement boundary a signed-vs-unsigned decode bug corrupts most, and
@@ -43,33 +31,27 @@ func boundaryInt16(n int) []int16 {
 
 // MeasureInt16Bytes must produce exactly the same Measurement as MeasureInt16 on
 // the same samples: it decodes the identical int16 values inline, so there is no
-// float rounding difference to tolerate. Covers mono, the interleaved-stereo
-// indexing (channels > 1), and the full-scale +/-boundary samples.
+// float rounding difference to tolerate. BirdNET-Go audio is always mono; the
+// cases cover a mono sine and the full-scale +/-boundary samples.
 func TestMeasureInt16BytesMatchesInt16(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name     string
-		pcm      []int16
-		channels int
+		name string
+		pcm  []int16
 	}{
-		{"mono", sineInt16(-12, 1000, 1, 48000), 1},
-		{
-			name:     "stereo",
-			pcm:      interleaveInt16(sineInt16(-12, 1000, 1, 48000), sineInt16(-9, 660, 1, 48000)),
-			channels: 2,
-		},
+		{"mono", sineInt16(-12, 1000, 1, 48000)},
 		// 1 s (> the 400 ms gate) of cycling edge values, guaranteeing -32768 and
 		// 32767 flow through both the k-weighting and true-peak passes.
-		{"full-scale boundary", boundaryInt16(48000), 1},
+		{"full-scale boundary", boundaryInt16(48000)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			want, err := MeasureInt16(tc.pcm, 48000, tc.channels)
+			want, err := MeasureInt16(tc.pcm, 48000, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := MeasureInt16Bytes(int16sToLEBytes(tc.pcm), 48000, tc.channels)
+			got, err := MeasureInt16Bytes(int16sToLEBytes(tc.pcm), 48000, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
