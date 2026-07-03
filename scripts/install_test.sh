@@ -91,6 +91,9 @@ print_message() { :; }
 log_message() { :; }
 log_command_result() { :; }
 command_exists() { command -v "$1" >/dev/null 2>&1; }
+check_directory_exists() { return 1; }
+is_raspberry_pi() { return 1; }
+resolve_host_timezone() { printf '%s' "$1"; }
 
 # Globals the extracted functions reference (install.sh defines these at the top; the harness
 # only pulls function bodies, so under set -u they must exist here).
@@ -98,6 +101,16 @@ RED=""; GREEN=""; YELLOW=""; NC=""; GRAY=""
 CONFIG_FILE=""
 SILENT_MODE=""
 BIRDNET_PASSWORD=""
+CONFIG_DIR="/tmp/birdnet-go-test-config"
+DATA_DIR="/tmp/birdnet-go-test-data"
+BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:nightly"
+WEB_PORT="8080"
+WEB_PORT_BIND_ADDR=""
+BIND_TLS_PORTS="false"
+TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"
+METRICS_BIND_ADDR=""
+CONFIGURED_TZ="UTC"
 
 # Load the helpers under test (order matters: callees before callers).
 for fn in \
@@ -108,6 +121,7 @@ for fn in \
     set_first_audio_source \
     _extract_bind_addr \
     load_existing_service_config \
+    generate_systemd_service_content \
     apply_tls_settings \
     ensure_internal_port_8080 \
     configure_rtsp_in_config \
@@ -367,6 +381,22 @@ load_existing_service_config "$unit"
 assert_eq "web-only: port restored" "8080" "$WEB_PORT"
 assert_eq "web-only: TLS stays off" "false" "$BIND_TLS_PORTS"
 assert_eq "web-only: metrics stays off" "false" "$BIND_METRICS_PORT"
+
+# ===========================================================================
+# generate_systemd_service_content
+# ===========================================================================
+it "generate_systemd_service_content"
+
+WEB_PORT="8080"; WEB_PORT_BIND_ADDR=""; BIND_TLS_PORTS="true"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""; CONFIGURED_TZ="UTC"
+unit_content="$(generate_systemd_service_content)"
+autotls_cap_count="$(printf '%s\n' "$unit_content" | grep -c -- '--cap-add NET_BIND_SERVICE' || true)"
+assert_eq "AutoTLS unit grants low-port bind capability" "1" "$autotls_cap_count"
+
+BIND_TLS_PORTS="false"
+unit_content="$(generate_systemd_service_content)"
+plain_cap_count="$(printf '%s\n' "$unit_content" | grep -c -- '--cap-add NET_BIND_SERVICE' || true)"
+assert_eq "plain HTTP unit does not grant low-port bind capability" "0" "$plain_cap_count"
 
 # ===========================================================================
 # apply_tls_settings (full slate; mode switch must clear stale host)

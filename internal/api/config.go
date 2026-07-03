@@ -180,10 +180,22 @@ func (c *Config) Address() string {
 
 // TLSAddress returns the full address string for the HTTPS server to listen on.
 func (c *Config) TLSAddress() string {
+	if c.AutoTLS {
+		return c.addressForPort("443")
+	}
 	port := c.TLSPort
 	if port == "" {
 		port = "8443"
 	}
+	return c.addressForPort(port)
+}
+
+// AutoTLSHTTPAddress returns the address for AutoTLS HTTP redirects.
+func (c *Config) AutoTLSHTTPAddress() string {
+	return c.addressForPort("80")
+}
+
+func (c *Config) addressForPort(port string) string {
 	if c.Host == "" {
 		return ":" + port
 	}

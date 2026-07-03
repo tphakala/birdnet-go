@@ -587,7 +587,7 @@ func (s *Server) Start() {
 	addr := s.config.Address()
 	switch {
 	case s.config.AutoTLS:
-		s.slogger.Info("HTTPS server starting with AutoTLS", logger.String("address", addr))
+		s.slogger.Info("HTTPS server starting with AutoTLS", logger.String("address", s.config.TLSAddress()))
 	case s.config.TLSEnabled:
 		s.slogger.Info("HTTPS server starting",
 			logger.String("https_address", s.config.TLSAddress()),
@@ -606,13 +606,12 @@ const autoTLSCacheDirName = "tls-acme"
 func (s *Server) startBlocking() error {
 	addr := s.config.Address()
 
-	s.slogger.Info("Starting HTTP server", logger.String("address", addr))
-
 	var err error
 	switch {
 	case s.config.AutoTLS:
 		// AutoTLS with Let's Encrypt
-		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)")
+		tlsAddr := s.config.TLSAddress()
+		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)", logger.String("https_address", tlsAddr))
 		// Configure persistent cert cache so certificates survive restarts.
 		// Without this, Echo's AutoTLSManager has no storage backend and certs
 		// are lost on every shutdown, triggering a fresh ACME request each time
@@ -639,7 +638,14 @@ func (s *Server) startBlocking() error {
 				Build()
 		}
 		s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(host)
-		err = s.echo.StartAutoTLS(addr)
+		if s.config.RedirectToHTTPS {
+			s.httpRedirectServer = s.newHTTPRedirectServer(s.config.AutoTLSHTTPAddress(), "443")
+			go s.serveHTTPRedirect()
+		}
+		err = s.echo.StartAutoTLS(tlsAddr)
+		if err != nil && s.httpRedirectServer != nil {
+			_ = s.httpRedirectServer.Close()
+		}
 	case s.config.TLSEnabled:
 		// Manual/Self-signed TLS: HTTPS on TLSPort, HTTP stays on configured port
 		tlsAddr := s.config.TLSAddress()
@@ -664,6 +670,7 @@ func (s *Server) startBlocking() error {
 		}
 	default:
 		// Plain HTTP
+		s.slogger.Info("Starting HTTP server", logger.String("address", addr))
 		err = s.echo.Start(addr)
 	}
 

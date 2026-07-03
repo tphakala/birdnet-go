@@ -4519,6 +4519,10 @@ generate_systemd_service_content() {
     if [ "$BIND_METRICS_PORT" = "true" ]; then
         metrics_port_line="-p ${METRICS_BIND_ADDR:+${METRICS_BIND_ADDR}:}8090:8090"
     fi
+    local tls_capability_line=""
+    if [ "$BIND_TLS_PORTS" = "true" ]; then
+        tls_capability_line="--cap-add NET_BIND_SERVICE"
+    fi
 
     # Check if running on Raspberry Pi and add WiFi power save disable script
     local wifi_power_save_script=""
@@ -4561,6 +4565,7 @@ ${wifi_power_save_script:+${wifi_power_save_script}
     -p ${WEB_PORT_BIND_ADDR:+${WEB_PORT_BIND_ADDR}:}${WEB_PORT}:8080 \\
 ${tls_ports_line:+    ${tls_ports_line} \\
 }${metrics_port_line:+    ${metrics_port_line} \\
+}${tls_capability_line:+    ${tls_capability_line} \\
 }    --env TZ="${TZ}" \\
     --env BIRDNET_UID=${HOST_UID} \\
     --env BIRDNET_GID=${HOST_GID} \\
