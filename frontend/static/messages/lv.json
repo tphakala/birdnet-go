@@ -1949,10 +1949,10 @@
           "summer": "Vasara",
           "autumn": "Rudens",
           "winter": "Ziema",
-          "wet1": "Lietus sezona",
-          "dry1": "Sausā sezona",
-          "wet2": "Lietus sezona",
-          "dry2": "Sausā sezona"
+          "wet1": "Pirmā lietus sezona",
+          "dry1": "Pirmā sausā sezona",
+          "wet2": "Otrā lietus sezona",
+          "dry2": "Otrā sausā sezona"
         },
         "description": "Apraksts",
         "songsAndCalls": "Dziesmas un saucieni",

@@ -1949,10 +1949,10 @@
           "summer": "Estate",
           "autumn": "Autunno",
           "winter": "Inverno",
-          "wet1": "Stagione delle piogge",
-          "dry1": "Stagione secca",
-          "wet2": "Stagione delle piogge",
-          "dry2": "Stagione secca"
+          "wet1": "Prima stagione delle piogge",
+          "dry1": "Prima stagione secca",
+          "wet2": "Seconda stagione delle piogge",
+          "dry2": "Seconda stagione secca"
         },
         "description": "Descrizione",
         "songsAndCalls": "Canti e richiami",

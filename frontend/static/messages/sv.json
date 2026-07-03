@@ -1949,10 +1949,10 @@
           "summer": "Sommar",
           "autumn": "Höst",
           "winter": "Vinter",
-          "wet1": "Regnperiod",
-          "dry1": "Torrperiod",
-          "wet2": "Regnperiod",
-          "dry2": "Torrperiod"
+          "wet1": "Första regnperioden",
+          "dry1": "Första torrperioden",
+          "wet2": "Andra regnperioden",
+          "dry2": "Andra torrperioden"
         },
         "description": "Beskrivning",
         "songsAndCalls": "Sång och läten",

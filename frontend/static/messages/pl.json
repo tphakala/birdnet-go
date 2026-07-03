@@ -1949,10 +1949,10 @@
           "summer": "Lato",
           "autumn": "Jesień",
           "winter": "Zima",
-          "wet1": "Pora deszczowa",
-          "dry1": "Pora sucha",
-          "wet2": "Pora deszczowa",
-          "dry2": "Pora sucha"
+          "wet1": "Pierwsza pora deszczowa",
+          "dry1": "Pierwsza pora sucha",
+          "wet2": "Druga pora deszczowa",
+          "dry2": "Druga pora sucha"
         },
         "description": "Opis",
         "songsAndCalls": "Śpiew i głosy",

@@ -1949,10 +1949,10 @@
           "summer": "Sommer",
           "autumn": "Høst",
           "winter": "Vinter",
-          "wet1": "Regntid",
-          "dry1": "Tørketid",
-          "wet2": "Regntid",
-          "dry2": "Tørketid"
+          "wet1": "Første regntid",
+          "dry1": "Første tørketid",
+          "wet2": "Andre regntid",
+          "dry2": "Andre tørketid"
         },
         "description": "Beskrivelse",
         "songsAndCalls": "Sang og lyder",

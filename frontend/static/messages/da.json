@@ -1949,10 +1949,10 @@
           "summer": "Sommer",
           "autumn": "Efterår",
           "winter": "Vinter",
-          "wet1": "Regntid",
-          "dry1": "Tørtid",
-          "wet2": "Regntid",
-          "dry2": "Tørtid"
+          "wet1": "Første regntid",
+          "dry1": "Første tørtid",
+          "wet2": "Anden regntid",
+          "dry2": "Anden tørtid"
         },
         "description": "Beskrivelse",
         "songsAndCalls": "Sang og kald",

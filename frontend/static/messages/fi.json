@@ -1949,10 +1949,10 @@
           "summer": "Kesä",
           "autumn": "Syksy",
           "winter": "Talvi",
-          "wet1": "Sadekausi",
-          "dry1": "Kuiva kausi",
-          "wet2": "Sadekausi",
-          "dry2": "Kuiva kausi"
+          "wet1": "Ensimmäinen sadekausi",
+          "dry1": "Ensimmäinen kuiva kausi",
+          "wet2": "Toinen sadekausi",
+          "dry2": "Toinen kuiva kausi"
         },
         "description": "Kuvaus",
         "songsAndCalls": "Laulu ja äänet",

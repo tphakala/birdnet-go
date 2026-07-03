@@ -1949,10 +1949,10 @@
           "summer": "Leto",
           "autumn": "Jeseň",
           "winter": "Zima",
-          "wet1": "Obdobie dažďov",
-          "dry1": "Obdobie sucha",
-          "wet2": "Obdobie dažďov",
-          "dry2": "Obdobie sucha"
+          "wet1": "Prvé obdobie dažďov",
+          "dry1": "Prvé obdobie sucha",
+          "wet2": "Druhé obdobie dažďov",
+          "dry2": "Druhé obdobie sucha"
         },
         "description": "Popis",
         "songsAndCalls": "Spev a hlasy",

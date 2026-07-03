@@ -1949,10 +1949,10 @@
           "summer": "Sommer",
           "autumn": "Herbst",
           "winter": "Winter",
-          "wet1": "Regenzeit",
-          "dry1": "Trockenzeit",
-          "wet2": "Regenzeit",
-          "dry2": "Trockenzeit"
+          "wet1": "Erste Regenzeit",
+          "dry1": "Erste Trockenzeit",
+          "wet2": "Zweite Regenzeit",
+          "dry2": "Zweite Trockenzeit"
         },
         "description": "Beschreibung",
         "songsAndCalls": "Gesang & Rufe",

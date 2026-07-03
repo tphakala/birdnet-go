@@ -1949,10 +1949,10 @@
           "summer": "Summer",
           "autumn": "Autumn",
           "winter": "Winter",
-          "wet1": "Wet season",
-          "dry1": "Dry season",
-          "wet2": "Wet season",
-          "dry2": "Dry season"
+          "wet1": "First wet season",
+          "dry1": "First dry season",
+          "wet2": "Second wet season",
+          "dry2": "Second dry season"
         },
         "description": "Description",
         "songsAndCalls": "Songs & Calls",

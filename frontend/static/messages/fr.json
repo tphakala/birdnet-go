@@ -1949,10 +1949,10 @@
           "summer": "Été",
           "autumn": "Automne",
           "winter": "Hiver",
-          "wet1": "Saison des pluies",
-          "dry1": "Saison sèche",
-          "wet2": "Saison des pluies",
-          "dry2": "Saison sèche"
+          "wet1": "Première saison des pluies",
+          "dry1": "Première saison sèche",
+          "wet2": "Deuxième saison des pluies",
+          "dry2": "Deuxième saison sèche"
         },
         "description": "Description",
         "songsAndCalls": "Chants et cris",

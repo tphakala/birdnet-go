@@ -1949,10 +1949,10 @@
           "summer": "Zomer",
           "autumn": "Herfst",
           "winter": "Winter",
-          "wet1": "Regenseizoen",
-          "dry1": "Droog seizoen",
-          "wet2": "Regenseizoen",
-          "dry2": "Droog seizoen"
+          "wet1": "Eerste regenseizoen",
+          "dry1": "Eerste droge seizoen",
+          "wet2": "Tweede regenseizoen",
+          "dry2": "Tweede droge seizoen"
         },
         "description": "Beschrijving",
         "songsAndCalls": "Zang en roep",

@@ -1949,10 +1949,10 @@
           "summer": "Verão",
           "autumn": "Outono",
           "winter": "Inverno",
-          "wet1": "Estação chuvosa",
-          "dry1": "Estação seca",
-          "wet2": "Estação chuvosa",
-          "dry2": "Estação seca"
+          "wet1": "Primeira estação chuvosa",
+          "dry1": "Primeira estação seca",
+          "wet2": "Segunda estação chuvosa",
+          "dry2": "Segunda estação seca"
         },
         "description": "Descrição",
         "songsAndCalls": "Cantos e chamados",

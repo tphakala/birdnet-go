@@ -1949,10 +1949,10 @@
           "summer": "Nyár",
           "autumn": "Ősz",
           "winter": "Tél",
-          "wet1": "Esős évszak",
-          "dry1": "Száraz évszak",
-          "wet2": "Esős évszak",
-          "dry2": "Száraz évszak"
+          "wet1": "Első esős évszak",
+          "dry1": "Első száraz évszak",
+          "wet2": "Második esős évszak",
+          "dry2": "Második száraz évszak"
         },
         "description": "Leírás",
         "songsAndCalls": "Ének és hangok",

@@ -1949,10 +1949,10 @@
           "summer": "Verano",
           "autumn": "Otoño",
           "winter": "Invierno",
-          "wet1": "Temporada de lluvias",
-          "dry1": "Temporada seca",
-          "wet2": "Temporada de lluvias",
-          "dry2": "Temporada seca"
+          "wet1": "Primera temporada de lluvias",
+          "dry1": "Primera temporada seca",
+          "wet2": "Segunda temporada de lluvias",
+          "dry2": "Segunda temporada seca"
         },
         "description": "Descripción",
         "songsAndCalls": "Cantos y reclamos",
