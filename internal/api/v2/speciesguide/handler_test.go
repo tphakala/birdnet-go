@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -549,4 +550,122 @@ func TestSpeciesGuideRoutes_NotesAreAuthGated(t *testing.T) {
 			assert.Equalf(t, http.StatusUnauthorized, rec.Code, "%s %s must be auth-gated", g.method, g.target)
 		})
 	}
+}
+
+// --- GetSimilarSpecies with a real taxonomy (covers similarSpeciesCandidates) ---
+
+func TestGetSimilarSpecies_ResolvesRealTaxonomy(t *testing.T) {
+	c := guideTestHandler(t, guideEnabledSettings())
+	db, err := classifier.LoadTaxonomyDatabase()
+	require.NoError(t, err)
+	c.TaxonomyDB = db
+	// A links-only stub guide for every candidate so resolution completes without
+	// a network fetch; the point here is the candidate set, not the prose.
+	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{CommonName: commonBlackbird, Description: ""}))
+
+	ctx, rec := guideCtx(t, sciEurasianBlackbird) // "Turdus merula"
+	require.NoError(t, c.GetSimilarSpecies(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp SimilarSpeciesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, sciEurasianBlackbird, resp.ScientificName)
+	assert.NotEmpty(t, resp.Genus, "the focal genus should resolve from the taxonomy")
+	assert.NotEmpty(t, resp.Similar, "same-genus Turdus species should be found")
+	// The focal species must be excluded from its own similar list.
+	for _, e := range resp.Similar {
+		assert.NotEqual(t, sciEurasianBlackbird, e.ScientificName)
+	}
+}
+
+// --- Lifecycle: Shutdown + SetGuideCache swap ---
+
+func TestHandler_ShutdownReleasesCache(t *testing.T) {
+	c := guideTestHandler(t, guideEnabledSettings())
+	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{CommonName: commonBlackbird, Description: "x"}))
+	c.Shutdown() // nils and closes the cache
+
+	// With the cache released, the guide endpoint reports it as unavailable.
+	ctx, rec := guideCtx(t, sciEurasianBlackbird)
+	require.NoError(t, c.GetSpeciesGuide(ctx))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestHandler_SetGuideCacheSwapsAndClosesOld(t *testing.T) {
+	c := guideTestHandler(t, guideEnabledSettings())
+	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{CommonName: "old", Description: "x"}))
+	// Swapping in a new cache closes the previous one; must not panic.
+	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{CommonName: commonBlackbird, Description: "A blackbird."}))
+
+	ctx, rec := guideCtx(t, sciEurasianBlackbird)
+	require.NoError(t, c.GetSpeciesGuide(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var data SpeciesGuideData
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &data))
+	assert.Equal(t, commonBlackbird, data.CommonName, "the swapped-in cache serves the request")
+}
+
+// --- Note write-error mapping + bad bodies ---
+
+func TestCreateSpeciesNote_BadBodyReturns400(t *testing.T) {
+	t.Parallel()
+	c, _ := notesHandler(t) // no DS call: bind fails before the datastore is touched
+	ctx, rec := notesCtx(t, http.MethodPost, "/api/v2/species/Turdus/notes", `{bad json`,
+		map[string]string{paramScientificName: sciEurasianBlackbird})
+	require.NoError(t, c.CreateSpeciesNote(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestCreateSpeciesNote_GenericErrorReturns500(t *testing.T) {
+	t.Parallel()
+	c, mockDS := notesHandler(t)
+	// A non-validation, non-too-long error takes the default branch → 500.
+	mockDS.EXPECT().SaveSpeciesNote(mock.Anything, mock.Anything).Return(errors.NewStd("db down")).Once()
+
+	ctx, rec := notesCtx(t, http.MethodPost, "/api/v2/species/Turdus/notes", `{"entry":"x"}`,
+		map[string]string{paramScientificName: sciEurasianBlackbird})
+	require.NoError(t, c.CreateSpeciesNote(ctx))
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestUpdateSpeciesNote_BadBodyReturns400(t *testing.T) {
+	t.Parallel()
+	c, _ := notesHandler(t)
+	ctx, rec := notesCtx(t, http.MethodPut, "/api/v2/species/notes/1", `{bad`,
+		map[string]string{"id": "1"})
+	require.NoError(t, c.UpdateSpeciesNote(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestDeleteSpeciesNote_GenericErrorReturns500(t *testing.T) {
+	t.Parallel()
+	c, mockDS := notesHandler(t)
+	// A non-NotFound datastore error takes the 500 branch.
+	mockDS.EXPECT().DeleteSpeciesNote(mock.Anything, "42").Return(errors.NewStd("db down")).Once()
+
+	ctx, rec := notesCtx(t, http.MethodDelete, "/api/v2/species/notes/42", "",
+		map[string]string{"id": "42"})
+	require.NoError(t, c.DeleteSpeciesNote(ctx))
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// --- Pure helpers that need an echo context ---
+
+func TestGuideLocale(t *testing.T) {
+	t.Parallel()
+	e := echo.New()
+	newCtx := func(target string) echo.Context {
+		return e.NewContext(httptest.NewRequest(http.MethodGet, target, http.NoBody), httptest.NewRecorder())
+	}
+
+	// 1. An explicit ?locale= query param wins.
+	assert.Equal(t, "de", guideLocale(newCtx("/?locale=de"), &conf.Settings{}))
+
+	// 2. No query param → the dashboard locale.
+	s := &conf.Settings{}
+	s.Realtime.Dashboard.Locale = "fr"
+	assert.Equal(t, "fr", guideLocale(newCtx("/"), s))
+
+	// 3. Neither set → the "en" default.
+	assert.Equal(t, "en", guideLocale(newCtx("/"), &conf.Settings{}))
 }

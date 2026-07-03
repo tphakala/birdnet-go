@@ -331,3 +331,38 @@ func TestSummarizeDescription(t *testing.T) {
 	assert.LessOrEqual(t, len(gotMB), guideSummaryMaxLength)
 	assert.True(t, utf8.ValidString(gotMB), "summary must remain valid UTF-8")
 }
+
+// TestComputeCurrentSeason_AllBranches covers every hemisphere/season window and
+// the equatorial bimodal wet/dry tokens.
+func TestComputeCurrentSeason_AllBranches(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		lat   float64
+		month time.Month
+		want  string
+	}{
+		// Northern hemisphere.
+		{52, time.April, "spring"}, {52, time.July, "summer"},
+		{52, time.October, "autumn"}, {52, time.January, "winter"},
+		// Southern hemisphere (opposite).
+		{-33, time.April, "autumn"}, {-33, time.July, "winter"},
+		{-33, time.October, "spring"}, {-33, time.January, "summer"},
+		// Equatorial band: two wet and two dry seasons.
+		{2, time.April, "wet1"}, {2, time.July, "dry1"},
+		{2, time.October, "wet2"}, {2, time.January, "dry2"},
+	}
+	for _, tc := range cases {
+		got := computeCurrentSeason(tc.lat, time.Date(2026, tc.month, 15, 0, 0, 0, 0, time.UTC))
+		assert.Equalf(t, tc.want, got, "lat=%v month=%v", tc.lat, tc.month)
+	}
+}
+
+// TestExpectednessAndEbirdCode_NoProcessor covers the nil-Processor guards: with
+// no loaded classifier, expectedness and the eBird code resolve to empty (the
+// success paths need a loaded geomodel, out of unit-test scope).
+func TestExpectednessAndEbirdCode_NoProcessor(t *testing.T) {
+	t.Parallel()
+	c := New(&apicore.Core{}) // Processor is nil
+	assert.Empty(t, c.guideExpectedness(sciEurasianBlackbird))
+	assert.Empty(t, c.ebirdSpeciesCode(sciEurasianBlackbird))
+}
