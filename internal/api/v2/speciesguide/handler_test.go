@@ -315,6 +315,35 @@ func TestResolveSimilarSpecies_StubWithEnrichmentsOffHasNoLinks(t *testing.T) {
 	assert.Empty(t, entries[0].ExternalLinks, "no links when enrichments are off")
 }
 
+// A candidate that fails to resolve at all (negative cache entry / provider
+// not-found) must still carry resource links when enrichments are on: links are
+// computed from embedded data and need no fetch, so "every selection is useful"
+// holds on the failure path too.
+func TestResolveSimilarSpecies_UnresolvedCandidateStillGetsLinks(t *testing.T) {
+	c := guideTestHandler(t, guideEnabledSettings())
+	c.SetGuideCache(newStubGuideCache(t, nil)) // provider yields ErrGuideNotFound
+	entries := c.resolveSimilarSpecies(
+		t.Context(),
+		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
+		defaultWikiLang, true, false, // enrichments on, supplementary off
+	)
+	require.Len(t, entries, 1)
+	assert.False(t, entries[0].HasGuide)
+	assert.NotEmpty(t, entries[0].ExternalLinks, "unresolved candidate should still carry resource links")
+}
+
+// Same invariant when no guide cache is wired at all (transient unavailability).
+func TestResolveSimilarSpecies_CacheUnavailableStillGetsLinks(t *testing.T) {
+	c := guideTestHandler(t, guideEnabledSettings()) // no cache wired
+	entries := c.resolveSimilarSpecies(
+		t.Context(),
+		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
+		defaultWikiLang, true, false,
+	)
+	require.Len(t, entries, 1)
+	assert.NotEmpty(t, entries[0].ExternalLinks, "cache-unavailable candidate should still carry resource links")
+}
+
 func TestResolveSimilarSpecies_WithDescriptionIsMarkedHasGuideAndNoLinks(t *testing.T) {
 	c := guideTestHandler(t, guideEnabledSettings())
 	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{

@@ -575,7 +575,7 @@ func (c *Handler) similarSpeciesCandidates(focal string) (genus string, candidat
 func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks, supplementary bool) []SimilarSpeciesEntry {
 	// Bound the whole fan-out so a cold cache (live external fetches) cannot
 	// block the request indefinitely; unresolved candidates fall back to
-	// name-only below.
+	// links-only (or name-only when enrichments are off) below.
 	resolveCtx, cancel := context.WithTimeout(ctx, similarSpeciesResolveTimeout)
 	defer cancel()
 
@@ -598,19 +598,23 @@ func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []simila
 				if strings.TrimSpace(g.Description) != "" {
 					entry.GuideSummary = summarizeDescription(g.Description)
 					entry.HasGuide = true
-				} else if withLinks {
-					// No prose to compare (e.g. an OpenFauna stub when Wikipedia is
-					// disabled or the species was never warmed). Surface external
-					// resource links instead so selecting the species is still useful.
-					entry.ExternalLinks = externalLinksForGuide(
-						cand.scientificName,
-						c.ebirdSpeciesCode(cand.scientificName),
-						locale,
-						supplementary,
-					)
 				}
 				return nil
 			})
+			// Prose-less entries carry external resource links (when enrichments
+			// are on) REGARDLESS of why there is no prose: an OpenFauna stub, a
+			// negative cache entry, an unavailable cache, or a resolve timeout.
+			// Links are computed from embedded data and need no fetch, so this
+			// honors the SimilarSpeciesEntry contract ("links whenever there is
+			// no prose to compare") on the failure paths too.
+			if withLinks && !entry.HasGuide {
+				entry.ExternalLinks = externalLinksForGuide(
+					cand.scientificName,
+					c.ebirdSpeciesCode(cand.scientificName),
+					locale,
+					supplementary,
+				)
+			}
 			entries[idx] = entry
 		})
 	}
