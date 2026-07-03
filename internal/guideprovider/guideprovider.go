@@ -329,6 +329,14 @@ func (c *GuideCache) storeMemoryLocked(key string, g *SpeciesGuide) {
 // The whole insert-then-verify runs under memWriteMu so the generation check and the
 // possible rollback are atomic with the insert — no concurrent writer can replace
 // the value between them and desync the count.
+//
+// The rollback's memCount.Add(-1) is guarded by LoadAndDelete's loaded, so it
+// decrements ONLY when it actually removes an entry. storeMemoryLocked is the sole
+// inserter and increments once per new key, so the invariant "every live entry is
+// counted exactly once" holds; removing an entry therefore always warrants one
+// decrement, whether this call newly inserted it or updated a pre-existing (already
+// counted) key. Making the decrement conditional on "did THIS call insert" would be
+// wrong: deleting a pre-existing entry without decrementing would OVERcount.
 func (c *GuideCache) storeMemoryGen(key string, g *SpeciesGuide, gen int64) {
 	c.memWriteMu.Lock()
 	defer c.memWriteMu.Unlock()

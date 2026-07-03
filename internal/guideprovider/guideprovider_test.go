@@ -998,3 +998,35 @@ func TestStoreMemoryGen_RacesStoreMemoryStaysExact(t *testing.T) {
 	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must equal the live entry count")
 	assert.LessOrEqual(t, c.memCount.Load(), int64(maxMemoryEntries), "cap must hold")
 }
+
+// TestStoreMemoryGen_ExistingKeyStaleGenStaysExact proves the rollback keeps
+// memCount exact when storeMemoryGen updates a PRE-EXISTING (already-counted) key
+// and the generation check then fails: the entry is removed and the count
+// decremented once, so memCount still equals the live count. Guards against a
+// "decrement only if this call inserted" change, which would OVERcount here by
+// deleting a counted entry without decrementing.
+func TestStoreMemoryGen_ExistingKeyStaleGenStaysExact(t *testing.T) {
+	t.Parallel()
+	c := newTestCache(t, newFakeStore(), nil)
+	key := cacheKey("Existing", "en")
+
+	// A pre-existing, counted entry stored under the current generation.
+	c.storeMemoryGen(key, &SpeciesGuide{CommonName: "old"}, c.invalidateGen.Load())
+	require.Equal(t, int64(1), c.memCount.Load())
+	_, ok := c.memory.Load(key)
+	require.True(t, ok)
+
+	// Update the SAME key with a value derived from a pre-invalidation read.
+	staleGen := c.invalidateGen.Load()
+	c.invalidateGen.Add(1) // InvalidateAll ran after staleGen was captured
+	c.storeMemoryGen(key, &SpeciesGuide{CommonName: "new"}, staleGen)
+
+	// The stale update is rolled back: entry gone, count back to zero — exact.
+	_, ok = c.memory.Load(key)
+	assert.False(t, ok, "stale-gen update of an existing key must be rolled back")
+	assert.Equal(t, int64(0), c.memCount.Load(), "no over/undercount")
+
+	count := 0
+	c.memory.Range(func(_, _ any) bool { count++; return true })
+	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must equal the live entry count")
+}
