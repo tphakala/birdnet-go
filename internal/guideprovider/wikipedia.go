@@ -200,7 +200,42 @@ func (p *WikipediaGuideProvider) buildURL(locale, title string) string {
 	q.Set("redirects", "1")
 	q.Set("exlimit", "1")
 	q.Set("titles", title)
-	return "https://" + url.PathEscape(locale) + ".wikipedia.org/w/api.php?" + q.Encode()
+	return "https://" + url.PathEscape(wikipediaSubdomain(locale)) + ".wikipedia.org/w/api.php?" + q.Encode()
+}
+
+// wikipediaLangOverrides maps a base-language subtag to the Wikipedia subdomain
+// when the two differ: Norwegian Bokmål ("nb") and Nynorsk ("nn") articles live on
+// no.wikipedia.org. Kept local (mirrors the same table in the api/v2/speciesguide
+// layer) so guideprovider stays a leaf package with no import back into the API.
+var wikipediaLangOverrides = map[string]string{
+	"nb": "no",
+	"nn": "no",
+}
+
+// wikipediaSubdomain converts a UI locale to its Wikipedia language subdomain. It
+// drops any regional subtag ("pt-br"/"pt_PT" -> "pt", "zh-cn" -> "zh") and applies
+// the nb/nn -> no override. Wikipedia has no regional subdomains (there is no
+// pt-br.wikipedia.org), so passing a full locale straight into the host would build
+// an invalid URL and fail every fetch for users with a regional locale. Anything
+// that isn't a 2-3 letter base code falls back to the default language.
+func wikipediaSubdomain(locale string) string {
+	l := strings.ToLower(strings.TrimSpace(locale))
+	// Keep only the primary subtag (split on either separator).
+	if i := strings.IndexAny(l, "-_"); i >= 0 {
+		l = l[:i]
+	}
+	if len(l) < 2 || len(l) > 3 {
+		return defaultLocale
+	}
+	for _, r := range l {
+		if r < 'a' || r > 'z' {
+			return defaultLocale
+		}
+	}
+	if sub, ok := wikipediaLangOverrides[l]; ok {
+		return sub
+	}
+	return l
 }
 
 // convertWikiSections rewrites MediaWiki section headers in a plain-text extract

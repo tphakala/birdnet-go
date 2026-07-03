@@ -168,6 +168,42 @@ func TestWikipediaProvider_RateLimitAndTimeoutAreTransient(t *testing.T) {
 	}
 }
 
+// TestWikipediaSubdomain verifies UI locales are mapped to a valid Wikipedia
+// language subdomain: regional subtags are dropped (Wikipedia has no
+// pt-br.wikipedia.org) and the nb/nn -> no override is applied.
+func TestWikipediaSubdomain(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"en":      "en",
+		"de":      "de",
+		"pt-br":   "pt", // regional subtag dropped
+		"pt_PT":   "pt", // underscore separator, uppercase
+		"zh-CN":   "zh",
+		"en-GB":   "en",
+		"nb":      "no", // Norwegian Bokmål lives on no.wikipedia.org
+		"nn-no":   "no", // Nynorsk + subtag
+		"":        "en", // empty -> default
+		"x":       "en", // too short
+		"english": "en", // too long
+		"e1":      "en", // non-alpha
+	}
+	for in, want := range cases {
+		assert.Equalf(t, want, wikipediaSubdomain(in), "wikipediaSubdomain(%q)", in)
+	}
+	// Surrounding whitespace is trimmed before the subtag split.
+	assert.Equal(t, "fr", wikipediaSubdomain("  fr-ca  "))
+}
+
+// TestWikipediaBuildURL_RegionalLocaleUsesBaseSubdomain guards the fix for the
+// broken host: a regional locale must resolve to the base-language Wikipedia host,
+// not an invalid pt-br.wikipedia.org that fails DNS on every request.
+func TestWikipediaBuildURL_RegionalLocaleUsesBaseSubdomain(t *testing.T) {
+	t.Parallel()
+	url := (&WikipediaGuideProvider{}).buildURL("pt-br", "Turdus merula")
+	assert.Contains(t, url, "https://pt.wikipedia.org/w/api.php?")
+	assert.NotContains(t, url, "pt-br.wikipedia.org")
+}
+
 func TestConvertWikiSections(t *testing.T) {
 	t.Parallel()
 	in := "Intro text.\n\n== Voice ==\nSings.\n\n=== Subsong ===\nQuiet.\n\n== Habitat ==\nForests."
