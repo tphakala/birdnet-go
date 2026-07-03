@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Falha ao atualizar definições do equalizador de áudio",
         "equalizerUpdated": "Definições do equalizador de áudio atualizadas",
         "savedSuccessfully": "Definições guardadas com sucesso",
-        "saveFailed": "Falha ao guardar as definições"
+        "saveFailed": "Falha ao guardar as definições",
+        "reconfiguringSpeciesGuide": "A atualizar o guia de espécies..."
       },
       "migration": {
         "startedTitle": "Migração da base de dados iniciada",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Não foi possível eliminar a nota.",
         "saveFailed": "Não foi possível guardar a nota.",
         "saveDisabledReason": "Introduza o texto da nota para ativar Guardar.",
-        "tooLong": "A nota é demasiado longa (máximo {max} caracteres)."
+        "tooLong": "A nota é demasiado longa (máximo {max} caracteres).",
+        "truncated": "A mostrar as {max} notas mais recentes; as notas mais antigas estão ocultas."
       },
       "similar": {
         "title": "Espécies semelhantes",

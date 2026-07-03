@@ -15,6 +15,11 @@
   // gate below measures UTF-8 byte length so multi-byte notes (e.g. CJK, emoji)
   // can't pass client validation only to be rejected by the server.
   const NOTE_MAX_BYTES = 10_000;
+  // Mirrors datastore.SpeciesNotesMaxResults: the read endpoint returns at most
+  // this many notes (newest first) with no pagination. When the response hits
+  // the cap, older notes exist but are hidden — surface that instead of
+  // presenting the capped list as complete.
+  const NOTES_MAX_RESULTS = 500;
   const HTTP_BAD_REQUEST = 400;
 
   const utf8Encoder = new TextEncoder();
@@ -226,6 +231,13 @@
   {:else if notes.length === 0}
     <p class="text-sm text-base-content/70">{t('analytics.species.notes.empty')}</p>
   {:else}
+    {#if notes.length >= NOTES_MAX_RESULTS}
+      <!-- A full page means the server cap was hit: older notes are not shown
+           (an exactly-at-cap total shows this too — harmless). -->
+      <p role="status" class="text-xs text-base-content/70 mb-2">
+        {t('analytics.species.notes.truncated', { max: NOTES_MAX_RESULTS })}
+      </p>
+    {/if}
     <ul class="space-y-2">
       {#each notes as note (note.id)}
         <li class="rounded-md border border-base-300 p-2">

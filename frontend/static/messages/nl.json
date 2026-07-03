@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Bijwerken van audio-equalizerinstellingen mislukt",
         "equalizerUpdated": "Audio-equalizerinstellingen bijgewerkt",
         "savedSuccessfully": "Instellingen succesvol opgeslagen",
-        "saveFailed": "Opslaan van instellingen mislukt"
+        "saveFailed": "Opslaan van instellingen mislukt",
+        "reconfiguringSpeciesGuide": "Soortengids wordt bijgewerkt..."
       },
       "migration": {
         "startedTitle": "Databasemigratie gestart",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Kan de notitie niet verwijderen.",
         "saveFailed": "Kan de notitie niet opslaan.",
         "saveDisabledReason": "Voer notitietekst in om Opslaan in te schakelen.",
-        "tooLong": "Notitie is te lang (maximaal {max} tekens)."
+        "tooLong": "Notitie is te lang (maximaal {max} tekens).",
+        "truncated": "De {max} meest recente notities worden getoond; oudere notities zijn verborgen."
       },
       "similar": {
         "title": "Vergelijkbare soorten",

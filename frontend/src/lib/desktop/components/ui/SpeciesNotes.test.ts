@@ -67,6 +67,24 @@ describe('SpeciesNotes', () => {
     ).toBeInTheDocument();
   });
 
+  it('surfaces a truncation notice when the server cap (500) is hit', async () => {
+    // Mirrors datastore.SpeciesNotesMaxResults: a full page means older notes
+    // exist but are hidden, and the list must not read as complete.
+    const capped = Array.from({ length: 500 }, (_, i) => note({ id: i + 1, entry: `Note ${i}` }));
+    vi.mocked(api.get).mockResolvedValue(capped as never);
+    render(SpeciesNotes, { props: { scientificName: 'Turdus merula' } });
+    expect(
+      await screen.findByText('analytics.species.notes.truncated', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+  });
+
+  it('shows no truncation notice below the cap', async () => {
+    vi.mocked(api.get).mockResolvedValue([note()] as never);
+    render(SpeciesNotes, { props: { scientificName: 'Turdus merula' } });
+    await screen.findByText('A note about this bird.', {}, { timeout: 5000 });
+    expect(screen.queryByText('analytics.species.notes.truncated')).not.toBeInTheDocument();
+  });
+
   it('does not load or show notes when not authenticated', async () => {
     mocks.authStore.set(false);
     vi.mocked(api.get).mockResolvedValue([note()] as never);

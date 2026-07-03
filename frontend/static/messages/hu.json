@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "A hang EQ beállítások frissítése sikertelen",
         "equalizerUpdated": "Hang EQ beállítások frissítve",
         "savedSuccessfully": "Beállítások sikeresen mentve",
-        "saveFailed": "A beállítások mentése sikertelen"
+        "saveFailed": "A beállítások mentése sikertelen",
+        "reconfiguringSpeciesGuide": "Fajútmutató frissítése..."
       },
       "migration": {
         "startedTitle": "Adatbázis migráció elkezdődött",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "A jegyzet törlése nem sikerült.",
         "saveFailed": "A jegyzet mentése nem sikerült.",
         "saveDisabledReason": "Adjon meg jegyzetszöveget a Mentés engedélyezéséhez.",
-        "tooLong": "A jegyzet túl hosszú (legfeljebb {max} karakter)."
+        "tooLong": "A jegyzet túl hosszú (legfeljebb {max} karakter).",
+        "truncated": "A {max} legújabb jegyzet látható; a régebbi jegyzetek rejtve vannak."
       },
       "similar": {
         "title": "Hasonló fajok",

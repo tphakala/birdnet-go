@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Aggiornamento delle impostazioni dell'equalizzatore audio non riuscito",
         "equalizerUpdated": "Impostazioni dell'equalizzatore audio aggiornate",
         "savedSuccessfully": "Impostazioni salvate con successo",
-        "saveFailed": "Salvataggio delle impostazioni non riuscito"
+        "saveFailed": "Salvataggio delle impostazioni non riuscito",
+        "reconfiguringSpeciesGuide": "Aggiornamento della guida delle specie..."
       },
       "migration": {
         "startedTitle": "Migrazione del database avviata",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Impossibile eliminare la nota.",
         "saveFailed": "Impossibile salvare la nota.",
         "saveDisabledReason": "Inserisci il testo della nota per abilitare il salvataggio.",
-        "tooLong": "La nota è troppo lunga (massimo {max} caratteri)."
+        "tooLong": "La nota è troppo lunga (massimo {max} caratteri).",
+        "truncated": "Sono mostrate le {max} note più recenti; le note più vecchie sono nascoste."
       },
       "similar": {
         "title": "Specie simili",

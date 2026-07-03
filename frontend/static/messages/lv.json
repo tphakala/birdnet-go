@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Neizdevās atjaunināt audio ekvalaizera iestatījumus",
         "equalizerUpdated": "Audio ekvalaizera iestatījumi atjaunināti",
         "savedSuccessfully": "Iestatījumi veiksmīgi saglabāti",
-        "saveFailed": "Neizdevās saglabāt iestatījumus"
+        "saveFailed": "Neizdevās saglabāt iestatījumus",
+        "reconfiguringSpeciesGuide": "Tiek atjaunināts sugu ceļvedis..."
       },
       "migration": {
         "startedTitle": "Datubāzes migrācija sākta",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Neizdevās izdzēst piezīmi.",
         "saveFailed": "Neizdevās saglabāt piezīmi.",
         "saveDisabledReason": "Ievadiet piezīmes tekstu, lai iespējotu saglabāšanu.",
-        "tooLong": "Piezīme ir pārāk gara (ne vairāk kā {max} rakstzīmes)."
+        "tooLong": "Piezīme ir pārāk gara (ne vairāk kā {max} rakstzīmes).",
+        "truncated": "Tiek rādītas {max} jaunākās piezīmes; vecākās piezīmes ir paslēptas."
       },
       "similar": {
         "title": "Līdzīgas sugas",

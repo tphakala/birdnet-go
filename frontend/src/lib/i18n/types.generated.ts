@@ -358,6 +358,7 @@ export type TranslationKey =
   | 'notifications.content.settings.equalizerUpdated'
   | 'notifications.content.settings.savedSuccessfully'
   | 'notifications.content.settings.saveFailed'
+  | 'notifications.content.settings.reconfiguringSpeciesGuide'
   | 'notifications.content.migration.startedTitle'
   | 'notifications.content.migration.startedMessage'
   | 'notifications.content.migration.pausedTitle'
@@ -1530,6 +1531,7 @@ export type TranslationKey =
   | 'analytics.species.notes.saveFailed'
   | 'analytics.species.notes.saveDisabledReason'
   | 'analytics.species.notes.tooLong' // params: max
+  | 'analytics.species.notes.truncated' // params: max
   | 'analytics.species.similar.title'
   | 'analytics.species.similar.compare'
   | 'analytics.species.similar.show'
@@ -4225,6 +4227,7 @@ export type TranslationParams = {
   'system.inference.coDetectedHelp': { seconds: string | number };
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.species.notes.tooLong': { max: string | number };
+  'analytics.species.notes.truncated': { max: string | number };
   'analytics.species.similar.versus': { species: string | number };
   'analytics.species.similar.selectPrompt': { species: string | number };
   'analytics.species.viewGuide': { species: string | number };

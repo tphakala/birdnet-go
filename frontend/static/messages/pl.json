@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Nie udało się zaktualizować ustawień korektora dźwięku",
         "equalizerUpdated": "Ustawienia korektora dźwięku zaktualizowane",
         "savedSuccessfully": "Ustawienia zapisane pomyślnie",
-        "saveFailed": "Nie udało się zapisać ustawień"
+        "saveFailed": "Nie udało się zapisać ustawień",
+        "reconfiguringSpeciesGuide": "Aktualizowanie przewodnika po gatunkach..."
       },
       "migration": {
         "startedTitle": "Migracja bazy danych rozpoczęta",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Nie udało się usunąć notatki.",
         "saveFailed": "Nie udało się zapisać notatki.",
         "saveDisabledReason": "Wprowadź treść notatki, aby włączyć zapisywanie.",
-        "tooLong": "Notatka jest za długa (maksymalnie {max} znaków)."
+        "tooLong": "Notatka jest za długa (maksymalnie {max} znaków).",
+        "truncated": "Wyświetlanych jest {max} najnowszych notatek; starsze notatki są ukryte."
       },
       "similar": {
         "title": "Podobne gatunki",

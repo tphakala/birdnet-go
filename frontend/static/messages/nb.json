@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Oppdatering av lydekvaliseringsinnstillinger mislyktes",
         "equalizerUpdated": "Lydekvaliseringsinnstillinger oppdatert",
         "savedSuccessfully": "Innstillinger lagret",
-        "saveFailed": "Lagring av innstillinger mislyktes"
+        "saveFailed": "Lagring av innstillinger mislyktes",
+        "reconfiguringSpeciesGuide": "Oppdaterer artsguiden..."
       },
       "migration": {
         "startedTitle": "Databasemigrering startet",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Kunne ikke slette notatet.",
         "saveFailed": "Kunne ikke lagre notatet.",
         "saveDisabledReason": "Skriv inn notattekst for å aktivere Lagre.",
-        "tooLong": "Notatet er for langt (maks {max} tegn)."
+        "tooLong": "Notatet er for langt (maks {max} tegn).",
+        "truncated": "Viser de {max} nyeste notatene; eldre notater er skjult."
       },
       "similar": {
         "title": "Lignende arter",

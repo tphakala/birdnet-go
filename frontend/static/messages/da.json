@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Kunne ikke opdatere lyd-equalizerindstillinger",
         "equalizerUpdated": "Lyd-equalizerindstillinger opdateret",
         "savedSuccessfully": "Indstillinger gemt",
-        "saveFailed": "Kunne ikke gemme indstillinger"
+        "saveFailed": "Kunne ikke gemme indstillinger",
+        "reconfiguringSpeciesGuide": "Opdaterer artsguiden..."
       },
       "migration": {
         "startedTitle": "Databasemigrering startet",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Kunne ikke slette noten.",
         "saveFailed": "Kunne ikke gemme noten.",
         "saveDisabledReason": "Indtast notetekst for at aktivere Gem.",
-        "tooLong": "Noten er for lang (maksimalt {max} tegn)."
+        "tooLong": "Noten er for lang (maksimalt {max} tegn).",
+        "truncated": "Viser de {max} nyeste noter; ældre noter er skjult."
       },
       "similar": {
         "title": "Lignende arter",

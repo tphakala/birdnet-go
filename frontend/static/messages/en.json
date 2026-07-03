@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Failed to update audio equalizer settings",
         "equalizerUpdated": "Audio equalizer settings updated",
         "savedSuccessfully": "Settings saved successfully",
-        "saveFailed": "Failed to save settings"
+        "saveFailed": "Failed to save settings",
+        "reconfiguringSpeciesGuide": "Updating species guide..."
       },
       "migration": {
         "startedTitle": "Database Migration Started",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Failed to delete note.",
         "saveFailed": "Failed to save note.",
         "saveDisabledReason": "Enter note text to enable Save.",
-        "tooLong": "Note is too long (maximum {max} bytes)."
+        "tooLong": "Note is too long (maximum {max} bytes).",
+        "truncated": "Showing the {max} most recent notes; older notes are hidden."
       },
       "similar": {
         "title": "Similar species",

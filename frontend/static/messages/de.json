@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Aktualisierung der Audio-Equalizer-Einstellungen fehlgeschlagen",
         "equalizerUpdated": "Audio-Equalizer-Einstellungen aktualisiert",
         "savedSuccessfully": "Einstellungen erfolgreich gespeichert",
-        "saveFailed": "Einstellungen konnten nicht gespeichert werden"
+        "saveFailed": "Einstellungen konnten nicht gespeichert werden",
+        "reconfiguringSpeciesGuide": "Steckbriefe werden aktualisiert..."
       },
       "migration": {
         "startedTitle": "Datenbankmigration gestartet",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Notiz konnte nicht gelöscht werden.",
         "saveFailed": "Notiz konnte nicht gespeichert werden.",
         "saveDisabledReason": "Geben Sie einen Notiztext ein, um Speichern zu aktivieren.",
-        "tooLong": "Notiz ist zu lang (maximal {max} Zeichen)."
+        "tooLong": "Notiz ist zu lang (maximal {max} Zeichen).",
+        "truncated": "Es werden die {max} neuesten Notizen angezeigt; ältere Notizen sind ausgeblendet."
       },
       "similar": {
         "title": "Ähnliche Arten",

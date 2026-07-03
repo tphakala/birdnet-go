@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Äänen taajuuskorjaimen asetusten päivitys epäonnistui",
         "equalizerUpdated": "Äänen taajuuskorjaimen asetukset päivitetty",
         "savedSuccessfully": "Asetukset tallennettu onnistuneesti",
-        "saveFailed": "Asetusten tallennus epäonnistui"
+        "saveFailed": "Asetusten tallennus epäonnistui",
+        "reconfiguringSpeciesGuide": "Päivitetään lajiopasta..."
       },
       "migration": {
         "startedTitle": "Tietokannan siirto aloitettu",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Muistiinpanon poistaminen epäonnistui.",
         "saveFailed": "Muistiinpanon tallentaminen epäonnistui.",
         "saveDisabledReason": "Kirjoita muistiinpanon teksti ottaaksesi tallennuksen käyttöön.",
-        "tooLong": "Muistiinpano on liian pitkä (enintään {max} merkkiä)."
+        "tooLong": "Muistiinpano on liian pitkä (enintään {max} merkkiä).",
+        "truncated": "Näytetään {max} uusinta muistiinpanoa; vanhemmat muistiinpanot on piilotettu."
       },
       "similar": {
         "title": "Samankaltaiset lajit",

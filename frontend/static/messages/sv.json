@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Kunde inte uppdatera ljudequalizerinställningar",
         "equalizerUpdated": "Ljudequalizerinställningar uppdaterade",
         "savedSuccessfully": "Inställningarna sparades",
-        "saveFailed": "Kunde inte spara inställningar"
+        "saveFailed": "Kunde inte spara inställningar",
+        "reconfiguringSpeciesGuide": "Uppdaterar artguiden..."
       },
       "migration": {
         "startedTitle": "Databasmigrering påbörjad",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Det gick inte att ta bort anteckningen.",
         "saveFailed": "Det gick inte att spara anteckningen.",
         "saveDisabledReason": "Ange anteckningstext för att aktivera Spara.",
-        "tooLong": "Anteckningen är för lång (högst {max} tecken)."
+        "tooLong": "Anteckningen är för lång (högst {max} tecken).",
+        "truncated": "Visar de {max} senaste anteckningarna; äldre anteckningar är dolda."
       },
       "similar": {
         "title": "Liknande arter",

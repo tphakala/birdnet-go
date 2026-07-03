@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Échec de la mise à jour des paramètres de l'égaliseur audio",
         "equalizerUpdated": "Paramètres de l'égaliseur audio mis à jour",
         "savedSuccessfully": "Paramètres enregistrés avec succès",
-        "saveFailed": "Échec de l'enregistrement des paramètres"
+        "saveFailed": "Échec de l'enregistrement des paramètres",
+        "reconfiguringSpeciesGuide": "Mise à jour du guide des espèces..."
       },
       "migration": {
         "startedTitle": "Migration de la base de données démarrée",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Échec de la suppression de la note.",
         "saveFailed": "Échec de l’enregistrement de la note.",
         "saveDisabledReason": "Saisissez le texte de la note pour activer l’enregistrement.",
-        "tooLong": "La note est trop longue (maximum {max} caractères)."
+        "tooLong": "La note est trop longue (maximum {max} caractères).",
+        "truncated": "Affichage des {max} notes les plus récentes ; les notes plus anciennes sont masquées."
       },
       "similar": {
         "title": "Espèces similaires",

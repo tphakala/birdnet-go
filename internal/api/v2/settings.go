@@ -2166,7 +2166,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, "info", toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, "info", toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, "info", toastDurationShort},
-	{"Species guide", "reconfigure_species_guide", speciesGuideSettingsChanged, "Reconfiguring species guide...", "", "info", toastDurationShort},
+	{"Species guide", "reconfigure_species_guide", speciesGuideSettingsChanged, "Reconfiguring species guide...", notification.MsgSettingsReconfiguringSpeciesGuide, "info", toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},

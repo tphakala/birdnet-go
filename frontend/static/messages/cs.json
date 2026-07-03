@@ -413,7 +413,8 @@
         "equalizerUpdateFailed": "Nepodařilo se aktualizovat nastavení audio ekvalizéru",
         "equalizerUpdated": "Nastavení audio ekvalizéru aktualizováno",
         "savedSuccessfully": "Nastavení úspěšně uloženo",
-        "saveFailed": "Uložení nastavení selhalo"
+        "saveFailed": "Uložení nastavení selhalo",
+        "reconfiguringSpeciesGuide": "Aktualizace průvodce druhy..."
       },
       "migration": {
         "startedTitle": "Migrace databáze zahájena",
@@ -1967,7 +1968,8 @@
         "deleteFailed": "Poznámku se nepodařilo smazat.",
         "saveFailed": "Poznámku se nepodařilo uložit.",
         "saveDisabledReason": "Zadejte text poznámky pro povolení uložení.",
-        "tooLong": "Poznámka je příliš dlouhá (maximálně {max} znaků)."
+        "tooLong": "Poznámka je příliš dlouhá (maximálně {max} znaků).",
+        "truncated": "Zobrazuje se {max} nejnovějších poznámek; starší poznámky jsou skryté."
       },
       "similar": {
         "title": "Podobné druhy",
