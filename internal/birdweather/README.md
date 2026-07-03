@@ -60,13 +60,18 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error)
 ```
 
-BirdWeather FLAC uploads use a short-lived, disk-backed temporary file before
-the upload buffer is created. FLAC muxers need seekable output to finalize
-`STREAMINFO` metadata such as the total sample count; without that metadata
-BirdWeather can store the soundscape duration as `0.0`. The upload path creates
-the private temp directory with `os.MkdirTemp`, encodes the FLAC there, reads
-the finalized bytes with `os.ReadFile`, and removes the temporary file
+The FFmpeg FLAC path uses a short-lived, disk-backed temporary file before the
+upload buffer is created. FFmpeg cannot finalize `STREAMINFO` metadata such as
+the total sample count when it encodes to a non-seekable pipe; without that
+metadata BirdWeather can store the soundscape duration as `0.0`. That path
+creates a private temp directory with `os.MkdirTemp`, encodes the FLAC there,
+reads the finalized bytes with `os.ReadFile`, and removes the temporary file
 afterward.
+
+The native go-flac path (`BIRDNET_FLAC_ENCODER=native`) encodes directly to an
+in-memory buffer with no temp file. go-flac declares
+`STREAMINFO.total_samples` up front from the PCM length and verifies it against
+the samples written, so the duration is correct without a seekable sink.
 
 ### Loudness Normalization
 
@@ -198,7 +203,7 @@ Client connections are properly managed to prevent resource leaks:
 - HTTP client timeouts to prevent hanging connections
 - Proper cleanup of resources in the `Close()` method
 - Idle connection cleanup
-- **Seekable FLAC Uploads**: BirdWeather FLAC uploads use a short-lived temporary file so FFmpeg and the native FLAC encoder can finalize seek metadata before upload. The path creates the temporary workspace with `os.MkdirTemp`, reads the finalized bytes back with `os.ReadFile`, and then uploads through the existing in-memory HTTP path.
+- **Seekable FLAC Uploads (FFmpeg path)**: FFmpeg FLAC uploads use a short-lived temporary file so FFmpeg can finalize seek metadata before upload. The path creates the temporary workspace with `os.MkdirTemp`, reads the finalized bytes back with `os.ReadFile`, and then uploads through the existing in-memory HTTP path. The native go-flac path skips the temp file and encodes in memory.
 - Temporary files and directories are properly cleaned up
 
 ## Debug Capabilities
@@ -301,7 +306,7 @@ Comprehensive tests are provided for all key functionality:
 - **Location coordinates** are currently ignored by BirdWeather's API. Despite the location randomization feature, BirdWeather always uses the coordinates assigned to your station ID/token rather than the coordinates submitted with detections.
 - FLAC encoding requires **FFmpeg to be installed and configured correctly** on the host system (Linux, macOS, Windows).
 - Loudness normalization requires FFmpeg with the `loudnorm` filter (available in most modern FFmpeg builds).
-- **Memory Usage**: FFmpeg loudness analysis remains in memory, but finalized FLAC upload encoding uses a short-lived temp file so `STREAMINFO` duration metadata can be written.
+- **Memory Usage**: FFmpeg loudness analysis remains in memory, but finalized FFmpeg FLAC upload encoding uses a short-lived temp file so `STREAMINFO` duration metadata can be written. The native go-flac path encodes entirely in memory, declaring `STREAMINFO.total_samples` up front.
 
 ## Dependencies
 
