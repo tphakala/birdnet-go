@@ -183,6 +183,82 @@ describe('SpeciesComparison', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('still renders the similar-species list when the guide 404s (independent endpoints)', async () => {
+    const similar: SimilarSpeciesResponse = {
+      scientific_name: 'Turdus merula',
+      genus: 'Turdus',
+      similar: [
+        {
+          scientific_name: 'Turdus pilaris',
+          common_name: 'Fieldfare',
+          relationship: 'same_genus',
+          has_guide: false,
+        },
+      ],
+    };
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/similar')) return Promise.resolve(similar as never);
+      return Promise.reject(new ApiError('not found', 404, new Response(null, { status: 404 })));
+    });
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+    });
+
+    // The soft no-guide message shows for the missing guide content...
+    expect(
+      await screen.findByText('analytics.species.guide.noGuide', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+    // ...but the successfully fetched similar list is not discarded.
+    expect(screen.getAllByText('Fieldfare').length).toBeGreaterThan(0);
+  });
+
+  it('hides the similar-species section when the guide reports similar_species=false', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/guide'))
+        return Promise.resolve(
+          makeGuide({
+            features: { notes: true, enrichments: true, similar_species: false },
+          }) as never
+        );
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+    });
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+    });
+
+    // Description still renders (guide feature itself is on)...
+    await screen.findByText('An introduction.', {}, { timeout: 5000 });
+    // ...but the similar-species section is gated off by the server flag.
+    expect(screen.queryByText('analytics.species.similar.title')).not.toBeInTheDocument();
+  });
+
+  it('skips the similar fetch entirely when showSimilarSpecies=false', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/guide'))
+        return Promise.resolve(
+          makeGuide({
+            features: { notes: true, enrichments: true, similar_species: false },
+          }) as never
+        );
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+    });
+
+    render(SpeciesComparison, {
+      props: {
+        scientificName: 'Turdus merula',
+        commonName: 'Common Blackbird',
+        showSimilarSpecies: false,
+        onclose: vi.fn(),
+      },
+    });
+
+    await screen.findByText('An introduction.', {}, { timeout: 5000 });
+    const urls = vi.mocked(api.get).mock.calls.map(c => String(c[0]));
+    expect(urls.some(u => u.includes('/similar'))).toBe(false);
+  });
+
   it('invokes onclose when the close button is clicked', async () => {
     const onclose = vi.fn();
     vi.mocked(api.get).mockResolvedValue(makeGuide() as never);

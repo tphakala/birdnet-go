@@ -7,6 +7,10 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { isAuthenticated } from '$lib/utils/auth';
   import { dashboardSettings } from '$lib/stores/settings';
+  import {
+    resolveSpeciesGuideConfig,
+    type SpeciesGuideUIConfig,
+  } from '$lib/utils/speciesGuideConfig';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
 
@@ -45,15 +49,30 @@
   // isOpen transitions to false), not during open.
   let prevIsOpen = $state(false);
   // Species guide panel state (gated on settings; reset each time the modal opens).
+  // Gating must work for unauthenticated guests too — the guide endpoints and
+  // GET /settings/dashboard are public, but the settings store is populated only
+  // by the auth-protected full-settings load. resolveSpeciesGuideConfig prefers
+  // the store value and falls back to one cached fetch of the public endpoint.
   let guidePanelOpen = $state(true);
-  let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
-  let showSimilarSpecies = $derived($dashboardSettings?.speciesGuide?.showSimilarSpecies ?? true);
-  let showNotes = $derived($dashboardSettings?.speciesGuide?.showNotes ?? true);
+  let guideConfig = $state<SpeciesGuideUIConfig | null>(null);
+  $effect(() => {
+    const fromStore = $dashboardSettings?.speciesGuide;
+    let stale = false;
+    void resolveSpeciesGuideConfig(fromStore).then(cfg => {
+      if (!stale) guideConfig = cfg;
+    });
+    return () => {
+      stale = true;
+    };
+  });
+  let guideEnabled = $derived(guideConfig?.enabled ?? false);
+  let showSimilarSpecies = $derived(guideConfig?.showSimilarSpecies ?? true);
+  let showNotes = $derived(guideConfig?.showNotes ?? true);
   // On desktop, when the guide (right column) has content, widen the modal and
   // split into two columns so the horizontal space is used without stretching the
   // description past a readable measure. Below `lg` the modal stays its default
   // width and the content stacks in a single column (tablet/desktop-only UI).
-  let wideLayout = $derived(guideEnabled && showSimilarSpecies);
+  let wideLayout = $derived(guideEnabled);
   $effect(() => {
     if (isOpen && !untrack(() => prevIsOpen)) {
       cachedSpecies = null;
@@ -162,8 +181,9 @@
           {/if}
         </div>
 
-        <!-- Guide column: description + similar species -->
-        {#if guideEnabled && showSimilarSpecies}
+        <!-- Guide column: description + enrichments, plus similar species when
+             that section is enabled (gated inside SpeciesComparison). -->
+        {#if guideEnabled}
           <div
             class="mt-4 border-t border-[var(--color-base-300)] pt-4 lg:mt-0 lg:border-t-0 lg:pt-0"
           >
@@ -173,6 +193,7 @@
                   scientificName={displaySpecies.scientific_name}
                   commonName={displayName}
                   heading={t('analytics.species.guide.title')}
+                  {showSimilarSpecies}
                   onclose={() => (guidePanelOpen = false)}
                 />
               {:else}

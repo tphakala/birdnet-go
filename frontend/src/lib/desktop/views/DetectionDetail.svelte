@@ -33,6 +33,10 @@
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
   import { dashboardSettings } from '$lib/stores/settings';
   import {
+    resolveSpeciesGuideConfig,
+    type SpeciesGuideUIConfig,
+  } from '$lib/utils/speciesGuideConfig';
+  import {
     Download,
     Camera,
     Clock,
@@ -104,10 +108,26 @@
   let activeTab = $state<TabType>('overview');
 
   // Species guide panel (gated on settings; collapsible inline panel).
+  // Gating must work for unauthenticated guests too — the guide endpoints and
+  // GET /settings/dashboard are public, but the settings store is populated
+  // only by the auth-protected full-settings load. resolveSpeciesGuideConfig
+  // prefers the store value (live for authenticated users) and falls back to
+  // one cached fetch of the public dashboard-settings endpoint.
   let guidePanelOpen = $state(true);
-  let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
-  let showSimilarSpecies = $derived($dashboardSettings?.speciesGuide?.showSimilarSpecies ?? true);
-  let showNotes = $derived($dashboardSettings?.speciesGuide?.showNotes ?? true);
+  let guideConfig = $state<SpeciesGuideUIConfig | null>(null);
+  $effect(() => {
+    const fromStore = $dashboardSettings?.speciesGuide;
+    let stale = false;
+    void resolveSpeciesGuideConfig(fromStore).then(cfg => {
+      if (!stale) guideConfig = cfg;
+    });
+    return () => {
+      stale = true;
+    };
+  });
+  let guideEnabled = $derived(guideConfig?.enabled ?? false);
+  let showSimilarSpecies = $derived(guideConfig?.showSimilarSpecies ?? true);
+  let showNotes = $derived(guideConfig?.showNotes ?? true);
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);
@@ -895,8 +915,11 @@
       </div>
     </section>
 
-    <!-- Species Guide panel (opt-in; gated on settings) -->
-    {#if guideEnabled && (showNotes || showSimilarSpecies)}
+    <!-- Species Guide panel (opt-in; gated on settings). The comparison mounts
+         whenever the guide is enabled: description and enrichments are part of
+         the guide feature itself, while the similar-species section inside it is
+         gated separately by showSimilarSpecies. -->
+    {#if guideEnabled}
       <section class="surface-card" aria-labelledby="species-guide-heading">
         <div class="p-5 md:p-6 space-y-6">
           <h2 id="species-guide-heading" class="sr-only">
@@ -905,24 +928,23 @@
           <!-- Key on the species so the guide + notes remount (and refetch) when
                navigating between detections of different species in place. -->
           {#key detection.scientificName}
-            {#if showSimilarSpecies}
-              {#if guidePanelOpen}
-                <SpeciesComparison
-                  scientificName={detection.scientificName}
-                  commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
-                  onclose={() => (guidePanelOpen = false)}
-                />
-              {:else}
-                <!-- Reopen affordance so closing the comparison is never a dead end. -->
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm gap-2"
-                  onclick={() => (guidePanelOpen = true)}
-                >
-                  <BookOpen class="h-4 w-4" />
-                  {t('analytics.species.similar.show')}
-                </button>
-              {/if}
+            {#if guidePanelOpen}
+              <SpeciesComparison
+                scientificName={detection.scientificName}
+                commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
+                {showSimilarSpecies}
+                onclose={() => (guidePanelOpen = false)}
+              />
+            {:else}
+              <!-- Reopen affordance so closing the comparison is never a dead end. -->
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm gap-2"
+                onclick={() => (guidePanelOpen = true)}
+              >
+                <BookOpen class="h-4 w-4" />
+                {t('analytics.species.similar.show')}
+              </button>
             {/if}
             {#if showNotes && $isAuthenticated}
               <SpeciesNotes scientificName={detection.scientificName} />

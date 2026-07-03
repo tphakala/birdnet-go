@@ -57,11 +57,26 @@
      * title is the species name) pass a generic label so it isn't shown twice.
      */
     heading?: string;
+    /**
+     * Whether the similar-species section is enabled (the showSimilarSpecies
+     * setting). The guide description and enrichments render regardless — they
+     * are gated only by the guide feature itself. When the guide response
+     * arrives, its server-computed features.similar_species flag takes over as
+     * the authoritative gate.
+     */
+    showSimilarSpecies?: boolean;
     className?: string;
     [key: string]: unknown;
   }
 
-  let { scientificName, commonName, onclose, heading, className = '' }: Props = $props();
+  let {
+    scientificName,
+    commonName,
+    onclose,
+    heading,
+    showSimilarSpecies = true,
+    className = '',
+  }: Props = $props();
 
   // Instance-scoped id prefix so two instances on one page don't collide on
   // aria-controls (DetectionDetail + an open modal).
@@ -104,6 +119,9 @@
   let enrichmentsOn = $derived(guide?.features?.enrichments ?? false);
   let season = $derived(guide ? getSeasonHighlight(guide.current_season) : null);
   let externalLinks = $derived(guide?.external_links ?? []);
+  // Similar-species section gate: the server-computed per-response flag is
+  // authoritative once the guide resolved; the prop covers the guide-404 case.
+  let similarSectionOn = $derived(guide?.features?.similar_species ?? showSimilarSpecies);
 
   async function load(): Promise<void> {
     loading = true;
@@ -112,19 +130,24 @@
     noGuide = false;
     const enc = encodeURIComponent(scientificName);
     const loc = encodeURIComponent(getLocale());
-    try {
-      const [g, s] = await Promise.all([
-        api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide?locale=${loc}`),
-        api.get<SimilarSpeciesResponse>(`/api/v2/species/${enc}/similar?locale=${loc}`).catch(
-          (): SimilarSpeciesResponse => ({
-            scientific_name: scientificName,
-            genus: '',
-            similar: [],
+    // The two endpoints are independent on the backend; fetch them independently
+    // so a guide 404 (species without guide content) doesn't discard a
+    // successfully fetched similar-species list.
+    const emptySimilar: SimilarSpeciesResponse = {
+      scientific_name: scientificName,
+      genus: '',
+      similar: [],
+    };
+    const similarPromise = showSimilarSpecies
+      ? api
+          .get<SimilarSpeciesResponse>(`/api/v2/species/${enc}/similar?locale=${loc}`)
+          .catch((e): SimilarSpeciesResponse => {
+            logger.error('Failed to load similar species', e, { component: 'SpeciesComparison' });
+            return emptySimilar;
           })
-        ),
-      ]);
-      guide = g;
-      similar = s.similar ?? [];
+      : Promise.resolve(emptySimilar);
+    try {
+      guide = await api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide?locale=${loc}`);
     } catch (e) {
       if (e instanceof ApiError && e.status === HTTP_SERVICE_UNAVAILABLE) {
         unavailable = true;
@@ -134,10 +157,10 @@
       } else {
         error = e instanceof Error ? e.message : String(e);
       }
-      logger.error('Failed to load species comparison', e, { component: 'SpeciesComparison' });
-    } finally {
-      loading = false;
+      logger.error('Failed to load species guide', e, { component: 'SpeciesComparison' });
     }
+    similar = (await similarPromise).similar ?? [];
+    loading = false;
   }
 
   function toggle(id: string): void {
@@ -177,12 +200,38 @@
     <div role="alert" class="p-4 rounded-lg bg-warning/10 text-warning-content">
       {t('analytics.species.guide.unavailable')}
     </div>
+  {:else if error}
+    <div role="alert" class="p-4 rounded-lg bg-error/10 text-error">{error}</div>
   {:else if noGuide}
+    <!-- No guide content for this species, but the similar-species list is an
+         independent endpoint: render it when it returned entries so a guide 404
+         doesn't discard useful data. -->
     <div role="status" class="p-4 text-sm text-base-content/70">
       {t('analytics.species.guide.noGuide')}
     </div>
-  {:else if error}
-    <div role="alert" class="p-4 rounded-lg bg-error/10 text-error">{error}</div>
+    {#if similarSectionOn && similar.length > 0}
+      <div>
+        <button
+          type="button"
+          class="flex w-full items-center justify-between py-2 text-left font-medium"
+          aria-expanded={openSections.similar}
+          aria-controls={`${uid}-similar`}
+          onclick={() => toggle('similar')}
+        >
+          <span>{t('analytics.species.similar.title')}</span>
+          {#if openSections.similar}
+            <ChevronDown class="h-4 w-4" />
+          {:else}
+            <ChevronRight class="h-4 w-4" />
+          {/if}
+        </button>
+        {#if openSections.similar}
+          <div id={`${uid}-similar`} class="pb-3">
+            <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
+          </div>
+        {/if}
+      </div>
+    {/if}
   {:else if guide}
     <!-- Enrichments: expectedness + season badges and external resource links -->
     {#if enrichmentsOn && (guide.expectedness || season || externalLinks.length > 0)}
@@ -256,28 +305,31 @@
       </div>
     {/if}
 
-    <!-- Similar species -->
-    <div>
-      <button
-        type="button"
-        class="flex w-full items-center justify-between py-2 text-left font-medium"
-        aria-expanded={openSections.similar}
-        aria-controls={`${uid}-similar`}
-        onclick={() => toggle('similar')}
-      >
-        <span>{t('analytics.species.similar.title')}</span>
+    <!-- Similar species (gated by the showSimilarSpecies setting, with the
+         guide response's server-computed features flag as the authority) -->
+    {#if similarSectionOn}
+      <div>
+        <button
+          type="button"
+          class="flex w-full items-center justify-between py-2 text-left font-medium"
+          aria-expanded={openSections.similar}
+          aria-controls={`${uid}-similar`}
+          onclick={() => toggle('similar')}
+        >
+          <span>{t('analytics.species.similar.title')}</span>
+          {#if openSections.similar}
+            <ChevronDown class="h-4 w-4" />
+          {:else}
+            <ChevronRight class="h-4 w-4" />
+          {/if}
+        </button>
         {#if openSections.similar}
-          <ChevronDown class="h-4 w-4" />
-        {:else}
-          <ChevronRight class="h-4 w-4" />
+          <div id={`${uid}-similar`} class="pb-3">
+            <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
+          </div>
         {/if}
-      </button>
-      {#if openSections.similar}
-        <div id={`${uid}-similar`} class="pb-3">
-          <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
-        </div>
-      {/if}
-    </div>
+      </div>
+    {/if}
   {:else}
     <p class="text-sm text-base-content/70 p-4">{t('analytics.species.guide.noSimilar')}</p>
   {/if}
