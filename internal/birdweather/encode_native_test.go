@@ -103,24 +103,6 @@ func TestEncodeWithNativeFLAC_Silence(t *testing.T) {
 	}
 }
 
-// TestPCMInt16FromBytes_SignedRoundTrip is the regression guard for the signed
-// cast: a Uint16-only read would turn negative samples into large positives and
-// corrupt the loudness measurement.
-func TestPCMInt16FromBytes_SignedRoundTrip(t *testing.T) {
-	t.Parallel()
-	want := []int16{0, -1, 1, 32767, -32768, 1234, -1234}
-	b := make([]byte, len(want)*2)
-	for i, s := range want {
-		binary.LittleEndian.PutUint16(b[i*2:], uint16(s)) //nolint:gosec // G115: building signed test PCM
-	}
-	assert.Equal(t, want, pcmInt16FromBytes(b))
-}
-
-// TestPCMInt16FromBytes_OddTrailingByte drops a trailing odd byte (never present
-// in real int16 PCM) instead of panicking.
-func TestPCMInt16FromBytes_OddTrailingByte(t *testing.T) {
-	t.Parallel()
-	got := pcmInt16FromBytes([]byte{0x01, 0x02, 0x03})
-	assert.Len(t, got, 1)
-	assert.Equal(t, int16(0x0201), got[0])
-}
+// The signed-cast and odd-trailing-byte regression guards now live with the
+// shared decoder in internal/audiocore/audionorm (MeasureInt16Bytes /
+// Meter.AddInt16Bytes), which this path calls instead of a local helper.

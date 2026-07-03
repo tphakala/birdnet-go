@@ -36,7 +36,7 @@ func sinePCMBytes(amp int16, seconds, freqHz float64) []byte {
 
 func measureLUFS(t *testing.T, pcm []byte) float64 {
 	t.Helper()
-	meas, err := audionorm.MeasureInt16(pcmBytesToInt16(pcm), conf.SampleRate, conf.NumChannels)
+	meas, err := audionorm.MeasureInt16Bytes(pcm, conf.SampleRate, conf.NumChannels)
 	require.NoError(t, err)
 	return meas.IntegratedLUFS
 }
@@ -64,7 +64,7 @@ func TestPlanNativeNormalizationGain_QuietClipReachesTarget(t *testing.T) {
 	assert.Positive(t, gainDB, "quiet clip must be boosted")
 	assert.InDelta(t, testTargetLUFS, measured+gainDB, 0.1,
 		"gain must bring the measured loudness onto the target (not peak-limited, not clamped)")
-	assert.Less(t, gainDB, maxNativeNormalizationGainDB, "this clip must not hit the clamp")
+	assert.Less(t, gainDB, audionorm.DefaultMaxGainDB, "this clip must not hit the clamp")
 }
 
 // TestPlanNativeNormalizationGain_Silence keeps silent input unchanged (gain 0)
@@ -79,7 +79,7 @@ func TestPlanNativeNormalizationGain_Silence(t *testing.T) {
 }
 
 // TestPlanNativeNormalizationGain_ClampsExtremeBoost bounds a near-silent (but
-// above the gate) clip to +maxNativeNormalizationGainDB instead of the full
+// above the gate) clip to +audionorm.DefaultMaxGainDB instead of the full
 // target-driven gain.
 func TestPlanNativeNormalizationGain_ClampsExtremeBoost(t *testing.T) {
 	t.Parallel()
@@ -87,14 +87,14 @@ func TestPlanNativeNormalizationGain_ClampsExtremeBoost(t *testing.T) {
 	// true-peak ceiling, so the clamp (not the ceiling) binds.
 	pcm := sinePCMBytes(40, 1.0, 1000)
 	measured := measureLUFS(t, pcm)
-	require.Less(t, measured, testTargetLUFS-maxNativeNormalizationGainDB,
+	require.Less(t, measured, testTargetLUFS-audionorm.DefaultMaxGainDB,
 		"sanity: uncapped gain would exceed the clamp")
 	require.Greater(t, measured, audionormMinTargetLUFS+3, "sanity: still above the absolute gate")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
 	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
-	assert.InDelta(t, maxNativeNormalizationGainDB, gainDB, 1e-9, "extreme boost must clamp to +30 dB")
+	assert.InDelta(t, audionorm.DefaultMaxGainDB, gainDB, 1e-9, "extreme boost must clamp to +DefaultMaxGainDB")
 }
 
 // TestPlanNativeNormalizationGain_Attenuates reduces a loud clip toward the target
@@ -181,21 +181,9 @@ func TestAudionormSupportsTargets(t *testing.T) {
 	}
 }
 
-func TestPcmBytesToInt16(t *testing.T) {
-	t.Parallel()
-	// Round-trips signed values including negatives via LE bit layout.
-	in := []int16{0, 1, -1, 32767, -32768, 1234, -1234}
-	raw := make([]byte, len(in)*2)
-	for i, s := range in {
-		//nolint:gosec // G115: signed->LE bit-write for test fixture
-		binary.LittleEndian.PutUint16(raw[i*2:], uint16(s))
-	}
-	assert.Equal(t, in, pcmBytesToInt16(raw))
-
-	// A trailing odd byte is ignored (not produced by real int16 PCM).
-	assert.Len(t, pcmBytesToInt16([]byte{1, 2, 3}), 1)
-	assert.Empty(t, pcmBytesToInt16(nil))
-}
+// The []byte->[]int16 signed-cast and odd-trailing-byte regression guards now
+// live with the shared decoder in internal/audiocore/audionorm (MeasureInt16Bytes
+// / Meter.AddInt16Bytes), which this path calls instead of a local helper.
 
 // TestEncodeClipSelectsNativeNormalization drives the real encodeClip switch with
 // the native gate on and normalization enabled, proving it routes to the native
