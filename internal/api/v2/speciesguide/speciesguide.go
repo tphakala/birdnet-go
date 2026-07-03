@@ -953,16 +953,16 @@ func (c *Handler) ebirdSpeciesCode(scientificName string) string {
 // endpoint, so species pages must be addressed by code as
 // https://ebird.org/species/<code>.
 //
-// lang for {lang} substitution is the Wikipedia project subtag (so the nb/nn -> no
-// override is applied). The Wikidata GoToLinkedPage template requires the exact wiki
-// project code, so that mapping is mandatory there; the same subtag also feeds
-// iNaturalist's ?locale= value. iNaturalist falls back to its default locale for a
-// value it does not recognize, so the link is always valid even when not localized.
+// lang for {lang} substitution is the plain base-language subtag (e.g. "nb" for
+// Norwegian Bokmål). Any Wikipedia-specific remapping (nb/nn -> the "no" project)
+// is applied per-source inside the OpenFauna resolver via each source's lang_map,
+// so it affects only Wikipedia links; other services (e.g. iNaturalist's ?locale=)
+// correctly receive the base subtag rather than the Wikipedia-mapped value.
 func externalLinksForGuide(scientificName, ebirdCode, locale string, includeSupplementary bool) []GuideExternalLink {
 	if scientificName == "" {
 		return nil
 	}
-	lang := wikipediaSubdomain(baseLanguage(locale))
+	lang := baseLanguage(locale)
 	resolved := openfauna.ExternalLinks(scientificName, lang, includeSupplementary)
 	out := make([]GuideExternalLink, 0, len(resolved)+1)
 	for _, l := range resolved {
@@ -982,33 +982,12 @@ func externalLinksForGuide(scientificName, ebirdCode, locale string, includeSupp
 	return out
 }
 
-// wikipediaLangOverrides maps a base-language subtag to the Wikipedia language
-// subdomain to use when the two differ. Norwegian Bokmål ("nb") and Nynorsk ("nn")
-// articles live on the Norwegian Wikipedia ("no"); nb.wikipedia.org only redirects
-// there, so we address it canonically instead of relying on the redirect. Subtags
-// absent from this map use the base subtag unchanged.
-var wikipediaLangOverrides = map[string]string{
-	"nb": "no",
-	"nn": "no",
-}
-
-// wikipediaSubdomain returns the Wikipedia language subdomain for a base-language
-// subtag, applying wikipediaLangOverrides for the cases where the article namespace
-// differs from the language code. Callers pass a value already produced by
-// baseLanguage (validated, lowercase).
-func wikipediaSubdomain(lang string) string {
-	if sub, ok := wikipediaLangOverrides[lang]; ok {
-		return sub
-	}
-	return lang
-}
-
 // baseLanguage extracts the lowercase base-language subtag from a UI locale (e.g.
 // "pt-br"/"pt_pt" -> "pt", "zh-cn" -> "zh"), validating it as a 2-3 letter code.
 // Anything else falls back to defaultWikiLang ("en"). The locale always originates
-// from the app's UI locale set (base-language codes that map to live Wikipedia
-// subdomains, modulo wikipediaSubdomain's overrides), so the result is safe to use
-// as a Wikipedia language subdomain and as an iNaturalist ?locale= value.
+// from the app's UI locale set, so the result is a valid base-language subtag safe
+// to feed the link resolver (which applies any per-source language remapping, e.g.
+// Wikipedia's nb/nn -> no, itself).
 func baseLanguage(locale string) string {
 	l := strings.ToLower(strings.TrimSpace(locale))
 	// Split on either separator and keep the primary subtag.

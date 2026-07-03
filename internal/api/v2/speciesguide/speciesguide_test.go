@@ -241,24 +241,11 @@ func TestBaseLanguage(t *testing.T) {
 	}
 }
 
-func TestWikipediaSubdomain(t *testing.T) {
-	t.Parallel()
-
-	cases := map[string]string{
-		"de": "de", // no override -> base subtag unchanged
-		"en": "en",
-		"nb": "no", // Norwegian Bokmål articles live on no.wikipedia.org
-		"nn": "no", // Norwegian Nynorsk likewise
-	}
-	for in, want := range cases {
-		assert.Equalf(t, want, wikipediaSubdomain(in), "wikipediaSubdomain(%q)", in)
-	}
-}
-
-// TestExternalLinksForGuide_NorwegianWikipediaOverride verifies the nb UI locale yields
-// a nowiki Wikidata redirect (not nbwiki), while iNaturalist keeps the base-language
-// ?locale=nb (its locale param degrades gracefully).
-func TestExternalLinksForGuide_NorwegianWikipediaOverride(t *testing.T) {
+// TestExternalLinksForGuide_NorwegianLangMapping verifies the Wikipedia-specific
+// nb->no remap is confined to Wikipedia: the Wikidata redirect uses "nowiki" (not
+// "nbwiki"), while iNaturalist correctly receives the base ISO subtag ?locale=nb
+// (the "no" Wikipedia project name is meaningless to iNaturalist).
+func TestExternalLinksForGuide_NorwegianLangMapping(t *testing.T) {
 	t.Parallel()
 
 	links := externalLinksForGuide(sciEurasianBlackbird, "", "nb", false)
@@ -266,12 +253,13 @@ func TestExternalLinksForGuide_NorwegianWikipediaOverride(t *testing.T) {
 	for _, l := range links {
 		byIcon[l.Icon] = l.URL
 	}
-	// The nb->no override must be applied: Wikipedia Wikidata link uses "nowiki".
+	// Wikipedia gets the "no" project via the source's lang_map.
 	assert.Contains(t, byIcon["wikipedia"], "nowiki")
 	assert.NotContains(t, byIcon["wikipedia"], "nbwiki")
-	// iNaturalist also receives the mapped lang ("no"), not the raw locale ("nb").
+	// iNaturalist keeps the base subtag — the Wikipedia mapping must NOT leak here.
 	if inat, ok := byIcon["inaturalist"]; ok {
-		assert.Contains(t, inat, "locale=no")
+		assert.Contains(t, inat, "locale=nb")
+		assert.NotContains(t, inat, "locale=no")
 	}
 }
 

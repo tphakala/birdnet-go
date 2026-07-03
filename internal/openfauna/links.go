@@ -19,6 +19,22 @@ type Source struct {
 	Order int    `json:"order"`
 	Icon  string `json:"icon"`
 	URL   string `json:"url"`
+	// LangMap optionally remaps the {lang} substitution for THIS source only, for
+	// services whose language token diverges from the standard base subtag. The
+	// canonical case is Wikipedia: Norwegian Bokmål/Nynorsk articles live on the
+	// "no" project ("nowiki" / no.wikipedia.org), so wikipedia sources map nb/nn ->
+	// no while every other source (e.g. iNaturalist's ?locale=) keeps the base
+	// subtag. Absent/unmatched keys fall through to the base lang unchanged.
+	LangMap map[string]string `json:"lang_map,omitempty"`
+}
+
+// langFor returns the {lang} value to substitute for this source: the source's
+// per-source override when present, else the base language unchanged.
+func (s Source) langFor(lang string) string {
+	if mapped, ok := s.LangMap[lang]; ok {
+		return mapped
+	}
+	return lang
 }
 
 // Link is one resolved external resource link, ready for the UI to render as a
@@ -36,6 +52,29 @@ var (
 	sourcesReg  map[string]Source
 )
 
+// birdnetGoSourceLangMaps holds birdnet-go-owned per-source {lang} overrides. It
+// lives in code (not in the vendored data/sources.json, which cmd/compiler
+// regenerates from OpenFauna upstream and would drop this quirk on every refresh)
+// and is merged onto both the upstream and the supplementary registries at parse
+// time. Currently: Wikipedia's Norwegian Bokmål/Nynorsk articles live on the "no"
+// project ("nowiki" / no.wikipedia.org), so those sources map nb/nn -> no; every
+// other source keeps the standard base subtag.
+var birdnetGoSourceLangMaps = map[string]map[string]string{
+	"wikipedia": {"nb": "no", "nn": "no"},
+}
+
+// applySourceLangMaps merges birdnetGoSourceLangMaps onto a parsed registry so the
+// override is applied uniformly regardless of which registry (upstream or
+// supplementary) a source came from, and survives data refreshes.
+func applySourceLangMaps(reg map[string]Source) {
+	for id, m := range birdnetGoSourceLangMaps {
+		if src, ok := reg[id]; ok {
+			src.LangMap = m
+			reg[id] = src
+		}
+	}
+}
+
 // Sources returns the embedded OpenFauna sources registry, parsed once. A parse
 // failure yields an empty registry (links simply do not render) and is logged.
 func Sources() map[string]Source {
@@ -48,6 +87,7 @@ func Sources() map[string]Source {
 			GetLogger().Error("failed to parse embedded openfauna sources.json", logger.Error(err))
 			reg = map[string]Source{}
 		}
+		applySourceLangMaps(reg)
 		sourcesReg = reg
 	})
 	// Return a clone so a caller mutating the result cannot corrupt the shared,
@@ -98,7 +138,8 @@ func resolveLinks(links map[string]LinkEntry, lang string, reg map[string]Source
 			// stable tokens from the trusted vendored dataset (Wikidata QIDs, numeric
 			// taxon ids). A source whose id would need escaping (e.g. a Wikipedia title
 			// with spaces) ships a url override instead, handled by the case above.
-			linkURL = substituteTemplate(src.URL, map[string]string{phID: entry.ID, phLang: lang})
+			// {lang} is the per-source mapped language (see Source.langFor).
+			linkURL = substituteTemplate(src.URL, map[string]string{phID: entry.ID, phLang: src.langFor(lang)})
 		default:
 			continue
 		}
@@ -134,6 +175,7 @@ func supplementarySources() map[string]Source {
 			GetLogger().Error("failed to parse supplementary_sources.json", logger.Error(err))
 			reg = map[string]Source{}
 		}
+		applySourceLangMaps(reg)
 		suppReg = reg
 	})
 	return suppReg
@@ -143,13 +185,17 @@ func supplementarySources() map[string]Source {
 // for one species (no per-species id needed). {sci} is query-escaped, {sci_underscored}
 // is path-escaped with spaces as underscores, {lang} is the UI base language.
 func resolveComputedLinks(scientificName, lang string, reg map[string]Source) []Link {
-	vars := map[string]string{
-		phSci:            url.QueryEscape(scientificName),
-		phSciUnderscored: url.PathEscape(strings.ReplaceAll(scientificName, " ", "_")),
-		phLang:           lang,
-	}
+	sci := url.QueryEscape(scientificName)
+	sciUnderscored := url.PathEscape(strings.ReplaceAll(scientificName, " ", "_"))
 	out := make([]Link, 0, len(reg))
 	for _, src := range reg {
+		// {lang} is mapped per source (see Source.langFor) so a Wikipedia gap-fill
+		// gets the "no" project for nb/nn while other sources keep the base subtag.
+		vars := map[string]string{
+			phSci:            sci,
+			phSciUnderscored: sciUnderscored,
+			phLang:           src.langFor(lang),
+		}
 		out = append(out, Link{
 			Name:  src.Name,
 			URL:   substituteTemplate(src.URL, vars),

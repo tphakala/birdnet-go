@@ -30,6 +30,41 @@ func TestResolveLinksTier1(t *testing.T) {
 	assert.Equal(t, "https://www.gbif.org/species/2480528", got[2].URL)
 }
 
+// TestResolveLinksPerSourceLangMap verifies each source's lang_map is applied to
+// {lang} for that source ONLY: the Wikipedia source remaps nb -> the "no" project,
+// while iNaturalist (no lang_map) keeps the base "nb" subtag.
+func TestResolveLinksPerSourceLangMap(t *testing.T) {
+	t.Parallel()
+	reg := map[string]Source{
+		idWikipedia: {
+			Name: "Wikipedia", Order: 10, Icon: idWikipedia,
+			URL:     "https://www.wikidata.org/wiki/Special:GoToLinkedPage/{lang}wiki/{id}",
+			LangMap: map[string]string{"nb": "no", "nn": "no"},
+		},
+		"inaturalist": {Name: "iNaturalist", Order: 20, Icon: "inaturalist", URL: "https://www.inaturalist.org/taxa/{id}?locale={lang}"},
+	}
+	links := map[string]LinkEntry{
+		idWikipedia:   {ID: "Q41181"},
+		"inaturalist": {ID: "5074"},
+	}
+	got := resolveLinks(links, "nb", reg)
+	require.Len(t, got, 2)
+	assert.Equal(t, "https://www.wikidata.org/wiki/Special:GoToLinkedPage/nowiki/Q41181", got[0].URL,
+		"Wikipedia source remaps nb -> no")
+	assert.Equal(t, "https://www.inaturalist.org/taxa/5074?locale=nb", got[1].URL,
+		"iNaturalist keeps the base subtag; the Wikipedia mapping must not leak")
+}
+
+func TestSourceLangFor(t *testing.T) {
+	t.Parallel()
+	wiki := Source{LangMap: map[string]string{"nb": "no", "nn": "no"}}
+	assert.Equal(t, "no", wiki.langFor("nb"))
+	assert.Equal(t, "no", wiki.langFor("nn"))
+	assert.Equal(t, "de", wiki.langFor("de"), "unmapped subtag falls through unchanged")
+	// A source with no map returns the input verbatim.
+	assert.Equal(t, "nb", Source{}.langFor("nb"))
+}
+
 func TestResolveLinksHonorsURLOverride(t *testing.T) {
 	reg := map[string]Source{
 		idWikipedia: {Name: "Wikipedia", Order: 10, Icon: idWikipedia, URL: "https://www.wikidata.org/wiki/Special:GoToLinkedPage/{lang}wiki/{id}"},
@@ -95,4 +130,17 @@ func TestExternalLinksWikipediaGapFillForMissingSpecies(t *testing.T) {
 	}
 	assert.Truef(t, wiki, "missing-species gap-fill should include a wikipedia link: %+v", links)
 	assert.Truef(t, xc, "missing-species gap-fill should include a xeno-canto link: %+v", links)
+}
+
+// TestProductionRegistriesGetLangOverride verifies the birdnet-go-owned Wikipedia
+// lang override is merged onto BOTH parsed registries (upstream + supplementary),
+// so it survives a data refresh that regenerates data/sources.json.
+func TestProductionRegistriesGetLangOverride(t *testing.T) {
+	t.Parallel()
+	if wiki, ok := Sources()["wikipedia"]; ok {
+		assert.Equal(t, "no", wiki.langFor("nb"), "upstream Wikipedia source must map nb -> no")
+	}
+	if wiki, ok := supplementarySources()["wikipedia"]; ok {
+		assert.Equal(t, "no", wiki.langFor("nb"), "supplementary Wikipedia source must map nb -> no")
+	}
 }
