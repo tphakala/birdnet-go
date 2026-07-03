@@ -59,7 +59,7 @@ export function resolveSpeciesGuideConfig(
   if (fromStore) return Promise.resolve(toSpeciesGuideUIConfig(fromStore));
   publicFetch ??= api
     .get<{ speciesGuide?: Partial<SpeciesGuideSettings> }>('/api/v2/settings/dashboard')
-    .then(dash => toSpeciesGuideUIConfig(dash?.speciesGuide))
+    .then(dash => toSpeciesGuideUIConfig(dash.speciesGuide))
     .catch((e: unknown) => {
       logger.error('Failed to fetch public dashboard settings for species guide', e, {
         component: 'speciesGuideConfig',
