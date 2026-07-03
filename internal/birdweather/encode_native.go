@@ -21,14 +21,14 @@ import (
 // limit so a near-silent clip is not over-amplified into loud static.
 const maxGainDB = 30.0
 
-// encodeWithNativeFLAC encodes PCM to a seekable temporary FLAC file, reads it
-// into an upload buffer, and uses the native go-flac encoder and audionorm
-// loudness normalization, with no FFmpeg dependency. The temp file round-trip is
-// handled by encodeUploadAudioToBuffer through os.MkdirTemp/os.ReadFile so
-// STREAMINFO total samples can be finalized. Pass 1 measures integrated loudness
-// and true peak; the planned gain (clamped to +/-maxGainDB) is then applied in
-// Go while the original bytes are streamed into the encoder. pcmData is not
-// modified.
+// encodeWithNativeFLAC encodes PCM directly to an in-memory FLAC upload buffer
+// using the native go-flac encoder and audionorm loudness normalization, with no
+// FFmpeg dependency. go-flac writes a finalized STREAMINFO total-samples field up
+// front from the PCM length, so the non-seekable buffer encoder yields the
+// correct soundscape duration with no temp-file round-trip. Pass 1 measures
+// integrated loudness and true peak; the planned gain (clamped to +/-maxGainDB)
+// is then applied in Go while the original bytes are streamed into the encoder.
+// pcmData is not modified.
 func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
 
@@ -82,18 +82,16 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 		logger.Float64("gain_db", gainDB),
 		logger.Bool("peak_limited", res.PeakLimited))
 
-	// Pass 2: apply the gain in Go and encode to seekable FLAC. BirdWeather
-	// derives soundscape duration from FLAC STREAMINFO, so uploads must not use
-	// the non-seekable buffer encoder that leaves total samples unknown.
-	buf, err := encodeUploadAudioToBuffer("flac", func(outputPath string) error {
-		return flac.EncodePCM(ctx, &flac.Options{
-			PCMData:    pcmData,
-			OutputPath: outputPath,
-			SampleRate: conf.SampleRate,
-			Channels:   conf.NumChannels,
-			BitDepth:   conf.BitDepth,
-			GainDB:     gainDB,
-		})
+	// Pass 2: apply the gain in Go and encode straight to an in-memory FLAC
+	// buffer. go-flac finalizes STREAMINFO.total_samples up front from the PCM
+	// length, so BirdWeather derives the correct soundscape duration without the
+	// temp-file round-trip the encoder needed before.
+	buf, err := flac.EncodePCMToBuffer(ctx, &flac.BufferOptions{
+		PCMData:    pcmData,
+		SampleRate: conf.SampleRate,
+		Channels:   conf.NumChannels,
+		BitDepth:   conf.BitDepth,
+		GainDB:     gainDB,
 	})
 	if err != nil {
 		// logFLACEncodingError downgrades timeout/cancel to WARN to avoid Sentry
