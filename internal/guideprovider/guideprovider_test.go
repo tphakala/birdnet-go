@@ -721,6 +721,48 @@ func TestStoreMemory_ExactCountUnderConcurrency(t *testing.T) {
 	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must stay exact under concurrency")
 }
 
+// TestStoreMemory_CountStaysExactWhenStoresRaceDeletes drives repeated
+// storeMemory writes against a shared key set while a competing goroutine deletes
+// those keys (mirroring InvalidateAll / negative-entry eviction). The old
+// Load-then-Store fast path could re-insert a concurrently deleted key without
+// incrementing memCount, drifting the count below the true entry total; Swap
+// closes that window. Run under -race; assert memCount matches the live map.
+func TestStoreMemory_CountStaysExactWhenStoresRaceDeletes(t *testing.T) {
+	t.Parallel()
+	c := NewGuideCache(newFakeStore(), noopMetrics{})
+	t.Cleanup(c.Close)
+
+	const keys = 64
+	const rounds = 4000
+	keyAt := func(i int) string { return cacheKey("racer", strconvI(i)) }
+
+	var wg sync.WaitGroup
+	// Writer: repeatedly (re)stores each key.
+	wg.Go(func() {
+		for r := range rounds {
+			c.storeMemory(keyAt(r%keys), &SpeciesGuide{CommonName: "x"})
+		}
+	})
+	// Deleter: repeatedly removes keys, decrementing the counter exactly as the
+	// eviction/invalidation paths do (LoadAndDelete + memCount.Add(-1)).
+	wg.Go(func() {
+		for r := range rounds {
+			if _, loaded := c.memory.LoadAndDelete(keyAt(r % keys)); loaded {
+				c.memCount.Add(-1)
+			}
+		}
+	})
+	wg.Wait()
+
+	count := 0
+	c.memory.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	assert.Equal(t, int64(count), c.memCount.Load(),
+		"memCount must equal the live entry count after stores raced deletes")
+}
+
 // TestRefreshStaleEntries_EvictsExpiredNegatives verifies the refresh sweep drops
 // expired negative entries from memory (freeing slots) while keeping fresh ones.
 func TestRefreshStaleEntries_EvictsExpiredNegatives(t *testing.T) {

@@ -286,25 +286,26 @@ func (c *GuideCache) SetWarmTopN(n int) {
 // so a flood of distinct keys cannot grow memory without bound (those entries
 // still live in the DB tier).
 //
-// The cap is enforced exactly without locking by reserving a slot up front
-// (memCount.Add) and rolling the reservation back when it would exceed the cap or
-// when a concurrent writer created the key first — so memCount stays an accurate
-// count of memory entries even under concurrent distinct-key writes.
+// The cap is enforced exactly without locking. Swap performs the update-or-insert
+// as a single atomic op and reports whether a value was already present, which
+// closes the race a separate Load-then-Store would open: a key deleted by a
+// concurrent InvalidateAll/eviction between the Load and the Store would be
+// re-inserted without accounting, undercounting memCount and letting memory grow
+// past the cap. With Swap, a concurrent delete simply makes our write look like a
+// fresh insert (loaded == false), so it takes the accounted path below.
 func (c *GuideCache) storeMemory(key string, g *SpeciesGuide) {
-	if _, loaded := c.memory.Load(key); loaded {
-		c.memory.Store(key, g)
+	if _, loaded := c.memory.Swap(key, g); loaded {
+		// Replaced an already-counted entry: no accounting change.
 		return
 	}
-	// Reserve a slot; if that pushes us over the cap, roll back and skip.
+	// Inserted a new entry (key was absent or concurrently deleted): claim a slot,
+	// rolling the insert back if it would exceed the cap.
 	if c.memCount.Add(1) > maxMemoryEntries {
 		c.memCount.Add(-1)
-		return
-	}
-	if _, loaded := c.memory.LoadOrStore(key, g); loaded {
-		// Another writer added this key between our Load and LoadOrStore: we did
-		// not consume a new slot, so release the reservation and update in place.
-		c.memCount.Add(-1)
-		c.memory.Store(key, g)
+		// Undo our insert, but only if it is still our value: a concurrent writer
+		// may have replaced it (that writer saw loaded == true and relies on this
+		// slot staying counted), so deleting its value would desync the count.
+		c.memory.CompareAndDelete(key, g)
 	}
 }
 
