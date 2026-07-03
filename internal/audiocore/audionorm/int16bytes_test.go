@@ -152,23 +152,29 @@ func TestClampGainDB(t *testing.T) {
 	cases := []struct {
 		name        string
 		in          float64
+		maxAbs      float64
 		wantVal     float64
 		wantLimited bool
 	}{
-		{"within range", 12.5, 12.5, false},
-		{"at positive ceiling", maxAbs, maxAbs, false},
-		{"above positive ceiling", maxAbs + 5, maxAbs, true},
-		{"at negative ceiling", -maxAbs, -maxAbs, false},
-		{"below negative ceiling", -maxAbs - 5, -maxAbs, true},
-		{"zero", 0, 0, false},
+		{"within range", 12.5, maxAbs, 12.5, false},
+		{"at positive ceiling", maxAbs, maxAbs, maxAbs, false},
+		{"above positive ceiling", maxAbs + 5, maxAbs, maxAbs, true},
+		{"at negative ceiling", -maxAbs, maxAbs, -maxAbs, false},
+		{"below negative ceiling", -maxAbs - 5, maxAbs, -maxAbs, true},
+		{"zero", 0, maxAbs, 0, false},
+		// A negative ceiling is treated as its magnitude, so the range stays
+		// symmetric rather than clamping every value to a negative bound.
+		{"negative ceiling, over", 50, -maxAbs, maxAbs, true},
+		{"negative ceiling, under", -50, -maxAbs, -maxAbs, true},
+		{"negative ceiling, within", 10, -maxAbs, 10, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, limited := ClampGainDB(tc.in, maxAbs)
+			got, limited := ClampGainDB(tc.in, tc.maxAbs)
 			if got != tc.wantVal || limited != tc.wantLimited {
 				t.Errorf("ClampGainDB(%v, %v) = (%v, %v), want (%v, %v)",
-					tc.in, maxAbs, got, limited, tc.wantVal, tc.wantLimited)
+					tc.in, tc.maxAbs, got, limited, tc.wantVal, tc.wantLimited)
 			}
 		})
 	}

@@ -215,11 +215,14 @@ const DefaultMaxGainDB = 30.0
 // limiting while another applies it silently. maxAbsDB is treated as a magnitude;
 // callers pass a non-negative value.
 func ClampGainDB(gainDB, maxAbsDB float64) (clamped float64, limited bool) {
+	// Treat maxAbsDB as a magnitude so a stray negative ceiling still yields a
+	// sane symmetric range rather than clamping everything to a negative bound.
+	absLimit := math.Abs(maxAbsDB)
 	switch {
-	case gainDB > maxAbsDB:
-		return maxAbsDB, true
-	case gainDB < -maxAbsDB:
-		return -maxAbsDB, true
+	case gainDB > absLimit:
+		return absLimit, true
+	case gainDB < -absLimit:
+		return -absLimit, true
 	default:
 		return gainDB, false
 	}
