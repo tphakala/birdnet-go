@@ -160,8 +160,10 @@ type Interface interface {
 	UpdateNoteComment(commentID string, entry string) error
 	DeleteNoteComment(commentID string) error
 	// Species guide notes (per-species, not tied to a single detection).
+	// GetSpeciesNoteByID exists on the concrete stores (used by their tests to
+	// verify round-trips) but is intentionally NOT part of this interface: the
+	// API handlers operate on IDs via Update/Delete directly.
 	GetSpeciesNotes(ctx context.Context, scientificName string) ([]SpeciesNote, error)
-	GetSpeciesNoteByID(ctx context.Context, id uint) (*SpeciesNote, error)
 	SaveSpeciesNote(ctx context.Context, note *SpeciesNote) error
 	DeleteSpeciesNote(ctx context.Context, noteID string) error
 	UpdateSpeciesNote(ctx context.Context, noteID, entry string) error

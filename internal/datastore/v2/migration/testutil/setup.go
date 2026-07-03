@@ -665,9 +665,6 @@ func (s *testLegacyInterface) Close() error { return nil }
 func (s *testLegacyInterface) GetSpeciesNotes(_ context.Context, _ string) ([]datastore.SpeciesNote, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetSpeciesNoteByID(_ context.Context, _ uint) (*datastore.SpeciesNote, error) {
-	return nil, datastore.ErrSpeciesNoteNotFound
-}
 func (s *testLegacyInterface) SaveSpeciesNote(_ context.Context, _ *datastore.SpeciesNote) error {
 	return nil
 }

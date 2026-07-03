@@ -3985,65 +3985,6 @@ func (_c *MockInterface_GetSpeciesFirstDetectionInPeriod_Call) RunAndReturn(run 
 	return _c
 }
 
-// GetSpeciesNoteByID provides a mock function with given fields: ctx, id
-func (_m *MockInterface) GetSpeciesNoteByID(ctx context.Context, id uint) (*datastore.SpeciesNote, error) {
-	ret := _m.Called(ctx, id)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetSpeciesNoteByID")
-	}
-
-	var r0 *datastore.SpeciesNote
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, uint) (*datastore.SpeciesNote, error)); ok {
-		return rf(ctx, id)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, uint) *datastore.SpeciesNote); ok {
-		r0 = rf(ctx, id)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*datastore.SpeciesNote)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, uint) error); ok {
-		r1 = rf(ctx, id)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockInterface_GetSpeciesNoteByID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSpeciesNoteByID'
-type MockInterface_GetSpeciesNoteByID_Call struct {
-	*mock.Call
-}
-
-// GetSpeciesNoteByID is a helper method to define mock.On call
-//   - ctx context.Context
-//   - id uint
-func (_e *MockInterface_Expecter) GetSpeciesNoteByID(ctx interface{}, id interface{}) *MockInterface_GetSpeciesNoteByID_Call {
-	return &MockInterface_GetSpeciesNoteByID_Call{Call: _e.mock.On("GetSpeciesNoteByID", ctx, id)}
-}
-
-func (_c *MockInterface_GetSpeciesNoteByID_Call) Run(run func(ctx context.Context, id uint)) *MockInterface_GetSpeciesNoteByID_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(uint))
-	})
-	return _c
-}
-
-func (_c *MockInterface_GetSpeciesNoteByID_Call) Return(_a0 *datastore.SpeciesNote, _a1 error) *MockInterface_GetSpeciesNoteByID_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockInterface_GetSpeciesNoteByID_Call) RunAndReturn(run func(context.Context, uint) (*datastore.SpeciesNote, error)) *MockInterface_GetSpeciesNoteByID_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GetSpeciesNotes provides a mock function with given fields: ctx, scientificName
 func (_m *MockInterface) GetSpeciesNotes(ctx context.Context, scientificName string) ([]datastore.SpeciesNote, error) {
 	ret := _m.Called(ctx, scientificName)
