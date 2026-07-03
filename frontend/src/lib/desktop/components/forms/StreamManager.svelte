@@ -28,6 +28,7 @@
   import { quietHoursStore } from '$lib/stores/quietHours.svelte';
   import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
+  import InlineSlider from './InlineSlider.svelte';
   import ModelCheckboxList from './ModelCheckboxList.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -130,6 +131,7 @@
   let newUrl = $state('');
   let newTransport = $state<'tcp' | 'udp'>('tcp');
   let newStreamType = $state<StreamType>('rtsp');
+  let newGain = $state(0);
   let newModels = $state<string[]>([DEFAULT_MODEL_ID]);
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let newChannelMode = $state<ChannelMode>('downmix');
@@ -393,6 +395,7 @@
     newTransport = 'tcp';
     newStreamType = 'rtsp';
     newChannelMode = 'downmix';
+    newGain = 0;
     newModels = [DEFAULT_MODEL_ID];
     newQuietHours = { ...defaultQuietHoursConfig };
     newTestResult = null;
@@ -453,6 +456,7 @@
       models: newModels,
       channelMode: newChannelMode,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
+      gain: newGain,
       quietHours: newQuietHours,
     } as StreamConfig;
 
@@ -740,6 +744,18 @@
               {disabled}
               onChange={mode => (newChannelMode = mode)}
               onAnalyze={url => analyzeChannels(url)}
+            />
+
+            <!-- Gain -->
+            <InlineSlider
+              label={t('settings.audio.soundCards.gainLabel')}
+              value={newGain}
+              onUpdate={value => (newGain = value)}
+              min={-40}
+              max={40}
+              step={1}
+              unit=" dB"
+              {disabled}
             />
 
             <!-- Model Selection -->

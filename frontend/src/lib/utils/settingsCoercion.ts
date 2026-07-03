@@ -177,7 +177,7 @@ export function coerceObject<T extends Record<string, unknown>>(
 function coerceStreamConfig(stream: unknown): UnknownSettings {
   const rawStream = coerceObject(stream, {} as UnknownSettings);
 
-  return {
+  const coercedStream: UnknownSettings = {
     ...rawStream,
     name: coerceString(rawStream.name, ''),
     url: coerceString(rawStream.url, ''),
@@ -188,6 +188,15 @@ function coerceStreamConfig(stream: unknown): UnknownSettings {
         ? rawStream.transport
         : undefined,
   };
+
+  // Clamp gain to the same -40..+40 dB range as sound card gain (backend
+  // validation). Only present when the caller sent one, so a stream without
+  // gain configured stays undefined rather than materializing a fake 0.
+  if ('gain' in rawStream) {
+    coercedStream.gain = coerceNumber(rawStream.gain, -40, 40, 0);
+  }
+
+  return coercedStream;
 }
 
 function coerceRTSPSettings(settings: unknown): UnknownSettings {

@@ -220,6 +220,7 @@ export interface StreamConfig {
   models?: string[]; // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
   equalizer?: EqualizerSettings; // Per-stream EQ (undefined = use global)
   quietHours?: QuietHoursConfig; // Quiet hours configuration
+  gain?: number; // Input gain in dB (0 = no adjustment)
 }
 
 // ChannelEnergy represents the energy level of a single audio channel

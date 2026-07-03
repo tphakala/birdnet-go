@@ -11,6 +11,7 @@
   - Editable stream name and URL with credential masking
   - Stream type selector (RTSP, HTTP, HLS, RTMP, UDP)
   - Protocol selector (TCP/UDP) for RTSP and RTMP streams
+  - Gain slider (-40 to +40 dB)
   - Inline editing mode
   - Delete confirmation
   - Always-visible action buttons for accessibility
@@ -39,6 +40,7 @@
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import Checkbox from './Checkbox.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
+  import InlineSlider from './InlineSlider.svelte';
   import ModelCheckboxList from './ModelCheckboxList.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
@@ -186,6 +188,7 @@
   let editTransport = $state<'tcp' | 'udp'>('tcp');
   let editStreamType = $state<StreamType>('rtsp');
   let editEnabled = $state(true);
+  let editGain = $state(0);
   let editModels = $state<string[]>([]);
   let editEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
   let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
@@ -315,6 +318,7 @@
     editChannelMode = normalizeChannelMode(stream.channelMode);
     editStreamType = stream.type;
     editEnabled = stream.enabled;
+    editGain = stream.gain ?? 0;
     editModels = stream.models?.length ? [...stream.models] : [DEFAULT_MODEL_ID];
     editEqualizer = stream.equalizer
       ? { ...stream.equalizer, filters: [...stream.equalizer.filters] }
@@ -364,6 +368,7 @@
         channelMode: editChannelMode,
         // Use selected transport for RTSP/RTMP, omit for others
         ...(showTransportInEdit ? { transport: editTransport } : {}),
+        gain: editGain,
         equalizer: transformedEqualizer,
         quietHours: editQuietHours,
       } as StreamConfig);
@@ -582,6 +587,18 @@
           size="sm"
         />
 
+        <!-- Gain -->
+        <InlineSlider
+          label={t('settings.audio.soundCards.gainLabel')}
+          value={editGain}
+          onUpdate={value => (editGain = value)}
+          min={-40}
+          max={40}
+          step={1}
+          unit=" dB"
+          {disabled}
+        />
+
         <!-- Model Selection -->
         <ModelCheckboxList
           models={availableModels}
@@ -731,6 +748,13 @@
         <div class="flex-shrink-0 flex items-center gap-2">
           <!-- Colored Protocol Tags -->
           <div class="hidden sm:flex items-center gap-1.5">
+            {#if stream.gain}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+              >
+                {stream.gain > 0 ? '+' : ''}{stream.gain} dB
+              </span>
+            {/if}
             <span
               class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
             >

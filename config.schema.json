@@ -2468,6 +2468,10 @@
           "type": "string",
           "description": "Channel handling: downmix, left, or right"
         },
+        "gain": {
+          "type": "number",
+          "description": "Input gain in dB (0 = no adjustment)"
+        },
         "equalizer": {
           "$ref": "#/$defs/EqualizerSettings",
           "description": "Per-stream EQ (nil = use global)"
