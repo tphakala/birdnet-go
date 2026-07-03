@@ -551,12 +551,11 @@ func (s *Settings) findStreamByURL(url string) *StreamConfig {
 
 // appendStreamFromSource creates a new StreamConfig from a misplaced audio
 // source and appends it to the RTSP streams. Credentials in url are preserved
-// verbatim; only the ValidationWarnings note uses a sanitized URL.
+// verbatim; only the ValidationWarnings note uses a sanitized URL. The stream
+// name is made unique and length-bounded so the migration never produces a
+// config the stream validator would reject at load time.
 func (s *Settings) appendStreamFromSource(src *AudioSourceConfig, url, streamType string) {
-	name := src.Name
-	if strings.TrimSpace(name) == "" {
-		name = fmt.Sprintf("Stream %d", len(s.Realtime.RTSP.Streams)+1)
-	}
+	name := s.uniqueStreamName(src.Name)
 
 	// Transport only applies to connection-oriented stream types.
 	transport := ""
@@ -579,6 +578,65 @@ func (s *Settings) appendStreamFromSource(src *AudioSourceConfig, url, streamTyp
 	s.ValidationWarnings = append(s.ValidationWarnings,
 		fmt.Sprintf("moved misplaced stream URL %q from realtime.audio.sources to realtime.rtsp.streams as %q",
 			privacy.SanitizeStreamUrl(url), name))
+}
+
+// uniqueStreamName derives a stream name from the requested source name that
+// the stream validator will accept at load time: unique (case-insensitively)
+// among the already-configured streams and within MaxStreamNameLength. An empty
+// requested name falls back to "Stream N" (N based on the current stream count).
+// An over-long name is truncated on a UTF-8 rune boundary; a name that collides
+// gets an incrementing " (2)", " (3)" suffix (with the base truncated further to
+// keep room for the suffix) until a free name is found. A misplaced source name
+// may be up to MaxAudioSourceNameLength, longer than a stream name is allowed to
+// be, so both the length clamp and the dedup are needed to keep
+// ReconcileMisplacedAudioSources from producing a name the validator would
+// reject with a fatal error at load time.
+func (s *Settings) uniqueStreamName(requested string) string {
+	base := strings.TrimSpace(requested)
+	if base == "" {
+		base = fmt.Sprintf("Stream %d", len(s.Realtime.RTSP.Streams)+1)
+	}
+	candidate := truncateStreamName(base, MaxStreamNameLength)
+	for n := 2; s.streamNameTaken(candidate); n++ {
+		suffix := fmt.Sprintf(" (%d)", n)
+		candidate = truncateStreamName(base, MaxStreamNameLength-len(suffix)) + suffix
+	}
+	return candidate
+}
+
+// truncateStreamName shortens name to at most maxBytes bytes on a UTF-8 rune
+// boundary (never splitting a multi-byte rune), trimming any trailing spaces
+// left by the cut. Stream names are byte-length-limited by the validator, so
+// this keeps a long source name from yielding a name the validator rejects.
+func truncateStreamName(name string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(name) <= maxBytes {
+		return name
+	}
+	// range over a string yields the byte index at each rune start; keep the
+	// largest start that still fits so the cut never lands inside a rune.
+	end := 0
+	for i := range name {
+		if i > maxBytes {
+			break
+		}
+		end = i
+	}
+	return strings.TrimRight(name[:end], " ")
+}
+
+// streamNameTaken reports whether any configured stream already uses name,
+// compared case-insensitively with surrounding whitespace trimmed, matching the
+// duplicate-name rule the stream validator enforces.
+func (s *Settings) streamNameTaken(name string) bool {
+	for i := range s.Realtime.RTSP.Streams {
+		if strings.EqualFold(strings.TrimSpace(s.Realtime.RTSP.Streams[i].Name), name) {
+			return true
+		}
+	}
+	return false
 }
 
 // mergeSourceIntoStream lightly merges non-default per-source overrides from a

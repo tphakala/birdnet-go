@@ -24,6 +24,7 @@ import type {
   PushFilterConfig,
   FalsePositiveFilterSettings,
 } from '$lib/stores/settings';
+import { AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB } from '$lib/stores/settings';
 
 // Type for partial/unknown settings data
 type UnknownSettings = Record<string, unknown>;
@@ -193,7 +194,7 @@ function coerceStreamConfig(stream: unknown): UnknownSettings {
   // validation). Only present when the caller sent one, so a stream without
   // gain configured stays undefined rather than materializing a fake 0.
   if ('gain' in rawStream) {
-    coercedStream.gain = coerceNumber(rawStream.gain, -40, 40, 0);
+    coercedStream.gain = coerceNumber(rawStream.gain, AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB, 0);
   }
 
   return coercedStream;
@@ -385,7 +386,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
 
     // Clamp gain between -40 and +40 dB (backend validation)
     if ('gain' in exp) {
-      coercedExport.gain = coerceNumber(exp.gain, -40, 40, 0);
+      coercedExport.gain = coerceNumber(exp.gain, AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB, 0);
     }
 
     // Normalization settings

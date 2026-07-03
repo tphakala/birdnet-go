@@ -52,7 +52,11 @@
     ChannelMode,
     ChannelAnalysis,
   } from '$lib/stores/settings';
-  import { defaultQuietHoursConfig } from '$lib/stores/settings';
+  import {
+    defaultQuietHoursConfig,
+    AUDIO_GAIN_MIN_DB,
+    AUDIO_GAIN_MAX_DB,
+  } from '$lib/stores/settings';
   import type { StreamHealthResponse } from './StreamManager.svelte';
   import StreamTestButton from './StreamTestButton.svelte';
   import StreamTimeline from './StreamTimeline.svelte';
@@ -592,8 +596,8 @@
           label={t('settings.audio.soundCards.gainLabel')}
           value={editGain}
           onUpdate={value => (editGain = value)}
-          min={-40}
-          max={40}
+          min={AUDIO_GAIN_MIN_DB}
+          max={AUDIO_GAIN_MAX_DB}
           step={1}
           unit=" dB"
           {disabled}

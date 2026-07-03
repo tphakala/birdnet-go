@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -188,6 +189,92 @@ func TestSettings_ReconcileMisplacedAudioSources_FallbackName(t *testing.T) {
 	require.Len(t, settings.Realtime.RTSP.Streams, 2)
 	// New stream is appended after the existing one; N = len(streams)+1 = 2.
 	assert.Equal(t, "Stream 2", settings.Realtime.RTSP.Streams[1].Name)
+}
+
+// TestSettings_ReconcileMisplacedAudioSources_UniqueNameOnCollision verifies
+// the migration never produces a duplicate stream name, which the validator
+// would otherwise reject with a fatal error at load time. It covers both a
+// non-empty source name colliding (case-insensitively) with an existing stream
+// and the "Stream N" fallback colliding with a manually named stream.
+func TestSettings_ReconcileMisplacedAudioSources_UniqueNameOnCollision(t *testing.T) {
+	t.Parallel()
+
+	t.Run("non-empty name collides case-insensitively", func(t *testing.T) {
+		t.Parallel()
+
+		settings := Settings{}
+		settings.Realtime.RTSP.Streams = []StreamConfig{
+			{Name: "Backyard", URL: "rtsp://cam0/stream", Type: StreamTypeRTSP, Enabled: true},
+		}
+		settings.Realtime.Audio.Sources = []AudioSourceConfig{
+			{Name: "backyard", Device: "rtsp://cam2/stream"}, // collides with "Backyard"
+		}
+
+		require.True(t, settings.ReconcileMisplacedAudioSources())
+		require.Len(t, settings.Realtime.RTSP.Streams, 2)
+		assert.Equal(t, "backyard (2)", settings.Realtime.RTSP.Streams[1].Name)
+		// The reconciled config must pass the same validator that runs at load
+		// time; asserting it directly (rather than re-implementing the rule)
+		// covers the duplicate-name and length checks and stays drift-proof.
+		require.NoError(t, settings.Realtime.RTSP.ValidateStreams())
+	})
+
+	t.Run("empty-name fallback collides with manual name", func(t *testing.T) {
+		t.Parallel()
+
+		settings := Settings{}
+		// One existing stream, so the empty-name fallback base is "Stream 2"
+		// (len+1), which is already taken by the manually named stream below.
+		settings.Realtime.RTSP.Streams = []StreamConfig{
+			{Name: "Stream 2", URL: "rtsp://cam0/stream", Type: StreamTypeRTSP, Enabled: true},
+		}
+		settings.Realtime.Audio.Sources = []AudioSourceConfig{
+			{Name: "", Device: "rtsp://cam3/stream"},
+		}
+
+		require.True(t, settings.ReconcileMisplacedAudioSources())
+		require.Len(t, settings.Realtime.RTSP.Streams, 2)
+		assert.Equal(t, "Stream 2 (2)", settings.Realtime.RTSP.Streams[1].Name)
+		require.NoError(t, settings.Realtime.RTSP.ValidateStreams())
+	})
+
+	t.Run("repeated collisions increment the suffix", func(t *testing.T) {
+		t.Parallel()
+
+		// "Cam" and "Cam (2)" are both taken, so the moved source must become
+		// "Cam (3)" - exercises the increment loop past the first suffix.
+		settings := Settings{}
+		settings.Realtime.RTSP.Streams = []StreamConfig{
+			{Name: "Cam", URL: "rtsp://cam0/stream", Type: StreamTypeRTSP, Enabled: true},
+			{Name: "Cam (2)", URL: "rtsp://cam1/stream", Type: StreamTypeRTSP, Enabled: true},
+		}
+		settings.Realtime.Audio.Sources = []AudioSourceConfig{
+			{Name: "Cam", Device: "rtsp://cam2/stream"},
+		}
+
+		require.True(t, settings.ReconcileMisplacedAudioSources())
+		require.Len(t, settings.Realtime.RTSP.Streams, 3)
+		assert.Equal(t, "Cam (3)", settings.Realtime.RTSP.Streams[2].Name)
+		require.NoError(t, settings.Realtime.RTSP.ValidateStreams())
+	})
+
+	t.Run("over-length source name is truncated to a valid name", func(t *testing.T) {
+		t.Parallel()
+
+		// A name at MaxAudioSourceNameLength is valid for a source but exceeds
+		// MaxStreamNameLength, so the migration must truncate it rather than emit
+		// a name the length validator would reject with a fatal error at load.
+		longName := strings.Repeat("a", MaxAudioSourceNameLength)
+		settings := Settings{}
+		settings.Realtime.Audio.Sources = []AudioSourceConfig{
+			{Name: longName, Device: "rtsp://cam0/stream"},
+		}
+
+		require.True(t, settings.ReconcileMisplacedAudioSources())
+		require.Len(t, settings.Realtime.RTSP.Streams, 1)
+		assert.LessOrEqual(t, len(settings.Realtime.RTSP.Streams[0].Name), MaxStreamNameLength)
+		require.NoError(t, settings.Realtime.RTSP.ValidateStreams())
+	})
 }
 
 // TestSettings_ReconcileMisplacedAudioSources_DedupMergeDefaultStream verifies

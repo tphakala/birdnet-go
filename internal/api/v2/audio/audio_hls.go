@@ -423,21 +423,23 @@ func (c *Handler) respondNoCaptureBuffer(ctx echo.Context, eng *engine.AudioEngi
 		captureBufferIDs = append(captureBufferIDs, h.SourceID)
 	}
 
-	availableCount := len(registeredIDs)
+	// registeredCount is the number of configured/registered sources, not the
+	// number usable for streaming right now (that is capture_buffer_count).
+	registeredCount := len(registeredIDs)
 
 	diagErr := errors.Newf("live audio source not available: no capture buffer for requested source").
 		Component("api").
 		Category(errors.CategoryAudioSource).
 		Context("requested_source", privacy.SanitizeRTSPUrl(sourceID)).
-		Context("available_source_count", availableCount).
+		Context("registered_source_count", registeredCount).
 		Context("capture_buffer_count", len(captureBufferIDs)).
 		Build()
 
 	c.LogAPIRequest(ctx, logger.LogLevelWarn, "Live audio start failed: source has no capture buffer",
 		logger.String("requested_source", privacy.SanitizeRTSPUrl(sourceID)),
-		logger.Int("available_sources", availableCount),
+		logger.Int("registered_sources", registeredCount),
 		logger.Int("capture_buffers", len(captureBufferIDs)),
-		logger.String("available_source_ids", strings.Join(registeredIDs, ",")),
+		logger.String("registered_source_ids", strings.Join(registeredIDs, ",")),
 		logger.String("capture_buffer_ids", strings.Join(captureBufferIDs, ",")))
 
 	return c.HandleError(ctx, diagErr,
