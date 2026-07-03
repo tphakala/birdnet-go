@@ -744,13 +744,15 @@ func TestStoreMemory_CountStaysExactWhenStoresRaceDeletes(t *testing.T) {
 			c.storeMemory(keyAt(r%keys), &SpeciesGuide{CommonName: "x"})
 		}
 	})
-	// Deleter: repeatedly removes keys, decrementing the counter exactly as the
+	// Deleter: repeatedly removes keys under memWriteMu, exactly as the real
 	// eviction/invalidation paths do (LoadAndDelete + memCount.Add(-1)).
 	wg.Go(func() {
 		for r := range rounds {
+			c.memWriteMu.Lock()
 			if _, loaded := c.memory.LoadAndDelete(keyAt(r % keys)); loaded {
 				c.memCount.Add(-1)
 			}
+			c.memWriteMu.Unlock()
 		}
 	})
 	wg.Wait()
@@ -952,4 +954,47 @@ func TestStoreMemoryGen_DropsPreInvalidationWrite(t *testing.T) {
 	c.storeMemoryGen(cacheKey("Fresh", "en"), &SpeciesGuide{CommonName: "y"}, c.invalidateGen.Load())
 	_, ok = c.memory.Load(cacheKey("Fresh", "en"))
 	assert.True(t, ok, "a current-generation write is kept")
+}
+
+// TestStoreMemoryGen_RacesStoreMemoryStaysExact reproduces the race Sentry flagged:
+// storeMemoryGen (the Tier-2 rehydrate, not behind singleflight) and storeMemory
+// (Tier-3) writing the same keys concurrently, with a competing deleter. The
+// memWriteMu serialization must keep memCount an exact count of live entries (the
+// old lock-free CompareAndDelete rollback could strand an uncounted entry here).
+// Run under -race.
+func TestStoreMemoryGen_RacesStoreMemoryStaysExact(t *testing.T) {
+	t.Parallel()
+	c := newTestCache(t, newFakeStore(), nil)
+
+	const keys = 64
+	const rounds = 3000
+	gen := c.invalidateGen.Load()
+	keyAt := func(i int) string { return cacheKey("gen", strconvI(i)) }
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for r := range rounds {
+			c.storeMemory(keyAt(r%keys), &SpeciesGuide{CommonName: "a"})
+		}
+	})
+	wg.Go(func() {
+		for r := range rounds {
+			c.storeMemoryGen(keyAt(r%keys), &SpeciesGuide{CommonName: "b"}, gen)
+		}
+	})
+	wg.Go(func() {
+		for r := range rounds {
+			c.memWriteMu.Lock()
+			if _, loaded := c.memory.LoadAndDelete(keyAt(r % keys)); loaded {
+				c.memCount.Add(-1)
+			}
+			c.memWriteMu.Unlock()
+		}
+	})
+	wg.Wait()
+
+	count := 0
+	c.memory.Range(func(_, _ any) bool { count++; return true })
+	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must equal the live entry count")
+	assert.LessOrEqual(t, c.memCount.Load(), int64(maxMemoryEntries), "cap must hold")
 }

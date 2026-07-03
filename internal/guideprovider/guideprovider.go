@@ -184,15 +184,24 @@ type registeredProvider struct {
 
 // GuideCache orchestrates the two-tier cache and provider fallback.
 type GuideCache struct {
-	memory    sync.Map     // key "scientificName|locale" -> *SpeciesGuide
-	memCount  atomic.Int64 // approximate count of memory entries (soft cap guard)
+	memory sync.Map // key "scientificName|locale" -> *SpeciesGuide
+	// memWriteMu serializes structural writes to the memory tier — every operation
+	// that inserts/removes a key AND adjusts memCount (storeMemory, storeMemoryGen,
+	// InvalidateAll's sweep, the stale-refresh eviction). It does NOT guard reads:
+	// Get's memory.Load stays lock-free (sync.Map is safe for concurrent reads
+	// during writes), so the hot path is unaffected. Serializing writers is what
+	// keeps memCount an exact count of live entries — a purely lock-free scheme
+	// cannot, because a concurrent writer can replace a just-inserted key between
+	// the insert and its cap-rollback, stranding an uncounted entry.
+	memWriteMu sync.Mutex
+	memCount   atomic.Int64 // count of memory entries (hard cap guard; written under memWriteMu)
 	// invalidateGen is bumped by InvalidateAll. A Tier-2 DB rehydrate captures it
 	// before reading and drops its write if it changed, so a pre-invalidation row
 	// read cannot re-seed memory after InvalidateAll's sweep has passed.
 	invalidateGen atomic.Int64
 	store         GuideStore
-	metrics   GuideCacheMetrics
-	providers []registeredProvider
+	metrics       GuideCacheMetrics
+	providers     []registeredProvider
 
 	fallbackPolicy string // conf.SpeciesGuideFallback{All,None}
 	warmTopN       int
@@ -285,28 +294,28 @@ func (c *GuideCache) SetWarmTopN(n int) {
 // keys are always updated; new keys are only added while under maxMemoryEntries,
 // so a flood of distinct keys cannot grow memory without bound (those entries
 // still live in the DB tier).
-//
-// The cap is enforced exactly without locking. Swap performs the update-or-insert
-// as a single atomic op and reports whether a value was already present, which
-// closes the race a separate Load-then-Store would open: a key deleted by a
-// concurrent InvalidateAll/eviction between the Load and the Store would be
-// re-inserted without accounting, undercounting memCount and letting memory grow
-// past the cap. With Swap, a concurrent delete simply makes our write look like a
-// fresh insert (loaded == false), so it takes the accounted path below.
 func (c *GuideCache) storeMemory(key string, g *SpeciesGuide) {
-	if _, loaded := c.memory.Swap(key, g); loaded {
-		// Replaced an already-counted entry: no accounting change.
+	c.memWriteMu.Lock()
+	defer c.memWriteMu.Unlock()
+	c.storeMemoryLocked(key, g)
+}
+
+// storeMemoryLocked performs the insert-or-update; the caller MUST hold memWriteMu.
+// Because writers are serialized, the Load/Store/count sequence is atomic against
+// every other structural writer, so memCount stays an exact count of live entries
+// (no lost updates, no stranded uncounted entries). An update-in-place leaves the
+// count unchanged; a new key is admitted only while under the cap (overflow stays
+// in the DB tier).
+func (c *GuideCache) storeMemoryLocked(key string, g *SpeciesGuide) {
+	if _, loaded := c.memory.Load(key); loaded {
+		c.memory.Store(key, g) // update in place: the slot is already counted
 		return
 	}
-	// Inserted a new entry (key was absent or concurrently deleted): claim a slot,
-	// rolling the insert back if it would exceed the cap.
-	if c.memCount.Add(1) > maxMemoryEntries {
-		c.memCount.Add(-1)
-		// Undo our insert, but only if it is still our value: a concurrent writer
-		// may have replaced it (that writer saw loaded == true and relies on this
-		// slot staying counted), so deleting its value would desync the count.
-		c.memory.CompareAndDelete(key, g)
+	if c.memCount.Load() >= maxMemoryEntries {
+		return // at cap: do not admit a new key
 	}
+	c.memory.Store(key, g)
+	c.memCount.Add(1)
 }
 
 // storeMemoryGen writes like storeMemory but undoes the write if InvalidateAll ran
@@ -316,8 +325,14 @@ func (c *GuideCache) storeMemory(key string, g *SpeciesGuide) {
 // the entry; if the sweep runs after our store, it removes the entry itself. Used by
 // the Tier-2 DB rehydrate in Get, the only path that can resurrect stale content
 // (Tier-3 fetches run under the current provider set, so their writes are fresh).
+//
+// The whole insert-then-verify runs under memWriteMu so the generation check and the
+// possible rollback are atomic with the insert — no concurrent writer can replace
+// the value between them and desync the count.
 func (c *GuideCache) storeMemoryGen(key string, g *SpeciesGuide, gen int64) {
-	c.storeMemory(key, g)
+	c.memWriteMu.Lock()
+	defer c.memWriteMu.Unlock()
+	c.storeMemoryLocked(key, g)
 	if c.invalidateGen.Load() != gen {
 		if _, loaded := c.memory.LoadAndDelete(key); loaded {
 			c.memCount.Add(-1)
@@ -416,13 +431,16 @@ func (c *GuideCache) InvalidateAll(ctx context.Context) error {
 		}
 	}
 	// Persistent tier is clear (or absent): drop the memory tier, keeping memCount
-	// accurate by decrementing per removal.
+	// accurate by decrementing per removal. Under memWriteMu so the sweep can't
+	// race a concurrent storeMemory into an inexact count.
+	c.memWriteMu.Lock()
 	c.memory.Range(func(k, _ any) bool {
 		if _, loaded := c.memory.LoadAndDelete(k); loaded {
 			c.memCount.Add(-1)
 		}
 		return true
 	})
+	c.memWriteMu.Unlock()
 	c.updateCachePopulationRatio()
 	return nil
 }
@@ -809,10 +827,16 @@ func (c *GuideCache) refreshStaleEntries() {
 		stale = append(stale, staleKey{name: name, locale: locale})
 		return true
 	})
-	for _, key := range evict {
-		if _, loaded := c.memory.LoadAndDelete(key); loaded {
-			c.memCount.Add(-1)
+	if len(evict) > 0 {
+		// Under memWriteMu so eviction can't race a concurrent storeMemory into an
+		// inexact count.
+		c.memWriteMu.Lock()
+		for _, key := range evict {
+			if _, loaded := c.memory.LoadAndDelete(key); loaded {
+				c.memCount.Add(-1)
+			}
 		}
+		c.memWriteMu.Unlock()
 	}
 	for _, s := range stale {
 		if c.shouldQuit() {
