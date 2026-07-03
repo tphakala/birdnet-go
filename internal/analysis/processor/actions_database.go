@@ -5,7 +5,6 @@ package processor
 
 import (
 	"context"
-	"encoding/binary"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -611,13 +610,6 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 	}
 }
 
-// maxNativeNormalizationGainDB bounds the loudness gain applied on the native
-// FLAC normalization path so a uniformly quiet clip is not over-amplified into
-// noise. Matches the +/-30 dB bound the BirdWeather native path uses; audionorm's
-// PlanGain already caps a boost at the true-peak ceiling, this is the secondary
-// guard for low-peak clips and for attenuation.
-const maxNativeNormalizationGainDB = 30.0
-
 // audionormMinTargetLUFS is the exclusive lower bound of audionorm's valid target
 // loudness range (audionorm rejects targets <= -70 LUFS, the absolute gate).
 const audionormMinTargetLUFS = -70.0
@@ -634,16 +626,16 @@ func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
 // planNativeNormalizationGain measures the clip's EBU R128 integrated loudness and
 // true peak with audionorm and returns the single linear gain (dB) that brings it
 // to targetLUFS without its true peak exceeding truePeakDBTP, clamped to
-// +/-maxNativeNormalizationGainDB. Silent or sub-400 ms input yields 0 (the clip
-// is left unchanged rather than boosted into noise), matching the BirdWeather
-// native path. The gain is applied by flac.EncodePCM during encoding; a.pcmData is
-// not modified here.
+// +/-audionorm.DefaultMaxGainDB. Silent or sub-400 ms input yields 0 (the clip is
+// left unchanged rather than boosted into noise), matching the BirdWeather native
+// path. The gain is applied by flac.EncodePCM during encoding; a.pcmData is not
+// modified here.
 func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampleRate int, targetLUFS, truePeakDBTP float64) (float64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	// audionorm reads a throwaway int16 view of the PCM; a.pcmData is not mutated.
-	meas, err := audionorm.MeasureInt16(pcmBytesToInt16(a.pcmData), sampleRate, conf.NumChannels)
+	// audionorm decodes the PCM bytes inline; a.pcmData is not mutated.
+	meas, err := audionorm.MeasureInt16Bytes(a.pcmData, sampleRate, conf.NumChannels)
 	if err != nil {
 		return 0, errors.New(err).
 			Component("analysis.processor").
@@ -660,13 +652,10 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 		TruePeakDBTP: truePeakDBTP,
 	})
 
-	gainDB := res.GainDB
-	switch {
-	case gainDB > maxNativeNormalizationGainDB:
-		gainDB = maxNativeNormalizationGainDB
-	case gainDB < -maxNativeNormalizationGainDB:
-		gainDB = -maxNativeNormalizationGainDB
-	}
+	// Silence yields GainDB == 0 (audionorm returns -Inf LUFS); the clamp is the
+	// secondary guard for low-peak clips and for attenuation. Applied silently on
+	// this path (the BirdWeather path logs its own limiting).
+	gainDB, _ := audionorm.ClampGainDB(res.GainDB, audionorm.DefaultMaxGainDB)
 
 	GetLogger().Debug("Native FLAC loudness analysis (detection save)",
 		logger.Float64("measured_lufs", meas.IntegratedLUFS),
@@ -676,20 +665,6 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 		logger.Bool("peak_limited", res.PeakLimited),
 		logger.String("detection_id", a.CorrelationID))
 	return gainDB, nil
-}
-
-// pcmBytesToInt16 reinterprets interleaved little-endian 16-bit PCM bytes as
-// []int16 for loudness measurement. PCM samples are signed, so each pair is read
-// as a uint16 and bit-cast to int16 (a Uint16-only read would turn negative
-// samples into large positives and corrupt the measurement). A trailing odd byte
-// (not produced by real int16 PCM) is ignored. The returned slice is a copy; the
-// source bytes are not modified. Mirrors internal/birdweather pcmInt16FromBytes.
-func pcmBytesToInt16(b []byte) []int16 {
-	out := make([]int16, len(b)/2)
-	for i := range out {
-		out[i] = int16(binary.LittleEndian.Uint16(b[i*2:])) //nolint:gosec // G115: intentional uint16->int16 bit reinterpretation for signed PCM
-	}
-	return out
 }
 
 // resolveExportParams determines the export sample rate, format, and output
