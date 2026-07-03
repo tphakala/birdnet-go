@@ -590,6 +590,7 @@ type StreamConfig struct {
 	Type        string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
 	Transport   string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
 	ChannelMode ChannelMode        `yaml:"channelMode,omitempty" json:"channelMode" mapstructure:"channelMode"`     // Channel handling: downmix, left, or right
+	Gain        float64            `yaml:"gain" json:"gain" mapstructure:"gain"`                                    // Input gain in dB (0 = no adjustment)
 	Equalizer   *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
 	QuietHours  QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration
 	Models      []string           `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`          // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
