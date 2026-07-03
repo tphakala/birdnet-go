@@ -638,10 +638,8 @@ func (s *Server) startBlocking() error {
 				Build()
 		}
 		s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(host)
-		if s.config.RedirectToHTTPS {
-			s.httpRedirectServer = s.newHTTPRedirectServer(s.config.AutoTLSHTTPAddress(), "443")
-			go s.serveHTTPRedirect()
-		}
+		s.httpRedirectServer = s.newAutoTLSHTTPServer(s.config.AutoTLSHTTPAddress())
+		go s.serveHTTPRedirect()
 		err = s.echo.StartAutoTLS(tlsAddr)
 		if err != nil && s.httpRedirectServer != nil {
 			_ = s.httpRedirectServer.Close()
@@ -752,11 +750,37 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 // newHTTPRedirectServer creates an HTTP server that redirects all requests to HTTPS.
 // The server is created synchronously to avoid a race between assignment and shutdown.
 func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
+	return &http.Server{
+		Addr:         httpAddr,
+		Handler:      newHTTPSRedirectHandler(tlsPort),
+		ReadTimeout:  s.config.ReadTimeout,
+		WriteTimeout: s.config.WriteTimeout,
+	}
+}
+
+// newAutoTLSHTTPServer creates the port-80 HTTP server required by autocert.
+// autocert.Manager.HTTPHandler intercepts ACME HTTP-01 challenges and delegates
+// non-challenge requests to the fallback redirect handler.
+func (s *Server) newAutoTLSHTTPServer(httpAddr string) *http.Server {
+	fallback := http.NotFoundHandler()
+	if s.config.RedirectToHTTPS {
+		fallback = newHTTPSRedirectHandler("443")
+	}
+
+	return &http.Server{
+		Addr:         httpAddr,
+		Handler:      s.echo.AutoTLSManager.HTTPHandler(fallback),
+		ReadTimeout:  s.config.ReadTimeout,
+		WriteTimeout: s.config.WriteTimeout,
+	}
+}
+
+func newHTTPSRedirectHandler(tlsPort string) http.Handler {
 	if tlsPort == "" {
 		tlsPort = "8443"
 	}
 
-	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract hostname, stripping any port from the Host header
 		host := r.Host
 		if h, _, err := net.SplitHostPort(r.Host); err == nil {
@@ -769,13 +793,6 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 		target += r.URL.RequestURI()
 		http.Redirect(w, r, target, http.StatusPermanentRedirect)
 	})
-
-	return &http.Server{
-		Addr:         httpAddr,
-		Handler:      redirectHandler,
-		ReadTimeout:  s.config.ReadTimeout,
-		WriteTimeout: s.config.WriteTimeout,
-	}
 }
 
 // serveHTTPRedirect starts listening on the HTTP redirect server.
