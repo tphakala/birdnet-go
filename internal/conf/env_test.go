@@ -860,3 +860,72 @@ func TestValidateEnvBaseURL_Integration(t *testing.T) {
 		assert.Contains(t, err.Error(), "must be http or https")
 	})
 }
+
+func TestValidateEnvPort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid standard port", "8080", false},
+		{"valid port 1", "1", false},
+		{"valid port max", "65535", false},
+		{"valid port 443", "443", false},
+		{"valid with spaces", " 8443 ", false},
+		{"zero", "0", true},
+		{"negative", "-1", true},
+		{"too large", "65536", true},
+		{"way too large", "100000", true},
+		{"not a number", "http", true},
+		{"empty", "", true},
+		{"decimal", "80.5", true},
+		{"whitespace only", "  ", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateEnvPort(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateEnvTLSMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"empty disables TLS", "", false},
+		{"autotls", "autotls", false},
+		{"manual", "manual", false},
+		{"selfsigned", "selfsigned", false},
+		{"case insensitive AutoTLS", "AutoTLS", false},
+		{"case insensitive MANUAL", "MANUAL", false},
+		{"with spaces", " autotls ", false},
+		{"invalid mode", "letsencrypt", true},
+		{"invalid random", "foo", true},
+		{"partial match", "auto", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateEnvTLSMode(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

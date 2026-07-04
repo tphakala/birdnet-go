@@ -5,8 +5,10 @@ package api
 
 import (
 	"fmt"
+	"os"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -40,12 +42,13 @@ type Config struct {
 	AutoTLS     bool   // Use Let's Encrypt automatic TLS
 	TLSCertFile string // Path to TLS certificate file (manual TLS)
 	TLSKeyFile  string // Path to TLS key file (manual TLS)
-	TLSPort     string // Port for HTTPS (when using manual/self-signed TLS)
+	TLSPort     string // Port for HTTPS (when TLS is enabled)
 
 	// Security settings
-	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
-	AllowedOrigins  []string // CORS allowed origins
-	AllowEmbedding  bool     // Allow embedding in iframes (e.g., Home Assistant)
+	RedirectToHTTPS   bool     // Redirect HTTP to HTTPS
+	RedirectAuthority string   // External HTTPS authority (host[:port]) for HTTP->HTTPS redirects; empty falls back to the request host
+	AllowedOrigins    []string // CORS allowed origins
+	AllowEmbedding    bool     // Allow embedding in iframes (e.g., Home Assistant)
 
 	// Timeouts
 	ReadTimeout     time.Duration // Maximum duration for reading request
@@ -71,7 +74,7 @@ func DefaultConfig() *Config {
 		Port:            "8080",
 		TLSEnabled:      false,
 		AutoTLS:         false,
-		TLSPort:         "8443",
+		TLSPort:         defaultTLSPort,
 		RedirectToHTTPS: false,
 		AllowedOrigins:  []string{"*"},
 		ReadTimeout:     DefaultReadTimeout,
@@ -83,6 +86,47 @@ func DefaultConfig() *Config {
 		LogLevel:        logger.LogLevelInfo,
 		DevMode:         false,
 	}
+}
+
+// TLS listener port defaults used when a port is unset or collides with the HTTP port.
+const (
+	// defaultTLSPort is the HTTPS listener port used when TLS is enabled and no
+	// port is configured.
+	defaultTLSPort = "8443"
+	// fallbackTLSPort is used when the configured TLS port equals the HTTP port.
+	fallbackTLSPort = "8444"
+)
+
+// resolveTLSPort sets cfg.TLSPort, defaulting to defaultTLSPort when empty and
+// resolving conflicts when TLSPort equals the HTTP port.
+func resolveTLSPort(cfg *Config) {
+	if cfg.TLSPort == "" {
+		cfg.TLSPort = defaultTLSPort
+	}
+	if cfg.TLSPort == cfg.Port {
+		fallback := defaultTLSPort
+		if cfg.Port == defaultTLSPort {
+			fallback = fallbackTLSPort
+		}
+		GetLogger().Warn("TLS port must differ from HTTP port",
+			logger.String("http_port", cfg.Port),
+			logger.String("configured_tls_port", cfg.TLSPort),
+			logger.String("resolved_tls_port", fallback),
+		)
+		cfg.TLSPort = fallback
+	}
+}
+
+// redirectExplicitlySet reports whether the user explicitly configured
+// security.redirecttohttps via the config file or the environment, as opposed to
+// relying on the built-in default. viper.IsSet cannot be used here: it returns
+// true whenever a default is registered (defaults.go always registers one), so
+// it can never distinguish an explicit user value from the default. InConfig
+// checks only the config file, and the env var is probed directly. Declared as a
+// variable so tests can drive the redirect-default policy deterministically;
+// tests that swap it must not run in parallel, since ConfigFromSettings reads it.
+var redirectExplicitlySet = func() bool {
+	return viper.InConfig(conf.ConfigKeySecurityRedirect) || os.Getenv(conf.EnvVarSecurityRedirect) != ""
 }
 
 // ConfigFromSettings creates a Config from the application settings.
@@ -102,7 +146,20 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	case conf.TLSModeAutoTLS:
 		cfg.AutoTLS = true
 		cfg.TLSEnabled = true
-		cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+		// Default to redirecting HTTP->HTTPS for AutoTLS; only honor an explicit
+		// user value (config file or env var). The default holds because
+		// redirectExplicitlySet ignores the built-in default (unlike viper.IsSet).
+		cfg.RedirectToHTTPS = true
+		if redirectExplicitlySet() {
+			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+		}
+		// Redirect to the externally advertised authority (base URL or host),
+		// never the internal TLS port, which is unreachable behind container port
+		// mappings such as host 443 -> container 8443. GetExternalHost falls back
+		// to Host (no port), which AutoTLS validation requires to be set.
+		cfg.RedirectAuthority = settings.Security.GetExternalHost()
+		cfg.TLSPort = settings.Security.TLSPort
+		resolveTLSPort(cfg)
 	case conf.TLSModeManual, conf.TLSModeSelfSigned:
 		tm := conf.GetTLSManager()
 		certPath := tm.GetCertificatePath("webserver", conf.TLSCertTypeServerCert)
@@ -113,22 +170,13 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 			cfg.TLSCertFile = certPath
 			cfg.TLSKeyFile = keyPath
 			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+			// Manual/self-signed TLS terminates directly on TLSPort with no
+			// external port remapping, so the redirect keeps that port (the
+			// request-host fallback in newHTTPRedirectServer). RedirectAuthority is
+			// left empty here on purpose: overriding it from BaseURL would retarget
+			// existing manual-TLS redirects and is out of scope for the AutoTLS fix.
 			cfg.TLSPort = settings.Security.TLSPort
-			if cfg.TLSPort == "" {
-				cfg.TLSPort = "8443"
-			}
-			if cfg.TLSPort == cfg.Port {
-				fallback := "8443"
-				if cfg.Port == "8443" {
-					fallback = "8444"
-				}
-				GetLogger().Warn("TLS port must differ from HTTP port",
-					logger.String("http_port", cfg.Port),
-					logger.String("configured_tls_port", cfg.TLSPort),
-					logger.String("resolved_tls_port", fallback),
-				)
-				cfg.TLSPort = fallback
-			}
+			resolveTLSPort(cfg)
 		}
 	default:
 		// TLSModeNone — plain HTTP
