@@ -45,6 +45,22 @@ jobs:
           # Use noembed,skipfrontend tags to skip model and frontend embedding requirement
           args: --build-tags=noembed,skipfrontend --output.checkstyle.path=golangci-lint-report.xml
 
+      - name: golangci-lint (integration + pebble_e2e build tags)
+        # The pass above compiles with noembed,skipfrontend only, so integration-tagged
+        # test files (and the pebble_e2e AutoTLS ACME e2e helpers) are never linted and
+        # accumulate latent issues. Run a second pass with those tags to hold that test
+        # code to the same bar. Using the action again (rather than a bare `run:`)
+        # guarantees the golangci-lint binary is present and emits GitHub annotations for
+        # findings. `if: !cancelled()` surfaces both lint sets even when the pass above
+        # already reported issues. setup-tensorflow exported CGO_* to the job env, so the
+        # tflite-cgo packages compile here too.
+        if: ${{ !cancelled() }}
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with:
+          version: v2.10.1
+          only-new-issues: false
+          args: --build-tags=integration,pebble_e2e,noembed,skipfrontend
+
       - name: Generate lint summary
         if: always()
         run: |
