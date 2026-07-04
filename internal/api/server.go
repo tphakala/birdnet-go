@@ -810,7 +810,7 @@ func newHTTPSRedirectHandler(tlsPort string) http.Handler {
 			host = h
 		}
 		target := "https://" + host
-		if tlsPort != "443" {
+		if tlsPort != autoTLSHTTPSPort {
 			target += ":" + tlsPort
 		}
 		target += r.URL.RequestURI()
