@@ -639,15 +639,18 @@ func (s *Server) startBlocking() error {
 		s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(host)
 
 		// Start HTTP server on the configured port for ACME HTTP-01 challenges.
-		// The fallback handler determines what happens to non-ACME traffic:
-		// - RedirectToHTTPS=false: serve the app over plain HTTP
-		// - RedirectToHTTPS=true + port 443: nil lets autocert redirect (no port in URL)
-		// - RedirectToHTTPS=true + custom port: custom handler includes port in redirect
+		// autocert.HTTPHandler serves the ACME challenges and passes non-ACME
+		// traffic to the fallback:
+		// - RedirectToHTTPS=false: serve the app over plain HTTP.
+		// - RedirectToHTTPS=true: 308-redirect to the external HTTPS URL. The
+		//   target authority is the advertised base URL / host (RedirectAuthority),
+		//   never the internal TLS port, which is unreachable behind container port
+		//   mappings such as host 443 -> container 8443.
 		var httpFallback http.Handler
-		if !s.config.RedirectToHTTPS {
+		if s.config.RedirectToHTTPS {
+			httpFallback = httpsRedirectHandler(s.config.RedirectAuthority, "")
+		} else {
 			httpFallback = s.echo
-		} else if s.config.TLSPort != "443" {
-			httpFallback = httpsRedirectHandler(s.config.TLSPort)
 		}
 		s.httpRedirectServer = &http.Server{
 			Addr:         addr,
@@ -777,22 +780,28 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 }
 
 // httpsRedirectHandler returns an http.Handler that 308-redirects requests to
-// HTTPS on the given tlsPort. IPv6 addresses are handled correctly.
-func httpsRedirectHandler(tlsPort string) http.Handler {
+// HTTPS. When externalAuthority is non-empty it is used verbatim as the target
+// host[:port] (the externally advertised address). Otherwise the request host is
+// reused with fallbackPort appended; an empty or "443" fallbackPort omits the
+// port, assuming the standard HTTPS port. IPv6 hosts are bracketed correctly.
+func httpsRedirectHandler(externalAuthority, fallbackPort string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host := r.Host
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			host = h
-		}
-		host = strings.TrimRight(strings.TrimLeft(host, "["), "]")
-		var hostPort string
-		if tlsPort == "443" {
-			hostPort = host
-			if strings.Contains(host, ":") {
-				hostPort = "[" + host + "]"
+		hostPort := externalAuthority
+		if hostPort == "" {
+			host := r.Host
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
 			}
-		} else {
-			hostPort = net.JoinHostPort(host, tlsPort)
+			host = strings.TrimRight(strings.TrimLeft(host, "["), "]")
+			switch fallbackPort {
+			case "", conf.DefaultHTTPSPort:
+				hostPort = host
+				if strings.Contains(host, ":") {
+					hostPort = "[" + host + "]"
+				}
+			default:
+				hostPort = net.JoinHostPort(host, fallbackPort)
+			}
 		}
 		target := "https://" + hostPort + r.URL.RequestURI()
 		http.Redirect(w, r, target, http.StatusPermanentRedirect)
@@ -808,7 +817,7 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 
 	return &http.Server{
 		Addr:         httpAddr,
-		Handler:      httpsRedirectHandler(tlsPort),
+		Handler:      httpsRedirectHandler(s.config.RedirectAuthority, tlsPort),
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}

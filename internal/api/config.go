@@ -5,6 +5,7 @@ package api
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/viper"
@@ -44,9 +45,10 @@ type Config struct {
 	TLSPort     string // Port for HTTPS (when TLS is enabled)
 
 	// Security settings
-	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
-	AllowedOrigins  []string // CORS allowed origins
-	AllowEmbedding  bool     // Allow embedding in iframes (e.g., Home Assistant)
+	RedirectToHTTPS   bool     // Redirect HTTP to HTTPS
+	RedirectAuthority string   // External HTTPS authority (host[:port]) for HTTP->HTTPS redirects; empty falls back to the request host
+	AllowedOrigins    []string // CORS allowed origins
+	AllowEmbedding    bool     // Allow embedding in iframes (e.g., Home Assistant)
 
 	// Timeouts
 	ReadTimeout     time.Duration // Maximum duration for reading request
@@ -106,6 +108,18 @@ func resolveTLSPort(cfg *Config) {
 	}
 }
 
+// redirectExplicitlySet reports whether the user explicitly configured
+// security.redirecttohttps via the config file or the environment, as opposed to
+// relying on the built-in default. viper.IsSet cannot be used here: it returns
+// true whenever a default is registered (defaults.go always registers one), so
+// it can never distinguish an explicit user value from the default. InConfig
+// checks only the config file, and the env var is probed directly. Declared as a
+// variable so tests can drive the redirect-default policy deterministically;
+// tests that swap it must not run in parallel, since ConfigFromSettings reads it.
+var redirectExplicitlySet = func() bool {
+	return viper.InConfig(conf.ConfigKeySecurityRedirect) || os.Getenv(conf.EnvVarSecurityRedirect) != ""
+}
+
 // ConfigFromSettings creates a Config from the application settings.
 // This bridges the existing conf.Settings structure to the new server config.
 func ConfigFromSettings(settings *conf.Settings) *Config {
@@ -123,15 +137,18 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	case conf.TLSModeAutoTLS:
 		cfg.AutoTLS = true
 		cfg.TLSEnabled = true
-		// Default to redirecting HTTP→HTTPS for AutoTLS. Only override if the
-		// user explicitly set the key (via config file or env var). Note: viper.IsSet
-		// returns true for any source (file, env, Set()), so a user who has
-		// "redirecttohttps: false" in YAML for a different TLS mode and then switches
-		// to AutoTLS will keep their explicit false — this is intentional.
+		// Default to redirecting HTTP->HTTPS for AutoTLS; only honor an explicit
+		// user value (config file or env var). The default holds because
+		// redirectExplicitlySet ignores the built-in default (unlike viper.IsSet).
 		cfg.RedirectToHTTPS = true
-		if viper.IsSet("security.redirecttohttps") {
+		if redirectExplicitlySet() {
 			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
 		}
+		// Redirect to the externally advertised authority (base URL or host),
+		// never the internal TLS port, which is unreachable behind container port
+		// mappings such as host 443 -> container 8443. GetExternalHost falls back
+		// to Host (no port), which AutoTLS validation requires to be set.
+		cfg.RedirectAuthority = settings.Security.GetExternalHost()
 		cfg.TLSPort = settings.Security.TLSPort
 		resolveTLSPort(cfg)
 	case conf.TLSModeManual, conf.TLSModeSelfSigned:
@@ -144,6 +161,11 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 			cfg.TLSCertFile = certPath
 			cfg.TLSKeyFile = keyPath
 			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+			// Manual/self-signed TLS terminates directly on TLSPort with no
+			// external port remapping, so the redirect keeps that port (the
+			// request-host fallback in newHTTPRedirectServer). RedirectAuthority is
+			// left empty here on purpose: overriding it from BaseURL would retarget
+			// existing manual-TLS redirects and is out of scope for the AutoTLS fix.
 			cfg.TLSPort = settings.Security.TLSPort
 			resolveTLSPort(cfg)
 		}

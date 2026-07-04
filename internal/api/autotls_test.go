@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/acme/autocert"
-
 	"github.com/labstack/echo/v4"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -40,6 +41,8 @@ func TestConfigFromSettings_AutoTLS(t *testing.T) {
 	assert.Equal(t, "8443", cfg.TLSPort, "TLS port should default to 8443")
 	assert.Equal(t, ":8443", cfg.TLSAddress(), "TLS address should use TLSPort")
 	assert.Equal(t, ":8080", cfg.Address(), "HTTP address should use Port")
+	assert.Equal(t, testHost, cfg.RedirectAuthority,
+		"redirect authority should be the advertised host, not the internal TLS port")
 }
 
 // TestConfigFromSettings_AutoTLS_CustomTLSPort verifies that a user-configured
@@ -138,16 +141,22 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	assert.NotEqual(t, http.StatusNotFound, resp.StatusCode,
 		"ACME path should be handled by autocert, not return 404")
 
-	// Non-ACME GET should redirect to HTTPS on the custom TLS port
-	// (RedirectToHTTPS defaults to true for AutoTLS).
+	// Non-ACME GET should redirect to HTTPS on the advertised host, NOT the
+	// internal TLS port (unreachable behind container port mappings).
+	// RedirectToHTTPS defaults to true for AutoTLS.
 	resp, err = client.Get(httpBase + "/")
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 	assert.Equal(t, http.StatusPermanentRedirect, resp.StatusCode,
 		"Non-ACME request should redirect to HTTPS")
 	location := resp.Header.Get("Location")
-	assert.Contains(t, location, ":"+tlsPort,
-		"Redirect should include custom TLS port")
+	parsedLoc, err := url.Parse(location)
+	require.NoError(t, err, "Location must be a valid URL, got: %s", location)
+	assert.Equal(t, "https", parsedLoc.Scheme)
+	assert.Equal(t, testHost, parsedLoc.Host,
+		"redirect should target the advertised host with no internal port")
+	assert.NotContains(t, location, ":"+tlsPort,
+		"redirect must not leak the internal TLS port")
 
 	// TLS listener should accept TCP connections (full TLS handshake won't
 	// complete without a real cert, but a successful TCP connect proves the
@@ -348,42 +357,151 @@ func TestAutoTLS_DualListeners_RedirectStatus(t *testing.T) {
 	parsed, err := url.Parse(loc)
 	require.NoError(t, err, "Location must be a valid URL")
 	assert.Equal(t, "https", parsed.Scheme)
-	assert.Contains(t, parsed.Host, ":"+tlsPort)
+	assert.Equal(t, testHost, parsed.Host,
+		"redirect should target the advertised host, not the internal TLS port")
 }
 
-// TestAutoTLS_Port443_AutocertRedirect verifies that when TLSPort is "443",
-// the httpFallback is nil and autocert's built-in redirect handles non-ACME
-// traffic (redirecting to https:// without an explicit port).
-// This tests the handler directly rather than starting a full server, because
-// binding port 443 requires root.
-func TestAutoTLS_Port443_AutocertRedirect(t *testing.T) {
+// TestHTTPSRedirectHandler verifies redirect target construction: an explicit
+// external authority is used verbatim; otherwise the request host is reused with
+// the port omitted for "" / "443" and appended (IPv6-safe) for a custom port.
+func TestHTTPSRedirectHandler(t *testing.T) {
 	t.Parallel()
 
-	// When TLSPort == "443", our code passes nil as the fallback to
-	// autocert.Manager.HTTPHandler(nil). autocert's default behavior for
-	// non-ACME traffic is to redirect to HTTPS on the same host.
-	mgr := &autocert.Manager{}
-	handler := mgr.HTTPHandler(nil) // same as what our code does for port 443
+	tests := []struct {
+		name              string
+		externalAuthority string
+		fallbackPort      string
+		reqHost           string
+		wantHost          string
+	}{
+		{"external authority wins", "birdnet.example.com", "", "internal:8080", "birdnet.example.com"},
+		{"external authority wins over fallback port", "birdnet.example.com", "8443", "internal:8080", "birdnet.example.com"},
+		{"external authority keeps its port", "birdnet.example.com:9443", "", "internal:8080", "birdnet.example.com:9443"},
+		{"no authority omits empty port", "", "", "host.example.com:8080", "host.example.com"},
+		{"no authority omits 443", "", "443", "host.example.com:80", "host.example.com"},
+		{"no authority appends custom port", "", "8443", "host.example.com:8080", "host.example.com:8443"},
+		{"IPv6 omits port", "", "", "[::1]:8080", "[::1]"},
+		{"IPv6 appends custom port", "", "8443", "[2001:db8::1]:8080", "[2001:db8::1]:8443"},
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", http.NoBody)
-	req.Host = "birdnet.example.com"
-	rec := httptest.NewRecorder()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	handler.ServeHTTP(rec, req)
+			h := httpsRedirectHandler(tc.externalAuthority, tc.fallbackPort)
+			req := httptest.NewRequest(http.MethodGet, "/some/path?q=1", http.NoBody)
+			req.Host = tc.reqHost
+			rec := httptest.NewRecorder()
 
-	resp := rec.Result()
-	_ = resp.Body.Close()
+			h.ServeHTTP(rec, req)
 
-	// autocert uses 302 for its built-in redirect
-	assert.Equal(t, http.StatusFound, resp.StatusCode,
-		"autocert nil-fallback should redirect non-ACME traffic")
-	loc := resp.Header.Get("Location")
-	parsed, err := url.Parse(loc)
-	require.NoError(t, err)
-	assert.Equal(t, "https", parsed.Scheme)
-	assert.Equal(t, "birdnet.example.com", parsed.Host,
-		"redirect to port 443 should omit the port")
-	assert.Equal(t, "/dashboard", parsed.Path)
+			resp := rec.Result()
+			_ = resp.Body.Close()
+
+			assert.Equal(t, http.StatusPermanentRedirect, resp.StatusCode,
+				"redirect should use 308 to preserve the request method")
+			parsed, err := url.Parse(resp.Header.Get("Location"))
+			require.NoError(t, err)
+			assert.Equal(t, "https", parsed.Scheme)
+			assert.Equal(t, tc.wantHost, parsed.Host)
+			assert.Equal(t, "/some/path?q=1", parsed.RequestURI())
+		})
+	}
+}
+
+// TestConfigFromSettings_AutoTLS_RedirectDefault checks the redirect-default
+// POLICY: default true, overridden only by an explicit user value. It stubs
+// redirectExplicitlySet, so it does not itself guard the viper.IsSet trap; that
+// is TestConfigFromSettings_AutoTLS_RedirectDefault_RealDetection below.
+func TestConfigFromSettings_AutoTLS_RedirectDefault(t *testing.T) {
+	tests := []struct {
+		name          string
+		explicitlySet bool
+		userValue     bool
+		want          bool
+	}{
+		{"defaults to true when unset", false, false, true},
+		{"explicit false is honored", true, false, false},
+		{"explicit true is honored", true, true, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orig := redirectExplicitlySet
+			t.Cleanup(func() { redirectExplicitlySet = orig })
+			redirectExplicitlySet = func() bool { return tc.explicitlySet }
+
+			settings := conftest.NewTestSettings().WithWebServer("8080", true).Build()
+			settings.Security.TLSMode = conf.TLSModeAutoTLS
+			settings.Security.Host = testHost
+			settings.Security.RedirectToHTTPS = tc.userValue
+
+			cfg := ConfigFromSettings(settings)
+			assert.Equal(t, tc.want, cfg.RedirectToHTTPS)
+		})
+	}
+}
+
+// TestConfigFromSettings_AutoTLS_RedirectEnvOverride exercises the real
+// redirectExplicitlySet detection: an explicit BIRDNET_SECURITY_REDIRECTTOHTTPS
+// env var disables the AutoTLS redirect default.
+func TestConfigFromSettings_AutoTLS_RedirectEnvOverride(t *testing.T) {
+	t.Setenv(conf.EnvVarSecurityRedirect, "false")
+
+	settings := conftest.NewTestSettings().WithWebServer("8080", true).Build()
+	settings.Security.TLSMode = conf.TLSModeAutoTLS
+	settings.Security.Host = testHost
+	settings.Security.RedirectToHTTPS = false
+
+	cfg := ConfigFromSettings(settings)
+	assert.False(t, cfg.RedirectToHTTPS,
+		"an explicit env override should disable the AutoTLS redirect default")
+}
+
+// TestConfigFromSettings_AutoTLS_RedirectDefault_RealDetection reproduces the
+// production trigger for the viper.IsSet trap: defaults.go registers a default
+// for security.redirecttohttps, which made viper.IsSet always return true and
+// collapse the AutoTLS redirect to false. It exercises the REAL detection (no
+// stub), so it fails on any viper.IsSet-based implementation regardless of the
+// test binary's viper state. Not parallel: it mutates the global viper.
+func TestConfigFromSettings_AutoTLS_RedirectDefault_RealDetection(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	// Mirror production: defaults.go registers this default on every config load.
+	viper.SetDefault(conf.ConfigKeySecurityRedirect, false)
+
+	settings := conftest.NewTestSettings().WithWebServer("8080", true).Build()
+	settings.Security.TLSMode = conf.TLSModeAutoTLS
+	settings.Security.Host = testHost
+	settings.Security.RedirectToHTTPS = false // the (default) stored value
+
+	cfg := ConfigFromSettings(settings)
+	assert.True(t, cfg.RedirectToHTTPS,
+		"AutoTLS must default to redirect=true even when a viper default is registered (the viper.IsSet trap)")
+}
+
+// TestConfigFromSettings_AutoTLS_RedirectFromConfigFile exercises the real
+// viper.InConfig half of redirectExplicitlySet: an explicit config-file value
+// must be honored (and the config key must be correct). Not parallel: it mutates
+// the global viper.
+func TestConfigFromSettings_AutoTLS_RedirectFromConfigFile(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.SetDefault(conf.ConfigKeySecurityRedirect, false)
+
+	cfgFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(cfgFile, []byte("security:\n  redirecttohttps: false\n"), 0o600))
+	viper.SetConfigFile(cfgFile)
+	require.NoError(t, viper.ReadInConfig())
+
+	settings := conftest.NewTestSettings().WithWebServer("8080", true).Build()
+	settings.Security.TLSMode = conf.TLSModeAutoTLS
+	settings.Security.Host = testHost
+	settings.Security.RedirectToHTTPS = false // explicit false present in the config file
+
+	cfg := ConfigFromSettings(settings)
+	assert.False(t, cfg.RedirectToHTTPS,
+		"an explicit config-file redirecttohttps:false must be honored for AutoTLS (viper.InConfig branch)")
 }
 
 // TestAutoTLS_RedirectDisabled_ServesApp verifies that when RedirectToHTTPS is
