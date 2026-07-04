@@ -26,7 +26,7 @@ func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 	settings := conftest.NewTestSettings().Apply()
 	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
-	s := NewOAuth2Server(t.Context())
+	s := NewOAuth2Server(t.Context(), false)
 
 	// Initialize gothic exactly as in production
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
@@ -76,7 +76,7 @@ func TestIsUserAuthenticatedTableDriven(t *testing.T) {
 				},
 			}
 
-			s := NewOAuth2Server(t.Context())
+			s := NewOAuth2Server(t.Context(), false)
 
 			// Initialize gothic exactly as in production
 			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
@@ -161,7 +161,7 @@ func TestOAuth2Server(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewOAuth2Server(t.Context())
+			s := NewOAuth2Server(t.Context(), false)
 			tt.test(t, s)
 		})
 	}

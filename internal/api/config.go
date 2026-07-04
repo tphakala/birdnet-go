@@ -194,6 +194,46 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	return cfg
 }
 
+// SessionCookiesSecure reports whether session and auth cookies should carry the
+// Secure attribute, i.e. whether clients reach the app over HTTPS given the
+// EFFECTIVE server configuration (not merely the persisted redirect toggle).
+//
+// AutoTLS with the HTTP->HTTPS redirect disabled is handled first: that mode
+// deliberately serves the full app over plain HTTP on the ACME listener (see
+// Server.startBlocking), so Secure must never be forced there, even when an
+// https BaseURL is advertised. Forcing it would drop the session cookie (which
+// also authenticates basic auth) and break login over that direct HTTP path.
+//
+// Otherwise it is true when any of the following hold:
+//   - a reverse proxy terminates TLS and the canonical BaseURL uses https;
+//   - the app redirects all HTTP traffic to HTTPS (RedirectToHTTPS), so every
+//     client ends up on HTTPS;
+//   - the app terminates TLS itself and serves no plain-HTTP app listener, i.e.
+//     manual or self-signed TLS with certificates present (TLSEnabled without
+//     AutoTLS). Manual/self-signed either redirects or listens HTTPS-only, so the
+//     browser always reaches it over HTTPS.
+//
+// Missing manual/self-signed certs leave TLSEnabled false, correctly yielding a
+// non-Secure cookie for the plain-HTTP fallback. The settings argument supplies
+// BaseURL, which Config intentionally does not carry.
+func (c *Config) SessionCookiesSecure(settings *conf.Settings) bool {
+	if c == nil {
+		return false
+	}
+	// AutoTLS without the redirect serves the app over plain HTTP directly, so
+	// keep Secure off regardless of any advertised https BaseURL.
+	if c.AutoTLS && !c.RedirectToHTTPS {
+		return false
+	}
+	if settings != nil && settings.Security.IsHTTPSBaseURL() {
+		return true
+	}
+	if c.RedirectToHTTPS {
+		return true
+	}
+	return c.TLSEnabled && !c.AutoTLS
+}
+
 // Validate checks the configuration for errors.
 func (c *Config) Validate() error {
 	if c.Port == "" {

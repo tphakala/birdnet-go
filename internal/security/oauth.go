@@ -227,6 +227,12 @@ type OAuth2Server struct {
 
 	// Throttling
 	throttledMessages map[string]time.Time
+
+	// secureCookies records whether session/auth cookies must carry the Secure
+	// attribute. It is decided by the caller from the effective web-server TLS
+	// config (the security package cannot import internal/api to derive it) and
+	// reused when providers are re-initialized on a settings reload.
+	secureCookies bool
 }
 
 // currentSettings returns the latest settings snapshot so security
@@ -255,7 +261,12 @@ var (
 // governs background goroutines owned by the server (currently the periodic
 // expired-token cleanup); cancelling it stops them, giving the cleanup goroutine
 // a proper shutdown path instead of running for the process lifetime.
-func NewOAuth2Server(ctx context.Context) *OAuth2Server {
+//
+// secureCookies controls the Secure attribute on the session/auth cookies. The
+// caller decides it from the effective web-server TLS configuration (see
+// api.Config.SessionCookiesSecure), since the security package cannot import
+// internal/api.
+func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 	// Re-enable OIDC discovery retries for this instance, clearing any disabled
 	// state a previous instance's shutdown left behind (sequential tests).
 	enableOIDCRetries()
@@ -264,16 +275,17 @@ func NewOAuth2Server(ctx context.Context) *OAuth2Server {
 	settings := conf.GetSettings()
 
 	server := &OAuth2Server{
-		settings:     settings,
-		authCodes:    make(map[string]AuthCode),
-		accessTokens: make(map[string]AccessToken),
+		settings:      settings,
+		authCodes:     make(map[string]AuthCode),
+		accessTokens:  make(map[string]AccessToken),
+		secureCookies: secureCookies,
 	}
 
 	// Validate and potentially fix session secret
 	validateSessionSecret(settings)
 
 	// Initialize Gothic with the provided configuration
-	InitializeGoth(settings)
+	InitializeGoth(settings, secureCookies)
 
 	// Set up token persistence
 	server.setupTokenPersistence()
@@ -403,12 +415,20 @@ func (s *OAuth2Server) setupTokenPersistence() {
 	}
 }
 
-// InitializeGoth initializes social authentication providers.
-func InitializeGoth(settings *conf.Settings) {
+// InitializeGoth initializes social authentication providers. secureCookies sets
+// the Secure attribute on the session store's cookies; the caller derives it from
+// the effective web-server TLS configuration (api.Config.SessionCookiesSecure).
+func InitializeGoth(settings *conf.Settings, secureCookies bool) {
+	if settings == nil {
+		// settings is a required dependency: setupSessionStore and
+		// initializeProviders both dereference it. Fail fast with a clear message
+		// instead of a confusing nil dereference deeper in initialization.
+		panic("security.InitializeGoth: settings must not be nil")
+	}
 	GetLogger().Info("Initializing Goth providers")
 
 	// Setup session store (filesystem or fallback to cookie-based)
-	setupSessionStore(settings)
+	setupSessionStore(settings, secureCookies)
 
 	// Initialize OAuth providers
 	initializeProviders(settings)
@@ -416,13 +436,29 @@ func InitializeGoth(settings *conf.Settings) {
 
 // setupSessionStore configures the Gothic session store.
 // It attempts to use a filesystem store, falling back to an in-memory cookie store on failure.
-func setupSessionStore(settings *conf.Settings) {
+// secureCookies sets the Secure attribute on the session cookies; it is derived by
+// the caller from the effective web-server TLS configuration.
+func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	secLog := GetLogger()
+
+	maxAge := DefaultSessionMaxAgeSeconds
+	if settings.Security.SessionDuration > 0 {
+		maxAge = int(settings.Security.SessionDuration.Seconds())
+	}
+
+	// newCookieStoreFallback builds the in-memory fallback store with the same
+	// cookie hardening (Secure, HttpOnly, SameSite) as the filesystem store, so a
+	// fallback does not silently drop the Secure attribute the caller requested.
+	newCookieStoreFallback := func() *sessions.CookieStore {
+		store := sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
+		store.Options = buildSessionOptions(secureCookies, maxAge)
+		return store
+	}
 
 	sessionPath, ok := getSessionPath()
 	if !ok {
 		// Fallback to in-memory store if config paths can't be retrieved
-		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
+		gothic.Store = newCookieStoreFallback()
 		return
 	}
 
@@ -431,7 +467,7 @@ func setupSessionStore(settings *conf.Settings) {
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, DirPermissions); err != nil {
 		secLog.Error("Failed to create session directory, falling back to in-memory cookie store", logger.Error(err))
-		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
+		gothic.Store = newCookieStoreFallback()
 		return
 	}
 
@@ -447,13 +483,8 @@ func setupSessionStore(settings *conf.Settings) {
 
 	// Configure session store options
 	store := gothic.Store.(*sessions.FilesystemStore)
-	maxAge := DefaultSessionMaxAgeSeconds
-	if settings.Security.SessionDuration > 0 {
-		maxAge = int(settings.Security.SessionDuration.Seconds())
-	}
-	secureCookie := settings.Security.RedirectToHTTPS
-	store.Options = buildSessionOptions(secureCookie, maxAge)
-	secLog.Info("Filesystem session store configured", logger.Int("max_age_seconds", maxAge), logger.Bool("secure", secureCookie))
+	store.Options = buildSessionOptions(secureCookies, maxAge)
+	secLog.Info("Filesystem session store configured", logger.Int("max_age_seconds", maxAge), logger.Bool("secure", secureCookies))
 
 	// Set reasonable values for session cookie storage
 	store.MaxLength(MaxSessionSizeBytes)
@@ -668,7 +699,7 @@ func SetTestConfigPath(path string) {
 func (s *OAuth2Server) UpdateProviders() {
 	GetLogger().Info("Updating Goth providers based on potentially changed settings")
 	cancelAllOIDCRetries()
-	InitializeGoth(s.currentSettings())
+	InitializeGoth(s.currentSettings(), s.secureCookies)
 }
 
 // IsUserAuthenticated checks if the user is authenticated
