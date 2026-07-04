@@ -216,6 +216,26 @@ jobs:
             -- -tags=integration -race -timeout 300s
         timeout-minutes: 10
 
+      - name: Run AutoTLS Pebble ACME e2e test
+        if: ${{ !cancelled() }}
+        run: |
+          # End-to-end AutoTLS issuance against a Pebble ACME testcontainer,
+          # driving the real dual-listener startBlocking() path (regression guard
+          # for #3527). Gated behind the extra pebble_e2e build tag so it never
+          # runs in the normal api suite; -run isolates it from the rest of the
+          # (compiled) api package.
+          gotestsum \
+            --format pkgname \
+            --jsonfile events-tc-pebble.json \
+            --junitfile junit-tc-pebble.xml \
+            --rerun-fails=1 \
+            --rerun-fails-abort-on-data-race \
+            --rerun-fails-max-failures=10 \
+            --rerun-fails-report=rerun-tc-pebble.txt \
+            --packages "./internal/api/" \
+            -- -tags=integration,pebble_e2e -run 'TestAutoTLS_Pebble' -race -timeout 300s
+        timeout-minutes: 10
+
       - name: Container diagnostics on failure
         if: failure()
         run: |

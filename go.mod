@@ -17,6 +17,7 @@ require (
 	github.com/jlaffaye/ftp v0.2.1
 	github.com/klauspost/cpuid/v2 v2.3.0
 	github.com/labstack/echo/v4 v4.15.4
+	github.com/moby/moby/api v1.55.0
 	github.com/nicholas-fedor/shoutrrr v0.16.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.10
@@ -86,7 +87,6 @@ require (
 	github.com/markbates/going v1.0.3 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
-	github.com/moby/moby/api v1.55.0 // indirect
 	github.com/moby/moby/client v0.5.0 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/sequential v0.7.0 // indirect
