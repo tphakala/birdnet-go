@@ -2166,6 +2166,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
+	{"OAuth providers", "", oauthProvidersChanged, "Authentication provider settings changed. Restart required to apply.", notification.MsgSettingsOauthRestart, "warning", toastDurationExtended},
 	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", "info", toastDurationShort},
 	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", "info", toastDurationShort},
 	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", "info", toastDurationShort},
@@ -2524,17 +2525,62 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 		return true
 	}
 
-	// Check security/TLS settings that affect the server
+	// Check security/TLS settings that affect the server. BaseURL is included
+	// because it feeds the HTTP->HTTPS redirect authority (api.Config.RedirectAuthority)
+	// and the session-cookie Secure decision (SessionCookiesSecure), both captured
+	// once at server start; it also seeds OAuth callback URLs at startup. Its only
+	// live consumer is notification link generation, so prompting restart matches the
+	// existing Host handling (Host is also read live by notifications yet restart-gated).
 	oldSec := oldSettings.Security
 	newSec := currentSettings.Security
 
 	if oldSec.Host != newSec.Host ||
+		oldSec.BaseURL != newSec.BaseURL ||
 		oldSec.TLSMode != newSec.TLSMode ||
 		oldSec.AutoTLS != newSec.AutoTLS || //nolint:staticcheck // Intentional: backward-compatible migration
 		oldSec.RedirectToHTTPS != newSec.RedirectToHTTPS {
 		return true
 	}
 
+	return false
+}
+
+// oauthProvidersChanged reports whether OAuth provider REGISTRATION config changed.
+// Provider registration (the goth providers built from client id/secret and the
+// callback URL derived from the base URL) binds once at startup via
+// security.InitializeGoth and does not hot-reload, so a change needs a restart to
+// take effect. Comparison is keyed by provider ID so reordering the list alone is
+// not treated as a change. UserID is intentionally excluded: the per-provider
+// allowlist is read live by the auth check (via currentSettings), so allowlist
+// edits already hot-reload without a restart.
+func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldProviders := oldSettings.Security.OAuthProviders
+	newProviders := currentSettings.Security.OAuthProviders
+	if len(oldProviders) != len(newProviders) {
+		return true
+	}
+	// Keyed by provider ID; duplicate IDs (a malformed config) collapse last-wins,
+	// which is acceptable and fail-safe: a missed change only delays a not-yet-active
+	// provider from registering until the next restart, never grants access.
+	newByID := make(map[string]*conf.OAuthProviderConfig, len(newProviders))
+	for i := range newProviders {
+		newByID[newProviders[i].Provider] = &newProviders[i]
+	}
+	for i := range oldProviders {
+		oldProvider := &oldProviders[i]
+		newProvider, ok := newByID[oldProvider.Provider]
+		if !ok {
+			return true
+		}
+		if oldProvider.Enabled != newProvider.Enabled ||
+			oldProvider.ClientID != newProvider.ClientID ||
+			oldProvider.ClientSecret != newProvider.ClientSecret ||
+			oldProvider.RedirectURI != newProvider.RedirectURI ||
+			oldProvider.IssuerURL != newProvider.IssuerURL ||
+			!slices.Equal(oldProvider.Scopes, newProvider.Scopes) {
+			return true
+		}
+	}
 	return false
 }
 

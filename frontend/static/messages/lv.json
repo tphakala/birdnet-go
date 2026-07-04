@@ -405,6 +405,7 @@
         "recalculatingThresholds": "Pārrēķina dinamiskos sliekšņus jaunai bāzes vērtībai",
         "reconfiguringDynamicThresholds": "Pārkonfigurē dinamiskos sliekšņus...",
         "webserverRestartRequired": "Tīmekļa servera iestatījumi mainīti. Nepieciešama restartēšana.",
+        "oauthRestartRequired": "Autentifikācijas nodrošinātāja iestatījumi mainīti. Nepieciešama restartēšana.",
         "reconfiguringSoundLevel": "Atjaunina skaņas līmeņa uzraudzību...",
         "reconfiguringAudioSources": "Audio avotu pārkonfigurēšana...",
         "rebuildingExtendedCapture": "Pārbūvē paplašinātās ierakstīšanas filtru...",

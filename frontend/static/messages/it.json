@@ -405,6 +405,7 @@
         "recalculatingThresholds": "Ricalcolo delle soglie dinamiche per il nuovo valore base",
         "reconfiguringDynamicThresholds": "Riconfigurazione delle soglie dinamiche...",
         "webserverRestartRequired": "Impostazioni del server web modificate. Riavvio necessario.",
+        "oauthRestartRequired": "Impostazioni del provider di autenticazione modificate. Riavvio necessario.",
         "reconfiguringSoundLevel": "Aggiornamento del monitoraggio del livello sonoro...",
         "reconfiguringAudioSources": "Riconfigurazione sorgenti audio...",
         "rebuildingExtendedCapture": "Ricostruzione del filtro di cattura estesa...",

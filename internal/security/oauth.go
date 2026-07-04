@@ -52,9 +52,9 @@ var (
 	//
 	// A retry goroutine that finishes on its own (provider registered, or the
 	// retry deadline elapsed) leaves its now-inert cancel func in the map; these
-	// spent entries are reaped by the next cancelAllOIDCRetries (settings reload
-	// or shutdown). The map is therefore bounded by the number of distinct
-	// configured issuer URLs, not by retry attempts.
+	// spent entries are reaped on server shutdown (shutdownOIDCRetries, via
+	// cancelAllOIDCRetriesLocked). The map is therefore bounded by the number of
+	// distinct configured issuer URLs, not by retry attempts.
 	oidcRetryCancels = make(map[string]context.CancelFunc)
 )
 
@@ -67,19 +67,10 @@ func cancelAllOIDCRetriesLocked() {
 	}
 }
 
-// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
-// Used on settings reload, where InitializeGoth rebuilds all providers from
-// scratch and any outstanding retries are superseded.
-func cancelAllOIDCRetries() {
-	oidcRetryCancelMu.Lock()
-	defer oidcRetryCancelMu.Unlock()
-	cancelAllOIDCRetriesLocked()
-}
-
 // shutdownOIDCRetries cancels every in-flight retry and blocks new ones for the
 // remaining lifetime of the current server instance. Called when the server's
 // context is cancelled (application shutdown), so a retry cannot be started
-// after shutdown has begun (e.g. by a late InitializeGoth/UpdateProviders).
+// after shutdown has begun (e.g. by a late InitializeGoth).
 func shutdownOIDCRetries() {
 	oidcRetryCancelMu.Lock()
 	defer oidcRetryCancelMu.Unlock()
@@ -227,12 +218,6 @@ type OAuth2Server struct {
 
 	// Throttling
 	throttledMessages map[string]time.Time
-
-	// secureCookies records whether session/auth cookies must carry the Secure
-	// attribute. It is decided by the caller from the effective web-server TLS
-	// config (the security package cannot import internal/api to derive it) and
-	// reused when providers are re-initialized on a settings reload.
-	secureCookies bool
 }
 
 // currentSettings returns the latest settings snapshot so security
@@ -275,10 +260,9 @@ func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 	settings := conf.GetSettings()
 
 	server := &OAuth2Server{
-		settings:      settings,
-		authCodes:     make(map[string]AuthCode),
-		accessTokens:  make(map[string]AccessToken),
-		secureCookies: secureCookies,
+		settings:     settings,
+		authCodes:    make(map[string]AuthCode),
+		accessTokens: make(map[string]AccessToken),
 	}
 
 	// Validate and potentially fix session secret
@@ -694,12 +678,6 @@ func createSessionKey(seed string) []byte {
 func SetTestConfigPath(path string) {
 	GetLogger().Debug("Setting test config path", logger.String("path", path))
 	testConfigPath = path
-}
-
-func (s *OAuth2Server) UpdateProviders() {
-	GetLogger().Info("Updating Goth providers based on potentially changed settings")
-	cancelAllOIDCRetries()
-	InitializeGoth(s.currentSettings(), s.secureCookies)
 }
 
 // IsUserAuthenticated checks if the user is authenticated

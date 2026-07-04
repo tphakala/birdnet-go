@@ -349,6 +349,7 @@ export type TranslationKey =
   | 'notifications.content.settings.recalculatingThresholds'
   | 'notifications.content.settings.reconfiguringDynamicThresholds'
   | 'notifications.content.settings.webserverRestartRequired'
+  | 'notifications.content.settings.oauthRestartRequired'
   | 'notifications.content.settings.reconfiguringSoundLevel'
   | 'notifications.content.settings.reconfiguringAudioSources'
   | 'notifications.content.settings.rebuildingExtendedCapture'
