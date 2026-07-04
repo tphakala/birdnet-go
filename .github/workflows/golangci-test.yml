@@ -223,7 +223,9 @@ jobs:
           # driving the real dual-listener startBlocking() path (regression guard
           # for #3527). Gated behind the extra pebble_e2e build tag so it never
           # runs in the normal api suite; -run isolates it from the rest of the
-          # (compiled) api package.
+          # (compiled) api package. noembed,skipfrontend skip the frontend/model
+          # go:embed requirements (this job does not build the frontend, and the
+          # AutoTLS listener path under test does not use the embedded assets).
           gotestsum \
             --format pkgname \
             --jsonfile events-tc-pebble.json \
@@ -233,7 +235,7 @@ jobs:
             --rerun-fails-max-failures=10 \
             --rerun-fails-report=rerun-tc-pebble.txt \
             --packages "./internal/api/" \
-            -- -tags=integration,pebble_e2e -run 'TestAutoTLS_Pebble' -race -timeout 300s
+            -- -tags=integration,pebble_e2e,noembed,skipfrontend -run 'TestAutoTLS_Pebble' -race -timeout 300s
         timeout-minutes: 10
 
       - name: Container diagnostics on failure

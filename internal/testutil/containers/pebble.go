@@ -155,8 +155,13 @@ func NewPebbleContainer(ctx context.Context, config *PebbleConfig) (*PebbleConta
 			// applicant's challenge listeners running in the test process.
 			hc.ExtraHosts = append(hc.ExtraHosts, fmt.Sprintf("%s:%s", challengeHost, pebbleHostGateway))
 		},
-		WaitingFor: wait.ForListeningPort(pebbleACMEPort).
-			WithStartupTimeout(pebbleStartupTimeout),
+		// Wait for BOTH the ACME and management listeners: fetchIssuerRoot hits the
+		// management port (once, no retry) right after construction, so waiting only
+		// for the ACME port would let a slow management listener flake construction.
+		WaitingFor: wait.ForAll(
+			wait.ForListeningPort(pebbleACMEPort),
+			wait.ForListeningPort(pebbleMgmtPort),
+		).WithDeadline(pebbleStartupTimeout),
 	}
 
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -347,9 +352,6 @@ func (c *PebbleContainer) WaitForIssuedCertificate(ctx context.Context, timeout 
 // Logs returns the Pebble container's stdout/stderr, which record ACME order and
 // challenge-validation attempts. Useful for diagnosing issuance failures in CI.
 func (c *PebbleContainer) Logs(ctx context.Context) (string, error) {
-	if c.container == nil {
-		return "", fmt.Errorf("pebble: no container")
-	}
 	rc, err := c.container.Logs(ctx)
 	if err != nil {
 		return "", fmt.Errorf("pebble: read logs: %w", err)
@@ -364,9 +366,6 @@ func (c *PebbleContainer) Logs(ctx context.Context) (string, error) {
 
 // Terminate stops and removes the Pebble container.
 func (c *PebbleContainer) Terminate(ctx context.Context) error {
-	if c.container == nil {
-		return nil
-	}
 	if err := c.container.Terminate(ctx); err != nil {
 		return fmt.Errorf("pebble: terminate container: %w", err)
 	}

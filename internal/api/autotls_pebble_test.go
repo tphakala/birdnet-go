@@ -88,6 +88,9 @@ func TestAutoTLS_Pebble_EndToEnd(t *testing.T) {
 	settings.Security.Host = acmeHost
 	settings.Security.TLSPort = tlsPort
 	conftest.SetTestSettings(settings)
+	// Reset the global settings snapshot afterward so a stale snapshot does not leak
+	// into a later test (nil clears it; see conftest.SetTestSettings).
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	// Point config discovery at a non-existent path so startBlocking's cache setup
 	// (conf.FindConfigFile) fails deterministically and leaves the injected
