@@ -447,7 +447,7 @@ func (c *Handler) checkMySQLTableHealth() PrerequisiteCheck {
 		}
 
 		for _, r := range results {
-			if r.MsgType == "error" {
+			if r.MsgType == "error" { //nolint:goconst // health-check message type, not the importEventError SSE-event constant
 				check.Status = CheckStatusFailed
 				check.Message = fmt.Sprintf("Table %s unhealthy: %s", table, r.MsgText)
 				return check

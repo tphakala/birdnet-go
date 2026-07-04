@@ -472,7 +472,7 @@ func NormalizeErrorType(errMsg string) string {
 		{"scientific name cannot be empty", "empty_scientific_name"},
 		{"not found", "not_found"},
 		{"is locked", "resource_locked"},
-		{"timed out", "timeout"},
+		{"timed out", "timeout"}, //nolint:goconst // normalized error token, not the CategoryTimeout enum value
 		{"timeout", "timeout"},
 		{"disk is full", "disk_full"},
 		{"i/o timeout", "io_timeout"},

@@ -64,11 +64,11 @@ func Global() *CentralLogger {
 	// Create a minimal console-only logger as fallback
 	globalLogger = &CentralLogger{
 		config: &LoggingConfig{
-			DefaultLevel: "info",
+			DefaultLevel: DefaultLogLevel,
 			Timezone:     "Local",
 			Console: &ConsoleOutput{
 				Enabled: true,
-				Level:   "info",
+				Level:   DefaultLogLevel,
 			},
 		},
 		timezone:      time.Local,

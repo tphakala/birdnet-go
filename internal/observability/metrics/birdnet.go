@@ -10,12 +10,12 @@ import (
 )
 
 const (
-	metricNameInferenceRTF         = "birdnet_inference_rtf"
-	metricNameModelRSSBytes        = "birdnet_model_rss_bytes"
-	metricNameAudioQueueDepth      = "birdnet_audio_queue_depth"
-	metricNameAudioDroppedChunks   = "birdnet_audio_dropped_chunks"
-	labelModel                     = "model"
-	labelSource                    = "source"
+	metricNameInferenceRTF       = "birdnet_inference_rtf"
+	metricNameModelRSSBytes      = "birdnet_model_rss_bytes"
+	metricNameAudioQueueDepth    = "birdnet_audio_queue_depth"
+	metricNameAudioDroppedChunks = "birdnet_audio_dropped_chunks"
+	labelModel                   = "model"
+	labelSource                  = "source"
 )
 
 // BirdNETMetrics contains all Prometheus metrics related to BirdNET operations.
@@ -44,8 +44,8 @@ type BirdNETMetrics struct {
 	ModelRSSBytes *prometheus.GaugeVec
 
 	// Audio pipeline gauges (per source).
-	AudioQueueDepth     *prometheus.GaugeVec
-	AudioDroppedChunks  *prometheus.GaugeVec
+	AudioQueueDepth    *prometheus.GaugeVec
+	AudioDroppedChunks *prometheus.GaugeVec
 
 	registry *prometheus.Registry
 }
@@ -88,7 +88,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Help:    "Time taken to perform a prediction",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
-		[]string{"model"},
+		[]string{labelModel},
 	)
 
 	m.ChunkProcessDuration = prometheus.NewHistogramVec(
@@ -97,7 +97,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Help:    "Time taken to process an audio chunk",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10),
 		},
-		[]string{"model"},
+		[]string{labelModel},
 	)
 
 	m.ModelInvokeDuration = prometheus.NewHistogramVec(
@@ -106,7 +106,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Help:    "Time taken for model invocation",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount8), // 1ms to ~256ms
 		},
-		[]string{"model"},
+		[]string{labelModel},
 	)
 
 	m.RangeFilterDuration = prometheus.NewHistogramVec(
@@ -115,7 +115,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Help:    "Time taken to apply range filter",
 			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount8), // 0.1ms to ~25.6ms
 		},
-		[]string{"model"},
+		[]string{labelModel},
 	)
 
 	// Operation counters
@@ -124,7 +124,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Name: "birdnet_predictions_total",
 			Help: "Total number of prediction requests",
 		},
-		[]string{"model", "status"},
+		[]string{labelModel, "status"},
 	)
 
 	m.PredictionErrors = prometheus.NewCounterVec(
@@ -132,7 +132,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Name: "birdnet_prediction_errors_total",
 			Help: "Total number of prediction errors",
 		},
-		[]string{"model", "error_type"},
+		[]string{labelModel, "error_type"},
 	)
 
 	m.ModelLoadTotal = prometheus.NewCounterVec(
@@ -140,7 +140,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Name: "birdnet_model_load_total",
 			Help: "Total number of model load attempts",
 		},
-		[]string{"model", "status"},
+		[]string{labelModel, "status"},
 	)
 
 	m.ModelLoadErrors = prometheus.NewCounterVec(
@@ -148,7 +148,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Name: "birdnet_model_load_errors_total",
 			Help: "Total number of model load errors",
 		},
-		[]string{"model", "error_type"},
+		[]string{labelModel, "error_type"},
 	)
 
 	// State gauges
