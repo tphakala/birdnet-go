@@ -1432,6 +1432,17 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 	assert.True(t, ok, "OIDC provider should be registered with goth")
 }
 
+// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
+// Test-only helper for resetting OIDC retry state between tests. Production reaps
+// these on shutdown via cancelAllOIDCRetriesLocked (shutdownOIDCRetries); there is
+// no settings-reload path that rebuilds providers at runtime, so this wrapper lives
+// with the tests rather than in the production binary.
+func cancelAllOIDCRetries() {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	cancelAllOIDCRetriesLocked()
+}
+
 func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
