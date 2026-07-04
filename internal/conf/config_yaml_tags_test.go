@@ -43,7 +43,7 @@ func TestAllSettingsStructsHaveYAMLTags(t *testing.T) {
 // json: tag but no yaml: tag.
 func checkType(t reflect.Type, path string, visited map[reflect.Type]bool, missing *[]string) {
 	// Dereference pointer types
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -162,7 +162,7 @@ func TestSettingsYAMLRoundTrip(t *testing.T) {
 // calls checkType so we validate nested structs.
 func recurseInto(ft reflect.Type, path string, visited map[reflect.Type]bool, missing *[]string) {
 	// Unwrap pointers
-	for ft.Kind() == reflect.Ptr {
+	for ft.Kind() == reflect.Pointer {
 		ft = ft.Elem()
 	}
 
@@ -171,7 +171,7 @@ func recurseInto(ft reflect.Type, path string, visited map[reflect.Type]bool, mi
 		checkType(ft, path, visited, missing)
 	case reflect.Slice:
 		elem := ft.Elem()
-		for elem.Kind() == reflect.Ptr {
+		for elem.Kind() == reflect.Pointer {
 			elem = elem.Elem()
 		}
 		if elem.Kind() == reflect.Struct {
@@ -179,7 +179,7 @@ func recurseInto(ft reflect.Type, path string, visited map[reflect.Type]bool, mi
 		}
 	case reflect.Map:
 		val := ft.Elem()
-		for val.Kind() == reflect.Ptr {
+		for val.Kind() == reflect.Pointer {
 			val = val.Elem()
 		}
 		if val.Kind() == reflect.Struct {

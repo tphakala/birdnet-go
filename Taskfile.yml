@@ -514,7 +514,7 @@ tasks:
         if ! command -v golangci-lint >/dev/null 2>&1; then
           echo "📥 Installing golangci-lint..."
           # Add timeout for install script download and execution
-          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin"; then
+          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.12.2"; then
             echo "❌ Failed to install golangci-lint"
             echo "   Check your internet connection and try again"
             exit 1
