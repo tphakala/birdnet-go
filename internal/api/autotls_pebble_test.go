@@ -202,6 +202,8 @@ func startACMEIssuanceTrigger(t *testing.T, tlsPort, host string) func() {
 			select {
 			case <-stop:
 				return
+			case <-triggerCtx.Done():
+				return
 			case <-time.After(2 * time.Second):
 			}
 		}

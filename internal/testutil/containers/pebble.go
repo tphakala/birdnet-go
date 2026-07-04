@@ -364,8 +364,10 @@ func (c *PebbleContainer) Logs(ctx context.Context) (string, error) {
 	return string(b), nil
 }
 
-// Terminate stops and removes the Pebble container.
+// Terminate stops and removes the Pebble container and releases the API client's
+// idle keep-alive connections.
 func (c *PebbleContainer) Terminate(ctx context.Context) error {
+	c.httpClient.CloseIdleConnections()
 	if err := c.container.Terminate(ctx); err != nil {
 		return fmt.Errorf("pebble: terminate container: %w", err)
 	}
