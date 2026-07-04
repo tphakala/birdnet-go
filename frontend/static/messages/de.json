@@ -1988,8 +1988,6 @@
         "cardNoGuide": "Für diese Art ist kein Steckbrief verfügbar.",
         "cardError": "Diese Art konnte nicht geladen werden. Bitte eine andere wählen.",
         "cardNoSections": "Für diese Art sind keine Vergleichsdetails verfügbar.",
-        "readMore": "Read more",
-        "readLess": "Show less",
         "sections": {
           "appearance": "Aussehen",
           "voice": "Stimme",

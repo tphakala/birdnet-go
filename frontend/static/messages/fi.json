@@ -1988,8 +1988,6 @@
         "cardNoGuide": "Tälle lajille ei ole opasta saatavilla.",
         "cardError": "Tämän lajin lataaminen epäonnistui. Kokeile toista.",
         "cardNoSections": "Tälle lajille ei ole vertailutietoja saatavilla.",
-        "readMore": "Read more",
-        "readLess": "Show less",
         "sections": {
           "appearance": "Ulkonäkö",
           "voice": "Ääni",

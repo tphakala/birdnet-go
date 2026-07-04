@@ -1988,8 +1988,6 @@
         "cardNoGuide": "Ingen guide tillgänglig för denna art.",
         "cardError": "Det gick inte att ladda denna art. Prova en annan.",
         "cardNoSections": "Inga jämförelsedetaljer tillgängliga för denna art.",
-        "readMore": "Read more",
-        "readLess": "Show less",
         "sections": {
           "appearance": "Utseende",
           "voice": "Läte",

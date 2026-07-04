@@ -1988,8 +1988,6 @@
         "cardNoGuide": "Šai sugai ceļvedis nav pieejams.",
         "cardError": "Neizdevās ielādēt šo sugu. Mēģiniet citu.",
         "cardNoSections": "Šai sugai nav pieejamu salīdzināšanas datu.",
-        "readMore": "Read more",
-        "readLess": "Show less",
         "sections": {
           "appearance": "Izskats",
           "voice": "Balss",

@@ -1988,8 +1988,6 @@
         "cardNoGuide": "Pre tento druh nie je k dispozícii sprievodca.",
         "cardError": "Tento druh sa nepodarilo načítať. Skúste iný.",
         "cardNoSections": "Pre tento druh nie sú k dispozícii žiadne údaje na porovnanie.",
-        "readMore": "Read more",
-        "readLess": "Show less",
         "sections": {
           "appearance": "Vzhľad",
           "voice": "Hlas",

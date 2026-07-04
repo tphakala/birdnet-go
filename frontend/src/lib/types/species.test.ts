@@ -60,6 +60,27 @@ describe('extractCanonicalSections', () => {
     expect(sections.behaviour).toBe('');
   });
 
+  it('concatenates a same-category section instead of dropping it (no silent content loss)', () => {
+    // Regression guard: when the backend promotes a canonical sub-section whose
+    // category matches its parent (e.g. "Identification" nested under
+    // "Description", both appearance), first-match-wins would drop its prose. The
+    // extractor must append it to the row instead.
+    const description = [
+      '## Description',
+      'Grey crown and rust underparts.',
+      '',
+      '## Identification',
+      'Distinguished from congeners by its wing bars.',
+      '',
+      '## Distribution and habitat',
+      'Temperate woodland.',
+    ].join('\n');
+    const sections = extractCanonicalSections(description);
+    expect(sections.appearance).toContain('Grey crown');
+    expect(sections.appearance).toContain('wing bars'); // previously dropped as a duplicate
+    expect(sections.habitat).toContain('Temperate woodland.');
+  });
+
   it('documents the pre-fix degradation: without a "## Voice" split the voice prose stays in appearance', () => {
     // This is the shape the OLD backend produced (Voice flattened to a bare line
     // inside Description). The extractor cannot recover it — which is exactly why

@@ -1988,8 +1988,6 @@
         "cardNoGuide": "Ingen guide tilgængelig for denne art.",
         "cardError": "Kunne ikke indlæse denne art. Prøv en anden.",
         "cardNoSections": "Ingen sammenligningsdetaljer tilgængelige for denne art.",
-        "readMore": "Read more",
-        "readLess": "Show less",
         "sections": {
           "appearance": "Udseende",
           "voice": "Stemme",

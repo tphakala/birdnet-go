@@ -343,10 +343,14 @@ export function classifyCanonicalHeading(heading: string): CanonicalSectionId | 
 }
 
 /**
- * Extracts the canonical comparison rows from a guide description. The first
- * matching section wins for each row. When no appearance/description section is
- * present, the article lead (text before the first `## `) is used so the
- * comparison card is never empty for a guide that has any prose.
+ * Extracts the canonical comparison rows from a guide description. Sections that
+ * classify to the same row are concatenated in document order (rather than the
+ * first one winning), so a promoted sub-section whose category matches its parent
+ * top-level section — e.g. a `## Identification` split out from under
+ * `## Description` — contributes its prose instead of being silently dropped.
+ * When no appearance/description section is present, the article lead (text
+ * before the first `## `) is used so the comparison card is never empty for a
+ * guide that has any prose.
  */
 export function extractCanonicalSections(description: string): CanonicalSections {
   const out: CanonicalSections = { appearance: '', voice: '', habitat: '', behaviour: '' };
@@ -357,8 +361,12 @@ export function extractCanonicalSections(description: string): CanonicalSections
       continue;
     }
     const id = classifyCanonicalHeading(section.heading);
+    if (!id || section.body === '') continue;
+    // Append rather than overwrite so a second same-category section — e.g. a
+    // promoted canonical sub-section that shares its parent's row — keeps its
+    // prose instead of being dropped by a first-match-wins check.
     // eslint-disable-next-line security/detect-object-injection -- id is a CanonicalSectionId union (fixed keys), not external input
-    if (id && !out[id]) out[id] = section.body;
+    out[id] = out[id] ? `${out[id]}\n\n${section.body}` : section.body;
   }
   if (!out.appearance) out.appearance = lead;
   return out;

@@ -1988,8 +1988,6 @@
         "cardNoGuide": "No guide available for this species.",
         "cardError": "Couldn’t load this species. Try another.",
         "cardNoSections": "No comparison details available for this species.",
-        "readMore": "Read more",
-        "readLess": "Show less",
         "sections": {
           "appearance": "Appearance",
           "voice": "Voice",

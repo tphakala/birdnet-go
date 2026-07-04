@@ -88,22 +88,23 @@ describe('SimilarSpeciesPanel', () => {
 
     render(SimilarSpeciesPanel, { props: { mainName: 'American Crow', similar: [entry()] } });
 
-    // Read more appears for the long voice row...
+    // Show more appears for the long voice row (reuses the shared common.ui key)...
     const toggle = await screen.findByRole(
       'button',
-      { name: 'analytics.species.similar.readMore' },
+      { name: 'common.ui.showMore' },
       { timeout: 5000 }
     );
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     // ...but the short appearance row gets no toggle (only one toggle total).
-    expect(screen.getAllByText('analytics.species.similar.readMore')).toHaveLength(1);
+    expect(screen.getAllByText('common.ui.showMore')).toHaveLength(1);
 
     // Expanding flips the label and aria-expanded; the full prose is present the
     // whole time (clamp is CSS-only, so nothing is truncated from the DOM).
     await fireEvent.click(toggle);
-    expect(
-      await screen.findByRole('button', { name: 'analytics.species.similar.readLess' })
-    ).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('button', { name: 'common.ui.showLess' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
     expect(screen.getByText(longVoice.trim(), { exact: false })).toBeInTheDocument();
   });
 

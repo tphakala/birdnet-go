@@ -271,9 +271,7 @@
                       aria-controls={`similar-row-${row.id}`}
                       onclick={() => toggleRow(row.id)}
                     >
-                      {expanded
-                        ? t('analytics.species.similar.readLess')
-                        : t('analytics.species.similar.readMore')}
+                      {expanded ? t('common.ui.showLess') : t('common.ui.showMore')}
                     </button>
                   {/if}
                 </div>
