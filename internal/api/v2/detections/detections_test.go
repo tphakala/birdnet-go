@@ -1411,7 +1411,7 @@ func TestReviewDetectionFalsePositiveLocalizedResolution(t *testing.T) {
 	setupValidReviewMock(&mockDS.Mock, "7", 7, false)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/7/review",
-		strings.NewReader(`{"verified": "false_positive", "ignoreSpecies": "mopsilepakko"}`))
+		strings.NewReader(`{"verified": "false_positive", "ignore_species": "mopsilepakko"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
