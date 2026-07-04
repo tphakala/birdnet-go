@@ -398,6 +398,17 @@ unit_content="$(generate_systemd_service_content)"
 plain_cap_count="$(printf '%s\n' "$unit_content" | grep -c -- '--cap-add NET_BIND_SERVICE' || true)"
 assert_eq "plain HTTP unit does not grant low-port bind capability" "0" "$plain_cap_count"
 
+# The container entrypoint drops from root to BIRDNET_UID with gosu before
+# launching birdnet-go. Docker's --cap-add keeps NET_BIND_SERVICE in the
+# container bounding set, but the binary also needs a file capability so the
+# non-root process can bind ports 80/443 after the uid switch.
+it "Dockerfile grants birdnet-go low-port bind file capability"
+dockerfile_content="$(cat "${REPO_ROOT}/Dockerfile")"
+libcap_count="$(printf '%s\n' "$dockerfile_content" | grep -c -- 'libcap2-bin' || true)"
+setcap_count="$(printf '%s\n' "$dockerfile_content" | grep -c -- 'setcap cap_net_bind_service=+ep /usr/bin/birdnet-go' || true)"
+assert_eq "Docker image installs setcap tool" "1" "$libcap_count"
+assert_eq "Docker image grants birdnet-go CAP_NET_BIND_SERVICE" "1" "$setcap_count"
+
 # ===========================================================================
 # apply_tls_settings (full slate; mode switch must clear stale host)
 # ===========================================================================

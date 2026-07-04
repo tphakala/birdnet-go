@@ -3,6 +3,9 @@ package api
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -16,16 +19,8 @@ func TestConfigFromSettingsAutoTLSUsesStandardHTTPSPort(t *testing.T) {
 
 	cfg := ConfigFromSettings(settings)
 
-	if !cfg.AutoTLS {
-		t.Fatal("expected AutoTLS to be enabled")
-	}
-	if got, want := cfg.Address(), ":8080"; got != want {
-		t.Fatalf("regular web address = %q, want %q", got, want)
-	}
-	if got, want := cfg.TLSAddress(), ":443"; got != want {
-		t.Fatalf("AutoTLS HTTPS address = %q, want %q", got, want)
-	}
-	if got, want := cfg.AutoTLSHTTPAddress(), ":80"; got != want {
-		t.Fatalf("AutoTLS HTTP redirect address = %q, want %q", got, want)
-	}
+	require.True(t, cfg.AutoTLS, "expected AutoTLS to be enabled")
+	assert.Equal(t, ":8080", cfg.Address(), "regular web address")
+	assert.Equal(t, ":443", cfg.TLSAddress(), "AutoTLS HTTPS address")
+	assert.Equal(t, ":80", cfg.AutoTLSHTTPAddress(), "AutoTLS HTTP redirect address")
 }

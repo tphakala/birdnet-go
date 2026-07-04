@@ -143,6 +143,7 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     lsof \
     bash-completion \
     gosu \
+    libcap2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy ONNX Runtime libraries (used by all arches; arm64 relies on them exclusively).
@@ -186,6 +187,7 @@ WORKDIR /data
 EXPOSE 80 443 8080 8090
 
 COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
+RUN setcap cap_net_bind_service=+ep /usr/bin/birdnet-go
 
 # Add container labels for metadata and compatibility information
 LABEL org.opencontainers.image.title="BirdNET-Go"

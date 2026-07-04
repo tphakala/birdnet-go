@@ -587,7 +587,10 @@ func (s *Server) Start() {
 	addr := s.config.Address()
 	switch {
 	case s.config.AutoTLS:
-		s.slogger.Info("HTTPS server starting with AutoTLS", logger.String("address", s.config.TLSAddress()))
+		s.slogger.Info("HTTPS server starting with AutoTLS",
+			logger.String("https_address", s.config.TLSAddress()),
+			logger.String("http_address", s.config.AutoTLSHTTPAddress()),
+		)
 	case s.config.TLSEnabled:
 		s.slogger.Info("HTTPS server starting",
 			logger.String("https_address", s.config.TLSAddress()),
@@ -764,7 +767,7 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 func (s *Server) newAutoTLSHTTPServer(httpAddr string) *http.Server {
 	fallback := http.NotFoundHandler()
 	if s.config.RedirectToHTTPS {
-		fallback = newHTTPSRedirectHandler("443")
+		fallback = newHTTPSRedirectHandler(autoTLSHTTPSPort)
 	}
 
 	return &http.Server{
@@ -777,7 +780,7 @@ func (s *Server) newAutoTLSHTTPServer(httpAddr string) *http.Server {
 
 func newHTTPSRedirectHandler(tlsPort string) http.Handler {
 	if tlsPort == "" {
-		tlsPort = "8443"
+		tlsPort = defaultManualTLSPort
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

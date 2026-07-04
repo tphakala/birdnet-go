@@ -23,6 +23,12 @@ const (
 	DefaultIdleTimeout     = 120 * time.Second
 	DefaultShutdownTimeout = 10 * time.Second
 
+	defaultHTTPPort       = "8080"
+	defaultManualTLSPort  = "8443"
+	autoTLSHTTPSPort      = "443"
+	autoTLSHTTPPort       = "80"
+	manualTLSConflictPort = "8444"
+
 	// DefaultLogPath is the default path for the server log file.
 	DefaultLogPath = "logs/server.log"
 )
@@ -68,10 +74,10 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Host:            "",
-		Port:            "8080",
+		Port:            defaultHTTPPort,
 		TLSEnabled:      false,
 		AutoTLS:         false,
-		TLSPort:         "8443",
+		TLSPort:         defaultManualTLSPort,
 		RedirectToHTTPS: false,
 		AllowedOrigins:  []string{"*"},
 		ReadTimeout:     DefaultReadTimeout,
@@ -115,12 +121,12 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
 			cfg.TLSPort = settings.Security.TLSPort
 			if cfg.TLSPort == "" {
-				cfg.TLSPort = "8443"
+				cfg.TLSPort = defaultManualTLSPort
 			}
 			if cfg.TLSPort == cfg.Port {
-				fallback := "8443"
-				if cfg.Port == "8443" {
-					fallback = "8444"
+				fallback := defaultManualTLSPort
+				if cfg.Port == defaultManualTLSPort {
+					fallback = manualTLSConflictPort
 				}
 				GetLogger().Warn("TLS port must differ from HTTP port",
 					logger.String("http_port", cfg.Port),
@@ -181,18 +187,18 @@ func (c *Config) Address() string {
 // TLSAddress returns the full address string for the HTTPS server to listen on.
 func (c *Config) TLSAddress() string {
 	if c.AutoTLS {
-		return c.addressForPort("443")
+		return c.addressForPort(autoTLSHTTPSPort)
 	}
 	port := c.TLSPort
 	if port == "" {
-		port = "8443"
+		port = defaultManualTLSPort
 	}
 	return c.addressForPort(port)
 }
 
 // AutoTLSHTTPAddress returns the address for AutoTLS HTTP redirects.
 func (c *Config) AutoTLSHTTPAddress() string {
-	return c.addressForPort("80")
+	return c.addressForPort(autoTLSHTTPPort)
 }
 
 func (c *Config) addressForPort(port string) string {
