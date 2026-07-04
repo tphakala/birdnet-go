@@ -17,7 +17,7 @@ import (
 // TestMosquittoContainer_ClearRetainedMessages tests the ClearRetainedMessages function
 // to ensure it properly clears retained messages without flakiness.
 func TestMosquittoContainer_ClearRetainedMessages(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create Mosquitto container
 	container, err := NewMosquittoContainer(ctx, nil)
@@ -124,7 +124,7 @@ func TestMosquittoContainer_ClearRetainedMessages(t *testing.T) {
 // TestMosquittoContainer_ClearRetainedMessages_ContextCancellation tests that
 // ClearRetainedMessages respects context cancellation.
 func TestMosquittoContainer_ClearRetainedMessages_ContextCancellation(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create Mosquitto container
 	container, err := NewMosquittoContainer(ctx, nil)
