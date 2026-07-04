@@ -97,8 +97,8 @@ func TestFilesystemStore(t *testing.T) {
 		},
 	}
 
-	// Initialize gothic with these settings
-	InitializeGoth(settings)
+	// Initialize gothic with these settings; no effective TLS -> non-Secure cookie.
+	InitializeGoth(settings, false)
 
 	// Verify that gothic.Store is a FilesystemStore
 	_, ok := gothic.Store.(*sessions.FilesystemStore)
@@ -109,7 +109,7 @@ func TestFilesystemStore(t *testing.T) {
 	assert.NotNil(t, store.Options, "Store options should not be nil")
 	assert.Equal(t, "/", store.Options.Path, "Path should be /")
 	assert.Equal(t, 86400*7, store.Options.MaxAge, "MaxAge should be 7 days")
-	assert.False(t, store.Options.Secure, "Secure should match RedirectToHTTPS")
+	assert.False(t, store.Options.Secure, "Secure should be false when no effective TLS is configured")
 	assert.True(t, store.Options.HttpOnly, "HttpOnly should be true")
 
 	// Verify the sessions directory was created with correct permissions
@@ -118,6 +118,40 @@ func TestFilesystemStore(t *testing.T) {
 	require.NoError(t, err, "Failed to stat sessions directory")
 	assert.True(t, info.IsDir(), "Sessions path should be a directory")
 	assert.Equal(t, os.FileMode(DirPermissions), info.Mode().Perm(), "Sessions directory should have secure permissions")
+}
+
+// TestFilesystemStore_SecureCookieFlag verifies that the secureCookies argument
+// threaded into InitializeGoth reaches the session cookie's Secure attribute. The
+// decision of WHAT that flag should be (from the effective TLS config) is tested
+// in internal/api (TestConfig_SessionCookiesSecure).
+func TestFilesystemStore_SecureCookieFlag(t *testing.T) {
+	// Not parallel: InitializeGoth mutates the global gothic.Store and the test
+	// config path.
+	tempDir := t.TempDir()
+	SetTestConfigPath(tempDir)
+	t.Cleanup(func() { SetTestConfigPath("") })
+
+	tests := []struct {
+		name   string
+		secure bool
+	}{
+		{"secureCookies false", false},
+		{"secureCookies true", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Subtests share the global gothic.Store; keep them sequential.
+			settings := &conf.Settings{Security: conf.Security{SessionSecret: "test-secret"}}
+			InitializeGoth(settings, tt.secure)
+
+			store, ok := gothic.Store.(*sessions.FilesystemStore)
+			require.True(t, ok, "gothic store should be a FilesystemStore")
+			require.NotNil(t, store.Options, "store options should not be nil")
+			assert.Equal(t, tt.secure, store.Options.Secure,
+				"Secure flag should match the secureCookies argument")
+		})
+	}
 }
 
 // TestLocalNetworkCookieStore tests configuring cookie store for local network access
