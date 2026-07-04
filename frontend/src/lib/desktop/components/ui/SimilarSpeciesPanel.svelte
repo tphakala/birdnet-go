@@ -144,6 +144,7 @@
         aria-label={t('analytics.species.similar.title')}
       >
         {#each similar as entry (entry.scientific_name)}
+          {@const name = entry.common_name || entry.scientific_name}
           <li>
             <button
               type="button"
@@ -151,12 +152,14 @@
                 {entry.scientific_name === selected
                 ? 'bg-primary/10 text-primary font-medium'
                 : 'hover:bg-base-200'}"
-              title={entry.has_guide ? undefined : t('analytics.species.similar.linksOnly')}
+              title={entry.has_guide
+                ? name
+                : `${name} · ${t('analytics.species.similar.linksOnly')}`}
               aria-pressed={entry.scientific_name === selected}
               onclick={() => select(entry.scientific_name)}
             >
               <span class="flex items-center gap-1">
-                <span class="truncate">{entry.common_name || entry.scientific_name}</span>
+                <span class="truncate">{name}</span>
                 {#if !entry.has_guide}
                   <!-- Subtle cue: this species offers resource links, not a comparison. -->
                   <ExternalLink
