@@ -100,3 +100,19 @@ func (s *Security) GetExternalHost() string {
 	// Priority 2: Fall back to Host
 	return s.Host
 }
+
+// IsHTTPSBaseURL reports whether the canonical external BaseURL uses the https
+// scheme, which indicates that a reverse proxy terminates TLS upstream while the
+// app itself may serve plain HTTP. It is used to decide whether clients reach the
+// app over HTTPS in reverse-proxy deployments (e.g. for the Secure cookie flag).
+//
+// A bare Host without an https BaseURL is deliberately NOT treated as HTTPS: Host
+// alone is ambiguous (it may front a plain-HTTP LAN deployment), so relying on it
+// could over-set Secure and drop the session cookie over HTTP.
+func (s *Security) IsHTTPSBaseURL() bool {
+	if s.BaseURL == "" {
+		return false
+	}
+	u, err := url.Parse(strings.TrimSpace(s.BaseURL))
+	return err == nil && u.Scheme == SchemeHTTPS
+}

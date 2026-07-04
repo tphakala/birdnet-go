@@ -45,6 +45,84 @@ func TestConfigFromSettings_AutoTLS(t *testing.T) {
 		"redirect authority should be the advertised host, not the internal TLS port")
 }
 
+// TestConfig_SessionCookiesSecure verifies the effective-TLS predicate that
+// decides the Secure attribute on session/auth cookies. The critical case is
+// AutoTLS with RedirectToHTTPS disabled: startBlocking then serves the app over
+// plain HTTP on the ACME listener, so Secure must be false there or login (which
+// the session cookie also gates for basic auth) breaks over that HTTP path.
+func TestConfig_SessionCookiesSecure(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		config  Config
+		baseURL string
+		want    bool
+	}{
+		{
+			name:   "AutoTLS with redirect (default) - secure",
+			config: Config{TLSEnabled: true, AutoTLS: true, RedirectToHTTPS: true},
+			want:   true,
+		},
+		{
+			name:   "AutoTLS without redirect serves app on HTTP - not secure",
+			config: Config{TLSEnabled: true, AutoTLS: true, RedirectToHTTPS: false},
+			want:   false,
+		},
+		{
+			name:   "manual TLS without redirect (HTTPS-only listener) - secure",
+			config: Config{TLSEnabled: true, AutoTLS: false, RedirectToHTTPS: false},
+			want:   true,
+		},
+		{
+			name:   "manual TLS with redirect - secure",
+			config: Config{TLSEnabled: true, AutoTLS: false, RedirectToHTTPS: true},
+			want:   true,
+		},
+		{
+			name:   "TLS mode selected but certs missing (plain HTTP fallback) - not secure",
+			config: Config{TLSEnabled: false, AutoTLS: false, RedirectToHTTPS: false},
+			want:   false,
+		},
+		{
+			// The RedirectToHTTPS clause secures independently of the TLS-mode
+			// clause. In practice ConfigFromSettings only sets RedirectToHTTPS
+			// together with TLSEnabled, but the predicate must handle the flag on
+			// its own.
+			name:   "redirect-to-HTTPS flag forces secure",
+			config: Config{RedirectToHTTPS: true},
+			want:   true,
+		},
+		{
+			name:    "reverse proxy https BaseURL, no app TLS - secure",
+			config:  Config{TLSEnabled: false, RedirectToHTTPS: false},
+			baseURL: "https://" + testHost,
+			want:    true,
+		},
+		{
+			name:    "reverse proxy http BaseURL, no app TLS - not secure",
+			config:  Config{TLSEnabled: false, RedirectToHTTPS: false},
+			baseURL: "http://" + testHost,
+			want:    false,
+		},
+		{
+			name:   "plain HTTP, nothing set - not secure",
+			config: Config{},
+			want:   false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			settings := &conf.Settings{Security: conf.Security{BaseURL: tc.baseURL}}
+			got := tc.config.SessionCookiesSecure(settings)
+			assert.Equal(t, tc.want, got, "Config.SessionCookiesSecure()")
+		})
+	}
+}
+
 // TestConfigFromSettings_AutoTLS_CustomTLSPort verifies that a user-configured
 // TLS port is respected in AutoTLS mode.
 func TestConfigFromSettings_AutoTLS_CustomTLSPort(t *testing.T) {

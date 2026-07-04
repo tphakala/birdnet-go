@@ -194,6 +194,38 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	return cfg
 }
 
+// SessionCookiesSecure reports whether session and auth cookies should carry the
+// Secure attribute, i.e. whether clients reach the app over HTTPS given the
+// EFFECTIVE server configuration (not merely the persisted redirect toggle). It
+// is true when any of the following hold:
+//   - a reverse proxy terminates TLS and the canonical BaseURL uses https;
+//   - the app redirects all HTTP traffic to HTTPS (RedirectToHTTPS), so every
+//     client ends up on HTTPS;
+//   - the app terminates TLS itself and serves no plain-HTTP app listener, i.e.
+//     manual or self-signed TLS with certificates present (TLSEnabled without
+//     AutoTLS). Manual/self-signed either redirects or listens HTTPS-only, so the
+//     browser always reaches it over HTTPS.
+//
+// AutoTLS is deliberately excluded from the last clause: with RedirectToHTTPS
+// disabled, AutoTLS serves the full app over plain HTTP on the ACME listener too
+// (see Server.startBlocking), so forcing Secure there would drop the session
+// cookie (which also authenticates basic auth) and break login over that HTTP
+// path. When AutoTLS does redirect (its default), the RedirectToHTTPS clause
+// already yields true. Missing manual/self-signed certs leave TLSEnabled false,
+// correctly yielding a non-Secure cookie for the plain-HTTP fallback.
+//
+// The settings argument supplies BaseURL, which Config intentionally does not
+// carry.
+func (c *Config) SessionCookiesSecure(settings *conf.Settings) bool {
+	if settings.Security.IsHTTPSBaseURL() {
+		return true
+	}
+	if c.RedirectToHTTPS {
+		return true
+	}
+	return c.TLSEnabled && !c.AutoTLS
+}
+
 // Validate checks the configuration for errors.
 func (c *Config) Validate() error {
 	if c.Port == "" {

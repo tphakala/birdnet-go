@@ -433,3 +433,67 @@ func TestSecurity_GetExternalHost_ConcurrentAccess(t *testing.T) {
 		assert.Equal(t, expectedHost, result, "Goroutine %d returned unexpected result", i)
 	}
 }
+
+// TestSecurity_IsHTTPSBaseURL tests the IsHTTPSBaseURL helper that reports whether
+// the canonical external BaseURL uses the https scheme (reverse-proxy TLS).
+func TestSecurity_IsHTTPSBaseURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		security Security
+		want     bool
+	}{
+		{
+			name:     "no BaseURL - false",
+			security: Security{},
+			want:     false,
+		},
+		{
+			name:     "https BaseURL - true",
+			security: Security{BaseURL: testURLHTTPSNoPort},
+			want:     true,
+		},
+		{
+			name:     "https BaseURL with surrounding whitespace - true",
+			security: Security{BaseURL: "  " + testURLHTTPSNoPort + "  "},
+			want:     true,
+		},
+		{
+			name:     "uppercase HTTPS scheme - true (scheme normalized by url.Parse)",
+			security: Security{BaseURL: "HTTPS://" + testHostExample},
+			want:     true,
+		},
+		{
+			name:     "http BaseURL - false",
+			security: Security{BaseURL: testURLHTTPNoPort},
+			want:     false,
+		},
+		{
+			name:     "bare host without scheme - false",
+			security: Security{BaseURL: testHostExample},
+			want:     false,
+		},
+		{
+			name:     "invalid BaseURL (parses with empty scheme) - false",
+			security: Security{BaseURL: testURLInvalid},
+			want:     false,
+		},
+		{
+			// url.Parse returns an error here (unterminated IPv6 host), exercising
+			// the err != nil branch, which must yield false.
+			name:     "malformed BaseURL (parse error) - false",
+			security: Security{BaseURL: "http://[::1"},
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tt.security.IsHTTPSBaseURL()
+			assert.Equal(t, tt.want, got, "Security.IsHTTPSBaseURL()")
+		})
+	}
+}
