@@ -417,6 +417,14 @@ BackupConfig contains backup-related configuration
 | `backup.operationtimeouts.cleanup` | string |  |
 | `backup.operationtimeouts.delete` | string |  |
 
+## import
+
+ImportConfig controls the BirdNET-Pi import feature behavior.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `import.allowinappelevation` | boolean | AllowInAppElevation enables the in-app sudo elevation ladder for native imports of unreadable source data. Default true. When false, the UI only offers copy-paste remediation and never prompts for a sudo password. |
+
 ## notification
 
 NotificationConfig is the root for notification-specific settings.

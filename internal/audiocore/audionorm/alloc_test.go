@@ -50,6 +50,18 @@ func TestMeasureInt16SteadyStateZeroAlloc(t *testing.T) {
 	}
 }
 
+// MeasureInt16Bytes must also reach zero allocations in steady state: it decodes
+// bytes inline via the pooled meter, allocating no intermediate []int16.
+func TestMeasureInt16BytesSteadyStateZeroAlloc(t *testing.T) {
+	pcm := int16sToLEBytes(sineInt16(-12, 1000, 1, 48000))
+	allocs := testing.AllocsPerRun(20, func() {
+		_, _ = MeasureInt16Bytes(pcm, 48000, 1)
+	})
+	if allocs != 0 {
+		t.Errorf("pooled MeasureInt16Bytes: %.1f allocs/op, want 0", allocs)
+	}
+}
+
 // NormalizeInt16 in steady state must also be zero-alloc (gain applied in place
 // with a stack scratch buffer; meter pooled).
 func TestNormalizeInt16SteadyStateZeroAlloc(t *testing.T) {

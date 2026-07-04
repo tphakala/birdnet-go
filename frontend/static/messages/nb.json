@@ -206,10 +206,19 @@
     "componentError": "Feil ved lasting av komponent",
     "speciesAnalytics": "Artsanalyse",
     "detectionDetails": "Registreringsdetaljer",
-    "settingsNotAvailable": "Innstillinger ikke tilgjengelig"
+    "settingsNotAvailable": "Innstillinger ikke tilgjengelig",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analyse - Nattaktivitet",
+    "analyticsWeather": "Analyse - Værkorrelasjon",
+    "analyticsSoundscape": "Analyse - Lydlandskap"
   },
   "navigation": {
     "dashboard": "Dashbord",
+    "liveAudio": "Direktelyd",
     "settingsMenu": "Innstillingsmeny",
     "theme": "Tema",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Rapporter en feil på GitHub (åpnes i nytt vindu)",
     "askQuestionAriaLabel": "Still et spørsmål på GitHub Discussions (åpnes i nytt vindu)",
     "viewOnGithubAriaLabel": "Vis BirdNET-Go på GitHub (åpnes i nytt vindu)",
-    "health": "Helse"
+    "health": "Helse",
+    "sections": {
+      "explore": "Utforsk",
+      "patterns": "Mønstre",
+      "environment": "Miljø",
+      "dataQuality": "Datakvalitet"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -1158,7 +1173,6 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "pageDescription": "Import data from other bird recording systems or export your detections.",
       "available": "Available",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
@@ -1205,6 +1219,43 @@
         "setupStepsLabel": "Setup steps",
         "recheckButton": "Re-check",
         "recheckHint": "After completing the setup steps, click Re-check to continue."
+      },
+      "source": {
+        "title": "Where is your BirdNET-Pi data?",
+        "candidatesIntro": "We found these BirdNET-Pi databases:",
+        "selectButton": "Select",
+        "useThisButton": "Use this",
+        "detectionsSummary": "{count} detections, up to {date}",
+        "kindLocal": "On this device",
+        "kindRemovable": "Removable drive",
+        "kindNetwork": "Network location",
+        "unreadableTitle": "Found, but BirdNET-Go can't read it",
+        "unreadableOwner": "This data belongs to another user ({owner}).",
+        "manualEntryLink": "Don't see it? Enter the location manually",
+        "manualEntryLabel": "BirdNET-Pi database location",
+        "manualValidating": "Checking...",
+        "manualValid": "Found {count} detections.",
+        "manualNotFound": "We couldn't find a file there.",
+        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
+        "manualInvalid": "That file isn't a BirdNET-Pi database.",
+        "zeroTitle": "We couldn't find it automatically",
+        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
+        "checkAgainButton": "Check again",
+        "showCommandsLabel": "Show commands",
+        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "elevation": {
+          "copying": "Copying your data...",
+          "passwordTitle": "BirdNET-Go needs permission to read this data",
+          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
+          "passwordLabel": "Administrator password",
+          "passwordRequiredReason": "Enter the administrator password to continue",
+          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
+          "submitButton": "Copy and continue",
+          "fallbackTitle": "Run this command to grant access",
+          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
+          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
+          "failed": "That didn't work. Check the password and try again, or use the command below."
+        }
       },
       "mode": {
         "label": "What do you want to import?",
@@ -1758,11 +1809,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Oversikt",
         "patterns": "Aktivitetsmønstre",
         "trends": "Trender",
         "biodiversity": "Biologisk mangfold",
-        "quality": "Gjennomgang og nøyaktighet"
+        "quality": "Gjennomgang og nøyaktighet",
+        "summary": "Summary",
+        "nocturnal": "Nattaktivitet",
+        "weather": "Vær",
+        "soundscape": "Lydlandskap"
       },
       "aria": {
         "tabs": "Analyseseksjoner"
@@ -1782,13 +1836,25 @@
         "notEnoughDataHint": "Dette diagrammet trenger minst {min} datapunkter. Fortsett å ta opp, og kom tilbake snart.",
         "export": "Eksporter",
         "exportComingSoon": "CSV-eksport kommer snart."
-      },
-      "comingSoon": {
-        "description": "Denne seksjonen er under utvikling og kommer i en kommende oppdatering."
       }
     },
-    "title": "Oversikt",
     "loadingError": "Innlasting av noen analysedata mislyktes. Prøv igjen senere.",
+    "comingSoon": {
+      "badge": "Kommer snart",
+      "plannedTitle": "Planlagte funksjoner",
+      "weather": {
+        "description": "Fugleaktivitet spores mot lokale værforhold. Denne visningen vil korrelere deteksjonene med temperatur, vind og nedbør.",
+        "feature1": "Korreler deteksjoner med temperatur, vind og nedbør",
+        "feature2": "Se hvordan værsystemer påvirker artsaktiviteten",
+        "feature3": "Sammenlign sesongaktivitet med historiske værdata"
+      },
+      "soundscape": {
+        "description": "Et innblikk i den overordnede akustiske karakteren til miljøet, ved bruk av akustiske indekser for å oppsummere lydlandskapets mangfold over tid.",
+        "feature1": "Akustiske indekser som oppsummerer lydlandskapets kompleksitet",
+        "feature2": "Spor biodiversitet gjennom omgivende lyd over tid",
+        "feature3": "Oppdag morgen- og kveldskorer i det akustiske registeret"
+      }
+    },
     "stats": {
       "totalDetections": "Totalt registreringer",
       "uniqueSpecies": "Unike arter",

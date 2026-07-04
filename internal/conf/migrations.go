@@ -3,11 +3,13 @@ package conf
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // persistMigration saves the config file after a successful migration.
@@ -158,24 +160,13 @@ func (s *Settings) MigrateOAuthConfig() bool {
 // inferStreamType detects the stream type from URL scheme.
 // Returns StreamTypeRTSP as default for unknown schemes.
 func inferStreamType(url string) string {
-	urlLower := strings.ToLower(url)
-
-	switch {
-	case strings.HasPrefix(urlLower, "rtsp://"), strings.HasPrefix(urlLower, "rtsps://"):
-		return StreamTypeRTSP
-	case strings.HasPrefix(urlLower, "rtmp://"), strings.HasPrefix(urlLower, "rtmps://"):
-		return StreamTypeRTMP
-	case strings.HasPrefix(urlLower, "udp://"), strings.HasPrefix(urlLower, "rtp://"):
-		return StreamTypeUDP
-	case strings.HasPrefix(urlLower, "http://"), strings.HasPrefix(urlLower, "https://"):
-		// Check for HLS (.m3u8) vs generic HTTP
-		if strings.Contains(urlLower, ".m3u8") {
-			return StreamTypeHLS
-		}
-		return StreamTypeHTTP
-	default:
-		return StreamTypeRTSP // Default to RTSP for unknown schemes
+	// Delegate to the strict scheme classifier and add the legacy default:
+	// unknown schemes fall back to RTSP (streamTypeForURL returns isStream=false
+	// for them). Sharing one scheme switch keeps the two classifiers from drifting.
+	if streamType, ok := streamTypeForURL(url); ok {
+		return streamType
 	}
+	return StreamTypeRTSP // Default to RTSP for unknown schemes
 }
 
 // MigrateRTSPConfig migrates legacy URLs []string to Streams []StreamConfig.
@@ -450,4 +441,277 @@ func (s *Settings) MigrateLocationConfigured() bool {
 
 	s.BirdNET.LocationConfigured = true
 	return true
+}
+
+// streamTypeForURL strictly classifies device as a network stream URL. It
+// returns a StreamType* constant and true only for recognized stream schemes;
+// unlike inferStreamType it never defaults an unknown or scheme-less value to
+// RTSP, so sound-card device names (hw:, plughw:, sysdefault, default, dsnoop,
+// "Loopback", bare names) and file paths classify as ("", false). Scheme
+// matching is case-insensitive and leading/trailing whitespace is trimmed
+// first.
+func streamTypeForURL(device string) (streamType string, isStream bool) {
+	lower := strings.ToLower(strings.TrimSpace(device))
+
+	switch {
+	case strings.HasPrefix(lower, "rtsp://"), strings.HasPrefix(lower, "rtsps://"):
+		return StreamTypeRTSP, true
+	case strings.HasPrefix(lower, "rtmp://"), strings.HasPrefix(lower, "rtmps://"):
+		return StreamTypeRTMP, true
+	case strings.HasPrefix(lower, "udp://"), strings.HasPrefix(lower, "rtp://"):
+		return StreamTypeUDP, true
+	case strings.HasPrefix(lower, "http://"), strings.HasPrefix(lower, "https://"):
+		if strings.Contains(lower, ".m3u8") {
+			return StreamTypeHLS, true
+		}
+		return StreamTypeHTTP, true
+	default:
+		return "", false
+	}
+}
+
+// ReconcileMisplacedAudioSources moves network stream URLs that were
+// misconfigured under realtime.audio.sources (meant for local sound cards)
+// into realtime.rtsp.streams, where the runtime opens them with FFmpeg. A
+// stream URL left in audio.sources is otherwise opened as an ALSA device,
+// which fails and breaks live audio.
+//
+// For each audio source whose device is a recognized stream URL:
+//   - If no rtsp.streams entry already has that URL, a new StreamConfig is
+//     appended carrying the source's per-source overrides (gain, models,
+//     equalizer, quiet hours) and the source entry is removed.
+//   - If an rtsp.streams entry already has that URL, non-default per-source
+//     fields are lightly merged into the existing stream without overwriting
+//     values the stream already sets, and the duplicate source entry is
+//     removed.
+//
+// Credentials embedded in a URL are preserved verbatim in the config;
+// sanitized URLs are used only in the recorded ValidationWarnings. The
+// function is idempotent: once every stream URL has been relocated, a second
+// call finds nothing to do and returns false. Returns true when at least one
+// source entry was moved or merged and removed.
+func (s *Settings) ReconcileMisplacedAudioSources() bool {
+	sources := s.Realtime.Audio.Sources
+	if len(sources) == 0 {
+		return false
+	}
+
+	changed := false
+	survivors := make([]AudioSourceConfig, 0, len(sources))
+
+	for i := range sources {
+		src := &sources[i]
+		device := strings.TrimSpace(src.Device)
+		streamType, isStream := streamTypeForURL(device)
+		if !isStream {
+			survivors = append(survivors, *src)
+			continue
+		}
+
+		if existing := s.findStreamByURL(device); existing != nil {
+			s.mergeSourceIntoStream(src, existing, device)
+		} else {
+			s.appendStreamFromSource(src, device, streamType)
+		}
+
+		if src.SampleRate > 0 {
+			s.ValidationWarnings = append(s.ValidationWarnings,
+				fmt.Sprintf("audio source %q sample rate %d Hz was not carried to stream %q: stream sample rate is auto-detected",
+					src.Name, src.SampleRate, privacy.SanitizeStreamUrl(device)))
+		}
+
+		changed = true
+	}
+
+	if !changed {
+		return false
+	}
+
+	s.Realtime.Audio.Sources = survivors
+
+	GetLogger().Info("Reconciled misplaced stream URLs from audio.sources into rtsp.streams",
+		logger.Int("stream_count", len(s.Realtime.RTSP.Streams)),
+		logger.Int("remaining_sources", len(survivors)))
+
+	return true
+}
+
+// findStreamByURL returns a pointer to the first configured stream whose URL
+// matches the given already-trimmed URL, or nil when none match. The compare
+// trims whitespace on the stored URL so cosmetic differences do not defeat
+// deduplication.
+func (s *Settings) findStreamByURL(url string) *StreamConfig {
+	for i := range s.Realtime.RTSP.Streams {
+		if strings.TrimSpace(s.Realtime.RTSP.Streams[i].URL) == url {
+			return &s.Realtime.RTSP.Streams[i]
+		}
+	}
+	return nil
+}
+
+// appendStreamFromSource creates a new StreamConfig from a misplaced audio
+// source and appends it to the RTSP streams. Credentials in url are preserved
+// verbatim; only the ValidationWarnings note uses a sanitized URL. The stream
+// name is made unique and length-bounded so the migration never produces a
+// config the stream validator would reject at load time.
+func (s *Settings) appendStreamFromSource(src *AudioSourceConfig, url, streamType string) {
+	name := s.uniqueStreamName(src.Name)
+
+	// Transport only applies to connection-oriented stream types.
+	transport := ""
+	if streamType == StreamTypeRTSP || streamType == StreamTypeRTMP {
+		transport = DefaultTransport
+	}
+
+	s.Realtime.RTSP.Streams = append(s.Realtime.RTSP.Streams, StreamConfig{
+		Name:       name,
+		URL:        url,
+		Enabled:    true,
+		Type:       streamType,
+		Transport:  transport,
+		Gain:       src.Gain,
+		Equalizer:  src.Equalizer,
+		QuietHours: src.QuietHours,
+		Models:     src.Models,
+	})
+
+	s.ValidationWarnings = append(s.ValidationWarnings,
+		fmt.Sprintf("moved misplaced stream URL %q from realtime.audio.sources to realtime.rtsp.streams as %q",
+			privacy.SanitizeStreamUrl(url), name))
+}
+
+// uniqueStreamName derives a stream name from the requested source name that
+// the stream validator will accept at load time: unique (case-insensitively)
+// among the already-configured streams and within MaxStreamNameLength. An empty
+// requested name falls back to "Stream N" (N based on the current stream count).
+// An over-long name is truncated on a UTF-8 rune boundary; a name that collides
+// gets an incrementing " (2)", " (3)" suffix (with the base truncated further to
+// keep room for the suffix) until a free name is found. A misplaced source name
+// may be up to MaxAudioSourceNameLength, longer than a stream name is allowed to
+// be, so both the length clamp and the dedup are needed to keep
+// ReconcileMisplacedAudioSources from producing a name the validator would
+// reject with a fatal error at load time.
+func (s *Settings) uniqueStreamName(requested string) string {
+	base := strings.TrimSpace(requested)
+	if base == "" {
+		base = fmt.Sprintf("Stream %d", len(s.Realtime.RTSP.Streams)+1)
+	}
+	candidate := truncateStreamName(base, MaxStreamNameLength)
+	for n := 2; s.streamNameTaken(candidate); n++ {
+		suffix := fmt.Sprintf(" (%d)", n)
+		candidate = truncateStreamName(base, MaxStreamNameLength-len(suffix)) + suffix
+	}
+	return candidate
+}
+
+// truncateStreamName shortens name to at most maxBytes bytes on a UTF-8 rune
+// boundary (never splitting a multi-byte rune), trimming any trailing spaces
+// left by the cut. Stream names are byte-length-limited by the validator, so
+// this keeps a long source name from yielding a name the validator rejects.
+func truncateStreamName(name string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(name) <= maxBytes {
+		return name
+	}
+	// range over a string yields the byte index at each rune start; keep the
+	// largest start that still fits so the cut never lands inside a rune.
+	end := 0
+	for i := range name {
+		if i > maxBytes {
+			break
+		}
+		end = i
+	}
+	return strings.TrimRight(name[:end], " ")
+}
+
+// streamNameTaken reports whether any configured stream already uses name,
+// compared case-insensitively with surrounding whitespace trimmed, matching the
+// duplicate-name rule the stream validator enforces.
+func (s *Settings) streamNameTaken(name string) bool {
+	for i := range s.Realtime.RTSP.Streams {
+		if strings.EqualFold(strings.TrimSpace(s.Realtime.RTSP.Streams[i].Name), name) {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeSourceIntoStream lightly merges non-default per-source overrides from a
+// misplaced audio source into an existing stream that already has the same URL.
+// Stream values that are already set are never overwritten. A ValidationWarnings
+// note records which fields were applied and which were kept as-is because the
+// stream already carried a non-default value.
+func (s *Settings) mergeSourceIntoStream(src *AudioSourceConfig, stream *StreamConfig, url string) {
+	var applied, kept []string
+
+	if src.Gain != 0 {
+		if stream.Gain == 0 {
+			stream.Gain = src.Gain
+			applied = append(applied, "gain")
+		} else {
+			kept = append(kept, "gain")
+		}
+	}
+
+	if len(src.Models) > 0 {
+		if len(stream.Models) == 0 {
+			stream.Models = src.Models
+			applied = append(applied, "models")
+		} else {
+			kept = append(kept, "models")
+		}
+	}
+
+	if src.Equalizer != nil {
+		if stream.Equalizer == nil {
+			stream.Equalizer = src.Equalizer
+			applied = append(applied, "equalizer")
+		} else {
+			kept = append(kept, "equalizer")
+		}
+	}
+
+	// QuietHours merges only when the struct is safely comparable to its zero
+	// value. If QuietHoursConfig ever gains a non-comparable field, skip the
+	// merge and record it rather than risking a reflect panic or losing data.
+	switch {
+	case !quietHoursComparable():
+		kept = append(kept, "quietHours (QuietHoursConfig not comparable)")
+	case reflect.ValueOf(src.QuietHours).IsZero():
+		// Source has no quiet-hours override to contribute.
+	case reflect.ValueOf(stream.QuietHours).IsZero():
+		stream.QuietHours = src.QuietHours
+		applied = append(applied, "quietHours")
+	default:
+		kept = append(kept, "quietHours")
+	}
+
+	s.ValidationWarnings = append(s.ValidationWarnings,
+		formatReconcileMergeWarning(privacy.SanitizeStreamUrl(url), stream.Name, applied, kept))
+}
+
+// quietHoursComparable reports whether QuietHoursConfig can be compared to its
+// zero value. Merging quiet hours relies on a zero-value check; if the struct
+// ever gains a non-comparable field this returns false so the merge is skipped
+// rather than risking a runtime panic.
+func quietHoursComparable() bool {
+	return reflect.TypeOf(QuietHoursConfig{}).Comparable()
+}
+
+// formatReconcileMergeWarning builds the ValidationWarnings note for a duplicate
+// source merged into an existing stream. sanitizedURL must already be stripped
+// of credentials.
+func formatReconcileMergeWarning(sanitizedURL, streamName string, applied, kept []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "merged misplaced audio source for stream URL %q into existing stream %q", sanitizedURL, streamName)
+	if len(applied) > 0 {
+		fmt.Fprintf(&b, "; applied: %s", strings.Join(applied, ", "))
+	}
+	if len(kept) > 0 {
+		fmt.Fprintf(&b, "; kept existing stream values for: %s", strings.Join(kept, ", "))
+	}
+	return b.String()
 }

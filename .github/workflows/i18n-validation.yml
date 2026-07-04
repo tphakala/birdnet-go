@@ -14,13 +14,24 @@ on:
       - 'frontend/static/messages/*.json'
       - 'frontend/src/lib/i18n/**'
 
+permissions:
+  contents: read
+  # The "Comment on PR" step (actions/github-script -> issues.createComment)
+  # posts the i18n validation results on the PR, which needs pull-requests write.
+  pull-requests: write
+
+# Cancel superseded runs for the same ref so rapid pushes do not pile up.
+concurrency:
+  group: i18n-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-translations:
     runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

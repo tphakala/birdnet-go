@@ -18,9 +18,11 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -414,28 +416,7 @@ func (c *Handler) findEncodingTempPath(relClipPath string) (string, bool) {
 // and the pre-fix "<base>.temp" form, but NOT unrelated sidecar temps that merely
 // share the prefix and suffix, e.g. a spectrogram's "<base>.png.<pid>.<seq>.temp".
 func isExportTempFor(name, base string) bool {
-	// Pre-fix format: exactly "<base>.temp".
-	if name == base+ffmpeg.TempExt {
-		return true
-	}
-	// Unique format: "<base>.<pid>.<seq>.temp" with integer pid and seq.
-	middle, ok := strings.CutPrefix(name, base+".")
-	if !ok {
-		return false
-	}
-	middle, ok = strings.CutSuffix(middle, ffmpeg.TempExt)
-	if !ok {
-		return false
-	}
-	pidStr, seqStr, ok := strings.Cut(middle, ".")
-	if !ok {
-		return false
-	}
-	if _, err := strconv.Atoi(pidStr); err != nil {
-		return false
-	}
-	_, err := strconv.Atoi(seqStr)
-	return err == nil
+	return audiotemp.IsTempFor(name, base)
 }
 
 // isAudioBeingEncoded reports whether a recent in-progress export temp file
@@ -536,12 +517,37 @@ func (c *Handler) waitForAudioFileGrace(ctx echo.Context, relClipPath string) bo
 	}
 }
 
+// isRecentClipCompletion reports whether a detection whose capture completed at
+// endTime is recent enough that its audio clip may still be encoding. A zero
+// endTime is treated as recent (unknown age -> fail-safe: keep waiting) so a
+// missing timestamp never suppresses the grace wait for a genuinely live encode.
+// Recency is keyed on completion time (Note.EndTime), shared with the reconcile
+// crawler via diskmanager.ClipRecencyWindow.
+func isRecentClipCompletion(endTime time.Time) bool {
+	return endTime.IsZero() || time.Since(endTime) < diskmanager.ClipRecencyWindow
+}
+
+// noteCompletionTime returns the detection's capture completion time (Note.EndTime)
+// for the grace-poll recency decision, or the zero time if it cannot be determined
+// (nil datastore, lookup error, or unset). It is only called on the 404 slow path,
+// so the extra lookup does not affect normal audio serves.
+func (c *Handler) noteCompletionTime(noteID string) time.Time {
+	if c.DS == nil {
+		return time.Time{}
+	}
+	note, err := c.DS.Get(noteID)
+	if err != nil {
+		return time.Time{}
+	}
+	return note.EndTime
+}
+
 // handleAudio404WithWait handles a 404 error for an audio file that may still be
 // encoding. It checks for an active temp file and waits for encoding to complete,
 // then falls back to a brief grace period for the race window where FFmpeg hasn't
 // created the temp file yet or already renamed it. Returns nil if the file was
 // successfully served, or the original/translated error otherwise.
-func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, logFields ...logger.Field) error {
+func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, detectionEndTime time.Time, logFields ...logger.Field) error {
 	if tempPath, encoding := c.findEncodingTempPath(relClipPath); encoding {
 		// Wait server-side for the file to appear instead of immediately
 		// returning 503, reducing unnecessary client round-trips. Pass the
@@ -563,8 +569,19 @@ func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, o
 		return c.translateSecureFSError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
 	}
 
-	// No temp file visible - brief grace wait for the race window where
-	// FFmpeg hasn't created the temp file yet or already renamed it.
+	// No temp file visible. For a detection whose capture completed long ago,
+	// skip the grace wait entirely and return 404 now: no export is in flight
+	// (the temp-file check above already ruled that out), so the file is a
+	// pre-reconcile ghost, not a live encode. Waiting would only pin an HTTP
+	// worker for the full grace period, and a page full of such ghosts would pin
+	// one worker each. Recent (or unknown-age) detections still get the brief
+	// grace wait for the FFmpeg race window.
+	if !isRecentClipCompletion(detectionEndTime) {
+		return c.translateSecureFSError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
+	}
+
+	// Brief grace wait for the race window where FFmpeg hasn't created the temp
+	// file yet or already renamed it.
 	if c.waitForAudioFileGrace(ctx, relClipPath) {
 		if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
 			return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after grace wait")
@@ -615,7 +632,9 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 		// frontend may request the file before it exists on disk.
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
-			return c.handleAudio404WithWait(ctx, normalizedFilename, err,
+			// Filename-based serving has no note ID to resolve a completion time,
+			// so pass the zero time (unknown -> keep the grace wait, fail-safe).
+			return c.handleAudio404WithWait(ctx, normalizedFilename, err, time.Time{},
 				logger.String("filename", filename),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()),
@@ -716,7 +735,9 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
-			return c.handleAudio404WithWait(ctx, normalizedClipPath, err,
+			// Skip the grace wait for old detections whose clip is a pre-reconcile
+			// ghost. Completion time is looked up here on the 404 slow path only.
+			return c.handleAudio404WithWait(ctx, normalizedClipPath, err, c.noteCompletionTime(noteID),
 				logger.String("note_id", noteID),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()),

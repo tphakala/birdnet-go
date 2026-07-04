@@ -40,6 +40,7 @@ type AppConfigResponse struct {
 	CustomColors       *conf.CustomColors    `json:"customColors,omitempty"`    // custom scheme hex colors (when colorScheme is "custom")
 	LogoStyle          string                `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
 	LiveSpectrogram    bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
+	AudioExportEnabled bool                  `json:"audioExportEnabled"`        // whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI
 	Layout             *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
 	FreshInstall       bool                  `json:"freshInstall"`              // true when this is a brand-new installation
 	NewVersion         bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
@@ -200,6 +201,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		CustomColors:       settings.Realtime.Dashboard.CustomColors,
 		LogoStyle:          settings.Realtime.Dashboard.LogoStyle,
 		LiveSpectrogram:    settings.Realtime.Dashboard.LiveSpectrogram,
+		AudioExportEnabled: settings.Realtime.Audio.Export.Enabled,
 		FreshInstall:       freshInstall,
 		NewVersion:         newVersion,
 		PreviousVersion:    previousVersion,

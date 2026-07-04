@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -63,7 +63,7 @@ jobs:
           sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
 
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -169,7 +169,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: nightly
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Get Build Version
         id: get_build_version
@@ -233,12 +233,12 @@ jobs:
       contents: write
 
   get-version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -268,14 +268,14 @@ jobs:
   cleanup:
     name: Cleanup old nightly releases
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Run cleanup even if some builds failed, but not if cancelled
     if: ${{ !cancelled() }}
     steps:
       - name: Delete old releases
         # Non-critical cleanup - don't fail the workflow if this errors
         continue-on-error: true
-        uses: dev-drprasad/delete-older-releases@v0.3.4
+        uses: dev-drprasad/delete-older-releases@dfbe6be2a006e9475dfcbe5b8d201f1824c2a9fe # v0.3.4
         with:
           keep_latest: 14
           delete_tags: true

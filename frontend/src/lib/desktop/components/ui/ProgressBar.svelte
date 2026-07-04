@@ -5,13 +5,7 @@
 
   type ProgressSize = 'xs' | 'sm' | 'md' | 'lg';
   type ProgressVariant =
-    | 'primary'
-    | 'secondary'
-    | 'accent'
-    | 'info'
-    | 'success'
-    | 'warning'
-    | 'error';
+    'primary' | 'secondary' | 'accent' | 'info' | 'success' | 'warning' | 'error';
 
   interface ColorThreshold {
     value: number;

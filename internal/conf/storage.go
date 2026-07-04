@@ -92,6 +92,13 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "source models")
 	}
 
+	// Relocate stream URLs misconfigured under realtime.audio.sources (meant
+	// for local sound cards) into realtime.rtsp.streams so the runtime opens
+	// them with FFmpeg instead of failing to open them as ALSA devices.
+	if settings.ReconcileMisplacedAudioSources() {
+		persistMigration(settings, "misplaced audio sources")
+	}
+
 	if streamEnabledMigrated {
 		persistMigration(settings, "stream enabled defaults")
 	}

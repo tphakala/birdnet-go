@@ -34,7 +34,7 @@
     routeCache: Record<string, boolean>;
     onToggleExpanded: () => void;
     onNavigate: (_url: string) => void;
-    showTooltip: (_event: MouseEvent, _text: string) => void;
+    showTooltip: (_event: MouseEvent | FocusEvent, _text: string) => void;
     hideTooltip: () => void;
     activeFlyout: string | null;
     sectionId: string;
@@ -76,29 +76,47 @@
     onToggleFlyout(sectionId);
   }
 
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (!flyoutOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onToggleFlyout(sectionId);
+      buttonRef?.focus();
+    }
+  }
+
   const menuItemBase =
     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
   const menuItemCollapsed = 'justify-center px-0';
   const subitemClass =
     'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150';
+  const focusRing =
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]';
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="flex flex-col relative flyout-container">
   {#if isCollapsed}
     <!-- Collapsed: Icon with flyout -->
     <div class="relative">
       <button
+        type="button"
         bind:this={buttonRef}
         onclick={handleToggleFlyout}
         onmouseenter={e => !flyoutOpen && showTooltip(e, label)}
         onmouseleave={hideTooltip}
+        onfocus={e => !flyoutOpen && showTooltip(e, label)}
+        onblur={hideTooltip}
         class={cn(
           menuItemBase,
           menuItemCollapsed,
           routeActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)]/80',
-          'hover:text-[var(--color-base-content)] hover:menu-hover'
+          'hover:text-[var(--color-base-content)] hover:menu-hover',
+          focusRing
         )}
         aria-expanded={flyoutOpen}
+        aria-haspopup="menu"
         aria-label={ariaLabel ?? label}
       >
         <Icon class="size-5 shrink-0" />
@@ -127,7 +145,8 @@
                 rel="noopener noreferrer"
                 class={cn(
                   subitemClass,
-                  'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                  'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
+                  focusRing
                 )}
                 aria-label={item.ariaLabel}
               >
@@ -139,12 +158,15 @@
               </a>
             {:else}
               <button
+                type="button"
                 onclick={() => onNavigate(item.url)}
+                aria-current={routeCache[item.routeKey] ? 'page' : undefined}
                 class={cn(
                   subitemClass,
                   routeCache[item.routeKey]
                     ? 'menu-subitem-active'
-                    : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
+                  focusRing
                 )}
               >
                 <item.icon class="size-4 shrink-0" />{item.label}
@@ -157,11 +179,13 @@
   {:else}
     <!-- Expanded: Regular collapsible -->
     <button
+      type="button"
       onclick={onToggleExpanded}
       class={cn(
         menuItemBase,
         routeActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-base-content)]/80',
-        'hover:text-[var(--color-base-content)] hover:menu-hover'
+        'hover:text-[var(--color-base-content)] hover:menu-hover',
+        focusRing
       )}
       aria-expanded={expanded}
     >
@@ -187,7 +211,8 @@
               rel="noopener noreferrer"
               class={cn(
                 subitemClass,
-                'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
+                focusRing
               )}
               aria-label={item.ariaLabel}
             >
@@ -199,12 +224,15 @@
             </a>
           {:else}
             <button
+              type="button"
               onclick={() => onNavigate(item.url)}
+              aria-current={routeCache[item.routeKey] ? 'page' : undefined}
               class={cn(
                 subitemClass,
                 routeCache[item.routeKey]
                   ? 'menu-subitem-active'
-                  : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                  : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover',
+                focusRing
               )}
             >
               <item.icon class="size-4 shrink-0" />{item.label}

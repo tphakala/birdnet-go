@@ -416,6 +416,7 @@ func init() {
 	RegisterComponent("imports", "imports")
 	RegisterComponent("imports/audio", "imports.audio")
 	RegisterComponent("imports/birdnetpi", "imports.birdnetpi")
+	RegisterComponent("imports/discovery", "imports.discovery")
 
 	// Analysis package components - use slash-separated paths for subpackages
 	RegisterComponent("analysis", "analysis")

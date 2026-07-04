@@ -78,4 +78,68 @@ describe('settingsCoercion realtime rtsp streams', () => {
       },
     });
   });
+
+  it('preserves an explicit stream gain value on save round-trip', () => {
+    const result = coerceSettings('realtime', {
+      rtsp: {
+        streams: [
+          {
+            name: 'Gain Stream',
+            url: 'rtsp://cam4',
+            type: 'rtsp',
+            gain: 12,
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      rtsp: {
+        streams: [
+          {
+            name: 'Gain Stream',
+            url: 'rtsp://cam4',
+            gain: 12,
+          },
+        ],
+      },
+    });
+  });
+
+  it('clamps an out-of-range stream gain to the -40..+40 dB bounds', () => {
+    const result = coerceSettings('realtime', {
+      rtsp: {
+        streams: [
+          {
+            name: 'Loud Stream',
+            url: 'rtsp://cam5',
+            type: 'rtsp',
+            gain: 100,
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      rtsp: {
+        streams: [{ gain: 40 }],
+      },
+    });
+  });
+
+  it('leaves stream gain undefined when not provided', () => {
+    const result = coerceSettings('realtime', {
+      rtsp: {
+        streams: [
+          {
+            name: 'No Gain Stream',
+            url: 'rtsp://cam6',
+            type: 'rtsp',
+          },
+        ],
+      },
+    }) as { rtsp: { streams: Array<Record<string, unknown>> } };
+
+    expect(result.rtsp.streams[0]?.gain).toBeUndefined();
+  });
 });

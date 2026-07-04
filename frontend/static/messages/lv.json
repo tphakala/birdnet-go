@@ -206,10 +206,19 @@
     "componentError": "Komponentes ielādes kļūda",
     "speciesAnalytics": "Sugu analītika",
     "detectionDetails": "Noteikšanas detaļas",
-    "settingsNotAvailable": "Iestatījumi nav pieejami"
+    "settingsNotAvailable": "Iestatījumi nav pieejami",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analītika - Nakts aktivitāte",
+    "analyticsWeather": "Analītika - Laika apstākļu korelācija",
+    "analyticsSoundscape": "Analītika - Skaņu ainava"
   },
   "navigation": {
     "dashboard": "Informācijas panelis",
+    "liveAudio": "Tiešraides audio",
     "settingsMenu": "Iestatījumu izvēlne",
     "theme": "Tēma",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Ziņot par kļūdu GitHub (atveras jaunā logā)",
     "askQuestionAriaLabel": "Uzdot jautājumu GitHub Discussions (atveras jaunā logā)",
     "viewOnGithubAriaLabel": "Skatīt BirdNET-Go GitHub (atveras jaunā logā)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Izpētīt",
+      "patterns": "Modeļi",
+      "environment": "Vide",
+      "dataQuality": "Datu kvalitāte"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -1158,7 +1173,6 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "pageDescription": "Import data from other bird recording systems or export your detections.",
       "available": "Available",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
@@ -1205,6 +1219,43 @@
         "setupStepsLabel": "Setup steps",
         "recheckButton": "Re-check",
         "recheckHint": "After completing the setup steps, click Re-check to continue."
+      },
+      "source": {
+        "title": "Where is your BirdNET-Pi data?",
+        "candidatesIntro": "We found these BirdNET-Pi databases:",
+        "selectButton": "Select",
+        "useThisButton": "Use this",
+        "detectionsSummary": "{count} detections, up to {date}",
+        "kindLocal": "On this device",
+        "kindRemovable": "Removable drive",
+        "kindNetwork": "Network location",
+        "unreadableTitle": "Found, but BirdNET-Go can't read it",
+        "unreadableOwner": "This data belongs to another user ({owner}).",
+        "manualEntryLink": "Don't see it? Enter the location manually",
+        "manualEntryLabel": "BirdNET-Pi database location",
+        "manualValidating": "Checking...",
+        "manualValid": "Found {count} detections.",
+        "manualNotFound": "We couldn't find a file there.",
+        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
+        "manualInvalid": "That file isn't a BirdNET-Pi database.",
+        "zeroTitle": "We couldn't find it automatically",
+        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
+        "checkAgainButton": "Check again",
+        "showCommandsLabel": "Show commands",
+        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "elevation": {
+          "copying": "Copying your data...",
+          "passwordTitle": "BirdNET-Go needs permission to read this data",
+          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
+          "passwordLabel": "Administrator password",
+          "passwordRequiredReason": "Enter the administrator password to continue",
+          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
+          "submitButton": "Copy and continue",
+          "fallbackTitle": "Run this command to grant access",
+          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
+          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
+          "failed": "That didn't work. Check the password and try again, or use the command below."
+        }
       },
       "mode": {
         "label": "What do you want to import?",
@@ -1758,11 +1809,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Pārskats",
         "patterns": "Aktivitātes modeļi",
         "trends": "Tendences",
         "biodiversity": "Bioloģiskā daudzveidība",
-        "quality": "Pārskatīšana un precizitāte"
+        "quality": "Pārskatīšana un precizitāte",
+        "summary": "Summary",
+        "nocturnal": "Nakts aktivitāte",
+        "weather": "Laika apstākļi",
+        "soundscape": "Skaņu ainava"
       },
       "aria": {
         "tabs": "Analīzes sadaļas"
@@ -1782,13 +1836,25 @@
         "notEnoughDataHint": "Šai diagrammai nepieciešami vismaz {min} datu punkti. Turpiniet ierakstīšanu un atgriezieties drīz.",
         "export": "Eksportēt",
         "exportComingSoon": "CSV eksports būs pieejams drīz."
-      },
-      "comingSoon": {
-        "description": "Šī sadaļa tiek izstrādāta un būs pieejama kādā no nākamajiem atjauninājumiem."
       }
     },
-    "title": "Pārskats",
     "loadingError": "Neizdevās ielādēt dažus analītikas datus. Lūdzu, mēģiniet vēlāk.",
+    "comingSoon": {
+      "badge": "Drīzumā",
+      "plannedTitle": "Plānotās iespējas",
+      "weather": {
+        "description": "Putnu aktivitāte saistīta ar vietējiem laika apstākļiem. Šis skats korelēs atklājumus ar temperatūru, vēju un nokrišņiem.",
+        "feature1": "Korelēt atklājumus ar temperatūru, vēju un nokrišņiem",
+        "feature2": "Redzēt, kā laika frontes maina sugu aktivitāti",
+        "feature3": "Salīdzināt sezonālo aktivitāti ar vēsturiskajiem laika apstākļiem"
+      },
+      "soundscape": {
+        "description": "Skatiens uz jūsu vides kopējo akustisko raksturu, izmantojot akustiskos indeksus, lai apkopotu skaņu ainavas daudzveidību laika gaitā.",
+        "feature1": "Akustiskie indeksi, kas apkopo skaņu ainavas sarežģītību",
+        "feature2": "Izsekot bioloģiskajai daudzveidībai, izmantojot apkārtnes skaņu laika gaitā",
+        "feature3": "Atklāt rītausmas un krēslas korus akustiskajā ierakstā"
+      }
+    },
     "stats": {
       "totalDetections": "Kopējās atpazīšanas",
       "uniqueSpecies": "Unikālās sugas",

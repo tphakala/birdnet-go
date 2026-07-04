@@ -22,6 +22,9 @@ on:
       - '.github/workflows/windows-test.yml'
       - '.github/actions/**'
   pull_request:
+    # Include labeled/unlabeled so adding or removing the `full-ci` label
+    # re-evaluates the job gate immediately instead of waiting for the next push.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - '**/*.go'
       - 'go.mod'
@@ -40,6 +43,14 @@ concurrency:
 jobs:
   unit-tests-windows:
     name: unit-tests (windows-amd64)
+    # Demoted off the per-commit PR critical path: this native run is slow (~25m)
+    # and already advisory (continue-on-error). It still runs on every push to
+    # main and on workflow_dispatch; on a PR it runs only when the `full-ci`
+    # label is present. A skipped job reports as success, so adding it as a
+    # required check later will not deadlock label-less PRs.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: windows-latest
     # Non-blocking until the native Windows CGO/DLL path is proven stable.
     continue-on-error: true
@@ -47,7 +58,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'

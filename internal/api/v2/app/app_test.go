@@ -150,6 +150,60 @@ func TestGetAppConfig_NoSecurity(t *testing.T) {
 	assert.Empty(t, response.Security.AuthConfig.EnabledProviders, "No OAuth providers should be enabled")
 }
 
+// TestGetAppConfig_AudioExportEnabled verifies the response surfaces
+// Realtime.Audio.Export.Enabled so the frontend can hide per-detection
+// spectrogram/audio UI when clip export is disabled.
+func TestGetAppConfig_AudioExportEnabled(t *testing.T) {
+	tests := []struct {
+		name          string
+		exportEnabled bool
+	}{
+		{name: "export enabled", exportEnabled: true},
+		{name: "export disabled", exportEnabled: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			settings := &conf.Settings{
+				Version: "1.0.0-test",
+			}
+			settings.Realtime.Audio.Export.Enabled = tt.exportEnabled
+			controller := newAppHandler(t, e, settings)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			err := controller.GetAppConfig(c)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.exportEnabled, response.AudioExportEnabled,
+				"AudioExportEnabled should mirror Realtime.Audio.Export.Enabled")
+
+			// Also assert against the raw JSON payload, pinning the full wire
+			// contract independent of the struct's json tag. The typed unmarshal
+			// above cannot distinguish a present-but-false value from an omitted
+			// key (both decode to false), so an accidental `omitempty` on the field
+			// would silently drop the key when export is disabled and leave the
+			// frontend guessing. Comparing the raw value catches both an omitted
+			// key (decodes to nil, != false) and a wrong value.
+			var raw map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+			require.Contains(t, raw, "audioExportEnabled",
+				"response must always include the audioExportEnabled key, even when false")
+			assert.Equal(t, tt.exportEnabled, raw["audioExportEnabled"],
+				"raw audioExportEnabled must carry the correct boolean value")
+		})
+	}
+}
+
 // TestGetAppConfig_ProjectLinks verifies the response always carries the
 // project identity/links (independent of telemetry), defaulting to the upstream
 // values with correctly derived issue URLs when nothing is overridden.
@@ -857,6 +911,7 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"customColors":       true,
 		"logoStyle":          true,
 		"liveSpectrogram":    true,
+		"audioExportEnabled": true,
 		"freshInstall":       true,
 		"newVersion":         true,
 		"projectLinks":       true,

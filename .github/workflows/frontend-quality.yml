@@ -28,10 +28,10 @@ permissions:
 jobs:
   lint:
     name: Lint & Type Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -62,10 +62,10 @@ jobs:
 
   test:
     name: Unit Tests & Security
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -79,7 +79,7 @@ jobs:
         run: npm ci
 
       - name: Cache Vitest
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: frontend/node_modules/.vitest
           key: vitest-${{ runner.os }}-${{ hashFiles('frontend/src/**/*.test.ts', 'frontend/vite.config.js') }}
@@ -97,10 +97,10 @@ jobs:
 
   build:
     name: Build & Analyze
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -137,7 +137,7 @@ jobs:
     name: Frontend Quality Gate
     needs: [lint, test, build]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check results
         run: |

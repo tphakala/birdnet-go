@@ -22,7 +22,8 @@ import type { Component } from 'svelte';
 export type AnyChartComponent = Component<any>;
 
 /** Tab groups shown in the hub, in display order. */
-export type ChartGroup = 'overview' | 'patterns' | 'trends' | 'biodiversity' | 'quality';
+export type ChartGroup =
+  'overview' | 'patterns' | 'trends' | 'biodiversity' | 'quality' | 'nocturnal';
 
 /** Date-range presets shared by the control bar and the registry fetchers. */
 export type DateRangePreset = 'week' | 'month' | 'quarter' | 'year' | 'custom';
@@ -37,8 +38,6 @@ export type DateRangePreset = 'week' | 'month' | 'quarter' | 'year' | 'custom';
  * re-parse.
  */
 export interface AnalyticsParams {
-  /** Active tab. */
-  tab: ChartGroup;
   /** Selected date-range preset. */
   range: DateRangePreset;
   /** Effective range start (YYYY-MM-DD, local). */

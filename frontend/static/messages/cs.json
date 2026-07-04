@@ -206,10 +206,19 @@
     "componentError": "Chyba načítání komponenty",
     "speciesAnalytics": "Analýza druhů",
     "detectionDetails": "Podrobnosti detekce",
-    "settingsNotAvailable": "Nastavení není k dispozici"
+    "settingsNotAvailable": "Nastavení není k dispozici",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytika - Noční aktivita",
+    "analyticsWeather": "Analytika - Korelace s počasím",
+    "analyticsSoundscape": "Analytika - Zvuková krajina"
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "liveAudio": "Živý zvuk",
     "settingsMenu": "Nabídka nastavení",
     "theme": "Motiv",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Nahlásit chybu na GitHubu (otevře se v novém okně)",
     "askQuestionAriaLabel": "Položit dotaz na GitHub Discussions (otevře se v novém okně)",
     "viewOnGithubAriaLabel": "Zobrazit BirdNET-Go na GitHubu (otevře se v novém okně)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Prozkoumat",
+      "patterns": "Vzorce",
+      "environment": "Prostředí",
+      "dataQuality": "Kvalita dat"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -1158,7 +1173,6 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "pageDescription": "Import data from other bird recording systems or export your detections.",
       "available": "Available",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
@@ -1205,6 +1219,43 @@
         "setupStepsLabel": "Setup steps",
         "recheckButton": "Re-check",
         "recheckHint": "After completing the setup steps, click Re-check to continue."
+      },
+      "source": {
+        "title": "Where is your BirdNET-Pi data?",
+        "candidatesIntro": "We found these BirdNET-Pi databases:",
+        "selectButton": "Select",
+        "useThisButton": "Use this",
+        "detectionsSummary": "{count} detections, up to {date}",
+        "kindLocal": "On this device",
+        "kindRemovable": "Removable drive",
+        "kindNetwork": "Network location",
+        "unreadableTitle": "Found, but BirdNET-Go can't read it",
+        "unreadableOwner": "This data belongs to another user ({owner}).",
+        "manualEntryLink": "Don't see it? Enter the location manually",
+        "manualEntryLabel": "BirdNET-Pi database location",
+        "manualValidating": "Checking...",
+        "manualValid": "Found {count} detections.",
+        "manualNotFound": "We couldn't find a file there.",
+        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
+        "manualInvalid": "That file isn't a BirdNET-Pi database.",
+        "zeroTitle": "We couldn't find it automatically",
+        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
+        "checkAgainButton": "Check again",
+        "showCommandsLabel": "Show commands",
+        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "elevation": {
+          "copying": "Copying your data...",
+          "passwordTitle": "BirdNET-Go needs permission to read this data",
+          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
+          "passwordLabel": "Administrator password",
+          "passwordRequiredReason": "Enter the administrator password to continue",
+          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
+          "submitButton": "Copy and continue",
+          "fallbackTitle": "Run this command to grant access",
+          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
+          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
+          "failed": "That didn't work. Check the password and try again, or use the command below."
+        }
       },
       "mode": {
         "label": "What do you want to import?",
@@ -1758,11 +1809,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Přehled",
         "patterns": "Vzorce aktivity",
         "trends": "Trendy",
         "biodiversity": "Biodiverzita",
-        "quality": "Kontrola a přesnost"
+        "quality": "Kontrola a přesnost",
+        "summary": "Summary",
+        "nocturnal": "Noční aktivita",
+        "weather": "Počasí",
+        "soundscape": "Zvuková krajina"
       },
       "aria": {
         "tabs": "Sekce analýzy"
@@ -1782,13 +1836,25 @@
         "notEnoughDataHint": "Tento graf potřebuje alespoň {min} datových bodů. Pokračujte v nahrávání a vraťte se brzy.",
         "export": "Exportovat",
         "exportComingSoon": "Export do CSV brzy přijde."
-      },
-      "comingSoon": {
-        "description": "Tato sekce se připravuje a přijde v některé z příštích aktualizací."
       }
     },
-    "title": "Přehled",
     "loadingError": "Nepodařilo se načíst některá analytická data. Zkuste to prosím později.",
+    "comingSoon": {
+      "badge": "Připravujeme",
+      "plannedTitle": "Plánované funkce",
+      "weather": {
+        "description": "Aktivita ptáků v závislosti na místních povětrnostních podmínkách. Toto zobrazení bude korelovat vaše detekce s teplotou, větrem a srážkami.",
+        "feature1": "Korelace detekcí s teplotou, větrem a srážkami",
+        "feature2": "Zjistit, jak atmosférické fronty ovlivňují aktivitu druhů",
+        "feature3": "Porovnat sezónní aktivitu s historickými meteorologickými daty"
+      },
+      "soundscape": {
+        "description": "Pohled na celkový akustický charakter vašeho prostředí pomocí akustických indexů pro shrnutí diverzity zvukové krajiny v čase.",
+        "feature1": "Akustické indexy shrnující složitost zvukové krajiny",
+        "feature2": "Sledování biodiverzity prostřednictvím okolního zvuku v průběhu času",
+        "feature3": "Odhalení úsvitových a soumračných chorů v akustickém záznamu"
+      }
+    },
     "stats": {
       "totalDetections": "Celkem detekcí",
       "uniqueSpecies": "Unikátní druhy",

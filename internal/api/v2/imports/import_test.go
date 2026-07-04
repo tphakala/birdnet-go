@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +35,10 @@ import (
 
 // testDBOnlyBody is the canonical valid db-only import request body used across tests.
 const testDBOnlyBody = `{"mode":"db-only","source_path":"birds.db"}`
+
+// osWindows is runtime.GOOS on Windows, used by tests that skip Linux/unix-only
+// native-import behavior the Windows filesystem cannot satisfy.
+const osWindows = "windows"
 
 // fakeSource implements imports.Source for unit tests.
 type fakeSource struct {
@@ -622,6 +627,39 @@ func TestResolveImportSourcePath_SymlinkEscape(t *testing.T) {
 	require.ErrorIs(t, err, errInvalidSourcePath)
 }
 
+// TestResolveImportSourcePath_AbsoluteWithinRootAccepted verifies that an
+// absolute path pointing inside the mount root is accepted (B1). The containment
+// check still enforces that the resolved path is physically under root.
+func TestResolveImportSourcePath_AbsoluteWithinRootAccepted(t *testing.T) {
+	root := t.TempDir()
+
+	// Create a file directly inside root.
+	p := filepath.Join(root, "birds.db")
+	require.NoError(t, os.WriteFile(p, []byte("x"), 0o600))
+
+	resolved, err := resolveImportSourcePath(root, p)
+	require.NoError(t, err)
+
+	// t.TempDir may sit under a symlink (macOS /var -> /private/var), so compare
+	// against the EvalSymlinks-resolved path rather than the literal input.
+	want, evalErr := filepath.EvalSymlinks(p)
+	require.NoError(t, evalErr)
+	assert.Equal(t, want, resolved)
+}
+
+// TestResolveImportSourcePath_AbsoluteOutsideRootRejected verifies that an
+// absolute path that resolves outside the mount root is rejected (B1).
+func TestResolveImportSourcePath_AbsoluteOutsideRootRejected(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir() // separate temp dir, therefore outside root
+
+	p := filepath.Join(outside, "birds.db")
+	require.NoError(t, os.WriteFile(p, []byte("x"), 0o600))
+
+	_, err := resolveImportSourcePath(root, p)
+	require.ErrorIs(t, err, errInvalidSourcePath)
+}
+
 // TestStartBirdNETPiImport_MissingFile_Returns400 verifies missing file returns 400.
 func TestStartBirdNETPiImport_MissingFile_Returns400(t *testing.T) {
 	_, c := newImportHandler(t)
@@ -1036,6 +1074,9 @@ func TestImportRoutes_Registered(t *testing.T) {
 	c.RegisterImportRoutes(c.Group)
 
 	expected := []string{
+		"GET " + apiV2Prefix + "/import/sources",
+		"POST " + apiV2Prefix + "/import/validate",
+		"POST " + apiV2Prefix + "/import/elevate",
 		"POST " + apiV2Prefix + "/import/birdnet-pi",
 		"GET " + apiV2Prefix + "/import/jobs/:jobId/progress",
 		"POST " + apiV2Prefix + "/import/jobs/:jobId/cancel",
@@ -1493,4 +1534,257 @@ func TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats(t *testing.T
 	require.NoError(t, err)
 	defer func() { _ = startResp2.Body.Close() }()
 	assert.Equal(t, http.StatusAccepted, startResp2.StatusCode, "slot must be freed after panic recovery")
+}
+
+// writeMinimalBirdNetPiDB creates a minimal valid BirdNET-Pi SQLite db at path.
+func writeMinimalBirdNetPiDB(t *testing.T, path string) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE detections (
+		Date TEXT, Time TEXT, Sci_Name TEXT, Com_Name TEXT, Confidence REAL,
+		Lat REAL, Lon REAL, Cutoff REAL, Sens REAL, File_Name TEXT)`).Error)
+	// Close immediately rather than via t.Cleanup: the helper returns nothing, so
+	// nothing depends on the connection staying open. Leaving the file open would
+	// block the probe from reopening it and prevent staging-dir removal on Windows,
+	// which cannot delete a directory containing an open file handle.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+}
+
+func TestResolveNativeImportSourcePath_Valid(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "birds.db")
+	writeMinimalBirdNetPiDB(t, db)
+
+	// The resolver returns the symlink-resolved path; resolve the expected value
+	// the same way so the comparison holds on macOS (where /tmp -> /private/tmp).
+	wantDB, err := filepath.EvalSymlinks(db)
+	require.NoError(t, err)
+
+	got, err := resolveNativeImportSourcePath(db)
+	require.NoError(t, err)
+	assert.Equal(t, wantDB, got)
+}
+
+func TestResolveNativeImportSourcePath_RejectsRelative(t *testing.T) {
+	_, err := resolveNativeImportSourcePath("relative/birds.db")
+	require.ErrorIs(t, err, errInvalidSourcePath)
+}
+
+func TestResolveNativeImportSourcePath_RejectsMissing(t *testing.T) {
+	_, err := resolveNativeImportSourcePath("/nonexistent/birds.db")
+	require.ErrorIs(t, err, errInvalidSourcePath)
+}
+
+// TestResolveNativeImportSourcePath_AcceptsRegularFile documents that the
+// resolver is path-only: it accepts any absolute, existing, regular file and
+// defers schema validation to the shared factory + Validate step in the handler
+// (mirroring the container branch). A non-BirdNET-Pi file is rejected there, not
+// here; see TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB.
+func TestResolveNativeImportSourcePath_AcceptsRegularFile(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "birds.db")
+	require.NoError(t, os.WriteFile(f, []byte("not sqlite"), 0o600))
+
+	wantF, err := filepath.EvalSymlinks(f)
+	require.NoError(t, err)
+
+	got, err := resolveNativeImportSourcePath(f)
+	require.NoError(t, err)
+	assert.Equal(t, wantF, got)
+}
+
+// TestStartBirdNETPiImport_NativeDispatch_AcceptsAbsolutePath verifies that
+// when isContainerEnv returns false, an absolute path to a valid SQLite db is
+// accepted (native branch).
+func TestStartBirdNETPiImport_NativeDispatch_AcceptsAbsolutePath(t *testing.T) {
+	_, c := newImportHandler(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+	// Force native branch.
+	c.isContainerEnv = func() bool { return false }
+	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
+
+	dbPath := filepath.Join(t.TempDir(), "birds.db")
+	writeMinimalBirdNetPiDB(t, dbPath)
+
+	body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, dbPath)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+}
+
+// TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB verifies that a
+// native absolute path to a regular file that is NOT a BirdNET-Pi database is
+// rejected with 400 by the shared factory + Validate step (the resolver is
+// path-only and no longer validates schema itself).
+func TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB(t *testing.T) {
+	_, c := newImportHandler(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	c.Repo = mockRepo
+	c.isContainerEnv = func() bool { return false }
+	// Use the real factory (birdnetpi.New) so the bad file fails open/validate.
+	c.importSourceFactory = nil
+
+	bad := filepath.Join(t.TempDir(), "birds.db")
+	require.NoError(t, os.WriteFile(bad, []byte("not a sqlite database"), 0o600))
+
+	body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, bad)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestStartBirdNETPiImport_ContainerDispatch_AcceptsRelativePath verifies that
+// when isContainerEnv returns true, a relative path (existing under the import
+// root) is accepted (container branch unchanged).
+func TestStartBirdNETPiImport_ContainerDispatch_AcceptsRelativePath(t *testing.T) {
+	_, c := newImportHandler(t)
+	mockDS := mocks.NewMockInterface(t)
+	c.DS = mockDS
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+	// Force container branch.
+	c.isContainerEnv = func() bool { return true }
+	root := t.TempDir()
+	c.importSourceRoot = root
+	// Place a real file under root so the resolver succeeds.
+	dbPath := filepath.Join(root, "birds.db")
+	writeMinimalBirdNetPiDB(t, dbPath)
+	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
+
+	body := `{"mode":"db-only","source_path":"birds.db"}`
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.StartBirdNETPiImport(ctx))
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+}
+
+// TestNewHandler_DefaultsImportSeams verifies that New() wires all injectable
+// seams used by the sources/validate/elevate endpoints.
+func TestNewHandler_DefaultsImportSeams(t *testing.T) {
+	h := New(apitest.NewCore(t), nil)
+	require.NotNil(t, h.importEnvInfo)
+	require.NotNil(t, h.scanCandidates)
+	require.NotNil(t, h.newLadder)
+	require.NotNil(t, h.freeBytesFn)
+	require.NotNil(t, h.verifyTrustedBase)
+}
+
+// TestLaunchImport_RemovesStagingDirOnCompletion verifies that when launchImport
+// is given a non-empty stagingCleanupDir, the directory is removed by the engine
+// goroutine on successful completion of the import.
+func TestLaunchImport_RemovesStagingDirOnCompletion(t *testing.T) {
+	// Native import staging is Linux-only (staging_base_other.go reports it
+	// unsupported off Linux). This test runs the full import engine and asserts the
+	// staging dir is gone afterward. On unix that holds even while the engine's db
+	// handle is still closing, because unlink removes a directory entry whose file
+	// is still open; Windows cannot delete an open file, so the assertion races the
+	// handle close. The flow never runs on Windows in production, so skip it there.
+	if runtime.GOOS == osWindows {
+		t.Skip("native import staging is unix-only; Windows cannot remove a dir with an open file handle")
+	}
+	verifyNoLeaks(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
+
+	base := t.TempDir()
+	stagingDir := filepath.Join(base, "birdnet-go-import-staging")
+	require.NoError(t, os.MkdirAll(stagingDir, 0o700))
+	db := filepath.Join(stagingDir, "birds.db")
+	writeMinimalBirdNetPiDB(t, db)
+
+	_, c := newImportHandler(t)
+	c.DS = mocks.NewMockInterface(t)
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
+	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	c.Repo = mockRepo
+	c.isContainerEnv = func() bool { return false }
+	c.stagingBase = base // allow cleanupStagingDir to match the base
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	id, launchErr := c.launchImport(ctx, db, importModeDBOnly, nil, stagingDir)
+	require.NoError(t, launchErr)
+	require.NotEmpty(t, id)
+
+	// Poll until the job reaches the done state (cleanup runs before job.finish).
+	deadline := time.Now().Add(10 * time.Second)
+	var finalStatus importStatusResponse
+	for time.Now().Before(deadline) {
+		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		statusRec := httptest.NewRecorder()
+		statusCtx := e.NewContext(statusReq, statusRec)
+		require.NoError(t, c.GetImportStatus(statusCtx))
+		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
+		if !finalStatus.Running && finalStatus.Status == importStatusDone {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	assert.Equal(t, importStatusDone, finalStatus.Status)
+	assert.NoDirExists(t, stagingDir, "staging dir must be removed by engine goroutine on completion")
+}
+
+// TestLaunchImport_RemovesStagingDirOnSlotInUse verifies that when the single
+// import slot is already occupied, launchImport cleans up the staging directory
+// synchronously before returning the 409 error.
+func TestLaunchImport_RemovesStagingDirOnSlotInUse(t *testing.T) {
+	base := t.TempDir()
+	stagingDir := filepath.Join(base, "birdnet-go-import-staging")
+	require.NoError(t, os.MkdirAll(stagingDir, 0o700))
+	db := filepath.Join(stagingDir, "birds.db")
+	writeMinimalBirdNetPiDB(t, db)
+
+	_, c := newImportHandler(t)
+	c.DS = mocks.NewMockInterface(t)
+	mockRepo := mocks.NewMockDetectionRepository(t)
+	c.Repo = mockRepo
+	c.isContainerEnv = func() bool { return false }
+	c.stagingBase = base
+
+	// Pre-occupy the single import slot so launchImport fails synchronously.
+	require.True(t, c.importMgr.start(newImportJob("busy", func() {})))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	_, launchErr := c.launchImport(ctx, db, importModeDBOnly, nil, stagingDir)
+	// c.HandleError writes the 409 body and returns nil (Echo pattern); launchImport follows the same convention.
+	require.NoError(t, launchErr)
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	assert.NoDirExists(t, stagingDir, "staging dir must be cleaned up on synchronous slot-in-use failure")
 }

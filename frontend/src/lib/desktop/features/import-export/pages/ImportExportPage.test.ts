@@ -13,16 +13,6 @@ describe('ImportExportPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the page heading', () => {
-    render(ImportExportPage);
-    expect(screen.getByText('system.sections.importExport')).toBeInTheDocument();
-  });
-
-  it('renders the page description', () => {
-    render(ImportExportPage);
-    expect(screen.getByText('system.importExport.pageDescription')).toBeInTheDocument();
-  });
-
   it('renders import and export section headings', () => {
     render(ImportExportPage);
     expect(screen.getByText('system.importExport.import.sectionTitle')).toBeInTheDocument();

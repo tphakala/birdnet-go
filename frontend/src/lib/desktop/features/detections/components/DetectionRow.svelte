@@ -49,6 +49,13 @@
   // passes them in as callbacks plus the server-hydrated isExcluded state.
   interface Props {
     detection: Detection;
+    /**
+     * Whether the Recording column exists in this table. The parent shows it when
+     * audio export is enabled or any visible row has a clip. The cell content is
+     * gated per-detection on detection.clipName, so rows without a clip render an
+     * empty cell to keep the table columns aligned.
+     */
+    showRecordingColumn?: boolean;
     isExcluded?: boolean;
     onDetailsClick?: (_id: number) => void;
     selectionActive?: boolean;
@@ -64,6 +71,7 @@
 
   let {
     detection,
+    showRecordingColumn = true,
     isExcluded = false,
     onDetailsClick,
     selectionActive = false,
@@ -277,14 +285,20 @@
   <VerificationBadges {detection} />
 </td>
 
-<!-- Recording/Spectrogram -->
-<td class="hidden md:table-cell">
-  <SpectrogramPlayer
-    audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-    detectionId={detection.id.toString()}
-    spectrogramSize="md"
-  />
-</td>
+<!-- Recording/Spectrogram column. The column is omitted entirely when no visible
+     row has a clip and export is disabled; within a shown column, the player is
+     rendered only for detections that actually have a clip. -->
+{#if showRecordingColumn}
+  <td class="hidden md:table-cell">
+    {#if detection.clipName}
+      <SpectrogramPlayer
+        audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
+        detectionId={detection.id.toString()}
+        spectrogramSize="md"
+      />
+    {/if}
+  </td>
+{/if}
 
 <!-- Action Menu -->
 <td onclick={e => e.stopPropagation()}>

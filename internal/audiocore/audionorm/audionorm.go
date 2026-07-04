@@ -112,6 +112,21 @@ func MeasureInt16(pcm []int16, sampleRate, channels int) (Measurement, error) {
 	return result(m), nil
 }
 
+// MeasureInt16Bytes measures interleaved little-endian 16-bit PCM supplied as raw
+// bytes. It is equivalent to reinterpreting the bytes as []int16 and calling
+// MeasureInt16, but decodes inline via Meter.AddInt16Bytes so no intermediate
+// slice is allocated. A trailing odd byte (never produced by real int16 PCM) is
+// ignored; the source bytes are not modified.
+func MeasureInt16Bytes(pcm []byte, sampleRate, channels int) (Measurement, error) {
+	if err := validateDims(sampleRate, channels, len(pcm)/2); err != nil {
+		return Measurement{}, err
+	}
+	m := acquireMeter(sampleRate, channels)
+	defer releaseMeter(m)
+	m.AddInt16Bytes(pcm)
+	return result(m), nil
+}
+
 // NormalizeFloat32 normalizes interleaved float32 PCM in place and returns the
 // outcome. Silent input is left untouched (GainDB = 0).
 func NormalizeFloat32(pcm []float32, opts Options) (Result, error) {
@@ -184,6 +199,33 @@ func PlanGain(meas Measurement, opts Options) Result {
 	res.GainDB = gain
 	res.OutputLUFS = meas.IntegratedLUFS + gain
 	return res
+}
+
+// DefaultMaxGainDB bounds the loudness gain the FLAC export paths apply: 30 dB,
+// the same clamp the BirdWeather FFmpeg FLAC path uses, so a clip's loudness is
+// corrected no more aggressively under one encoder than the other. It stops a
+// near-silent clip from being over-amplified into loud static, and a hot clip
+// from being driven toward digital silence. (Distinct from ffmpeg.MaxGainDB,
+// which is a wider loudnorm-offset validation range, not this export clamp.)
+const DefaultMaxGainDB = 30.0
+
+// ClampGainDB constrains a planned gain (dB) to [-maxAbsDB, +maxAbsDB] and reports
+// whether the clamp took effect. Callers pass PlanGain's GainDB and their own
+// ceiling (usually DefaultMaxGainDB); the returned bool lets one caller log the
+// limiting while another applies it silently. maxAbsDB is treated as a magnitude;
+// callers pass a non-negative value.
+func ClampGainDB(gainDB, maxAbsDB float64) (clamped float64, limited bool) {
+	// Treat maxAbsDB as a magnitude so a stray negative ceiling still yields a
+	// sane symmetric range rather than clamping everything to a negative bound.
+	absLimit := math.Abs(maxAbsDB)
+	switch {
+	case gainDB > absLimit:
+		return absLimit, true
+	case gainDB < -absLimit:
+		return -absLimit, true
+	default:
+		return gainDB, false
+	}
 }
 
 func validateDims(sampleRate, channels, n int) error {

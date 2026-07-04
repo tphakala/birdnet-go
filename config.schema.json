@@ -1028,6 +1028,17 @@
       "type": "object",
       "description": "HomeAssistantSettings contains settings for Home Assistant MQTT auto-discovery."
     },
+    "ImportConfig": {
+      "properties": {
+        "allowinappelevation": {
+          "type": "boolean",
+          "description": "AllowInAppElevation enables the in-app sudo elevation ladder for native\nimports of unreadable source data. Default true. When false, the UI only\noffers copy-paste remediation and never prompts for a sudo password."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ImportConfig controls the BirdNET-Pi import feature behavior."
+    },
     "LiveStreamSettings": {
       "properties": {
         "debug": {
@@ -2218,6 +2229,10 @@
           "$ref": "#/$defs/BackupConfig",
           "description": "Backup configuration"
         },
+        "import": {
+          "$ref": "#/$defs/ImportConfig",
+          "description": "BirdNET-Pi import behavior"
+        },
         "notification": {
           "$ref": "#/$defs/NotificationConfig",
           "description": "Configuration for push notifications"
@@ -2452,6 +2467,10 @@
         "channelMode": {
           "type": "string",
           "description": "Channel handling: downmix, left, or right"
+        },
+        "gain": {
+          "type": "number",
+          "description": "Input gain in dB (0 = no adjustment)"
         },
         "equalizer": {
           "$ref": "#/$defs/EqualizerSettings",

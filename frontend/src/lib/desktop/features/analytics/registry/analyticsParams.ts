@@ -5,7 +5,6 @@
  * registry fetchers.
  *
  * URL contract (all in the `?query`):
- *   tab     active tab group (omitted when it equals the default tab)
  *   range   week|month|quarter|year|custom (omitted when `month`, the default)
  *   start   YYYY-MM-DD, only meaningful (and serialised) when range=custom
  *   end     YYYY-MM-DD, only meaningful (and serialised) when range=custom
@@ -14,18 +13,8 @@
  */
 import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
 
-import type { AnalyticsParams, ChartGroup, DateRangePreset } from './types';
+import type { AnalyticsParams, DateRangePreset } from './types';
 
-/** Tab groups in display order. */
-export const GROUP_ORDER: readonly ChartGroup[] = [
-  'overview',
-  'patterns',
-  'trends',
-  'biodiversity',
-  'quality',
-] as const;
-
-const VALID_GROUPS = new Set<string>(GROUP_ORDER);
 const VALID_RANGES = new Set<string>(['week', 'month', 'quarter', 'year', 'custom']);
 
 /** Default range when the URL omits `range`. Matches the legacy page default. */
@@ -84,8 +73,6 @@ export function resolveDateRange(
 }
 
 interface ParseOptions {
-  /** Tab used when `?tab=` is absent or invalid. */
-  defaultTab?: ChartGroup;
   /** Injectable clock for deterministic range resolution. */
   now?: Date;
 }
@@ -101,10 +88,6 @@ export function parseAnalyticsParams(search: string, opts: ParseOptions = {}): A
   // URLSearchParams strips a single leading '?' itself, so pass the value as-is.
   const sp = new URLSearchParams(search);
   const now = opts.now ?? new Date();
-  const defaultTab = opts.defaultTab ?? 'overview';
-
-  const rawTab = sp.get('tab');
-  const tab: ChartGroup = rawTab && VALID_GROUPS.has(rawTab) ? (rawTab as ChartGroup) : defaultTab;
 
   const rawRange = sp.get('range');
   const range: DateRangePreset =
@@ -115,9 +98,8 @@ export function parseAnalyticsParams(search: string, opts: ParseOptions = {}): A
 
   const speciesRaw = sp.get('species') ?? '';
   const species = speciesRaw
-    ? // Dedupe so a hand-edited URL with repeats (?species=A,A) does not produce
-      // duplicate selections / duplicate D3 series keys.
-      [
+    ? [
+        // Dedupe so a hand-edited URL with repeats (?species=A,A) does not produce duplicate selections / duplicate D3 series keys.
         ...new Set(
           speciesRaw
             .split(',')
@@ -131,29 +113,17 @@ export function parseAnalyticsParams(search: string, opts: ParseOptions = {}): A
 
   const [startDate, endDate] = resolveDateRange(range, start, end, now);
 
-  return { tab, range, start, end, species, source, startDate, endDate };
-}
-
-interface SerializeOptions {
-  /** Tab that is omitted from the URL (the default landing tab). */
-  defaultTab?: ChartGroup;
+  return { range, start, end, species, source, startDate, endDate };
 }
 
 /**
  * Serialises analytics hub state into a query string (no leading `?`), omitting
  * defaults and empties so URLs stay clean and deep-linkable. The output is the
- * exact inverse of {@link parseAnalyticsParams} given matching options.
+ * exact inverse of {@link parseAnalyticsParams}.
  */
-export function serializeAnalyticsParams(
-  params: AnalyticsParams,
-  opts: SerializeOptions = {}
-): string {
+export function serializeAnalyticsParams(params: AnalyticsParams): string {
   const sp = new URLSearchParams();
-  const defaultTab = opts.defaultTab ?? 'overview';
 
-  if (params.tab !== defaultTab) {
-    sp.set('tab', params.tab);
-  }
   if (params.range !== DEFAULT_RANGE) {
     sp.set('range', params.range);
   }

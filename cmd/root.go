@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd/authors"
 	"github.com/tphakala/birdnet-go/cmd/benchmark"
+	"github.com/tphakala/birdnet-go/cmd/importstage"
 	"github.com/tphakala/birdnet-go/cmd/license"
 	"github.com/tphakala/birdnet-go/cmd/notify"
 	"github.com/tphakala/birdnet-go/cmd/rangefilter"
@@ -39,6 +40,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	supportCmd := support.Command(settings)
 	benchmarkCmd := benchmark.Command(settings)
 	notifyCmd := notify.Command(settings)
+	importStageCmd := importstage.Command(settings)
 
 	subcommands := []*cobra.Command{
 		serveCmd,
@@ -48,13 +50,18 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 		supportCmd,
 		benchmarkCmd,
 		notifyCmd,
+		importStageCmd,
 	}
 
 	rootCmd.AddCommand(subcommands...)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// Skip setup for authors and license commands
-		if cmd.Name() != authorsCmd.Name() && cmd.Name() != licenseCmd.Name() {
+		// Skip setup for informational and privileged primitive commands.
+		// import-stage runs as root via sudo and must not trigger daemon init,
+		// config loading, telemetry, or network calls.
+		if cmd.Name() != authorsCmd.Name() &&
+			cmd.Name() != licenseCmd.Name() &&
+			cmd.Name() != importStageCmd.Name() {
 			if err := initialize(); err != nil {
 				return fmt.Errorf("error initializing: %w", err)
 			}

@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -546,6 +547,54 @@ func TestStreamConfig_ChannelModeValidation(t *testing.T) {
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "invalid channel mode")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestStreamConfig_Validate_GainRange mirrors TestAudioSourceConfig_Validate_GainRange:
+// StreamConfig.Validate must reject NaN, +/-Inf, and out-of-range gain so a
+// hand-edited config.yaml or a non-UI API client cannot push an out-of-range
+// gain past the frontend clamp. Only Gain varies; every other field is valid.
+func TestStreamConfig_Validate_GainRange(t *testing.T) {
+	t.Parallel()
+
+	base := func() StreamConfig {
+		return StreamConfig{
+			Name: "Gain Cam",
+			URL:  "rtsp://cam.local/stream",
+			Type: StreamTypeRTSP,
+		}
+	}
+
+	tests := []struct {
+		name    string
+		gain    float64
+		wantErr bool
+	}{
+		{"zero gain", 0, false},
+		{"max gain", MaxAudioGain, false},
+		{"min gain", MinAudioGain, false},
+		{"normal positive gain", 6.5, false},
+		{"NaN gain", math.NaN(), true},
+		{"positive Inf gain", math.Inf(1), true},
+		{"negative Inf gain", math.Inf(-1), true},
+		{"above max", MaxAudioGain + 1, true},
+		{"below min", MinAudioGain - 1, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := base()
+			s.Gain = tt.gain
+			err := s.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "gain")
+				assert.Contains(t, err.Error(), "out of range")
 			} else {
 				assert.NoError(t, err)
 			}

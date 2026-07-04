@@ -18,15 +18,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h2 class="text-2xl font-semibold text-[var(--color-base-content)]">
-      {t('system.sections.importExport')}
-    </h2>
-    <p class="mt-1 text-sm text-[var(--color-base-content)]/70">
-      {t('system.importExport.pageDescription')}
-    </p>
-  </div>
-
   <!-- Import section -->
   <section aria-labelledby="import-section-heading">
     <h3

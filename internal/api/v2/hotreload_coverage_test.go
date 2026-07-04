@@ -166,6 +166,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.RTSP.Streams.*.Type":        {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
 	"Realtime.RTSP.Streams.*.Transport":   {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
 	"Realtime.RTSP.Streams.*.ChannelMode": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
+	"Realtime.RTSP.Streams.*.Gain":        {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
 	"Realtime.RTSP.Streams.*.Equalizer":   {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.RTSP.Streams.*.QuietHours":  {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_quiet_hours"},
 	"Realtime.RTSP.Streams.*.Models":      {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
@@ -245,6 +246,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 
 	// --- Alerting ---
 	"Alerting": {categories: []hotReloadCategory{hotReloadFresh}},
+
+	// --- Import (in-app elevation toggle; per-request policy read live, no action) ---
+	"Import": {categories: []hotReloadCategory{hotReloadFresh}},
 }
 
 // Ceiling decreases as TODO actions are implemented; target is zero.

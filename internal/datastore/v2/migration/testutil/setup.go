@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -730,6 +731,9 @@ func (s *testLegacyInterface) GetImageCacheBatch(_ string, _ []string) (map[stri
 func (s *testLegacyInterface) SaveImageCache(_ *datastore.ImageCache) error        { return nil }
 func (s *testLegacyInterface) GetLockedNotesClipPaths() ([]string, error)          { return nil, nil }
 func (s *testLegacyInterface) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
+func (s *testLegacyInterface) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
+	return nil, nil
+}
 func (s *testLegacyInterface) CountHourlyDetections(_, _ string, _ int) (int64, error) {
 	return 0, nil
 }

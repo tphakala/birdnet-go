@@ -206,10 +206,19 @@
     "componentError": "Komponens betöltési hiba",
     "speciesAnalytics": "Faj elemzés",
     "detectionDetails": "Detektálás részletei",
-    "settingsNotAvailable": "Beállítások nem elérhetők"
+    "settingsNotAvailable": "Beállítások nem elérhetők",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Elemzés - Éjszakai aktivitás",
+    "analyticsWeather": "Elemzés - Időjárás-korreláció",
+    "analyticsSoundscape": "Elemzés - Hangkép"
   },
   "navigation": {
     "dashboard": "Irányítópult",
+    "liveAudio": "Élő hang",
     "settingsMenu": "Beállítások menü",
     "theme": "Téma",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
     "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
     "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)",
-    "health": "Rendszerállapot"
+    "health": "Rendszerállapot",
+    "sections": {
+      "explore": "Felfedezés",
+      "patterns": "Minták",
+      "environment": "Környezet",
+      "dataQuality": "Adatminőség"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -1158,7 +1173,6 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "pageDescription": "Import data from other bird recording systems or export your detections.",
       "available": "Available",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
@@ -1205,6 +1219,43 @@
         "setupStepsLabel": "Setup steps",
         "recheckButton": "Re-check",
         "recheckHint": "After completing the setup steps, click Re-check to continue."
+      },
+      "source": {
+        "title": "Where is your BirdNET-Pi data?",
+        "candidatesIntro": "We found these BirdNET-Pi databases:",
+        "selectButton": "Select",
+        "useThisButton": "Use this",
+        "detectionsSummary": "{count} detections, up to {date}",
+        "kindLocal": "On this device",
+        "kindRemovable": "Removable drive",
+        "kindNetwork": "Network location",
+        "unreadableTitle": "Found, but BirdNET-Go can't read it",
+        "unreadableOwner": "This data belongs to another user ({owner}).",
+        "manualEntryLink": "Don't see it? Enter the location manually",
+        "manualEntryLabel": "BirdNET-Pi database location",
+        "manualValidating": "Checking...",
+        "manualValid": "Found {count} detections.",
+        "manualNotFound": "We couldn't find a file there.",
+        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
+        "manualInvalid": "That file isn't a BirdNET-Pi database.",
+        "zeroTitle": "We couldn't find it automatically",
+        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
+        "checkAgainButton": "Check again",
+        "showCommandsLabel": "Show commands",
+        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "elevation": {
+          "copying": "Copying your data...",
+          "passwordTitle": "BirdNET-Go needs permission to read this data",
+          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
+          "passwordLabel": "Administrator password",
+          "passwordRequiredReason": "Enter the administrator password to continue",
+          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
+          "submitButton": "Copy and continue",
+          "fallbackTitle": "Run this command to grant access",
+          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
+          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
+          "failed": "That didn't work. Check the password and try again, or use the command below."
+        }
       },
       "mode": {
         "label": "What do you want to import?",
@@ -1758,11 +1809,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Áttekintés",
         "patterns": "Tevékenységi minták",
         "trends": "Trendek",
         "biodiversity": "Biodiverzitás",
-        "quality": "Ellenőrzés és pontosság"
+        "quality": "Ellenőrzés és pontosság",
+        "summary": "Summary",
+        "nocturnal": "Éjszakai aktivitás",
+        "weather": "Időjárás",
+        "soundscape": "Hangkép"
       },
       "aria": {
         "tabs": "Elemzési szakaszok"
@@ -1782,13 +1836,25 @@
         "notEnoughDataHint": "Ehhez a diagramhoz legalább {min} adatpont szükséges. Folytassa a rögzítést, és nézzen vissza hamarosan.",
         "export": "Exportálás",
         "exportComingSoon": "A CSV-exportálás hamarosan érkezik."
-      },
-      "comingSoon": {
-        "description": "Ez a szakasz fejlesztés alatt áll, és egy közelgő frissítésben érkezik."
       }
     },
-    "title": "Áttekintés",
     "loadingError": "Néhány analitikai adat betöltése sikertelen. Próbálja később újra.",
+    "comingSoon": {
+      "badge": "Hamarosan",
+      "plannedTitle": "Tervezett funkciók",
+      "weather": {
+        "description": "Madárfelvételek a helyi időjárási viszonyokhoz mérve. Ez a nézet az észleléseket összekapcsolja a hőmérséklettel, széllel és csapadékkal.",
+        "feature1": "Észlelések korrelálása hőmérséklettel, széllel és csapadékkal",
+        "feature2": "Megmutatja, hogyan befolyásolják az időjárási frontok a fajok aktivitását",
+        "feature3": "Szezonális aktivitás összehasonlítása a historikus időjárási adatokkal"
+      },
+      "soundscape": {
+        "description": "Átfogó kép a környezet akusztikai karakteréről, akusztikai indexek segítségével összefoglalva a hangkép diverzitását az idő múlásával.",
+        "feature1": "Akusztikus indexek, amelyek összefoglalják a hangkép összetettségét",
+        "feature2": "A biodiverzitás nyomon követése a környezeti hang révén az idő múlásával",
+        "feature3": "Hajnali és esti kórusok azonosítása az akusztikai felvételekben"
+      }
+    },
     "stats": {
       "totalDetections": "Összes detektálás",
       "uniqueSpecies": "Egyedi fajok",

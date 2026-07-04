@@ -27,9 +27,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -354,7 +356,7 @@ func (c *Handler) StartHLSStream(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
 	}
 	if _, bufErr := eng.BufferManager().CaptureBuffer(sourceID); bufErr != nil {
-		return c.HandleError(ctx, nil, "Audio source not found", http.StatusNotFound)
+		return c.respondNoCaptureBuffer(ctx, eng, sourceID)
 	}
 
 	// Check for existing healthy stream first (reuse if possible)
@@ -389,6 +391,60 @@ func (c *Handler) StartHLSStream(ctx echo.Context) error {
 	playlistReady := c.waitForHLSPlaylist(ctx, sourceID, stream)
 
 	return c.buildHLSStreamResponse(ctx, sourceID, stream, playlistReady)
+}
+
+// respondNoCaptureBuffer builds a diagnostic 404 for a live-audio start request
+// whose source has no capture buffer. Before this, StartHLSStream returned a bare
+// 404 with a nil error and no diagnostics, so users saw an error popup with "no
+// logs" (issue #3766). Here we gather the currently registered source IDs and the
+// source IDs that actually have a capture buffer (the ones that can back a live
+// stream right now), so the WARN log and the returned error explain what went
+// wrong and what could be started instead.
+//
+// All logged identifiers are opaque source-ID hashes (e.g. "rtsp_d13dfe45"), which
+// are safe to log. Raw connection strings are never logged; the requested source
+// ID is additionally passed through privacy.SanitizeRTSPUrl as defense in depth.
+func (c *Handler) respondNoCaptureBuffer(ctx echo.Context, eng *engine.AudioEngine, sourceID string) error {
+	// Registered sources from the source registry (all configured sources).
+	var registeredIDs []string
+	if registry := eng.Registry(); registry != nil {
+		sources := registry.List()
+		registeredIDs = make([]string, 0, len(sources))
+		for _, src := range sources {
+			registeredIDs = append(registeredIDs, src.ID)
+		}
+	}
+
+	// Source IDs that currently have a capture buffer allocated: these are the
+	// ones that can actually back a live stream right now.
+	health := eng.BufferManager().CaptureBufferHealthAll()
+	captureBufferIDs := make([]string, 0, len(health))
+	for _, h := range health {
+		captureBufferIDs = append(captureBufferIDs, h.SourceID)
+	}
+
+	// registeredCount is the number of configured/registered sources, not the
+	// number usable for streaming right now (that is capture_buffer_count).
+	registeredCount := len(registeredIDs)
+
+	diagErr := errors.Newf("live audio source not available: no capture buffer for requested source").
+		Component("api").
+		Category(errors.CategoryAudioSource).
+		Context("requested_source", privacy.SanitizeRTSPUrl(sourceID)).
+		Context("registered_source_count", registeredCount).
+		Context("capture_buffer_count", len(captureBufferIDs)).
+		Build()
+
+	c.LogAPIRequest(ctx, logger.LogLevelWarn, "Live audio start failed: source has no capture buffer",
+		logger.String("requested_source", privacy.SanitizeRTSPUrl(sourceID)),
+		logger.Int("registered_sources", registeredCount),
+		logger.Int("capture_buffers", len(captureBufferIDs)),
+		logger.String("registered_source_ids", strings.Join(registeredIDs, ",")),
+		logger.String("capture_buffer_ids", strings.Join(captureBufferIDs, ",")))
+
+	return c.HandleError(ctx, diagErr,
+		"Audio source not available for live streaming. If you recently changed audio settings, the stream may need a moment or a restart to become available.",
+		http.StatusNotFound)
 }
 
 // buildHLSStreamResponse constructs the HLS stream status response

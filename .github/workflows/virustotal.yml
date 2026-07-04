@@ -11,7 +11,7 @@ permissions:
 jobs:
   scan:
     name: Scan Release Assets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Get latest release ID
         if: github.event_name == 'workflow_dispatch'
@@ -22,7 +22,7 @@ jobs:
           RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/latest --jq '.id')
           echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
 
-      - uses: cssnr/virustotal-action@v2
+      - uses: cssnr/virustotal-action@5edfa4c982eb0caec6d568ea27cf715269f5c23b # v2
         with:
           vt_api_key: ${{ secrets.VT_API_KEY }}
           release_id: ${{ steps.release.outputs.id || '' }}
