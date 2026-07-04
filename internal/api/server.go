@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -90,8 +91,10 @@ type Server struct {
 	staticServer *StaticFileServer
 	spaHandler   *SPAHandler
 
-	// HTTP server for redirect/ACME challenges (when TLS is enabled)
-	httpRedirectServer *http.Server
+	// HTTP server for redirect/ACME challenges (when TLS is enabled). Stored from
+	// the startBlocking goroutine and read from ShutdownWithContext on another
+	// goroutine, so access goes through atomic load/store.
+	httpRedirectServer atomic.Pointer[http.Server]
 
 	// Lifecycle management
 	startTime time.Time
@@ -652,12 +655,13 @@ func (s *Server) startBlocking() error {
 		} else {
 			httpFallback = s.echo
 		}
-		s.httpRedirectServer = &http.Server{
+		redirectSrv := &http.Server{
 			Addr:         addr,
 			Handler:      s.echo.AutoTLSManager.HTTPHandler(httpFallback),
 			ReadTimeout:  s.config.ReadTimeout,
 			WriteTimeout: s.config.WriteTimeout,
 		}
+		s.httpRedirectServer.Store(redirectSrv)
 
 		// Pre-bind the HTTP listener so ACME challenges work. Fail fast if the
 		// port is unavailable rather than discovering it asynchronously.
@@ -665,7 +669,7 @@ func (s *Server) startBlocking() error {
 		if listenErr != nil {
 			return fmt.Errorf("AutoTLS: cannot bind HTTP listener on %s (required for ACME HTTP-01 challenges): %w", addr, listenErr)
 		}
-		go s.serveHTTPOnListener(httpLn)
+		go s.serveHTTPOnListener(redirectSrv, httpLn)
 
 		// Start HTTPS server on TLS port (this blocks)
 		tlsAddr := s.config.TLSAddress()
@@ -674,8 +678,8 @@ func (s *Server) startBlocking() error {
 			logger.String("http_address", addr),
 		)
 		err = s.echo.StartAutoTLS(tlsAddr)
-		if err != nil && s.httpRedirectServer != nil {
-			_ = s.httpRedirectServer.Close()
+		if err != nil {
+			_ = redirectSrv.Close()
 		}
 	case s.config.TLSEnabled:
 		// Manual/Self-signed TLS: HTTPS on TLSPort, HTTP stays on configured port
@@ -689,15 +693,18 @@ func (s *Server) startBlocking() error {
 
 		// Start HTTP redirect server on the regular port if configured
 		if s.config.RedirectToHTTPS {
-			s.httpRedirectServer = s.newHTTPRedirectServer(addr, s.config.TLSPort)
-			go s.serveHTTPRedirect()
+			redirectSrv := s.newHTTPRedirectServer(addr, s.config.TLSPort)
+			s.httpRedirectServer.Store(redirectSrv)
+			go s.serveHTTPRedirect(redirectSrv)
 		}
 
 		// Start HTTPS server on TLS port (this blocks)
 		err = s.echo.StartTLS(tlsAddr, s.config.TLSCertFile, s.config.TLSKeyFile)
 		// If HTTPS startup failed, shut down the redirect server
-		if err != nil && s.httpRedirectServer != nil {
-			_ = s.httpRedirectServer.Close()
+		if err != nil {
+			if srv := s.httpRedirectServer.Load(); srv != nil {
+				_ = srv.Close()
+			}
 		}
 	default:
 		// Plain HTTP
@@ -747,8 +754,8 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 	}
 
 	// Shutdown HTTP redirect server if running
-	if s.httpRedirectServer != nil {
-		if err := s.httpRedirectServer.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
+	if srv := s.httpRedirectServer.Load(); srv != nil {
+		if err := srv.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
 			s.slogger.Warn("Error shutting down HTTP redirect server", logger.Error(err))
 		}
 	}
@@ -792,7 +799,8 @@ func httpsRedirectHandler(externalAuthority, fallbackPort string) http.Handler {
 			if h, _, err := net.SplitHostPort(host); err == nil {
 				host = h
 			}
-			host = strings.TrimRight(strings.TrimLeft(host, "["), "]")
+			host = strings.TrimPrefix(host, "[")
+			host = strings.TrimSuffix(host, "]")
 			switch fallbackPort {
 			case "", conf.DefaultHTTPSPort:
 				hostPort = host
@@ -812,7 +820,7 @@ func httpsRedirectHandler(externalAuthority, fallbackPort string) http.Handler {
 // The server is created synchronously to avoid a race between assignment and shutdown.
 func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 	if tlsPort == "" {
-		tlsPort = "8443"
+		tlsPort = defaultTLSPort
 	}
 
 	return &http.Server{
@@ -824,24 +832,25 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 }
 
 // serveHTTPRedirect starts listening on the HTTP redirect server.
-// Must be called in a goroutine after newHTTPRedirectServer.
-func (s *Server) serveHTTPRedirect() {
+// Must be called in a goroutine after newHTTPRedirectServer, with the server it
+// stored, so it does not race with a concurrent shutdown reading the field.
+func (s *Server) serveHTTPRedirect(srv *http.Server) {
 	s.slogger.Info("Starting HTTP->HTTPS redirect server",
-		logger.String("http_address", s.httpRedirectServer.Addr),
+		logger.String("http_address", srv.Addr),
 	)
 
-	if err := s.httpRedirectServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.slogger.Error("HTTP redirect server error", logger.Error(err))
 	}
 }
 
 // serveHTTPOnListener serves the HTTP redirect/ACME server on a pre-bound listener.
-func (s *Server) serveHTTPOnListener(ln net.Listener) {
+func (s *Server) serveHTTPOnListener(srv *http.Server, ln net.Listener) {
 	s.slogger.Info("Starting HTTP->HTTPS redirect server",
-		logger.String("http_address", s.httpRedirectServer.Addr),
+		logger.String("http_address", srv.Addr),
 	)
 
-	if err := s.httpRedirectServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.slogger.Error("HTTP redirect server error", logger.Error(err))
 	}
 }

@@ -113,8 +113,8 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // t.Context() is already cancelled in Cleanup
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
-		if s.httpRedirectServer != nil {
-			_ = s.httpRedirectServer.Shutdown(ctx)
+		if srv := s.httpRedirectServer.Load(); srv != nil {
+			_ = srv.Shutdown(ctx)
 		}
 	})
 
@@ -325,8 +325,8 @@ func TestAutoTLS_DualListeners_RedirectStatus(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // t.Context() is already cancelled in Cleanup
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
-		if s.httpRedirectServer != nil {
-			_ = s.httpRedirectServer.Shutdown(ctx)
+		if srv := s.httpRedirectServer.Load(); srv != nil {
+			_ = srv.Shutdown(ctx)
 		}
 	})
 
@@ -540,8 +540,8 @@ func TestAutoTLS_RedirectDisabled_ServesApp(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // t.Context() is already cancelled in Cleanup
 		defer cancel()
 		_ = s.echo.Shutdown(ctx)
-		if s.httpRedirectServer != nil {
-			_ = s.httpRedirectServer.Shutdown(ctx)
+		if srv := s.httpRedirectServer.Load(); srv != nil {
+			_ = srv.Shutdown(ctx)
 		}
 	})
 

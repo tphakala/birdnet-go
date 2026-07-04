@@ -74,7 +74,7 @@ func DefaultConfig() *Config {
 		Port:            "8080",
 		TLSEnabled:      false,
 		AutoTLS:         false,
-		TLSPort:         "8443",
+		TLSPort:         defaultTLSPort,
 		RedirectToHTTPS: false,
 		AllowedOrigins:  []string{"*"},
 		ReadTimeout:     DefaultReadTimeout,
@@ -88,16 +88,25 @@ func DefaultConfig() *Config {
 	}
 }
 
-// resolveTLSPort sets cfg.TLSPort, defaulting to "8443" when empty and
+// TLS listener port defaults used when a port is unset or collides with the HTTP port.
+const (
+	// defaultTLSPort is the HTTPS listener port used when TLS is enabled and no
+	// port is configured.
+	defaultTLSPort = "8443"
+	// fallbackTLSPort is used when the configured TLS port equals the HTTP port.
+	fallbackTLSPort = "8444"
+)
+
+// resolveTLSPort sets cfg.TLSPort, defaulting to defaultTLSPort when empty and
 // resolving conflicts when TLSPort equals the HTTP port.
 func resolveTLSPort(cfg *Config) {
 	if cfg.TLSPort == "" {
-		cfg.TLSPort = "8443"
+		cfg.TLSPort = defaultTLSPort
 	}
 	if cfg.TLSPort == cfg.Port {
-		fallback := "8443"
-		if cfg.Port == "8443" {
-			fallback = "8444"
+		fallback := defaultTLSPort
+		if cfg.Port == defaultTLSPort {
+			fallback = fallbackTLSPort
 		}
 		GetLogger().Warn("TLS port must differ from HTTP port",
 			logger.String("http_port", cfg.Port),
