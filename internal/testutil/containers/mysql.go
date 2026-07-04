@@ -63,11 +63,12 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 	}
 
 	// Build container request
-	opts := []testcontainers.ContainerCustomizer{
+	opts := make([]testcontainers.ContainerCustomizer, 0, 3+len(config.InitScripts))
+	opts = append(opts,
 		mysql.WithDatabase(config.Database),
 		mysql.WithUsername(config.Username),
 		mysql.WithPassword(config.Password),
-	}
+	)
 
 	// Add init scripts if provided
 	for _, script := range config.InitScripts {
@@ -78,8 +79,9 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 	// Containers are created fresh for each test run to ensure isolation.
 
 	// Create and start container
-	// Note: mysql.RunContainer already handles waiting for the container to be ready
-	mysqlContainer, err := mysql.RunContainer(ctx, opts...)
+	// Note: mysql.Run already handles waiting for the container to be ready
+	image := fmt.Sprintf("mysql:%s", config.ImageTag)
+	mysqlContainer, err := mysql.Run(ctx, image, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start MySQL container: %w", err)
 	}
