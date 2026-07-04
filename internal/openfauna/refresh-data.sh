@@ -7,11 +7,12 @@
 #
 #   ./refresh-data.sh /path/to/openfauna/checkout
 #
-# It rebuilds the CSVs with the openfauna compiler, gzips them deterministically
-# (gzip -n: no name/timestamp, so identical data produces an identical blob and a
-# clean git diff) into ./data/, copies the small aliases.json verbatim, regenerates
-# the locale list, and records the source commit in ./data/SOURCE.txt. Commit the
-# resulting ./data/ changes.
+# It runs the openfauna compiler (which emits translations.csv, metadata.jsonl,
+# sources.json, manifest.json, and aliases.json), gzips the large CSV/JSONL blobs
+# deterministically (gzip -n: no name/timestamp, so identical data produces an
+# identical blob and a clean git diff) into ./data/, copies the small JSON files
+# (sources/manifest/aliases) verbatim, regenerates the locale list, and records the
+# source commit in ./data/SOURCE.txt. Commit the resulting ./data/ changes.
 set -euo pipefail
 
 OF_DIR="${1:?usage: refresh-data.sh /path/to/openfauna/checkout}"

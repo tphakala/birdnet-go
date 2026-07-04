@@ -141,29 +141,52 @@ export interface GuideSection {
 // Wikipedia article text arrives as `## Heading` sections (see the Go
 // guideprovider's convertWikiSections). These lowercase heading fragments map a
 // section to a canonical comparison row. Lists include common localized
-// fragments for the locales BirdNET-Go ships; unmatched headings degrade
-// gracefully (the section is simply omitted from the comparison).
+// Wikipedia section-heading fragments for ALL 16 locales BirdNET-Go ships
+// (cs da de en es fi fr hu it lv nb nl pl pt sk sv); unmatched headings degrade
+// gracefully (the section is simply omitted from the comparison). Matching is
+// case-insensitive substring, so accented forms are kept as they appear on-wiki.
 // ---------------------------------------------------------------------------
 
 /** Heading fragments that denote a "songs & calls" / voice section. */
 export const GUIDE_SONGS_HEADINGS = [
+  // en / de / fr / es-pt-it (canto, voce, voz) / pl / fi / sv
   'songs and calls',
   'song',
   'calls',
   'voice',
   'vocalization',
   'stimme',
+  'gesang',
   'chant et cris',
   'voix',
   'voz',
   'canto',
+  'voce',
   'głos',
   'ääntelyt',
   'läte',
+  // cs / sk
+  'hlas',
+  'zpěv',
+  'spev',
+  // da / nb
+  'sang',
+  'stemme',
+  // hu
+  'hangja',
+  'ének',
+  // lv
+  'balss',
+  'dziesma',
+  // nl
+  'geluid',
+  'zang',
+  'roep',
 ];
 
 /** Heading fragments that denote an appearance / description section. */
 export const GUIDE_APPEARANCE_HEADINGS = [
+  // en / de / fr / es / fi / sv
   'description',
   'appearance',
   'identification',
@@ -175,10 +198,38 @@ export const GUIDE_APPEARANCE_HEADINGS = [
   'aspecto',
   'kuvaus',
   'utseende',
+  // it / pt
+  'descrizione',
+  'aspetto',
+  'descrição',
+  'aparência',
+  // cs / sk
+  'popis',
+  'vzhled',
+  'vzhľad',
+  // da / nb
+  'beskrivelse',
+  'kendetegn',
+  'kjennetegn',
+  // hu
+  'leírás',
+  'megjelenése',
+  'külleme',
+  // lv
+  'apraksts',
+  'izskats',
+  // nl
+  'beschrijving',
+  'kenmerken',
+  'uiterlijk',
+  // pl
+  'wygląd',
+  'opis',
 ];
 
 /** Heading fragments that denote a distribution / habitat / range section. */
 export const GUIDE_HABITAT_HEADINGS = [
+  // en / de / fr / es / fi / sv
   'distribution and habitat',
   'distribution',
   'habitat',
@@ -189,15 +240,76 @@ export const GUIDE_HABITAT_HEADINGS = [
   'distribución',
   'levinneisyys',
   'utbredning',
+  // it / pt
+  'distribuzione',
+  'areale',
+  'distribuição',
+  // cs / sk
+  'rozšíření',
+  'rozšírenie',
+  'výskyt',
+  'biotop',
+  // da / nb
+  'udbredelse',
+  'levested',
+  'utbredelse',
+  'leveområde',
+  // hu
+  'elterjedése',
+  'előfordulása',
+  'élőhely',
+  // lv
+  'izplatība',
+  'dzīvotne',
+  // nl
+  'verspreiding',
+  'leefgebied',
+  // pl
+  'występowanie',
+  'zasięg',
+  'środowisko',
 ];
 
 /** Heading fragments that denote a behaviour / ecology section. */
 export const GUIDE_BEHAVIOUR_HEADINGS = [
+  // en / de / fr / es / fi / sv
   'behaviour',
   'behavior',
   'ecology',
   'verhalten',
   'comportement',
+  'comportamiento',
+  'ecología',
+  'käyttäytyminen',
+  'elintavat',
+  'ekologia',
+  'beteende',
+  'ekologi',
+  // it / pt
+  'comportamento',
+  'ecologia',
+  'biologia',
+  // cs / sk
+  'chování',
+  'ekologie',
+  'správanie',
+  'ekológia',
+  // da / nb
+  'adfærd',
+  'atferd',
+  'økologi',
+  // hu
+  'életmódja',
+  'viselkedése',
+  // lv
+  'uzvedība',
+  'ekoloģija',
+  // nl
+  'gedrag',
+  'ecologie',
+  'leefwijze',
+  // pl
+  'zachowanie',
 ];
 
 export type CanonicalSectionId = 'appearance' | 'voice' | 'habitat' | 'behaviour';

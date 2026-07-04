@@ -205,6 +205,12 @@ type GuideCache struct {
 
 	fallbackPolicy string // conf.SpeciesGuideFallback{All,None}
 	warmTopN       int
+	// warmLocale is the dashboard locale that cache warming (startup WarmForSpecies +
+	// per-detection PreFetch) targets, so warmed entries key to the same locale the UI
+	// requests. Set once via SetWarmLocale before Start() and treated as immutable for
+	// the cache's lifetime (a reconfigure rebuilds the cache), so background warm
+	// goroutines read it without a lock. Empty falls back to defaultLocale.
+	warmLocale string
 
 	sf singleflight.Group
 
@@ -288,6 +294,17 @@ func (c *GuideCache) SetWarmTopN(n int) {
 		return
 	}
 	c.warmTopN = n
+}
+
+// SetWarmLocale records the dashboard locale that startup warming and per-detection
+// pre-fetch should target, so warmed entries key to the locale the UI will request
+// rather than the default "en". Call before Start(); see RegisterProvider for the
+// concurrency contract.
+func (c *GuideCache) SetWarmLocale(locale string) {
+	if c == nil {
+		return
+	}
+	c.warmLocale = locale
 }
 
 // storeMemory writes an entry to the memory tier with a hard size cap. Existing
@@ -767,7 +784,9 @@ func (c *GuideCache) PreFetch(ctx context.Context, scientificName string) {
 		if fetchCtx == nil {
 			fetchCtx = c.ctx
 		}
-		_, _ = c.Get(fetchCtx, name, FetchOptions{})
+		// Warm the dashboard locale (not the default), so the pre-fetched entry keys to
+		// the locale the UI actually requests.
+		_, _ = c.Get(fetchCtx, name, FetchOptions{Locale: c.warmLocale})
 	})
 }
 
@@ -790,7 +809,9 @@ func (c *GuideCache) WarmForSpecies(speciesNames []string) {
 			if c.shouldQuit() {
 				return
 			}
-			_, _ = c.Get(c.ctx, n, FetchOptions{})
+			// Warm the dashboard locale (not the default) so the warmed entries key to
+			// the locale the UI will request.
+			_, _ = c.Get(c.ctx, n, FetchOptions{Locale: c.warmLocale})
 		}
 		c.updateCachePopulationRatio()
 	})
@@ -840,6 +861,20 @@ func (c *GuideCache) refreshStaleEntries() {
 		// inexact count.
 		c.memWriteMu.Lock()
 		for _, key := range evict {
+			// Re-check under the lock before deleting: a concurrent fetchAndStore may
+			// have replaced this stale negative with a fresh positive between the
+			// lock-free Range scan above and here. Only evict when the CURRENT value is
+			// still a stale negative, so we never drop a freshly-stored positive by
+			// acting on a stale snapshot. (storeMemoryLocked also holds memWriteMu, so
+			// this Load/LoadAndDelete pair cannot race a structural write.)
+			cur, ok := c.memory.Load(key)
+			if !ok {
+				continue
+			}
+			g, isGuide := cur.(*SpeciesGuide)
+			if !isGuide || !g.IsNegativeEntry() || !c.isCacheEntryStale(g) {
+				continue
+			}
 			if _, loaded := c.memory.LoadAndDelete(key); loaded {
 				c.memCount.Add(-1)
 			}

@@ -3,6 +3,11 @@
 package analysis
 
 import (
+	"cmp"
+	"context"
+	"slices"
+	"strings"
+
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/guideprovider"
@@ -40,6 +45,10 @@ func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpM
 
 	cache := guideprovider.NewGuideCache(store, gpMetrics)
 	cache.SetWarmTopN(cfg.WarmTopN)
+	// Warm/pre-fetch in the dashboard locale so warming targets the same cache key the
+	// UI requests; otherwise non-English instances warm "en" and pay a wasted fetch per
+	// new detection while the user's locale stays cold.
+	cache.SetWarmLocale(settings.Realtime.Dashboard.Locale)
 
 	// OpenFauna is the primary provider: registered first (so it is the merge base
 	// and DB cache key), it supplies offline taxonomy, localized common names, and
@@ -64,29 +73,71 @@ func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpM
 	return cache
 }
 
-// warmGuideCacheWithTopSpecies warms the guide cache for the top-N detected
-// species. It is a no-op when warming is disabled (topN <= 0).
+// warmGuideCacheWithTopSpecies warms the guide cache for the top-N most-detected
+// species, so the entries most likely to be viewed are pre-loaded. It is a no-op
+// when warming is disabled (topN <= 0).
 func warmGuideCacheWithTopSpecies(cache *guideprovider.GuideCache, ds datastore.Interface, topN int, log logger.Logger) {
 	if cache == nil || topN <= 0 {
 		return
 	}
-	species, err := ds.GetAllDetectedSpecies()
-	if err != nil {
-		log.Warn("Failed to load species for guide cache warming", logger.Error(err))
-		return
-	}
-	// Preallocate by the smaller of the warm target and the actual species count,
-	// so an out-of-range topN can never drive an oversized allocation here.
-	names := make([]string, 0, min(topN, len(species)))
-	for i := range species {
-		if len(names) >= topN {
-			break
-		}
-		if species[i].ScientificName != "" {
-			names = append(names, species[i].ScientificName)
-		}
-	}
+	names := topDetectedSpeciesNames(ds, topN, log)
 	if len(names) > 0 {
 		cache.WarmForSpecies(names)
 	}
+}
+
+// topDetectedSpeciesNames returns up to topN scientific names ranked by all-time
+// detection count (most-detected first, ties broken by most-recently-seen then name).
+// If the ranked summary query is unavailable it falls back to the alphabetical
+// GetAllDetectedSpecies list, so warming still runs (just unranked) rather than being
+// skipped entirely.
+func topDetectedSpeciesNames(ds datastore.Interface, topN int, log logger.Logger) []string {
+	summary, err := ds.GetSpeciesSummaryData(context.Background(), "", "")
+	if err != nil {
+		log.Warn("Failed to load ranked species for guide cache warming; falling back to unranked list",
+			logger.Error(err))
+		return firstDetectedSpeciesNames(ds, topN, log)
+	}
+	if len(summary) == 0 {
+		return nil
+	}
+	// Rank by detection count desc, then most-recent-seen desc, then name for a stable
+	// order among ties (map/query order alone is not "top-N").
+	slices.SortFunc(summary, func(a, b datastore.SpeciesSummaryData) int {
+		if c := cmp.Compare(b.Count, a.Count); c != 0 {
+			return c
+		}
+		if c := b.LastSeen.Compare(a.LastSeen); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ScientificName, b.ScientificName)
+	})
+	return takeSpeciesNames(topN, len(summary), func(i int) string { return summary[i].ScientificName })
+}
+
+// firstDetectedSpeciesNames is the unranked fallback: the alphabetical
+// GetAllDetectedSpecies list truncated to topN.
+func firstDetectedSpeciesNames(ds datastore.Interface, topN int, log logger.Logger) []string {
+	species, err := ds.GetAllDetectedSpecies()
+	if err != nil {
+		log.Warn("Failed to load species for guide cache warming", logger.Error(err))
+		return nil
+	}
+	return takeSpeciesNames(topN, len(species), func(i int) string { return species[i].ScientificName })
+}
+
+// takeSpeciesNames collects up to topN non-empty scientific names from an indexed
+// source, preallocating by the smaller of topN and the source length so an
+// out-of-range topN cannot drive an oversized allocation.
+func takeSpeciesNames(topN, count int, nameAt func(i int) string) []string {
+	names := make([]string, 0, min(topN, count))
+	for i := range count {
+		if len(names) >= topN {
+			break
+		}
+		if name := nameAt(i); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }

@@ -28,6 +28,7 @@
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { untrack } from 'svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
@@ -149,6 +150,21 @@
       ? taxonomyInfo.subspecies
       : []
   );
+
+  // Reset the guide panel to expanded when navigating to a DIFFERENT species in place.
+  // guidePanelOpen lives outside the {#key detection.scientificName} block, so a panel
+  // collapsed on detection A would otherwise stay collapsed on detection B and hide its
+  // guide. Guard on the previous species so a same-species refetch (new detection object,
+  // same name) doesn't fight a user who just collapsed the panel. Mirrors
+  // SpeciesDetailModal, which resets guidePanelOpen on each open.
+  let prevGuideSpecies = $state<string | undefined>(undefined);
+  $effect(() => {
+    const name = detection?.scientificName;
+    if (name !== undefined && name !== untrack(() => prevGuideSpecies)) {
+      prevGuideSpecies = name;
+      guidePanelOpen = true;
+    }
+  });
 
   // AbortController for preventing race conditions
   let detectionController: AbortController | null = null;

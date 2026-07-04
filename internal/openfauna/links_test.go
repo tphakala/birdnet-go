@@ -144,3 +144,28 @@ func TestProductionRegistriesGetLangOverride(t *testing.T) {
 		assert.Equal(t, "no", wiki.langFor("nb"), "supplementary Wikipedia source must map nb -> no")
 	}
 }
+
+// TestApplySourceLangMapsMergesUpstream verifies the branch's core "survive data
+// refreshes" premise: an upstream-supplied lang_map is MERGED with (not clobbered by)
+// birdnet-go's own {nb,nn}->no override, so a future OpenFauna refresh that ships its
+// own lang_map keys keeps them.
+func TestApplySourceLangMapsMergesUpstream(t *testing.T) {
+	reg := map[string]Source{
+		idWikipedia: {
+			Name:    "Wikipedia",
+			URL:     "https://{lang}.wikipedia.org/wiki/{id}",
+			LangMap: map[string]string{"als": "gsw", "nb": "upstream"}, // upstream-supplied
+		},
+		"inaturalist": {Name: "iNaturalist", URL: "https://www.inaturalist.org/taxa/{id}"},
+	}
+	applySourceLangMaps(reg)
+
+	wiki := reg[idWikipedia]
+	// Upstream-only key preserved.
+	assert.Equal(t, "gsw", wiki.LangMap["als"], "upstream lang_map key must survive the merge")
+	// birdnet-go override wins on the conflicting key and adds its own.
+	assert.Equal(t, "no", wiki.LangMap["nb"], "birdnet-go override must win on a conflicting key")
+	assert.Equal(t, "no", wiki.LangMap["nn"], "birdnet-go override key must be added")
+	// A source with no birdnet-go override is untouched.
+	assert.Nil(t, reg["inaturalist"].LangMap)
+}

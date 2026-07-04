@@ -646,9 +646,9 @@ func TestNormalizeLocale_Validation(t *testing.T) {
 		{"de", "de"},
 		{" PT-BR ", "pt-br"},             // trimmed + lowercased
 		{"zh-hans", "zh-hans"},           // 4-letter subtag allowed
-		{"be-tarask", "be-tarask"},       // 6-letter subtag (real Wikipedia subdomain)
-		{"zh-classical", "zh-classical"}, // 9-letter subtag (real Wikipedia subdomain)
-		{"zh-min-nan", "zh-min-nan"},     // two subtags (real Wikipedia subdomain)
+		{wpEditionBeTarask, wpEditionBeTarask},       // 6-letter subtag (real Wikipedia subdomain)
+		{wpEditionZhClassical, wpEditionZhClassical}, // 9-letter subtag (real Wikipedia subdomain)
+		{wpEditionZhMinNan, wpEditionZhMinNan},       // two subtags (real Wikipedia subdomain)
 		{"", "en"},                       // empty -> default
 		{"english", "en"},                // too long, no subtag -> default
 		{"ab-cd-ef-gh", "en"},            // more than two subtags -> default
@@ -862,6 +862,7 @@ func TestGuideCache_SetupMethodGuards(t *testing.T) {
 	t.Parallel()
 	var nilCache *GuideCache
 	nilCache.SetWarmTopN(5)           // nil receiver: no-op
+	nilCache.SetWarmLocale("de")      // nil receiver: no-op
 	nilCache.SetFallbackPolicy("all") // nil receiver: no-op
 	nilCache.RegisterProvider("x", &fakeProvider{name: "x"})
 	nilCache.PreFetch(t.Context(), "x")    // nil receiver: no-op
@@ -1029,4 +1030,69 @@ func TestStoreMemoryGen_ExistingKeyStaleGenStaysExact(t *testing.T) {
 	count := 0
 	c.memory.Range(func(_, _ any) bool { count++; return true })
 	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must equal the live entry count")
+}
+
+// localeSpyProvider records the FetchOptions.Locale of each Fetch so tests can assert
+// which locale the warm/pre-fetch paths request.
+type localeSpyProvider struct {
+	name    string
+	locales chan string
+	result  *SpeciesGuide
+}
+
+func (p *localeSpyProvider) Name() string { return p.name }
+
+func (p *localeSpyProvider) Fetch(_ context.Context, scientificName string, opts FetchOptions) (*SpeciesGuide, error) {
+	select {
+	case p.locales <- opts.Locale:
+	default:
+	}
+	g := *p.result
+	g.ScientificName = scientificName
+	return &g, nil
+}
+
+// TestGuideCache_WarmForSpecies_UsesWarmLocale guards [15] F1: startup warming must
+// fetch the configured dashboard locale (SetWarmLocale), not the default "en", so the
+// warmed entry keys to the locale the UI will actually request.
+func TestGuideCache_WarmForSpecies_UsesWarmLocale(t *testing.T) {
+	t.Parallel()
+	prov := &localeSpyProvider{
+		name:    OpenFaunaProviderName,
+		locales: make(chan string, 4),
+		result:  &SpeciesGuide{Description: "desc", CachedAt: time.Now()},
+	}
+	c := newTestCache(t, newFakeStore(), prov)
+	c.SetWarmLocale("de")
+
+	c.WarmForSpecies([]string{"Turdus merula"})
+
+	select {
+	case got := <-prov.locales:
+		assert.Equal(t, "de", got, "warm fetch must use the configured dashboard locale, not the default")
+	case <-time.After(2 * time.Second):
+		t.Fatal("warm fetch did not occur")
+	}
+}
+
+// TestGuideCache_PreFetch_UsesWarmLocale guards [15] F1 for the per-detection pre-fetch
+// path: it too must fetch the configured dashboard locale.
+func TestGuideCache_PreFetch_UsesWarmLocale(t *testing.T) {
+	t.Parallel()
+	prov := &localeSpyProvider{
+		name:    OpenFaunaProviderName,
+		locales: make(chan string, 4),
+		result:  &SpeciesGuide{Description: "desc", CachedAt: time.Now()},
+	}
+	c := newTestCache(t, newFakeStore(), prov)
+	c.SetWarmLocale("fr")
+
+	c.PreFetch(t.Context(), "Turdus merula")
+
+	select {
+	case got := <-prov.locales:
+		assert.Equal(t, "fr", got, "pre-fetch must use the configured dashboard locale, not the default")
+	case <-time.After(2 * time.Second):
+		t.Fatal("pre-fetch did not occur")
+	}
 }

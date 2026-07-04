@@ -42,3 +42,18 @@ func parseSchemaMajor(raw []byte) (int, bool) {
 func embeddedSchemaMajor() (int, bool) {
 	return parseSchemaMajor(manifestJSON)
 }
+
+// parseSpeciesCount extracts species_count from a manifest.json blob. Returns
+// ok=false on parse failure or a non-positive count.
+func parseSpeciesCount(raw []byte) (int, bool) {
+	var m manifest
+	if err := json.Unmarshal(raw, &m); err != nil || m.SpeciesCount <= 0 {
+		return 0, false
+	}
+	return m.SpeciesCount, true
+}
+
+// embeddedSpeciesCount returns the species_count of the embedded manifest.
+func embeddedSpeciesCount() (int, bool) {
+	return parseSpeciesCount(manifestJSON)
+}

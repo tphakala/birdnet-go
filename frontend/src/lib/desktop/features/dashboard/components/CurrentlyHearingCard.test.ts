@@ -115,13 +115,15 @@ describe('CurrentlyHearingCard guide click affordance', () => {
     settingsActions.resetAllSettings();
   });
 
-  it('renders each species as a button when the guide is enabled', () => {
+  it('renders each species as a button when the guide is enabled', async () => {
     enableGuide();
-    const { getByRole } = card.render({ props: { detections: [pending()] } });
-    // The card is interactive: a button whose accessible name uses the
+    const { findByRole } = card.render({ props: { detections: [pending()] } });
+    // Gating resolves asynchronously via resolveSpeciesGuideConfig (guest-safe), so
+    // the interactive button appears after the store-backed config promise resolves.
+    // The card is then interactive: a button whose accessible name uses the
     // parameterized viewGuide key (the test i18n mock returns the bare key) and
     // whose visible content is the localized species name.
-    const button = getByRole('button', { name: 'analytics.species.viewGuide' });
+    const button = await findByRole('button', { name: 'analytics.species.viewGuide' });
     expect(button).toHaveTextContent('Punarinta');
   });
 

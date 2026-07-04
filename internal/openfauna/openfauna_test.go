@@ -468,6 +468,62 @@ func TestDecodeMetadataJSONL(t *testing.T) {
 // and keeps its +1 (matching the single stored entry); the rest roll back. The
 // invariant "metaCacheCount == live entry count" therefore holds. Not parallel: it
 // touches package-global state. Run under -race.
+func TestLookupCommonName_Embedded(t *testing.T) {
+	t.Parallel()
+
+	// Forward lookup: a present species resolves to a localized common name in its
+	// locale. The result must round-trip through the reverse LookupScientificNames,
+	// tying the two directions without hardcoding the exact localized string (which
+	// upstream data may edit).
+	name, found := LookupCommonName("Vulpes vulpes", "fi")
+	require.True(t, found, "a present species must resolve a Finnish common name")
+	require.NotEmpty(t, name)
+	assert.Contains(t, LookupScientificNames([]string{name}, "fi")[name], "Vulpes vulpes",
+		"the common name LookupCommonName returned must reverse-resolve to the species")
+
+	// Memoization: a second lookup (different casing → same normalized key) returns the
+	// identical cached result. This exercises the commonNameCache hit path.
+	name2, found2 := LookupCommonName("VULPES VULPES", "fi")
+	assert.Equal(t, found, found2)
+	assert.Equal(t, name, name2, "memoized common name must match the first lookup")
+
+	// Absent and blank names memoize as "not found" without resolving; a repeat lookup
+	// of an absent name stays absent (negative-result memo path).
+	absentA, okA := LookupCommonName("Notarealbird xyzzy", "fi")
+	_, okB := LookupCommonName("notarealbird xyzzy", "fi")
+	assert.False(t, okA)
+	assert.False(t, okB, "an absent name stays absent on the memoized lookup")
+	assert.Empty(t, absentA)
+	_, okBlank := LookupCommonName("   ", "fi")
+	assert.False(t, okBlank, "a blank name must not resolve")
+}
+
+func TestStoreCommonNameCache_CountMatchesEntriesUnderConcurrency(t *testing.T) {
+	const workers = 16
+	const perWorker = 200
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := range perWorker {
+				// Distinct keys AND a shared hot key, so both the distinct-key and
+				// same-key concurrent-insert paths run (mirrors storeMetaCache).
+				storeCommonNameCache(fmt.Sprintf("cncache-conc-%d-%d", w, i), commonNameCacheEntry{found: true})
+				storeCommonNameCache("cncache-conc-shared", commonNameCacheEntry{name: "x", found: true})
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	// The counter must equal the actual number of live entries. Robust to entries other
+	// tests added (both counted the same way); an overcount would exceed the Range total.
+	actual := 0
+	commonNameCache.Range(func(_, _ any) bool { actual++; return true })
+	assert.Equal(t, int64(actual), commonNameCacheCount.Load(),
+		"commonNameCacheCount must equal the live entry count (no over/undercount)")
+}
+
 func TestStoreMetaCache_CountMatchesEntriesUnderConcurrency(t *testing.T) {
 	const workers = 16
 	const perWorker = 200

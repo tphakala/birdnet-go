@@ -19,18 +19,23 @@ type openFaunaLookup interface {
 }
 
 // embeddedOpenFauna is the production openFaunaLookup, backed by the package-level
-// helpers over the vendored, embedded dataset. Both calls scan the dataset, so this
-// is only used on the cache-miss path (the same place eBird made a network call).
+// helpers over the vendored, embedded dataset. Both calls memoize their result
+// (LookupMeta via metaCache, LookupCommonName via commonNameCache), so a first
+// lookup of a name pays the dataset scan and repeats are O(1); it is used on the
+// cache-miss path (the same place eBird made a network call).
 type embeddedOpenFauna struct{}
 
+// Both lookups canonicalize the scientific name first (CanonicalName is identity for
+// non-aliased names) so a species detected/stored under a legacy label — e.g. a
+// historic detection recorded before ingestion canonicalization existed — still
+// resolves its OpenFauna taxonomy and localized common name from the canonical-keyed
+// dataset instead of silently missing.
 func (embeddedOpenFauna) Meta(scientificName string) (openfauna.Meta, bool) {
-	return openfauna.LookupMeta(scientificName)
+	return openfauna.LookupMeta(openfauna.CanonicalName(scientificName))
 }
 
 func (embeddedOpenFauna) CommonName(scientificName, bngLocale string) (string, bool) {
-	names := openfauna.LookupCommonNames([]string{scientificName}, bngLocale)
-	name, ok := names[scientificName]
-	return name, ok
+	return openfauna.LookupCommonName(openfauna.CanonicalName(scientificName), bngLocale)
 }
 
 // OpenFaunaGuideProvider enriches guides with offline taxonomy (genus/family) and a

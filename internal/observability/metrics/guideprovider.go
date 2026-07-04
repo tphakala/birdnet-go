@@ -8,7 +8,7 @@ import (
 )
 
 // GuideProviderMetrics contains all Prometheus metrics related to the species
-// guide provider cache and its upstream providers (Wikipedia, eBird).
+// guide provider cache and its upstream providers (Wikipedia, OpenFauna).
 type GuideProviderMetrics struct {
 	// CacheHits counts guide cache hits, labeled by tier (memory|db) and the
 	// quality of the cached entry (full|intro_only|stub|negative).
@@ -44,7 +44,9 @@ func NewGuideProviderMetrics(registry *prometheus.Registry) (*GuideProviderMetri
 	return m, nil
 }
 
-// initMetrics initializes all metrics for GuideProviderMetrics.
+// initMetrics initializes all metrics for GuideProviderMetrics. It currently cannot
+// fail; the error return is retained for a uniform constructor shape and reserved for
+// future fallible metric initialization (the constructor's err check is intentional).
 func (m *GuideProviderMetrics) initMetrics() error {
 	m.CacheHits = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "guide_provider_cache_hits_total",

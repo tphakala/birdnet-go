@@ -186,6 +186,15 @@ func TestWikipediaSubdomain(t *testing.T) {
 		"x":       "en", // too short
 		"english": "en", // too long
 		"e1":      "en", // non-alpha
+		// Real hyphenated Wikipedia subdomains are PRESERVED whole (they exist as
+		// their own editions), not collapsed to the base subtag.
+		wpEditionZhClassical: wpEditionZhClassical,
+		wpEditionZhMinNan:    wpEditionZhMinNan,
+		wpEditionBeTarask:    wpEditionBeTarask,
+		wpEditionNdsNl:       wpEditionNdsNl,
+		"zh_classical":       wpEditionZhClassical, // underscore separator normalized
+		// A regional variant that is NOT a real subdomain still collapses.
+		"zh-cn": "zh",
 	}
 	for in, want := range cases {
 		assert.Equalf(t, want, wikipediaSubdomain(in), "wikipediaSubdomain(%q)", in)

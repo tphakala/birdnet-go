@@ -1,7 +1,9 @@
 package analysis
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,17 +36,26 @@ type realGormDatastore struct {
 func (r *realGormDatastore) GormDB() *gorm.DB { return r.db }
 
 // warmSpyDatastore records whether the warming path queried detected species and
-// returns canned data. Any other datastore method hits the nil embed and panics,
-// surfacing an unexpected dependency.
+// returns canned data. The warm path prefers the ranked GetSpeciesSummaryData and
+// falls back to GetAllDetectedSpecies only when the summary query errors. Any other
+// datastore method hits the nil embed and panics, surfacing an unexpected dependency.
 type warmSpyDatastore struct {
 	datastore.Interface
-	called bool
-	notes  []datastore.Note
-	err    error
+	called     bool // GetSpeciesSummaryData (the primary ranked path) was queried
+	allCalled  bool // GetAllDetectedSpecies (the unranked fallback) was queried
+	summary    []datastore.SpeciesSummaryData
+	summaryErr error
+	notes      []datastore.Note
+	err        error
+}
+
+func (w *warmSpyDatastore) GetSpeciesSummaryData(_ context.Context, _, _ string) ([]datastore.SpeciesSummaryData, error) {
+	w.called = true
+	return w.summary, w.summaryErr
 }
 
 func (w *warmSpyDatastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
-	w.called = true
+	w.allCalled = true
 	return w.notes, w.err
 }
 
@@ -128,13 +139,15 @@ func TestWarmGuideCacheWithTopSpecies_ZeroTopNIsNoOp(t *testing.T) {
 func TestWarmGuideCacheWithTopSpecies_DatastoreErrorHandled(t *testing.T) {
 	t.Parallel()
 	cache := newUnstartedCache(t)
-	ds := &warmSpyDatastore{err: assert.AnError}
+	// Both the ranked summary and the unranked fallback error, so warming resolves
+	// to no names. This must be handled gracefully (logged, no panic).
+	ds := &warmSpyDatastore{summaryErr: assert.AnError, err: assert.AnError}
 
-	// An error loading species must be handled gracefully (logged, no panic).
 	assert.NotPanics(t, func() {
 		warmGuideCacheWithTopSpecies(cache, ds, 5, GetLogger())
 	})
-	assert.True(t, ds.called)
+	assert.True(t, ds.called, "the ranked summary query must be attempted")
+	assert.True(t, ds.allCalled, "a summary error must fall back to the unranked list")
 }
 
 func TestWarmGuideCacheWithTopSpecies_QueriesAndWarms(t *testing.T) {
@@ -146,11 +159,10 @@ func TestWarmGuideCacheWithTopSpecies_QueriesAndWarms(t *testing.T) {
 	// identically whether or not the cache is open.
 	cache.Close()
 	ds := &warmSpyDatastore{
-		notes: []datastore.Note{
-			{ScientificName: "Turdus merula"},
-			{ScientificName: ""}, // skipped: empty scientific name
-			{ScientificName: "Parus major"},
-			{ScientificName: "Cyanistes caeruleus"},
+		summary: []datastore.SpeciesSummaryData{
+			{ScientificName: "Turdus merula", Count: 50},
+			{ScientificName: "Parus major", Count: 5},
+			{ScientificName: "Cyanistes caeruleus", Count: 20},
 		},
 	}
 
@@ -158,6 +170,80 @@ func TestWarmGuideCacheWithTopSpecies_QueriesAndWarms(t *testing.T) {
 		warmGuideCacheWithTopSpecies(cache, ds, 2, GetLogger())
 	})
 	assert.True(t, ds.called, "detected species must be queried when warming is enabled")
+}
+
+// TestTopDetectedSpeciesNames_RanksByDetectionCount guards [5] F1: warming must select
+// the MOST-DETECTED species (by count desc), not an arbitrary/alphabetical subset, and
+// must skip empty scientific names without letting them consume a slot.
+func TestTopDetectedSpeciesNames_RanksByDetectionCount(t *testing.T) {
+	t.Parallel()
+	ds := &warmSpyDatastore{
+		summary: []datastore.SpeciesSummaryData{
+			{ScientificName: "Parus major", Count: 5},
+			{ScientificName: "Turdus merula", Count: 50},
+			{ScientificName: "", Count: 100}, // highest count but empty: must be skipped
+			{ScientificName: "Cyanistes caeruleus", Count: 20},
+		},
+	}
+
+	got := topDetectedSpeciesNames(ds, 2, GetLogger())
+	assert.Equal(t, []string{"Turdus merula", "Cyanistes caeruleus"}, got,
+		"warm must pick the highest-count species in order, skipping the empty name")
+	assert.True(t, ds.called)
+	assert.False(t, ds.allCalled, "the ranked path must not fall back when the summary succeeds")
+}
+
+// TestTopDetectedSpeciesNames_FallsBackToUnrankedOnSummaryError guards the fallback:
+// when the ranked summary query errors, warming still runs using GetAllDetectedSpecies.
+func TestTopDetectedSpeciesNames_FallsBackToUnrankedOnSummaryError(t *testing.T) {
+	t.Parallel()
+	ds := &warmSpyDatastore{
+		summaryErr: assert.AnError,
+		notes: []datastore.Note{
+			{ScientificName: "Turdus merula"},
+			{ScientificName: "Parus major"},
+		},
+	}
+
+	got := topDetectedSpeciesNames(ds, 5, GetLogger())
+	assert.Equal(t, []string{"Turdus merula", "Parus major"}, got)
+	assert.True(t, ds.called)
+	assert.True(t, ds.allCalled, "a summary error must fall back to the unranked list")
+}
+
+// TestTopDetectedSpeciesNames_EmptySummaryReturnsNilNoFallback guards the third path:
+// a successful but EMPTY summary means "no detections to rank", so warming resolves to
+// nothing and must NOT fall back to the unranked list (the fallback is reserved for a
+// summary ERROR, not an empty result).
+func TestTopDetectedSpeciesNames_EmptySummaryReturnsNilNoFallback(t *testing.T) {
+	t.Parallel()
+	ds := &warmSpyDatastore{summary: nil} // no error, no rows
+
+	got := topDetectedSpeciesNames(ds, 5, GetLogger())
+	assert.Empty(t, got)
+	assert.True(t, ds.called, "the ranked summary must be queried")
+	assert.False(t, ds.allCalled, "an empty (non-error) summary must not trigger the unranked fallback")
+}
+
+// TestTopDetectedSpeciesNames_TieBreakByRecencyThenName exercises the ranking's
+// secondary/tertiary sort keys: species with equal detection counts are ordered
+// most-recently-seen first, and a further tie on recency breaks by scientific name.
+func TestTopDetectedSpeciesNames_TieBreakByRecencyThenName(t *testing.T) {
+	t.Parallel()
+	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	ds := &warmSpyDatastore{
+		summary: []datastore.SpeciesSummaryData{
+			{ScientificName: "Aaa aaa", Count: 10, LastSeen: older},
+			{ScientificName: "Ccc ccc", Count: 10, LastSeen: newer},
+			{ScientificName: "Bbb bbb", Count: 10, LastSeen: newer}, // ties Ccc on count+recency
+		},
+	}
+
+	got := topDetectedSpeciesNames(ds, 3, GetLogger())
+	// Equal counts → most-recent first (Ccc/Bbb before Aaa); the Ccc/Bbb recency tie
+	// breaks by scientific name ascending (Bbb before Ccc).
+	assert.Equal(t, []string{"Bbb bbb", "Ccc ccc", "Aaa aaa"}, got)
 }
 
 // newUnstartedCache builds a real GuideCache backed by an in-memory store but does

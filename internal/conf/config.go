@@ -197,31 +197,18 @@ type Dashboard struct {
 // Wikipedia link for species the offline dataset does not cover); it defaults
 // off and needs no network access at render time.
 //
-// The three Show* flags are pointers so that an absent value defaults to true:
-// a plain bool would default to false and hide every section for existing users.
-// Read them through the IsShow*() accessors, never directly.
+// The three Show* sub-section toggles default ON via viper defaults (see
+// setDefaultConfig), so an unset config shows every section when the guide is
+// enabled; a user opts a section out by setting its flag false.
 type SpeciesGuideConfig struct {
-	Enabled                  bool  `yaml:"enabled" json:"enabled"`
-	EnableWikipedia          bool  `yaml:"enablewikipedia" json:"enableWikipedia"`                   // opt in to online Wikipedia descriptions (default off)
-	EnableSupplementaryLinks bool  `yaml:"enablesupplementarylinks" json:"enableSupplementaryLinks"` // opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off
-	WarmTopN                 int   `yaml:"warmtopn" json:"warmTopN" jsonschema:"minimum=0,maximum=1000"` // top-N species warmed on startup (0 = off; clamped to SpeciesGuideMaxWarmTopN)
-	PreFetchEnabled          bool  `yaml:"prefetchenabled" json:"preFetchEnabled"`                   // pre-fetch guides for newly detected species
-	ShowNotes                *bool `yaml:"shownotes" json:"showNotes"`                               // default true
-	ShowEnrichments          *bool `yaml:"showenrichments" json:"showEnrichments"`                   // default true
-	ShowSimilarSpecies       *bool `yaml:"showsimilarspecies" json:"showSimilarSpecies"`             // default true
-}
-
-// IsShowNotes reports whether the notes section should be shown (defaults to true when unset).
-func (c *SpeciesGuideConfig) IsShowNotes() bool { return c.ShowNotes == nil || *c.ShowNotes }
-
-// IsShowEnrichments reports whether enrichment badges should be shown (defaults to true when unset).
-func (c *SpeciesGuideConfig) IsShowEnrichments() bool {
-	return c.ShowEnrichments == nil || *c.ShowEnrichments
-}
-
-// IsShowSimilarSpecies reports whether the similar-species panel should be shown (defaults to true when unset).
-func (c *SpeciesGuideConfig) IsShowSimilarSpecies() bool {
-	return c.ShowSimilarSpecies == nil || *c.ShowSimilarSpecies
+	Enabled                  bool `yaml:"enabled" json:"enabled"`
+	EnableWikipedia          bool `yaml:"enablewikipedia" json:"enableWikipedia"`                       // opt in to online Wikipedia descriptions (default off)
+	EnableSupplementaryLinks bool `yaml:"enablesupplementarylinks" json:"enableSupplementaryLinks"`     // opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off
+	WarmTopN                 int  `yaml:"warmtopn" json:"warmTopN" jsonschema:"minimum=0,maximum=1000"` // top-N species warmed on startup (0 = off; clamped to SpeciesGuideMaxWarmTopN)
+	PreFetchEnabled          bool `yaml:"prefetchenabled" json:"preFetchEnabled"`                       // pre-fetch guides for newly detected species
+	ShowNotes                bool `yaml:"shownotes" json:"showNotes"`                                   // default true
+	ShowEnrichments          bool `yaml:"showenrichments" json:"showEnrichments"`                       // default true
+	ShowSimilarSpecies       bool `yaml:"showsimilarspecies" json:"showSimilarSpecies"`                 // default true
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.

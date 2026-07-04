@@ -179,12 +179,16 @@ func setDefaultConfig() {
 	// Species guide configuration (disabled by default). Taxonomy/common names/links
 	// come from the offline OpenFauna dataset; online Wikipedia descriptions are
 	// opt-in (off by default) so the guide works fully offline out of the box.
-	// The three Show* flags intentionally have no default; nil → true via IsShow*().
+	// The three Show* sub-section toggles default ON: when the guide is enabled the
+	// notes/enrichments/similar-species sections show unless the user opts out.
 	viper.SetDefault("realtime.dashboard.speciesguide.enabled", false)
 	viper.SetDefault("realtime.dashboard.speciesguide.enablewikipedia", false)
 	viper.SetDefault("realtime.dashboard.speciesguide.enablesupplementarylinks", false)
 	viper.SetDefault("realtime.dashboard.speciesguide.prefetchenabled", true)
 	viper.SetDefault("realtime.dashboard.speciesguide.warmtopn", 50)
+	viper.SetDefault("realtime.dashboard.speciesguide.shownotes", true)
+	viper.SetDefault("realtime.dashboard.speciesguide.showenrichments", true)
+	viper.SetDefault("realtime.dashboard.speciesguide.showsimilarspecies", true)
 
 	// Spectrogram pre-rendering configuration
 	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false)                                // Opt-in for safety

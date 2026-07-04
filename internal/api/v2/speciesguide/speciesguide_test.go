@@ -6,6 +6,7 @@ package speciesguide
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -353,4 +354,92 @@ func TestExpectednessAndEbirdCode_NoProcessor(t *testing.T) {
 	c := New(&apicore.Core{}) // Processor is nil
 	assert.Empty(t, c.guideExpectedness(sciEurasianBlackbird))
 	assert.Empty(t, c.ebirdSpeciesCode(sciEurasianBlackbird))
+}
+
+// --- geomodel coverage memoization (labelSource-injected, no tflite model) ---
+
+// BirdNET-style labels ("<scientific>_<common>") used to seed the fake label set.
+const (
+	labelBlackbird = "Turdus merula_Eurasian Blackbird"
+	labelGreatTit  = "Parus major_Great Tit"
+)
+
+// fakeLabelSource is a labelSource returning a fixed label set so the geomodel-coverage
+// memoization is exercisable without a loaded classifier. calls counts Labels()
+// invocations (atomic, since the double-checked build path may run concurrently) to
+// prove the label set is scanned once per model rather than on every lookup.
+type fakeLabelSource struct {
+	labels []string
+	calls  atomic.Int32
+}
+
+func (f *fakeLabelSource) Labels() []string {
+	f.calls.Add(1)
+	return f.labels
+}
+
+func TestGeomodelCoverage_MatchesAndMemoizes(t *testing.T) {
+	t.Parallel()
+	c := New(&apicore.Core{})
+	// Coverage keys off the scientific part of each label.
+	bn := &fakeLabelSource{labels: []string{labelBlackbird, labelGreatTit}}
+
+	// Present species match, case-insensitively; a secondary-model-only species (e.g. a
+	// bat, absent from the primary label set) is not covered.
+	assert.True(t, c.speciesHasGeomodelCoverage(bn, sciEurasianBlackbird))
+	assert.True(t, c.speciesHasGeomodelCoverage(bn, strings.ToUpper(sciEurasianBlackbird)))
+	assert.True(t, c.speciesHasGeomodelCoverage(bn, "Parus major"))
+	assert.False(t, c.speciesHasGeomodelCoverage(bn, "Barbastella barbastellus"))
+
+	// The label set is scanned exactly once and then served from the memo.
+	assert.Equal(t, int32(1), bn.calls.Load(), "Labels() must be scanned once and memoized")
+}
+
+func TestGeomodelCoverage_RebuildsOnModelSwap(t *testing.T) {
+	t.Parallel()
+	c := New(&apicore.Core{})
+	bn1 := &fakeLabelSource{labels: []string{labelBlackbird}}
+	assert.True(t, c.speciesHasGeomodelCoverage(bn1, sciEurasianBlackbird))
+	assert.False(t, c.speciesHasGeomodelCoverage(bn1, "Parus major"))
+
+	// A model reload swaps the classifier; the memo (keyed on the classifier identity)
+	// must rebuild against the new label set rather than serve the stale one.
+	bn2 := &fakeLabelSource{labels: []string{labelGreatTit}}
+	assert.False(t, c.speciesHasGeomodelCoverage(bn2, sciEurasianBlackbird),
+		"a species dropped by the new model must not persist from the old memo")
+	assert.True(t, c.speciesHasGeomodelCoverage(bn2, "Parus major"))
+	assert.Equal(t, int32(1), bn2.calls.Load(), "the new model's labels are scanned once")
+}
+
+func TestGeomodelCoverage_EmptyLabelsNotMemoized(t *testing.T) {
+	t.Parallel()
+	c := New(&apicore.Core{})
+	// An empty label slice means the model vocabulary is not yet loaded. It must NOT be
+	// memoized (that would pin an empty result for the model's lifetime); each call
+	// re-scans so the memo self-corrects once labels populate.
+	empty := &fakeLabelSource{labels: nil}
+	assert.False(t, c.speciesHasGeomodelCoverage(empty, sciEurasianBlackbird))
+	assert.False(t, c.speciesHasGeomodelCoverage(empty, sciEurasianBlackbird))
+	assert.Equal(t, int32(2), empty.calls.Load(), "an empty label set must not be cached; each call re-scans")
+}
+
+func TestGeomodelCoverage_ConcurrentBuildIsSafe(t *testing.T) {
+	t.Parallel()
+	c := New(&apicore.Core{})
+	bn := &fakeLabelSource{labels: []string{labelBlackbird, labelGreatTit}}
+
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Go(func() {
+			assert.True(t, c.speciesHasGeomodelCoverage(bn, sciEurasianBlackbird))
+		})
+	}
+	wg.Wait()
+
+	// The double-checked lock serializes builders, so a concurrent first-build stampede
+	// scans the labels a small bounded number of times (ideally once) and never panics
+	// or corrupts the memo — validated under -race.
+	got := bn.calls.Load()
+	assert.Positive(t, got)
+	assert.LessOrEqual(t, got, int32(32))
 }

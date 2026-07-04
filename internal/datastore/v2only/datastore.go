@@ -130,6 +130,7 @@ type Datastore struct {
 	notification repository.NotificationHistoryRepository
 	appEvent     repository.AppEventRepository
 	log          logger.Logger
+	metricsMu    sync.RWMutex // guards metrics (SetMetrics can swap it concurrently)
 	metrics      *datastore.Metrics
 	timezone     *time.Location
 	suncalc      *suncalc.SunCalc
@@ -475,7 +476,19 @@ func (ds *Datastore) Close() error {
 
 // SetMetrics sets the metrics instance.
 func (ds *Datastore) SetMetrics(metrics *datastore.Metrics) {
+	ds.metricsMu.Lock()
 	ds.metrics = metrics
+	ds.metricsMu.Unlock()
+}
+
+// getMetrics returns the current metrics instance under the read lock, mirroring the
+// legacy store's accessor so hot-path readers (e.g. species-note CRUD) never race a
+// concurrent SetMetrics swap.
+func (ds *Datastore) getMetrics() *datastore.Metrics {
+	ds.metricsMu.RLock()
+	m := ds.metrics
+	ds.metricsMu.RUnlock()
+	return m
 }
 
 // Manager returns the underlying database manager.
@@ -1896,7 +1909,7 @@ func (ds *Datastore) SaveSpeciesNote(ctx context.Context, note *datastore.Specie
 				Context("scientific_name", note.ScientificName).Build()
 		}
 		return nil
-	}, ds.metrics)
+	}, ds.getMetrics())
 }
 
 // UpdateSpeciesNote updates a note's entry, or returns ErrSpeciesNoteNotFound.
@@ -1929,7 +1942,7 @@ func (ds *Datastore) UpdateSpeciesNote(ctx context.Context, noteID, entry string
 			return datastore.ErrSpeciesNoteNotFound
 		}
 		return nil
-	}, ds.metrics)
+	}, ds.getMetrics())
 }
 
 // DeleteSpeciesNote removes a note by ID, or returns ErrSpeciesNoteNotFound.
@@ -1950,7 +1963,7 @@ func (ds *Datastore) DeleteSpeciesNote(ctx context.Context, noteID string) error
 			return datastore.ErrSpeciesNoteNotFound
 		}
 		return nil
-	}, ds.metrics)
+	}, ds.getMetrics())
 }
 
 // parseSpeciesNoteID parses a string note ID into a uint, rejecting invalid input.

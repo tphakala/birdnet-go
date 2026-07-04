@@ -66,12 +66,22 @@ var birdnetGoSourceLangMaps = map[string]map[string]string{
 // applySourceLangMaps merges birdnetGoSourceLangMaps onto a parsed registry so the
 // override is applied uniformly regardless of which registry (upstream or
 // supplementary) a source came from, and survives data refreshes.
+//
+// The merge is key-wise, not whole-field: any lang_map a future OpenFauna refresh
+// ships in data/sources.json is preserved, with birdnet-go's own keys overlaid on
+// top (birdnet-go wins on a conflicting key). This keeps upstream-supplied language
+// remaps from being silently discarded on the next data refresh.
 func applySourceLangMaps(reg map[string]Source) {
-	for id, m := range birdnetGoSourceLangMaps {
-		if src, ok := reg[id]; ok {
-			src.LangMap = m
-			reg[id] = src
+	for id, overrides := range birdnetGoSourceLangMaps {
+		src, ok := reg[id]
+		if !ok {
+			continue
 		}
+		merged := make(map[string]string, len(src.LangMap)+len(overrides))
+		maps.Copy(merged, src.LangMap) // upstream-supplied keys first
+		maps.Copy(merged, overrides)   // birdnet-go overlay wins on conflict
+		src.LangMap = merged
+		reg[id] = src
 	}
 }
 
@@ -90,8 +100,10 @@ func Sources() map[string]Source {
 		applySourceLangMaps(reg)
 		sourcesReg = reg
 	})
-	// Return a clone so a caller mutating the result cannot corrupt the shared,
-	// process-wide registry or race concurrent ExternalLinks() reads.
+	// Return a SHALLOW clone: a caller adding/removing map KEYS cannot corrupt the
+	// shared, process-wide registry or race concurrent ExternalLinks() reads. Note the
+	// per-source LangMap headers are shared with the registry, so callers must treat the
+	// returned Source values (and their LangMap) as read-only.
 	return maps.Clone(sourcesReg)
 }
 
@@ -117,6 +129,14 @@ func substituteTemplate(tmpl string, vars map[string]string) string {
 	return out
 }
 
+// hasUnresolvedPlaceholder reports whether a substituted URL still contains a raw
+// "{...}" placeholder, which means the template referenced a key the resolver did
+// not supply (a misspelled or hand-edited source). Such links are dropped rather
+// than emitted as silently-dead URLs.
+func hasUnresolvedPlaceholder(u string) bool {
+	return strings.Contains(u, "{")
+}
+
 // resolveLinks resolves a species' id-keyed links map against a registry into
 // sorted Links. For each entry: a non-empty url override is used verbatim;
 // otherwise {id}/{lang} are substituted into the source template. Entries whose
@@ -140,6 +160,13 @@ func resolveLinks(links map[string]LinkEntry, lang string, reg map[string]Source
 			// with spaces) ships a url override instead, handled by the case above.
 			// {lang} is the per-source mapped language (see Source.langFor).
 			linkURL = substituteTemplate(src.URL, map[string]string{phID: entry.ID, phLang: src.langFor(lang)})
+			if hasUnresolvedPlaceholder(linkURL) {
+				// Template referenced a placeholder this resolver does not supply; a dead
+				// link would result. Drop and log rather than render it.
+				GetLogger().Warn("openfauna source template has unresolved placeholder; dropping link",
+					logger.String("source", id), logger.String("url_template", src.URL))
+				continue
+			}
 		default:
 			continue
 		}
@@ -178,7 +205,9 @@ func supplementarySources() map[string]Source {
 		applySourceLangMaps(reg)
 		suppReg = reg
 	})
-	return suppReg
+	// Return a shallow clone, matching Sources(): callers may add/remove keys freely but
+	// must treat the Source values (and their LangMap) as read-only.
+	return maps.Clone(suppReg)
 }
 
 // resolveComputedLinks renders every source in a scientific-name-templated registry
@@ -196,9 +225,17 @@ func resolveComputedLinks(scientificName, lang string, reg map[string]Source) []
 			phSciUnderscored: sciUnderscored,
 			phLang:           src.langFor(lang),
 		}
+		linkURL := substituteTemplate(src.URL, vars)
+		if hasUnresolvedPlaceholder(linkURL) {
+			// A supplementary template referenced a key not supplied here (e.g. {id});
+			// drop it rather than render a dead link.
+			GetLogger().Warn("supplementary source template has unresolved placeholder; dropping link",
+				logger.String("source", src.Name), logger.String("url_template", src.URL))
+			continue
+		}
 		out = append(out, Link{
 			Name:  src.Name,
-			URL:   substituteTemplate(src.URL, vars),
+			URL:   linkURL,
 			Icon:  src.Icon,
 			Order: src.Order,
 		})
@@ -218,6 +255,10 @@ func resolveComputedLinks(scientificName, lang string, reg map[string]Source) []
 // eBird is NOT added here: it is a runtime special case (licensing) appended by the
 // API layer from the model's species code.
 func ExternalLinks(scientificName, lang string, includeSupplementary bool) []Link {
+	// Canonicalize first so a legacy/reclassified name resolves the canonical-keyed
+	// OpenFauna Tier-1 links (and the supplementary templates use the current name).
+	// CanonicalName is identity for non-aliased names, so this is safe unconditionally.
+	scientificName = CanonicalName(scientificName)
 	var tier1 []Link
 	if meta, ok := LookupMeta(scientificName); ok && len(meta.Links) > 0 {
 		tier1 = resolveLinks(meta.Links, lang, Sources())
@@ -241,6 +282,9 @@ func ExternalLinks(scientificName, lang string, includeSupplementary bool) []Lin
 			if _, dup := have[l.Icon]; dup {
 				continue
 			}
+			// Track appended icons too, so two supplementary sources sharing an icon
+			// don't both survive (dedup against Tier-1 AND earlier supplementary links).
+			have[l.Icon] = struct{}{}
 		}
 		combined = append(combined, l)
 	}

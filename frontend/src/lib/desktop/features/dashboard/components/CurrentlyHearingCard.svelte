@@ -20,6 +20,10 @@ Props:
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { settingsStore, dashboardSettings } from '$lib/stores/settings';
+  import {
+    resolveSpeciesGuideConfig,
+    type SpeciesGuideUIConfig,
+  } from '$lib/utils/speciesGuideConfig';
   import SpeciesDetailModal from '$lib/desktop/features/analytics/components/modals/SpeciesDetailModal.svelte';
 
   interface Props {
@@ -32,7 +36,24 @@ Props:
   // Clicking a "currently hearing" species opens the species guide modal. Only
   // wire it up when the guide feature is enabled, so the modal always has guide
   // content to show (it would otherwise be an empty name + image card).
-  let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
+  //
+  // Gating must work for unauthenticated guests too: the settings store is populated
+  // only by the auth-protected full-settings load, so gating on it directly would leave
+  // guests unable to open the guide on a public instance. resolveSpeciesGuideConfig
+  // prefers the store value and falls back to one cached fetch of the public
+  // GET /settings/dashboard endpoint — matching SpeciesDetailModal / DetectionDetail.
+  let guideConfig = $state<SpeciesGuideUIConfig | null>(null);
+  $effect(() => {
+    const fromStore = $dashboardSettings?.speciesGuide;
+    let stale = false;
+    void resolveSpeciesGuideConfig(fromStore).then(cfg => {
+      if (!stale) guideConfig = cfg;
+    });
+    return () => {
+      stale = true;
+    };
+  });
+  let guideEnabled = $derived(guideConfig?.enabled ?? false);
 
   // Minimal species shape the guide modal needs. A live ping has no aggregate
   // stats, so those fields are zeroed and the modal is opened with showStats={false}.

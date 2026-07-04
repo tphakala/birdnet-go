@@ -237,6 +237,16 @@ func warnOnSchemaMismatch() {
 				logger.String("data_version", DataVersion()),
 			)
 		}
+		// The metaCache/commonNameCache soft caps assume the dataset fits under them so
+		// every real species memoizes. If a data refresh grows the dataset past a cap,
+		// some genuine species silently stop being memoized; the manifest carries the
+		// count that detects it, so warn loud rather than fail quietly.
+		if count, ok := embeddedSpeciesCount(); ok && count > metaCacheMaxEntries {
+			GetLogger().Warn("embedded openfauna species_count exceeds metaCache cap; some species will not be memoized",
+				logger.Int("species_count", count),
+				logger.Int("meta_cache_cap", metaCacheMaxEntries),
+			)
+		}
 	})
 }
 
@@ -678,6 +688,71 @@ func LookupMeta(scientific string) (Meta, bool) {
 		logger.Bool("found", ok),
 	)
 	return found, ok
+}
+
+// commonNameCacheMaxEntries bounds the LookupCommonName memo. It sits above the
+// ~15k-species dataset multiplied by a handful of actively-used locales, so every
+// real (species, locale) pair can be memoized while a flood of distinct never-present
+// names cannot grow the memo without limit.
+const commonNameCacheMaxEntries = 60000
+
+// commonNameCacheEntry is a memoized LookupCommonName result. found distinguishes a
+// cached "resolved" entry from a cached "no translation" one so negative lookups are
+// memoized too.
+type commonNameCacheEntry struct {
+	name  string
+	found bool
+}
+
+var (
+	// commonNameCache memoizes LookupCommonName keyed by effective-locale + normalized
+	// scientific name. Like metaCache it is correct lock-free BECAUSE the embedded
+	// dataset is immutable (append-only, no update/evict), so a (name, locale) result
+	// never changes. This avoids the full translations-dataset decompress+scan on the
+	// guide provider's per-name cache-miss/warm/refresh path.
+	commonNameCache      sync.Map     // "eff\x00norm" -> commonNameCacheEntry
+	commonNameCacheCount atomic.Int64 // approximate entry count guarding the soft cap
+)
+
+// storeCommonNameCache records a LookupCommonName result under the soft cap using the
+// same lock-free reserve-then-LoadOrStore pattern as storeMetaCache (exact because the
+// memo is append-only). See TestStoreMetaCache_CountMatchesEntriesUnderConcurrency for
+// the reasoning that applies identically here.
+func storeCommonNameCache(key string, e commonNameCacheEntry) {
+	if _, loaded := commonNameCache.Load(key); loaded {
+		return
+	}
+	if commonNameCacheCount.Add(1) > commonNameCacheMaxEntries {
+		commonNameCacheCount.Add(-1)
+		return
+	}
+	if _, loaded := commonNameCache.LoadOrStore(key, e); loaded {
+		commonNameCacheCount.Add(-1)
+	}
+}
+
+// LookupCommonName returns the localized common name for a SINGLE scientific name in
+// the locale mapped from bngLocale (with the dataset's English fallback), memoizing
+// the result (present or absent) so repeat lookups are O(1). Unlike the batched
+// LookupCommonNames — which scans the whole translations dataset on every call and is
+// documented as cold-path only — this memoized form is safe on the guide cache-miss,
+// startup-warm, and periodic-refresh paths, which resolve one name at a time.
+func LookupCommonName(scientificName, bngLocale string) (string, bool) {
+	norm := normalizeName(scientificName)
+	if norm == "" {
+		return "", false
+	}
+	eff := mapLocale(bngLocale)
+	key := eff + "\x00" + norm
+	if v, ok := commonNameCache.Load(key); ok {
+		if e, ok := v.(commonNameCacheEntry); ok {
+			return e.name, e.found
+		}
+	}
+	names := lookupCommonNamesEffective([]string{scientificName}, eff)
+	name, found := names[scientificName]
+	storeCommonNameCache(key, commonNameCacheEntry{name: name, found: found})
+	return name, found
 }
 
 // Locales returns the sorted list of locale codes available in the dataset

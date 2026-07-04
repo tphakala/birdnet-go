@@ -87,6 +87,14 @@ const (
 	guideRateLimitBurst = 30
 	// maxSimilarSpecies caps the number of similar-species candidates resolved.
 	maxSimilarSpecies = 8
+	// maxConcurrentSimilarFetches bounds how many of a single request's similar-species
+	// candidates hold a live guide fetch at once. singleflight does NOT collapse the
+	// fan-out (each candidate is a distinct species), so an unbounded fan-out could put
+	// maxSimilarSpecies live upstream fetches in flight per request; capping it here
+	// smooths the burst without changing the result (cache hits still return
+	// immediately, and a candidate that can't get a slot before the deadline falls back
+	// to links-only, identical to a fetch that times out).
+	maxConcurrentSimilarFetches = 4
 	// similarSpeciesResolveTimeout bounds the worst-case latency of the
 	// similar-species panel: candidates fan out concurrent guide lookups that may
 	// trigger live (external) fetches on a cold cache, so cap how long the whole
@@ -130,6 +138,15 @@ type Handler struct {
 	guideRarityExpiry time.Time
 	guideRarityScores map[string]float64
 	guideRarityLocKey string
+
+	// geomodelCoverage* memoize the set of scientific names the primary geomodel can
+	// classify (lowercased), so the expectedness badge does not linear-scan the full
+	// label set on every guide request for a species absent from today's probable
+	// list. The label set is immutable for a loaded model, so the set is built once
+	// and keyed on the classifier pointer; a model reload (new pointer) rebuilds it.
+	geomodelCoverageMu  sync.RWMutex
+	geomodelCoverageBn  labelSource
+	geomodelCoverageSet map[string]struct{}
 }
 
 // New creates the species guide domain handler around the shared core.
@@ -267,6 +284,12 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Notes are auth-gated for both reads and writes: they are user-authored and
 	// may contain sensitive content (e.g. precise locations of rare species), so
 	// they must not be world-readable on a publicly exposed instance.
+	//
+	// Authorization is deliberately single-tier: BirdNET-Go has one admin identity,
+	// so any authenticated principal may read every species' notes and update/delete
+	// any note by :id. There is intentionally NO per-user ownership scoping (it would
+	// be meaningless in the single-admin model). If multi-user auth is ever added, the
+	// update/delete-by-id handlers must gain an ownership check to avoid IDOR.
 	g.GET("/species/:scientific_name/notes", c.GetSpeciesNotes, c.GetAuthMiddleware())
 	g.POST("/species/:scientific_name/notes", c.CreateSpeciesNote, c.GetAuthMiddleware())
 	g.PUT("/species/notes/:id", c.UpdateSpeciesNote, c.GetAuthMiddleware())
@@ -313,8 +336,10 @@ func (c *Handler) newGuideRateLimiter() echo.MiddlewareFunc {
 func parseScientificNameParam(ctx echo.Context) (string, error) {
 	name := strings.TrimSpace(ctx.Param("scientific_name"))
 	if name == "" {
-		// Fall back to the first positional param in case of param-name drift.
-		if vals := ctx.ParamValues(); len(vals) > 0 {
+		// Fall back to the sole positional param in case of param-name drift, but ONLY
+		// when the route has exactly one path param. On a multi-param route grabbing
+		// vals[0] could silently bind the wrong value, so prefer a clear 400 there.
+		if vals := ctx.ParamValues(); len(vals) == 1 {
 			name = strings.TrimSpace(vals[0])
 		}
 	}
@@ -346,18 +371,21 @@ func parseScientificNameParam(ctx echo.Context) (string, error) {
 }
 
 // isPlausibleScientificName reports whether s looks like a scientific name: only
-// letters (any script, to stay locale-safe), spaces, hyphens, apostrophes, and
-// periods. Every name in the embedded OpenFauna dataset (and BirdNET's binomial,
-// hyphenated, and "x"-hybrid labels) matches this set. It is a cheap input filter,
-// not a taxonomic check — it keeps obviously non-name input out of the providers and
-// the dataset memo without trying to enumerate valid binomials.
+// Latin-script letters, spaces, hyphens, apostrophes, and periods. Scientific
+// binomials (and BirdNET's binomial, hyphenated, and "x"-hybrid labels) are Latin
+// script, and the embedded OpenFauna dataset is keyed by Latin binomials, so a
+// non-Latin string (CJK, Cyrillic, Arabic, ...) can never resolve to a guide. Rejecting
+// non-Latin scripts here — rather than accepting any unicode letter — keeps them out of
+// the Wikipedia API and the per-value dataset memo instead of accumulating one scan
+// result per distinct non-Latin garbage value. It is a cheap input filter, not a
+// taxonomic check.
 func isPlausibleScientificName(s string) bool {
 	if s == "" {
 		return false // an empty name is never plausible (callers also guard, but be explicit)
 	}
 	for _, r := range s {
 		switch {
-		case unicode.IsLetter(r):
+		case unicode.Is(unicode.Latin, r):
 		case r == ' ' || r == '-' || r == '\'' || r == '.':
 		default:
 			return false
@@ -382,6 +410,11 @@ func parseNoteIDParam(ctx echo.Context) (string, error) {
 }
 
 // guideLocale resolves the request locale: query param, then dashboard locale, then "en".
+// The returned value is intentionally NOT sanitized here: the guide cache normalizes it
+// downstream (guideprovider.normalizeLocale bounds the cache-key space and the Wikipedia
+// subdomain it can select), and the external-link path re-derives its base subtag via
+// baseLanguage. Validation lives in those consumers rather than being duplicated at this
+// boundary, so there is a single locale-validation authority per consumer.
 func guideLocale(ctx echo.Context, settings *conf.Settings) string {
 	if l := strings.TrimSpace(ctx.QueryParam("locale")); l != "" {
 		return l
@@ -456,9 +489,9 @@ func (c *Handler) GetSpeciesGuide(ctx echo.Context) error {
 		Description:    guide.Description,
 		Quality:        classifyGuideQuality(guide.Description, guide.Partial),
 		Features: GuideFeatureFlags{
-			Notes:          cfg.IsShowNotes(),
-			Enrichments:    cfg.IsShowEnrichments(),
-			SimilarSpecies: cfg.IsShowSimilarSpecies(),
+			Notes:          cfg.ShowNotes,
+			Enrichments:    cfg.ShowEnrichments,
+			SimilarSpecies: cfg.ShowSimilarSpecies,
 		},
 		Source: GuideSource{
 			Provider:   guide.SourceProvider,
@@ -472,14 +505,26 @@ func (c *Handler) GetSpeciesGuide(ctx echo.Context) error {
 	// Enrichments (expectedness, season, external links) are only rendered when
 	// the showEnrichments setting is on; skip their cost (the geomodel prediction
 	// in particular) when the feature flag is off.
-	if cfg.IsShowEnrichments() {
-		data.CurrentSeason = computeCurrentSeason(settings.BirdNET.Latitude, time.Now())
+	if cfg.ShowEnrichments {
+		// Season is only meaningful once the observer location is configured. An unset
+		// location defaults to (0,0), which falls inside the equatorial band and would
+		// otherwise emit a wet/dry-season token for every un-configured instance
+		// (misleading for temperate users); treat (0,0) as "unset" and omit the field.
+		if settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0 {
+			data.CurrentSeason = computeCurrentSeason(settings.BirdNET.Latitude, time.Now())
+		}
 		data.ExternalLinks = externalLinksForGuide(
 			guide.ScientificName,
 			c.ebirdSpeciesCode(guide.ScientificName),
 			locale,
 			cfg.EnableSupplementaryLinks,
 		)
+		// Expectedness keys off the REQUEST name, not guide.ScientificName (which the
+		// links/eBird calls above use): the geomodel's vocabulary is BirdNET-label-
+		// derived — the same origin as the detection's request name — so the request
+		// name is the value guaranteed to match the geomodel label set. A
+		// provider-normalized guide.ScientificName could fall outside that vocabulary
+		// and silently miss.
 		if exp := c.guideExpectedness(name); exp != "" {
 			data.Expectedness = exp
 		}
@@ -515,7 +560,7 @@ func (c *Handler) GetSimilarSpecies(ctx echo.Context) error {
 
 	// Links are enrichment data: only attach them to description-less entries when
 	// enrichments are enabled, mirroring the main guide modal.
-	withLinks := settings.Realtime.Dashboard.SpeciesGuide.IsShowEnrichments()
+	withLinks := settings.Realtime.Dashboard.SpeciesGuide.ShowEnrichments
 	supplementary := settings.Realtime.Dashboard.SpeciesGuide.EnableSupplementaryLinks
 	entries := c.resolveSimilarSpecies(ctx.Request().Context(), candidates, locale, withLinks, supplementary)
 
@@ -580,6 +625,9 @@ func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []simila
 	defer cancel()
 
 	entries := make([]SimilarSpeciesEntry, len(candidates))
+	// Per-request semaphore bounding concurrent live guide fetches (see
+	// maxConcurrentSimilarFetches). Acquired around gc.Get and released after.
+	sem := make(chan struct{}, maxConcurrentSimilarFetches)
 	var wg sync.WaitGroup
 	for i := range candidates {
 		idx := i // capture per-iteration index for the goroutine
@@ -590,6 +638,14 @@ func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []simila
 				Relationship:   cand.relationship,
 			}
 			_ = c.WithGuideCache(func(gc *guideprovider.GuideCache) error {
+				// Wait for a fetch slot, but never past the resolve deadline; a candidate
+				// that can't get a slot in time falls back to links-only below.
+				select {
+				case sem <- struct{}{}:
+					defer func() { <-sem }()
+				case <-resolveCtx.Done():
+					return nil
+				}
 				g, err := gc.Get(resolveCtx, cand.scientificName, guideprovider.FetchOptions{Locale: locale})
 				if err != nil || g == nil || g.IsNegativeEntry() {
 					return nil //nolint:nilerr // best-effort enrichment; missing guide is fine
@@ -779,7 +835,7 @@ func (c *Handler) guideExpectedness(scientificName string) string {
 	}
 	// Not in today's probable list: rare if the geomodel covers it at all,
 	// otherwise unknown (omit). Mirrors getSpeciesRarityInfo's semantics.
-	if speciesHasGeomodelCoverage(proc.Bn, scientificName) {
+	if c.speciesHasGeomodelCoverage(proc.Bn, scientificName) {
 		return scoreToExpectedness(0)
 	}
 	return ""
@@ -863,17 +919,64 @@ const (
 	rarityThresholdRare     = 0.05
 )
 
+// labelSource is the minimal view of the geomodel that coverage detection needs: the
+// primary model's classifiable label set. *classifier.Orchestrator satisfies it; tests
+// supply a fake so the memoization logic is exercisable without a loaded tflite model.
+type labelSource interface {
+	Labels() []string
+}
+
 // speciesHasGeomodelCoverage reports whether the scientific name is in the primary
 // model's label set (the geomodel's classifiable vocabulary). Secondary-model-only
 // species (e.g. bats) are absent from it and so have no geomodel occurrence
-// probability to base a rarity on.
-func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName string) bool {
-	for _, label := range bn.Labels() {
-		if strings.EqualFold(detection.ExtractScientificName(label), scientificName) {
-			return true
-		}
+// probability to base a rarity on. It consults a memoized name set (see
+// geomodelCoverageNames) rather than re-scanning bn.Labels() on every call.
+func (c *Handler) speciesHasGeomodelCoverage(bn labelSource, scientificName string) bool {
+	set := c.geomodelCoverageNames(bn)
+	_, ok := set[strings.ToLower(detection.ExtractScientificName(scientificName))]
+	return ok
+}
+
+// geomodelCoverageNames returns the lowercased set of scientific names the primary
+// model can classify, building it once per loaded model. The label set is immutable
+// for a given classifier, so the result is memoized under geomodelCoverageMu and
+// keyed on the classifier pointer; a model reload swaps the pointer and rebuilds.
+// Lowercasing both sides (here and at lookup) is equivalent to the previous EqualFold
+// comparison for the ASCII-Latin scientific names in the label set and matches how
+// probableSpeciesScores keys its map.
+func (c *Handler) geomodelCoverageNames(bn labelSource) map[string]struct{} {
+	c.geomodelCoverageMu.RLock()
+	if c.geomodelCoverageBn == bn && c.geomodelCoverageSet != nil {
+		set := c.geomodelCoverageSet
+		c.geomodelCoverageMu.RUnlock()
+		return set
 	}
-	return false
+	c.geomodelCoverageMu.RUnlock()
+
+	c.geomodelCoverageMu.Lock()
+	defer c.geomodelCoverageMu.Unlock()
+	// Re-check under the write lock: another goroutine may have built the set while
+	// we waited, so only one scan runs per loaded model.
+	if c.geomodelCoverageBn == bn && c.geomodelCoverageSet != nil {
+		return c.geomodelCoverageSet
+	}
+	labels := bn.Labels()
+	set := make(map[string]struct{}, len(labels))
+	for _, label := range labels {
+		set[strings.ToLower(detection.ExtractScientificName(label))] = struct{}{}
+	}
+	// Do not memoize an empty set: an empty label slice means the model's vocabulary
+	// is not yet available, and caching it (keyed on this bn pointer) would pin an
+	// empty result for the model's lifetime. Return it uncached so a later call —
+	// once labels are populated — rebuilds. On the real path this is unreachable
+	// (expectedness only runs after a successful GetProbableSpecies, which implies a
+	// loaded label set), but the guard keeps the memo self-correcting regardless.
+	if len(set) == 0 {
+		return set
+	}
+	c.geomodelCoverageSet = set
+	c.geomodelCoverageBn = bn
+	return set
 }
 
 // scoreToExpectedness maps a geomodel occurrence score to an expectedness label.

@@ -69,6 +69,11 @@ func encodeSimilarSpecies(list []SimilarSpecies) string {
 	}
 	b, err := json.Marshal(list)
 	if err != nil {
+		// Marshaling a []SimilarSpecies effectively never fails, but if it did, "" is
+		// indistinguishable from "no similar species". Log so a genuinely corrupt encode
+		// is visible rather than silently persisted as an empty list.
+		GetLogger().Warn("failed to encode similar-species list; storing empty",
+			logger.Int("count", len(list)), logger.Error(err))
 		return ""
 	}
 	return string(b)
@@ -81,6 +86,9 @@ func decodeSimilarSpecies(encoded string) []SimilarSpecies {
 	}
 	var list []SimilarSpecies
 	if err := json.Unmarshal([]byte(encoded), &list); err != nil {
+		// A corrupt-but-present list decodes to nil; log so the silent drop is visible.
+		GetLogger().Warn("failed to decode stored similar-species list; dropping",
+			logger.Error(err))
 		return nil
 	}
 	return list
@@ -175,7 +183,23 @@ func (s *GORMGuideStore) Get(ctx context.Context, scientificName, locale, provid
 // Save upserts an entry on the composite key.
 func (s *GORMGuideStore) Save(ctx context.Context, entry *GuideCacheEntry) error {
 	if entry == nil {
+		// A nil entry is a programming error; nothing is persisted. Log so a buggy
+		// caller does not read the nil (success) return as a completed write.
+		GetLogger().Debug("guide store Save called with nil entry; nothing persisted")
 		return nil
+	}
+	if entry.CachedAt.IsZero() {
+		// A zero CachedAt (Go zero value, year 1) is self-destructive: Cleanup treats
+		// the row as ancient and deletes it on the next sweep, and GetRecent sorts it
+		// last so a bounded warm-load drops it. Every production writer stamps
+		// time.Now(); stamp it here too so a future writer that forgets cannot persist a
+		// row that silently vanishes with no diagnostics.
+		GetLogger().Warn("guide store Save received zero CachedAt; stamping current time",
+			logger.String("scientific_name", entry.ScientificName),
+			logger.String("locale", entry.Locale),
+			logger.String("provider", entry.Provider),
+		)
+		entry.CachedAt = time.Now()
 	}
 	err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
@@ -208,7 +232,9 @@ func (s *GORMGuideStore) GetAll(ctx context.Context) ([]GuideCacheEntry, error) 
 // in-memory tier can hold. A non-positive limit returns all rows (matching
 // GetAll); the warm path always passes a positive cap.
 func (s *GORMGuideStore) GetRecent(ctx context.Context, limit int) ([]GuideCacheEntry, error) {
-	q := s.db.WithContext(ctx).Order("cached_at DESC")
+	// Secondary key id DESC gives a deterministic cutoff among rows sharing a cached_at
+	// (e.g. a bulk warm insert), so which entries survive the LIMIT is stable.
+	q := s.db.WithContext(ctx).Order("cached_at DESC").Order("id DESC")
 	if limit > 0 {
 		q = q.Limit(limit)
 	}

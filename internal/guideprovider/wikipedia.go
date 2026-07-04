@@ -212,16 +212,61 @@ var wikipediaLangOverrides = map[string]string{
 	"nn": "no",
 }
 
+// Non-standard Wikipedia language editions whose project subdomain itself contains a
+// hyphen (e.g. zh-classical.wikipedia.org). Declared as constants so the lookup table
+// below and its in-package tests share one source of truth for each subdomain string.
+const (
+	wpEditionBatSmg      = "bat-smg"
+	wpEditionBeTarask    = "be-tarask"
+	wpEditionCbkZam      = "cbk-zam"
+	wpEditionFiuVro      = "fiu-vro"
+	wpEditionMapBms      = "map-bms"
+	wpEditionNdsNl       = "nds-nl"
+	wpEditionRoaRup      = "roa-rup"
+	wpEditionRoaTara     = "roa-tara"
+	wpEditionZhClassical = "zh-classical"
+	wpEditionZhMinNan    = "zh-min-nan"
+	wpEditionZhYue       = "zh-yue"
+)
+
+// wikipediaHyphenatedSubdomains lists the Wikipedia language editions whose project
+// subdomain itself contains a hyphen (e.g. zh-classical.wikipedia.org). These are the
+// non-standard subdomains localePattern (guideprovider.go) was widened to admit;
+// wikipediaSubdomain preserves them whole rather than collapsing to a base subtag, so
+// those locales fetch their own edition instead of silently falling back to the base
+// language. Every OTHER hyphenated locale is a regional variant (pt-br, zh-cn) with no
+// dedicated subdomain and is correctly collapsed.
+var wikipediaHyphenatedSubdomains = map[string]struct{}{
+	wpEditionBatSmg:      {},
+	wpEditionBeTarask:    {},
+	wpEditionCbkZam:      {},
+	wpEditionFiuVro:      {},
+	wpEditionMapBms:      {},
+	wpEditionNdsNl:       {},
+	wpEditionRoaRup:      {},
+	wpEditionRoaTara:     {},
+	wpEditionZhClassical: {},
+	wpEditionZhMinNan:    {},
+	wpEditionZhYue:       {},
+}
+
 // wikipediaSubdomain converts a UI locale to its Wikipedia language subdomain. It
 // drops any regional subtag ("pt-br"/"pt_PT" -> "pt", "zh-cn" -> "zh") and applies
-// the nb/nn -> no override. Wikipedia has no regional subdomains (there is no
-// pt-br.wikipedia.org), so passing a full locale straight into the host would build
-// an invalid URL and fail every fetch for users with a regional locale. Anything
-// that isn't a 2-3 letter base code falls back to the default language.
+// the nb/nn -> no override, but PRESERVES the non-standard hyphenated subdomains that
+// really exist (zh-classical, zh-min-nan, be-tarask, ...). Wikipedia has no regional
+// subdomains (there is no pt-br.wikipedia.org), so passing a regional locale straight
+// into the host would build an invalid URL and fail every fetch. Anything that isn't a
+// recognized hyphenated subdomain or a 2-3 letter base code falls back to the default.
 func wikipediaSubdomain(locale string) string {
 	l := strings.ToLower(strings.TrimSpace(locale))
-	// Keep only the primary subtag (split on either separator).
-	if i := strings.IndexAny(l, "-_"); i >= 0 {
+	// Normalize the separator so the allowlist matches an underscore form too.
+	l = strings.ReplaceAll(l, "_", "-")
+	// A hyphenated locale that is itself a real Wikipedia subdomain is kept whole.
+	if _, ok := wikipediaHyphenatedSubdomains[l]; ok {
+		return l
+	}
+	// Otherwise keep only the primary subtag.
+	if i := strings.IndexByte(l, '-'); i >= 0 {
 		l = l[:i]
 	}
 	if len(l) < 2 || len(l) > 3 {

@@ -3,40 +3,30 @@ package conf
 import (
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSpeciesGuideConfig_IsShowDefaults(t *testing.T) {
-	t.Parallel()
+// TestSpeciesGuideConfig_ShowDefaults verifies the three Show* sub-section toggles
+// default ON via viper defaults (so an unset config shows all sections when the guide
+// is enabled), replacing the former *bool nil-means-true convention.
+func TestSpeciesGuideConfig_ShowDefaults(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	setDefaultConfig()
 
-	t.Run("nil pointers default to true", func(t *testing.T) {
-		t.Parallel()
-		c := &SpeciesGuideConfig{}
-		assert.True(t, c.IsShowNotes())
-		assert.True(t, c.IsShowEnrichments())
-		assert.True(t, c.IsShowSimilarSpecies())
-	})
+	assert.True(t, viper.GetBool("realtime.dashboard.speciesguide.shownotes"),
+		"notes section must default to shown")
+	assert.True(t, viper.GetBool("realtime.dashboard.speciesguide.showenrichments"),
+		"enrichments must default to shown")
+	assert.True(t, viper.GetBool("realtime.dashboard.speciesguide.showsimilarspecies"),
+		"similar-species panel must default to shown")
 
-	t.Run("explicit false is respected", func(t *testing.T) {
-		t.Parallel()
-		f := false
-		c := &SpeciesGuideConfig{
-			ShowNotes:          &f,
-			ShowEnrichments:    &f,
-			ShowSimilarSpecies: &f,
-		}
-		assert.False(t, c.IsShowNotes())
-		assert.False(t, c.IsShowEnrichments())
-		assert.False(t, c.IsShowSimilarSpecies())
-	})
-
-	t.Run("explicit true is respected", func(t *testing.T) {
-		t.Parallel()
-		tr := true
-		c := &SpeciesGuideConfig{ShowNotes: &tr}
-		assert.True(t, c.IsShowNotes())
-	})
+	// An explicitly stored false must win over the default (opt-out is respected).
+	viper.Set("realtime.dashboard.speciesguide.shownotes", false)
+	assert.False(t, viper.GetBool("realtime.dashboard.speciesguide.shownotes"),
+		"an explicit false opt-out must be respected")
 }
 
 func TestValidateSpeciesGuideSettings_WarmTopNClamp(t *testing.T) {
@@ -74,29 +64,21 @@ func TestCloneSettings_SpeciesGuideShowFlagsIndependence(t *testing.T) {
 	t.Parallel()
 
 	src := &Settings{}
-	tr := true
-	src.Realtime.Dashboard.SpeciesGuide.ShowNotes = &tr
-	src.Realtime.Dashboard.SpeciesGuide.ShowEnrichments = &tr
-	src.Realtime.Dashboard.SpeciesGuide.ShowSimilarSpecies = &tr
+	src.Realtime.Dashboard.SpeciesGuide.ShowNotes = true
+	src.Realtime.Dashboard.SpeciesGuide.ShowEnrichments = true
+	src.Realtime.Dashboard.SpeciesGuide.ShowSimilarSpecies = true
 
 	dst := CloneSettings(src)
 	require.NotNil(t, dst)
 	dstGuide := &dst.Realtime.Dashboard.SpeciesGuide
 	srcGuide := &src.Realtime.Dashboard.SpeciesGuide
-	require.NotNil(t, dstGuide.ShowNotes)
-	require.NotNil(t, dstGuide.ShowEnrichments)
-	require.NotNil(t, dstGuide.ShowSimilarSpecies)
 
-	// None of the three Show* pointers may be aliased with the source.
-	assert.NotSame(t, srcGuide.ShowNotes, dstGuide.ShowNotes)
-	assert.NotSame(t, srcGuide.ShowEnrichments, dstGuide.ShowEnrichments)
-	assert.NotSame(t, srcGuide.ShowSimilarSpecies, dstGuide.ShowSimilarSpecies)
-
-	// Mutating the clone must not affect the source, for every flag.
-	*dstGuide.ShowNotes = false
-	*dstGuide.ShowEnrichments = false
-	*dstGuide.ShowSimilarSpecies = false
-	assert.True(t, *srcGuide.ShowNotes)
-	assert.True(t, *srcGuide.ShowEnrichments)
-	assert.True(t, *srcGuide.ShowSimilarSpecies)
+	// The Show* flags are plain bool value types; mutating the clone must not affect
+	// the source (they ride the shallow struct copy with no shared pointer).
+	dstGuide.ShowNotes = false
+	dstGuide.ShowEnrichments = false
+	dstGuide.ShowSimilarSpecies = false
+	assert.True(t, srcGuide.ShowNotes)
+	assert.True(t, srcGuide.ShowEnrichments)
+	assert.True(t, srcGuide.ShowSimilarSpecies)
 }

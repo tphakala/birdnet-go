@@ -32,3 +32,30 @@ func TestParseSchemaMajor(t *testing.T) {
 		})
 	}
 }
+
+func TestEmbeddedSpeciesCountIsPositive(t *testing.T) {
+	count, ok := embeddedSpeciesCount()
+	require.True(t, ok, "embedded manifest species_count did not parse")
+	assert.Positive(t, count, "embedded OpenFauna species_count must be positive (drives the cache-cap sanity check)")
+}
+
+func TestParseSpeciesCount(t *testing.T) {
+	cases := map[string]struct {
+		in    string
+		count int
+		ok    bool
+	}{
+		"normal":   {`{"species_count":15000}`, 15000, true},
+		"zero":     {`{"species_count":0}`, 0, false}, // non-positive is treated as absent
+		"negative": {`{"species_count":-5}`, 0, false},
+		"missing":  {`{"schema_version":"2.1.0"}`, 0, false},
+		"garbage":  {`not json`, 0, false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			count, ok := parseSpeciesCount([]byte(tc.in))
+			assert.Equal(t, tc.ok, ok)
+			assert.Equal(t, tc.count, count)
+		})
+	}
+}

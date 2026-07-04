@@ -2566,9 +2566,9 @@ func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bo
 		o.EnableSupplementaryLinks != n.EnableSupplementaryLinks ||
 		o.WarmTopN != n.WarmTopN ||
 		o.PreFetchEnabled != n.PreFetchEnabled ||
-		o.IsShowNotes() != n.IsShowNotes() ||
-		o.IsShowEnrichments() != n.IsShowEnrichments() ||
-		o.IsShowSimilarSpecies() != n.IsShowSimilarSpecies()
+		o.ShowNotes != n.ShowNotes ||
+		o.ShowEnrichments != n.ShowEnrichments ||
+		o.ShowSimilarSpecies != n.ShowSimilarSpecies
 }
 
 func speciesTrackingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
