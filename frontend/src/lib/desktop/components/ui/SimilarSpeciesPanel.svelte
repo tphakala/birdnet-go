@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { SvelteMap } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { ExternalLink } from '@lucide/svelte';
   import { t, getLocale } from '$lib/i18n';
   import ExternalLinkBadge from '$lib/desktop/components/ui/ExternalLinkBadge.svelte';
@@ -39,7 +39,20 @@
 
   type LoadStatus = 'loading' | 'ready' | 'notfound' | 'error';
 
+  // A row longer than this (characters) is collapsed to four lines (the literal
+  // `line-clamp-4` class below — Tailwind only generates utilities it sees in
+  // source, so the line count can't be interpolated) with a "Read more" toggle, so
+  // the card reads as a scannable contrast rather than a full-article dump. The
+  // threshold is deliberate: short rows (a one-line voice note) never get an
+  // ambiguous toggle, long prose rows always do. jsdom has no layout, so a
+  // character heuristic (not scrollHeight measurement) keeps the behaviour
+  // unit-testable.
+  const CLAMP_CHAR_THRESHOLD = 240;
+
   let selected = $state<string | null>(null);
+  // Rows the user has expanded past the clamp, for the current selection. Cleared
+  // whenever the selected species changes (see select()).
+  const expandedRows = new SvelteSet<CanonicalSectionId>();
   // Per-species fetch cache + status, keyed by scientific name, so re-selecting
   // a species is instant and we don't re-hit the rate-limited guide endpoint.
   // SvelteMap keeps keyed access reactive without indexing a plain object.
@@ -81,7 +94,13 @@
     }
   }
 
+  function toggleRow(id: CanonicalSectionId): void {
+    if (expandedRows.has(id)) expandedRows.delete(id);
+    else expandedRows.add(id);
+  }
+
   function select(name: string): void {
+    if (name !== selected) expandedRows.clear();
     selected = name;
     // Links-only entries (no comparison prose) render their external_links
     // directly from the /similar response — no per-species guide fetch needed.
@@ -230,13 +249,33 @@
           {:else}
             <dl class="flex flex-col gap-3">
               {#each visibleRows as row (row.id)}
+                {@const text = selectedSections?.[row.id] ?? ''}
+                {@const clampable = text.length > CLAMP_CHAR_THRESHOLD}
+                {@const expanded = expandedRows.has(row.id)}
                 <div>
                   <dt class="text-xs uppercase tracking-wide text-base-content/50">
                     {t(row.labelKey)}
                   </dt>
-                  <dd class="mt-0.5 text-sm whitespace-pre-line">
-                    {selectedSections?.[row.id]}
+                  <dd
+                    id={`similar-row-${row.id}`}
+                    class="mt-0.5 text-sm whitespace-pre-line"
+                    class:line-clamp-4={clampable && !expanded}
+                  >
+                    {text}
                   </dd>
+                  {#if clampable}
+                    <button
+                      type="button"
+                      class="mt-0.5 text-xs font-medium text-primary hover:underline"
+                      aria-expanded={expanded}
+                      aria-controls={`similar-row-${row.id}`}
+                      onclick={() => toggleRow(row.id)}
+                    >
+                      {expanded
+                        ? t('analytics.species.similar.readLess')
+                        : t('analytics.species.similar.readMore')}
+                    </button>
+                  {/if}
                 </div>
               {/each}
             </dl>

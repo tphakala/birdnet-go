@@ -1988,6 +1988,8 @@
         "cardNoGuide": "No hay guía disponible para esta especie.",
         "cardError": "No se pudo cargar esta especie. Prueba con otra.",
         "cardNoSections": "No hay detalles de comparación disponibles para esta especie.",
+        "readMore": "Read more",
+        "readLess": "Show less",
         "sections": {
           "appearance": "Aspecto",
           "voice": "Voz",

@@ -1988,6 +1988,8 @@
         "cardNoGuide": "Ingen guide tilgjengelig for denne arten.",
         "cardError": "Kunne ikke laste denne arten. Prøv en annen.",
         "cardNoSections": "Ingen sammenligningsdetaljer tilgjengelig for denne arten.",
+        "readMore": "Read more",
+        "readLess": "Show less",
         "sections": {
           "appearance": "Utseende",
           "voice": "Stemme",

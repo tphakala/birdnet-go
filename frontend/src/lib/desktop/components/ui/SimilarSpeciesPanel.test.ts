@@ -78,6 +78,35 @@ describe('SimilarSpeciesPanel', () => {
     expect(screen.getByText('analytics.species.similar.versus')).toBeInTheDocument();
   });
 
+  it('clamps a long comparison row behind a Read more toggle and expands on click', async () => {
+    const longVoice = 'Song phrase. '.repeat(40); // > 240 chars → clampable
+    vi.mocked(api.get).mockResolvedValue(
+      makeGuide({
+        description: `Short appearance.\n\n## Voice\n${longVoice}`,
+      }) as never
+    );
+
+    render(SimilarSpeciesPanel, { props: { mainName: 'American Crow', similar: [entry()] } });
+
+    // Read more appears for the long voice row...
+    const toggle = await screen.findByRole(
+      'button',
+      { name: 'analytics.species.similar.readMore' },
+      { timeout: 5000 }
+    );
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // ...but the short appearance row gets no toggle (only one toggle total).
+    expect(screen.getAllByText('analytics.species.similar.readMore')).toHaveLength(1);
+
+    // Expanding flips the label and aria-expanded; the full prose is present the
+    // whole time (clamp is CSS-only, so nothing is truncated from the DOM).
+    await fireEvent.click(toggle);
+    expect(
+      await screen.findByRole('button', { name: 'analytics.species.similar.readLess' })
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(longVoice.trim(), { exact: false })).toBeInTheDocument();
+  });
+
   it('shows resource links for a description-less species and keeps it clickable', async () => {
     render(SimilarSpeciesPanel, {
       props: {

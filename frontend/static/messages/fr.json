@@ -1988,6 +1988,8 @@
         "cardNoGuide": "Aucun guide disponible pour cette espèce.",
         "cardError": "Impossible de charger cette espèce. Essayez-en une autre.",
         "cardNoSections": "Aucun détail de comparaison disponible pour cette espèce.",
+        "readMore": "Read more",
+        "readLess": "Show less",
         "sections": {
           "appearance": "Apparence",
           "voice": "Voix",

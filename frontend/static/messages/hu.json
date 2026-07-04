@@ -1988,6 +1988,8 @@
         "cardNoGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
         "cardError": "Nem sikerült betölteni ezt a fajt. Próbáljon másikat.",
         "cardNoSections": "Ehhez a fajhoz nincsenek elérhető összehasonlítási adatok.",
+        "readMore": "Read more",
+        "readLess": "Show less",
         "sections": {
           "appearance": "Megjelenés",
           "voice": "Hang",

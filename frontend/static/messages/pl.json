@@ -1988,6 +1988,8 @@
         "cardNoGuide": "Przewodnik niedostępny dla tego gatunku.",
         "cardError": "Nie udało się załadować tego gatunku. Spróbuj innego.",
         "cardNoSections": "Brak dostępnych szczegółów porównania dla tego gatunku.",
+        "readMore": "Read more",
+        "readLess": "Show less",
         "sections": {
           "appearance": "Wygląd",
           "voice": "Głos",

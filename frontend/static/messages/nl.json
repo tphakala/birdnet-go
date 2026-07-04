@@ -1988,6 +1988,8 @@
         "cardNoGuide": "Geen gids beschikbaar voor deze soort.",
         "cardError": "Kan deze soort niet laden. Probeer een andere.",
         "cardNoSections": "Geen vergelijkingsdetails beschikbaar voor deze soort.",
+        "readMore": "Read more",
+        "readLess": "Show less",
         "sections": {
           "appearance": "Uiterlijk",
           "voice": "Geluid",

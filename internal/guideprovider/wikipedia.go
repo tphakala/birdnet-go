@@ -285,16 +285,25 @@ func wikipediaSubdomain(locale string) string {
 
 // convertWikiSections rewrites MediaWiki section headers in a plain-text extract
 // into the "## Heading" markdown the frontend's parseGuideDescription expects.
-// Top-level (== H ==) headers become "## H"; deeper headers are flattened to a
-// bare heading line so they don't create spurious top-level splits.
+// Top-level (== H ==) headers become "## H". Deeper headers (=== H ===) are
+// flattened to a bare heading line so they don't create spurious top-level splits —
+// EXCEPT when the deeper heading names a canonical comparison section
+// (appearance/voice/habitat/behaviour, see isCanonicalHeading), in which case it is
+// promoted to a top-level "## H" too. Bird articles routinely nest the voice
+// section under "Description"/"Behaviour"; promoting it lets the frontend surface a
+// distinct Voice row instead of absorbing the prose into the parent section.
 func convertWikiSections(extract string) string {
 	lines := strings.Split(extract, "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		// Check deeper (===+) headers first so they are flattened, not promoted
-		// to top-level "## " splits by the level-2 matcher.
+		// Check deeper (===+) headers first so they aren't matched as top-level
+		// "## " splits by the level-2 matcher below.
 		if m := subSectionHeadingRegex.FindStringSubmatch(trimmed); m != nil {
-			lines[i] = m[1]
+			if isCanonicalHeading(m[1]) {
+				lines[i] = "## " + m[1] // promote a canonical sub-section to its own row
+			} else {
+				lines[i] = m[1] // flatten: keep non-canonical prose inline in the parent
+			}
 			continue
 		}
 		if m := sectionHeadingRegex.FindStringSubmatch(trimmed); m != nil {

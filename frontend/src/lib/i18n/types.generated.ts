@@ -1548,6 +1548,8 @@ export type TranslationKey =
   | 'analytics.species.similar.cardNoGuide'
   | 'analytics.species.similar.cardError'
   | 'analytics.species.similar.cardNoSections'
+  | 'analytics.species.similar.readMore'
+  | 'analytics.species.similar.readLess'
   | 'analytics.species.similar.sections.appearance'
   | 'analytics.species.similar.sections.voice'
   | 'analytics.species.similar.sections.habitat'
