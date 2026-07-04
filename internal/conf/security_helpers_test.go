@@ -470,6 +470,16 @@ func TestSecurity_IsHTTPSBaseURL(t *testing.T) {
 			want:     false,
 		},
 		{
+			name:     "https scheme with no authority - false",
+			security: Security{BaseURL: "https:"},
+			want:     false,
+		},
+		{
+			name:     "opaque https URL (no host) - false",
+			security: Security{BaseURL: "https:" + testHostExample},
+			want:     false,
+		},
+		{
 			name:     "bare host without scheme - false",
 			security: Security{BaseURL: testHostExample},
 			want:     false,
@@ -496,4 +506,10 @@ func TestSecurity_IsHTTPSBaseURL(t *testing.T) {
 			assert.Equal(t, tt.want, got, "Security.IsHTTPSBaseURL()")
 		})
 	}
+
+	t.Run("nil receiver is safe", func(t *testing.T) {
+		t.Parallel()
+		var nilSec *Security
+		assert.False(t, nilSec.IsHTTPSBaseURL(), "nil *Security must not panic and returns false")
+	})
 }

@@ -419,6 +419,12 @@ func (s *OAuth2Server) setupTokenPersistence() {
 // the Secure attribute on the session store's cookies; the caller derives it from
 // the effective web-server TLS configuration (api.Config.SessionCookiesSecure).
 func InitializeGoth(settings *conf.Settings, secureCookies bool) {
+	if settings == nil {
+		// settings is a required dependency: setupSessionStore and
+		// initializeProviders both dereference it. Fail fast with a clear message
+		// instead of a confusing nil dereference deeper in initialization.
+		panic("security.InitializeGoth: settings must not be nil")
+	}
 	GetLogger().Info("Initializing Goth providers")
 
 	// Setup session store (filesystem or fallback to cookie-based)

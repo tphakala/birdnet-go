@@ -70,6 +70,14 @@ func TestConfig_SessionCookiesSecure(t *testing.T) {
 			want:   false,
 		},
 		{
+			// AutoTLS+redirect-off serves the app over plain HTTP directly, so an
+			// advertised https BaseURL must NOT force Secure (would break HTTP login).
+			name:    "AutoTLS without redirect and https BaseURL still serves HTTP - not secure",
+			config:  Config{TLSEnabled: true, AutoTLS: true, RedirectToHTTPS: false},
+			baseURL: "https://" + testHost,
+			want:    false,
+		},
+		{
 			name:   "manual TLS without redirect (HTTPS-only listener) - secure",
 			config: Config{TLSEnabled: true, AutoTLS: false, RedirectToHTTPS: false},
 			want:   true,
@@ -121,6 +129,18 @@ func TestConfig_SessionCookiesSecure(t *testing.T) {
 			assert.Equal(t, tc.want, got, "Config.SessionCookiesSecure()")
 		})
 	}
+
+	t.Run("nil-safety", func(t *testing.T) {
+		t.Parallel()
+		// nil settings skips the BaseURL clause and falls through to the Config clauses.
+		assert.True(t, (&Config{RedirectToHTTPS: true}).SessionCookiesSecure(nil),
+			"nil settings must still honor the RedirectToHTTPS clause")
+		assert.False(t, (&Config{}).SessionCookiesSecure(nil),
+			"nil settings with no TLS config is not secure")
+		// nil receiver is safe.
+		var nilCfg *Config
+		assert.False(t, nilCfg.SessionCookiesSecure(nil), "nil *Config must not panic and returns false")
+	})
 }
 
 // TestConfigFromSettings_AutoTLS_CustomTLSPort verifies that a user-configured

@@ -110,9 +110,12 @@ func (s *Security) GetExternalHost() string {
 // alone is ambiguous (it may front a plain-HTTP LAN deployment), so relying on it
 // could over-set Secure and drop the session cookie over HTTP.
 func (s *Security) IsHTTPSBaseURL() bool {
-	if s.BaseURL == "" {
+	if s == nil || s.BaseURL == "" {
 		return false
 	}
 	u, err := url.Parse(strings.TrimSpace(s.BaseURL))
-	return err == nil && u.Scheme == SchemeHTTPS
+	// Require a real authority: url.Parse treats "https:" and the opaque
+	// "https:host" as scheme https with an empty Host, which is not a usable
+	// external URL and must not be treated as HTTPS.
+	return err == nil && u.Scheme == SchemeHTTPS && u.Host != ""
 }
