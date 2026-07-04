@@ -19,6 +19,18 @@ linters:
         text: "dupSubExpr"
         linters:
           - gocritic
+      # goconst v1.9.0+ (bundled since golangci-lint v2.12.0) started walking
+      # composite-literal nodes (map keys, slice elements, struct-init values),
+      # which surfaced hundreds of "make it a constant" nits for inline
+      # structured-logging and DB/JSON field-name keys that are conventionally
+      # left inline. There is no upstream toggle to scope that scan yet
+      # (golangci/golangci-lint#6571), so suppress the extraction suggestions by
+      # message. The "but such constant X already exists" findings are NOT
+      # matched here, so goconst still flags literals that duplicate an existing
+      # named constant.
+      - text: "make it a constant"
+        linters:
+          - goconst
   enable:
     # Existing linters
     - copyloopvar
@@ -34,7 +46,7 @@ linters:
     # - wastedassign  # Disabled: SIGSEGV in golang.org/x/tools go/ssa.CreatePackage under golangci-lint v2.12.2 + Go 1.26 (same SSA crash class as modernize below); ineffassign covers the overlapping cases
     # Security & quality linters
     # - gosec
-    # - goconst  # Temporarily disabled during the golangci-lint v2.12.2 adoption: its stricter defaults surface ~266 real-code findings (some valid "constant already exists" cases, most generic inline field-name noise). Re-enable with tuning and fix the valid ones in a tracked follow-up.
+    - goconst  # "constant already exists" enforcement; extraction nits suppressed via exclusions rule (see above)
     - staticcheck
     - ineffassign
     - bodyclose
@@ -55,6 +67,10 @@ linters:
   disable:
     - unused
   settings:
+    goconst:
+      # Test strings are noisy and rarely worth deduplicating; the upstream CLI
+      # defaults this to true but golangci-lint's integration defaults it to false.
+      ignore-tests: true
     gocognit:
       min-complexity: 50
     gocritic:
