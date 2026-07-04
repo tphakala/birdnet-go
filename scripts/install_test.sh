@@ -392,11 +392,17 @@ BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""; CONFIGURED_TZ="UTC"
 unit_content="$(generate_systemd_service_content)"
 autotls_cap_count="$(printf '%s\n' "$unit_content" | grep -c -- '--cap-add NET_BIND_SERVICE' || true)"
 assert_eq "AutoTLS unit grants low-port bind capability" "1" "$autotls_cap_count"
+# AutoTLS serves the UI on 443 and the HTTP entrypoint on 80; the container never
+# listens on 8080, so the dead web mapping must not be published.
+autotls_web_count="$(printf '%s\n' "$unit_content" | grep -c -- ':8080' || true)"
+assert_eq "AutoTLS unit does not publish the dead 8080 mapping" "0" "$autotls_web_count"
 
 BIND_TLS_PORTS="false"
 unit_content="$(generate_systemd_service_content)"
 plain_cap_count="$(printf '%s\n' "$unit_content" | grep -c -- '--cap-add NET_BIND_SERVICE' || true)"
 assert_eq "plain HTTP unit does not grant low-port bind capability" "0" "$plain_cap_count"
+plain_web_count="$(printf '%s\n' "$unit_content" | grep -c -- ':8080' || true)"
+assert_eq "plain HTTP unit publishes the web port mapping" "1" "$plain_web_count"
 
 # The container entrypoint drops from root to BIRDNET_UID with gosu before
 # launching birdnet-go. Docker's --cap-add keeps NET_BIND_SERVICE in the

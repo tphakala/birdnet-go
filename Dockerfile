@@ -217,9 +217,12 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 # Add healthcheck to monitor container status
 # Uses /health endpoint and validates JSON status via jq to avoid false positives
 # from HTTP->HTTPS 308 redirects (curl -f treats 3xx as success).
+# The port-80 probe covers AutoTLS mode: the app serves /health over plain HTTP
+# there, while a localhost HTTPS probe on :443 is rejected by autocert's
+# hostname whitelist and nothing listens on 8080/8443.
 # Extended start-period for low-power devices (e.g., Raspberry Pi)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null || exit 1
+    CMD curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null || curl -fs --connect-timeout 2 --max-time 3 http://localhost:80/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null || exit 1
 
 # Container startup execution chain:
 # 1. entrypoint.sh - Sets up user permissions, timezone, device access, and performs

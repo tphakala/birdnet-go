@@ -4510,6 +4510,15 @@ generate_systemd_service_content() {
     # because load_existing_service_config() restores these flags from the current unit.
     # Any restored host bind address is reapplied so a localhost-only mapping survives a
     # regenerate (default is no address: published on all interfaces).
+    # The container only listens on 8080 outside AutoTLS. Under AutoTLS the app
+    # serves the UI on 443 and an HTTP entrypoint (redirect + ACME + health) on
+    # 80, so publishing the 8080 mapping would expose a dead host port. Publish
+    # the web mapping only when AutoTLS is off; the 80/443 mapping below covers
+    # the AutoTLS HTTP entrypoint.
+    local web_port_line=""
+    if [ "$BIND_TLS_PORTS" != "true" ]; then
+        web_port_line="-p ${WEB_PORT_BIND_ADDR:+${WEB_PORT_BIND_ADDR}:}${WEB_PORT}:8080"
+    fi
     local tls_ports_line=""
     if [ "$BIND_TLS_PORTS" = "true" ]; then
         tls_ports_line="-p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}80:80 \\
@@ -4562,8 +4571,8 @@ ExecStartPre=-/bin/chown -h ${HOST_UID}:${HOST_GID} /mnt/birdnet-go/external
 ${wifi_power_save_script:+${wifi_power_save_script}
 }ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
-    -p ${WEB_PORT_BIND_ADDR:+${WEB_PORT_BIND_ADDR}:}${WEB_PORT}:8080 \\
-${tls_ports_line:+    ${tls_ports_line} \\
+${web_port_line:+    ${web_port_line} \\
+}${tls_ports_line:+    ${tls_ports_line} \\
 }${metrics_port_line:+    ${metrics_port_line} \\
 }${tls_capability_line:+    ${tls_capability_line} \\
 }    --env TZ="${TZ}" \\

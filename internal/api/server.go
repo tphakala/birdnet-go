@@ -472,10 +472,15 @@ func (s *Server) setupMiddleware() {
 	s.echo.Use(mw.NewSecureHeaders(securityConfig))
 }
 
+// healthCheckPath is the unauthenticated health endpoint used by container
+// healthchecks and load balancers. It is served over every listener, including
+// the plain-HTTP AutoTLS port, so a self-check never needs a valid certificate.
+const healthCheckPath = "/health"
+
 // setupRoutes configures all HTTP routes.
 func (s *Server) setupRoutes() error {
 	// Health check endpoint at root level
-	s.echo.GET("/health", s.healthCheck)
+	s.echo.GET(healthCheckPath, s.healthCheck)
 
 	// Social OAuth routes (Google, GitHub, Microsoft)
 	// These must be at /auth/:provider to match frontend expectations
@@ -765,10 +770,25 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 // autocert.Manager.HTTPHandler intercepts ACME HTTP-01 challenges and delegates
 // non-challenge requests to the fallback redirect handler.
 func (s *Server) newAutoTLSHTTPServer(httpAddr string) *http.Server {
-	fallback := http.NotFoundHandler()
+	// Non-challenge requests either redirect to HTTPS or 404.
+	redirectOrNotFound := http.NotFoundHandler()
 	if s.config.RedirectToHTTPS {
-		fallback = newHTTPSRedirectHandler(autoTLSHTTPSPort)
+		redirectOrNotFound = newHTTPSRedirectHandler(autoTLSHTTPSPort)
 	}
+
+	// Serve the health endpoint over plain HTTP so container healthchecks can
+	// verify AutoTLS deployments. A localhost probe to the HTTPS listener on
+	// :443 fails autocert's HostPolicy (localhost is never whitelisted), and
+	// nothing listens on the plain web port in AutoTLS mode, so port 80 is the
+	// only address a self-check can reach without a valid certificate. This is
+	// checked ahead of the redirect so the probe receives JSON, not a 308.
+	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == healthCheckPath {
+			s.echo.ServeHTTP(w, r)
+			return
+		}
+		redirectOrNotFound.ServeHTTP(w, r)
+	})
 
 	return &http.Server{
 		Addr:         httpAddr,
