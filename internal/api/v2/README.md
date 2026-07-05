@@ -148,7 +148,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/detections/included`        | `GetIncludedSpecies`    | ✅   | Get always-include species list            |
 | POST   | `/detections/confirm`         | `ConfirmSpecies`        | ✅   | Toggle species in confirmed list (analytics-only) |
 | GET    | `/detections/confirmed`       | `GetConfirmedSpecies`   | ✅   | Get confirmed species list                 |
-| POST   | `/detections/species/delete`  | `DeleteSpeciesDetections` | ✅ | Delete up to 500 detections for a species per call (skips locked; response `remaining` is non-zero if more are left - repeat the call until it's 0; 501 if datastore unsupported) |
+| POST   | `/detections/species/delete`  | `DeleteSpeciesDetections` | ✅ | Delete up to 500 detections for a species per call (skips locked). Repeat while response `remaining` is non-zero, each time sending `exclude_ids` = the accumulated `skipped_ids` from every prior call for this operation, so locked entries can't block later deletable ones; 501 if datastore unsupported |
 | POST   | `/detections/batch/delete`    | `BatchDeleteDetections` | ✅   | Bulk delete detections by ID               |
 | POST   | `/detections/batch/review`    | `BatchReviewDetections` | ✅   | Bulk set verification status               |
 | POST   | `/detections/batch/lock`      | `BatchLockDetections`   | ✅   | Bulk lock or unlock detections             |

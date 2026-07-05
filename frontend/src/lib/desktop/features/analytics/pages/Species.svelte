@@ -151,6 +151,13 @@
     },
   ];
 
+  // Defense-in-depth cap on the species-delete round-trip loop (confirmDelete):
+  // the backend's exclude_ids handshake guarantees termination in at most
+  // (detection count / server maxBatchSize of 500) passes, so this is only a
+  // last-resort backstop against an unforeseen non-terminating case, set far
+  // above any plausible detection count (1000 passes * 500 = 500,000).
+  const MAX_DELETE_PASSES = 1000;
+
   // Default sort and persistence (survives a page refresh).
   const DEFAULT_SORT_ORDER: SortOrder = 'count_desc';
   const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
@@ -977,18 +984,38 @@
     deleteProgress = null;
     let totalDeleted = 0;
     let totalSkipped = 0;
+    // IDs the server has already reported as locked (permanently un-deletable),
+    // accumulated across rounds and resent as exclude_ids so chunk selection
+    // (always the front of the current ID list) advances past them instead of
+    // re-examining the same locked entries every round - otherwise a locked
+    // detection could block the loop from ever reaching later, genuinely
+    // deletable detections. See the SpeciesDeleteResult doc comment backend-side.
+    const excludeIds: string[] = [];
     try {
       // The server caps each call at maxBatchSize detections and reports how many
       // are still pending, so a species with a very large detection count can't
       // hold one request (and, on SQLite, its writer lock) open for minutes. Loop
-      // until the server reports nothing left.
+      // until the server reports nothing left. deletePasses is a defense-in-depth
+      // cap only - the exclude_ids handshake guarantees termination in at most
+      // (total detections / maxBatchSize) rounds, far below this limit.
+      let deletePasses = 0;
       for (;;) {
-        const result = await api.post<{ deleted: number; skipped: number; remaining: number }>(
-          '/api/v2/detections/species/delete',
-          { scientific_name: target.scientific_name }
-        );
+        deletePasses += 1;
+        if (deletePasses > MAX_DELETE_PASSES) {
+          throw new Error(`Species delete exceeded ${MAX_DELETE_PASSES} passes`);
+        }
+        const result = await api.post<{
+          deleted: number;
+          skipped: number;
+          remaining: number;
+          skipped_ids?: string[];
+        }>('/api/v2/detections/species/delete', {
+          scientific_name: target.scientific_name,
+          exclude_ids: excludeIds,
+        });
         totalDeleted += result?.deleted ?? 0;
         totalSkipped += result?.skipped ?? 0;
+        excludeIds.push(...(result?.skipped_ids ?? []));
         const remaining = result?.remaining ?? 0;
         if (remaining === 0) break;
         deleteProgress = { deleted: totalDeleted, remaining };

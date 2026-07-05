@@ -142,21 +142,31 @@ func (c *Handler) toggleSpeciesInList(species string, listOf func(*conf.Settings
 	defer c.settingsMutex.Unlock()
 
 	current := c.getSettingsOrFallback()
-	wasPresent := slices.ContainsFunc(listOf(current), func(s string) bool { return strings.EqualFold(s, species) })
+
+	// Resolve the incoming name to its scientific form for MATCHING purposes
+	// only (mirrors the Exclude list's resolveExcludeName/excludeEntryMatches
+	// convention: canonicalize the target once, then compare each stored entry
+	// against it, which also resolves the entry's own alias). This catches an
+	// entry stored as the scientific name (e.g. typed directly into the
+	// Settings editor) against an incoming current-locale common name, or vice
+	// versa - not just a case difference. It is comparison-only: the value
+	// actually stored (below, on add) is still the caller's verbatim `species`
+	// string, not this resolved form, so Include's range-filter override
+	// (internal/classifier/range_filter.go resolveOverrideLabels) keeps
+	// operating on unchanged stored strings; Confirmed has no other consumer
+	// so this is purely a UX improvement there. Known residual limitation: the
+	// common-to-scientific map reflects only the currently active BirdNET
+	// locale (name_maps.go buildNameMaps), so an entry stored as a common name
+	// under a locale that is no longer active still won't resolve - only a
+	// same-locale common/scientific mismatch is fixed here.
+	canonicalTarget := c.resolveExcludeName(species)
+	matchesTarget := func(s string) bool { return c.excludeEntryMatches(s, canonicalTarget) }
+
+	wasPresent := slices.ContainsFunc(listOf(current), matchesTarget)
 
 	updated := conf.CloneSettings(current)
 	if wasPresent {
-		// Case-insensitive removal so an entry stored under a different casing
-		// (e.g. typed into the Settings editor, or added while a different UI
-		// locale was active) can still be toggled off instead of leaving an
-		// orphan that this exact-match string can never remove. Unlike the
-		// Exclude list (resolveExcludeName/excludeEntryMatches), entries are not
-		// canonicalized to a scientific name here: Confirmed has no other
-		// consumer, but Include is the pre-existing range-filter override field
-		// (internal/classifier/range_filter.go resolveOverrideLabels), which
-		// already has its own alias/locale resolution keyed on the verbatim
-		// stored string - rewriting that string at write time would fight it.
-		setList(updated, slices.DeleteFunc(listOf(updated), func(s string) bool { return strings.EqualFold(s, species) }))
+		setList(updated, slices.DeleteFunc(listOf(updated), matchesTarget))
 		action = speciesActionRemoved
 		present = false
 	} else {
