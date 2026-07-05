@@ -232,7 +232,7 @@ func TestValidateSpeciesTrackingSettings_RejectsInvalidInfrequentTracking(t *tes
 	}
 
 	err := validateSpeciesTrackingSettings(&settings)
-	requireEnhancedError(t, err)
+	_ = requireEnhancedError(t, err)
 }
 
 func BenchmarkValidateSoundLevelSettings(b *testing.B) {
