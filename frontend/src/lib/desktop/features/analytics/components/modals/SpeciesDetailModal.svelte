@@ -78,11 +78,19 @@
   // when the modal is reused for a different species.
   let taxonomy = $state<SpeciesTaxonomyResponse | null>(null);
   let taxonomyLoading = $state(false);
-  // On desktop, when the guide (right column) has content, widen the modal and
+  // Outer collapse state for the guide panel (bindable into SpeciesComparison).
+  // Declared before `wideLayout` because that derived reads it; reset to expanded
+  // on each open / species change by the $effect.pre further down.
+  let guidePanelCollapsed = $state(false);
+  // On desktop, when the guide (right column) is expanded, widen the modal and
   // split into two columns so the horizontal space is used without stretching the
   // description past a readable measure. Below `lg` the modal stays its default
   // width and the content stacks in a single column (tablet/desktop-only UI).
-  let wideLayout = $derived(guideEnabled);
+  // When the guide is collapsed the right column would just be an empty half, so
+  // drop back to the single-column `md` width — the same layout used when the
+  // guide is disabled entirely. The image renders at ~400px there, matching the
+  // Wikipedia thumbnail source, so nothing is upscaled.
+  let wideLayout = $derived(guideEnabled && !guidePanelCollapsed);
   $effect(() => {
     if (isOpen && !untrack(() => prevIsOpen)) {
       cachedSpecies = null;
@@ -106,8 +114,7 @@
   // the primary thing users open the guide for, so it should be visible on every open.
   // The inner section toggles (songs/similar) live in SpeciesComparison and persist on
   // their own across reopens (it isn't remounted for the same species), so this resets
-  // only the outer collapse via the bindable prop.
-  let guidePanelCollapsed = $state(false);
+  // only the outer collapse via the bindable prop (declared above).
   // $effect.pre runs before the DOM update, so when the species changes the reset lands
   // before the {#key} remounts SpeciesComparison — the panel mounts already expanded
   // rather than briefly adopting a stale collapsed value. It deliberately does not read
@@ -289,8 +296,14 @@
         <!-- Guide column: description + enrichments, plus similar species when
              that section is enabled (gated inside SpeciesComparison). -->
         {#if guideEnabled}
+          <!-- In the two-column (expanded) layout the guide is grid column 2, so the
+               `lg:` resets drop the top separator. When collapsed the modal is single
+               column and the guide stacks below the left content, so it keeps its
+               top-border separator at every breakpoint. -->
           <div
-            class="mt-4 border-t border-[var(--color-base-300)] pt-4 lg:mt-0 lg:border-t-0 lg:pt-0"
+            class={wideLayout
+              ? 'mt-4 border-t border-[var(--color-base-300)] pt-4 lg:mt-0 lg:border-t-0 lg:pt-0'
+              : 'mt-4 border-t border-[var(--color-base-300)] pt-4'}
           >
             {#key displaySpecies.scientific_name}
               <SpeciesComparison
