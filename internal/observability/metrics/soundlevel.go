@@ -47,7 +47,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_sound_level_db",
 			Help: "Current sound level in dB",
 		},
-		[]string{"source", "name", "measurement_type"}, // measurement_type: overall, weighted
+		[]string{labelSource, "name", "measurement_type"}, // measurement_type: overall, weighted
 	)
 
 	m.soundLevelUpdatesTotal = prometheus.NewCounterVec(
@@ -55,7 +55,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_sound_level_updates_total",
 			Help: "Total number of sound level updates",
 		},
-		[]string{"source", "name"},
+		[]string{labelSource, "name"},
 	)
 
 	m.soundLevelDuration = prometheus.NewHistogramVec(
@@ -64,7 +64,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Help:    "Duration of sound level measurement windows",
 			Buckets: []float64{1, 5, 10, 30, 60}, // Common measurement windows
 		},
-		[]string{"source", "name"},
+		[]string{labelSource, "name"},
 	)
 
 	// Octave band specific metrics
@@ -73,7 +73,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_octave_band_level_db",
 			Help: "Sound level for specific 1/3rd octave bands in dB",
 		},
-		[]string{"source", "name", "frequency_band", "metric_type"}, // metric_type: current
+		[]string{labelSource, "name", "frequency_band", "metric_type"}, // metric_type: current
 	)
 
 	m.octaveBandMinGauge = prometheus.NewGaugeVec(
@@ -81,7 +81,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_octave_band_min_db",
 			Help: "Minimum sound level for specific 1/3rd octave bands in dB",
 		},
-		[]string{"source", "name", "frequency_band"},
+		[]string{labelSource, "name", "frequency_band"},
 	)
 
 	m.octaveBandMaxGauge = prometheus.NewGaugeVec(
@@ -89,7 +89,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_octave_band_max_db",
 			Help: "Maximum sound level for specific 1/3rd octave bands in dB",
 		},
-		[]string{"source", "name", "frequency_band"},
+		[]string{labelSource, "name", "frequency_band"},
 	)
 
 	m.octaveBandMeanGauge = prometheus.NewGaugeVec(
@@ -97,7 +97,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_octave_band_mean_db",
 			Help: "Mean sound level for specific 1/3rd octave bands in dB",
 		},
-		[]string{"source", "name", "frequency_band"},
+		[]string{labelSource, "name", "frequency_band"},
 	)
 
 	// Processing metrics
@@ -107,7 +107,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Help:    "Time taken to process sound level data",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
-		[]string{"source", "name", "operation"}, // operation: filter, aggregate, calculate
+		[]string{labelSource, "name", "operation"}, // operation: filter, aggregate, calculate
 	)
 
 	m.soundLevelProcessingErrors = prometheus.NewCounterVec(
@@ -115,7 +115,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_sound_level_processing_errors_total",
 			Help: "Total number of sound level processing errors",
 		},
-		[]string{"source", "name", "error_type"},
+		[]string{labelSource, "name", "error_type"},
 	)
 
 	m.soundLevelPublishingTotal = prometheus.NewCounterVec(
@@ -123,7 +123,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_sound_level_publishing_total",
 			Help: "Total number of sound level publishing attempts",
 		},
-		[]string{"source", "name", "destination", "status"}, // destination: mqtt, sse; status: success, error
+		[]string{labelSource, "name", "destination", "status"}, // destination: mqtt, sse; status: success, error
 	)
 
 	m.soundLevelPublishingErrors = prometheus.NewCounterVec(
@@ -131,7 +131,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 			Name: "myaudio_sound_level_publishing_errors_total",
 			Help: "Total number of sound level publishing errors",
 		},
-		[]string{"source", "name", "destination", "error_type"},
+		[]string{labelSource, "name", "destination", "error_type"},
 	)
 
 	return nil

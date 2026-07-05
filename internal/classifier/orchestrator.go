@@ -1892,6 +1892,9 @@ func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
 // For the primary model entry, the live o.ModelInfo is returned rather than the
 // static registry template, so the reported Backend and Quantization match the
 // actually loaded model (e.g. ONNX/INT8 on the arm64 container default).
+// NumSpecies is always sourced from the live instance (not the template) so a
+// sliced or custom model reports its actual loaded label count rather than the
+// stock catalog number.
 func (o *Orchestrator) ModelInfos() []ModelInfo {
 	o.mu.RLock()
 	if o.models == nil {
@@ -1911,9 +1914,17 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
+		// Capture the instance pointer under entry.mu, then release the lock before
+		// calling any instance method. Those accessors take their own per-model lock
+		// (BirdNET locks bn.mu), so holding entry.mu across them would stall
+		// PredictModel, which needs entry.mu only briefly on the inference hot path.
+		// This mirrors instanceFor / GetModelRuntimeInfo. The captured pointer stays
+		// usable even if the entry is torn down concurrently: the accessors below read
+		// label/settings/info state, not the native classifier that Close() frees.
 		ref.entry.mu.Lock()
-		if ref.entry.instance == nil {
-			ref.entry.mu.Unlock()
+		instance := ref.entry.instance
+		ref.entry.mu.Unlock()
+		if instance == nil {
 			continue
 		}
 		var info ModelInfo
@@ -1926,14 +1937,19 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 			info, exists = ModelRegistry[ref.id]
 			if !exists {
 				info = ModelInfo{
-					ID:         ref.entry.instance.ModelID(),
-					Name:       ref.entry.instance.ModelName(),
-					Spec:       ref.entry.instance.Spec(),
-					NumSpecies: ref.entry.instance.NumSpecies(),
+					ID:   instance.ModelID(),
+					Name: instance.ModelName(),
+					Spec: instance.Spec(),
 				}
 			}
 		}
-		ref.entry.mu.Unlock()
+		// NumSpecies depends on the model's loaded label file, which a user can
+		// override with a sliced or custom model (e.g. a regional Perch v2 slice
+		// with far fewer classes than the stock 14,795). Both the primary template
+		// (o.ModelInfo) and the static registry template carry the stock catalog
+		// count, so source it from the live instance to report what is actually
+		// loaded.
+		info.NumSpecies = instance.NumSpecies()
 		infos = append(infos, info)
 	}
 	return infos

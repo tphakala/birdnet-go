@@ -419,6 +419,7 @@
         "recalculatingThresholds": "Recalculating dynamic thresholds for new base value",
         "reconfiguringDynamicThresholds": "Reconfiguring dynamic thresholds...",
         "webserverRestartRequired": "Web server settings changed. Restart required.",
+        "oauthRestartRequired": "Authentication provider settings changed. Restart required.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
@@ -5370,6 +5371,7 @@
     "restartFailed": "Failed to initiate restart",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

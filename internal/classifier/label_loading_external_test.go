@@ -78,3 +78,41 @@ func TestLoadExternalLabels_MissingPathReportsExpandedPath(t *testing.T) {
 	assert.Contains(t, err.Error(), missing,
 		"error context should reference the expanded path, not the unexpanded $VAR template")
 }
+
+// TestLoadLabels_RefreshesModelInfoNumSpecies verifies loadLabels refreshes the
+// cached ModelInfo.NumSpecies to the actual loaded label count, so a stale stock
+// count seeded from the registry template (e.g. 6523 for BirdNET v2.4 vs the real
+// 6522) is corrected, and leaves it untouched when loading fails. This keeps
+// o.ModelInfo / PrimaryModelInfo() reporting the live count.
+func TestLoadLabels_RefreshesModelInfoNumSpecies(t *testing.T) {
+	t.Parallel()
+
+	const staleStockCount = 6523
+
+	t.Run("refreshes to the loaded label count", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		labelPath := filepath.Join(dir, "labels.txt")
+		require.NoError(t, os.WriteFile(labelPath, []byte(twoLabelFile), 0o644))
+
+		bn := newExternalLabelBirdNET(labelPath)
+		bn.ModelInfo.NumSpecies = staleStockCount // as the registry template would seed it
+
+		require.NoError(t, bn.loadLabels())
+		require.Len(t, bn.Settings.BirdNET.Labels, 2)
+		assert.Equal(t, 2, bn.ModelInfo.NumSpecies,
+			"loadLabels must refresh ModelInfo.NumSpecies to the loaded label count, not keep the stale template value")
+		assert.Equal(t, bn.NumSpecies(), bn.ModelInfo.NumSpecies,
+			"ModelInfo.NumSpecies must match the live NumSpecies() count")
+	})
+
+	t.Run("leaves NumSpecies untouched when loading fails", func(t *testing.T) {
+		t.Parallel()
+		bn := newExternalLabelBirdNET(filepath.Join(t.TempDir(), "does-not-exist.txt"))
+		bn.ModelInfo.NumSpecies = staleStockCount
+
+		require.Error(t, bn.loadLabels())
+		assert.Equal(t, staleStockCount, bn.ModelInfo.NumSpecies,
+			"a failed label load must not clobber the previous NumSpecies")
+	})
+}

@@ -419,6 +419,7 @@
         "recalculatingThresholds": "Lasketaan dynaamisia kynnysarvoja uudelleen uudelle perusarvolle",
         "reconfiguringDynamicThresholds": "Määritetään dynaamisia kynnysarvoja uudelleen...",
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
+        "oauthRestartRequired": "Tunnistautumispalveluntarjoajan asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
@@ -5370,6 +5371,7 @@
     "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

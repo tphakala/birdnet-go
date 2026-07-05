@@ -92,7 +92,7 @@ func (n *Notification) ToTemplateMap() map[string]any {
 		"priority":  string(n.Priority),
 		"status":    string(n.Status),
 		"title":     n.Title,
-		"message":   n.Message,
+		"message":   n.Message, //nolint:goconst // template data map key, not the function-local keyMessage
 		"component": n.Component,
 		"timestamp": n.Timestamp.Format(time.RFC3339),
 		"metadata":  n.Metadata,

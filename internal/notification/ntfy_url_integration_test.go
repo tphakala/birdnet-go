@@ -3,7 +3,6 @@
 package notification_test
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"testing"
@@ -16,7 +15,7 @@ import (
 )
 
 func TestNtfyURLPatterns_MatchFrontend(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// No-auth container for basic URL tests
 	noAuthContainer := setupNtfyContainer(t)

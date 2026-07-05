@@ -52,9 +52,9 @@ var (
 	//
 	// A retry goroutine that finishes on its own (provider registered, or the
 	// retry deadline elapsed) leaves its now-inert cancel func in the map; these
-	// spent entries are reaped by the next cancelAllOIDCRetries (settings reload
-	// or shutdown). The map is therefore bounded by the number of distinct
-	// configured issuer URLs, not by retry attempts.
+	// spent entries are reaped on server shutdown (shutdownOIDCRetries, via
+	// cancelAllOIDCRetriesLocked). The map is therefore bounded by the number of
+	// distinct configured issuer URLs, not by retry attempts.
 	oidcRetryCancels = make(map[string]context.CancelFunc)
 )
 
@@ -67,19 +67,10 @@ func cancelAllOIDCRetriesLocked() {
 	}
 }
 
-// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
-// Used on settings reload, where InitializeGoth rebuilds all providers from
-// scratch and any outstanding retries are superseded.
-func cancelAllOIDCRetries() {
-	oidcRetryCancelMu.Lock()
-	defer oidcRetryCancelMu.Unlock()
-	cancelAllOIDCRetriesLocked()
-}
-
 // shutdownOIDCRetries cancels every in-flight retry and blocks new ones for the
 // remaining lifetime of the current server instance. Called when the server's
 // context is cancelled (application shutdown), so a retry cannot be started
-// after shutdown has begun (e.g. by a late InitializeGoth/UpdateProviders).
+// after shutdown has begun (e.g. by a late InitializeGoth).
 func shutdownOIDCRetries() {
 	oidcRetryCancelMu.Lock()
 	defer oidcRetryCancelMu.Unlock()
@@ -255,7 +246,12 @@ var (
 // governs background goroutines owned by the server (currently the periodic
 // expired-token cleanup); cancelling it stops them, giving the cleanup goroutine
 // a proper shutdown path instead of running for the process lifetime.
-func NewOAuth2Server(ctx context.Context) *OAuth2Server {
+//
+// secureCookies controls the Secure attribute on the session/auth cookies. The
+// caller decides it from the effective web-server TLS configuration (see
+// api.Config.SessionCookiesSecure), since the security package cannot import
+// internal/api.
+func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 	// Re-enable OIDC discovery retries for this instance, clearing any disabled
 	// state a previous instance's shutdown left behind (sequential tests).
 	enableOIDCRetries()
@@ -273,7 +269,7 @@ func NewOAuth2Server(ctx context.Context) *OAuth2Server {
 	validateSessionSecret(settings)
 
 	// Initialize Gothic with the provided configuration
-	InitializeGoth(settings)
+	InitializeGoth(settings, secureCookies)
 
 	// Set up token persistence
 	server.setupTokenPersistence()
@@ -403,12 +399,20 @@ func (s *OAuth2Server) setupTokenPersistence() {
 	}
 }
 
-// InitializeGoth initializes social authentication providers.
-func InitializeGoth(settings *conf.Settings) {
+// InitializeGoth initializes social authentication providers. secureCookies sets
+// the Secure attribute on the session store's cookies; the caller derives it from
+// the effective web-server TLS configuration (api.Config.SessionCookiesSecure).
+func InitializeGoth(settings *conf.Settings, secureCookies bool) {
+	if settings == nil {
+		// settings is a required dependency: setupSessionStore and
+		// initializeProviders both dereference it. Fail fast with a clear message
+		// instead of a confusing nil dereference deeper in initialization.
+		panic("security.InitializeGoth: settings must not be nil")
+	}
 	GetLogger().Info("Initializing Goth providers")
 
 	// Setup session store (filesystem or fallback to cookie-based)
-	setupSessionStore(settings)
+	setupSessionStore(settings, secureCookies)
 
 	// Initialize OAuth providers
 	initializeProviders(settings)
@@ -416,13 +420,29 @@ func InitializeGoth(settings *conf.Settings) {
 
 // setupSessionStore configures the Gothic session store.
 // It attempts to use a filesystem store, falling back to an in-memory cookie store on failure.
-func setupSessionStore(settings *conf.Settings) {
+// secureCookies sets the Secure attribute on the session cookies; it is derived by
+// the caller from the effective web-server TLS configuration.
+func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	secLog := GetLogger()
+
+	maxAge := DefaultSessionMaxAgeSeconds
+	if settings.Security.SessionDuration > 0 {
+		maxAge = int(settings.Security.SessionDuration.Seconds())
+	}
+
+	// newCookieStoreFallback builds the in-memory fallback store with the same
+	// cookie hardening (Secure, HttpOnly, SameSite) as the filesystem store, so a
+	// fallback does not silently drop the Secure attribute the caller requested.
+	newCookieStoreFallback := func() *sessions.CookieStore {
+		store := sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
+		store.Options = buildSessionOptions(secureCookies, maxAge)
+		return store
+	}
 
 	sessionPath, ok := getSessionPath()
 	if !ok {
 		// Fallback to in-memory store if config paths can't be retrieved
-		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
+		gothic.Store = newCookieStoreFallback()
 		return
 	}
 
@@ -431,7 +451,7 @@ func setupSessionStore(settings *conf.Settings) {
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, DirPermissions); err != nil {
 		secLog.Error("Failed to create session directory, falling back to in-memory cookie store", logger.Error(err))
-		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
+		gothic.Store = newCookieStoreFallback()
 		return
 	}
 
@@ -447,13 +467,8 @@ func setupSessionStore(settings *conf.Settings) {
 
 	// Configure session store options
 	store := gothic.Store.(*sessions.FilesystemStore)
-	maxAge := DefaultSessionMaxAgeSeconds
-	if settings.Security.SessionDuration > 0 {
-		maxAge = int(settings.Security.SessionDuration.Seconds())
-	}
-	secureCookie := settings.Security.RedirectToHTTPS
-	store.Options = buildSessionOptions(secureCookie, maxAge)
-	secLog.Info("Filesystem session store configured", logger.Int("max_age_seconds", maxAge), logger.Bool("secure", secureCookie))
+	store.Options = buildSessionOptions(secureCookies, maxAge)
+	secLog.Info("Filesystem session store configured", logger.Int("max_age_seconds", maxAge), logger.Bool("secure", secureCookies))
 
 	// Set reasonable values for session cookie storage
 	store.MaxLength(MaxSessionSizeBytes)
@@ -663,12 +678,6 @@ func createSessionKey(seed string) []byte {
 func SetTestConfigPath(path string) {
 	GetLogger().Debug("Setting test config path", logger.String("path", path))
 	testConfigPath = path
-}
-
-func (s *OAuth2Server) UpdateProviders() {
-	GetLogger().Info("Updating Goth providers based on potentially changed settings")
-	cancelAllOIDCRetries()
-	InitializeGoth(s.currentSettings())
 }
 
 // IsUserAuthenticated checks if the user is authenticated

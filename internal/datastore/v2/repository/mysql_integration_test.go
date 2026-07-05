@@ -24,7 +24,7 @@ var (
 func TestMain(m *testing.M) {
 	var err error
 
-	ctx := context.Background()
+	ctx := context.Background() //nolint:gocritic // no *testing.T available (TestMain / setup helper)
 
 	// Create MySQL container
 	mysqlContainer, err = containers.NewMySQLContainer(ctx, nil) // Use defaults
@@ -35,13 +35,13 @@ func TestMain(m *testing.M) {
 	// Get database connection
 	testDB = mysqlContainer.DB()
 	if testDB == nil {
-		_ = mysqlContainer.Terminate(context.Background())
+		_ = mysqlContainer.Terminate(context.Background()) //nolint:gocritic // no *testing.T available in TestMain
 		panic("database connection is nil")
 	}
 
 	// Run migrations
 	if err := runMigrations(testDB); err != nil {
-		_ = mysqlContainer.Terminate(context.Background())
+		_ = mysqlContainer.Terminate(context.Background()) //nolint:gocritic // no *testing.T available in TestMain
 		panic("failed to run migrations: " + err.Error())
 	}
 
@@ -49,7 +49,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// Cleanup
-	if err := mysqlContainer.Terminate(context.Background()); err != nil {
+	if err := mysqlContainer.Terminate(context.Background()); err != nil { //nolint:gocritic // no *testing.T available in TestMain
 		panic("failed to terminate MySQL container: " + err.Error())
 	}
 
@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 func runMigrations(db *sql.DB) error {
 	// TODO: Apply actual schema migrations here
 	// For now, this is a placeholder that would execute SQL schema files
-	ctx := context.Background()
+	ctx := context.Background() //nolint:gocritic // no *testing.T available (TestMain / setup helper)
 
 	// Example: Create a simple test table
 	schema := `
@@ -337,16 +337,16 @@ func TestMySQL_Aggregation_GroupBy(t *testing.T) {
 	defer func() { _ = rows.Close() }()
 
 	results := make([]struct {
-		species    string
-		count      int
-		avgConf    float64
+		species string
+		count   int
+		avgConf float64
 	}, 0)
 
 	for rows.Next() {
 		var r struct {
-			species    string
-			count      int
-			avgConf    float64
+			species string
+			count   int
+			avgConf float64
 		}
 		err := rows.Scan(&r.species, &r.count, &r.avgConf)
 		require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestMySQL_HAVING_Clause(t *testing.T) {
 	}{
 		{"Turdus merula", 0.95},
 		{"Turdus merula", 0.83}, // Changed from 0.85 to avoid FLOAT precision boundary issues
-		{"Turdus merula", 0.75},  // Average will be ~0.843, clearly < 0.85
+		{"Turdus merula", 0.75}, // Average will be ~0.843, clearly < 0.85
 		{"Parus major", 0.92},
 		{"Parus major", 0.88}, // Average will be 0.90, clearly > 0.85
 	}

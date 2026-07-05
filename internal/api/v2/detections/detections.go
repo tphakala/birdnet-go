@@ -98,9 +98,9 @@ func parseVerificationStatus(status string) (verificationStatus, error) {
 		return verificationStatus{IsSet: false}, nil
 	}
 	switch status {
-	case "correct":
+	case VerificationStatusCorrect:
 		return verificationStatus{IsSet: true, Verified: true}, nil
-	case "false_positive":
+	case VerificationStatusFalsePositive:
 		return verificationStatus{IsSet: true, Verified: false}, nil
 	default:
 		return verificationStatus{}, fmt.Errorf("invalid verification status: %s", status)
@@ -1660,7 +1660,7 @@ func (c *Handler) canonicalizeExcludeList(exclude []string) []string {
 
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
 func (c *Handler) addToIgnoredSpecies(verified, ignoreSpecies string) error {
-	if verified == "false_positive" && ignoreSpecies != "" {
+	if verified == VerificationStatusFalsePositive && ignoreSpecies != "" {
 		return c.addSpeciesToIgnoredList(c.resolveExcludeName(ignoreSpecies))
 	}
 	return nil
@@ -1770,8 +1770,8 @@ func (c *Handler) AddComment(noteID uint, commentText string) error {
 func (c *Handler) AddReview(noteID uint, verified bool) error {
 	// Convert bool to string value
 	verifiedStr := map[bool]string{
-		true:  "correct",
-		false: "false_positive",
+		true:  VerificationStatusCorrect,
+		false: VerificationStatusFalsePositive,
 	}[verified]
 
 	review := &datastore.NoteReview{

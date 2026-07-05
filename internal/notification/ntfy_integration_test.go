@@ -19,10 +19,10 @@ import (
 // setupNtfyContainer creates a no-auth ntfy container and registers cleanup.
 func setupNtfyContainer(t *testing.T) *containers.NtfyContainer {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	c, err := containers.NewNtfyContainer(ctx, nil)
 	require.NoError(t, err, "failed to start ntfy container")
-	t.Cleanup(func() { _ = c.Terminate(context.Background()) })
+	t.Cleanup(func() { _ = c.Terminate(context.Background()) }) //nolint:gocritic // t.Context() is already cancelled when Cleanup runs; Terminate needs a live context
 	return c
 }
 
@@ -38,7 +38,7 @@ func shoutrrrNtfyURL(host, topic string) string {
 
 func TestNtfyShoutrrrDelivery_NoAuth(t *testing.T) {
 	container := setupNtfyContainer(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	host := container.GetHost(ctx)
 
 	tests := []struct {

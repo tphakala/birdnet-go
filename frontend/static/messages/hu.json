@@ -419,6 +419,7 @@
         "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
         "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
         "webserverRestartRequired": "Webszerver beállítások megváltoztak. Újraindítás szükséges.",
+        "oauthRestartRequired": "Hitelesítési szolgáltató beállítások megváltoztak. Újraindítás szükséges.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
@@ -5370,6 +5371,7 @@
     "restartFailed": "Az újraindítás kezdeményezése sikertelen",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

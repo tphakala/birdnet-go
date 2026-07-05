@@ -419,6 +419,7 @@
         "recalculatingThresholds": "Przeliczanie progów dynamicznych dla nowej wartości bazowej",
         "reconfiguringDynamicThresholds": "Ponowna konfiguracja progów dynamicznych...",
         "webserverRestartRequired": "Ustawienia serwera WWW zmienione. Wymagany restart.",
+        "oauthRestartRequired": "Ustawienia dostawcy uwierzytelniania zmienione. Wymagany restart.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Aktualizacja monitorowania poziomu dźwięku...",
@@ -5370,6 +5371,7 @@
     "restartFailed": "Nie udało się zainicjować ponownego uruchomienia",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"
