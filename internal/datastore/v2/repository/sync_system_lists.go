@@ -44,9 +44,12 @@ func SyncSystemLists(ctx context.Context, db *gorm.DB, settings *conf.Settings) 
 				Description: sl.desc,
 				IsSystem:    true,
 			}
+			// Explicitly update both "description" AND "is_system" on name conflict.
+			// This guarantees a pre-existing non-system list with the same name is
+			// correctly promoted, preventing a First() ErrRecordNotFound crash below.
 			err := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "name"}},
-				DoUpdates: clause.AssignmentColumns([]string{"description"}),
+				DoUpdates: clause.AssignmentColumns([]string{"description", "is_system"}),
 			}).Create(&list).Error
 			if err != nil {
 				return fmt.Errorf("failed to sync system list %s: %w", sl.name, err)

@@ -86,3 +86,33 @@ func TestSyncSystemLists(t *testing.T) {
 	assert.Equal(t, "cyanistes caeruleus", extCapList.Members[0].ScientificName)
 	assert.Equal(t, "passer domesticus", extCapList.Members[1].ScientificName)
 }
+
+func TestSyncSystemLists_ConflictingNonSystemList(t *testing.T) {
+	db := setupSpeciesListsTestDB(t)
+	ctx := t.Context()
+
+	// Simulate the bug scenario: a user or legacy script manually inserted a list
+	// with the exact matching name but marked as a normal user list (IsSystem: false).
+	preExistingList := entities.SpeciesList{
+		Name:        "YAML: Extended Capture",
+		Description: "Manual rogue list creation",
+		IsSystem:    false,
+	}
+	err := db.Create(&preExistingList).Error
+	require.NoError(t, err)
+
+	settings := &conf.Settings{}
+	settings.Realtime.ExtendedCapture.Species = []string{"Turdus merula"}
+
+	// Attempt sync. This would crash with GORM record not found prior to the fix.
+	err = SyncSystemLists(ctx, db, settings)
+	require.NoError(t, err, "SyncSystemLists should promote the non-system list and recover safely")
+
+	// Fetch the list back to verify it was updated and promoted to a system flag successfully
+	var updatedList entities.SpeciesList
+	err = db.Where("name = ?", "YAML: Extended Capture").First(&updatedList).Error
+	require.NoError(t, err)
+
+	assert.True(t, updatedList.IsSystem, "The pre-existing non-system list should be forced to IsSystem = true")
+	assert.Equal(t, "Configured via realtime.extendedcapture.species settings in config.yaml", updatedList.Description)
+}

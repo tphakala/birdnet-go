@@ -700,11 +700,7 @@
                   }
                   const isListOp = condition.operator === 'in' || condition.operator === 'not_in';
                   const supportsList = newProp === 'scientific_name' || newProp === 'species_name';
-                  if (
-                    condition.value &&
-                    condition.value.startsWith('list:') &&
-                    (!isListOp || !supportsList)
-                  ) {
+                  if (condition.value?.startsWith('list:') && (!isListOp || !supportsList)) {
                     condition.value = '';
                   }
                 }}
@@ -725,11 +721,7 @@
                   const supportsList =
                     condition.property === 'scientific_name' ||
                     condition.property === 'species_name';
-                  if (
-                    condition.value &&
-                    condition.value.startsWith('list:') &&
-                    (!isListOp || !supportsList)
-                  ) {
+                  if (condition.value?.startsWith('list:') && (!isListOp || !supportsList)) {
                     condition.value = '';
                   }
                   if (
