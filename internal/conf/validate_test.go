@@ -164,6 +164,77 @@ func TestValidateSoundLevelSettingsErrorMessage(t *testing.T) {
 	assert.Equal(t, expectedMsg, err.Error())
 }
 
+func TestValidateInfrequentTrackingSettings(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings InfrequentTrackingSettings
+		wantErr  bool
+	}{
+		{
+			name:     "disabled - should pass regardless of absence days",
+			settings: InfrequentTrackingSettings{Enabled: false, AbsenceDays: 0},
+			wantErr:  false,
+		},
+		{
+			name:     "enabled with valid absence days",
+			settings: InfrequentTrackingSettings{Enabled: true, AbsenceDays: 14},
+			wantErr:  false,
+		},
+		{
+			name:     "enabled with zero absence days - should fail",
+			settings: InfrequentTrackingSettings{Enabled: true, AbsenceDays: 0},
+			wantErr:  true,
+		},
+		{
+			name:     "enabled with negative absence days - should fail",
+			settings: InfrequentTrackingSettings{Enabled: true, AbsenceDays: -5},
+			wantErr:  true,
+		},
+		{
+			name:     "enabled with absence days over 365 - should fail",
+			settings: InfrequentTrackingSettings{Enabled: true, AbsenceDays: 366},
+			wantErr:  true,
+		},
+		{
+			name:     "enabled with boundary absence days 365 - should pass",
+			settings: InfrequentTrackingSettings{Enabled: true, AbsenceDays: 365},
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateInfrequentTrackingSettings(&tt.settings)
+
+			if tt.wantErr {
+				enhanced := requireEnhancedError(t, err)
+				assert.Equal(t, errors.CategoryValidation, enhanced.Category)
+				assert.Equal(t, "infrequent-tracking-absence-days", enhanced.Context["validation_type"])
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestValidateSpeciesTrackingSettings_RejectsInvalidInfrequentTracking guards the
+// actual settings-save entry point (conf.ValidateSettings -> validateRealtimeSettings
+// -> validateSpeciesTrackingSettings): before this test was added, this function
+// silently accepted any InfrequentTracking.AbsenceDays value, since only the
+// separate (and not save-path-wired) SpeciesTrackingSettings.Validate() method
+// checked it.
+func TestValidateSpeciesTrackingSettings_RejectsInvalidInfrequentTracking(t *testing.T) {
+	settings := SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 14,
+		SyncIntervalMinutes:  60,
+		InfrequentTracking:   InfrequentTrackingSettings{Enabled: true, AbsenceDays: -5},
+	}
+
+	err := validateSpeciesTrackingSettings(&settings)
+	requireEnhancedError(t, err)
+}
+
 func BenchmarkValidateSoundLevelSettings(b *testing.B) {
 	settings := &SoundLevelSettings{
 		Enabled:  true,
