@@ -73,12 +73,12 @@ Responsive Breakpoints:
     getTemperatureSymbol,
     type TemperatureUnit,
   } from '$lib/utils/formatters';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { dashboardSettings, speciesTrackingSettings } from '$lib/stores/settings';
   import {
     resolveNoveltyCategory,
     noveltyCategoryColorVar,
   } from '$lib/desktop/features/dashboard/utils/noveltyCategory';
-  import { ChevronLeft, ChevronRight, Star, XCircle } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, History, Star, XCircle } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import AnimatedCounter from './AnimatedCounter.svelte';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
@@ -710,6 +710,14 @@ Responsive Breakpoints:
   });
   const isToday = $derived(selectedDate === serverTodayDate);
 
+  // Absence threshold for the infrequent novelty tier; undefined disables it so
+  // the category never activates when infrequent tracking is turned off.
+  const infrequentThresholdDays = $derived(
+    $speciesTrackingSettings?.infrequentTracking?.enabled === true
+      ? ($speciesTrackingSettings.infrequentTracking.absenceDays ?? 14)
+      : undefined
+  );
+
   // Check for reduced motion preference for performance and accessibility
   const prefersReducedMotion = $derived(
     typeof window !== 'undefined'
@@ -1051,6 +1059,10 @@ Responsive Breakpoints:
           <div class="flex flex-col" style:gap="var(--grid-gap)">
             {#each sortedData as item, index (`${item.scientific_name}_${index}`)}
               {@const displayName = localizeSpeciesName(item.scientific_name, item.common_name)}
+              {@const noveltyCat = resolveNoveltyCategory(item, {
+                infrequentThresholdDays,
+                isToday,
+              })}
               <div
                 class="flex items-center species-row"
                 class:new-species={item.isNew && !prefersReducedMotion}
@@ -1084,7 +1096,7 @@ Responsive Breakpoints:
                     title={displayName}
                   >
                     <span class="truncate flex-1">{displayName}</span>
-                    {#if resolveNoveltyCategory(item) === 'lifetime'}
+                    {#if noveltyCat === 'lifetime'}
                       <span
                         class="inline-block shrink-0"
                         style:color={noveltyCategoryColorVar('lifetime')}
@@ -1092,7 +1104,7 @@ Responsive Breakpoints:
                       >
                         <Star class="size-3 fill-current" />
                       </span>
-                    {:else if resolveNoveltyCategory(item) === 'year'}
+                    {:else if noveltyCat === 'year'}
                       <span
                         class="shrink-0"
                         style:color={noveltyCategoryColorVar('year')}
@@ -1100,13 +1112,23 @@ Responsive Breakpoints:
                       >
                         📅
                       </span>
-                    {:else if resolveNoveltyCategory(item) === 'season'}
+                    {:else if noveltyCat === 'season'}
                       <span
                         class="shrink-0"
                         style:color={noveltyCategoryColorVar('season')}
                         title={`First time this ${item.current_season || 'season'} (${item.days_this_season ?? 0} day${(item.days_this_season ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         🌿
+                      </span>
+                    {:else if noveltyCat === 'infrequent'}
+                      <span
+                        class="inline-block shrink-0"
+                        style:color={noveltyCategoryColorVar('infrequent')}
+                        title={t('dashboard.dailySummary.tooltips.infrequent', {
+                          days: item.days_since_last_seen ?? 0,
+                        })}
+                      >
+                        <History class="size-3" />
                       </span>
                     {/if}
                   </a>

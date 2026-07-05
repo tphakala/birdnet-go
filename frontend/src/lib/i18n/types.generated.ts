@@ -510,6 +510,7 @@ export type TranslationKey =
   | 'dashboard.newSpeciesHighlights.categoryYear'
   | 'dashboard.newSpeciesHighlights.categorySeason'
   | 'dashboard.newSpeciesHighlights.categorySeasonNamed' // params: season
+  | 'dashboard.newSpeciesHighlights.categoryInfrequent'
   | 'dashboard.newSpeciesHighlights.maxConfidenceShort' // params: confidence
   | 'dashboard.newSpeciesHighlights.detections' // params: count
   | 'dashboard.newSpeciesHighlights.lastSeen' // params: days
@@ -532,6 +533,7 @@ export type TranslationKey =
   | 'dashboard.dailySummary.tooltips.hourlyDetections' // params: count, hour
   | 'dashboard.dailySummary.tooltips.biHourlyDetections' // params: count, startHour, endHour
   | 'dashboard.dailySummary.tooltips.sixHourlyDetections' // params: count, startHour, endHour
+  | 'dashboard.dailySummary.tooltips.infrequent' // params: days
   | 'dashboard.dailySummary.loading.preparing'
   | 'dashboard.dailySummary.loading.fetching'
   | 'dashboard.dailySummary.loading.error'
@@ -2019,6 +2021,7 @@ export type TranslationKey =
   | 'settings.notifications.templates.fields.detectionUrl'
   | 'settings.notifications.templates.fields.imageUrl'
   | 'settings.notifications.templates.fields.daysSinceFirstSeen'
+  | 'settings.notifications.templates.fields.daysSinceLastSeen'
   | 'settings.notifications.testNotification.title'
   | 'settings.notifications.testNotification.description'
   | 'settings.notifications.testNotification.whatHappens'
@@ -3094,6 +3097,12 @@ export type TranslationKey =
   | 'settings.species.tracking.seasonal.seasons.startMonth'
   | 'settings.species.tracking.seasonal.seasons.startDay'
   | 'settings.species.tracking.seasonal.seasons.hemisphereNote'
+  | 'settings.species.tracking.infrequent.title'
+  | 'settings.species.tracking.infrequent.description'
+  | 'settings.species.tracking.infrequent.enabled.label'
+  | 'settings.species.tracking.infrequent.enabled.helpText'
+  | 'settings.species.tracking.infrequent.absenceDays.label'
+  | 'settings.species.tracking.infrequent.absenceDays.helpText'
   | 'settings.species.tracking.months.january'
   | 'settings.species.tracking.months.february'
   | 'settings.species.tracking.months.march'
@@ -3252,6 +3261,7 @@ export type TranslationKey =
   | 'settings.alerts.schema.events.stream_disconnected'
   | 'settings.alerts.schema.events.stream_error'
   | 'settings.alerts.schema.events.detection_new_species'
+  | 'settings.alerts.schema.events.detection_infrequent_species'
   | 'settings.alerts.schema.events.detection_occurred'
   | 'settings.alerts.schema.events.application_started'
   | 'settings.alerts.schema.events.application_stopped'
@@ -3291,6 +3301,8 @@ export type TranslationKey =
   | 'settings.alerts.v2RequiredLink'
   | 'settings.alerts.builtInRules.newSpecies.name'
   | 'settings.alerts.builtInRules.newSpecies.description'
+  | 'settings.alerts.builtInRules.infrequentSpecies.name'
+  | 'settings.alerts.builtInRules.infrequentSpecies.description'
   | 'settings.alerts.builtInRules.streamDisconnected.name'
   | 'settings.alerts.builtInRules.streamDisconnected.description'
   | 'settings.alerts.builtInRules.streamError.name'
@@ -4069,6 +4081,7 @@ export type TranslationParams = {
     startHour: string | number;
     endHour: string | number;
   };
+  'dashboard.dailySummary.tooltips.infrequent': { days: string | number };
   'dashboard.recentDetections.modals.showSpecies': { species: string | number };
   'dashboard.recentDetections.modals.ignoreSpecies': { species: string | number };
   'dashboard.recentDetections.modals.showSpeciesConfirm': { species: string | number };

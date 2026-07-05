@@ -306,6 +306,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.speciestracking.seasonaltracking.enabled` | boolean | true to enable seasonal tracking |
 | `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 21) |
 | `realtime.speciestracking.seasonaltracking.seasons` | any |  |
+| `realtime.speciestracking.infrequenttracking.enabled` | boolean | true to enable infrequent species tracking |
+| `realtime.speciestracking.infrequenttracking.absencedays` | integer | Days since last detection before a return is flagged "infrequent" (default: 14) |
 | `realtime.extendedcapture.enabled` | boolean |  |
 | `realtime.extendedcapture.maxduration` | integer |  |
 | `realtime.extendedcapture.capturebufferseconds` | integer |  |

@@ -875,12 +875,13 @@ type LogDeduplicationSettings struct {
 
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
-	Enabled                      bool                     `yaml:"enabled" json:"enabled"`                                           // true to enable new species tracking
-	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 14)
-	SyncIntervalMinutes          int                      `yaml:"syncintervalminutes" json:"syncIntervalMinutes"`                   // Interval to sync with database (default: 60)
-	NotificationSuppressionHours int                      `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
-	YearlyTracking               YearlyTrackingSettings   `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
-	SeasonalTracking             SeasonalTrackingSettings `yaml:"seasonaltracking" json:"seasonalTracking"`                         // Settings for seasonal species tracking
+	Enabled                      bool                       `yaml:"enabled" json:"enabled"`                                           // true to enable new species tracking
+	NewSpeciesWindowDays         int                        `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 14)
+	SyncIntervalMinutes          int                        `yaml:"syncintervalminutes" json:"syncIntervalMinutes"`                   // Interval to sync with database (default: 60)
+	NotificationSuppressionHours int                        `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
+	YearlyTracking               YearlyTrackingSettings     `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
+	SeasonalTracking             SeasonalTrackingSettings   `yaml:"seasonaltracking" json:"seasonalTracking"`                         // Settings for seasonal species tracking
+	InfrequentTracking           InfrequentTrackingSettings `yaml:"infrequenttracking" json:"infrequentTracking"`                     // Settings for infrequent (rarely returning) species tracking
 }
 
 // YearlyTrackingSettings contains settings for tracking first arrivals each year
@@ -896,6 +897,13 @@ type SeasonalTrackingSettings struct {
 	Enabled    bool              `yaml:"enabled" json:"enabled"`                       // true to enable seasonal tracking
 	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 21)
 	Seasons    map[string]Season `yaml:"seasons" json:"seasons" jsonschema:"nullable"` // Season definitions
+}
+
+// InfrequentTrackingSettings contains settings for flagging species detected
+// for the first time after a long absence (rare returning visitors)
+type InfrequentTrackingSettings struct {
+	Enabled     bool `yaml:"enabled" json:"enabled"`         // true to enable infrequent species tracking
+	AbsenceDays int  `yaml:"absencedays" json:"absenceDays"` // Days since last detection before a return is flagged "infrequent" (default: 14)
 }
 
 // Season defines the start date for a season
@@ -1057,6 +1065,26 @@ func (s *SpeciesTrackingSettings) Validate() error {
 		if err := s.SeasonalTracking.Validate(); err != nil {
 			return err
 		}
+	}
+
+	// Validate infrequent tracking if enabled
+	if s.InfrequentTracking.Enabled {
+		if err := s.InfrequentTracking.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Validate validates the InfrequentTrackingSettings configuration
+func (i *InfrequentTrackingSettings) Validate() error {
+	// Validate absence days
+	if i.AbsenceDays < 1 || i.AbsenceDays > 365 {
+		return errors.Newf("infrequent absence days must be between 1 and 365, got %d", i.AbsenceDays).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 
 	return nil
