@@ -899,8 +899,7 @@ type SeasonalTrackingSettings struct {
 	Seasons    map[string]Season `yaml:"seasons" json:"seasons" jsonschema:"nullable"` // Season definitions
 }
 
-// InfrequentTrackingSettings contains settings for flagging species detected
-// for the first time after a long absence (rare returning visitors)
+// InfrequentTrackingSettings contains settings for flagging species detected for the first time after a long absence (rare returning visitors)
 type InfrequentTrackingSettings struct {
 	Enabled     bool `yaml:"enabled" json:"enabled"`         // true to enable infrequent species tracking
 	AbsenceDays int  `yaml:"absencedays" json:"absenceDays"` // Days since last detection before a return is flagged "infrequent" (default: 14)

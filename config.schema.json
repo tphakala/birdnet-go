@@ -1052,7 +1052,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "description": "InfrequentTrackingSettings contains settings for flagging species detected\nfor the first time after a long absence (rare returning visitors)"
+      "description": "InfrequentTrackingSettings contains settings for flagging species detected for the first time after a long absence (rare returning visitors)"
     },
     "LiveStreamSettings": {
       "properties": {
