@@ -1892,6 +1892,9 @@ func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
 // For the primary model entry, the live o.ModelInfo is returned rather than the
 // static registry template, so the reported Backend and Quantization match the
 // actually loaded model (e.g. ONNX/INT8 on the arm64 container default).
+// NumSpecies is always sourced from the live instance (not the template) so a
+// sliced or custom model reports its actual loaded label count rather than the
+// stock catalog number.
 func (o *Orchestrator) ModelInfos() []ModelInfo {
 	o.mu.RLock()
 	if o.models == nil {
@@ -1911,30 +1914,40 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
-		ref.entry.mu.Lock()
-		if ref.entry.instance == nil {
-			ref.entry.mu.Unlock()
-			continue
-		}
-		var info ModelInfo
-		if ref.id == primaryID {
-			// Return the live primary info so Backend/Quantization reflect the
-			// actually loaded model, not the static registry template.
-			info = primaryInfo
-		} else {
-			var exists bool
-			info, exists = ModelRegistry[ref.id]
-			if !exists {
-				info = ModelInfo{
-					ID:         ref.entry.instance.ModelID(),
-					Name:       ref.entry.instance.ModelName(),
-					Spec:       ref.entry.instance.Spec(),
-					NumSpecies: ref.entry.instance.NumSpecies(),
+		// Scope each entry's lock to a closure so a panic in any instance accessor
+		// (ModelID/ModelName/Spec/NumSpecies) still releases entry.mu via defer,
+		// instead of leaking the lock and wedging that model for the process life.
+		func() {
+			ref.entry.mu.Lock()
+			defer ref.entry.mu.Unlock()
+			if ref.entry.instance == nil {
+				return
+			}
+			var info ModelInfo
+			if ref.id == primaryID {
+				// Return the live primary info so Backend/Quantization reflect the
+				// actually loaded model, not the static registry template.
+				info = primaryInfo
+			} else {
+				var exists bool
+				info, exists = ModelRegistry[ref.id]
+				if !exists {
+					info = ModelInfo{
+						ID:   ref.entry.instance.ModelID(),
+						Name: ref.entry.instance.ModelName(),
+						Spec: ref.entry.instance.Spec(),
+					}
 				}
 			}
-		}
-		ref.entry.mu.Unlock()
-		infos = append(infos, info)
+			// NumSpecies depends on the model's loaded label file, which a user can
+			// override with a sliced or custom model (e.g. a regional Perch v2 slice
+			// with far fewer classes than the stock 14,795). Both the primary template
+			// (o.ModelInfo) and the static registry template carry the stock catalog
+			// count, so source it from the live instance to report what is actually
+			// loaded.
+			info.NumSpecies = ref.entry.instance.NumSpecies()
+			infos = append(infos, info)
+		}()
 	}
 	return infos
 }
