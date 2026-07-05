@@ -1914,40 +1914,43 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
-		// Scope each entry's lock to a closure so a panic in any instance accessor
-		// (ModelID/ModelName/Spec/NumSpecies) still releases entry.mu via defer,
-		// instead of leaking the lock and wedging that model for the process life.
-		func() {
-			ref.entry.mu.Lock()
-			defer ref.entry.mu.Unlock()
-			if ref.entry.instance == nil {
-				return
-			}
-			var info ModelInfo
-			if ref.id == primaryID {
-				// Return the live primary info so Backend/Quantization reflect the
-				// actually loaded model, not the static registry template.
-				info = primaryInfo
-			} else {
-				var exists bool
-				info, exists = ModelRegistry[ref.id]
-				if !exists {
-					info = ModelInfo{
-						ID:   ref.entry.instance.ModelID(),
-						Name: ref.entry.instance.ModelName(),
-						Spec: ref.entry.instance.Spec(),
-					}
+		// Capture the instance pointer under entry.mu, then release the lock before
+		// calling any instance method. Those accessors take their own per-model lock
+		// (BirdNET locks bn.mu), so holding entry.mu across them would stall
+		// PredictModel, which needs entry.mu only briefly on the inference hot path.
+		// This mirrors instanceFor / GetModelRuntimeInfo. The captured pointer stays
+		// usable even if the entry is torn down concurrently: the accessors below read
+		// label/settings/info state, not the native classifier that Close() frees.
+		ref.entry.mu.Lock()
+		instance := ref.entry.instance
+		ref.entry.mu.Unlock()
+		if instance == nil {
+			continue
+		}
+		var info ModelInfo
+		if ref.id == primaryID {
+			// Return the live primary info so Backend/Quantization reflect the
+			// actually loaded model, not the static registry template.
+			info = primaryInfo
+		} else {
+			var exists bool
+			info, exists = ModelRegistry[ref.id]
+			if !exists {
+				info = ModelInfo{
+					ID:   instance.ModelID(),
+					Name: instance.ModelName(),
+					Spec: instance.Spec(),
 				}
 			}
-			// NumSpecies depends on the model's loaded label file, which a user can
-			// override with a sliced or custom model (e.g. a regional Perch v2 slice
-			// with far fewer classes than the stock 14,795). Both the primary template
-			// (o.ModelInfo) and the static registry template carry the stock catalog
-			// count, so source it from the live instance to report what is actually
-			// loaded.
-			info.NumSpecies = ref.entry.instance.NumSpecies()
-			infos = append(infos, info)
-		}()
+		}
+		// NumSpecies depends on the model's loaded label file, which a user can
+		// override with a sliced or custom model (e.g. a regional Perch v2 slice
+		// with far fewer classes than the stock 14,795). Both the primary template
+		// (o.ModelInfo) and the static registry template carry the stock catalog
+		// count, so source it from the live instance to report what is actually
+		// loaded.
+		info.NumSpecies = instance.NumSpecies()
+		infos = append(infos, info)
 	}
 	return infos
 }
