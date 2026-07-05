@@ -218,6 +218,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.dashboard.speciesguide.shownotes` | boolean | default true |
 | `realtime.dashboard.speciesguide.showenrichments` | boolean | default true |
 | `realtime.dashboard.speciesguide.showsimilarspecies` | boolean | default true |
+| `realtime.dashboard.speciesguide.showtaxonomy` | boolean | default true |
 | `realtime.dynamicthreshold.enabled` | boolean | true to enable dynamic threshold |
 | `realtime.dynamicthreshold.debug` | boolean | true to enable debug mode |
 | `realtime.dynamicthreshold.trigger` | number | trigger threshold for dynamic threshold |

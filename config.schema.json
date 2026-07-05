@@ -2383,6 +2383,10 @@
         "showsimilarspecies": {
           "type": "boolean",
           "description": "default true"
+        },
+        "showtaxonomy": {
+          "type": "boolean",
+          "description": "default true"
         }
       },
       "additionalProperties": false,
