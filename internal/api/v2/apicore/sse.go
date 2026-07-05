@@ -97,9 +97,12 @@ type SSESoundLevelData struct {
 	EventType string `json:"eventType"`
 }
 
-// safeBaseName returns the filename component of a path, or empty string if the path is empty.
+// SafeBaseName returns the filename component of a path, or empty string if the path is empty.
 // Unlike filepath.Base("") which returns ".", this returns "" for empty inputs.
-func safeBaseName(path string) string {
+// It defines the clip-name privacy contract shared by the SSE feed and the REST
+// detection responses: only the basename is exposed, never the on-disk directory
+// layout, and an empty clip name stays empty (a truthful "no clip" signal).
+func SafeBaseName(path string) string {
 	if path == "" {
 		return ""
 	}
@@ -120,7 +123,7 @@ func NewSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImag
 		Confidence:     note.Confidence,
 		Latitude:       note.Latitude,
 		Longitude:      note.Longitude,
-		ClipName:       safeBaseName(note.ClipName),
+		ClipName:       SafeBaseName(note.ClipName),
 		Verified:       note.Verified,
 		Locked:         note.Locked,
 		Unlikely:       note.Unlikely,

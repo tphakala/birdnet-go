@@ -204,21 +204,23 @@
             </div>
           </div>
 
-          <!-- Audio and Spectrogram -->
-          <div class="relative bg-[var(--color-base-200)] rounded-lg p-4">
-            <AudioPlayer
-              audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-              detectionId={detection.id.toString()}
-              showSpectrogram={true}
-              spectrogramSize="lg"
-              spectrogramRaw={false}
-              responsive={true}
-              className="w-full mx-auto"
-              enableClipExtraction={clipExtractionEnabled}
-              clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
-              modelType={detection.modelType}
-            />
-          </div>
+          <!-- Audio and Spectrogram (shown only when this detection has a clip) -->
+          {#if detection.clipName}
+            <div class="relative bg-[var(--color-base-200)] rounded-lg p-4">
+              <AudioPlayer
+                audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
+                detectionId={detection.id.toString()}
+                showSpectrogram={true}
+                spectrogramSize="lg"
+                spectrogramRaw={false}
+                responsive={true}
+                className="w-full mx-auto"
+                enableClipExtraction={clipExtractionEnabled}
+                clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
+                modelType={detection.modelType}
+              />
+            </div>
+          {/if}
         </div>
 
         <!-- Right Column: Review Controls -->

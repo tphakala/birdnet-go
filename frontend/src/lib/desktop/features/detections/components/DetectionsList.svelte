@@ -67,6 +67,7 @@
   import DetectionCardMobile from './DetectionCardMobile.svelte';
   import DetectionRow from './DetectionRow.svelte';
   import DetectionsCardView from './DetectionsCardView.svelte';
+  import { appState } from '$lib/stores/appState.svelte';
 
   type SortField = 'dateTime' | 'species' | 'confidence' | 'status';
   type SortDirection = 'asc' | 'desc';
@@ -94,6 +95,14 @@
     onSortChange,
     className = '',
   }: Props = $props();
+
+  // Show the Recording column when audio export is enabled (so it stays visible
+  // even for a page that happens to have no clips yet) OR when any visible row
+  // actually has a clip (so historical clips remain reachable after export is
+  // turned off). The per-row spectrogram is still gated on detection.clipName.
+  let showRecordingColumn = $derived(
+    appState.audioExportEnabled || (data?.notes ?? []).some(d => Boolean(d.clipName))
+  );
 
   // Generate title based on query type
   const title = $derived.by(() => {
@@ -618,8 +627,11 @@
                   direction={sortDirection}
                   onSort={handleSort}
                 />
-                <th scope="col" class="hidden md:table-cell">{t('detections.headers.recording')}</th
-                >
+                {#if showRecordingColumn}
+                  <th scope="col" class="hidden md:table-cell"
+                    >{t('detections.headers.recording')}</th
+                  >
+                {/if}
                 <th scope="col">{t('detections.headers.actions')}</th>
               </tr>
             </thead>
@@ -636,6 +648,7 @@
                 >
                   <DetectionRow
                     {detection}
+                    {showRecordingColumn}
                     {onDetailsClick}
                     isExcluded={isSpeciesExcluded(detection.commonName)}
                     selectionActive={selection.selectionActive}

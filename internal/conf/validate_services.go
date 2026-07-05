@@ -572,7 +572,7 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 	authType := strings.ToLower(auth.Type)
 
 	// Empty auth type defaults to "none" - this is valid
-	if authType == "" || authType == "none" {
+	if authType == "" || authType == "none" { //nolint:goconst // auth-type value, not the RetentionPolicyNone constant
 		return nil
 	}
 

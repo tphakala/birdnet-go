@@ -40,8 +40,16 @@ const (
 	ConfigKeyRangeFilterPassUnmappedSpecies = "birdnet.rangefilter.passunmappedspecies"
 	ConfigKeyRangeFilterDebug               = "birdnet.rangefilter.debug"
 
+	// Web Server Configuration
+	ConfigKeyWebServerPort = "webserver.port"
+
 	// Security Configuration
-	ConfigKeyBaseURL = "security.baseurl"
+	ConfigKeyBaseURL          = "security.baseurl"
+	ConfigKeySecurityHost     = "security.host"
+	ConfigKeySecurityAutoTLS  = "security.autotls"
+	ConfigKeySecurityTLSMode  = "security.tlsmode"
+	ConfigKeySecurityTLSPort  = "security.tlsport"
+	ConfigKeySecurityRedirect = "security.redirecttohttps"
 )
 
 // Environment variable names that map to configuration keys.
@@ -69,8 +77,16 @@ const (
 	EnvVarRangeFilterPassUnmappedSpecies = "BIRDNET_RANGEFILTER_PASSUNMAPPEDSPECIES"
 	EnvVarRangeFilterDebug               = "BIRDNET_RANGEFILTER_DEBUG"
 
+	// Web Server Configuration
+	EnvVarWebServerPort = "BIRDNET_WEBSERVER_PORT"
+
 	// Security Configuration
-	EnvVarBaseURL = "BIRDNET_URL"
+	EnvVarBaseURL          = "BIRDNET_URL"
+	EnvVarSecurityHost     = "BIRDNET_SECURITY_HOST"
+	EnvVarSecurityAutoTLS  = "BIRDNET_SECURITY_AUTOTLS"
+	EnvVarSecurityTLSMode  = "BIRDNET_SECURITY_TLSMODE"
+	EnvVarSecurityTLSPort  = "BIRDNET_SECURITY_TLSPORT"
+	EnvVarSecurityRedirect = "BIRDNET_SECURITY_REDIRECTTOHTTPS"
 )
 
 // Validation constraint constants for environment variable ranges.
@@ -130,8 +146,16 @@ func getEnvBindings() []envBinding {
 		{ConfigKeyRangeFilterPassUnmappedSpecies, EnvVarRangeFilterPassUnmappedSpecies, validateEnvBool},
 		{ConfigKeyRangeFilterDebug, EnvVarRangeFilterDebug, validateEnvBool},
 
+		// Web Server Configuration
+		{ConfigKeyWebServerPort, EnvVarWebServerPort, validateEnvPort},
+
 		// Security Configuration
 		{ConfigKeyBaseURL, EnvVarBaseURL, validateEnvBaseURL},
+		{ConfigKeySecurityHost, EnvVarSecurityHost, nil},
+		{ConfigKeySecurityAutoTLS, EnvVarSecurityAutoTLS, validateEnvBool},
+		{ConfigKeySecurityTLSMode, EnvVarSecurityTLSMode, validateEnvTLSMode},
+		{ConfigKeySecurityTLSPort, EnvVarSecurityTLSPort, validateEnvPort},
+		{ConfigKeySecurityRedirect, EnvVarSecurityRedirect, validateEnvBool},
 	}
 }
 
@@ -273,6 +297,27 @@ func validateEnvThreads(value string) error {
 	return nil
 }
 
+func validateEnvPort(value string) error {
+	value = strings.TrimSpace(value)
+	port, err := strconv.Atoi(value)
+	if err != nil {
+		return fmt.Errorf("invalid port: %w", err)
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535, got %d", port)
+	}
+	return nil
+}
+
+func validateEnvTLSMode(value string) error {
+	value = strings.TrimSpace(strings.ToLower(value))
+	validModes := []string{"", "autotls", "manual", "selfsigned"}
+	if !slices.Contains(validModes, value) {
+		return fmt.Errorf("must be one of: autotls, manual, selfsigned (or empty to disable)")
+	}
+	return nil
+}
+
 func validateEnvRangeFilterModel(value string) error {
 	value = strings.TrimSpace(value)
 	validModels := []string{"latest", "legacy", "v3"}
@@ -351,16 +396,21 @@ func canonicalizeValue(configKey, envValue string) {
 	// Determine value type based on config key and canonicalize accordingly
 	switch configKey {
 	// Boolean values
-	case ConfigKeyDebug, ConfigKeyUseXNNPACK, ConfigKeyRangeFilterPassUnmappedSpecies, ConfigKeyRangeFilterDebug:
+	case ConfigKeyDebug, ConfigKeyUseXNNPACK, ConfigKeyRangeFilterPassUnmappedSpecies, ConfigKeyRangeFilterDebug,
+		ConfigKeySecurityAutoTLS, ConfigKeySecurityRedirect:
 		if parsed, err := strconv.ParseBool(strings.ToLower(trimmed)); err == nil {
 			viper.Set(configKey, parsed)
 		}
 
-	// Integer values
+	// Integer values (ports are stored as strings but trimmed)
 	case ConfigKeyThreads:
 		if parsed, err := strconv.Atoi(trimmed); err == nil {
 			viper.Set(configKey, parsed)
 		}
+
+	// Port values - trim whitespace, store as clean string
+	case ConfigKeyWebServerPort, ConfigKeySecurityTLSPort:
+		viper.Set(configKey, trimmed)
 
 	// Float64 values
 	case ConfigKeyLatitude, ConfigKeyLongitude, ConfigKeySensitivity,
@@ -373,6 +423,13 @@ func canonicalizeValue(configKey, envValue string) {
 	case ConfigKeyLocale:
 		// Canonicalize locale to lowercase
 		viper.Set(configKey, strings.ToLower(trimmed))
+
+	case ConfigKeySecurityTLSMode:
+		// TLS mode is case-insensitive; canonicalize to lowercase
+		viper.Set(configKey, strings.ToLower(trimmed))
+
+	case ConfigKeySecurityHost:
+		viper.Set(configKey, trimmed)
 
 	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath, ConfigKeyRangeFilterLabelsPath:
 		// Regular string values - just trim whitespace

@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -92,8 +93,10 @@ type Server struct {
 	staticServer *StaticFileServer
 	spaHandler   *SPAHandler
 
-	// HTTP redirect server (when TLS is enabled with manual/self-signed certs)
-	httpRedirectServer *http.Server
+	// HTTP server for redirect/ACME challenges (when TLS is enabled). Stored from
+	// the startBlocking goroutine and read from ShutdownWithContext on another
+	// goroutine, so access goes through atomic load/store.
+	httpRedirectServer atomic.Pointer[http.Server]
 
 	// Lifecycle management
 	startTime time.Time
@@ -623,8 +626,6 @@ func (s *Server) startBlocking() error {
 	var err error
 	switch {
 	case s.config.AutoTLS:
-		// AutoTLS with Let's Encrypt
-		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)")
 		// Configure persistent cert cache so certificates survive restarts.
 		// Without this, Echo's AutoTLSManager has no storage backend and certs
 		// are lost on every shutdown, triggering a fresh ACME request each time
@@ -651,7 +652,47 @@ func (s *Server) startBlocking() error {
 				Build()
 		}
 		s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(host)
-		err = s.echo.StartAutoTLS(addr)
+
+		// Start HTTP server on the configured port for ACME HTTP-01 challenges.
+		// autocert.HTTPHandler serves the ACME challenges and passes non-ACME
+		// traffic to the fallback:
+		// - RedirectToHTTPS=false: serve the app over plain HTTP.
+		// - RedirectToHTTPS=true: 308-redirect to the external HTTPS URL. The
+		//   target authority is the advertised base URL / host (RedirectAuthority),
+		//   never the internal TLS port, which is unreachable behind container port
+		//   mappings such as host 443 -> container 8443.
+		var httpFallback http.Handler
+		if s.config.RedirectToHTTPS {
+			httpFallback = httpsRedirectHandler(s.config.RedirectAuthority, "")
+		} else {
+			httpFallback = s.echo
+		}
+		redirectSrv := &http.Server{
+			Addr:         addr,
+			Handler:      s.echo.AutoTLSManager.HTTPHandler(httpFallback),
+			ReadTimeout:  s.config.ReadTimeout,
+			WriteTimeout: s.config.WriteTimeout,
+		}
+		s.httpRedirectServer.Store(redirectSrv)
+
+		// Pre-bind the HTTP listener so ACME challenges work. Fail fast if the
+		// port is unavailable rather than discovering it asynchronously.
+		httpLn, listenErr := net.Listen("tcp", addr)
+		if listenErr != nil {
+			return fmt.Errorf("AutoTLS: cannot bind HTTP listener on %s (required for ACME HTTP-01 challenges): %w", addr, listenErr)
+		}
+		go s.serveHTTPOnListener(redirectSrv, httpLn)
+
+		// Start HTTPS server on TLS port (this blocks)
+		tlsAddr := s.config.TLSAddress()
+		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)",
+			logger.String("https_address", tlsAddr),
+			logger.String("http_address", addr),
+		)
+		err = s.echo.StartAutoTLS(tlsAddr)
+		if err != nil {
+			_ = redirectSrv.Close()
+		}
 	case s.config.TLSEnabled:
 		// Manual/Self-signed TLS: HTTPS on TLSPort, HTTP stays on configured port
 		tlsAddr := s.config.TLSAddress()
@@ -664,15 +705,18 @@ func (s *Server) startBlocking() error {
 
 		// Start HTTP redirect server on the regular port if configured
 		if s.config.RedirectToHTTPS {
-			s.httpRedirectServer = s.newHTTPRedirectServer(addr, s.config.TLSPort)
-			go s.serveHTTPRedirect()
+			redirectSrv := s.newHTTPRedirectServer(addr, s.config.TLSPort)
+			s.httpRedirectServer.Store(redirectSrv)
+			go s.serveHTTPRedirect(redirectSrv)
 		}
 
 		// Start HTTPS server on TLS port (this blocks)
 		err = s.echo.StartTLS(tlsAddr, s.config.TLSCertFile, s.config.TLSKeyFile)
 		// If HTTPS startup failed, shut down the redirect server
-		if err != nil && s.httpRedirectServer != nil {
-			_ = s.httpRedirectServer.Close()
+		if err != nil {
+			if srv := s.httpRedirectServer.Load(); srv != nil {
+				_ = srv.Close()
+			}
 		}
 	default:
 		// Plain HTTP
@@ -722,8 +766,8 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 	}
 
 	// Shutdown HTTP redirect server if running
-	if s.httpRedirectServer != nil {
-		if err := s.httpRedirectServer.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
+	if srv := s.httpRedirectServer.Load(); srv != nil {
+		if err := srv.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
 			s.slogger.Warn("Error shutting down HTTP redirect server", logger.Error(err))
 		}
 	}
@@ -754,43 +798,71 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 	return nil
 }
 
+// httpsRedirectHandler returns an http.Handler that 308-redirects requests to
+// HTTPS. When externalAuthority is non-empty it is used verbatim as the target
+// host[:port] (the externally advertised address). Otherwise the request host is
+// reused with fallbackPort appended; an empty or "443" fallbackPort omits the
+// port, assuming the standard HTTPS port. IPv6 hosts are bracketed correctly.
+func httpsRedirectHandler(externalAuthority, fallbackPort string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hostPort := externalAuthority
+		if hostPort == "" {
+			host := r.Host
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+			host = strings.TrimPrefix(host, "[")
+			host = strings.TrimSuffix(host, "]")
+			switch fallbackPort {
+			case "", conf.DefaultHTTPSPort:
+				hostPort = host
+				if strings.Contains(host, ":") {
+					hostPort = "[" + host + "]"
+				}
+			default:
+				hostPort = net.JoinHostPort(host, fallbackPort)
+			}
+		}
+		target := "https://" + hostPort + r.URL.RequestURI()
+		http.Redirect(w, r, target, http.StatusPermanentRedirect)
+	})
+}
+
 // newHTTPRedirectServer creates an HTTP server that redirects all requests to HTTPS.
 // The server is created synchronously to avoid a race between assignment and shutdown.
 func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 	if tlsPort == "" {
-		tlsPort = "8443"
+		tlsPort = defaultTLSPort
 	}
-
-	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract hostname, stripping any port from the Host header
-		host := r.Host
-		if h, _, err := net.SplitHostPort(r.Host); err == nil {
-			host = h
-		}
-		target := "https://" + host
-		if tlsPort != "443" {
-			target += ":" + tlsPort
-		}
-		target += r.URL.RequestURI()
-		http.Redirect(w, r, target, http.StatusPermanentRedirect)
-	})
 
 	return &http.Server{
 		Addr:         httpAddr,
-		Handler:      redirectHandler,
+		Handler:      httpsRedirectHandler(s.config.RedirectAuthority, tlsPort),
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
 }
 
 // serveHTTPRedirect starts listening on the HTTP redirect server.
-// Must be called in a goroutine after newHTTPRedirectServer.
-func (s *Server) serveHTTPRedirect() {
+// Must be called in a goroutine after newHTTPRedirectServer, with the server it
+// stored, so it does not race with a concurrent shutdown reading the field.
+func (s *Server) serveHTTPRedirect(srv *http.Server) {
 	s.slogger.Info("Starting HTTP->HTTPS redirect server",
-		logger.String("http_address", s.httpRedirectServer.Addr),
+		logger.String("http_address", srv.Addr),
 	)
 
-	if err := s.httpRedirectServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.slogger.Error("HTTP redirect server error", logger.Error(err))
+	}
+}
+
+// serveHTTPOnListener serves the HTTP redirect/ACME server on a pre-bound listener.
+func (s *Server) serveHTTPOnListener(srv *http.Server, ln net.Listener) {
+	s.slogger.Info("Starting HTTP->HTTPS redirect server",
+		logger.String("http_address", srv.Addr),
+	)
+
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.slogger.Error("HTTP redirect server error", logger.Error(err))
 	}
 }
@@ -851,6 +923,14 @@ func (s *Server) registerSPARoutes() {
 		"/ui/analytics",
 		"/ui/analytics/species",
 		"/ui/analytics/advanced",
+		"/ui/analytics/summary",
+		"/ui/analytics/activity",
+		"/ui/analytics/trends",
+		"/ui/analytics/biodiversity",
+		"/ui/analytics/review",
+		"/ui/analytics/nocturnal",
+		"/ui/analytics/weather",
+		"/ui/analytics/soundscape",
 		"/ui/search",
 		"/ui/about",
 	}

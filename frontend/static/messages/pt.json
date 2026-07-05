@@ -206,10 +206,19 @@
     "componentError": "Erro ao carregar componente",
     "speciesAnalytics": "Análise de espécies",
     "detectionDetails": "Detalhes da detecção",
-    "settingsNotAvailable": "Configurações não disponíveis"
+    "settingsNotAvailable": "Configurações não disponíveis",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Análise - Atividade noturna",
+    "analyticsWeather": "Análise - Correlação climática",
+    "analyticsSoundscape": "Análise - Paisagem sonora"
   },
   "navigation": {
     "dashboard": "Painel",
+    "liveAudio": "Áudio ao vivo",
     "settingsMenu": "Menu de configurações",
     "theme": "Tema",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Reportar um erro no GitHub (abre em nova janela)",
     "askQuestionAriaLabel": "Fazer uma pergunta no GitHub Discussions (abre em nova janela)",
     "viewOnGithubAriaLabel": "Ver BirdNET-Go no GitHub (abre em nova janela)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Explorar",
+      "patterns": "Padrões",
+      "environment": "Ambiente",
+      "dataQuality": "Qualidade dos dados"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Recalculando limiares dinâmicos para novo valor base",
         "reconfiguringDynamicThresholds": "A reconfigurar limiares dinâmicos...",
         "webserverRestartRequired": "Definições do servidor web alteradas. Reinício necessário.",
+        "oauthRestartRequired": "Definições do provedor de autenticação alteradas. Reinício necessário.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "A atualizar monitorização do nível de som...",
@@ -1795,11 +1811,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Visão geral",
         "patterns": "Padrões de atividade",
         "trends": "Tendências",
         "biodiversity": "Biodiversidade",
-        "quality": "Revisão e precisão"
+        "quality": "Revisão e precisão",
+        "summary": "Summary",
+        "nocturnal": "Atividade noturna",
+        "weather": "Clima",
+        "soundscape": "Paisagem sonora"
       },
       "aria": {
         "tabs": "Seções de análise"
@@ -1819,13 +1838,25 @@
         "notEnoughDataHint": "Este gráfico precisa de pelo menos {min} pontos de dados. Continue gravando e volte em breve.",
         "export": "Exportar",
         "exportComingSoon": "A exportação CSV chegará em breve."
-      },
-      "comingSoon": {
-        "description": "Esta seção está em construção e chegará numa atualização futura."
       }
     },
-    "title": "Visão geral",
     "loadingError": "Falha ao carregar alguns dados analíticos. Por favor, tente novamente mais tarde.",
+    "comingSoon": {
+      "badge": "Em breve",
+      "plannedTitle": "Funcionalidades previstas",
+      "weather": {
+        "description": "Atividade das aves rastreada em relação às condições meteorológicas locais. Esta vista correlacionará as deteções com temperatura, vento e chuva.",
+        "feature1": "Correlacionar deteções com temperatura, vento e precipitação",
+        "feature2": "Ver como as frentes meteorológicas alteram a atividade das espécies",
+        "feature3": "Comparar a atividade sazonal com dados climáticos históricos"
+      },
+      "soundscape": {
+        "description": "Uma análise do caráter acústico global do ambiente, utilizando índices acústicos para resumir a diversidade da paisagem sonora ao longo do tempo.",
+        "feature1": "Índices acústicos que resumem a complexidade da paisagem sonora",
+        "feature2": "Rastrear a biodiversidade através do som ambiente ao longo do tempo",
+        "feature3": "Identificar coros do amanhecer e do entardecer no registo acústico"
+      }
+    },
     "stats": {
       "totalDetections": "Total de detecções",
       "uniqueSpecies": "Espécies únicas",
@@ -5372,6 +5403,7 @@
     "restartFailed": "Falha ao iniciar a reinicialização",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

@@ -319,11 +319,12 @@ type BufferOptions struct {
 
 // EncodePCMToBuffer encodes opts.PCMData to a FLAC stream and returns it as an
 // in-memory buffer. Unlike EncodePCM it writes to a non-seekable bytes.Buffer,
-// so no SEEKTABLE is emitted and the STREAMINFO total-samples/MD5 fields are
-// left at their spec-legal "unknown" sentinels (the same result as FFmpeg
-// encoding to a pipe). A non-zero GainDB is applied in Go before encoding;
-// opts.PCMData itself is never modified. Intended for upload paths (e.g.
-// BirdWeather) that need FLAC bytes in memory rather than a file.
+// so no SEEKTABLE is emitted. The STREAMINFO total-samples field is finalized
+// up front from the PCM length (go-flac verifies it against the samples actually
+// written on Close), so consumers that read the sample count for duration get a
+// correct value without a seekable sink; the MD5 field is left at its spec-legal
+// "unknown" sentinel for this streaming path. A non-zero GainDB is applied in Go
+// before encoding; opts.PCMData itself is never modified.
 func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer, error) {
 	if opts == nil {
 		return nil, errors.Newf("flac encode: nil options").
@@ -339,11 +340,22 @@ func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer,
 		return nil, ctxErr
 	}
 
+	// Derive the inter-channel sample count (frames) from the PCM length so
+	// go-flac can write a finalized STREAMINFO.total_samples up front on a
+	// non-seekable sink. validateEncodeInput has already confirmed the length is
+	// a whole number of frames, so this division is exact.
+	bytesPerFrame := (opts.BitDepth / 8) * opts.Channels
+	totalSamples := uint64(len(opts.PCMData) / bytesPerFrame)
+
 	cfg := goflac.Config{
 		SampleRate:       opts.SampleRate,
 		BitDepth:         opts.BitDepth,
 		Channels:         opts.Channels,
 		CompressionLevel: defaultCompressionLevel,
+		// TotalSamples finalizes STREAMINFO.total_samples in the header without a
+		// seek-back, so a bytes.Buffer sink still reports the correct duration.
+		// go-flac verifies it against the samples written on Close.
+		TotalSamples: totalSamples,
 		// No SeekTableInterval: a bytes.Buffer is not an io.WriteSeeker, and
 		// go-flac rejects a seektable on a non-seekable sink. Short upload clips
 		// do not need one.

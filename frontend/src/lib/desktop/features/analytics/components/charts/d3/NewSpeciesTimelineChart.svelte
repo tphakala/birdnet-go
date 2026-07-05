@@ -54,15 +54,13 @@
   // (scientific name) so a species keeps a stable row/color across locales; only
   // the axis tick label and the tooltip use `displayName`.
   const localizedData = $derived(
-    data.map(
-      (d): LocalizedNewSpeciesDatum => ({
-        ...d,
-        // Logical OR (not ??) so an empty-string scientific name also falls back to
-        // the common name; an empty key would collapse distinct rows onto one band.
-        key: d.scientificName || d.commonName,
-        displayName: localizeSpeciesName(d.scientificName, d.commonName),
-      })
-    )
+    data.map((d): LocalizedNewSpeciesDatum => ({
+      ...d,
+      // Logical OR (not ??) so an empty-string scientific name also falls back to
+      // the common name; an empty key would collapse distinct rows onto one band.
+      key: d.scientificName || d.commonName,
+      displayName: localizeSpeciesName(d.scientificName, d.commonName),
+    }))
   );
 
   // Styling constants

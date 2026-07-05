@@ -172,6 +172,12 @@ export interface SoundLevelSettings {
   interval: number;
 }
 
+// Audio gain bounds in dB, shared by the sound card, stream, and export gain
+// controls. Mirrors the backend MinAudioGain/MaxAudioGain validation range so
+// the frontend clamp and sliders stay in sync if the range ever changes.
+export const AUDIO_GAIN_MIN_DB = -40;
+export const AUDIO_GAIN_MAX_DB = 40;
+
 // Stream type constants
 export const StreamTypes = {
   RTSP: 'rtsp',
@@ -220,6 +226,7 @@ export interface StreamConfig {
   models?: string[]; // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
   equalizer?: EqualizerSettings; // Per-stream EQ (undefined = use global)
   quietHours?: QuietHoursConfig; // Quiet hours configuration
+  gain?: number; // Input gain in dB (0 = no adjustment)
 }
 
 // ChannelEnergy represents the energy level of a single audio channel

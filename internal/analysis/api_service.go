@@ -192,8 +192,12 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	serviceCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 
-	// Create OAuth2 server.
-	s.oauth2Server = security.NewOAuth2Server(serviceCtx)
+	// Create OAuth2 server. Session/auth cookies must be Secure only when clients
+	// reach the app over HTTPS; derive that from the effective web-server TLS
+	// config, which knows the AutoTLS redirect default and cert presence that the
+	// persisted settings alone cannot express.
+	webCfg := api.ConfigFromSettings(s.settings)
+	s.oauth2Server = security.NewOAuth2Server(serviceCtx, webCfg.SessionCookiesSecure(s.settings))
 
 	// Create and start the HTTP API server.
 	GetLogger().Info("starting HTTP server")

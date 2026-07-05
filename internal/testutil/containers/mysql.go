@@ -43,6 +43,9 @@ type MySQLConfig struct {
 	InitScripts []string
 }
 
+// defaultMySQLImageTag is the MySQL image tag used when a config does not set one.
+const defaultMySQLImageTag = "8.0"
+
 // DefaultMySQLConfig returns a MySQLConfig with sensible defaults.
 func DefaultMySQLConfig() MySQLConfig {
 	return MySQLConfig{
@@ -50,7 +53,7 @@ func DefaultMySQLConfig() MySQLConfig {
 		RootPassword: "test",
 		Username:     "testuser",
 		Password:     "testpass",
-		ImageTag:     "8.0",
+		ImageTag:     defaultMySQLImageTag,
 	}
 }
 
@@ -63,11 +66,12 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 	}
 
 	// Build container request
-	opts := []testcontainers.ContainerCustomizer{
+	opts := make([]testcontainers.ContainerCustomizer, 0, 3+len(config.InitScripts))
+	opts = append(opts,
 		mysql.WithDatabase(config.Database),
 		mysql.WithUsername(config.Username),
 		mysql.WithPassword(config.Password),
-	}
+	)
 
 	// Add init scripts if provided
 	for _, script := range config.InitScripts {
@@ -78,8 +82,15 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 	// Containers are created fresh for each test run to ensure isolation.
 
 	// Create and start container
-	// Note: mysql.RunContainer already handles waiting for the container to be ready
-	mysqlContainer, err := mysql.RunContainer(ctx, opts...)
+	// Note: mysql.Run already handles waiting for the container to be ready.
+	// Fall back to the default tag when a caller supplies a config without one,
+	// so the image is never the invalid "mysql:".
+	imageTag := config.ImageTag
+	if imageTag == "" {
+		imageTag = defaultMySQLImageTag
+	}
+	image := fmt.Sprintf("mysql:%s", imageTag)
+	mysqlContainer, err := mysql.Run(ctx, image, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start MySQL container: %w", err)
 	}

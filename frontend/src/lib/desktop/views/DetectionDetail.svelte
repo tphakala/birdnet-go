@@ -894,42 +894,44 @@
     <!-- Hero Section -->
     {@render heroSection(detection)}
 
-    <!-- Media Section -->
-    <section class="surface-card" aria-labelledby="media-heading">
-      <div class="p-5 md:p-6">
-        <h2 id="media-heading" class="section-heading !mb-0">
-          {t('detections.media.title')}
-        </h2>
-        {#if clipExtractionEnabled}
-          <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
-            {t('detections.media.clipHint')}
-          </p>
-        {:else}
-          <div class="mb-3"></div>
-        {/if}
-        <div
-          role="region"
-          aria-label={t('detections.detail.aria.audioRecordingFor', {
-            name: localizeSpeciesName(detection.scientificName, detection.commonName),
-          })}
-        >
-          <div class="detail-audio-container">
-            <AudioPlayer
-              audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-              detectionId={detection.id.toString()}
-              showSpectrogram={true}
-              spectrogramSize="lg"
-              spectrogramRaw={false}
-              responsive={true}
-              className="w-full"
-              enableClipExtraction={clipExtractionEnabled}
-              clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
-              modelType={detection.modelType}
-            />
+    <!-- Media Section (shown only when this detection has a clip) -->
+    {#if detection.clipName}
+      <section class="surface-card" aria-labelledby="media-heading">
+        <div class="p-5 md:p-6">
+          <h2 id="media-heading" class="section-heading !mb-0">
+            {t('detections.media.title')}
+          </h2>
+          {#if clipExtractionEnabled}
+            <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
+              {t('detections.media.clipHint')}
+            </p>
+          {:else}
+            <div class="mb-3"></div>
+          {/if}
+          <div
+            role="region"
+            aria-label={t('detections.detail.aria.audioRecordingFor', {
+              name: localizeSpeciesName(detection.scientificName, detection.commonName),
+            })}
+          >
+            <div class="detail-audio-container">
+              <AudioPlayer
+                audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
+                detectionId={detection.id.toString()}
+                showSpectrogram={true}
+                spectrogramSize="lg"
+                spectrogramRaw={false}
+                responsive={true}
+                className="w-full"
+                enableClipExtraction={clipExtractionEnabled}
+                clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
+                modelType={detection.modelType}
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    {/if}
 
     <!-- Species Guide panel (opt-in; gated on settings). The comparison mounts
          whenever the guide is enabled: description and enrichments are part of

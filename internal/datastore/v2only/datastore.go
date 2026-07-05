@@ -37,6 +37,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -2496,6 +2497,65 @@ func (ds *Datastore) ClearNoteClipPathsByNames(clipNames []string) (int64, error
 	}
 
 	return totalAffected, nil
+}
+
+// GetNoteClipReferences returns up to limit detections with a non-empty clip_name
+// and ID greater than afterID, ordered by ID ascending (keyset pagination). It is
+// used by the clip reconcile crawler to walk clip references in bounded chunks.
+//
+// CompletionTime keys on the end_time column, which stores the capture COMPLETION
+// time as an absolute Unix-millis value (Save writes note.EndTime.UnixMilli(); the
+// entity field's "offset from source start" comment is stale). This matches the v1
+// store's use of Note.EndTime and the media grace-poll, so the crawler's recency
+// guard protects a clip until its capture actually completes, even for extended
+// captures. When end_time is NULL, fall back to detected_at (detection time); such
+// rows are older detections without a recorded end, safe to treat as long-complete.
+func (ds *Datastore) GetNoteClipReferences(afterID uint, limit int) ([]diskmanager.ClipReference, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("limit must be positive: %d", limit)
+	}
+
+	ctx := context.Background()
+	detectionsTable := ds.manager.TablePrefix() + "detections"
+
+	var rows []struct {
+		ID         uint
+		ClipName   *string
+		DetectedAt int64
+		EndTime    *int64
+	}
+	err := ds.manager.DB().WithContext(ctx).
+		Table(detectionsTable).
+		Select("id", "clip_name", "detected_at", "end_time").
+		Where("id > ? AND clip_name IS NOT NULL AND clip_name <> ''", afterID).
+		Order("id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get clip references after id %d: %w", afterID, err)
+	}
+
+	refs := make([]diskmanager.ClipReference, 0, len(rows))
+	for i := range rows {
+		clip := ""
+		if rows[i].ClipName != nil {
+			clip = *rows[i].ClipName
+		}
+		// Prefer end_time (absolute completion, ms); fall back to detected_at (s).
+		var completion time.Time
+		switch {
+		case rows[i].EndTime != nil:
+			completion = time.UnixMilli(*rows[i].EndTime)
+		case rows[i].DetectedAt > 0:
+			completion = time.Unix(rows[i].DetectedAt, 0)
+		}
+		refs = append(refs, diskmanager.ClipReference{
+			ID:             rows[i].ID,
+			ClipName:       clip,
+			CompletionTime: completion,
+		})
+	}
+	return refs, nil
 }
 
 // ============================================================

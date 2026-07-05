@@ -206,10 +206,19 @@
     "componentError": "Komponens betöltési hiba",
     "speciesAnalytics": "Faj elemzés",
     "detectionDetails": "Detektálás részletei",
-    "settingsNotAvailable": "Beállítások nem elérhetők"
+    "settingsNotAvailable": "Beállítások nem elérhetők",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Elemzés - Éjszakai aktivitás",
+    "analyticsWeather": "Elemzés - Időjárás-korreláció",
+    "analyticsSoundscape": "Elemzés - Hangkép"
   },
   "navigation": {
     "dashboard": "Irányítópult",
+    "liveAudio": "Élő hang",
     "settingsMenu": "Beállítások menü",
     "theme": "Téma",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
     "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
     "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)",
-    "health": "Rendszerállapot"
+    "health": "Rendszerállapot",
+    "sections": {
+      "explore": "Felfedezés",
+      "patterns": "Minták",
+      "environment": "Környezet",
+      "dataQuality": "Adatminőség"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
         "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
         "webserverRestartRequired": "Webszerver beállítások megváltoztak. Újraindítás szükséges.",
+        "oauthRestartRequired": "Hitelesítési szolgáltató beállítások megváltoztak. Újraindítás szükséges.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
@@ -1795,11 +1811,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Áttekintés",
         "patterns": "Tevékenységi minták",
         "trends": "Trendek",
         "biodiversity": "Biodiverzitás",
-        "quality": "Ellenőrzés és pontosság"
+        "quality": "Ellenőrzés és pontosság",
+        "summary": "Summary",
+        "nocturnal": "Éjszakai aktivitás",
+        "weather": "Időjárás",
+        "soundscape": "Hangkép"
       },
       "aria": {
         "tabs": "Elemzési szakaszok"
@@ -1819,13 +1838,25 @@
         "notEnoughDataHint": "Ehhez a diagramhoz legalább {min} adatpont szükséges. Folytassa a rögzítést, és nézzen vissza hamarosan.",
         "export": "Exportálás",
         "exportComingSoon": "A CSV-exportálás hamarosan érkezik."
-      },
-      "comingSoon": {
-        "description": "Ez a szakasz fejlesztés alatt áll, és egy közelgő frissítésben érkezik."
       }
     },
-    "title": "Áttekintés",
     "loadingError": "Néhány analitikai adat betöltése sikertelen. Próbálja később újra.",
+    "comingSoon": {
+      "badge": "Hamarosan",
+      "plannedTitle": "Tervezett funkciók",
+      "weather": {
+        "description": "Madárfelvételek a helyi időjárási viszonyokhoz mérve. Ez a nézet az észleléseket összekapcsolja a hőmérséklettel, széllel és csapadékkal.",
+        "feature1": "Észlelések korrelálása hőmérséklettel, széllel és csapadékkal",
+        "feature2": "Megmutatja, hogyan befolyásolják az időjárási frontok a fajok aktivitását",
+        "feature3": "Szezonális aktivitás összehasonlítása a historikus időjárási adatokkal"
+      },
+      "soundscape": {
+        "description": "Átfogó kép a környezet akusztikai karakteréről, akusztikai indexek segítségével összefoglalva a hangkép diverzitását az idő múlásával.",
+        "feature1": "Akusztikus indexek, amelyek összefoglalják a hangkép összetettségét",
+        "feature2": "A biodiverzitás nyomon követése a környezeti hang révén az idő múlásával",
+        "feature3": "Hajnali és esti kórusok azonosítása az akusztikai felvételekben"
+      }
+    },
     "stats": {
       "totalDetections": "Összes detektálás",
       "uniqueSpecies": "Egyedi fajok",
@@ -5372,6 +5403,7 @@
     "restartFailed": "Az újraindítás kezdeményezése sikertelen",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

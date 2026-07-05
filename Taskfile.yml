@@ -16,7 +16,11 @@ vars:
       if [ ! -z "$BUILD_VERSION" ]; then
         echo "$BUILD_VERSION"
       else
-        git describe --tags --always 2>/dev/null || echo "unknown"
+        # Describe only against real release tags (semver v* and nightly-*).
+        # The auto-update feature publishes a permanent "manifest" prerelease
+        # whose git tag would otherwise be the nearest ancestor, making local
+        # builds report a confusing "manifest-<n>-g<hash>" version.
+        git describe --tags --always --match 'v*' --match 'nightly-*' 2>/dev/null || echo "unknown"
       fi
   UNAME_S:
     sh: uname -s
@@ -510,7 +514,7 @@ tasks:
         if ! command -v golangci-lint >/dev/null 2>&1; then
           echo "📥 Installing golangci-lint..."
           # Add timeout for install script download and execution
-          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin"; then
+          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.12.2"; then
             echo "❌ Failed to install golangci-lint"
             echo "   Check your internet connection and try again"
             exit 1

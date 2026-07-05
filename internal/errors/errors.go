@@ -801,7 +801,7 @@ func IsTransientNetworkError(err error) bool {
 	// even if the error wasn't wrapped as an EnhancedError
 	errMsg := strings.ToLower(err.Error())
 	transientPatterns := []string{
-		"dns", "timeout", "deadline exceeded",
+		"dns", "timeout", "deadline exceeded", //nolint:goconst // error-message substring for matching, not the CategoryTimeout enum value
 		"connection refused", "connection reset",
 		"no such host", "i/o timeout",
 		"network is unreachable", "no route to host",

@@ -993,12 +993,12 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 	tests := []struct {
 		name     string
 		duration time.Duration
-		validate func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics)
+		validate func(t *testing.T, acc *logScanAccum, diag *LogSourceDiagnostics)
 	}{
 		{
 			name:     "successful log collection",
 			duration: testDuration24Hours,
-			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
+			validate: func(t *testing.T, acc *logScanAccum, diag *LogSourceDiagnostics) {
 				t.Helper()
 				// Check that paths were searched
 				assert.NotEmpty(t, diag.PathsSearched)
@@ -1014,12 +1014,13 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 		{
 			name:     "old logs filtered by duration",
 			duration: testDuration1Minute, // Very short duration to filter out test log
-			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
+			validate: func(t *testing.T, acc *logScanAccum, diag *LogSourceDiagnostics) {
 				t.Helper()
 				// Paths should still be searched
 				assert.NotEmpty(t, diag.PathsSearched)
-				// But logs might be filtered out
-				// logs might be empty after filtering
+				// The 2024-dated fixture is older than the 1-minute window, so
+				// every entry is filtered out and the counted total is zero.
+				assert.Zero(t, acc.entries)
 			},
 		},
 	}
@@ -1030,9 +1031,11 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 				Details: make(map[string]any),
 			}
 
-			logs, _, _ := c.collectLogFilesWithDiagnostics(tt.duration, testSize10MB, false, diagnostics)
+			var acc logScanAccum
+			err := c.collectLogFilesWithDiagnostics(t.Context(), tt.duration, testSize10MB, &acc, diagnostics)
+			require.NoError(t, err)
 
-			tt.validate(t, logs, diagnostics)
+			tt.validate(t, &acc, diagnostics)
 		})
 	}
 }

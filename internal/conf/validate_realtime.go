@@ -312,7 +312,7 @@ func validateSpeciesGuideSettings(settings *SpeciesGuideConfig) {
 }
 
 // validWeatherProviders contains all recognized weather provider values.
-var validWeatherProviders = []string{"none", "yrno", "openweather", "wunderground"}
+var validWeatherProviders = []string{"none", "yrno", "openweather", "wunderground"} //nolint:goconst // weather-provider value, not the RetentionPolicyNone constant
 
 // validateWeatherSettings validates weather-specific settings
 func validateWeatherSettings(settings *WeatherSettings) error {

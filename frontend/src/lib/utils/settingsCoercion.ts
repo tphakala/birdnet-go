@@ -24,6 +24,7 @@ import type {
   PushFilterConfig,
   FalsePositiveFilterSettings,
 } from '$lib/stores/settings';
+import { AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB } from '$lib/stores/settings';
 
 // Type for partial/unknown settings data
 type UnknownSettings = Record<string, unknown>;
@@ -177,7 +178,7 @@ export function coerceObject<T extends Record<string, unknown>>(
 function coerceStreamConfig(stream: unknown): UnknownSettings {
   const rawStream = coerceObject(stream, {} as UnknownSettings);
 
-  return {
+  const coercedStream: UnknownSettings = {
     ...rawStream,
     name: coerceString(rawStream.name, ''),
     url: coerceString(rawStream.url, ''),
@@ -188,6 +189,15 @@ function coerceStreamConfig(stream: unknown): UnknownSettings {
         ? rawStream.transport
         : undefined,
   };
+
+  // Clamp gain to the same -40..+40 dB range as sound card gain (backend
+  // validation). Only present when the caller sent one, so a stream without
+  // gain configured stays undefined rather than materializing a fake 0.
+  if ('gain' in rawStream) {
+    coercedStream.gain = coerceNumber(rawStream.gain, AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB, 0);
+  }
+
+  return coercedStream;
 }
 
 function coerceRTSPSettings(settings: unknown): UnknownSettings {
@@ -376,7 +386,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
 
     // Clamp gain between -40 and +40 dB (backend validation)
     if ('gain' in exp) {
-      coercedExport.gain = coerceNumber(exp.gain, -40, 40, 0);
+      coercedExport.gain = coerceNumber(exp.gain, AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB, 0);
     }
 
     // Normalization settings

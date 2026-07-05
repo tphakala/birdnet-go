@@ -8,6 +8,8 @@ import (
 	datastore "github.com/tphakala/birdnet-go/internal/datastore"
 	detection "github.com/tphakala/birdnet-go/internal/detection"
 
+	diskmanager "github.com/tphakala/birdnet-go/internal/diskmanager"
+
 	gorm "gorm.io/gorm"
 
 	metrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -3215,6 +3217,65 @@ func (_c *MockInterface_GetNoteClipPath_Call) Return(_a0 string, _a1 error) *Moc
 }
 
 func (_c *MockInterface_GetNoteClipPath_Call) RunAndReturn(run func(string) (string, error)) *MockInterface_GetNoteClipPath_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetNoteClipReferences provides a mock function with given fields: afterID, limit
+func (_m *MockInterface) GetNoteClipReferences(afterID uint, limit int) ([]diskmanager.ClipReference, error) {
+	ret := _m.Called(afterID, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetNoteClipReferences")
+	}
+
+	var r0 []diskmanager.ClipReference
+	var r1 error
+	if rf, ok := ret.Get(0).(func(uint, int) ([]diskmanager.ClipReference, error)); ok {
+		return rf(afterID, limit)
+	}
+	if rf, ok := ret.Get(0).(func(uint, int) []diskmanager.ClipReference); ok {
+		r0 = rf(afterID, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]diskmanager.ClipReference)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(uint, int) error); ok {
+		r1 = rf(afterID, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetNoteClipReferences_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetNoteClipReferences'
+type MockInterface_GetNoteClipReferences_Call struct {
+	*mock.Call
+}
+
+// GetNoteClipReferences is a helper method to define mock.On call
+//   - afterID uint
+//   - limit int
+func (_e *MockInterface_Expecter) GetNoteClipReferences(afterID interface{}, limit interface{}) *MockInterface_GetNoteClipReferences_Call {
+	return &MockInterface_GetNoteClipReferences_Call{Call: _e.mock.On("GetNoteClipReferences", afterID, limit)}
+}
+
+func (_c *MockInterface_GetNoteClipReferences_Call) Run(run func(afterID uint, limit int)) *MockInterface_GetNoteClipReferences_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetNoteClipReferences_Call) Return(_a0 []diskmanager.ClipReference, _a1 error) *MockInterface_GetNoteClipReferences_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetNoteClipReferences_Call) RunAndReturn(run func(uint, int) ([]diskmanager.ClipReference, error)) *MockInterface_GetNoteClipReferences_Call {
 	_c.Call.Return(run)
 	return _c
 }

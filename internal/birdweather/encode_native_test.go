@@ -48,7 +48,8 @@ func TestEncodeWithNativeFLAC(t *testing.T) {
 	client := &BwClient{Settings: &conf.Settings{}}
 
 	// A quiet (-30 dBFS) 1 s sine; normalization should boost it toward -23 LUFS.
-	pcm := sinePCM(conf.SampleRate, -30)
+	sampleCount := conf.SampleRate
+	pcm := sinePCM(sampleCount, -30)
 
 	res, err := client.encodeWithNativeFLAC(pcm, testTimestamp)
 	require.NoError(t, err)
@@ -59,6 +60,9 @@ func TestEncodeWithNativeFLAC(t *testing.T) {
 	flacBytes := res.buffer.Bytes()
 	require.GreaterOrEqual(t, len(flacBytes), 4)
 	assert.Equal(t, "fLaC", string(flacBytes[:4]), "FLAC signature not found")
+	sampleRate, totalSamples := flacStreamInfo(t, flacBytes)
+	assert.Equal(t, uint64(conf.SampleRate), sampleRate, "FLAC STREAMINFO sample rate mismatch")
+	assert.Equal(t, uint64(sampleCount), totalSamples, "FLAC STREAMINFO total samples should be finalized")
 
 	// Re-measure the decoded output: it should sit near the target loudness.
 	out := decodeToInt16(t, flacBytes)
@@ -99,24 +103,6 @@ func TestEncodeWithNativeFLAC_Silence(t *testing.T) {
 	}
 }
 
-// TestPCMInt16FromBytes_SignedRoundTrip is the regression guard for the signed
-// cast: a Uint16-only read would turn negative samples into large positives and
-// corrupt the loudness measurement.
-func TestPCMInt16FromBytes_SignedRoundTrip(t *testing.T) {
-	t.Parallel()
-	want := []int16{0, -1, 1, 32767, -32768, 1234, -1234}
-	b := make([]byte, len(want)*2)
-	for i, s := range want {
-		binary.LittleEndian.PutUint16(b[i*2:], uint16(s)) //nolint:gosec // G115: building signed test PCM
-	}
-	assert.Equal(t, want, pcmInt16FromBytes(b))
-}
-
-// TestPCMInt16FromBytes_OddTrailingByte drops a trailing odd byte (never present
-// in real int16 PCM) instead of panicking.
-func TestPCMInt16FromBytes_OddTrailingByte(t *testing.T) {
-	t.Parallel()
-	got := pcmInt16FromBytes([]byte{0x01, 0x02, 0x03})
-	assert.Len(t, got, 1)
-	assert.Equal(t, int16(0x0201), got[0])
-}
+// The signed-cast and odd-trailing-byte regression guards now live with the
+// shared decoder in internal/audiocore/audionorm (MeasureInt16Bytes /
+// Meter.AddInt16Bytes), which this path calls instead of a local helper.

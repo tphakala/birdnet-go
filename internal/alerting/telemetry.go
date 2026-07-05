@@ -44,7 +44,7 @@ func (at *AlertingTelemetry) ReportInitFailed(errMsg string) {
 		scope.SetFingerprint([]string{telemetryComponent, "init-failed"})
 
 		scope.SetContext(telemetryComponent, map[string]any{
-			"error": privacy.ScrubMessage(errMsg),
+			"error": privacy.ScrubMessage(errMsg), //nolint:goconst // Sentry context key, not the PropertyError condition-property constant
 		})
 
 		telemetry.CaptureMessage(

@@ -206,10 +206,19 @@
     "componentError": "Komponentin latausvirhe",
     "speciesAnalytics": "Lajianalytiikka",
     "detectionDetails": "Tunnistuksen tiedot",
-    "settingsNotAvailable": "Asetukset eivät ole käytettävissä"
+    "settingsNotAvailable": "Asetukset eivät ole käytettävissä",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytiikka - Yöaktiviteetti",
+    "analyticsWeather": "Analytiikka - Sääkorrelaatio",
+    "analyticsSoundscape": "Analytiikka - Äänimaisema"
   },
   "navigation": {
     "dashboard": "Yleiskatsaus",
+    "liveAudio": "Live-ääni",
     "settingsMenu": "Asetusvalikko",
     "theme": "Teema",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Ilmoita virheestä GitHubissa (avautuu uuteen ikkunaan)",
     "askQuestionAriaLabel": "Esitä kysymys GitHub Discussions -foorumilla (avautuu uuteen ikkunaan)",
     "viewOnGithubAriaLabel": "Näytä BirdNET-Go GitHubissa (avautuu uuteen ikkunaan)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Selaa",
+      "patterns": "Kaavat",
+      "environment": "Ympäristö",
+      "dataQuality": "Tiedon laatu"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Lasketaan dynaamisia kynnysarvoja uudelleen uudelle perusarvolle",
         "reconfiguringDynamicThresholds": "Määritetään dynaamisia kynnysarvoja uudelleen...",
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
+        "oauthRestartRequired": "Tunnistautumispalveluntarjoajan asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
@@ -1795,11 +1811,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Yleiskatsaus",
         "patterns": "Aktiivisuuskuviot",
         "trends": "Trendit",
         "biodiversity": "Luonnon monimuotoisuus",
-        "quality": "Tarkistus ja tarkkuus"
+        "quality": "Tarkistus ja tarkkuus",
+        "summary": "Summary",
+        "nocturnal": "Yöaktiviteetti",
+        "weather": "Sää",
+        "soundscape": "Äänimaisema"
       },
       "aria": {
         "tabs": "Analyysiosiot"
@@ -1819,13 +1838,25 @@
         "notEnoughDataHint": "Tämä kaavio tarvitsee vähintään {min} datapistettä. Jatka tallentamista ja palaa pian takaisin.",
         "export": "Vie",
         "exportComingSoon": "CSV-vienti tulee pian."
-      },
-      "comingSoon": {
-        "description": "Tämä osio on rakenteilla ja tulee tulevassa päivityksessä."
       }
     },
-    "title": "Yleiskatsaus",
     "loadingError": "Joidenkin analytiikkatietojen lataus epäonnistui. Yritä myöhemmin uudelleen.",
+    "comingSoon": {
+      "badge": "Tulossa pian",
+      "plannedTitle": "Suunnitellut ominaisuudet",
+      "weather": {
+        "description": "Lintujen aktiivisuus suhteessa paikallisiin sääoloihin. Tämä näkymä yhdistää havainnot lämpötilaan, tuuleen ja sateeseen.",
+        "feature1": "Yhdistä havainnot lämpötilaan, tuuleen ja sateeseen",
+        "feature2": "Katso, miten säärintamat muuttavat lajien aktiivisuutta",
+        "feature3": "Vertaa kausiluonteista aktiivisuutta historialliseen säähän"
+      },
+      "soundscape": {
+        "description": "Katsaus ympäristösi akustiseen luonteeseen, käyttäen akustisia indeksejä äänimaiseman monimuotoisuuden yhteenvetoon ajan myötä.",
+        "feature1": "Akustiset indeksit, jotka tiivistävät äänimaiseman monimutkaisuuden",
+        "feature2": "Seuraa biodiversiteettiä ympäristön äänen avulla ajan myötä",
+        "feature3": "Tunnista aamun ja auringonlaskun kuorot akustisesta tallenteesta"
+      }
+    },
     "stats": {
       "totalDetections": "Havainnot yhteensä",
       "uniqueSpecies": "Ainutlaatuiset lajit",
@@ -5372,6 +5403,7 @@
     "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"
