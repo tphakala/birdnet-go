@@ -242,18 +242,22 @@ func (c *Handler) requireV2(ctx echo.Context) error {
 		"Alert rules require the enhanced (v2) database", http.StatusConflict, notification.MsgErrAlertV2Required, nil)
 }
 
-// engineUnavailable writes a 503 Service Unavailable response carrying the recorded
-// alerting-engine initialization error when one is present. Engine-dependent
-// handlers call it when they cannot act: the mutating handlers guard on
-// alertEngineErr != nil (init attempted and failed), while TestAlertRule guards on
-// alertEngine == nil (absent for any reason) because it dereferences the engine
-// directly. Either way the 503 surfaces a real failure instead of a silent no-op or
-// a false success. alertEngineErr may be nil here (the defensive engine-nil case),
-// in which case HandleErrorWithKey falls back to the generic message. For a
-// deployment where alerting is simply disabled, the requireV2 group middleware
-// returns 409 before any handler runs, so this 503 never fires for that case.
-func (c *Handler) engineUnavailable(ctx echo.Context) error {
+// engineUnavailableLocked writes a 503 Service Unavailable response carrying the
+// recorded alerting-engine initialization error when one is present.
+// Callers must hold c.initMu before calling this.
+func (c *Handler) engineUnavailableLocked(ctx echo.Context) error {
 	return c.HandleErrorWithKey(ctx, c.alertEngineErr,
+		"Alerting engine is unavailable", http.StatusServiceUnavailable, notification.MsgErrAlertEngineUnavailable, nil)
+}
+
+// engineUnavailable writes a 503 Service Unavailable response carrying the recorded
+// alerting-engine initialization error when one is present. It acquires the mutex
+// to prevent data races on alertEngineErr.
+func (c *Handler) engineUnavailable(ctx echo.Context) error {
+	c.initMu.Lock()
+	err := c.alertEngineErr
+	c.initMu.Unlock()
+	return c.HandleErrorWithKey(ctx, err,
 		"Alerting engine is unavailable", http.StatusServiceUnavailable, notification.MsgErrAlertEngineUnavailable, nil)
 }
 
@@ -279,7 +283,7 @@ func (c *Handler) ensureEngineReady(ctx echo.Context) bool {
 	}
 
 	if !c.alertsAvailable() {
-		_ = c.engineUnavailable(ctx)
+		_ = c.engineUnavailableLocked(ctx)
 		return false
 	}
 
@@ -293,7 +297,7 @@ func (c *Handler) ensureEngineReady(ctx echo.Context) bool {
 		apicore.GetLogger().Error("failed to re-initialize alerting engine", logger.Error(err))
 		eventBus.Stop()
 		c.alertEngineErr = err
-		_ = c.engineUnavailable(ctx)
+		_ = c.engineUnavailableLocked(ctx)
 		return false
 	}
 
