@@ -123,6 +123,9 @@ func isInfrequentDetection(properties map[string]any) bool {
 	if settings == nil {
 		return false
 	}
+    if !settings.Realtime.SpeciesTracking.Enabled {
+        return false
+    }
 	infrequent := settings.Realtime.SpeciesTracking.InfrequentTracking
 	if !infrequent.Enabled {
 		return false
