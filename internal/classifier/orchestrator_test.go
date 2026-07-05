@@ -17,13 +17,14 @@ import (
 
 // mockModelInstance implements ModelInstance for testing.
 type mockModelInstance struct {
-	id        string
-	spec      ModelSpec
-	labels    []string // optional; when nil a single default label is returned
-	device    string   // optional; when empty RuntimeInfo reports "CPU"
-	backend   string   // optional; reported verbatim by RuntimeInfo
-	precision string   // optional; reported verbatim by RuntimeInfo
-	predict   func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
+	id         string
+	spec       ModelSpec
+	labels     []string // optional; when nil a single default label is returned
+	device     string   // optional; when empty RuntimeInfo reports "CPU"
+	backend    string   // optional; reported verbatim by RuntimeInfo
+	precision  string   // optional; reported verbatim by RuntimeInfo
+	numSpecies int      // optional; when 0 NumSpecies reports a single default species
+	predict    func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
 func (m *mockModelInstance) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
@@ -39,7 +40,12 @@ func (m *mockModelInstance) ModelName() string {
 	return "mock-" + m.id
 }
 func (m *mockModelInstance) ModelVersion() string { return "1.0" }
-func (m *mockModelInstance) NumSpecies() int      { return 1 }
+func (m *mockModelInstance) NumSpecies() int {
+	if m.numSpecies != 0 {
+		return m.numSpecies
+	}
+	return 1
+}
 func (m *mockModelInstance) Labels() []string {
 	if m.labels != nil {
 		return m.labels
@@ -393,6 +399,75 @@ func TestModelInfos_LivePrimaryInfo(t *testing.T) {
 	// Confirm ToDetectionModelInfo keeps attribution correct: IsStock keeps Variant "default".
 	det := got.ToDetectionModelInfo()
 	assert.Equal(t, "default", det.Variant, "IsStock stock model must attribute as default")
+}
+
+// TestModelInfos_ReportsLiveSpeciesCount verifies ModelInfos sources NumSpecies
+// from the loaded instance, not the static registry (secondary) or o.ModelInfo
+// (primary) template. A user can load a sliced or custom model whose label file
+// has a different class count than the stock catalog entry (e.g. a regional
+// Perch v2 slice with 383 species vs the stock 14,795); the AI Models panel must
+// report the actually-loaded count, not the template number.
+func TestModelInfos_ReportsLiveSpeciesCount(t *testing.T) {
+	t.Parallel()
+
+	t.Run("secondary model overrides stale registry count", func(t *testing.T) {
+		t.Parallel()
+		const slicedPerchSpecies = 383
+		// Guard the premise: the Perch_V2 registry template carries the stock count,
+		// so returning it verbatim would be the bug this test pins down.
+		require.Equal(t, 14795, ModelRegistry[RegistryIDPerchV2].NumSpecies,
+			"test premise: registry template must carry the stock Perch count")
+
+		// The mock's id matches the Perch_V2 registry entry, but the loaded instance
+		// reports 383, mimicking a sliced Nordic model. With no primary set it is
+		// treated as a secondary model (the registry-template branch).
+		o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDPerchV2, numSpecies: slicedPerchSpecies})
+
+		infos := o.ModelInfos()
+		require.Len(t, infos, 1)
+		assert.Equal(t, RegistryIDPerchV2, infos[0].ID)
+		assert.Equal(t, slicedPerchSpecies, infos[0].NumSpecies,
+			"secondary model must report the live label count, not the registry's stock 14795")
+	})
+
+	t.Run("primary model overrides stale template count", func(t *testing.T) {
+		t.Parallel()
+		const customPrimarySpecies = 500
+		const id = "BirdNET_V2.4"
+		// o.ModelInfo carries a stale template count (6523); the loaded instance
+		// reports a custom label file with 500 species.
+		o := &Orchestrator{
+			ModelInfo: ModelInfo{ID: id, Name: "BirdNET v2.4", NumSpecies: 6523},
+			models: map[string]*modelEntry{
+				id: {instance: &mockModelInstance{id: id, numSpecies: customPrimarySpecies}},
+			},
+			modelRSS: make(map[string]int64),
+		}
+
+		infos := o.ModelInfos()
+		require.Len(t, infos, 1)
+		assert.Equal(t, id, infos[0].ID)
+		assert.Equal(t, customPrimarySpecies, infos[0].NumSpecies,
+			"primary model must report the live label count, not o.ModelInfo's template count")
+	})
+
+	t.Run("unregistered secondary model uses live count", func(t *testing.T) {
+		t.Parallel()
+		const customSpecies = 7
+		const id = "custom_unlisted_model"
+		// Guard the premise: the id must be absent from the registry so ModelInfos
+		// takes the instance-built fallback branch (not the registry-template branch).
+		_, exists := ModelRegistry[id]
+		require.False(t, exists, "test premise: id must be absent from the registry")
+
+		o := newTestOrchestrator(t, &mockModelInstance{id: id, numSpecies: customSpecies})
+
+		infos := o.ModelInfos()
+		require.Len(t, infos, 1)
+		assert.Equal(t, id, infos[0].ID)
+		assert.Equal(t, customSpecies, infos[0].NumSpecies,
+			"unregistered secondary model must report the live label count")
+	})
 }
 
 // TestAllLabels_IncludesSecondaryModelLabels verifies that AllLabels returns the
