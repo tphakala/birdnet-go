@@ -1497,12 +1497,18 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		info, exists := ModelRegistry[ref.id]
 		if !exists {
 			info = ModelInfo{
-				ID:         ref.entry.instance.ModelID(),
-				Name:       ref.entry.instance.ModelName(),
-				Spec:       ref.entry.instance.Spec(),
-				NumSpecies: ref.entry.instance.NumSpecies(),
+				ID:   ref.entry.instance.ModelID(),
+				Name: ref.entry.instance.ModelName(),
+				Spec: ref.entry.instance.Spec(),
 			}
 		}
+		// Source NumSpecies from the live instance (its loaded label count) rather
+		// than the static registry template, so a sliced or custom model reports
+		// its actual loaded species count instead of the stock catalog number, and
+		// a registry entry that omits the count does not report 0. Backport essence
+		// of #3790 (the primaryInfo/runtime-backend reporting from that PR belongs
+		// to the post-tag AI Models panel and is not included here).
+		info.NumSpecies = ref.entry.instance.NumSpecies()
 		ref.entry.mu.Unlock()
 		infos = append(infos, info)
 	}

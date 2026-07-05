@@ -250,6 +250,32 @@ func TestOrchestrator_ModelInfos(t *testing.T) {
 	assert.True(t, ids["Perch_V2"])
 }
 
+// TestOrchestrator_ModelInfos_LiveNumSpecies verifies that ModelInfos reports the
+// live instance species count (its loaded label count) rather than the static
+// ModelRegistry template count, so a sliced or custom model reports what is
+// actually loaded and a registry entry that omits the count does not report 0.
+// Regression guard for the #3790 backport essence.
+func TestOrchestrator_ModelInfos_LiveNumSpecies(t *testing.T) {
+	t.Parallel()
+
+	// BirdNET_V2.4 is registry-known with a template NumSpecies of 6523; the mock
+	// instance reports a live count of 1, which must win.
+	const templateCount = 6523
+	require.Equal(t, templateCount, ModelRegistry["BirdNET_V2.4"].NumSpecies,
+		"test premise: registry template count changed")
+
+	o := &Orchestrator{
+		models: map[string]*modelEntry{
+			"BirdNET_V2.4": {instance: &mockModelInstance{id: "BirdNET_V2.4"}},
+		},
+	}
+
+	infos := o.ModelInfos()
+	require.Len(t, infos, 1)
+	assert.Equal(t, 1, infos[0].NumSpecies,
+		"ModelInfos must report the live instance count, not the static registry template")
+}
+
 func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
 	t.Parallel()
 
