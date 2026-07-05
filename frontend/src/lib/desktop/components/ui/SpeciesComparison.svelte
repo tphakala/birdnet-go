@@ -186,7 +186,7 @@
     <h2 class="text-lg font-semibold">
       <button
         type="button"
-        class="flex w-full items-center justify-between gap-2 text-left"
+        class="flex w-full cursor-pointer items-center justify-between gap-2 text-left"
         aria-expanded={!collapsed}
         aria-controls={`${uid}-guide-body`}
         data-testid="species-comparison-toggle"
@@ -233,7 +233,7 @@
           <div>
             <button
               type="button"
-              class="flex w-full items-center justify-between py-2 text-left font-medium"
+              class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
               aria-expanded={openSections.similar}
               aria-controls={`${uid}-similar`}
               onclick={() => toggle('similar')}
@@ -282,7 +282,7 @@
           <div class="border-b border-base-300">
             <button
               type="button"
-              class="flex w-full items-center justify-between py-2 text-left font-medium"
+              class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
               aria-expanded={openSections.description}
               aria-controls={`${uid}-description`}
               onclick={() => toggle('description')}
@@ -307,7 +307,7 @@
           <div class="border-b border-base-300">
             <button
               type="button"
-              class="flex w-full items-center justify-between py-2 text-left font-medium"
+              class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
               aria-expanded={openSections.songs}
               aria-controls={`${uid}-songs`}
               onclick={() => toggle('songs')}
@@ -331,7 +331,7 @@
           <div>
             <button
               type="button"
-              class="flex w-full items-center justify-between py-2 text-left font-medium"
+              class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
               aria-expanded={openSections.similar}
               aria-controls={`${uid}-similar`}
               onclick={() => toggle('similar')}
