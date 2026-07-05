@@ -4667,6 +4667,10 @@
         "showSimilarSpecies": {
           "label": "Vis lignende arter",
           "helpText": "Vis sammenligningspanelet for lignende arter."
+        },
+        "showTaxonomy": {
+          "label": "Vis taksonomi",
+          "helpText": "Vis det taksonomiske hierarki (fra klasse til art) og underarter."
         }
       }
     },

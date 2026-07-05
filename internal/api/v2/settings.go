@@ -2571,7 +2571,8 @@ func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bo
 		o.PreFetchEnabled != n.PreFetchEnabled ||
 		o.ShowNotes != n.ShowNotes ||
 		o.ShowEnrichments != n.ShowEnrichments ||
-		o.ShowSimilarSpecies != n.ShowSimilarSpecies
+		o.ShowSimilarSpecies != n.ShowSimilarSpecies ||
+		o.ShowTaxonomy != n.ShowTaxonomy
 }
 
 func speciesTrackingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {

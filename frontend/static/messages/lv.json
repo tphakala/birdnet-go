@@ -4667,6 +4667,10 @@
         "showSimilarSpecies": {
           "label": "Rādīt līdzīgas sugas",
           "helpText": "Rādīt līdzīgu sugu salīdzināšanas paneli."
+        },
+        "showTaxonomy": {
+          "label": "Rādīt taksonomiju",
+          "helpText": "Rādīt taksonomisko hierarhiju (no klases līdz sugai) un pasugas."
         }
       }
     },

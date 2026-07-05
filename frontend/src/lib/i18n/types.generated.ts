@@ -3410,6 +3410,8 @@ export type TranslationKey =
   | 'settings.userInterface.speciesGuide.showEnrichments.helpText'
   | 'settings.userInterface.speciesGuide.showSimilarSpecies.label'
   | 'settings.userInterface.speciesGuide.showSimilarSpecies.helpText'
+  | 'settings.userInterface.speciesGuide.showTaxonomy.label'
+  | 'settings.userInterface.speciesGuide.showTaxonomy.helpText'
   | 'settings.restartRequired'
   | 'auth.login'
   | 'auth.logout'

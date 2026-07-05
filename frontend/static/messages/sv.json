@@ -4667,6 +4667,10 @@
         "showSimilarSpecies": {
           "label": "Visa liknande arter",
           "helpText": "Visa jämförelsepanelen för liknande arter."
+        },
+        "showTaxonomy": {
+          "label": "Visa taxonomi",
+          "helpText": "Visa den taxonomiska hierarkin (från klass till art) och underarter."
         }
       }
     },

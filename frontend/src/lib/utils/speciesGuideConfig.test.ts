@@ -17,6 +17,18 @@ describe('toSpeciesGuideUIConfig', () => {
       enabled: true,
       showNotes: true,
       showSimilarSpecies: true,
+      showTaxonomy: true,
+    });
+  });
+
+  it('respects an explicit showTaxonomy opt-out', () => {
+    expect(
+      toSpeciesGuideUIConfig({ enabled: true, enableWikipedia: false, showTaxonomy: false })
+    ).toEqual({
+      enabled: true,
+      showNotes: true,
+      showSimilarSpecies: true,
+      showTaxonomy: false,
     });
   });
 
@@ -25,6 +37,7 @@ describe('toSpeciesGuideUIConfig', () => {
       enabled: false,
       showNotes: false,
       showSimilarSpecies: false,
+      showTaxonomy: false,
     });
   });
 });
@@ -41,7 +54,12 @@ describe('resolveSpeciesGuideConfig', () => {
       enableWikipedia: false,
       showSimilarSpecies: false,
     });
-    expect(cfg).toEqual({ enabled: true, showNotes: true, showSimilarSpecies: false });
+    expect(cfg).toEqual({
+      enabled: true,
+      showNotes: true,
+      showSimilarSpecies: false,
+      showTaxonomy: true,
+    });
     expect(api.get).not.toHaveBeenCalled();
   });
 
@@ -54,7 +72,12 @@ describe('resolveSpeciesGuideConfig', () => {
       resolveSpeciesGuideConfig(undefined),
       resolveSpeciesGuideConfig(undefined),
     ]);
-    expect(a).toEqual({ enabled: true, showNotes: false, showSimilarSpecies: true });
+    expect(a).toEqual({
+      enabled: true,
+      showNotes: false,
+      showSimilarSpecies: true,
+      showTaxonomy: true,
+    });
     expect(b).toEqual(a);
     expect(api.get).toHaveBeenCalledTimes(1);
     expect(api.get).toHaveBeenCalledWith('/api/v2/settings/dashboard');

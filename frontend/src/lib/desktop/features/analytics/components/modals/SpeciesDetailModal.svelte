@@ -13,6 +13,11 @@
   } from '$lib/utils/speciesGuideConfig';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
+  import { api } from '$lib/utils/api';
+  import { loggers } from '$lib/utils/logger';
+  import type { SpeciesTaxonomyResponse } from '$lib/types/species';
+
+  const logger = loggers.ui;
 
   interface SpeciesData {
     common_name: string;
@@ -68,6 +73,13 @@
   let guideEnabled = $derived(guideConfig?.enabled ?? false);
   let showSimilarSpecies = $derived(guideConfig?.showSimilarSpecies ?? true);
   let showNotes = $derived(guideConfig?.showNotes ?? true);
+  let showTaxonomy = $derived(guideConfig?.showTaxonomy ?? true);
+
+  // Taxonomy (offline OpenFauna, public endpoint). Fetched only when the section
+  // will render; a `stale` guard prevents a previous species' taxonomy flashing
+  // when the modal is reused for a different species.
+  let taxonomy = $state<SpeciesTaxonomyResponse | null>(null);
+  let taxonomyLoading = $state(false);
   // On desktop, when the guide (right column) has content, widen the modal and
   // split into two columns so the horizontal space is used without stretching the
   // description past a readable measure. Below `lg` the modal stays its default
@@ -92,6 +104,38 @@
   let displayName = $derived(
     localizeSpeciesName(displaySpecies?.scientific_name, displaySpecies?.common_name)
   );
+
+  $effect(() => {
+    const name = displaySpecies?.scientific_name;
+    // Only fetch when the taxonomy section will actually render.
+    if (!name || !guideEnabled || !showTaxonomy) {
+      taxonomy = null;
+      return;
+    }
+    let stale = false;
+    taxonomyLoading = true;
+    void api
+      .get<SpeciesTaxonomyResponse>(
+        `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(name)}`
+      )
+      .then(data => {
+        if (!stale) taxonomy = data;
+      })
+      .catch((e: unknown) => {
+        if (!stale) {
+          taxonomy = null;
+          logger.error('Failed to fetch taxonomy for guide modal', e, {
+            component: 'SpeciesDetailModal',
+          });
+        }
+      })
+      .finally(() => {
+        if (!stale) taxonomyLoading = false;
+      });
+    return () => {
+      stale = true;
+    };
+  });
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
@@ -165,6 +209,53 @@
                   <span class="opacity-70">{t('analytics.species.headers.lastDetected')}</span>
                   <span class="font-semibold">{formatDate(displaySpecies.last_heard)}</span>
                 </div>
+              {/if}
+            </div>
+          {/if}
+
+          {#if guideEnabled && showTaxonomy && (taxonomyLoading || taxonomy?.taxonomy)}
+            <!-- Taxonomy: factual metadata (like the stats), rendered in the modal's
+                 own row idiom rather than DetectionDetail's connector-tree CSS. The
+                 two renderings are intentionally separate to keep this branch-scoped;
+                 a future upstream PR can extract a shared TaxonomyTree component. -->
+            <div class="border-t border-[var(--color-base-300)] pt-4 space-y-2">
+              <h4 class="text-sm font-semibold opacity-70">{t('species.taxonomy.hierarchy')}</h4>
+              {#if taxonomyLoading}
+                <div class="animate-pulse space-y-2" aria-hidden="true">
+                  {#each Array(5) as _, i (i)}
+                    <div class="h-8 rounded bg-[var(--color-base-200)]"></div>
+                  {/each}
+                </div>
+              {:else if taxonomy?.taxonomy}
+                <dl class="space-y-1 text-sm">
+                  {#each [{ key: 'class', value: taxonomy.taxonomy.class }, { key: 'order', value: taxonomy.taxonomy.order }, { key: 'family', value: taxonomy.taxonomy.family }, { key: 'genus', value: taxonomy.taxonomy.genus }, { key: 'species', value: taxonomy.taxonomy.species }] as rank (rank.key)}
+                    <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
+                      <dt class="opacity-70">{t(`species.taxonomy.labels.${rank.key}`)}</dt>
+                      <dd class="font-medium" class:italic={rank.key === 'species'}>
+                        {rank.value}
+                      </dd>
+                    </div>
+                  {/each}
+                </dl>
+                {#if taxonomy.subspecies && taxonomy.subspecies.length > 0}
+                  <div class="pt-2">
+                    <h5 class="text-xs font-medium opacity-60 mb-1">
+                      {t('species.taxonomy.subspecies')}
+                    </h5>
+                    <ul class="space-y-1 text-sm">
+                      {#each taxonomy.subspecies as sub, i (`${sub.scientific_name}_${i}`)}
+                        <li class="flex flex-col">
+                          <span class="italic">{sub.scientific_name}</span>
+                          {#if sub.common_name}
+                            <span class="text-xs opacity-70"
+                              >{localizeSpeciesName(sub.scientific_name, sub.common_name)}</span
+                            >
+                          {/if}
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
+                {/if}
               {/if}
             </div>
           {/if}

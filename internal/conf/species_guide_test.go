@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSpeciesGuideConfig_ShowDefaults verifies the three Show* sub-section toggles
+// TestSpeciesGuideConfig_ShowDefaults verifies the Show* sub-section toggles
 // default ON via viper defaults (so an unset config shows all sections when the guide
 // is enabled), replacing the former *bool nil-means-true convention.
 func TestSpeciesGuideConfig_ShowDefaults(t *testing.T) {
@@ -22,6 +22,8 @@ func TestSpeciesGuideConfig_ShowDefaults(t *testing.T) {
 		"enrichments must default to shown")
 	assert.True(t, viper.GetBool("realtime.dashboard.speciesguide.showsimilarspecies"),
 		"similar-species panel must default to shown")
+	assert.True(t, viper.GetBool("realtime.dashboard.speciesguide.showtaxonomy"),
+		"taxonomy section must default to shown")
 
 	// An explicitly stored false must win over the default (opt-out is respected).
 	viper.Set("realtime.dashboard.speciesguide.shownotes", false)
@@ -67,6 +69,7 @@ func TestCloneSettings_SpeciesGuideShowFlagsIndependence(t *testing.T) {
 	src.Realtime.Dashboard.SpeciesGuide.ShowNotes = true
 	src.Realtime.Dashboard.SpeciesGuide.ShowEnrichments = true
 	src.Realtime.Dashboard.SpeciesGuide.ShowSimilarSpecies = true
+	src.Realtime.Dashboard.SpeciesGuide.ShowTaxonomy = true
 
 	dst := CloneSettings(src)
 	require.NotNil(t, dst)
@@ -78,7 +81,9 @@ func TestCloneSettings_SpeciesGuideShowFlagsIndependence(t *testing.T) {
 	dstGuide.ShowNotes = false
 	dstGuide.ShowEnrichments = false
 	dstGuide.ShowSimilarSpecies = false
+	dstGuide.ShowTaxonomy = false
 	assert.True(t, srcGuide.ShowNotes)
 	assert.True(t, srcGuide.ShowEnrichments)
 	assert.True(t, srcGuide.ShowSimilarSpecies)
+	assert.True(t, srcGuide.ShowTaxonomy)
 }

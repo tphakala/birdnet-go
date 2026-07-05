@@ -4667,6 +4667,10 @@
         "showSimilarSpecies": {
           "label": "Zobraziť podobné druhy",
           "helpText": "Zobraziť panel porovnania podobných druhov."
+        },
+        "showTaxonomy": {
+          "label": "Zobraziť taxonómiu",
+          "helpText": "Zobraziť taxonomickú hierarchiu (od triedy po druh) a poddruhy."
         }
       }
     },

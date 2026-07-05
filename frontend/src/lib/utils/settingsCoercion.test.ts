@@ -143,3 +143,21 @@ describe('settingsCoercion realtime rtsp streams', () => {
     expect(result.rtsp.streams[0]?.gain).toBeUndefined();
   });
 });
+
+describe('settingsCoercion species guide show flags', () => {
+  it('defaults an absent showTaxonomy flag to true (backend *bool semantics)', () => {
+    const result = coerceSettings('realtime', {
+      dashboard: { speciesGuide: { enabled: true } },
+    }) as { dashboard: { speciesGuide: Record<string, unknown> } };
+
+    expect(result.dashboard.speciesGuide.showTaxonomy).toBe(true);
+  });
+
+  it('preserves an explicit showTaxonomy opt-out', () => {
+    const result = coerceSettings('realtime', {
+      dashboard: { speciesGuide: { enabled: true, showTaxonomy: false } },
+    }) as { dashboard: { speciesGuide: Record<string, unknown> } };
+
+    expect(result.dashboard.speciesGuide.showTaxonomy).toBe(false);
+  });
+});

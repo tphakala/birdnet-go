@@ -4667,6 +4667,10 @@
         "showSimilarSpecies": {
           "label": "Hasonló fajok megjelenítése",
           "helpText": "A hasonló fajok összehasonlító paneljének megjelenítése."
+        },
+        "showTaxonomy": {
+          "label": "Rendszertan megjelenítése",
+          "helpText": "A rendszertani hierarchia (osztálytól fajig) és az alfajok megjelenítése."
         }
       }
     },

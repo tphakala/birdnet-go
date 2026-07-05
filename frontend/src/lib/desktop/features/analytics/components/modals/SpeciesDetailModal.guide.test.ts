@@ -14,6 +14,22 @@ vi.mock('$lib/utils/api', () => ({
       if (url.includes('/similar')) {
         return Promise.resolve({ scientific_name: '', genus: '', similar: [] });
       }
+      if (url.includes('/taxonomy')) {
+        return Promise.resolve({
+          taxonomy: {
+            kingdom: 'Animalia',
+            phylum: 'Chordata',
+            class: 'Aves',
+            order: 'Passeriformes',
+            family: 'Passeridae',
+            genus: 'Passer',
+            species: 'Passer domesticus',
+          },
+          subspecies: [
+            { scientific_name: 'Passer domesticus domesticus', common_name: 'House Sparrow' },
+          ],
+        });
+      }
       return Promise.resolve({
         scientific_name: '',
         common_name: '',
@@ -54,8 +70,9 @@ const species = {
 };
 
 // enableGuide turns on the guide + similar-species panel (notes off) by spreading
-// the existing dashboard and overriding only speciesGuide.
-function enableGuide(): void {
+// the existing dashboard and overriding only speciesGuide. `overrides` lets a test
+// flip an individual show flag (e.g. showTaxonomy) without restating the rest.
+function enableGuide(overrides: Record<string, unknown> = {}): void {
   const dashboard = get(settingsStore).formData.realtime?.dashboard;
   if (!dashboard) {
     throw new Error('default dashboard settings missing');
@@ -69,6 +86,8 @@ function enableGuide(): void {
         showNotes: false,
         showEnrichments: true,
         showSimilarSpecies: true,
+        showTaxonomy: true,
+        ...overrides,
       },
     },
   });
@@ -161,5 +180,50 @@ describe('SpeciesDetailModal species guide panel', () => {
       },
       { timeout: 5000 }
     );
+  });
+
+  // Taxonomy is factual metadata sourced from the public /species/taxonomy endpoint;
+  // it renders in the guide modal when the guide is on and showTaxonomy is not opted out.
+  it('renders the taxonomy hierarchy and subspecies when showTaxonomy is on', async () => {
+    enableGuide();
+    modalTest.render({ props: { isOpen: true, species } });
+
+    const { api } = await import('$lib/utils/api');
+    await waitFor(
+      () => {
+        expect(vi.mocked(api.get)).toHaveBeenCalledWith(
+          expect.stringContaining('/species/taxonomy')
+        );
+      },
+      { timeout: 5000 }
+    );
+
+    // t() returns keys in tests, so the heading/labels render as their key strings.
+    expect(
+      await screen.findByText('species.taxonomy.hierarchy', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Aves')).toBeInTheDocument();
+    expect(screen.getByText('Passeridae')).toBeInTheDocument();
+    expect(screen.getByText('species.taxonomy.subspecies')).toBeInTheDocument();
+    expect(screen.getByText('Passer domesticus domesticus')).toBeInTheDocument();
+  });
+
+  it('hides taxonomy and does not fetch it when showTaxonomy is opted out', async () => {
+    enableGuide({ showTaxonomy: false });
+    const { container } = modalTest.render({ props: { isOpen: true, species } });
+
+    // The guide comparison still mounts, so wait on it to know the modal settled.
+    await waitFor(
+      () => {
+        if (!container.querySelector(COMPARISON_CLOSE)) throw new Error('not mounted yet');
+      },
+      { timeout: 5000 }
+    );
+
+    const { api } = await import('$lib/utils/api');
+    expect(vi.mocked(api.get)).not.toHaveBeenCalledWith(
+      expect.stringContaining('/species/taxonomy')
+    );
+    expect(screen.queryByText('species.taxonomy.hierarchy')).toBeNull();
   });
 });

@@ -20,12 +20,14 @@ export interface SpeciesGuideUIConfig {
   enabled: boolean;
   showNotes: boolean;
   showSimilarSpecies: boolean;
+  showTaxonomy: boolean;
 }
 
 const DISABLED: SpeciesGuideUIConfig = {
   enabled: false,
   showNotes: false,
   showSimilarSpecies: false,
+  showTaxonomy: false,
 };
 
 /** Normalize raw speciesGuide settings (store or public endpoint) into UI gates.
@@ -38,6 +40,7 @@ export function toSpeciesGuideUIConfig(
     enabled: raw.enabled ?? false,
     showNotes: raw.showNotes ?? true,
     showSimilarSpecies: raw.showSimilarSpecies ?? true,
+    showTaxonomy: raw.showTaxonomy ?? true,
   };
 }
 

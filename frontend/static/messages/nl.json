@@ -4667,6 +4667,10 @@
         "showSimilarSpecies": {
           "label": "Vergelijkbare soorten tonen",
           "helpText": "Het vergelijkingspaneel voor vergelijkbare soorten tonen."
+        },
+        "showTaxonomy": {
+          "label": "Taxonomie tonen",
+          "helpText": "De taxonomische hiërarchie (van klasse tot soort) en ondersoorten tonen."
         }
       }
     },

@@ -130,6 +130,27 @@ export interface SpeciesNoteData {
   created_at: string;
   updated_at: string;
 }
+
+// Taxonomy shapes for GET /api/v2/species/taxonomy. All fields come from the
+// offline OpenFauna dataset, so the endpoint is public (no auth required).
+export interface TaxonomyHierarchy {
+  kingdom: string;
+  phylum: string;
+  class: string;
+  order: string;
+  family: string;
+  family_common?: string;
+  genus: string;
+  species: string;
+}
+export interface TaxonomySubspecies {
+  scientific_name: string;
+  common_name?: string;
+}
+export interface SpeciesTaxonomyResponse {
+  taxonomy?: TaxonomyHierarchy;
+  subspecies?: TaxonomySubspecies[];
+}
 export interface GuideSection {
   heading: string;
   body: string;

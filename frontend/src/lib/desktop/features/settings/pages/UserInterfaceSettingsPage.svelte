@@ -236,6 +236,7 @@
     showNotes: settings.dashboard.speciesGuide?.showNotes ?? true,
     showEnrichments: settings.dashboard.speciesGuide?.showEnrichments ?? true,
     showSimilarSpecies: settings.dashboard.speciesGuide?.showSimilarSpecies ?? true,
+    showTaxonomy: settings.dashboard.speciesGuide?.showTaxonomy ?? true,
   });
 
   // --- Update handlers ---
@@ -528,6 +529,14 @@
             helpText={t('settings.userInterface.speciesGuide.showSimilarSpecies.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
             onchange={value => updateSpeciesGuideSetting('showSimilarSpecies', value)}
+          />
+
+          <Checkbox
+            checked={speciesGuide.showTaxonomy}
+            label={t('settings.userInterface.speciesGuide.showTaxonomy.label')}
+            helpText={t('settings.userInterface.speciesGuide.showTaxonomy.helpText')}
+            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            onchange={value => updateSpeciesGuideSetting('showTaxonomy', value)}
           />
         </div>
       </div>

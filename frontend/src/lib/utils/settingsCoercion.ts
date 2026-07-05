@@ -806,6 +806,7 @@ function coerceSpeciesGuideSettings(value: unknown): UnknownSettings {
     showNotes: coerceBoolean(sg.showNotes, true),
     showEnrichments: coerceBoolean(sg.showEnrichments, true),
     showSimilarSpecies: coerceBoolean(sg.showSimilarSpecies, true),
+    showTaxonomy: coerceBoolean(sg.showTaxonomy, true),
   };
 }
 

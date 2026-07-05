@@ -592,7 +592,7 @@ export interface Dashboard {
 // Species guide settings. Taxonomy, localized common names, and external links
 // always come from the offline OpenFauna dataset; enableWikipedia opts into online
 // Wikipedia article descriptions (the one thing OpenFauna can't provide), off by default.
-// The three show* flags default to true when absent (matches backend *bool semantics).
+// The show* flags default to true when absent (matches backend *bool semantics).
 export interface SpeciesGuideSettings {
   enabled: boolean;
   enableWikipedia: boolean; // opt in to online Wikipedia descriptions (default off)
@@ -602,6 +602,7 @@ export interface SpeciesGuideSettings {
   showNotes?: boolean;
   showEnrichments?: boolean;
   showSimilarSpecies?: boolean;
+  showTaxonomy?: boolean;
 }
 
 // Dashboard layout configuration
@@ -1047,6 +1048,7 @@ function createEmptySettings(): SettingsFormData {
           showNotes: true,
           showEnrichments: true,
           showSimilarSpecies: true,
+          showTaxonomy: true,
         },
       },
     },

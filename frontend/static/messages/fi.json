@@ -4667,6 +4667,10 @@
         "showSimilarSpecies": {
           "label": "Näytä samankaltaiset lajit",
           "helpText": "Näytä samankaltaisten lajien vertailupaneeli."
+        },
+        "showTaxonomy": {
+          "label": "Näytä taksonomia",
+          "helpText": "Näytä taksonominen hierarkia (luokasta lajiin) ja alalajit."
         }
       }
     },

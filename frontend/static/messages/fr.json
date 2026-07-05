@@ -4667,6 +4667,10 @@
         "showSimilarSpecies": {
           "label": "Afficher les espèces similaires",
           "helpText": "Afficher le panneau de comparaison des espèces similaires."
+        },
+        "showTaxonomy": {
+          "label": "Afficher la taxonomie",
+          "helpText": "Afficher la hiérarchie taxonomique (de la classe à l'espèce) et les sous-espèces."
         }
       }
     },

@@ -209,6 +209,7 @@ type SpeciesGuideConfig struct {
 	ShowNotes                bool `yaml:"shownotes" json:"showNotes"`                                   // default true
 	ShowEnrichments          bool `yaml:"showenrichments" json:"showEnrichments"`                       // default true
 	ShowSimilarSpecies       bool `yaml:"showsimilarspecies" json:"showSimilarSpecies"`                 // default true
+	ShowTaxonomy             bool `yaml:"showtaxonomy" json:"showTaxonomy"`                             // default true
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.
