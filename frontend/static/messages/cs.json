@@ -623,7 +623,7 @@
       "categoryYear": "Nový letos",
       "categorySeason": "Nový tuto sezónu",
       "categorySeasonNamed": "Nový toto {season}",
-      "categoryInfrequent": "Infrequent",
+      "categoryInfrequent": "Zřídka vídané",
       "maxConfidenceShort": "Max {confidence} %",
       "detections": "{count, plural, one {# detekce} few {# detekce} other {# detekcí}}",
       "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {před # dnem} few {před # dny} other {před # dny}}"
@@ -659,7 +659,7 @@
         "hourlyDetections": "{count} detekcí v {hour}:00 – kliknutím zobrazíte",
         "biHourlyDetections": "{count} detekcí od {startHour}:00 do {endHour}:00 – kliknutím zobrazíte",
         "sixHourlyDetections": "{count} detekcí od {startHour}:00 do {endHour}:00 – kliknutím zobrazíte",
-        "infrequent": "Infrequent - returned after {days, plural, one {# day} other {# days}} away"
+        "infrequent": "Zřídka vídané - návrat po {days, plural, one {# dni} other {# dnech}} nepřítomnosti"
       },
       "loading": {
         "preparing": "Připravuji data…",
@@ -2722,7 +2722,7 @@
           "detectionUrl": "Úplná URL adresa detekce v UI",
           "imageUrl": "Odkaz na obrázek druhu",
           "daysSinceFirstSeen": "Počet dní od první detekce",
-          "daysSinceLastSeen": "Number of days since last detected"
+          "daysSinceLastSeen": "Počet dní od poslední detekce"
         }
       },
       "testNotification": {
@@ -4242,15 +4242,15 @@
           }
         },
         "infrequent": {
-          "title": "Infrequent Tracking",
-          "description": "Flag species returning after a long absence (rare returning visitors)",
+          "title": "Sledování zřídka vídaných druhů",
+          "description": "Označí druhy, které se vracejí po dlouhé nepřítomnosti (vzácní navrátilci)",
           "enabled": {
-            "label": "Enable Infrequent Tracking",
-            "helpText": "Track and notify when a species is detected again after a long absence"
+            "label": "Povolit sledování zřídka vídaných druhů",
+            "helpText": "Sledovat a upozornit, když je druh znovu detekován po dlouhé nepřítomnosti"
           },
           "absenceDays": {
-            "label": "Absence Threshold (days)",
-            "helpText": "Minimum days since the last detection before a returning species is flagged 'infrequent' (1-365)"
+            "label": "Práh nepřítomnosti (dny)",
+            "helpText": "Minimální počet dní od poslední detekce, než je vracející se druh označen jako 'zřídka vídaný' (1-365)"
           }
         },
         "months": {
@@ -4450,7 +4450,7 @@
           "stream_disconnected": "Stream odpojen",
           "stream_error": "Chyba streamu",
           "detection_new_species": "Detekován nový druh",
-          "detection_infrequent_species": "Infrequent Species Detected",
+          "detection_infrequent_species": "Detekován zřídka vídaný druh",
           "detection_occurred": "Proběhla detekce",
           "application_started": "Aplikace spuštěna",
           "application_stopped": "Aplikace zastavena",
@@ -4502,8 +4502,8 @@
           "description": "Upozorní, když je druh detekován poprvé"
         },
         "infrequentSpecies": {
-          "name": "Infrequent species detected",
-          "description": "Notifies when a species returns after a long absence"
+          "name": "Detekován zřídka vídaný druh",
+          "description": "Upozorní, když se druh vrátí po dlouhé nepřítomnosti"
         },
         "streamDisconnected": {
           "name": "Audio stream odpojen",

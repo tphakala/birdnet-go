@@ -623,7 +623,7 @@
       "categoryYear": "Uusi tänä vuonna",
       "categorySeason": "Uusi tällä kaudella",
       "categorySeasonNamed": "Uusi tällä {season}",
-      "categoryInfrequent": "Infrequent",
+      "categoryInfrequent": "Harvoin havaittu",
       "maxConfidenceShort": "Maks {confidence} %",
       "detections": "{count, plural, one {# havainto} other {# havaintoa}}",
       "lastSeen": "Viimeksi: {days, plural, =0 {tänään} one {# päivä sitten} other {# päivää sitten}}"
@@ -659,7 +659,7 @@
         "hourlyDetections": "{count} havaintoa klo {hour}.00 - Klikkaa nähdäksesi",
         "biHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi",
         "sixHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi",
-        "infrequent": "Infrequent - returned after {days, plural, one {# day} other {# days}} away"
+        "infrequent": "Harvoin havaittu - palasi {days, plural, one {# päivän} other {# päivän}} poissaolon jälkeen"
       },
       "loading": {
         "preparing": "Valmistellaan tietoja...",
@@ -2722,7 +2722,7 @@
           "detectionUrl": "Täydellinen URL havaintoon",
           "imageUrl": "Linkki lajikuvaan",
           "daysSinceFirstSeen": "Päivien lukumäärä ensimmäisestä havainnosta",
-          "daysSinceLastSeen": "Number of days since last detected"
+          "daysSinceLastSeen": "Päivien määrä viimeisestä havainnosta"
         }
       },
       "testNotification": {
@@ -4242,15 +4242,15 @@
           }
         },
         "infrequent": {
-          "title": "Infrequent Tracking",
-          "description": "Flag species returning after a long absence (rare returning visitors)",
+          "title": "Harvoin havaittujen lajien seuranta",
+          "description": "Merkitsee lajit, jotka palaavat pitkän poissaolon jälkeen (harvinaiset palaajat)",
           "enabled": {
-            "label": "Enable Infrequent Tracking",
-            "helpText": "Track and notify when a species is detected again after a long absence"
+            "label": "Ota harvoin havaittujen lajien seuranta käyttöön",
+            "helpText": "Seuraa ja ilmoita, kun laji havaitaan uudelleen pitkän poissaolon jälkeen"
           },
           "absenceDays": {
-            "label": "Absence Threshold (days)",
-            "helpText": "Minimum days since the last detection before a returning species is flagged 'infrequent' (1-365)"
+            "label": "Poissaolokynnys (päivää)",
+            "helpText": "Vähimmäismäärä päiviä viimeisestä havainnosta ennen kuin palaava laji merkitään harvoin havaituksi (1-365)"
           }
         },
         "months": {
@@ -4450,7 +4450,7 @@
           "stream_disconnected": "Striimi katkaistu",
           "stream_error": "Striimivirhe",
           "detection_new_species": "Uusi laji havaittu",
-          "detection_infrequent_species": "Infrequent Species Detected",
+          "detection_infrequent_species": "Harvinainen palaava laji havaittu",
           "detection_occurred": "Havainto tehty",
           "application_started": "Sovellus käynnistetty",
           "application_stopped": "Sovellus pysäytetty",
@@ -4502,8 +4502,8 @@
           "description": "Ilmoittaa kun laji havaitaan ensimmäistä kertaa"
         },
         "infrequentSpecies": {
-          "name": "Infrequent species detected",
-          "description": "Notifies when a species returns after a long absence"
+          "name": "Harvinainen palaava laji havaittu",
+          "description": "Ilmoittaa, kun laji palaa pitkän poissaolon jälkeen"
         },
         "streamDisconnected": {
           "name": "Äänistriimi katkennut",

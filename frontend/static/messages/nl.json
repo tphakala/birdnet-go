@@ -623,7 +623,7 @@
       "categoryYear": "Nieuw dit jaar",
       "categorySeason": "Nieuw dit seizoen",
       "categorySeasonNamed": "Nieuw dit {season}",
-      "categoryInfrequent": "Infrequent",
+      "categoryInfrequent": "Zeldzaam",
       "maxConfidenceShort": "Max {confidence}%",
       "detections": "{count, plural, one {# detectie} other {# detecties}}",
       "lastSeen": "Laatst: {days, plural, =0 {vandaag} one {# dag geleden} other {# dagen geleden}}"
@@ -659,7 +659,7 @@
         "hourlyDetections": "{count} herkend om {hour}:00 - Klik om te zien",
         "biHourlyDetections": "{count} herkend van {startHour}:00 t/m {endHour}:00 - Klik om te zien",
         "sixHourlyDetections": "{count} herkend van {startHour}:00 t/m {endHour}:00 - Klik om te zien",
-        "infrequent": "Infrequent - returned after {days, plural, one {# day} other {# days}} away"
+        "infrequent": "Zeldzaam - teruggekeerd na {days, plural, one {# dag} other {# dagen}} afwezigheid"
       },
       "loading": {
         "preparing": "Informatie voorbereiden ...",
@@ -2722,7 +2722,7 @@
           "detectionUrl": "Volledige URL naar detectie",
           "imageUrl": "Link naar soortafbeelding",
           "daysSinceFirstSeen": "Aantal dagen sinds eerste detectie",
-          "daysSinceLastSeen": "Number of days since last detected"
+          "daysSinceLastSeen": "Aantal dagen sinds de laatste detectie"
         }
       },
       "testNotification": {
@@ -4242,15 +4242,15 @@
           }
         },
         "infrequent": {
-          "title": "Infrequent Tracking",
-          "description": "Flag species returning after a long absence (rare returning visitors)",
+          "title": "Volgen van zeldzame soorten",
+          "description": "Markeert soorten die terugkeren na een lange afwezigheid (zeldzame terugkerende bezoekers)",
           "enabled": {
-            "label": "Enable Infrequent Tracking",
-            "helpText": "Track and notify when a species is detected again after a long absence"
+            "label": "Volgen van zeldzame soorten inschakelen",
+            "helpText": "Houd bij en meld wanneer een soort opnieuw wordt gedetecteerd na een lange afwezigheid"
           },
           "absenceDays": {
-            "label": "Absence Threshold (days)",
-            "helpText": "Minimum days since the last detection before a returning species is flagged 'infrequent' (1-365)"
+            "label": "Afwezigheidsdrempel (dagen)",
+            "helpText": "Minimumaantal dagen sinds de laatste detectie voordat een terugkerende soort als 'zeldzaam' wordt gemarkeerd (1-365)"
           }
         },
         "months": {
@@ -4450,7 +4450,7 @@
           "stream_disconnected": "Stream verbroken",
           "stream_error": "Stream-fout",
           "detection_new_species": "Nieuwe soort gedetecteerd",
-          "detection_infrequent_species": "Infrequent Species Detected",
+          "detection_infrequent_species": "Zeldzame soort gedetecteerd",
           "detection_occurred": "Detectie uitgevoerd",
           "application_started": "Applicatie gestart",
           "application_stopped": "Applicatie gestopt",
@@ -4502,8 +4502,8 @@
           "description": "Meldt wanneer een soort voor het eerst wordt gedetecteerd"
         },
         "infrequentSpecies": {
-          "name": "Infrequent species detected",
-          "description": "Notifies when a species returns after a long absence"
+          "name": "Zeldzame soort gedetecteerd",
+          "description": "Meldt wanneer een soort terugkeert na een lange afwezigheid"
         },
         "streamDisconnected": {
           "name": "Audiostream verbroken",

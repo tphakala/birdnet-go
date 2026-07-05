@@ -623,7 +623,7 @@
       "categoryYear": "Neu dieses Jahr",
       "categorySeason": "Neu diese Saison",
       "categorySeasonNamed": "Neu diesen {season}",
-      "categoryInfrequent": "Infrequent",
+      "categoryInfrequent": "Selten",
       "maxConfidenceShort": "Max. {confidence} %",
       "detections": "{count, plural, one {# Erkennung} other {# Erkennungen}}",
       "lastSeen": "Zuletzt: {days, plural, =0 {heute} one {vor # Tag} other {vor # Tagen}}"
@@ -659,7 +659,7 @@
         "hourlyDetections": "{count} Erkennungen um {hour}:00 Uhr - Klicken zum Anzeigen",
         "biHourlyDetections": "{count} Erkennungen von {startHour}:00 bis {endHour}:00 Uhr - Klicken zum Anzeigen",
         "sixHourlyDetections": "{count} Erkennungen von {startHour}:00 bis {endHour}:00 Uhr - Klicken zum Anzeigen",
-        "infrequent": "Infrequent - returned after {days, plural, one {# day} other {# days}} away"
+        "infrequent": "Selten - nach {days, plural, one {# Tag} other {# Tagen}} Abwesenheit zurückgekehrt"
       },
       "loading": {
         "preparing": "Daten werden vorbereitet...",
@@ -2722,7 +2722,7 @@
           "detectionUrl": "Vollständige URL zur Erkennung",
           "imageUrl": "Link zum Artbild",
           "daysSinceFirstSeen": "Anzahl Tage seit der ersten Erkennung",
-          "daysSinceLastSeen": "Number of days since last detected"
+          "daysSinceLastSeen": "Anzahl der Tage seit der letzten Erkennung"
         }
       },
       "testNotification": {
@@ -4242,15 +4242,15 @@
           }
         },
         "infrequent": {
-          "title": "Infrequent Tracking",
-          "description": "Flag species returning after a long absence (rare returning visitors)",
+          "title": "Verfolgung seltener Arten",
+          "description": "Markiert Arten, die nach langer Abwesenheit zurückkehren (seltene Rückkehrer)",
           "enabled": {
-            "label": "Enable Infrequent Tracking",
-            "helpText": "Track and notify when a species is detected again after a long absence"
+            "label": "Verfolgung seltener Arten aktivieren",
+            "helpText": "Verfolgen und benachrichtigen Sie, wenn eine Art nach langer Abwesenheit erneut erkannt wird"
           },
           "absenceDays": {
-            "label": "Absence Threshold (days)",
-            "helpText": "Minimum days since the last detection before a returning species is flagged 'infrequent' (1-365)"
+            "label": "Abwesenheitsschwelle (Tage)",
+            "helpText": "Mindestanzahl der Tage seit der letzten Erkennung, bevor eine zurückkehrende Art als 'selten' markiert wird (1-365)"
           }
         },
         "months": {
@@ -4450,7 +4450,7 @@
           "stream_disconnected": "Stream getrennt",
           "stream_error": "Stream-Fehler",
           "detection_new_species": "Neue Art erkannt",
-          "detection_infrequent_species": "Infrequent Species Detected",
+          "detection_infrequent_species": "Seltene Art erkannt",
           "detection_occurred": "Erkennung erfolgt",
           "application_started": "Anwendung gestartet",
           "application_stopped": "Anwendung gestoppt",
@@ -4502,8 +4502,8 @@
           "description": "Benachrichtigt, wenn eine Art zum ersten Mal erkannt wird"
         },
         "infrequentSpecies": {
-          "name": "Infrequent species detected",
-          "description": "Notifies when a species returns after a long absence"
+          "name": "Seltene Art erkannt",
+          "description": "Benachrichtigt, wenn eine Art nach langer Abwesenheit zurückkehrt"
         },
         "streamDisconnected": {
           "name": "Audiostream getrennt",

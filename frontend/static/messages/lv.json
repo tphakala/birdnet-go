@@ -623,7 +623,7 @@
       "categoryYear": "Jauna šogad",
       "categorySeason": "Jauna šosezon",
       "categorySeasonNamed": "Jauna šajā {season}",
-      "categoryInfrequent": "Infrequent",
+      "categoryInfrequent": "Reti novērota",
       "maxConfidenceShort": "Maks {confidence} %",
       "detections": "{count, plural, zero {# noteikšanu} one {# noteikšana} other {# noteikšanas}}",
       "lastSeen": "Pēdējoreiz: {days, plural, =0 {šodien} one {pirms # dienas} other {pirms # dienām}}"
@@ -659,7 +659,7 @@
         "hourlyDetections": "{count} atklāšanas plkst. {hour}:00 — noklikšķiniet, lai skatītu",
         "biHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 — noklikšķiniet, lai skatītu",
         "sixHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 — noklikšķiniet, lai skatītu",
-        "infrequent": "Infrequent - returned after {days, plural, one {# day} other {# days}} away"
+        "infrequent": "Reti novērota - atgriezās pēc {days, plural, one {# dienas} other {# dienām}} prombūtnes"
       },
       "loading": {
         "preparing": "Sagatavo datus...",
@@ -2722,7 +2722,7 @@
           "detectionUrl": "Pilns URL uz noteikšanu saskarnē",
           "imageUrl": "Saite uz sugas attēlu",
           "daysSinceFirstSeen": "Dienu skaits kopš pirmās noteikšanas",
-          "daysSinceLastSeen": "Number of days since last detected"
+          "daysSinceLastSeen": "Dienu skaits kopš pēdējās noteikšanas"
         }
       },
       "testNotification": {
@@ -4242,15 +4242,15 @@
           }
         },
         "infrequent": {
-          "title": "Infrequent Tracking",
-          "description": "Flag species returning after a long absence (rare returning visitors)",
+          "title": "Reti novērotu sugu izsekošana",
+          "description": "Atzīmē sugas, kas atgriežas pēc ilgas prombūtnes (reti atgriezušies viesi)",
           "enabled": {
-            "label": "Enable Infrequent Tracking",
-            "helpText": "Track and notify when a species is detected again after a long absence"
+            "label": "Iespējot reti novērotu sugu izsekošanu",
+            "helpText": "Izsekot un paziņot, kad suga pēc ilgas prombūtnes tiek noteikta atkārtoti"
           },
           "absenceDays": {
-            "label": "Absence Threshold (days)",
-            "helpText": "Minimum days since the last detection before a returning species is flagged 'infrequent' (1-365)"
+            "label": "Prombūtnes slieksnis (dienas)",
+            "helpText": "Minimālais dienu skaits kopš pēdējās noteikšanas, pirms atgriezusies suga tiek atzīmēta kā 'reti novērota' (1-365)"
           }
         },
         "months": {
@@ -4450,7 +4450,7 @@
           "stream_disconnected": "Straume atvienota",
           "stream_error": "Straumes kļūda",
           "detection_new_species": "Jauna suga noteikta",
-          "detection_infrequent_species": "Infrequent Species Detected",
+          "detection_infrequent_species": "Noteikta reti novērota suga",
           "detection_occurred": "Noteikšana notikusi",
           "application_started": "Lietojumprogramma palaista",
           "application_stopped": "Lietojumprogramma apturēta",
@@ -4502,8 +4502,8 @@
           "description": "Paziņo, kad suga tiek noteikta pirmo reizi"
         },
         "infrequentSpecies": {
-          "name": "Infrequent species detected",
-          "description": "Notifies when a species returns after a long absence"
+          "name": "Noteikta reti novērota suga",
+          "description": "Paziņo, kad suga atgriežas pēc ilgas prombūtnes"
         },
         "streamDisconnected": {
           "name": "Audio straume atvienota",

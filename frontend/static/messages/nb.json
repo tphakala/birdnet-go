@@ -623,7 +623,7 @@
       "categoryYear": "Nye i år",
       "categorySeason": "Nye denne sesongen",
       "categorySeasonNamed": "Nye i {season}",
-      "categoryInfrequent": "Infrequent",
+      "categoryInfrequent": "Sjelden",
       "maxConfidenceShort": "Maks {confidence}%",
       "detections": "{count, plural, one {# deteksjon} other {# deteksjoner}}",
       "lastSeen": "Sist: {days, plural, =0 {i dag} one {# dag siden} other {# dager siden}}"
@@ -659,7 +659,7 @@
         "hourlyDetections": "{count} registreringer kl. {hour}:00 – Klikk for å se",
         "biHourlyDetections": "{count} registreringer fra {startHour}:00–{endHour}:00 – Klikk for å se",
         "sixHourlyDetections": "{count} registreringer fra {startHour}:00–{endHour}:00 – Klikk for å se",
-        "infrequent": "Infrequent - returned after {days, plural, one {# day} other {# days}} away"
+        "infrequent": "Sjelden - tilbake etter {days, plural, one {# dags} other {# dagers}} fravær"
       },
       "loading": {
         "preparing": "Forbereder data...",
@@ -2722,7 +2722,7 @@
           "detectionUrl": "Full URL til registrering i grensesnittet",
           "imageUrl": "Lenke til artsbilde",
           "daysSinceFirstSeen": "Antall dager siden første registrering",
-          "daysSinceLastSeen": "Number of days since last detected"
+          "daysSinceLastSeen": "Antall dager siden siste observasjon"
         }
       },
       "testNotification": {
@@ -4242,15 +4242,15 @@
           }
         },
         "infrequent": {
-          "title": "Infrequent Tracking",
-          "description": "Flag species returning after a long absence (rare returning visitors)",
+          "title": "Sporing av sjeldne arter",
+          "description": "Marker arter som kommer tilbake etter langt fravær (sjeldne tilbakevendende besøkende)",
           "enabled": {
-            "label": "Enable Infrequent Tracking",
-            "helpText": "Track and notify when a species is detected again after a long absence"
+            "label": "Aktiver sporing av sjeldne arter",
+            "helpText": "Spor og varsle når en art registreres igjen etter langt fravær"
           },
           "absenceDays": {
-            "label": "Absence Threshold (days)",
-            "helpText": "Minimum days since the last detection before a returning species is flagged 'infrequent' (1-365)"
+            "label": "Fraværsterskel (dager)",
+            "helpText": "Minste antall dager siden siste registrering før en art som kommer tilbake markeres som 'sjelden' (1-365)"
           }
         },
         "months": {
@@ -4450,7 +4450,7 @@
           "stream_disconnected": "Strøm frakoblet",
           "stream_error": "Strømfeil",
           "detection_new_species": "Ny art registrert",
-          "detection_infrequent_species": "Infrequent Species Detected",
+          "detection_infrequent_species": "Sjelden art registrert",
           "detection_occurred": "Registrering utført",
           "application_started": "Applikasjon startet",
           "application_stopped": "Applikasjon stoppet",
@@ -4502,8 +4502,8 @@
           "description": "Varsler når en art registreres for første gang"
         },
         "infrequentSpecies": {
-          "name": "Infrequent species detected",
-          "description": "Notifies when a species returns after a long absence"
+          "name": "Sjelden art registrert",
+          "description": "Varsler når en art kommer tilbake etter langt fravær"
         },
         "streamDisconnected": {
           "name": "Lydstrøm frakoblet",
