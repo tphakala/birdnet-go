@@ -117,15 +117,21 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 // isInfrequentDetection reports whether a returning detection qualifies as
 // "infrequent": tracking enabled and the pre-return absence gap exceeds the
 // configured threshold. days_since_last_seen is absent for first-ever and
-// same-day detections, so those never qualify.
+// same-day detections, so those never qualify. New species detections take
+// precedence over the infrequent tier (matching the frontend's lifetime >
+// year > season > infrequent ordering), so an already-new detection never
+// also qualifies as infrequent.
 func isInfrequentDetection(properties map[string]any) bool {
+	if isNew, ok := properties[PropertyIsNewSpecies].(bool); ok && isNew {
+		return false
+	}
 	settings := conf.GetSettings()
 	if settings == nil {
 		return false
 	}
-    if !settings.Realtime.SpeciesTracking.Enabled {
-        return false
-    }
+	if !settings.Realtime.SpeciesTracking.Enabled {
+		return false
+	}
 	infrequent := settings.Realtime.SpeciesTracking.InfrequentTracking
 	if !infrequent.Enabled {
 		return false

@@ -127,6 +127,7 @@ func TestBridge_NewSpecies_EmitsBothEvents(t *testing.T) {
 func setInfrequentTracking(t *testing.T, enabled bool, absenceDays int) {
 	t.Helper()
 	settings := conftest.GetTestSettings()
+	settings.Realtime.SpeciesTracking.Enabled = true
 	settings.Realtime.SpeciesTracking.InfrequentTracking = conf.InfrequentTrackingSettings{
 		Enabled:     enabled,
 		AbsenceDays: absenceDays,
@@ -186,6 +187,31 @@ func TestBridge_InfrequentDisabled_NoInfrequentEvent(t *testing.T) {
 	assert.Len(t, result, 1)
 	assert.Equal(t, EventDetectionOccurred, result[0].EventName)
 	assert.Equal(t, false, result[0].Properties[PropertyIsInfrequent])
+}
+
+func TestBridge_NewSpeciesTakesPrecedenceOverInfrequent_NoDuplicateEvent(t *testing.T) {
+	setInfrequentTracking(t, true, 14)
+	bridge, mu, captured := setupBridgeWithCapture(t)
+
+	// A new species whose absence gap also exceeds the infrequent threshold
+	// must only emit the new-species event, never an additional infrequent one.
+	event, err := events.NewDetectionEvent("Test Bird", "Testus birdus", 0.9, "mic", true, 0)
+	require.NoError(t, err)
+	event.GetMetadata()[PropertyDaysSinceLastSeen] = 20 // > threshold
+
+	require.NoError(t, bridge.ProcessDetectionEvent(event))
+
+	result := waitForEvents(t, mu, captured, 2)
+	assert.Len(t, result, 2)
+
+	eventNames := []string{result[0].EventName, result[1].EventName}
+	assert.Contains(t, eventNames, EventDetectionOccurred)
+	assert.Contains(t, eventNames, EventDetectionNewSpecies)
+	assert.NotContains(t, eventNames, EventDetectionInfrequentSpecies)
+
+	for _, r := range result {
+		assert.Equal(t, false, r.Properties[PropertyIsInfrequent])
+	}
 }
 
 func TestBridge_NewSpecies_IndependentPropertyMaps(t *testing.T) {

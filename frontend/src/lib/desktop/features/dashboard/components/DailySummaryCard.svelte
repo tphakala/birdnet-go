@@ -711,9 +711,11 @@ Responsive Breakpoints:
   const isToday = $derived(selectedDate === serverTodayDate);
 
   // Absence threshold for the infrequent novelty tier; undefined disables it so
-  // the category never activates when infrequent tracking is turned off.
+  // the category never activates when species tracking (or its infrequent
+  // sub-toggle) is turned off, matching the gating in NewSpeciesHighlightsCard.
   const infrequentThresholdDays = $derived(
-    $speciesTrackingSettings?.infrequentTracking?.enabled === true
+    $speciesTrackingSettings?.enabled === true &&
+      $speciesTrackingSettings.infrequentTracking?.enabled === true
       ? ($speciesTrackingSettings.infrequentTracking.absenceDays ?? 14)
       : undefined
   );
