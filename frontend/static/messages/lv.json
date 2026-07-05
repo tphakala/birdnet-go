@@ -659,7 +659,7 @@
         "hourlyDetections": "{count} atklāšanas plkst. {hour}:00 — noklikšķiniet, lai skatītu",
         "biHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 — noklikšķiniet, lai skatītu",
         "sixHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 — noklikšķiniet, lai skatītu",
-        "infrequent": "Reti novērota - atgriezās pēc {days, plural, one {# dienas} other {# dienām}} prombūtnes"
+        "infrequent": "Reti novērota - atgriezās pēc {days, plural, zero {# dienu} one {# dienas} other {# dienām}} prombūtnes"
       },
       "loading": {
         "preparing": "Sagatavo datus...",
