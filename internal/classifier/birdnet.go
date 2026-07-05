@@ -641,13 +641,25 @@ func (bn *BirdNET) initializeTFLiteMetaModel(settings *conf.Settings) error {
 func (bn *BirdNET) loadLabels() error {
 	bn.Settings.BirdNET.Labels = []string{} // Reset labels.
 
-	// Use embedded labels if no external label path is set
+	// Use embedded labels if no external label path is set, otherwise use external labels.
+	var err error
 	if bn.Settings.BirdNET.LabelPath == "" {
-		return bn.loadEmbeddedLabels()
+		err = bn.loadEmbeddedLabels()
+	} else {
+		err = bn.loadExternalLabels()
+	}
+	if err != nil {
+		return err
 	}
 
-	// Otherwise use external labels
-	return bn.loadExternalLabels()
+	// Refresh the cached ModelInfo.NumSpecies to the actually-loaded label count.
+	// ModelInfo is seeded from the registry template, whose NumSpecies is the stock
+	// catalog figure (e.g. 6523 for BirdNET v2.4) and can differ from the real label
+	// file (6522) or a custom/sliced label file. loadLabels is the single place the
+	// label set changes, so refreshing here keeps o.ModelInfo / PrimaryModelInfo()
+	// reporting the live count. bn.NumSpecies() already reads len(labels) directly.
+	bn.ModelInfo.NumSpecies = len(bn.Settings.BirdNET.Labels)
+	return nil
 }
 
 // loadEmbeddedLabels loads labels from the embedded label files
