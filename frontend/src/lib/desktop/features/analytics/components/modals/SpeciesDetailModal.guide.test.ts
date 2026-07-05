@@ -6,8 +6,8 @@ import SpeciesDetailModal from './SpeciesDetailModal.svelte';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
 
 // SpeciesComparison (rendered inside the modal) loads via $lib/utils/api; stub it
-// so it mounts cleanly. It is intentionally not mocked — its real close button
-// drives the parent onclose, which is the behavior under test.
+// so it mounts cleanly. It is intentionally not mocked — its real header toggle
+// collapses the guide body in place, which is the behavior under test.
 vi.mock('$lib/utils/api', () => ({
   api: {
     get: vi.fn((url: string) => {
@@ -56,8 +56,7 @@ vi.mock('$lib/utils/api', () => ({
 
 const modalTest = createComponentTestFactory(SpeciesDetailModal);
 
-const COMPARISON_CLOSE = '[data-testid="species-comparison-close"]';
-const REOPEN_KEY = 'analytics.species.similar.show';
+const COMPARISON_TOGGLE = '[data-testid="species-comparison-toggle"]';
 
 const species = {
   common_name: 'House Sparrow',
@@ -103,32 +102,103 @@ describe('SpeciesDetailModal species guide panel', () => {
     settingsActions.resetAllSettings();
   });
 
-  // The modal had the same close-with-no-reopen dead end as the detail view; this
-  // guards the reopen affordance there too.
-  it('reopens the comparison after it is closed', async () => {
+  // The guide panel collapses in place (header stays, body hides) like the sections
+  // inside it, instead of closing to a separate reopen button. Guards that the
+  // header toggle is never a dead end.
+  it('collapses and re-expands the guide panel in place', async () => {
     enableGuide();
     const { container } = modalTest.render({ props: { isOpen: true, species } });
 
-    const closeBtn = await waitFor(
+    const toggle = await waitFor(
       () => {
-        const b = container.querySelector(COMPARISON_CLOSE);
+        const b = container.querySelector(COMPARISON_TOGGLE);
         if (!b) throw new Error('comparison not mounted yet');
         return b as HTMLElement;
       },
       { timeout: 5000 }
     );
 
-    await fireEvent.click(closeBtn);
-    const reopenBtn = await screen.findByText(REOPEN_KEY, {}, { timeout: 5000 });
-    expect(container.querySelector(COMPARISON_CLOSE)).toBeNull();
+    // Body visible once the guide loads.
+    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
 
-    await fireEvent.click(reopenBtn);
-    await waitFor(
+    // Collapse in place: the header/toggle stays, the body hides.
+    await fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.queryByText('A bird.')).toBeNull();
+    });
+    expect(container.querySelector(COMPARISON_TOGGLE)).not.toBeNull();
+
+    // Expand again: the body returns.
+    await fireEvent.click(toggle);
+    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
+  });
+
+  // The description is the primary thing users open the guide for, so the panel
+  // re-expands on every open — even if it was collapsed when the modal last closed.
+  it('re-expands the guide panel when reopened for the same species', async () => {
+    enableGuide();
+    const { container, rerender } = modalTest.render({ props: { isOpen: true, species } });
+
+    const toggle = await waitFor(
       () => {
-        expect(container.querySelector(COMPARISON_CLOSE)).not.toBeNull();
+        const b = container.querySelector(COMPARISON_TOGGLE);
+        if (!b) throw new Error('comparison not mounted yet');
+        return b as HTMLElement;
       },
       { timeout: 5000 }
     );
+
+    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
+
+    // Collapse the panel, then close the modal with it still collapsed.
+    await fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.queryByText('A bird.')).toBeNull();
+    });
+    await rerender({ isOpen: false, species });
+
+    // Reopen the same species: the panel re-expands so the description shows again.
+    await rerender({ isOpen: true, species });
+    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
+  });
+
+  // Companion guard to the re-expand test: only the OUTER panel resets on reopen.
+  // The inner section toggles must persist (the modal keeps SpeciesComparison mounted
+  // for the same species). If a refactor ever remounts it on open, this catches the
+  // silent regression.
+  it('keeps inner section state across a reopen while re-expanding the panel', async () => {
+    enableGuide();
+    const { container, rerender } = modalTest.render({ props: { isOpen: true, species } });
+
+    await waitFor(
+      () => {
+        if (!container.querySelector(COMPARISON_TOGGLE)) throw new Error('comparison not mounted');
+      },
+      { timeout: 5000 }
+    );
+
+    // Description inner section is open by default; collapse just that section (not
+    // the whole panel), which hides its body but leaves the section header.
+    const descHeader = await screen.findByText(
+      'analytics.species.guide.description',
+      {},
+      { timeout: 5000 }
+    );
+    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
+    await fireEvent.click(descHeader);
+    await waitFor(() => {
+      expect(screen.queryByText('A bird.')).toBeNull();
+    });
+
+    // Close and reopen the same species.
+    await rerender({ isOpen: false, species });
+    await rerender({ isOpen: true, species });
+
+    // The outer panel re-expanded (its toggle + the description section header show)...
+    expect(container.querySelector(COMPARISON_TOGGLE)).not.toBeNull();
+    expect(screen.getByText('analytics.species.guide.description')).toBeInTheDocument();
+    // ...but the inner description section kept its collapsed state, so its body stays hidden.
+    expect(screen.queryByText('A bird.')).toBeNull();
   });
 
   // Regression guard: the modal title already shows the species name, so the
@@ -140,7 +210,7 @@ describe('SpeciesDetailModal species guide panel', () => {
 
     await waitFor(
       () => {
-        if (!container.querySelector(COMPARISON_CLOSE)) throw new Error('not mounted yet');
+        if (!container.querySelector(COMPARISON_TOGGLE)) throw new Error('not mounted yet');
       },
       { timeout: 5000 }
     );
@@ -158,7 +228,7 @@ describe('SpeciesDetailModal species guide panel', () => {
 
     await waitFor(
       () => {
-        if (!container.querySelector(COMPARISON_CLOSE)) throw new Error('not mounted yet');
+        if (!container.querySelector(COMPARISON_TOGGLE)) throw new Error('not mounted yet');
       },
       { timeout: 5000 }
     );
@@ -215,7 +285,7 @@ describe('SpeciesDetailModal species guide panel', () => {
     // The guide comparison still mounts, so wait on it to know the modal settled.
     await waitFor(
       () => {
-        if (!container.querySelector(COMPARISON_CLOSE)) throw new Error('not mounted yet');
+        if (!container.querySelector(COMPARISON_TOGGLE)) throw new Error('not mounted yet');
       },
       { timeout: 5000 }
     );

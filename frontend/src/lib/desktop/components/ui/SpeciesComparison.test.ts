@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import SpeciesComparison from './SpeciesComparison.svelte';
 import type { SpeciesGuideData, SimilarSpeciesResponse } from '$lib/types/species';
 
@@ -68,7 +68,7 @@ describe('SpeciesComparison', () => {
     });
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
     expect(await screen.findByText('An introduction.', {}, { timeout: 5000 })).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe('SpeciesComparison', () => {
     });
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
     await screen.findByText('An introduction.', {}, { timeout: 5000 });
@@ -130,7 +130,7 @@ describe('SpeciesComparison', () => {
     });
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
     await screen.findByText('An introduction.', {}, { timeout: 5000 });
@@ -147,7 +147,7 @@ describe('SpeciesComparison', () => {
     });
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
     expect(
@@ -161,7 +161,7 @@ describe('SpeciesComparison', () => {
     );
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
     expect(await screen.findByRole('alert', {}, { timeout: 5000 })).toBeInTheDocument();
@@ -173,7 +173,7 @@ describe('SpeciesComparison', () => {
     );
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
     expect(
@@ -202,7 +202,7 @@ describe('SpeciesComparison', () => {
     });
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
     // The soft no-guide message shows for the missing guide content...
@@ -225,7 +225,7 @@ describe('SpeciesComparison', () => {
     });
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose: vi.fn() },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
     // Description still renders (guide feature itself is on)...
@@ -250,7 +250,6 @@ describe('SpeciesComparison', () => {
         scientificName: 'Turdus merula',
         commonName: 'Common Blackbird',
         showSimilarSpecies: false,
-        onclose: vi.fn(),
       },
     });
 
@@ -259,20 +258,27 @@ describe('SpeciesComparison', () => {
     expect(urls.some(u => u.includes('/similar'))).toBe(false);
   });
 
-  it('invokes onclose when the close button is clicked', async () => {
-    const onclose = vi.fn();
+  it('collapses and expands the guide body in place when the header toggle is clicked', async () => {
     vi.mocked(api.get).mockResolvedValue(makeGuide() as never);
 
     render(SpeciesComparison, {
-      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird', onclose },
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
     });
 
-    const closeButton = await screen.findByTestId(
-      'species-comparison-close',
-      {},
-      { timeout: 5000 }
-    );
-    closeButton.click();
-    expect(onclose).toHaveBeenCalledOnce();
+    // Body is visible once the guide loads.
+    expect(await screen.findByText('An introduction.', {}, { timeout: 5000 })).toBeInTheDocument();
+
+    const toggle = await screen.findByTestId('species-comparison-toggle', {}, { timeout: 5000 });
+
+    // Collapse: the body content is removed but the header toggle stays visible.
+    toggle.click();
+    await waitFor(() => {
+      expect(screen.queryByText('An introduction.')).toBeNull();
+    });
+    expect(screen.getByTestId('species-comparison-toggle')).toBeInTheDocument();
+
+    // Expand: the body returns.
+    toggle.click();
+    expect(await screen.findByText('An introduction.', {}, { timeout: 5000 })).toBeInTheDocument();
   });
 });

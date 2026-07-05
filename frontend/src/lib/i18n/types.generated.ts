@@ -1559,7 +1559,6 @@ export type TranslationKey =
   | 'analytics.species.notes.truncated' // params: max
   | 'analytics.species.similar.title'
   | 'analytics.species.similar.compare'
-  | 'analytics.species.similar.show'
   | 'analytics.species.similar.loading'
   | 'analytics.species.similar.empty'
   | 'analytics.species.similar.similar'

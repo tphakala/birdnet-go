@@ -28,7 +28,6 @@
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
-  import { untrack } from 'svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
@@ -47,7 +46,6 @@
     Moon,
     Sunrise,
     Sunset,
-    BookOpen,
   } from '@lucide/svelte';
 
   // Interface definitions for API responses
@@ -108,13 +106,12 @@
   // State
   let activeTab = $state<TabType>('overview');
 
-  // Species guide panel (gated on settings; collapsible inline panel).
-  // Gating must work for unauthenticated guests too — the guide endpoints and
-  // GET /settings/dashboard are public, but the settings store is populated
-  // only by the auth-protected full-settings load. resolveSpeciesGuideConfig
-  // prefers the store value (live for authenticated users) and falls back to
-  // one cached fetch of the public dashboard-settings endpoint.
-  let guidePanelOpen = $state(true);
+  // Species guide config (gated on settings). The panel itself collapses in place
+  // inside SpeciesComparison. Gating must work for unauthenticated guests too — the
+  // guide endpoints and GET /settings/dashboard are public, but the settings store
+  // is populated only by the auth-protected full-settings load.
+  // resolveSpeciesGuideConfig prefers the store value (live for authenticated users)
+  // and falls back to one cached fetch of the public dashboard-settings endpoint.
   let guideConfig = $state<SpeciesGuideUIConfig | null>(null);
   $effect(() => {
     const fromStore = $dashboardSettings?.speciesGuide;
@@ -150,21 +147,6 @@
       ? taxonomyInfo.subspecies
       : []
   );
-
-  // Reset the guide panel to expanded when navigating to a DIFFERENT species in place.
-  // guidePanelOpen lives outside the {#key detection.scientificName} block, so a panel
-  // collapsed on detection A would otherwise stay collapsed on detection B and hide its
-  // guide. Guard on the previous species so a same-species refetch (new detection object,
-  // same name) doesn't fight a user who just collapsed the panel. Mirrors
-  // SpeciesDetailModal, which resets guidePanelOpen on each open.
-  let prevGuideSpecies = $state<string | undefined>(undefined);
-  $effect(() => {
-    const name = detection?.scientificName;
-    if (name !== undefined && name !== untrack(() => prevGuideSpecies)) {
-      prevGuideSpecies = name;
-      guidePanelOpen = true;
-    }
-  });
 
   // AbortController for preventing race conditions
   let detectionController: AbortController | null = null;
@@ -946,24 +928,11 @@
           <!-- Key on the species so the guide + notes remount (and refetch) when
                navigating between detections of different species in place. -->
           {#key detection.scientificName}
-            {#if guidePanelOpen}
-              <SpeciesComparison
-                scientificName={detection.scientificName}
-                commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
-                {showSimilarSpecies}
-                onclose={() => (guidePanelOpen = false)}
-              />
-            {:else}
-              <!-- Reopen affordance so closing the comparison is never a dead end. -->
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm gap-2"
-                onclick={() => (guidePanelOpen = true)}
-              >
-                <BookOpen class="h-4 w-4" />
-                {t('analytics.species.similar.show')}
-              </button>
-            {/if}
+            <SpeciesComparison
+              scientificName={detection.scientificName}
+              commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
+              {showSimilarSpecies}
+            />
             {#if showNotes && $isAuthenticated}
               <SpeciesNotes scientificName={detection.scientificName} />
             {/if}

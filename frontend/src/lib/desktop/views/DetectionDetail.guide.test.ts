@@ -13,9 +13,9 @@ vi.mock('$lib/desktop/components/data/WeatherDetails.svelte');
 vi.mock('$lib/desktop/features/dashboard/components/SourceBadge.svelte');
 vi.mock('$lib/desktop/components/ui/VerificationBadges.svelte');
 
-// SpeciesComparison is intentionally NOT mocked: its real close button drives the
-// parent's onclose, which is the behavior under test. Its data calls go through
-// $lib/utils/api, mocked here to resolve immediately so it mounts cleanly.
+// SpeciesComparison is intentionally NOT mocked: its real header toggle collapses
+// the guide body in place, which is the behavior under test. Its data calls go
+// through $lib/utils/api, mocked here to resolve immediately so it mounts cleanly.
 vi.mock('$lib/utils/api', () => ({
   api: {
     get: vi.fn((url: string) => {
@@ -49,8 +49,7 @@ vi.mock('$lib/utils/api', () => ({
 
 const detailTest = createComponentTestFactory(DetectionDetail);
 
-const COMPARISON_CLOSE = '[data-testid="species-comparison-close"]';
-const REOPEN_KEY = 'analytics.species.similar.show';
+const COMPARISON_TOGGLE = '[data-testid="species-comparison-toggle"]';
 
 function makeDetection(overrides: Partial<Detection> = {}): Detection {
   return {
@@ -125,34 +124,35 @@ describe('DetectionDetail species guide panel', () => {
     settingsActions.resetAllSettings();
   });
 
-  // Closing the comparison must not be a dead end: a reopen affordance appears and
-  // re-expands the panel. Regression guard for the close-button-with-no-reopen bug.
-  it('reopens the comparison after it is closed', async () => {
+  // The guide panel collapses in place (header stays, body hides) like the sections
+  // inside it, instead of closing to a separate reopen button. Guards that the
+  // header toggle is never a dead end.
+  it('collapses and re-expands the guide panel in place', async () => {
     enableGuide();
     const { container } = detailTest.render({ detectionId: 'det-1' });
 
-    // The comparison renders once the detection loads (its close button is present).
-    const closeBtn = await waitFor(
+    // The comparison renders once the detection loads (its header toggle is present).
+    const toggle = await waitFor(
       () => {
-        const b = container.querySelector(COMPARISON_CLOSE);
+        const b = container.querySelector(COMPARISON_TOGGLE);
         if (!b) throw new Error('comparison not mounted yet');
         return b as HTMLElement;
       },
       { timeout: 5000 }
     );
 
-    // Close it: the comparison collapses and the reopen affordance appears.
-    await fireEvent.click(closeBtn);
-    const reopenBtn = await screen.findByText(REOPEN_KEY, {}, { timeout: 5000 });
-    expect(container.querySelector(COMPARISON_CLOSE)).toBeNull();
+    // Body visible once the guide loads.
+    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
 
-    // Reopen it: the comparison comes back.
-    await fireEvent.click(reopenBtn);
-    await waitFor(
-      () => {
-        expect(container.querySelector(COMPARISON_CLOSE)).not.toBeNull();
-      },
-      { timeout: 5000 }
-    );
+    // Collapse in place: the header/toggle stays, the body hides.
+    await fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.queryByText('A bird.')).toBeNull();
+    });
+    expect(container.querySelector(COMPARISON_TOGGLE)).not.toBeNull();
+
+    // Expand again: the body returns.
+    await fireEvent.click(toggle);
+    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
   });
 });

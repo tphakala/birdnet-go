@@ -1,6 +1,5 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { BookOpen } from '@lucide/svelte';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
@@ -53,12 +52,11 @@
   // The cache is only useful during the close transition (species becomes null while
   // isOpen transitions to false), not during open.
   let prevIsOpen = $state(false);
-  // Species guide panel state (gated on settings; reset each time the modal opens).
-  // Gating must work for unauthenticated guests too — the guide endpoints and
-  // GET /settings/dashboard are public, but the settings store is populated only
-  // by the auth-protected full-settings load. resolveSpeciesGuideConfig prefers
-  // the store value and falls back to one cached fetch of the public endpoint.
-  let guidePanelOpen = $state(true);
+  // Species guide config (gated on settings). Gating must work for unauthenticated
+  // guests too — the guide endpoints and GET /settings/dashboard are public, but the
+  // settings store is populated only by the auth-protected full-settings load.
+  // resolveSpeciesGuideConfig prefers the store value and falls back to one cached
+  // fetch of the public endpoint.
   let guideConfig = $state<SpeciesGuideUIConfig | null>(null);
   $effect(() => {
     const fromStore = $dashboardSettings?.speciesGuide;
@@ -88,7 +86,6 @@
   $effect(() => {
     if (isOpen && !untrack(() => prevIsOpen)) {
       cachedSpecies = null;
-      guidePanelOpen = true;
     }
     prevIsOpen = isOpen;
   });
@@ -104,6 +101,23 @@
   let displayName = $derived(
     localizeSpeciesName(displaySpecies?.scientific_name, displaySpecies?.common_name)
   );
+
+  // The guide panel re-expands whenever the modal shows a species: the description is
+  // the primary thing users open the guide for, so it should be visible on every open.
+  // The inner section toggles (songs/similar) live in SpeciesComparison and persist on
+  // their own across reopens (it isn't remounted for the same species), so this resets
+  // only the outer collapse via the bindable prop.
+  let guidePanelCollapsed = $state(false);
+  // $effect.pre runs before the DOM update, so when the species changes the reset lands
+  // before the {#key} remounts SpeciesComparison — the panel mounts already expanded
+  // rather than briefly adopting a stale collapsed value. It deliberately does not read
+  // guidePanelCollapsed, so collapsing the panel mid-view isn't fought.
+  $effect.pre(() => {
+    const name = displaySpecies?.scientific_name;
+    if (isOpen && name) {
+      guidePanelCollapsed = false;
+    }
+  });
 
   $effect(() => {
     const name = displaySpecies?.scientific_name;
@@ -279,25 +293,13 @@
             class="mt-4 border-t border-[var(--color-base-300)] pt-4 lg:mt-0 lg:border-t-0 lg:pt-0"
           >
             {#key displaySpecies.scientific_name}
-              {#if guidePanelOpen}
-                <SpeciesComparison
-                  scientificName={displaySpecies.scientific_name}
-                  commonName={displayName}
-                  heading={t('analytics.species.guide.title')}
-                  {showSimilarSpecies}
-                  onclose={() => (guidePanelOpen = false)}
-                />
-              {:else}
-                <!-- Reopen affordance so closing the comparison is never a dead end. -->
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm gap-2"
-                  onclick={() => (guidePanelOpen = true)}
-                >
-                  <BookOpen class="h-4 w-4" />
-                  {t('analytics.species.similar.show')}
-                </button>
-              {/if}
+              <SpeciesComparison
+                scientificName={displaySpecies.scientific_name}
+                commonName={displayName}
+                heading={t('analytics.species.guide.title')}
+                {showSimilarSpecies}
+                bind:collapsed={guidePanelCollapsed}
+              />
             {/key}
           </div>
         {/if}
