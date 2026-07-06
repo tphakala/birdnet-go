@@ -27,13 +27,21 @@ func captureHook(t *testing.T) *[]*errors.EnhancedError {
 	return &captured
 }
 
-// newTestContext creates an echo.Context for use in telemetry tests.
+// newTestContext creates an echo.Context for use in telemetry tests. It also sets
+// the matched route pattern (via SetPath) to the request path, simulating echo's
+// post-routing state: the telemetry endpoint context is now recorded from
+// routePattern(ctx) (the matched route pattern) rather than the raw URL path, so
+// the token-bearing path of a request like an HLS stream is never sent to Sentry.
+// The static test paths used here have no path parameters, so the pattern equals
+// the path.
 func newTestContext(t *testing.T, method, path string) (echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(method, path, http.NoBody)
 	rec := httptest.NewRecorder()
-	return e.NewContext(req, rec), rec
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath(path)
+	return ctx, rec
 }
 
 // TestHandleError_5xxReportedToTelemetry verifies that a 5xx HandleError call
