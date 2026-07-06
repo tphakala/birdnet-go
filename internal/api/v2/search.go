@@ -25,6 +25,16 @@ const maxSearchSpeciesScientific = 100
 
 // initSearchRoutes registers the search-related routes
 func (c *Controller) initSearchRoutes() {
+	// HandleSearch dereferences c.DS (SearchDetections). Honor the constructor's
+	// "datastore disabled" mode (NewWithOptions permits a nil datastore) by not
+	// registering the search route when there is no datastore, instead of
+	// registering a handler that would panic. This mirrors the detection and
+	// media route groups, with requireDatastore as defense in depth.
+	if c.DS == nil {
+		c.logWarnIfEnabled("Skipping search routes: datastore is not available")
+		return
+	}
+
 	c.logInfoIfEnabled("Initializing search routes")
 
 	// Search endpoints - publicly accessible
