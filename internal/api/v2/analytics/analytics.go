@@ -760,12 +760,16 @@ func (c *Handler) convertSummaryDataToResponse(summaryData []datastore.SpeciesSu
 	return response
 }
 
-// formatTimeIfNotZero formats time as string if not zero
+// formatTimeIfNotZero formats a timestamp as an ISO 8601 (RFC3339) string with a
+// timezone offset, or "" if the time is zero. RFC3339 is the timestamp format used
+// across the rest of the v2 API (detections, SSE, weather, notifications), so the
+// species summary's first_heard/last_heard match it and carry an unambiguous offset
+// for timezone-aware clients. See issue #3793.
 func formatTimeIfNotZero(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.Format(time.DateTime)
+	return t.Format(time.RFC3339)
 }
 
 // getThumbnailURLFromBirdImage extracts URL from BirdImage map
