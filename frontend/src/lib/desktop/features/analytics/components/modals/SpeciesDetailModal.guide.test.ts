@@ -219,8 +219,9 @@ describe('SpeciesDetailModal species guide panel', () => {
       { timeout: 5000 }
     );
 
-    // The panel header now renders the guide-title key (t() returns keys in tests).
-    expect(screen.getByText('analytics.species.guide.title')).toBeInTheDocument();
+    // The panel header renders the "Species guide" heading key, not the species
+    // name (t() returns keys in tests).
+    expect(screen.getByText('analytics.species.similar.speciesGuide')).toBeInTheDocument();
   });
 
   // Regression guard: reusing one modal instance for a different species must
