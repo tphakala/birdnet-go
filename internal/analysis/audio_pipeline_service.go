@@ -1376,21 +1376,53 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 		})
 	}
 
-	// Local audio cards (multi-source).
+	// Collect the connection strings of ALL configured rtsp.streams (enabled AND
+	// disabled), so a stream URL misconfigured under audio.sources does not
+	// overwrite the rtsp.streams config: reconfigureChangedSources dedups the
+	// desired configs by connection string, and the audio.sources copy is
+	// appended later, so without this guard it would win. The rtsp.streams entry
+	// must win. Disabled streams are included so a duplicate under audio.sources
+	// is suppressed rather than silently re-enabling a stream the user turned off.
+	streamConns := make(map[string]struct{}, len(settings.Realtime.RTSP.Streams))
+	for i := range settings.Realtime.RTSP.Streams {
+		streamConns[strings.TrimSpace(settings.Realtime.RTSP.Streams[i].URL)] = struct{}{}
+	}
+
+	// Local audio cards and any stream URLs misconfigured under audio.sources.
 	for i := range settings.Realtime.Audio.Sources {
 		src := &settings.Realtime.Audio.Sources[i]
-		if src.Device == "" {
+		// Trim once so type detection, the dedup key, and the registered
+		// connection string all see the same value: audiocore.StreamSourceType
+		// matches scheme prefixes without trimming, so incidental whitespace
+		// would otherwise misclassify a stream URL as an ALSA device.
+		device := strings.TrimSpace(src.Device)
+		if device == "" {
 			continue
 		}
 		sampleRate := conf.SampleRate
 		if src.SampleRate > 0 {
 			sampleRate = src.SampleRate
 		}
+
+		// Default to an ALSA audio card; promote to a stream type only when the
+		// device is actually a network stream URL. This keeps a misplaced
+		// stream URL from being opened as an ALSA device (which fails and
+		// breaks live audio) even before the config migration relocates it.
+		sourceType := audiocore.SourceTypeAudioCard
+		if streamType, isStream := audiocore.StreamSourceType(device); isStream {
+			if _, dup := streamConns[device]; dup {
+				// Already produced from rtsp.streams; skip the duplicate so the
+				// proper rtsp.streams config wins the connection-keyed dedup.
+				continue
+			}
+			sourceType = streamType
+		}
+
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
 				DisplayName:      src.Name,
-				Type:             audiocore.SourceTypeAudioCard,
-				ConnectionString: src.Device,
+				Type:             sourceType,
+				ConnectionString: device,
 				SampleRate:       sampleRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,

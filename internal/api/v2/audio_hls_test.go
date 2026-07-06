@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 )
 
 // TestHLSStreamInfoStruct tests the HLSStreamInfo struct
@@ -763,4 +764,80 @@ func TestPrivateModeExemptPathsAreRegisteredRoutes(t *testing.T) {
 	for k := range wantExempt {
 		assert.Truef(t, registered[k], "exempt route %q is not a registered route", k)
 	}
+}
+
+// TestStartHLSStream_NoCaptureBuffer verifies that starting a live-audio (HLS)
+// stream for a source that has no capture buffer returns a diagnostic 404 rather
+// than the old opaque "Audio source not found" with a nil error (issue #3766).
+// The handler must not panic while gathering diagnostics, whether or not other
+// sources are registered, and the response must carry the improved user-facing
+// message.
+//
+// Ported from upstream #3779; adapted from the extracted *Handler/apitest harness
+// to the pre-extraction *Controller layout (c.engine is the pre-extraction engine
+// pointer; the JSON body carries the user-facing message).
+func TestStartHLSStream_NoCaptureBuffer(t *testing.T) {
+	const (
+		wantMsg  = "Audio source not available for live streaming"
+		unknown  = "rtsp_unknown_source"
+		startURL = "/api/v2/streams/hls/" + unknown + "/start"
+	)
+
+	// newControllerWithEngine returns a Controller backed by a real (but idle)
+	// audio engine. No capture buffers are ever allocated, so CaptureBuffer always
+	// misses and StartHLSStream falls into the no-capture-buffer diagnostic path.
+	newControllerWithEngine := func(t *testing.T) *Controller {
+		t.Helper()
+		eng := engine.New(t.Context(), &engine.Config{}, nil)
+		t.Cleanup(eng.Stop)
+		c := &Controller{}
+		c.Settings.Store(getTestSettings(t))
+		c.engine.Store(eng)
+		return c
+	}
+
+	callStart := func(t *testing.T, c *Controller) (*httptest.ResponseRecorder, error) {
+		t.Helper()
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, startURL, http.NoBody)
+		rec := httptest.NewRecorder()
+		ctx := e.NewContext(req, rec)
+		ctx.SetParamNames("sourceID")
+		ctx.SetParamValues(unknown)
+		return rec, c.StartHLSStream(ctx)
+	}
+
+	// StartHLSStream writes the error response via ctx.JSON (returning a nil error)
+	// and must produce a 404 whose body carries the improved user-facing message.
+	assertDiag404 := func(t *testing.T, rec *httptest.ResponseRecorder, err error) {
+		t.Helper()
+		require.NoError(t, err, "StartHLSStream writes the response and returns nil")
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), wantMsg)
+	}
+
+	t.Run("empty engine returns diagnostic 404", func(t *testing.T) {
+		c := newControllerWithEngine(t)
+		rec, err := callStart(t, c)
+		assertDiag404(t, rec, err)
+	})
+
+	t.Run("other registered sources still return diagnostic 404", func(t *testing.T) {
+		c := newControllerWithEngine(t)
+
+		// Register a couple of sources so the diagnostics-gathering loop over the
+		// registry actually runs. None of them have a capture buffer, matching the
+		// #3766 scenario where a source is configured but not yet streamable.
+		registry := c.engine.Load().Registry()
+		for _, cfg := range []*audiocore.SourceConfig{
+			{ID: "rtsp_a", DisplayName: "Camera A", Type: audiocore.SourceTypeRTSP, ConnectionString: "rtsp://user:pass@cam-a.local/stream"},
+			{ID: "card_b", DisplayName: "Backyard Mic", Type: audiocore.SourceTypeAudioCard, ConnectionString: "hw:0,0"},
+		} {
+			_, regErr := registry.Register(cfg)
+			require.NoError(t, regErr)
+		}
+
+		rec, err := callStart(t, c)
+		assertDiag404(t, rec, err)
+	})
 }
