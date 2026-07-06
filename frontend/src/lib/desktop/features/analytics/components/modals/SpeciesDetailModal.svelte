@@ -128,9 +128,13 @@
 
   $effect(() => {
     const name = displaySpecies?.scientific_name;
-    // Only fetch when the taxonomy section will actually render.
+    // Only fetch when the taxonomy section will actually render. Also clear any
+    // in-flight loading flag: if a previous run's fetch is still pending, its
+    // cleanup already set stale=true so its .finally won't reset the flag, so
+    // reset it here to avoid a stuck loading state when the section re-renders.
     if (!name || !guideEnabled || !showTaxonomy) {
       taxonomy = null;
+      taxonomyLoading = false;
       return;
     }
     let stale = false;
