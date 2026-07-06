@@ -191,8 +191,10 @@
       certInfo = await settingsAPI.tls.generateSelfSigned({
         validity: settings?.selfSignedValidity ?? '1825d',
       });
-      // Reload settings to sync frontend with backend TLSMode change
-      await settingsActions.loadSettings();
+      // Sync only the TLS mode the backend just persisted. A full loadSettings()
+      // reload would overwrite the whole store and discard any unsaved edits the
+      // user made in other Security fields. The backend sets mode to "selfsigned".
+      settingsActions.syncTLSMode(certInfo?.mode ?? 'selfsigned');
       settingsStore.update(state => ({ ...state, restartRequired: true }));
       toastActions.success(t('settings.security.tls.generateSuccess'));
     } catch (err) {
@@ -213,8 +215,10 @@
         privateKey: uploadKey,
         caCertificate: uploadCA || undefined,
       });
-      // Reload settings to sync frontend with backend TLSMode change
-      await settingsActions.loadSettings();
+      // Sync only the TLS mode the backend just persisted. A full loadSettings()
+      // reload would overwrite the whole store and discard any unsaved edits the
+      // user made in other Security fields. The backend sets mode to "manual".
+      settingsActions.syncTLSMode(certInfo?.mode ?? 'manual');
       settingsStore.update(state => ({ ...state, restartRequired: true }));
       toastActions.success(t('settings.security.tls.uploadSuccess'));
       // Clear upload form on success
@@ -238,8 +242,11 @@
     try {
       await settingsAPI.tls.deleteCertificate();
       certInfo = null;
-      // Reload settings to sync frontend with backend TLSMode reset to none
-      await settingsActions.loadSettings();
+      // Sync only the TLS mode the backend just persisted (reset to none). The
+      // DELETE endpoint returns no body, so use "" directly. A full loadSettings()
+      // reload would overwrite the whole store and discard any unsaved edits the
+      // user made in other Security fields.
+      settingsActions.syncTLSMode('');
       settingsStore.update(state => ({ ...state, restartRequired: true }));
       toastActions.success(t('settings.security.tls.deleteSuccess'));
     } catch (err) {
