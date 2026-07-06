@@ -25,7 +25,11 @@ linters:
     - wastedassign
     # Security & quality linters
     # - gosec
-    - goconst
+    # goconst disabled on release/v0.7: golangci-lint v2.12.2 detects struct-field
+    # string reuse that tag-era code was never written against; main fixed its
+    # findings in #3789, which is not backported. Keep this branch linting green
+    # for the code it actually ships.
+    # - goconst
     - staticcheck
     - ineffassign
     - bodyclose

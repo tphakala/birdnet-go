@@ -408,7 +408,7 @@ func lookupRegistry(path string) bool {
 }
 
 func unwrapPtr(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t
