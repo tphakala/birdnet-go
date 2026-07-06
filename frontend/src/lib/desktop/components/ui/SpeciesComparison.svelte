@@ -46,6 +46,12 @@
   // soft "no guide" message rather than the alarming red error alert.
   const HTTP_NOT_FOUND = 404;
 
+  // Descriptions longer than this (characters) are clamped with a "read more"
+  // toggle so a very long guide entry doesn't dominate the panel as one wall of
+  // text; shorter descriptions render in full with no ambiguous toggle. Mirrors
+  // SimilarSpeciesPanel's character-length heuristic (jsdom has no layout).
+  const DESC_CLAMP_CHARS = 800;
+
   interface Props {
     scientificName: string;
     commonName: string;
@@ -96,11 +102,16 @@
   let noGuide = $state(false);
   let error = $state<string | null>(null);
 
+  // Description is always shown (not a collapsible section), so it isn't tracked
+  // here — only songs and similar species toggle.
   let openSections = $state<Record<string, boolean>>({
-    description: true,
     songs: false,
     similar: true,
   });
+
+  // Whether a long description is expanded past its clamp. Parents key this
+  // component on the species, so it remounts (and resets to collapsed) per species.
+  let descExpanded = $state(false);
 
   function classifyHeading(heading: string): 'description' | 'songs' | 'other' {
     const h = heading.trim().toLowerCase();
@@ -257,13 +268,21 @@
         {#if enrichmentsOn && (guide.expectedness || season || externalLinks.length > 0)}
           <div class="mb-3 flex flex-wrap items-center gap-2" data-testid="guide-enrichments">
             {#if guide.expectedness}
-              <span class="badge badge-sm badge-outline">
+              <!-- Filled tints instead of thin outlines: expectedness and season are
+                   the guide's most glanceable facts, so they get prominence rather
+                   than being the quietest thing in the panel. -->
+              <span class="badge badge-sm border-0 bg-primary/10 text-primary font-medium">
                 {t(`analytics.species.guide.expectedness.${guide.expectedness}`)}
               </span>
             {/if}
             {#if season}
               {@const SeasonIcon = season.icon ? SEASON_ICON_COMPONENT.get(season.icon) : undefined}
-              <span class="badge badge-sm badge-outline gap-1">
+              <!-- Dark base-content text (not warning-content, which is white and
+                   meant for a solid amber fill) so the label stays legible on the
+                   pale amber tint in light mode; it flips to light in dark mode. -->
+              <span
+                class="badge badge-sm border-0 gap-1 bg-warning/15 text-[var(--color-base-content)] font-medium"
+              >
                 {#if SeasonIcon}<SeasonIcon class="h-3 w-3" aria-hidden="true" />{/if}
                 {t(season.i18nKey)}
               </span>
@@ -277,27 +296,29 @@
           </div>
         {/if}
 
-        <!-- Description -->
+        <!-- Description: the primary reason the guide is opened, so it stays visible
+             rather than hidden behind a toggle. Songs and similar species below
+             remain collapsible because they can run long. -->
         {#if descriptionBody}
-          <div class="border-b border-base-300">
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
-              aria-expanded={openSections.description}
-              aria-controls={`${uid}-description`}
-              onclick={() => toggle('description')}
+          {@const descClampable = descriptionBody.length > DESC_CLAMP_CHARS}
+          <div class="border-b border-base-300 pb-3">
+            <h3 class="py-2 text-sm font-medium">{t('analytics.species.guide.description')}</h3>
+            <div
+              id={`${uid}-description`}
+              class={`text-base leading-relaxed whitespace-pre-line${descClampable && !descExpanded ? ' line-clamp-[10]' : ''}`}
             >
-              <span>{t('analytics.species.guide.description')}</span>
-              {#if openSections.description}
-                <ChevronDown class="h-4 w-4" />
-              {:else}
-                <ChevronRight class="h-4 w-4" />
-              {/if}
-            </button>
-            {#if openSections.description}
-              <div id={`${uid}-description`} class="pb-3 text-sm whitespace-pre-line">
-                {descriptionBody}
-              </div>
+              {descriptionBody}
+            </div>
+            {#if descClampable}
+              <button
+                type="button"
+                class="mt-1 text-xs font-medium text-primary hover:underline"
+                aria-expanded={descExpanded}
+                aria-controls={`${uid}-description`}
+                onclick={() => (descExpanded = !descExpanded)}
+              >
+                {descExpanded ? t('common.ui.showLess') : t('common.ui.showMore')}
+              </button>
             {/if}
           </div>
         {/if}
@@ -320,7 +341,9 @@
               {/if}
             </button>
             {#if openSections.songs}
-              <div id={`${uid}-songs`} class="pb-3 text-sm whitespace-pre-line">{songsBody}</div>
+              <div id={`${uid}-songs`} class="pb-3 text-base leading-relaxed whitespace-pre-line">
+                {songsBody}
+              </div>
             {/if}
           </div>
         {/if}

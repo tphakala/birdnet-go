@@ -214,27 +214,46 @@
           {/if}
 
           {#if showStats}
-            <div class="grid grid-cols-2 gap-3 text-sm">
-              <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-                <span class="opacity-70">{t('analytics.species.card.detections')}</span>
-                <span class="font-semibold">{displaySpecies.count}</span>
-              </div>
-              <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-                <span class="opacity-70">{t('analytics.species.card.confidence')}</span>
-                <span class="font-semibold">{formatPercentage(displaySpecies.avg_confidence)}</span>
-              </div>
-              {#if displaySpecies.first_heard}
-                <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-                  <span class="opacity-70">{t('analytics.species.headers.firstDetected')}</span>
-                  <span class="font-semibold">{formatDate(displaySpecies.first_heard)}</span>
+            <!-- "Your detections": the user's own data, set apart from the reference
+                 taxonomy below by a primary accent rail and value-forward typography
+                 rather than repeating the same gray-pill row idiom. -->
+            <div class="border-l-2 border-[var(--color-primary)] pl-3">
+              <div class="flex flex-wrap gap-x-6 gap-y-3">
+                <div>
+                  <div class="text-xl font-semibold leading-none">{displaySpecies.count}</div>
+                  <div class="mt-1 text-xs opacity-60">
+                    {t('analytics.species.card.detections')}
+                  </div>
                 </div>
-              {/if}
-              {#if displaySpecies.last_heard}
-                <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-                  <span class="opacity-70">{t('analytics.species.headers.lastDetected')}</span>
-                  <span class="font-semibold">{formatDate(displaySpecies.last_heard)}</span>
+                <div>
+                  <div class="text-xl font-semibold leading-none">
+                    {formatPercentage(displaySpecies.avg_confidence)}
+                  </div>
+                  <div class="mt-1 text-xs opacity-60">
+                    {t('analytics.species.card.confidence')}
+                  </div>
                 </div>
-              {/if}
+                {#if displaySpecies.first_heard}
+                  <div>
+                    <div class="text-sm font-medium leading-none">
+                      {formatDate(displaySpecies.first_heard)}
+                    </div>
+                    <div class="mt-1 text-xs opacity-60">
+                      {t('analytics.species.headers.firstDetected')}
+                    </div>
+                  </div>
+                {/if}
+                {#if displaySpecies.last_heard}
+                  <div>
+                    <div class="text-sm font-medium leading-none">
+                      {formatDate(displaySpecies.last_heard)}
+                    </div>
+                    <div class="mt-1 text-xs opacity-60">
+                      {t('analytics.species.headers.lastDetected')}
+                    </div>
+                  </div>
+                {/if}
+              </div>
             </div>
           {/if}
 
@@ -252,13 +271,23 @@
                   {/each}
                 </div>
               {:else if taxonomy?.taxonomy}
-                <dl class="space-y-1 text-sm">
-                  {#each [{ key: 'class', value: taxonomy.taxonomy.class }, { key: 'order', value: taxonomy.taxonomy.order }, { key: 'family', value: taxonomy.taxonomy.family }, { key: 'genus', value: taxonomy.taxonomy.genus }, { key: 'species', value: taxonomy.taxonomy.species }] as rank (rank.key)}
-                    <div class="flex justify-between bg-[var(--color-base-200)] rounded px-3 py-2">
-                      <dt class="opacity-70">{t(`species.taxonomy.labels.${rank.key}`)}</dt>
-                      <dd class="font-medium" class:italic={rank.key === 'species'}>
+                <!-- Rendered as an indented lineage so the class -> order -> family ->
+                     genus -> species nesting is visible, instead of five equal rows
+                     that discard the hierarchy. Each level steps in against a rail;
+                     the species (the leaf) carries the primary accent. -->
+                <dl class="text-sm">
+                  {#each [{ key: 'class', value: taxonomy.taxonomy.class }, { key: 'order', value: taxonomy.taxonomy.order }, { key: 'family', value: taxonomy.taxonomy.family }, { key: 'genus', value: taxonomy.taxonomy.genus }, { key: 'species', value: taxonomy.taxonomy.species }] as rank, i (rank.key)}
+                    <div
+                      class={`flex items-baseline gap-2 py-1 pl-3 ${rank.key === 'species' ? 'border-l-2 border-[var(--color-primary)]' : 'border-l border-[var(--color-base-300)]'}`}
+                      style={`margin-left: ${i * 0.85}rem`}
+                    >
+                      <dd
+                        class="font-medium"
+                        class:italic={rank.key === 'species' || rank.key === 'genus'}
+                      >
                         {rank.value}
                       </dd>
+                      <dt class="text-xs opacity-50">{t(`species.taxonomy.labels.${rank.key}`)}</dt>
                     </div>
                   {/each}
                 </dl>
@@ -325,13 +354,18 @@
   {/snippet}
 
   {#snippet footer()}
-    <button
-      class="px-4 py-2 rounded-lg font-medium transition-colors w-full
-             bg-[var(--color-primary)] text-[var(--color-primary-content)]
-             hover:bg-[var(--color-primary)]/90"
-      onclick={handleClose}
-    >
-      {t('common.close')}
-    </button>
+    <!-- Close is an escape hatch, not the primary action, so it reads as a quiet
+         secondary control rather than a full-width primary button that would draw
+         the eye to the least valuable thing on screen. -->
+    <div class="flex justify-end">
+      <button
+        class="px-4 py-2 rounded-lg font-medium transition-colors
+               border border-[var(--color-base-300)]
+               hover:bg-[var(--color-base-200)]"
+        onclick={handleClose}
+      >
+        {t('common.close')}
+      </button>
+    </div>
   {/snippet}
 </Modal>

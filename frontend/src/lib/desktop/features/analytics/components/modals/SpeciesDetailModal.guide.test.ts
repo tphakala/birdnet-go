@@ -165,7 +165,8 @@ describe('SpeciesDetailModal species guide panel', () => {
   // Companion guard to the re-expand test: only the OUTER panel resets on reopen.
   // The inner section toggles must persist (the modal keeps SpeciesComparison mounted
   // for the same species). If a refactor ever remounts it on open, this catches the
-  // silent regression.
+  // silent regression. The description is always visible now, so this exercises the
+  // similar-species section, which is still a collapsible inner section.
   it('keeps inner section state across a reopen while re-expanding the panel', async () => {
     enableGuide();
     const { container, rerender } = modalTest.render({ props: { isOpen: true, species } });
@@ -177,28 +178,31 @@ describe('SpeciesDetailModal species guide panel', () => {
       { timeout: 5000 }
     );
 
-    // Description inner section is open by default; collapse just that section (not
-    // the whole panel), which hides its body but leaves the section header.
-    const descHeader = await screen.findByText(
-      'analytics.species.guide.description',
+    // The description stays visible (no longer collapsible)...
+    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
+
+    // ...while the similar-species section is open by default; collapse just that
+    // section (not the whole panel), which hides its body but leaves the header.
+    const similarHeader = await screen.findByText(
+      'analytics.species.similar.title',
       {},
       { timeout: 5000 }
     );
-    expect(await screen.findByText('A bird.', {}, { timeout: 5000 })).toBeInTheDocument();
-    await fireEvent.click(descHeader);
+    expect(screen.getByText('analytics.species.similar.empty')).toBeInTheDocument();
+    await fireEvent.click(similarHeader);
     await waitFor(() => {
-      expect(screen.queryByText('A bird.')).toBeNull();
+      expect(screen.queryByText('analytics.species.similar.empty')).toBeNull();
     });
 
     // Close and reopen the same species.
     await rerender({ isOpen: false, species });
     await rerender({ isOpen: true, species });
 
-    // The outer panel re-expanded (its toggle + the description section header show)...
+    // The outer panel re-expanded (its toggle shows, the description is visible)...
     expect(container.querySelector(COMPARISON_TOGGLE)).not.toBeNull();
-    expect(screen.getByText('analytics.species.guide.description')).toBeInTheDocument();
-    // ...but the inner description section kept its collapsed state, so its body stays hidden.
-    expect(screen.queryByText('A bird.')).toBeNull();
+    expect(screen.getByText('A bird.')).toBeInTheDocument();
+    // ...but the inner similar section kept its collapsed state, so its body stays hidden.
+    expect(screen.queryByText('analytics.species.similar.empty')).toBeNull();
   });
 
   // Regression guard: the modal title already shows the species name, so the
