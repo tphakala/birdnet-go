@@ -885,7 +885,14 @@ func (c *GuideCache) refreshStaleEntries() {
 		if c.shouldQuit() {
 			return
 		}
-		_, _ = c.fetchAndStore(c.ctx, s.name, s.locale)
+		// Route the background refresh through the same singleflight group (keyed on
+		// the cache key) as triggerAsyncRefresh and the synchronous Tier-3 path, so a
+		// periodic refresh that coincides with a user-triggered fetch for the same
+		// species collapses to one provider call instead of a redundant external hit.
+		key := cacheKey(s.name, s.locale)
+		_, _, _ = c.sf.Do(key, func() (any, error) {
+			return c.fetchAndStore(c.ctx, s.name, s.locale)
+		})
 	}
 
 	// Opportunistic retention cleanup of long-expired DB rows.
