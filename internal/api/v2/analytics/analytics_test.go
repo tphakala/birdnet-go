@@ -129,9 +129,73 @@ func TestGetSpeciesSummary(t *testing.T) {
 		assert.Equal(t, "Blue Jay", response[1]["common_name"])
 		assert.Equal(t, "blujay", response[1]["species_code"])
 		assert.InDelta(t, 27, response[1]["count"], 0.01)
+
+		// first_heard / last_heard must be ISO 8601 (RFC3339) with a timezone
+		// offset, not the offset-less "2006-01-02 15:04:05" form. Regression
+		// guard for issue #3793. A successful RFC3339 parse also proves the
+		// offset is present, since RFC3339 requires one.
+		firstHeard, ok := response[0]["first_heard"].(string)
+		require.True(t, ok, "first_heard should be a string")
+		parsedFirst, err := time.Parse(time.RFC3339, firstHeard)
+		require.NoErrorf(t, err, "first_heard %q must be valid RFC3339", firstHeard)
+		assert.WithinDuration(t, firstSeen, parsedFirst, time.Second,
+			"first_heard should round-trip the FirstSeen instant")
+
+		lastHeard, ok := response[0]["last_heard"].(string)
+		require.True(t, ok, "last_heard should be a string")
+		parsedLast, err := time.Parse(time.RFC3339, lastHeard)
+		require.NoErrorf(t, err, "last_heard %q must be valid RFC3339", lastHeard)
+		assert.WithinDuration(t, lastSeen, parsedLast, time.Second,
+			"last_heard should round-trip the LastSeen instant")
 	}
 
 	// Verify mock expectations
+	mockDS.AssertExpectations(t)
+}
+
+// TestGetSpeciesSummary_ZeroTimeOmitsHeardFields verifies that a species with no
+// recorded first/last detection time (a zero time.Time) omits first_heard/last_heard
+// from the JSON response entirely, rather than emitting an empty string or a
+// 1970 epoch value. This guards the omitempty contract on the RFC3339-formatted
+// fields. Companion to the RFC3339 format assertion in TestGetSpeciesSummary. See
+// issue #3793.
+func TestGetSpeciesSummary_ZeroTimeOmitsHeardFields(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "species-summary")
+
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	mockSummaryData := []datastore.SpeciesSummaryData{
+		{
+			ScientificName: "Turdus migratorius",
+			CommonName:     "American Robin",
+			SpeciesCode:    "amerob",
+			Count:          42,
+			// FirstSeen and LastSeen left as the zero time.Time on purpose.
+			AvgConfidence: 0.75,
+			MaxConfidence: 0.85,
+		},
+	}
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/analytics/species/summary")
+
+	require.NoError(t, controller.GetSpeciesSummary(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response, 1)
+
+	_, hasFirst := response[0]["first_heard"]
+	assert.False(t, hasFirst, "first_heard should be omitted when the detection time is zero")
+	_, hasLast := response[0]["last_heard"]
+	assert.False(t, hasLast, "last_heard should be omitted when the detection time is zero")
+
 	mockDS.AssertExpectations(t)
 }
 
