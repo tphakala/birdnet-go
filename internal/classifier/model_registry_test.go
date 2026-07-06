@@ -404,3 +404,38 @@ func TestModelInfo_ToDetectionModelInfo_EmptyDetectionName(t *testing.T) {
 	got := info.ToDetectionModelInfo()
 	assert.Equal(t, detection.DefaultModelInfo(), got)
 }
+
+// TestCustomBirdNETV24ModelInfo verifies that any model configured in the
+// birdnet config section keeps the canonical BirdNET_V2.4 identity regardless
+// of filename. Identity divergence (e.g. a "Custom" ID for an unrecognized
+// filename) breaks the per-source model-set join, which keys the loaded model
+// by ID against the "birdnet" config alias, so the primary classifier never
+// gets a buffer monitor and inference never starts.
+func TestCustomBirdNETV24ModelInfo(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		path     string
+		wantBack string
+	}{
+		{"fp16 keepact onnx", "/models/BirdNET_v24_fp16_keepact.onnx", BackendONNX},
+		{"plain onnx no precision token", "/models/my-classifier.onnx", BackendONNX},
+		{"custom tflite build", "/models/BirdNET-Go_classifier.tflite", BackendTFLite},
+		{"unrecognized onnx name", "/models/totally-unknown.onnx", BackendONNX},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			info := customBirdNETV24ModelInfo(tt.path)
+
+			assert.Equal(t, DefaultModelVersion, info.ID, "birdnet-slot model must keep BirdNET_V2.4 identity")
+			assert.Equal(t, "BirdNET", info.DetectionName)
+			assert.Equal(t, "2.4", info.DetectionVersion)
+			assert.Equal(t, tt.path, info.CustomPath)
+			assert.Equal(t, tt.wantBack, info.Backend)
+			assert.NotEmpty(t, info.SupportedLocales, "must inherit BirdNET v2.4 locales")
+		})
+	}
+}

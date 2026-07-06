@@ -4,6 +4,7 @@ package classifier
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -317,4 +318,32 @@ func IsLocaleSupported(modelInfo *ModelInfo, locale string) bool {
 	}
 
 	return false
+}
+
+// customBirdNETV24ModelInfo returns the canonical BirdNET_V2.4 identity adapted
+// to load a user-supplied model file configured in the birdnet config section
+// (birdnet.modelpath). Any model placed in the birdnet slot is a BirdNET
+// v2.4-type classifier (same 48kHz/3s I/O and 6522-class head), so it keeps the
+// BirdNET_V2.4 ID regardless of filename. Keeping the ID canonical is required:
+// the per-source model-set join in the analysis pipeline maps the config alias
+// "birdnet" to BirdNET_V2.4 and looks the loaded model up by ID, so a divergent
+// ID (the "Custom" sentinel for an unrecognized filename) would leave the
+// primary classifier without an analysis buffer monitor and inference would
+// never start. Backend is taken from the file extension. BirdNET v3.0 is
+// selected via birdnet.version, never by a filename in this slot.
+//
+// Partial backport of the model-identity unification from #3544; quantization
+// tracking and the arm64 ONNX-only defaults from that change are not included.
+func customBirdNETV24ModelInfo(path string) ModelInfo {
+	info := ModelRegistry[DefaultModelVersion]
+	info.CustomPath = path
+	info.SupportedLocales = slices.Clone(info.SupportedLocales)
+	info.ConfigAliases = slices.Clone(info.ConfigAliases)
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".onnx":
+		info.Backend = BackendONNX
+	case ".tflite":
+		info.Backend = BackendTFLite
+	}
+	return info
 }

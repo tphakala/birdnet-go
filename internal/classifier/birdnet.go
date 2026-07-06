@@ -127,16 +127,13 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			bn.ModelInfo.CustomPath = settings.BirdNET.ModelPath
 		}
 	case settings.BirdNET.ModelPath != "":
-		// Tier 3: filename-based fallback
-		bn.ModelInfo, err = DetermineModelInfo(settings.BirdNET.ModelPath)
-		if err != nil {
-			return nil, errors.New(err).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				ModelContext(settings.BirdNET.ModelPath, settings.BirdNET.ModelPath).
-				Context("operation", "determine_model_info").
-				Build()
-		}
+		// Tier 3: explicit model path in the birdnet config section. Any model in
+		// the birdnet slot is a BirdNET v2.4-type classifier, so it inherits the
+		// canonical BirdNET_V2.4 identity regardless of filename (BirdNET v3.0 is
+		// selected via birdnet.version, not by a filename here). Keeping the ID
+		// canonical ensures the per-source model-set join matches the loaded model
+		// so the primary classifier gets a buffer monitor and inference starts.
+		bn.ModelInfo = customBirdNETV24ModelInfo(settings.BirdNET.ModelPath)
 	default:
 		// Tier 4: default embedded model
 		info, ok := ModelRegistry[DefaultModelVersion]
