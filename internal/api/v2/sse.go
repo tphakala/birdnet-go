@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -211,6 +212,15 @@ type SSEClient struct {
 	Response       http.ResponseWriter
 	Done           chan struct{} // Signal-only buffered channel to prevent blocking
 	StreamType     string        // streamTypeDetections, streamTypeSoundLevels, or streamTypeAll
+
+	// Authenticated records the client's authentication state, captured ONCE at
+	// connect time (mirroring StreamAudioLevel, which checks isClientAuthenticated
+	// per connection). The detection stream reads this to decide whether to expose
+	// the raw audio source DisplayName: unauthenticated subscribers receive only
+	// the stable Source.ID, since DisplayName can embed internal host details for
+	// stream sources without a user-configured name. Set before the read loop runs
+	// and never mutated afterwards, so concurrent broadcasts read it race-free.
+	Authenticated bool
 
 	// Health tracking for auto-disconnect of slow/blocked clients
 	// Uses atomic operations for thread-safe access during concurrent broadcasts
@@ -626,10 +636,95 @@ func (c *Controller) StreamDetections(ctx echo.Context) error {
 		func(client *SSEClient) {
 			client.Channel = make(chan SSEDetectionData, sseDetectionBufferSize) // Buffer for high detection periods
 			client.PendingChan = make(chan any, ssePendingBufferSize)            // Buffer for pending detection snapshots
+			// Capture the authentication state ONCE at connect time (mirroring
+			// StreamAudioLevel). setupFunc runs synchronously before the client is
+			// registered and before the event loop starts, so this snapshot is
+			// race-free and is read by the per-client send path to decide whether to
+			// expose the raw source DisplayName.
+			client.Authenticated = c.isClientAuthenticated(ctx)
 		},
 		func(ctx echo.Context, client *SSEClient, clientID string) error {
 			return c.runSSEEventLoopMulti(ctx, client, clientID, detectionStreamEndpoint)
 		})
+}
+
+// sanitizeDetectionForUnauthenticated returns a COPY of a detection event with the
+// audio source DisplayName stripped, exposing only the stable Source.ID to
+// unauthenticated subscribers. The source DisplayName can embed internal host
+// details (for stream sources without a user-configured name), so it must never
+// reach unauthenticated clients.
+//
+// Deliberate divergence from the detections REST/search endpoints: those strip the
+// entire Source (id included) for unauthenticated clients, whereas this stream
+// keeps Source.ID. The stream follows the StreamAudioLevel precedent (which exposes
+// the raw source id and only anonymizes the display name). The id is an opaque,
+// stable identifier the live UI needs to distinguish/correlate sources, and
+// DisplayName is the only field that can carry sensitive host details.
+//
+// The returned event rebuilds Source as a FRESH pointer. The broadcast struct is
+// fanned out to every client as a shared *SSESourceInfo (BroadcastDetection does
+// `client.Channel <- *detection`, which copies the struct VALUE per client but
+// shares the Source pointer), so mutating Source in place would race across clients
+// under -race and corrupt authenticated clients' payloads. The function copies the
+// dereferenced value first and rebinds Source only on that local copy, so the
+// caller's struct and shared pointer are left untouched. The input is taken by
+// pointer to avoid copying the (large) value twice.
+func sanitizeDetectionForUnauthenticated(event *SSEDetectionData) SSEDetectionData {
+	out := *event
+	if out.Source != nil {
+		out.Source = &SSESourceInfo{ID: out.Source.ID}
+	}
+	return out
+}
+
+// detectionPayloadForClient returns the detection payload to serialize for a single
+// subscriber. Authenticated subscribers receive the event unchanged (full
+// DisplayName, via the shared pointer, which is never mutated); unauthenticated
+// subscribers receive a sanitized copy exposing only the stable Source.ID.
+func detectionPayloadForClient(event *SSEDetectionData, authenticated bool) SSEDetectionData {
+	if authenticated {
+		return *event
+	}
+	return sanitizeDetectionForUnauthenticated(event)
+}
+
+// sanitizePendingForUnauthenticated returns a sanitized COPY of a pending detection
+// snapshot for unauthenticated subscribers: each item's Source (the audio source
+// display name) is stripped, leaving only the stable SourceID.
+//
+// PendingChan is typed `any`; the only payload the broadcaster sends today is
+// []processor.SSEPendingDetection (verified at the BroadcastPending call site). An
+// unexpected concrete type fails CLOSED, returning an empty pending list rather
+// than forwarding an unknown (potentially display-name-bearing) payload to an
+// unauthenticated client.
+//
+// The pending snapshot is broadcast as a single shared slice to every detection
+// client (BroadcastPending sends the same []processor.SSEPendingDetection to all
+// PendingChan channels), so all clients alias the same backing array. A fresh slice
+// of copied, sanitized elements is allocated; the shared array is never mutated,
+// which would race across clients and corrupt authenticated clients' payloads.
+func sanitizePendingForUnauthenticated(pending any) any {
+	items, ok := pending.([]processor.SSEPendingDetection)
+	if !ok {
+		return []processor.SSEPendingDetection{}
+	}
+	sanitized := make([]processor.SSEPendingDetection, len(items))
+	for i := range items {
+		item := items[i] // copy the struct value (does not touch the shared array)
+		item.Source = "" // strip the display name; SourceID is retained for filtering
+		sanitized[i] = item
+	}
+	return sanitized
+}
+
+// pendingPayloadForClient returns the pending snapshot to serialize for a single
+// subscriber: authenticated subscribers receive it unchanged; unauthenticated
+// subscribers receive a sanitized copy with the per-item display name removed.
+func pendingPayloadForClient(pending any, authenticated bool) any {
+	if authenticated {
+		return pending
+	}
+	return sanitizePendingForUnauthenticated(pending)
 }
 
 // runSSEEventLoopMulti handles the SSE event loop for detection streams,
@@ -662,7 +757,12 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 				if !ok {
 					return nil
 				}
-				if err := c.sendSSEMessage(ctx, "detection", detection); err != nil {
+				// Per-client send path: unauthenticated subscribers receive a copy
+				// with the source DisplayName stripped (only Source.ID exposed). The
+				// shared broadcast struct is never mutated; see
+				// sanitizeDetectionForUnauthenticated.
+				payload := detectionPayloadForClient(&detection, client.Authenticated)
+				if err := c.sendSSEMessage(ctx, "detection", payload); err != nil {
 					c.logErrorIfEnabled("Failed to send SSE detection",
 						logger.String("client_id", clientID),
 						logger.String("endpoint", endpoint),
@@ -683,6 +783,10 @@ func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, c
 					if !ok {
 						return nil
 					}
+					// Same per-client anonymization as the detection path: the
+					// pending snapshot also carries the source display name, so
+					// unauthenticated subscribers receive a sanitized copy.
+					pending = pendingPayloadForClient(pending, client.Authenticated)
 					if err := c.sendSSEMessage(ctx, "pending", pending); err != nil {
 						c.logErrorIfEnabled("Failed to send SSE pending",
 							logger.String("client_id", clientID),
