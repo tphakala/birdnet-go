@@ -1346,8 +1346,9 @@ tasks:
           GOARCH: amd64
           BINARY_SUFFIX: ''
           # amd64 includes the OpenVINO backend by default (activates on an Intel
-          # iGPU at runtime, otherwise falls back to ONNX Runtime). The standard
-          # Docker and CI images pass OPENVINO=false to stay ONNX-only.
+          # iGPU at runtime when the host provides the GPU drivers, otherwise falls
+          # back to ONNX Runtime). The published Docker images bundle the OpenVINO
+          # runtime libraries; pass OPENVINO=false to build an ONNX-only binary.
           OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_linux_arm64:
@@ -1367,8 +1368,9 @@ tasks:
           # does not link libtensorflowlite_c (issue #1103).
           NOTFLITE: 'true'
           # arm64 includes the OpenVINO backend by default (activates on A76/ARMv8.2
-          # at runtime, otherwise falls back to ONNX Runtime). The standard Docker
-          # and CI images pass OPENVINO=false to stay strictly ONNX-only.
+          # at runtime, otherwise falls back to ONNX Runtime). The published Docker
+          # images bundle the OpenVINO runtime libraries; pass OPENVINO=false to
+          # build a strictly ONNX-only binary.
           OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_windows_amd64:
