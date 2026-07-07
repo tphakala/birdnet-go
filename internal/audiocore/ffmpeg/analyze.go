@@ -113,7 +113,10 @@ func buildAnalysisArgs(url string, ffmpegMajor int) []string {
 	// connect. Mirror the live capture path's flag selection.
 	timeoutFlag := ffmpegTimeoutParam
 	if isRTSP {
-		args = append(args, "-rtsp_transport", "tcp")
+		// Restrict the RTSP handshake to audio tracks; -vn below only drops video
+		// after decode, so without this the camera's video track is still SETUP
+		// (issue #3798).
+		args = append(args, "-rtsp_transport", "tcp", ffmpegAllowedMediaTypesFlag, ffmpegAllowedMediaTypesAudio)
 		timeoutFlag = rtspTimeoutParamForMajor(ffmpegMajor)
 	}
 
