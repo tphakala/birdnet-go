@@ -930,12 +930,11 @@
           {#key detection.scientificName}
             <!-- Pass an explicit "Species guide" heading so the collapsible bar
                  describes the section rather than repeating the bird's name (already
-                 shown in the page header). Reuses the existing similar.speciesGuide
-                 string (translated in all locales) to avoid a new key. -->
+                 shown in the page header). -->
             <SpeciesComparison
               scientificName={detection.scientificName}
               commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
-              heading={t('analytics.species.similar.speciesGuide')}
+              heading={t('analytics.species.guide.speciesGuide')}
               {showSimilarSpecies}
             />
             {#if showNotes && $isAuthenticated}

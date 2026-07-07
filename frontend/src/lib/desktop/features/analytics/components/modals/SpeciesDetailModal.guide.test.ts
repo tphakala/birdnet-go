@@ -221,7 +221,7 @@ describe('SpeciesDetailModal species guide panel', () => {
 
     // The panel header renders the "Species guide" heading key, not the species
     // name (t() returns keys in tests).
-    expect(screen.getByText('analytics.species.similar.speciesGuide')).toBeInTheDocument();
+    expect(screen.getByText('analytics.species.guide.speciesGuide')).toBeInTheDocument();
   });
 
   // Regression guard: reusing one modal instance for a different species must

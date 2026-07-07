@@ -1987,7 +1987,8 @@
         },
         "description": "Description",
         "songsAndCalls": "Chants et cris",
-        "externalLinks": "Ressources externes"
+        "externalLinks": "Ressources externes",
+        "speciesGuide": "Guide des espèces"
       },
       "notes": {
         "title": "Notes",
@@ -2008,7 +2009,6 @@
         "loading": "Chargement des espèces similaires…",
         "empty": "Aucune espèce similaire trouvée.",
         "similar": "Similaire",
-        "speciesGuide": "Guide des espèces",
         "versus": "vs {species}",
         "selectPrompt": "Sélectionnez une espèce à comparer avec {species}.",
         "noGuideAvailable": "Aucun guide disponible",

@@ -1546,6 +1546,7 @@ export type TranslationKey =
   | 'analytics.species.guide.description'
   | 'analytics.species.guide.songsAndCalls'
   | 'analytics.species.guide.externalLinks'
+  | 'analytics.species.guide.speciesGuide'
   | 'analytics.species.notes.title'
   | 'analytics.species.notes.placeholder'
   | 'analytics.species.notes.editLabel'
@@ -1562,7 +1563,6 @@ export type TranslationKey =
   | 'analytics.species.similar.loading'
   | 'analytics.species.similar.empty'
   | 'analytics.species.similar.similar'
-  | 'analytics.species.similar.speciesGuide'
   | 'analytics.species.similar.versus' // params: species
   | 'analytics.species.similar.selectPrompt' // params: species
   | 'analytics.species.similar.noGuideAvailable'

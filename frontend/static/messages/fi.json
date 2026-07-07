@@ -1987,7 +1987,8 @@
         },
         "description": "Kuvaus",
         "songsAndCalls": "Laulu ja äänet",
-        "externalLinks": "Ulkoiset resurssit"
+        "externalLinks": "Ulkoiset resurssit",
+        "speciesGuide": "Lajiopas"
       },
       "notes": {
         "title": "Muistiinpanot",
@@ -2008,7 +2009,6 @@
         "loading": "Ladataan samankaltaisia lajeja…",
         "empty": "Samankaltaisia lajeja ei löytynyt.",
         "similar": "Samankaltainen",
-        "speciesGuide": "Lajiopas",
         "versus": "vs {species}",
         "selectPrompt": "Valitse laji vertailtavaksi lajin {species} kanssa.",
         "noGuideAvailable": "Opasta ei saatavilla",

@@ -1987,7 +1987,8 @@
         },
         "description": "Popis",
         "songsAndCalls": "Zpěv a volání",
-        "externalLinks": "Externí zdroje"
+        "externalLinks": "Externí zdroje",
+        "speciesGuide": "Průvodce druhem"
       },
       "notes": {
         "title": "Poznámky",
@@ -2008,7 +2009,6 @@
         "loading": "Načítání podobných druhů…",
         "empty": "Nebyly nalezeny žádné podobné druhy.",
         "similar": "Podobné",
-        "speciesGuide": "Průvodce druhem",
         "versus": "vs {species}",
         "selectPrompt": "Vyberte druh pro porovnání s {species}.",
         "noGuideAvailable": "Průvodce není k dispozici",

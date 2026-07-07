@@ -1987,7 +1987,8 @@
         },
         "description": "Apraksts",
         "songsAndCalls": "Dziesmas un saucieni",
-        "externalLinks": "Ārējie resursi"
+        "externalLinks": "Ārējie resursi",
+        "speciesGuide": "Sugu ceļvedis"
       },
       "notes": {
         "title": "Piezīmes",
@@ -2008,7 +2009,6 @@
         "loading": "Notiek līdzīgu sugu ielāde…",
         "empty": "Līdzīgas sugas nav atrastas.",
         "similar": "Līdzīga",
-        "speciesGuide": "Sugu ceļvedis",
         "versus": "vs {species}",
         "selectPrompt": "Atlasiet sugu, ko salīdzināt ar {species}.",
         "noGuideAvailable": "Ceļvedis nav pieejams",

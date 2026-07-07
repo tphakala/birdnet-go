@@ -1987,7 +1987,8 @@
         },
         "description": "Description",
         "songsAndCalls": "Songs & Calls",
-        "externalLinks": "External resources"
+        "externalLinks": "External resources",
+        "speciesGuide": "Species guide"
       },
       "notes": {
         "title": "Notes",
@@ -2008,7 +2009,6 @@
         "loading": "Loading similar species…",
         "empty": "No similar species found.",
         "similar": "Similar",
-        "speciesGuide": "Species guide",
         "versus": "vs {species}",
         "selectPrompt": "Select a species to compare with {species}.",
         "noGuideAvailable": "No guide available",

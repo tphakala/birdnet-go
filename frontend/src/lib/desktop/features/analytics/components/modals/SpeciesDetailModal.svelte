@@ -342,7 +342,7 @@
               <SpeciesComparison
                 scientificName={displaySpecies.scientific_name}
                 commonName={displayName}
-                heading={t('analytics.species.similar.speciesGuide')}
+                heading={t('analytics.species.guide.speciesGuide')}
                 {showSimilarSpecies}
                 bind:collapsed={guidePanelCollapsed}
               />

@@ -1987,7 +1987,8 @@
         },
         "description": "Beskrivelse",
         "songsAndCalls": "Sang og kald",
-        "externalLinks": "Eksterne ressourcer"
+        "externalLinks": "Eksterne ressourcer",
+        "speciesGuide": "Artsguide"
       },
       "notes": {
         "title": "Noter",
@@ -2008,7 +2009,6 @@
         "loading": "Indlæser lignende arter…",
         "empty": "Ingen lignende arter fundet.",
         "similar": "Lignende",
-        "speciesGuide": "Artsguide",
         "versus": "vs {species}",
         "selectPrompt": "Vælg en art for at sammenligne med {species}.",
         "noGuideAvailable": "Ingen guide tilgængelig",

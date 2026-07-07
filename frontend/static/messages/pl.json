@@ -1987,7 +1987,8 @@
         },
         "description": "Opis",
         "songsAndCalls": "Śpiew i głosy",
-        "externalLinks": "Zasoby zewnętrzne"
+        "externalLinks": "Zasoby zewnętrzne",
+        "speciesGuide": "Przewodnik po gatunkach"
       },
       "notes": {
         "title": "Notatki",
@@ -2008,7 +2009,6 @@
         "loading": "Ładowanie podobnych gatunków…",
         "empty": "Nie znaleziono podobnych gatunków.",
         "similar": "Podobny",
-        "speciesGuide": "Przewodnik po gatunkach",
         "versus": "vs {species}",
         "selectPrompt": "Wybierz gatunek do porównania z {species}.",
         "noGuideAvailable": "Przewodnik niedostępny",

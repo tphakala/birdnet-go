@@ -1987,7 +1987,8 @@
         },
         "description": "Beschreibung",
         "songsAndCalls": "Gesang & Rufe",
-        "externalLinks": "Externe Ressourcen"
+        "externalLinks": "Externe Ressourcen",
+        "speciesGuide": "Steckbrief"
       },
       "notes": {
         "title": "Notizen",
@@ -2008,7 +2009,6 @@
         "loading": "Ähnliche Arten werden geladen…",
         "empty": "Keine ähnlichen Arten gefunden.",
         "similar": "Ähnlich",
-        "speciesGuide": "Steckbrief",
         "versus": "vs. {species}",
         "selectPrompt": "Wählen Sie eine Art zum Vergleich mit {species}.",
         "noGuideAvailable": "Kein Steckbrief verfügbar",

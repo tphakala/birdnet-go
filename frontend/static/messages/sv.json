@@ -1987,7 +1987,8 @@
         },
         "description": "Beskrivning",
         "songsAndCalls": "Sång och läten",
-        "externalLinks": "Externa resurser"
+        "externalLinks": "Externa resurser",
+        "speciesGuide": "Artguide"
       },
       "notes": {
         "title": "Anteckningar",
@@ -2008,7 +2009,6 @@
         "loading": "Laddar liknande arter…",
         "empty": "Inga liknande arter hittades.",
         "similar": "Liknande",
-        "speciesGuide": "Artguide",
         "versus": "vs {species}",
         "selectPrompt": "Välj en art att jämföra med {species}.",
         "noGuideAvailable": "Ingen guide tillgänglig",

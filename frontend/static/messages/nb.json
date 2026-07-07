@@ -1987,7 +1987,8 @@
         },
         "description": "Beskrivelse",
         "songsAndCalls": "Sang og lyder",
-        "externalLinks": "Eksterne ressurser"
+        "externalLinks": "Eksterne ressurser",
+        "speciesGuide": "Artsguide"
       },
       "notes": {
         "title": "Notater",
@@ -2008,7 +2009,6 @@
         "loading": "Laster lignende arter…",
         "empty": "Ingen lignende arter funnet.",
         "similar": "Lignende",
-        "speciesGuide": "Artsguide",
         "versus": "vs {species}",
         "selectPrompt": "Velg en art å sammenligne med {species}.",
         "noGuideAvailable": "Ingen guide tilgjengelig",

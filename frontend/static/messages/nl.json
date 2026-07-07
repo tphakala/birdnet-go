@@ -1987,7 +1987,8 @@
         },
         "description": "Beschrijving",
         "songsAndCalls": "Zang en roep",
-        "externalLinks": "Externe bronnen"
+        "externalLinks": "Externe bronnen",
+        "speciesGuide": "Soortengids"
       },
       "notes": {
         "title": "Notities",
@@ -2008,7 +2009,6 @@
         "loading": "Vergelijkbare soorten laden…",
         "empty": "Geen vergelijkbare soorten gevonden.",
         "similar": "Vergelijkbaar",
-        "speciesGuide": "Soortengids",
         "versus": "vs {species}",
         "selectPrompt": "Selecteer een soort om te vergelijken met {species}.",
         "noGuideAvailable": "Geen gids beschikbaar",

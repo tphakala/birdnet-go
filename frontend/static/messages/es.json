@@ -1987,7 +1987,8 @@
         },
         "description": "Descripción",
         "songsAndCalls": "Cantos y reclamos",
-        "externalLinks": "Recursos externos"
+        "externalLinks": "Recursos externos",
+        "speciesGuide": "Guía de especies"
       },
       "notes": {
         "title": "Notas",
@@ -2008,7 +2009,6 @@
         "loading": "Cargando especies similares…",
         "empty": "No se encontraron especies similares.",
         "similar": "Similar",
-        "speciesGuide": "Guía de especies",
         "versus": "vs {species}",
         "selectPrompt": "Selecciona una especie para comparar con {species}.",
         "noGuideAvailable": "Guía no disponible",

@@ -1987,7 +1987,8 @@
         },
         "description": "Leírás",
         "songsAndCalls": "Ének és hangok",
-        "externalLinks": "Külső források"
+        "externalLinks": "Külső források",
+        "speciesGuide": "Fajútmutató"
       },
       "notes": {
         "title": "Jegyzetek",
@@ -2008,7 +2009,6 @@
         "loading": "Hasonló fajok betöltése…",
         "empty": "Nem találhatók hasonló fajok.",
         "similar": "Hasonló",
-        "speciesGuide": "Fajútmutató",
         "versus": "vs {species}",
         "selectPrompt": "Válasszon egy fajt a(z) {species} összehasonlításához.",
         "noGuideAvailable": "Nincs elérhető útmutató",
