@@ -225,6 +225,35 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			expectedProviders:  map[string]bool{providerAvicommons: true, providerWikimedia: true},
 			expectedImageCount: 2,
 		},
+		{
+			name:           "mixed_batch_missing_from_all_providers",
+			fallbackPolicy: "all",
+			species:        []string{"Parus major", "Turdus merula", "Corvus corax"},
+			setupStore: func(t *testing.T, store *mockStore) {
+				t.Helper()
+				// Parus major resolves from the primary provider.
+				err := store.SaveImageCache(&datastore.ImageCache{
+					ScientificName: "Parus major",
+					ProviderName:   providerAvicommons,
+					URL:            "http://avi.example.com/parus.jpg",
+					CachedAt:       time.Now(),
+				})
+				require.NoError(t, err)
+				// Turdus merula resolves only from the fallback provider.
+				err = store.SaveImageCache(&datastore.ImageCache{
+					ScientificName: "Turdus merula",
+					ProviderName:   providerWikimedia,
+					URL:            "http://wiki.example.com/turdus.jpg",
+					CachedAt:       time.Now(),
+				})
+				require.NoError(t, err)
+				// Corvus corax is cached by no provider; it must be omitted from the
+				// result (not fabricated), leaving the placeholder to be applied by the
+				// caller rather than a phantom entry here.
+			},
+			expectedProviders:  map[string]bool{providerAvicommons: true, providerWikimedia: true},
+			expectedImageCount: 2,
+		},
 	}
 
 	for _, tc := range testCases {

@@ -946,9 +946,7 @@ func (c *BirdImageCache) fetchFromDBWithFallback(scientificNames []string) (map[
 			if dbImages == nil {
 				dbImages = make(map[string]*datastore.ImageCache)
 			}
-			for name, img := range fallbackImages {
-				dbImages[name] = img
-			}
+			maps.Copy(dbImages, fallbackImages)
 		}
 	}
 
@@ -971,15 +969,23 @@ func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, deb
 
 	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
 		if debug {
-			log.Debug("No images found with primary provider, but fallback policy is 'none'")
+			log.Debug("Skipping fallback lookup for missing species: fallback policy is 'none'",
+				logger.Int("missing_count", len(scientificNames)))
 		}
 		return nil
 	}
 
 	if debug {
-		log.Debug("No images found with primary provider, trying fallback providers (policy: all)")
+		log.Debug("Looking up missing species via fallback providers (policy: all)",
+			logger.Int("missing_count", len(scientificNames)))
 	}
 
+	// fallbackProviders holds exactly the two registered providers (avicommons,
+	// wikimedia); the primary is skipped below, leaving a single effective fallback
+	// provider that is queried for all missing names. Returning on the first provider
+	// with any hits is therefore complete for the current provider set. If a third
+	// provider is ever added, this early return must instead accumulate results across
+	// providers for the still-missing names (see tryFallbackProviders for that pattern).
 	for _, fallbackProvider := range fallbackProviders {
 		if fallbackProvider == c.providerName {
 			continue
