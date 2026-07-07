@@ -7,6 +7,8 @@
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { buildSpeciesSearchPath } from '$lib/utils/detectionUrls';
+  import { navigation } from '$lib/stores/navigation.svelte';
   import { onMount, onDestroy } from 'svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
@@ -544,6 +546,17 @@
     showDetailModal = false;
     selectedSpecies = null;
   }
+
+  function openSpeciesDetections(displayName: string) {
+    navigation.navigate(buildSpeciesSearchPath(displayName));
+  }
+
+  function handleSpeciesRowKeydown(event: KeyboardEvent, displayName: string) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openSpeciesDetections(displayName);
+    }
+  }
 </script>
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.species.title')}>
@@ -710,9 +723,14 @@
                   species.common_name
                 )}
                 <tr
-                  class={index % 2 === 0
+                  class="{index % 2 === 0
                     ? 'bg-[var(--color-base-100)]'
-                    : 'bg-[var(--color-base-200)]'}
+                    : 'bg-[var(--color-base-200)]'} cursor-pointer hover:bg-[var(--color-base-300)] transition-colors"
+                  role="link"
+                  tabindex="0"
+                  aria-label={t('components.birdThumbnail.viewDetections', { name: displayName })}
+                  onclick={() => openSpeciesDetections(displayName)}
+                  onkeydown={event => handleSpeciesRowKeydown(event, displayName)}
                 >
                   <td>
                     <div class="flex items-center gap-3">

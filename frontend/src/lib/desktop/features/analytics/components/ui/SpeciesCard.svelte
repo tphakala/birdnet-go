@@ -3,6 +3,8 @@
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { buildSpeciesSearchPath } from '$lib/utils/detectionUrls';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -32,16 +34,37 @@
   function handleImageError() {
     imageLoadFailed = true;
   }
+
+  function openDetections() {
+    navigation.navigate(buildSpeciesSearchPath(displayName));
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openDetections();
+    }
+  }
 </script>
 
-<div class={cn('card bg-[var(--color-base-200)]', className)}>
+<div
+  role="link"
+  tabindex="0"
+  class={cn(
+    'card bg-[var(--color-base-200)] hover:shadow-lg transition-shadow cursor-pointer',
+    className
+  )}
+  aria-label={t('components.birdThumbnail.viewDetections', { name: displayName })}
+  onclick={openDetections}
+  onkeydown={handleKeydown}
+>
   <figure class="px-4 pt-4">
     <div class="rounded-xl w-full aspect-[4/3] overflow-hidden bg-[var(--color-base-300)]">
       {#if species.thumbnail_url && !imageLoadFailed}
         <img
           src={species.thumbnail_url}
-          alt={displayName}
-          class="h-full w-full object-cover"
+          alt=""
+          class="h-full w-full object-cover pointer-events-none"
           onerror={handleImageError}
         />
       {/if}
