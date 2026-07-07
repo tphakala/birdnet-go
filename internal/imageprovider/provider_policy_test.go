@@ -297,6 +297,52 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 	}
 }
 
+// TestBatchFallbackAccumulatesAcrossProviders verifies that when missing species are
+// spread across multiple fallback providers, the batch fallback keeps querying later
+// providers for the still-missing names instead of stopping at the first provider that
+// returns anything. It uses a primary provider outside fallbackProviders so that both
+// registered providers (avicommons, wikimedia) are exercised as fallbacks.
+func TestBatchFallbackAccumulatesAcrossProviders(t *testing.T) {
+	const primaryProvider = "test-primary"
+
+	settings := conftest.GetTestSettings()
+	settings.Realtime.Dashboard.Thumbnails.ImageProvider = primaryProvider
+	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "all"
+	applyGlobalSettings(t, settings)
+
+	store := newMockStoreWithTracking()
+	// Parus major is cached only by avicommons, Turdus merula only by wikimedia.
+	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
+		ScientificName: "Parus major",
+		ProviderName:   providerAvicommons,
+		URL:            "http://avi.example.com/parus.jpg",
+		CachedAt:       time.Now(),
+	}))
+	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
+		ScientificName: "Turdus merula",
+		ProviderName:   providerWikimedia,
+		URL:            "http://wiki.example.com/turdus.jpg",
+		CachedAt:       time.Now(),
+	}))
+
+	mockProvider := &mockImageProvider{}
+	cache := imageprovider.InitCache(primaryProvider, mockProvider, nil, store)
+	defer func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	}()
+
+	results := cache.GetBatchCachedOnly([]string{"Parus major", "Turdus merula"})
+
+	// Both species resolve, each from a different fallback provider. Under the previous
+	// first-match-wins logic only the first provider's hit came back and the other
+	// species stayed missing.
+	assert.Len(t, results, 2, "expected both species resolved across two fallback providers")
+	assert.Contains(t, results, "Parus major")
+	assert.Contains(t, results, "Turdus merula")
+	assert.True(t, store.WasProviderQueried(providerAvicommons), "avicommons fallback should be queried")
+	assert.True(t, store.WasProviderQueried(providerWikimedia), "wikimedia fallback should be queried")
+}
+
 // isImageNotFoundError checks if an error is an image not found error
 func isImageNotFoundError(err error) bool {
 	return err != nil && err.Error() == "image not found by provider"
