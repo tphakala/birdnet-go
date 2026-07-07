@@ -530,7 +530,7 @@ func buildInputArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 	timeoutFlag := timeoutParamForSource(cfg.sourceType(), ffmpegMajor)
 
 	if cfg.sourceType() == audiocore.SourceTypeRTSP {
-		args = append(args, "-rtsp_transport", cfg.Transport)
+		args = append(args, "-rtsp_transport", cfg.Transport, "-allowed_media_types", "audio")
 	}
 
 	hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters)
