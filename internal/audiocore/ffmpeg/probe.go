@@ -140,10 +140,12 @@ func parseProbeOutput(data []byte) (*StreamInfo, error) {
 func buildProbeArgs(url string) []string {
 	args := make([]string, 0, 10)
 
-	// For RTSP streams, force TCP transport before the input URL.
+	// For RTSP streams, force TCP transport before the input URL and restrict the
+	// handshake to audio tracks so ffprobe never SETUPs the camera's video track
+	// (issue #3798); -select_streams below only filters ffprobe's output.
 	lower := strings.ToLower(url)
 	if strings.HasPrefix(lower, "rtsp://") || strings.HasPrefix(lower, "rtsps://") {
-		args = append(args, "-rtsp_transport", "tcp")
+		args = append(args, "-rtsp_transport", "tcp", ffmpegAllowedMediaTypesFlag, ffmpegAllowedMediaTypesAudio)
 	}
 
 	args = append(args,
