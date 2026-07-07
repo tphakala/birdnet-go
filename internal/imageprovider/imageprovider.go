@@ -932,9 +932,24 @@ func (c *BirdImageCache) fetchFromDBWithFallback(scientificNames []string) (map[
 			logger.Int("found_count", len(dbImages)))
 	}
 
-	// Try fallback providers if no images found
-	if len(dbImages) == 0 && len(scientificNames) > 0 {
-		dbImages = c.tryBatchFallbackProviders(scientificNames, debug)
+	// Try fallback providers for any missing images
+	var missingNames []string
+	for _, name := range scientificNames {
+		if _, ok := dbImages[name]; !ok {
+			missingNames = append(missingNames, name)
+		}
+	}
+
+	if len(missingNames) > 0 {
+		fallbackImages := c.tryBatchFallbackProviders(missingNames, debug)
+		if len(fallbackImages) > 0 {
+			if dbImages == nil {
+				dbImages = make(map[string]*datastore.ImageCache)
+			}
+			for name, img := range fallbackImages {
+				dbImages[name] = img
+			}
+		}
 	}
 
 	return dbImages, nil

@@ -142,6 +142,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 	testCases := []struct {
 		name               string
 		fallbackPolicy     string
+		species            []string
 		setupStore         func(t *testing.T, store *mockStore)
 		expectedProviders  map[string]bool
 		expectedImageCount int
@@ -149,6 +150,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 		{
 			name:           "no_fallback_when_policy_none",
 			fallbackPolicy: "none",
+			species:        []string{"Parus major"},
 			setupStore: func(t *testing.T, store *mockStore) {
 				t.Helper()
 				// Add image only for wikimedia provider
@@ -166,6 +168,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 		{
 			name:           "fallback_when_policy_all",
 			fallbackPolicy: "all",
+			species:        []string{"Parus major"},
 			setupStore: func(t *testing.T, store *mockStore) {
 				t.Helper()
 				// Add image only for wikimedia provider
@@ -183,6 +186,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 		{
 			name:           "primary_provider_has_image",
 			fallbackPolicy: "none",
+			species:        []string{"Parus major"},
 			setupStore: func(t *testing.T, store *mockStore) {
 				t.Helper()
 				// Add image for primary provider
@@ -196,6 +200,30 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			},
 			expectedProviders:  map[string]bool{providerAvicommons: true},
 			expectedImageCount: 1, // Should find avicommons image without fallback
+		},
+		{
+			name:           "mixed_batch_primary_and_fallback",
+			fallbackPolicy: "all",
+			species:        []string{"Parus major", "Turdus merula"},
+			setupStore: func(t *testing.T, store *mockStore) {
+				t.Helper()
+				err := store.SaveImageCache(&datastore.ImageCache{
+					ScientificName: "Parus major",
+					ProviderName:   providerAvicommons,
+					URL:            "http://avi.example.com/parus.jpg",
+					CachedAt:       time.Now(),
+				})
+				require.NoError(t, err)
+				err = store.SaveImageCache(&datastore.ImageCache{
+					ScientificName: "Turdus merula",
+					ProviderName:   providerWikimedia,
+					URL:            "http://wiki.example.com/turdus.jpg",
+					CachedAt:       time.Now(),
+				})
+				require.NoError(t, err)
+			},
+			expectedProviders:  map[string]bool{providerAvicommons: true, providerWikimedia: true},
+			expectedImageCount: 2,
 		},
 	}
 
@@ -220,8 +248,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			}()
 
 			// Test GetBatchCachedOnly which internally uses batchLoadFromDB
-			species := []string{"Parus major"}
-			results := cache.GetBatchCachedOnly(species)
+			results := cache.GetBatchCachedOnly(tc.species)
 
 			// Verify result count
 			assert.Len(t, results, tc.expectedImageCount,
