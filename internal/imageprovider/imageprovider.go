@@ -1018,10 +1018,12 @@ func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, deb
 
 		// Narrow the search so later providers only query for names still unresolved.
 		// Build a fresh slice rather than reslicing `remaining`, whose backing array
-		// aliases the caller's input on the first iteration.
+		// aliases the caller's input on the first iteration. A present-but-nil entry
+		// counts as unresolved so a later provider can still resolve it, mirroring the
+		// missing check in fetchFromDBWithFallback.
 		nextRemaining := make([]string, 0, len(remaining))
 		for _, name := range remaining {
-			if _, ok := providerImages[name]; !ok {
+			if img, ok := providerImages[name]; !ok || img == nil {
 				nextRemaining = append(nextRemaining, name)
 			}
 		}
