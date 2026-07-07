@@ -932,15 +932,33 @@ func (c *BirdImageCache) fetchFromDBWithFallback(scientificNames []string) (map[
 			logger.Int("found_count", len(dbImages)))
 	}
 
-	// Try fallback providers if no images found
-	if len(dbImages) == 0 && len(scientificNames) > 0 {
-		dbImages = c.tryBatchFallbackProviders(scientificNames, debug)
+	// Try fallback providers for any missing images. A present-but-nil entry is
+	// treated as missing so it still gets a fallback lookup (mirrors the nil guard
+	// in convertDBImagesToValidBirdImages).
+	var missingNames []string
+	for _, name := range scientificNames {
+		if img, ok := dbImages[name]; !ok || img == nil {
+			missingNames = append(missingNames, name)
+		}
+	}
+
+	if len(missingNames) > 0 {
+		fallbackImages := c.tryBatchFallbackProviders(missingNames, debug)
+		if len(fallbackImages) > 0 {
+			if dbImages == nil {
+				dbImages = make(map[string]*datastore.ImageCache)
+			}
+			maps.Copy(dbImages, fallbackImages)
+		}
 	}
 
 	return dbImages, nil
 }
 
 // tryBatchFallbackProviders attempts to load images from fallback providers for batch operations.
+// It queries each non-primary provider in turn for the names still unresolved and merges the
+// results, so a batch whose missing species are spread across several providers is fully resolved
+// rather than stopping at the first provider that returns anything.
 func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, debug bool) map[string]*datastore.ImageCache {
 	log := GetLogger().With(logger.String("provider", c.providerName))
 
@@ -956,38 +974,62 @@ func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, deb
 
 	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
 		if debug {
-			log.Debug("No images found with primary provider, but fallback policy is 'none'")
+			log.Debug("Skipping fallback lookup for missing species: fallback policy is 'none'",
+				logger.Int("missing_count", len(scientificNames)))
 		}
 		return nil
 	}
 
 	if debug {
-		log.Debug("No images found with primary provider, trying fallback providers (policy: all)")
+		log.Debug("Looking up missing species via fallback providers (policy: all)",
+			logger.Int("missing_count", len(scientificNames)))
 	}
 
+	var fallbackImages map[string]*datastore.ImageCache
+	remaining := scientificNames
 	for _, fallbackProvider := range fallbackProviders {
+		if len(remaining) == 0 {
+			break
+		}
 		if fallbackProvider == c.providerName {
 			continue
 		}
-		fallbackImages, err := c.store.GetImageCacheBatch(fallbackProvider, scientificNames)
+		providerImages, err := c.store.GetImageCacheBatch(fallbackProvider, remaining)
 		if err != nil {
 			// Stop iterating fallbacks if the DB is corrupted; the next batch
 			// query would also fail and inflate the corruption metric.
 			if c.handleDBCorruption(err, "batch_fallback_lookup") {
-				return nil
+				break
 			}
 			continue
 		}
-		if len(fallbackImages) > 0 {
-			if debug {
-				log.Debug("Found images using fallback provider",
-					logger.String("fallback_provider", fallbackProvider),
-					logger.Int("found_count", len(fallbackImages)))
-			}
-			return fallbackImages
+		if len(providerImages) == 0 {
+			continue
 		}
+		if debug {
+			log.Debug("Found images using fallback provider",
+				logger.String("fallback_provider", fallbackProvider),
+				logger.Int("found_count", len(providerImages)))
+		}
+		if fallbackImages == nil {
+			fallbackImages = make(map[string]*datastore.ImageCache, len(providerImages))
+		}
+		maps.Copy(fallbackImages, providerImages)
+
+		// Narrow the search so later providers only query for names still unresolved.
+		// Build a fresh slice rather than reslicing `remaining`, whose backing array
+		// aliases the caller's input on the first iteration. A present-but-nil entry
+		// counts as unresolved so a later provider can still resolve it, mirroring the
+		// missing check in fetchFromDBWithFallback.
+		nextRemaining := make([]string, 0, len(remaining))
+		for _, name := range remaining {
+			if img, ok := providerImages[name]; !ok || img == nil {
+				nextRemaining = append(nextRemaining, name)
+			}
+		}
+		remaining = nextRemaining
 	}
-	return nil
+	return fallbackImages
 }
 
 // convertDBImagesToValidBirdImages converts DB entries to BirdImages, filtering out stale entries.

@@ -142,6 +142,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 	testCases := []struct {
 		name               string
 		fallbackPolicy     string
+		species            []string
 		setupStore         func(t *testing.T, store *mockStore)
 		expectedProviders  map[string]bool
 		expectedImageCount int
@@ -149,6 +150,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 		{
 			name:           "no_fallback_when_policy_none",
 			fallbackPolicy: "none",
+			species:        []string{"Parus major"},
 			setupStore: func(t *testing.T, store *mockStore) {
 				t.Helper()
 				// Add image only for wikimedia provider
@@ -166,6 +168,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 		{
 			name:           "fallback_when_policy_all",
 			fallbackPolicy: "all",
+			species:        []string{"Parus major"},
 			setupStore: func(t *testing.T, store *mockStore) {
 				t.Helper()
 				// Add image only for wikimedia provider
@@ -183,6 +186,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 		{
 			name:           "primary_provider_has_image",
 			fallbackPolicy: "none",
+			species:        []string{"Parus major"},
 			setupStore: func(t *testing.T, store *mockStore) {
 				t.Helper()
 				// Add image for primary provider
@@ -196,6 +200,59 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			},
 			expectedProviders:  map[string]bool{providerAvicommons: true},
 			expectedImageCount: 1, // Should find avicommons image without fallback
+		},
+		{
+			name:           "mixed_batch_primary_and_fallback",
+			fallbackPolicy: "all",
+			species:        []string{"Parus major", "Turdus merula"},
+			setupStore: func(t *testing.T, store *mockStore) {
+				t.Helper()
+				err := store.SaveImageCache(&datastore.ImageCache{
+					ScientificName: "Parus major",
+					ProviderName:   providerAvicommons,
+					URL:            "http://avi.example.com/parus.jpg",
+					CachedAt:       time.Now(),
+				})
+				require.NoError(t, err)
+				err = store.SaveImageCache(&datastore.ImageCache{
+					ScientificName: "Turdus merula",
+					ProviderName:   providerWikimedia,
+					URL:            "http://wiki.example.com/turdus.jpg",
+					CachedAt:       time.Now(),
+				})
+				require.NoError(t, err)
+			},
+			expectedProviders:  map[string]bool{providerAvicommons: true, providerWikimedia: true},
+			expectedImageCount: 2,
+		},
+		{
+			name:           "mixed_batch_missing_from_all_providers",
+			fallbackPolicy: "all",
+			species:        []string{"Parus major", "Turdus merula", "Corvus corax"},
+			setupStore: func(t *testing.T, store *mockStore) {
+				t.Helper()
+				// Parus major resolves from the primary provider.
+				err := store.SaveImageCache(&datastore.ImageCache{
+					ScientificName: "Parus major",
+					ProviderName:   providerAvicommons,
+					URL:            "http://avi.example.com/parus.jpg",
+					CachedAt:       time.Now(),
+				})
+				require.NoError(t, err)
+				// Turdus merula resolves only from the fallback provider.
+				err = store.SaveImageCache(&datastore.ImageCache{
+					ScientificName: "Turdus merula",
+					ProviderName:   providerWikimedia,
+					URL:            "http://wiki.example.com/turdus.jpg",
+					CachedAt:       time.Now(),
+				})
+				require.NoError(t, err)
+				// Corvus corax is cached by no provider; it must be omitted from the
+				// result (not fabricated), leaving the placeholder to be applied by the
+				// caller rather than a phantom entry here.
+			},
+			expectedProviders:  map[string]bool{providerAvicommons: true, providerWikimedia: true},
+			expectedImageCount: 2,
 		},
 	}
 
@@ -220,8 +277,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			}()
 
 			// Test GetBatchCachedOnly which internally uses batchLoadFromDB
-			species := []string{"Parus major"}
-			results := cache.GetBatchCachedOnly(species)
+			results := cache.GetBatchCachedOnly(tc.species)
 
 			// Verify result count
 			assert.Len(t, results, tc.expectedImageCount,
@@ -239,6 +295,52 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBatchFallbackAccumulatesAcrossProviders verifies that when missing species are
+// spread across multiple fallback providers, the batch fallback keeps querying later
+// providers for the still-missing names instead of stopping at the first provider that
+// returns anything. It uses a primary provider outside fallbackProviders so that both
+// registered providers (avicommons, wikimedia) are exercised as fallbacks.
+func TestBatchFallbackAccumulatesAcrossProviders(t *testing.T) {
+	const primaryProvider = "test-primary"
+
+	settings := conftest.GetTestSettings()
+	settings.Realtime.Dashboard.Thumbnails.ImageProvider = primaryProvider
+	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "all"
+	applyGlobalSettings(t, settings)
+
+	store := newMockStoreWithTracking()
+	// Parus major is cached only by avicommons, Turdus merula only by wikimedia.
+	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
+		ScientificName: "Parus major",
+		ProviderName:   providerAvicommons,
+		URL:            "http://avi.example.com/parus.jpg",
+		CachedAt:       time.Now(),
+	}))
+	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
+		ScientificName: "Turdus merula",
+		ProviderName:   providerWikimedia,
+		URL:            "http://wiki.example.com/turdus.jpg",
+		CachedAt:       time.Now(),
+	}))
+
+	mockProvider := &mockImageProvider{}
+	cache := imageprovider.InitCache(primaryProvider, mockProvider, nil, store)
+	defer func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	}()
+
+	results := cache.GetBatchCachedOnly([]string{"Parus major", "Turdus merula"})
+
+	// Both species resolve, each from a different fallback provider. Under the previous
+	// first-match-wins logic only the first provider's hit came back and the other
+	// species stayed missing.
+	assert.Len(t, results, 2, "expected both species resolved across two fallback providers")
+	assert.Contains(t, results, "Parus major")
+	assert.Contains(t, results, "Turdus merula")
+	assert.True(t, store.WasProviderQueried(providerAvicommons), "avicommons fallback should be queried")
+	assert.True(t, store.WasProviderQueried(providerWikimedia), "wikimedia fallback should be queried")
 }
 
 // isImageNotFoundError checks if an error is an image not found error
