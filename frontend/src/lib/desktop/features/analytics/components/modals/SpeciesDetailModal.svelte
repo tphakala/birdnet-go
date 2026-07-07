@@ -162,6 +162,18 @@
     };
   });
 
+  // Per-rank indent for the taxonomy lineage, using the Tailwind spacing scale
+  // (0.75rem steps) so each level steps in against its rail without an inline-style
+  // magic number. Keyed by rank position (class=0 … species=4). A Map (not an
+  // array indexed by a dynamic key) avoids the security/detect-object-injection lint.
+  const TAXONOMY_INDENT = new Map<number, string>([
+    [0, 'ml-0'],
+    [1, 'ml-3'],
+    [2, 'ml-6'],
+    [3, 'ml-9'],
+    [4, 'ml-12'],
+  ]);
+
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
   }
@@ -277,17 +289,21 @@
                      the species (the leaf) carries the primary accent. -->
                 <dl class="text-sm">
                   {#each [{ key: 'class', value: taxonomy.taxonomy.class }, { key: 'order', value: taxonomy.taxonomy.order }, { key: 'family', value: taxonomy.taxonomy.family }, { key: 'genus', value: taxonomy.taxonomy.genus }, { key: 'species', value: taxonomy.taxonomy.species }] as rank, i (rank.key)}
+                    <!-- DOM order is term (dt) then value (dd) so assistive tech keeps
+                         the "rank: name" association; `order` flips them visually so the
+                         name stays prominent on the left and the muted rank sits after. -->
                     <div
-                      class={`flex items-baseline gap-2 py-1 pl-3 ${rank.key === 'species' ? 'border-l-2 border-[var(--color-primary)]' : 'border-l border-[var(--color-base-300)]'}`}
-                      style={`margin-left: ${i * 0.85}rem`}
+                      class={`flex items-baseline gap-2 py-1 pl-3 ${TAXONOMY_INDENT.get(i) ?? 'ml-12'} ${rank.key === 'species' ? 'border-l-2 border-[var(--color-primary)]' : 'border-l border-[var(--color-base-300)]'}`}
                     >
+                      <dt class="order-2 text-xs opacity-50">
+                        {t(`species.taxonomy.labels.${rank.key}`)}
+                      </dt>
                       <dd
-                        class="font-medium"
+                        class="order-1 font-medium"
                         class:italic={rank.key === 'species' || rank.key === 'genus'}
                       >
                         {rank.value}
                       </dd>
-                      <dt class="text-xs opacity-50">{t(`species.taxonomy.labels.${rank.key}`)}</dt>
                     </div>
                   {/each}
                 </dl>

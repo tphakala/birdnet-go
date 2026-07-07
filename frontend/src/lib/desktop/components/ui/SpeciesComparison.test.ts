@@ -81,6 +81,66 @@ describe('SpeciesComparison', () => {
     ).toBeInTheDocument();
   });
 
+  it('clamps a long description and toggles it with show more / show less', async () => {
+    // Intro longer than DESC_CLAMP_CHARS (800) and with no "## heading" so the whole
+    // string is parsed as the description body, exercising the clamp path.
+    const longIntro = 'Lorem ipsum dolor sit amet. '.repeat(40); // ~1120 chars
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/similar'))
+        return Promise.resolve({
+          scientific_name: 'Turdus merula',
+          genus: 'Turdus',
+          similar: [],
+        } as never);
+      return Promise.resolve(makeGuide({ description: longIntro }) as never);
+    });
+
+    const { container } = render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
+    });
+
+    // Long description renders clamped, with a "show more" control.
+    const desc = await waitFor(
+      () => {
+        const el = container.querySelector('[id$="-description"]');
+        if (!el) throw new Error('description not rendered');
+        return el as HTMLElement;
+      },
+      { timeout: 5000 }
+    );
+    expect(desc.className).toContain('line-clamp-[10]');
+    const showMore = screen.getByText('common.ui.showMore');
+
+    // Expanding drops the clamp and flips the toggle label.
+    showMore.click();
+    await waitFor(() => {
+      expect(container.querySelector('[id$="-description"]')?.className).not.toContain(
+        'line-clamp-[10]'
+      );
+    });
+    expect(screen.getByText('common.ui.showLess')).toBeInTheDocument();
+  });
+
+  it('does not clamp a short description', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/similar'))
+        return Promise.resolve({
+          scientific_name: 'Turdus merula',
+          genus: 'Turdus',
+          similar: [],
+        } as never);
+      return Promise.resolve(makeGuide({ description: 'A short intro.' }) as never);
+    });
+
+    const { container } = render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
+    });
+
+    await screen.findByText('A short intro.', {}, { timeout: 5000 });
+    expect(container.querySelector('[id$="-description"]')?.className).not.toContain('line-clamp');
+    expect(screen.queryByText('common.ui.showMore')).toBeNull();
+  });
+
   it('renders enrichment badges and external links when enrichments are enabled', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url.includes('/guide'))
