@@ -166,6 +166,11 @@ func TestBuildProbeArgs(t *testing.T) {
 
 		assert.Contains(t, args, "-rtsp_transport")
 		assert.Contains(t, args, "tcp")
+		// Only audio tracks should be SETUP during the RTSPS handshake (issue #3798).
+		allowedIdx := slices.Index(args, "-allowed_media_types")
+		require.NotEqual(t, -1, allowedIdx, "expected -allowed_media_types flag for RTSPS")
+		require.Less(t, allowedIdx+1, len(args), "-allowed_media_types must have a value")
+		assert.Equal(t, "audio", args[allowedIdx+1])
 		assert.Equal(t, "rtsps://camera.example.com/live", args[len(args)-1])
 		assert.Contains(t, args, "-v")
 		assert.Contains(t, args, "quiet")
