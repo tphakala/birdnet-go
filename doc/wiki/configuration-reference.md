@@ -210,6 +210,15 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.dashboard.layout.elements` | dashboard-element[] |  |
 | `realtime.dashboard.defaultaudiogain` | number | Default playback gain in dB (0-24) |
 | `realtime.dashboard.livespectrogram` | boolean | auto-start live spectrogram on dashboard |
+| `realtime.dashboard.speciesguide.enabled` | boolean |  |
+| `realtime.dashboard.speciesguide.enablewikipedia` | boolean | opt in to online Wikipedia descriptions (default off) |
+| `realtime.dashboard.speciesguide.enablesupplementarylinks` | boolean | opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off |
+| `realtime.dashboard.speciesguide.warmtopn` | integer | top-N species warmed on startup (0 = off; clamped to SpeciesGuideMaxWarmTopN) |
+| `realtime.dashboard.speciesguide.prefetchenabled` | boolean | pre-fetch guides for newly detected species |
+| `realtime.dashboard.speciesguide.shownotes` | boolean | default true |
+| `realtime.dashboard.speciesguide.showenrichments` | boolean | default true |
+| `realtime.dashboard.speciesguide.showsimilarspecies` | boolean | default true |
+| `realtime.dashboard.speciesguide.showtaxonomy` | boolean | default true |
 | `realtime.dynamicthreshold.enabled` | boolean | true to enable dynamic threshold |
 | `realtime.dynamicthreshold.debug` | boolean | true to enable debug mode |
 | `realtime.dynamicthreshold.trigger` | number | trigger threshold for dynamic threshold |

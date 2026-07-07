@@ -429,7 +429,8 @@
         "equalizerUpdateFailed": "Nie udało się zaktualizować ustawień korektora dźwięku",
         "equalizerUpdated": "Ustawienia korektora dźwięku zaktualizowane",
         "savedSuccessfully": "Ustawienia zapisane pomyślnie",
-        "saveFailed": "Nie udało się zapisać ustawień"
+        "saveFailed": "Nie udało się zapisać ustawień",
+        "reconfiguringSpeciesGuide": "Aktualizowanie przewodnika po gatunkach..."
       },
       "migration": {
         "startedTitle": "Migracja bazy danych rozpoczęta",
@@ -1960,7 +1961,71 @@
         "detections": "Detekcje:",
         "confidence": "Pewność:",
         "first": "Pierwsze:"
-      }
+      },
+      "guide": {
+        "title": "Przewodnik",
+        "similar": "Podobne gatunki",
+        "noSimilar": "Nie znaleziono podobnych gatunków",
+        "loading": "Ładowanie przewodnika…",
+        "unavailable": "Przewodnik po gatunkach jest tymczasowo niedostępny. Spróbuj ponownie później.",
+        "noGuide": "Przewodnik niedostępny dla tego gatunku.",
+        "expectedness": {
+          "expected": "Oczekiwany tutaj",
+          "uncommon": "Niezbyt częsty tutaj",
+          "rare": "Rzadki tutaj",
+          "unexpected": "Nieoczekiwany tutaj"
+        },
+        "season": {
+          "spring": "Wiosna",
+          "summer": "Lato",
+          "autumn": "Jesień",
+          "winter": "Zima",
+          "wet1": "Pierwsza pora deszczowa",
+          "dry1": "Pierwsza pora sucha",
+          "wet2": "Druga pora deszczowa",
+          "dry2": "Druga pora sucha"
+        },
+        "description": "Opis",
+        "songsAndCalls": "Śpiew i głosy",
+        "externalLinks": "Zasoby zewnętrzne",
+        "speciesGuide": "Przewodnik po gatunkach"
+      },
+      "notes": {
+        "title": "Notatki",
+        "placeholder": "Dodaj notatkę o tym gatunku…",
+        "editLabel": "Edytuj notatkę",
+        "save": "Zapisz notatkę",
+        "empty": "Brak notatek.",
+        "deleteConfirm": "Usunąć tę notatkę?",
+        "deleteFailed": "Nie udało się usunąć notatki.",
+        "saveFailed": "Nie udało się zapisać notatki.",
+        "saveDisabledReason": "Wprowadź treść notatki, aby włączyć zapisywanie.",
+        "tooLong": "Notatka jest za długa (maksymalnie {max} znaków).",
+        "truncated": "Wyświetlanych jest {max} najnowszych notatek; starsze notatki są ukryte."
+      },
+      "similar": {
+        "title": "Podobne gatunki",
+        "compare": "Porównaj",
+        "loading": "Ładowanie podobnych gatunków…",
+        "empty": "Nie znaleziono podobnych gatunków.",
+        "similar": "Podobny",
+        "versus": "vs {species}",
+        "selectPrompt": "Wybierz gatunek do porównania z {species}.",
+        "noGuideAvailable": "Przewodnik niedostępny",
+        "linksOnly": "Tylko linki",
+        "exploreResources": "Brak szczegółów porównania. Przeglądaj zasoby:",
+        "cardLoading": "Ładowanie porównania…",
+        "cardNoGuide": "Przewodnik niedostępny dla tego gatunku.",
+        "cardError": "Nie udało się załadować tego gatunku. Spróbuj innego.",
+        "cardNoSections": "Brak dostępnych szczegółów porównania dla tego gatunku.",
+        "sections": {
+          "appearance": "Wygląd",
+          "voice": "Głos",
+          "habitat": "Siedlisko i zasięg",
+          "behaviour": "Zachowanie"
+        }
+      },
+      "viewGuide": "Zobacz przewodnik dla {species}"
     },
     "advanced": {
       "chartControls": "Kontrolki wykresu",
@@ -4542,7 +4607,8 @@
         "appearance": "Wygląd",
         "language": "Język i regionalne",
         "visualContent": "Treści wizualne",
-        "audioPlayback": "Odtwarzanie audio"
+        "audioPlayback": "Odtwarzanie audio",
+        "speciesGuide": "Przewodnik po gatunkach"
       },
       "appearance": {
         "title": "Wygląd",
@@ -4562,6 +4628,49 @@
         "defaultGain": "Domyślne wzmocnienie głośności",
         "defaultGainHelpText": "Początkowe wzmocnienie stosowane podczas odtwarzania nagrań. Dźwięki ptaków są często ciche, dlatego zalecane jest wzmocnienie 6-12 dB.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Przewodnik po gatunkach",
+        "description": "Wzbogać wykrycia o taksonomię, nazwy zwyczajowe, linki zewnętrzne i podobne gatunki — offline dzięki OpenFauna; opisy z Wikipedii są opcjonalnym dodatkiem online.",
+        "enabled": {
+          "label": "Włącz przewodnik po gatunkach",
+          "helpText": "Pokazuj kontekstowe informacje przewodnika w szczegółach wykrycia i w oknie gatunku."
+        },
+        "enableWikipedia": {
+          "label": "Opisy z Wikipedii",
+          "helpText": "Pobieraj także opisy artykułów z Wikipedii (wymaga internetu). Domyślnie wyłączone – taksonomia, nazwy zwyczajowe i linki zewnętrzne zawsze działają offline dzięki OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Linki uzupełniające",
+          "helpText": "Dodaj linki audio Xeno-canto oraz link do Wikipedii dla gatunków nieobjętych zbiorem danych offline. Linki otwierają zewnętrzne witryny; w tle nie są pobierane żadne dane."
+        },
+        "warmTopN": {
+          "label": "Wstępnie wczytaj najczęstsze gatunki",
+          "helpText": "Wstępnie wczytuj przewodniki dla najczęściej wykrywanych gatunków przy uruchamianiu (0 wyłącza wstępne wczytywanie)."
+        },
+        "preFetchEnabled": {
+          "label": "Wstępne pobieranie przy wykryciu",
+          "helpText": "Pobierz przewodnik przy pierwszym wykryciu gatunku, aby później wczytywał się natychmiast."
+        },
+        "sections": {
+          "title": "Sekcje przewodnika"
+        },
+        "showNotes": {
+          "label": "Pokaż notatki",
+          "helpText": "Zezwalaj na notatki użytkownika dla poszczególnych gatunków."
+        },
+        "showEnrichments": {
+          "label": "Pokaż wzbogacenia",
+          "helpText": "Pokaż odznaki jakości, przewidywalności i pory roku."
+        },
+        "showSimilarSpecies": {
+          "label": "Pokaż podobne gatunki",
+          "helpText": "Pokaż panel porównania podobnych gatunków."
+        },
+        "showTaxonomy": {
+          "label": "Pokaż taksonomię",
+          "helpText": "Pokaż hierarchię taksonomiczną (od klasy do gatunku) i podgatunki."
+        }
       }
     },
     "restartRequired": "Niektóre zmiany wymagają ponownego uruchomienia serwera. Uruchom ponownie BirdNET-Go."

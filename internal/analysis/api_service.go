@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -39,6 +40,10 @@ type APIServerService struct {
 	server         *api.Server
 	proc           *processor.Processor
 	birdImageCache *imageprovider.BirdImageCache
+	// guideCache is built here, handed to the API controller (which becomes its
+	// canonical owner), then niled out. It is only non-nil transiently during
+	// Start, or if an early-startup failure occurs before the handoff.
+	guideCache     *guideprovider.GuideCache
 	sunCalc        *suncalc.SunCalc
 	oauth2Server   *security.OAuth2Server
 	systemMonitor  *monitor.SystemMonitor
@@ -95,6 +100,12 @@ func (s *APIServerService) Start(ctx context.Context) error {
 				_ = s.proc.ShutdownWithContext(context.Background())
 				s.proc = nil
 			}
+			// Close the guide cache only if ownership was not yet handed to the
+			// controller (handoff sets s.guideCache = nil).
+			if s.guideCache != nil {
+				s.guideCache.Close()
+				s.guideCache = nil
+			}
 		}
 	}()
 
@@ -129,6 +140,17 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	// Create processor.
 	s.proc = processor.New(s.settings, dataStore, bn, s.metrics, s.birdImageCache, GetLogger())
 	s.proc.SetSunCalc(s.sunCalc)
+
+	// Initialize the species guide cache (no-op when disabled), wire the
+	// processor pre-fetch callback, and warm the top-N detected species.
+	s.guideCache = initGuideCacheIfNeeded(s.settings, dataStore, s.metrics.GuideProvider)
+	if s.guideCache != nil {
+		if s.settings.Realtime.Dashboard.SpeciesGuide.PreFetchEnabled {
+			s.proc.SetGuidePreFetch(s.guideCache.PreFetch)
+		}
+		warmGuideCacheWithTopSpecies(s.guideCache, dataStore,
+			s.settings.Realtime.Dashboard.SpeciesGuide.WarmTopN, GetLogger())
+	}
 
 	// Initialize backup system (optional; failure is non-fatal).
 	backupLog := logger.Global().Module("backup")
@@ -191,6 +213,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 		api.WithSunCalc(s.sunCalc),
 		api.WithV2Manager(s.dbService.V2Manager()),
 		api.WithAudioEngine(s.engine),
+		api.WithGuideCache(s.guideCache),
 	}
 	if buf := health.GlobalErrorBuffer(); buf != nil {
 		serverOpts = append(serverOpts, api.WithHealthErrorBuffer(buf))
@@ -211,6 +234,10 @@ func (s *APIServerService) Start(ctx context.Context) error {
 			Build()
 	}
 	s.server = apiServer
+	// Ownership handoff: the API controller now owns the guide cache and will
+	// close it on shutdown. Drop our reference so the failure-path cleanup and
+	// Stop() don't double-close it.
+	s.guideCache = nil
 	s.server.Start()
 
 	// Wire shutdown requester into API controller for restart endpoints.

@@ -129,6 +129,15 @@ func (b *SettingsBuilder) WithImageProvider(provider, fallbackPolicy string) *Se
 	return b
 }
 
+// WithSpeciesGuide enables the species guide and sets whether online Wikipedia
+// descriptions are enabled (taxonomy/common names/links always come from the
+// offline OpenFauna dataset).
+func (b *SettingsBuilder) WithSpeciesGuide(enableWikipedia bool) *SettingsBuilder {
+	b.settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
+	b.settings.Realtime.Dashboard.SpeciesGuide.EnableWikipedia = enableWikipedia
+	return b
+}
+
 // WithWebServer configures web server settings.
 func (b *SettingsBuilder) WithWebServer(port string, enabled bool) *SettingsBuilder {
 	b.settings.WebServer.Port = port

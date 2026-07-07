@@ -176,6 +176,21 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.defaultaudiogain", 0.0)      // Default playback gain in dB (no boost)
 	viper.SetDefault("realtime.dashboard.livespectrogram", false)     // Auto-start live spectrogram on dashboard
 
+	// Species guide configuration (disabled by default). Taxonomy/common names/links
+	// come from the offline OpenFauna dataset; online Wikipedia descriptions are
+	// opt-in (off by default) so the guide works fully offline out of the box.
+	// The Show* sub-section toggles default ON: when the guide is enabled the
+	// notes/enrichments/similar-species/taxonomy sections show unless the user opts out.
+	viper.SetDefault("realtime.dashboard.speciesguide.enabled", false)
+	viper.SetDefault("realtime.dashboard.speciesguide.enablewikipedia", false)
+	viper.SetDefault("realtime.dashboard.speciesguide.enablesupplementarylinks", false)
+	viper.SetDefault("realtime.dashboard.speciesguide.prefetchenabled", true)
+	viper.SetDefault("realtime.dashboard.speciesguide.warmtopn", 50)
+	viper.SetDefault("realtime.dashboard.speciesguide.shownotes", true)
+	viper.SetDefault("realtime.dashboard.speciesguide.showenrichments", true)
+	viper.SetDefault("realtime.dashboard.speciesguide.showsimilarspecies", true)
+	viper.SetDefault("realtime.dashboard.speciesguide.showtaxonomy", true)
+
 	// Spectrogram pre-rendering configuration
 	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false)                                // Opt-in for safety
 	viper.SetDefault("realtime.dashboard.spectrogram.mode", "auto")                                  // Default to auto mode (generate on demand)

@@ -1,0 +1,314 @@
+package guideprovider
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+
+	"golang.org/x/time/rate"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
+)
+
+const (
+	// wikipediaLicense and wikipediaLicenseURL describe the license of article text.
+	wikipediaLicense    = "CC BY-SA 4.0"
+	wikipediaLicenseURL = "https://creativecommons.org/licenses/by-sa/4.0/"
+
+	// wikipediaUserAgent identifies the client to the Wikimedia API. Wikimedia's
+	// UA-policy enforcement (phab T400119) rejects bare "App/1.0 (url)" agents
+	// with HTTP 403, so we use the standard polite-bot "Mozilla/5.0 (compatible;
+	// ...)" form that includes the app name and a contact URL.
+	wikipediaUserAgent = "Mozilla/5.0 (compatible; BirdNET-Go/1.0; +https://github.com/tphakala/birdnet-go)"
+
+	// wikipediaTimeout bounds a single Wikipedia HTTP request.
+	wikipediaTimeout = 15 * time.Second
+	// wikipediaMaxResponseBytes caps the response body read so a hostile or
+	// malfunctioning upstream cannot exhaust memory. Real TextExtracts responses
+	// for a single article are a few KB; 2 MiB is a generous ceiling.
+	wikipediaMaxResponseBytes = 2 << 20
+	// wikipediaRateLimit is the steady-state request rate (requests/second).
+	wikipediaRateLimit = 5
+	// wikipediaRateBurst is the rate-limiter burst allowance.
+	wikipediaRateBurst = 10
+
+	// httpStatusServerErrorMin is the lowest 5xx status (transient territory).
+	httpStatusServerErrorMin = 500
+)
+
+// sectionHeadingRegex matches a top-level MediaWiki section header line
+// (== Heading ==) produced by TextExtracts with exsectionformat=wiki.
+var sectionHeadingRegex = regexp.MustCompile(`^==\s*(.+?)\s*==$`)
+
+// subSectionHeadingRegex matches deeper MediaWiki headers (=== ... ===).
+var subSectionHeadingRegex = regexp.MustCompile(`^={3,}\s*(.+?)\s*={3,}$`)
+
+// WikipediaGuideProvider fetches guide data from the Wikipedia REST/action API.
+type WikipediaGuideProvider struct {
+	client  *http.Client
+	limiter *rate.Limiter
+}
+
+// NewWikipediaGuideProviderWithMetrics constructs a Wikipedia provider. The
+// metrics sink is recorded by the cache around Fetch, so it is accepted for
+// signature compatibility but not retained here.
+func NewWikipediaGuideProviderWithMetrics(_ GuideCacheMetrics) *WikipediaGuideProvider {
+	return &WikipediaGuideProvider{
+		client:  &http.Client{Timeout: wikipediaTimeout},
+		limiter: rate.NewLimiter(rate.Limit(wikipediaRateLimit), wikipediaRateBurst),
+	}
+}
+
+// Name returns the provider's registration name.
+func (p *WikipediaGuideProvider) Name() string { return WikipediaProviderName }
+
+// wikiQueryResponse models the action=query TextExtracts response shape.
+type wikiQueryResponse struct {
+	// Error is populated when the API rejects the request: MediaWiki returns
+	// these with a 200 OK status and an error object instead of a query result.
+	Error *struct {
+		Code string `json:"code"`
+		Info string `json:"info"`
+	} `json:"error"`
+	Query struct {
+		Pages map[string]struct {
+			PageID  int       `json:"pageid"`
+			Title   string    `json:"title"`
+			Extract string    `json:"extract"`
+			FullURL string    `json:"fullurl"`
+			Missing *struct{} `json:"missing"`
+		} `json:"pages"`
+	} `json:"query"`
+}
+
+// Fetch retrieves a species guide from the locale's Wikipedia.
+func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName string, opts FetchOptions) (*SpeciesGuide, error) {
+	if err := p.limiter.Wait(ctx); err != nil {
+		return nil, NewTransientError(err)
+	}
+
+	locale := opts.Locale
+	if locale == "" {
+		locale = defaultLocale
+	}
+
+	endpoint := p.buildURL(locale, scientificName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("guideprovider").
+			Category(errors.CategoryHTTP).
+			Context("operation", "wikipedia_request").
+			Build()
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", wikipediaUserAgent)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		// Network-level failures are transient.
+		return nil, NewTransientError(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return nil, ErrGuideNotFound
+	case resp.StatusCode == http.StatusTooManyRequests,
+		resp.StatusCode == http.StatusRequestTimeout,
+		resp.StatusCode >= httpStatusServerErrorMin:
+		// 429 (rate limited), 408 (request timeout) and 5xx are transient. Returning
+		// a plain (non-transient) error would make fetchAndStore persist a 30-minute
+		// negative entry, suppressing retries for a species that was merely throttled
+		// or briefly unavailable.
+		return nil, NewTransientError(errors.Newf("wikipedia returned status %d", resp.StatusCode).
+			Component("guideprovider").
+			Category(errors.CategoryHTTP).
+			Context("operation", "wikipedia_status_transient").
+			Build())
+	case resp.StatusCode != http.StatusOK:
+		// Any other non-OK status is non-definitive: wrap it transient so an
+		// unexpected upstream response doesn't get persisted as a 30-minute
+		// negative entry that suppresses retries for a valid species.
+		return nil, NewTransientError(errors.Newf("wikipedia returned status %d", resp.StatusCode).
+			Component("guideprovider").
+			Category(errors.CategoryHTTP).
+			Context("operation", "wikipedia_status").
+			Build())
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, wikipediaMaxResponseBytes))
+	if err != nil {
+		return nil, NewTransientError(err)
+	}
+
+	var parsed wikiQueryResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// A decode failure is a transport/API-shape problem, not "species not
+		// found"; keep it out of the negative cache.
+		return nil, NewTransientError(errors.New(err).
+			Component("guideprovider").
+			Category(errors.CategoryHTTP).
+			Context("operation", "wikipedia_decode").
+			Context("expected_path", "query.pages").
+			Context("error_detail", err.Error()).
+			Build())
+	}
+
+	// MediaWiki signals request-level errors (e.g. maxlag, bad params) with a
+	// 200 OK body carrying an error object. Treat these as transient rather than
+	// letting an empty Pages map fall through to a cached ErrGuideNotFound.
+	if parsed.Error != nil {
+		return nil, NewTransientError(errors.Newf("wikipedia api error: %s - %s", parsed.Error.Code, parsed.Error.Info).
+			Component("guideprovider").
+			Category(errors.CategoryHTTP).
+			Context("operation", "wikipedia_api_error").
+			Build())
+	}
+
+	for _, page := range parsed.Query.Pages {
+		if page.Missing != nil || page.PageID <= 0 || strings.TrimSpace(page.Extract) == "" {
+			return nil, ErrGuideNotFound
+		}
+		return &SpeciesGuide{
+			CommonName:     page.Title,
+			Description:    convertWikiSections(page.Extract),
+			SourceProvider: WikipediaProviderName,
+			SourceURL:      page.FullURL,
+			License:        wikipediaLicense,
+			LicenseURL:     wikipediaLicenseURL,
+		}, nil
+	}
+
+	return nil, ErrGuideNotFound
+}
+
+// buildURL constructs the TextExtracts action API URL for a species title.
+func (p *WikipediaGuideProvider) buildURL(locale, title string) string {
+	q := url.Values{}
+	q.Set("action", "query")
+	q.Set("format", "json")
+	q.Set("prop", "extracts|info")
+	q.Set("explaintext", "1")
+	q.Set("exsectionformat", "wiki")
+	q.Set("inprop", "url")
+	q.Set("redirects", "1")
+	q.Set("exlimit", "1")
+	q.Set("titles", title)
+	return "https://" + url.PathEscape(wikipediaSubdomain(locale)) + ".wikipedia.org/w/api.php?" + q.Encode()
+}
+
+// wikipediaLangOverrides maps a base-language subtag to the Wikipedia subdomain
+// when the two differ: Norwegian Bokmål ("nb") and Nynorsk ("nn") articles live on
+// no.wikipedia.org. Kept local (mirrors the same table in the api/v2/speciesguide
+// layer) so guideprovider stays a leaf package with no import back into the API.
+var wikipediaLangOverrides = map[string]string{
+	"nb": "no",
+	"nn": "no",
+}
+
+// Non-standard Wikipedia language editions whose project subdomain itself contains a
+// hyphen (e.g. zh-classical.wikipedia.org). Declared as constants so the lookup table
+// below and its in-package tests share one source of truth for each subdomain string.
+const (
+	wpEditionBatSmg      = "bat-smg"
+	wpEditionBeTarask    = "be-tarask"
+	wpEditionCbkZam      = "cbk-zam"
+	wpEditionFiuVro      = "fiu-vro"
+	wpEditionMapBms      = "map-bms"
+	wpEditionNdsNl       = "nds-nl"
+	wpEditionRoaRup      = "roa-rup"
+	wpEditionRoaTara     = "roa-tara"
+	wpEditionZhClassical = "zh-classical"
+	wpEditionZhMinNan    = "zh-min-nan"
+	wpEditionZhYue       = "zh-yue"
+)
+
+// wikipediaHyphenatedSubdomains lists the Wikipedia language editions whose project
+// subdomain itself contains a hyphen (e.g. zh-classical.wikipedia.org). These are the
+// non-standard subdomains localePattern (guideprovider.go) was widened to admit;
+// wikipediaSubdomain preserves them whole rather than collapsing to a base subtag, so
+// those locales fetch their own edition instead of silently falling back to the base
+// language. Every OTHER hyphenated locale is a regional variant (pt-br, zh-cn) with no
+// dedicated subdomain and is correctly collapsed.
+var wikipediaHyphenatedSubdomains = map[string]struct{}{
+	wpEditionBatSmg:      {},
+	wpEditionBeTarask:    {},
+	wpEditionCbkZam:      {},
+	wpEditionFiuVro:      {},
+	wpEditionMapBms:      {},
+	wpEditionNdsNl:       {},
+	wpEditionRoaRup:      {},
+	wpEditionRoaTara:     {},
+	wpEditionZhClassical: {},
+	wpEditionZhMinNan:    {},
+	wpEditionZhYue:       {},
+}
+
+// wikipediaSubdomain converts a UI locale to its Wikipedia language subdomain. It
+// drops any regional subtag ("pt-br"/"pt_PT" -> "pt", "zh-cn" -> "zh") and applies
+// the nb/nn -> no override, but PRESERVES the non-standard hyphenated subdomains that
+// really exist (zh-classical, zh-min-nan, be-tarask, ...). Wikipedia has no regional
+// subdomains (there is no pt-br.wikipedia.org), so passing a regional locale straight
+// into the host would build an invalid URL and fail every fetch. Anything that isn't a
+// recognized hyphenated subdomain or a 2-3 letter base code falls back to the default.
+func wikipediaSubdomain(locale string) string {
+	l := strings.ToLower(strings.TrimSpace(locale))
+	// Normalize the separator so the allowlist matches an underscore form too.
+	l = strings.ReplaceAll(l, "_", "-")
+	// A hyphenated locale that is itself a real Wikipedia subdomain is kept whole.
+	if _, ok := wikipediaHyphenatedSubdomains[l]; ok {
+		return l
+	}
+	// Otherwise keep only the primary subtag.
+	if i := strings.IndexByte(l, '-'); i >= 0 {
+		l = l[:i]
+	}
+	if len(l) < 2 || len(l) > 3 {
+		return defaultLocale
+	}
+	for _, r := range l {
+		if r < 'a' || r > 'z' {
+			return defaultLocale
+		}
+	}
+	if sub, ok := wikipediaLangOverrides[l]; ok {
+		return sub
+	}
+	return l
+}
+
+// convertWikiSections rewrites MediaWiki section headers in a plain-text extract
+// into the "## Heading" markdown the frontend's parseGuideDescription expects.
+// Top-level (== H ==) headers become "## H". Deeper headers (=== H ===) are
+// flattened to a bare heading line so they don't create spurious top-level splits —
+// EXCEPT when the deeper heading names a canonical comparison section
+// (appearance/voice/habitat/behaviour, see isCanonicalHeading), in which case it is
+// promoted to a top-level "## H" too. Bird articles routinely nest the voice
+// section under "Description"/"Behaviour"; promoting it lets the frontend surface a
+// distinct Voice row instead of absorbing the prose into the parent section.
+func convertWikiSections(extract string) string {
+	lines := strings.Split(extract, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Check deeper (===+) headers first so they aren't matched as top-level
+		// "## " splits by the level-2 matcher below.
+		if m := subSectionHeadingRegex.FindStringSubmatch(trimmed); m != nil {
+			if isCanonicalHeading(m[1]) {
+				lines[i] = "## " + m[1] // promote a canonical sub-section to its own row
+			} else {
+				lines[i] = m[1] // flatten: keep non-canonical prose inline in the parent
+			}
+			continue
+		}
+		if m := sectionHeadingRegex.FindStringSubmatch(trimmed); m != nil {
+			lines[i] = "## " + m[1]
+		}
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}

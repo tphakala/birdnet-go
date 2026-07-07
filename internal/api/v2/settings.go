@@ -2167,6 +2167,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, ToastTypeInfo, toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, ToastTypeInfo, toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, ToastTypeInfo, toastDurationShort},
+	{"Species guide", "reconfigure_species_guide", speciesGuideSettingsChanged, "Reconfiguring species guide...", notification.MsgSettingsReconfiguringSpeciesGuide, ToastTypeInfo, toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, ToastTypeWarning, toastDurationExtended},
@@ -2545,6 +2546,35 @@ func seasonalTrackingChanged(old, current conf.SeasonalTrackingSettings) bool {
 }
 
 // speciesTrackingSettingsChanged checks if species tracking settings have changed
+// speciesGuideSettingsChanged reports whether any species guide setting changed,
+// so the settings handler can emit the reconfigure_species_guide hot-reload signal.
+func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	o := oldSettings.Realtime.Dashboard.SpeciesGuide
+	n := currentSettings.Realtime.Dashboard.SpeciesGuide
+
+	// A toggle of the feature itself always requires reconfiguration.
+	if o.Enabled != n.Enabled {
+		return true
+	}
+	// If it was and remains disabled, nothing else matters.
+	if !n.Enabled {
+		return false
+	}
+	// EnableSupplementaryLinks and the Show* flags are read per-request by the
+	// handlers and don't affect cached guide content, so a rebuild is not strictly
+	// required for them. They are included anyway so every guide setting emits the
+	// same reconfigure signal (and its confirmation toast) — a settings toggle is a
+	// rare manual action, and the uniform UX signal is worth the redundant rebuild.
+	return o.EnableWikipedia != n.EnableWikipedia ||
+		o.EnableSupplementaryLinks != n.EnableSupplementaryLinks ||
+		o.WarmTopN != n.WarmTopN ||
+		o.PreFetchEnabled != n.PreFetchEnabled ||
+		o.ShowNotes != n.ShowNotes ||
+		o.ShowEnrichments != n.ShowEnrichments ||
+		o.ShowSimilarSpecies != n.ShowSimilarSpecies ||
+		o.ShowTaxonomy != n.ShowTaxonomy
+}
+
 func speciesTrackingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldTracking := oldSettings.Realtime.SpeciesTracking
 	newTracking := currentSettings.Realtime.SpeciesTracking

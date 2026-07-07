@@ -429,7 +429,8 @@
         "equalizerUpdateFailed": "Bijwerken van audio-equalizerinstellingen mislukt",
         "equalizerUpdated": "Audio-equalizerinstellingen bijgewerkt",
         "savedSuccessfully": "Instellingen succesvol opgeslagen",
-        "saveFailed": "Opslaan van instellingen mislukt"
+        "saveFailed": "Opslaan van instellingen mislukt",
+        "reconfiguringSpeciesGuide": "Soortengids wordt bijgewerkt..."
       },
       "migration": {
         "startedTitle": "Databasemigratie gestart",
@@ -1960,7 +1961,71 @@
         "detections": "Aantal herkend:",
         "confidence": "Betrouwbaarheid:",
         "first": "Eerst:"
-      }
+      },
+      "guide": {
+        "title": "Gids",
+        "similar": "Vergelijkbare soorten",
+        "noSimilar": "Geen vergelijkbare soorten gevonden",
+        "loading": "Gids laden…",
+        "unavailable": "De soortengids is tijdelijk niet beschikbaar. Probeer het later opnieuw.",
+        "noGuide": "Geen gids beschikbaar voor deze soort.",
+        "expectedness": {
+          "expected": "Hier te verwachten",
+          "uncommon": "Hier ongewoon",
+          "rare": "Hier zeldzaam",
+          "unexpected": "Hier onverwacht"
+        },
+        "season": {
+          "spring": "Lente",
+          "summer": "Zomer",
+          "autumn": "Herfst",
+          "winter": "Winter",
+          "wet1": "Eerste regenseizoen",
+          "dry1": "Eerste droge seizoen",
+          "wet2": "Tweede regenseizoen",
+          "dry2": "Tweede droge seizoen"
+        },
+        "description": "Beschrijving",
+        "songsAndCalls": "Zang en roep",
+        "externalLinks": "Externe bronnen",
+        "speciesGuide": "Soortengids"
+      },
+      "notes": {
+        "title": "Notities",
+        "placeholder": "Voeg een notitie over deze soort toe…",
+        "editLabel": "Notitie bewerken",
+        "save": "Notitie opslaan",
+        "empty": "Nog geen notities.",
+        "deleteConfirm": "Deze notitie verwijderen?",
+        "deleteFailed": "Kan de notitie niet verwijderen.",
+        "saveFailed": "Kan de notitie niet opslaan.",
+        "saveDisabledReason": "Voer notitietekst in om Opslaan in te schakelen.",
+        "tooLong": "Notitie is te lang (maximaal {max} tekens).",
+        "truncated": "De {max} meest recente notities worden getoond; oudere notities zijn verborgen."
+      },
+      "similar": {
+        "title": "Vergelijkbare soorten",
+        "compare": "Vergelijken",
+        "loading": "Vergelijkbare soorten laden…",
+        "empty": "Geen vergelijkbare soorten gevonden.",
+        "similar": "Vergelijkbaar",
+        "versus": "vs {species}",
+        "selectPrompt": "Selecteer een soort om te vergelijken met {species}.",
+        "noGuideAvailable": "Geen gids beschikbaar",
+        "linksOnly": "Alleen links",
+        "exploreResources": "Geen vergelijkingsdetails. Bronnen verkennen:",
+        "cardLoading": "Vergelijking laden…",
+        "cardNoGuide": "Geen gids beschikbaar voor deze soort.",
+        "cardError": "Kan deze soort niet laden. Probeer een andere.",
+        "cardNoSections": "Geen vergelijkingsdetails beschikbaar voor deze soort.",
+        "sections": {
+          "appearance": "Uiterlijk",
+          "voice": "Geluid",
+          "habitat": "Leefgebied en verspreiding",
+          "behaviour": "Gedrag"
+        }
+      },
+      "viewGuide": "Gids voor {species} bekijken"
     },
     "advanced": {
       "chartControls": "Grafiekbediening",
@@ -4542,7 +4607,8 @@
         "appearance": "Uiterlijk",
         "language": "Taal en regionaal",
         "visualContent": "Visuele inhoud",
-        "audioPlayback": "Audioweergave"
+        "audioPlayback": "Audioweergave",
+        "speciesGuide": "Soortengids"
       },
       "appearance": {
         "title": "Uiterlijk",
@@ -4562,6 +4628,49 @@
         "defaultGain": "Standaard volumeversterking",
         "defaultGainHelpText": "Initiële versterking bij het afspelen van opnames. Vogelgeluiden zijn vaak zacht, dus een versterking van 6-12 dB wordt aanbevolen.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Soortengids",
+        "description": "Verrijk detecties met taxonomie, gangbare namen, externe links en vergelijkbare soorten — offline via OpenFauna; Wikipedia-beschrijvingen zijn een optionele online aanvulling.",
+        "enabled": {
+          "label": "Soortengids inschakelen",
+          "helpText": "Contextuele gidsinformatie tonen bij detectiedetails en in het soortvenster."
+        },
+        "enableWikipedia": {
+          "label": "Wikipedia-beschrijvingen",
+          "helpText": "Ook artikelbeschrijvingen van Wikipedia ophalen (vereist internet). Standaard uit – taxonomie, gangbare namen en externe links werken altijd offline via OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Aanvullende links",
+          "helpText": "Xeno-canto-audiolinks en een Wikipedia-link toevoegen voor soorten die niet in de offline dataset staan. Links openen externe sites; er worden geen gegevens op de achtergrond opgehaald."
+        },
+        "warmTopN": {
+          "label": "Meest voorkomende soorten voorladen",
+          "helpText": "Gidsen voor de meest gedetecteerde soorten bij het opstarten voorladen (0 schakelt voorladen uit)."
+        },
+        "preFetchEnabled": {
+          "label": "Vooraf ophalen bij detectie",
+          "helpText": "De gids ophalen wanneer een soort voor het eerst wordt gedetecteerd, zodat deze later direct laadt."
+        },
+        "sections": {
+          "title": "Gidssecties"
+        },
+        "showNotes": {
+          "label": "Notities tonen",
+          "helpText": "Gebruikersnotities per soort toestaan."
+        },
+        "showEnrichments": {
+          "label": "Verrijkingen tonen",
+          "helpText": "Badges voor kwaliteit, verwachtbaarheid en seizoen tonen."
+        },
+        "showSimilarSpecies": {
+          "label": "Vergelijkbare soorten tonen",
+          "helpText": "Het vergelijkingspaneel voor vergelijkbare soorten tonen."
+        },
+        "showTaxonomy": {
+          "label": "Taxonomie tonen",
+          "helpText": "De taxonomische hiërarchie (van klasse tot soort) en ondersoorten tonen."
+        }
       }
     },
     "restartRequired": "Sommige wijzigingen vereisen een herstart van de server. Herstart BirdNET-Go."

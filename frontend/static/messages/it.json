@@ -429,7 +429,8 @@
         "equalizerUpdateFailed": "Aggiornamento delle impostazioni dell'equalizzatore audio non riuscito",
         "equalizerUpdated": "Impostazioni dell'equalizzatore audio aggiornate",
         "savedSuccessfully": "Impostazioni salvate con successo",
-        "saveFailed": "Salvataggio delle impostazioni non riuscito"
+        "saveFailed": "Salvataggio delle impostazioni non riuscito",
+        "reconfiguringSpeciesGuide": "Aggiornamento della guida delle specie..."
       },
       "migration": {
         "startedTitle": "Migrazione del database avviata",
@@ -1960,7 +1961,71 @@
         "detections": "Rilevamenti:",
         "confidence": "Confidenza:",
         "first": "Primo:"
-      }
+      },
+      "guide": {
+        "title": "Guida",
+        "similar": "Specie simili",
+        "noSimilar": "Nessuna specie simile trovata",
+        "loading": "Caricamento della guida…",
+        "unavailable": "La guida delle specie è temporaneamente non disponibile. Riprova più tardi.",
+        "noGuide": "Nessuna guida disponibile per questa specie.",
+        "expectedness": {
+          "expected": "Atteso qui",
+          "uncommon": "Poco comune qui",
+          "rare": "Raro qui",
+          "unexpected": "Inatteso qui"
+        },
+        "season": {
+          "spring": "Primavera",
+          "summer": "Estate",
+          "autumn": "Autunno",
+          "winter": "Inverno",
+          "wet1": "Prima stagione delle piogge",
+          "dry1": "Prima stagione secca",
+          "wet2": "Seconda stagione delle piogge",
+          "dry2": "Seconda stagione secca"
+        },
+        "description": "Descrizione",
+        "songsAndCalls": "Canti e richiami",
+        "externalLinks": "Risorse esterne",
+        "speciesGuide": "Guida delle specie"
+      },
+      "notes": {
+        "title": "Note",
+        "placeholder": "Aggiungi una nota su questa specie…",
+        "editLabel": "Modifica nota",
+        "save": "Salva nota",
+        "empty": "Ancora nessuna nota.",
+        "deleteConfirm": "Eliminare questa nota?",
+        "deleteFailed": "Impossibile eliminare la nota.",
+        "saveFailed": "Impossibile salvare la nota.",
+        "saveDisabledReason": "Inserisci il testo della nota per abilitare il salvataggio.",
+        "tooLong": "La nota è troppo lunga (massimo {max} caratteri).",
+        "truncated": "Sono mostrate le {max} note più recenti; le note più vecchie sono nascoste."
+      },
+      "similar": {
+        "title": "Specie simili",
+        "compare": "Confronta",
+        "loading": "Caricamento delle specie simili…",
+        "empty": "Nessuna specie simile trovata.",
+        "similar": "Simile",
+        "versus": "vs {species}",
+        "selectPrompt": "Seleziona una specie da confrontare con {species}.",
+        "noGuideAvailable": "Nessuna guida disponibile",
+        "linksOnly": "Solo link",
+        "exploreResources": "Nessun dettaglio di confronto. Esplora le risorse:",
+        "cardLoading": "Caricamento del confronto…",
+        "cardNoGuide": "Nessuna guida disponibile per questa specie.",
+        "cardError": "Impossibile caricare questa specie. Provane un’altra.",
+        "cardNoSections": "Nessun dettaglio di confronto disponibile per questa specie.",
+        "sections": {
+          "appearance": "Aspetto",
+          "voice": "Voce",
+          "habitat": "Habitat e distribuzione",
+          "behaviour": "Comportamento"
+        }
+      },
+      "viewGuide": "Visualizza la guida di {species}"
     },
     "advanced": {
       "chartControls": "Controlli Grafico",
@@ -4542,7 +4607,8 @@
         "appearance": "Aspetto",
         "language": "Lingua e regionale",
         "visualContent": "Contenuti visivi",
-        "audioPlayback": "Riproduzione audio"
+        "audioPlayback": "Riproduzione audio",
+        "speciesGuide": "Guida alle specie"
       },
       "appearance": {
         "title": "Aspetto",
@@ -4562,6 +4628,49 @@
         "defaultGain": "Amplificazione volume predefinita",
         "defaultGainHelpText": "Guadagno iniziale applicato durante la riproduzione delle registrazioni. I suoni degli uccelli sono spesso deboli, quindi è consigliato un incremento di 6-12 dB.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Guida alle specie",
+        "description": "Arricchisci i rilevamenti con tassonomia, nomi comuni, collegamenti esterni e specie simili — offline tramite OpenFauna; le descrizioni di Wikipedia sono un componente aggiuntivo online facoltativo.",
+        "enabled": {
+          "label": "Abilita guida alle specie",
+          "helpText": "Mostra le informazioni contestuali della guida nei dettagli di rilevamento e nella finestra della specie."
+        },
+        "enableWikipedia": {
+          "label": "Descrizioni da Wikipedia",
+          "helpText": "Recupera anche le descrizioni degli articoli da Wikipedia (richiede Internet). Disattivato per impostazione predefinita: tassonomia, nomi comuni e collegamenti esterni funzionano sempre offline tramite OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Collegamenti supplementari",
+          "helpText": "Aggiungi collegamenti audio Xeno-canto e un collegamento a Wikipedia per le specie non coperte dal set di dati offline. I collegamenti aprono siti esterni; nessun dato viene recuperato in background."
+        },
+        "warmTopN": {
+          "label": "Precarica specie più frequenti",
+          "helpText": "Precarica le guide delle specie più rilevate all’avvio (0 disabilita il precaricamento)."
+        },
+        "preFetchEnabled": {
+          "label": "Precaricamento al rilevamento",
+          "helpText": "Recupera la guida al primo rilevamento di una specie, così si carica all’istante in seguito."
+        },
+        "sections": {
+          "title": "Sezioni della guida"
+        },
+        "showNotes": {
+          "label": "Mostra note",
+          "helpText": "Consenti note utente per specie."
+        },
+        "showEnrichments": {
+          "label": "Mostra arricchimenti",
+          "helpText": "Mostra i badge di qualità, prevedibilità e stagione."
+        },
+        "showSimilarSpecies": {
+          "label": "Mostra specie simili",
+          "helpText": "Mostra il pannello di confronto delle specie simili."
+        },
+        "showTaxonomy": {
+          "label": "Mostra tassonomia",
+          "helpText": "Mostra la gerarchia tassonomica (dalla classe alla specie) e le sottospecie."
+        }
       }
     },
     "restartRequired": "Alcune modifiche richiedono un riavvio del server per avere effetto. Riavvia BirdNET-Go."

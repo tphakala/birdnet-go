@@ -429,7 +429,8 @@
         "equalizerUpdateFailed": "Aktualizácia nastavení audio ekvalizéra zlyhala",
         "equalizerUpdated": "Nastavenia audio ekvalizéra aktualizované",
         "savedSuccessfully": "Nastavenia úspešne uložené",
-        "saveFailed": "Uloženie nastavení zlyhalo"
+        "saveFailed": "Uloženie nastavení zlyhalo",
+        "reconfiguringSpeciesGuide": "Aktualizuje sa sprievodca druhmi..."
       },
       "migration": {
         "startedTitle": "Migrácia databázy spustená",
@@ -1960,7 +1961,71 @@
         "detections": "Detekcie:",
         "confidence": "Istota:",
         "first": "Prvýkrát:"
-      }
+      },
+      "guide": {
+        "title": "Sprievodca",
+        "similar": "Podobné druhy",
+        "noSimilar": "Nenašli sa žiadne podobné druhy",
+        "loading": "Načítava sa sprievodca…",
+        "unavailable": "Sprievodca druhmi je dočasne nedostupný. Skúste to znova neskôr.",
+        "noGuide": "Pre tento druh nie je k dispozícii sprievodca.",
+        "expectedness": {
+          "expected": "Tu očakávaný",
+          "uncommon": "Tu nezvyčajný",
+          "rare": "Tu vzácny",
+          "unexpected": "Tu neočakávaný"
+        },
+        "season": {
+          "spring": "Jar",
+          "summer": "Leto",
+          "autumn": "Jeseň",
+          "winter": "Zima",
+          "wet1": "Prvé obdobie dažďov",
+          "dry1": "Prvé obdobie sucha",
+          "wet2": "Druhé obdobie dažďov",
+          "dry2": "Druhé obdobie sucha"
+        },
+        "description": "Popis",
+        "songsAndCalls": "Spev a hlasy",
+        "externalLinks": "Externé zdroje",
+        "speciesGuide": "Sprievodca druhmi"
+      },
+      "notes": {
+        "title": "Poznámky",
+        "placeholder": "Pridať poznámku k tomuto druhu…",
+        "editLabel": "Upraviť poznámku",
+        "save": "Uložiť poznámku",
+        "empty": "Zatiaľ žiadne poznámky.",
+        "deleteConfirm": "Odstrániť túto poznámku?",
+        "deleteFailed": "Poznámku sa nepodarilo odstrániť.",
+        "saveFailed": "Poznámku sa nepodarilo uložiť.",
+        "saveDisabledReason": "Zadajte text poznámky na povolenie uloženia.",
+        "tooLong": "Poznámka je príliš dlhá (maximálne {max} znakov).",
+        "truncated": "Zobrazuje sa {max} najnovších poznámok; staršie poznámky sú skryté."
+      },
+      "similar": {
+        "title": "Podobné druhy",
+        "compare": "Porovnať",
+        "loading": "Načítavajú sa podobné druhy…",
+        "empty": "Nenašli sa žiadne podobné druhy.",
+        "similar": "Podobné",
+        "versus": "vs {species}",
+        "selectPrompt": "Vyberte druh na porovnanie s {species}.",
+        "noGuideAvailable": "Sprievodca nie je k dispozícii",
+        "linksOnly": "Iba odkazy",
+        "exploreResources": "Žiadne podrobnosti porovnania. Preskúmať zdroje:",
+        "cardLoading": "Načítava sa porovnanie…",
+        "cardNoGuide": "Pre tento druh nie je k dispozícii sprievodca.",
+        "cardError": "Tento druh sa nepodarilo načítať. Skúste iný.",
+        "cardNoSections": "Pre tento druh nie sú k dispozícii žiadne údaje na porovnanie.",
+        "sections": {
+          "appearance": "Vzhľad",
+          "voice": "Hlas",
+          "habitat": "Biotop a rozšírenie",
+          "behaviour": "Správanie"
+        }
+      },
+      "viewGuide": "Zobraziť sprievodcu pre {species}"
     },
     "advanced": {
       "chartControls": "Ovládanie grafu",
@@ -4542,7 +4607,8 @@
         "appearance": "Vzhľad",
         "language": "Jazyk a regionálne",
         "visualContent": "Vizuálny obsah",
-        "audioPlayback": "Prehrávanie zvuku"
+        "audioPlayback": "Prehrávanie zvuku",
+        "speciesGuide": "Sprievodca druhmi"
       },
       "appearance": {
         "title": "Vzhľad",
@@ -4562,6 +4628,49 @@
         "defaultGain": "Predvolené zosilnenie hlasitosti",
         "defaultGainHelpText": "Počiatočné zosilnenie pri prehrávaní nahrávok. Zvuky vtákov sú často tiché, preto sa odporúča zosilnenie 6-12 dB.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Sprievodca druhmi",
+        "description": "Obohaťte detekcie o taxonómiu, bežné názvy, externé odkazy a podobné druhy — offline cez OpenFauna; popisy z Wikipédie sú voliteľný online doplnok.",
+        "enabled": {
+          "label": "Povoliť sprievodcu druhmi",
+          "helpText": "Zobraziť kontextové informácie sprievodcu v podrobnostiach detekcie a v okne druhu."
+        },
+        "enableWikipedia": {
+          "label": "Popisy z Wikipédie",
+          "helpText": "Načítať aj popisy článkov z Wikipédie (vyžaduje internet). Predvolene vypnuté – taxonómia, bežné názvy a externé odkazy fungujú vždy offline cez OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Doplnkové odkazy",
+          "helpText": "Pridať zvukové odkazy Xeno-canto a odkaz na Wikipédiu pre druhy, ktoré offline súbor údajov nepokrýva. Odkazy otvárajú externé stránky; na pozadí sa nenačítavajú žiadne údaje."
+        },
+        "warmTopN": {
+          "label": "Predhriať najčastejšie druhy",
+          "helpText": "Pri spustení vopred načítať sprievodcov pre najčastejšie detegované druhy (0 vypína predhrievanie)."
+        },
+        "preFetchEnabled": {
+          "label": "Predbežné načítanie pri detekcii",
+          "helpText": "Načítať sprievodcu pri prvej detekcii druhu, aby sa neskôr zobrazil okamžite."
+        },
+        "sections": {
+          "title": "Sekcie sprievodcu"
+        },
+        "showNotes": {
+          "label": "Zobraziť poznámky",
+          "helpText": "Povoliť používateľské poznámky pre jednotlivé druhy."
+        },
+        "showEnrichments": {
+          "label": "Zobraziť obohatenia",
+          "helpText": "Zobraziť odznaky kvality, očakávanosti a ročného obdobia."
+        },
+        "showSimilarSpecies": {
+          "label": "Zobraziť podobné druhy",
+          "helpText": "Zobraziť panel porovnania podobných druhov."
+        },
+        "showTaxonomy": {
+          "label": "Zobraziť taxonómiu",
+          "helpText": "Zobraziť taxonomickú hierarchiu (od triedy po druh) a poddruhy."
+        }
       }
     },
     "restartRequired": "Niektoré zmeny vyžadujú reštart servera. Reštartujte BirdNET-Go."
