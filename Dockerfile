@@ -140,7 +140,8 @@ RUN set -eu; \
     cp -a "${OV_SRC}"/libopenvino_ir_frontend.so* /home/dev-user/lib/openvino/; \
     cp -a "${OV_SRC}/${OV_CPU_PLUGIN}"* /home/dev-user/lib/openvino/; \
     if [ -n "${OV_GPU_PLUGIN}" ]; then cp -a "${OV_SRC}/${OV_GPU_PLUGIN}"* /home/dev-user/lib/openvino/; fi; \
-    cp -a /tmp/ov/runtime/3rdparty/tbb/lib/*.so* /home/dev-user/lib/openvino/; \
+    find /tmp/ov/runtime/3rdparty/tbb/lib -name '*.so*' -exec cp -a {} /home/dev-user/lib/openvino/ \; ; \
+    test -e /home/dev-user/lib/openvino/libtbb.so.12; \
     rm -rf /tmp/openvino.tgz /tmp/ov; \
     echo "Staged OpenVINO runtime libraries: $(ls /home/dev-user/lib/openvino | wc -l) entries"
 
@@ -207,7 +208,10 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy ONNX Runtime libraries (used by all arches; arm64 relies on them exclusively).
-COPY --from=build /home/dev-user/lib/libonnxruntime*.so* /usr/lib/
+# --chown=root:root because COPY --from preserves the build-stage owner (dev-user,
+# UID 10001); system libraries must be root-owned so a runtime process cannot
+# overwrite them if it happens to share that UID.
+COPY --chown=root:root --from=build /home/dev-user/lib/libonnxruntime*.so* /usr/lib/
 
 # TensorFlow Lite C library: installed for non-arm64 only. arm64 is ONNX-only
 # (issue #1103) and the binary does not link libtensorflowlite_c. Stage it, then
@@ -225,7 +229,9 @@ RUN if [ "$TARGETPLATFORM" != "linux/arm64" ]; then \
 # without Intel GPU drivers, falls back to ONNX Runtime cleanly. The staging dir
 # holds the arch-appropriate set (see the build stage), with symlinks preserved so
 # the bare-soname dlopen resolves; ldconfig then refreshes the loader cache.
-COPY --from=build /home/dev-user/lib/openvino/ /usr/lib/
+# --chown=root:root because COPY --from preserves the build-stage owner (dev-user,
+# UID 10001); system libraries must be root-owned (see the ONNX Runtime copy above).
+COPY --chown=root:root --from=build /home/dev-user/lib/openvino/ /usr/lib/
 RUN ldconfig
 
 # Include reset_auth tool from build stage
