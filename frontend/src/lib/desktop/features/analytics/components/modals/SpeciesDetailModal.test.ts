@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup } from '@testing-library/svelte';
+import { cleanup, fireEvent } from '@testing-library/svelte';
 import { createComponentTestFactory, screen } from '../../../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import SpeciesDetailModal from './SpeciesDetailModal.svelte';
@@ -99,6 +99,37 @@ describe('SpeciesDetailModal', () => {
     await user.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the thumbnail image when thumbnail_url is set', () => {
+    const { container } = modalTest.render({
+      props: {
+        isOpen: true,
+        species: { ...mockSpecies, thumbnail_url: '/api/v2/media/image/Passer%20domesticus' },
+      },
+    });
+
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img).toHaveAttribute('src', '/api/v2/media/image/Passer%20domesticus');
+  });
+
+  // Regression for Forgejo #1311: under defer-to-proxy every species gets a media-proxy
+  // URL that can 404, so the modal must swap to the placeholder background on error
+  // rather than showing a broken image.
+  it('degrades to the placeholder (removes the img) when the thumbnail fails to load', async () => {
+    const { container } = modalTest.render({
+      props: {
+        isOpen: true,
+        species: { ...mockSpecies, thumbnail_url: '/api/v2/media/image/Passer%20domesticus' },
+      },
+    });
+
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    if (img) await fireEvent.error(img);
+
+    expect(container.querySelector('img')).toBeNull();
   });
 
   it('closes when clicking outside the modal content', async () => {
