@@ -36,6 +36,13 @@
     imageLoadFailed = true;
   }
 
+  // Reset the failed-load flag when a new species is provided so a reused
+  // component instance retries its thumbnail instead of keeping a prior
+  // species' placeholder (matches SpeciesDetailModal).
+  $effect(() => {
+    if (species) imageLoadFailed = false;
+  });
+
   function handleClick() {
     if (onClick) {
       onClick(species);

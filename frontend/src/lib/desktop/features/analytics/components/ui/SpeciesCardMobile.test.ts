@@ -61,5 +61,28 @@ describe('SpeciesCardMobile', () => {
 
       expect(container.querySelector('img')).toBeNull();
     });
+
+    it(`resets the failed-load flag when the species prop changes for the ${variant} variant`, async () => {
+      const { container, rerender } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant },
+      });
+
+      const img = container.querySelector('img');
+      expect(img).not.toBeNull();
+      if (img) await fireEvent.error(img);
+      expect(container.querySelector('img')).toBeNull();
+
+      // A reused instance showing a different species must retry its thumbnail.
+      await rerender({
+        species: {
+          ...mockSpecies,
+          scientific_name: 'Corvus brachyrhynchos',
+          common_name: 'American Crow',
+          thumbnail_url: '/api/v2/media/image/Corvus%20brachyrhynchos',
+        },
+      });
+
+      expect(container.querySelector('img')).not.toBeNull();
+    });
   }
 });
