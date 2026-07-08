@@ -34,6 +34,12 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	require.Less(t, rtspIdx+1, len(args), "-rtsp_transport must have a value")
 	assert.Equal(t, "tcp", args[rtspIdx+1])
 
+	// Only audio streams should be requested during RTSP handshake.
+	allowedMediaIdx := slices.Index(args, "-allowed_media_types")
+	require.NotEqual(t, -1, allowedMediaIdx, "expected -allowed_media_types flag for RTSP")
+	require.Less(t, allowedMediaIdx+1, len(args), "-allowed_media_types must have a value")
+	assert.Equal(t, "audio", args[allowedMediaIdx+1])
+
 	// Empty FFmpegPath yields an unknown version, which safely falls back to -timeout.
 	timeoutIdx := slices.Index(args, "-timeout")
 	require.NotEqual(t, -1, timeoutIdx, "expected -timeout flag for RTSP")

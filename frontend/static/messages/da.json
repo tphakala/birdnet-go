@@ -206,10 +206,19 @@
     "componentError": "Komponentindlæsningsfejl",
     "speciesAnalytics": "Artsanalyse",
     "detectionDetails": "Detektionsdetaljer",
-    "settingsNotAvailable": "Indstillinger ikke tilgængelige"
+    "settingsNotAvailable": "Indstillinger ikke tilgængelige",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analyse - Nataktivitet",
+    "analyticsWeather": "Analyse - Vejrkorrelation",
+    "analyticsSoundscape": "Analyse - Lydlandskab"
   },
   "navigation": {
     "dashboard": "Instrumentpanel",
+    "liveAudio": "Direktelyd",
     "settingsMenu": "Indstillingsmenu",
     "theme": "Tema",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Rapportér en fejl på GitHub (åbner i nyt vindue)",
     "askQuestionAriaLabel": "Stil et spørgsmål på GitHub Discussions (åbner i nyt vindue)",
     "viewOnGithubAriaLabel": "Se BirdNET-Go på GitHub (åbner i nyt vindue)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Udforsk",
+      "patterns": "Mønstre",
+      "environment": "Miljø",
+      "dataQuality": "Datakvalitet"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Genberegner dynamiske tærskler for ny basisværdi",
         "reconfiguringDynamicThresholds": "Genkonfigurerer dynamiske tærskler...",
         "webserverRestartRequired": "Webserverindstillinger ændret. Genstart påkrævet.",
+        "oauthRestartRequired": "Godkendelsesudbyderindstillinger ændret. Genstart påkrævet.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Opdaterer lydniveauovervågning...",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Oversigt",
         "patterns": "Aktivitetsmønstre",
         "trends": "Tendenser",
         "biodiversity": "Biodiversitet",
-        "quality": "Gennemgang og nøjagtighed"
+        "quality": "Gennemgang og nøjagtighed",
+        "summary": "Summary",
+        "nocturnal": "Nataktivitet",
+        "weather": "Vejr",
+        "soundscape": "Lydlandskab"
       },
       "aria": {
         "tabs": "Analyseafsnit"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "Dette diagram kræver mindst {min} datapunkter. Fortsæt optagelsen, og kig forbi igen snart.",
         "export": "Eksporter",
         "exportComingSoon": "CSV-eksport kommer snart."
-      },
-      "comingSoon": {
-        "description": "Dette afsnit er under opbygning og kommer i en kommende opdatering."
       }
     },
-    "title": "Oversigt",
     "loadingError": "Kunne ikke indlæse nogle analysedata. Prøv venligst igen senere.",
+    "comingSoon": {
+      "badge": "Kommer snart",
+      "plannedTitle": "Planlagte funktioner",
+      "weather": {
+        "description": "Fugleaktivitet målt mod lokale vejrforhold. Denne visning vil korrelere dine registreringer med temperatur, vind og nedbør.",
+        "feature1": "Korreler registreringer med temperatur, vind og nedbør",
+        "feature2": "Se, hvordan vejrfronter påvirker artsaktiviteten",
+        "feature3": "Sammenlign sæsonaktivitet med historiske vejrdata"
+      },
+      "soundscape": {
+        "description": "Et kig på den overordnede akustiske karakter af dit miljø ved hjælp af akustiske indeks til at opsummere lydlandskabets mangfoldighed over tid.",
+        "feature1": "Akustiske indeks, der opsummerer lydlandskabets kompleksitet",
+        "feature2": "Spor biodiversitet via omgivende lyd over tid",
+        "feature3": "Opdage daggry- og tusmørkekor i det akustiske register"
+      }
+    },
     "stats": {
       "totalDetections": "Samlede registreringer",
       "uniqueSpecies": "Unikke arter",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Kunne ikke starte genstart",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

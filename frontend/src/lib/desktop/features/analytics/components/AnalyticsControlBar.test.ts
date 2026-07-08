@@ -33,7 +33,7 @@ const species: Species[] = [
 
 function makeParams(overrides: Partial<AnalyticsParams> = {}): AnalyticsParams {
   return {
-    ...parseAnalyticsParams('', { defaultTab: 'patterns', now: NOW }),
+    ...parseAnalyticsParams('', { now: NOW }),
     ...overrides,
   };
 }

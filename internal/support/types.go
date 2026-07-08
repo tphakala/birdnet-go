@@ -10,10 +10,12 @@ import (
 // and system information used for troubleshooting and debugging BirdNET-Go issues.
 // The data is privacy-scrubbed before collection to remove sensitive information.
 type SupportDump struct {
-	ID             string                `json:"id"`
-	Timestamp      time.Time             `json:"timestamp"`
-	SystemID       string                `json:"system_id"`
-	Version        string                `json:"version"`
+	ID        string    `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	SystemID  string    `json:"system_id"`
+	Version   string    `json:"version"`
+	// Logs holds journal entries only. On-disk log files are counted for the
+	// diagnostics summary and shipped raw in the archive, not retained here.
 	Logs           []LogEntry            `json:"logs"`
 	Config         map[string]any        `json:"config"`
 	SystemInfo     SystemInfo            `json:"system_info"`

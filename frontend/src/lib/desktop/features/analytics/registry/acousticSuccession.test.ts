@@ -24,7 +24,6 @@ interface SuccessionRow {
 
 function makeParams(): AnalyticsParams {
   return {
-    tab: 'patterns',
     range: 'month',
     start: '2026-03-01',
     end: '2026-03-31',

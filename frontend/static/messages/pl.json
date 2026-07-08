@@ -206,10 +206,19 @@
     "componentError": "Błąd ładowania komponentu",
     "speciesAnalytics": "Analityka gatunków",
     "detectionDetails": "Szczegóły wykrycia",
-    "settingsNotAvailable": "Ustawienia niedostępne"
+    "settingsNotAvailable": "Ustawienia niedostępne",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analityka - Aktywność nocna",
+    "analyticsWeather": "Analityka - Korelacja pogodowa",
+    "analyticsSoundscape": "Analityka - Krajobraz dźwiękowy"
   },
   "navigation": {
     "dashboard": "Panel",
+    "liveAudio": "Dźwięk na żywo",
     "settingsMenu": "Menu ustawień",
     "theme": "Motyw",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Zgłoś błąd na GitHubie (otwiera się w nowym oknie)",
     "askQuestionAriaLabel": "Zadaj pytanie na GitHub Discussions (otwiera się w nowym oknie)",
     "viewOnGithubAriaLabel": "Zobacz BirdNET-Go na GitHubie (otwiera się w nowym oknie)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Odkryj",
+      "patterns": "Wzorce",
+      "environment": "Środowisko",
+      "dataQuality": "Jakość danych"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Przeliczanie progów dynamicznych dla nowej wartości bazowej",
         "reconfiguringDynamicThresholds": "Ponowna konfiguracja progów dynamicznych...",
         "webserverRestartRequired": "Ustawienia serwera WWW zmienione. Wymagany restart.",
+        "oauthRestartRequired": "Ustawienia dostawcy uwierzytelniania zmienione. Wymagany restart.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Aktualizacja monitorowania poziomu dźwięku...",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Przegląd",
         "patterns": "Wzorce aktywności",
         "trends": "Trendy",
         "biodiversity": "Bioróżnorodność",
-        "quality": "Przegląd i dokładność"
+        "quality": "Przegląd i dokładność",
+        "summary": "Summary",
+        "nocturnal": "Aktywność nocna",
+        "weather": "Pogoda",
+        "soundscape": "Krajobraz dźwiękowy"
       },
       "aria": {
         "tabs": "Sekcje analizy"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "Ten wykres wymaga co najmniej {min} punktów danych. Kontynuuj nagrywanie i wróć wkrótce.",
         "export": "Eksportuj",
         "exportComingSoon": "Eksport CSV pojawi się wkrótce."
-      },
-      "comingSoon": {
-        "description": "Ta sekcja jest w budowie i pojawi się w nadchodzącej aktualizacji."
       }
     },
-    "title": "Przegląd",
     "loadingError": "Nie udało się załadować niektórych danych analitycznych. Spróbuj ponownie później.",
+    "comingSoon": {
+      "badge": "Wkrótce",
+      "plannedTitle": "Planowane funkcje",
+      "weather": {
+        "description": "Aktywność ptaków zestawiona z lokalnymi warunkami pogodowymi. Ten widok skoreluje wykrycia z temperaturą, wiatrem i opadami.",
+        "feature1": "Koreluj wykrycia z temperaturą, wiatrem i opadami",
+        "feature2": "Zobacz, jak fronty pogodowe wpływają na aktywność gatunków",
+        "feature3": "Porównuj aktywność sezonową z historycznymi danymi pogodowymi"
+      },
+      "soundscape": {
+        "description": "Spojrzenie na ogólny charakter akustyczny środowiska, z użyciem indeksów akustycznych do podsumowania różnorodności krajobrazu dźwiękowego w czasie.",
+        "feature1": "Indeksy akustyczne podsumowujące złożoność krajobrazu dźwiękowego",
+        "feature2": "Śledzenie bioróżnorodności poprzez dźwięki otoczenia w czasie",
+        "feature3": "Wykrywanie porannych i wieczornych chórów w zapisie akustycznym"
+      }
+    },
     "stats": {
       "totalDetections": "Wszystkie Detekcje",
       "uniqueSpecies": "Unikalne Gatunki",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Nie udało się zainicjować ponownego uruchomienia",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

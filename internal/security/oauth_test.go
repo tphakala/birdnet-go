@@ -26,7 +26,7 @@ func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 	settings := conftest.NewTestSettings().Apply()
 	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
-	s := NewOAuth2Server(t.Context())
+	s := NewOAuth2Server(t.Context(), false)
 
 	// Initialize gothic exactly as in production
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
@@ -76,7 +76,7 @@ func TestIsUserAuthenticatedTableDriven(t *testing.T) {
 				},
 			}
 
-			s := NewOAuth2Server(t.Context())
+			s := NewOAuth2Server(t.Context(), false)
 
 			// Initialize gothic exactly as in production
 			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
@@ -161,7 +161,7 @@ func TestOAuth2Server(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewOAuth2Server(t.Context())
+			s := NewOAuth2Server(t.Context(), false)
 			tt.test(t, s)
 		})
 	}
@@ -1430,6 +1430,17 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 	providers := goth.GetProviders()
 	_, ok := providers[ProviderOIDC]
 	assert.True(t, ok, "OIDC provider should be registered with goth")
+}
+
+// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
+// Test-only helper for resetting OIDC retry state between tests. Production reaps
+// these on shutdown via cancelAllOIDCRetriesLocked (shutdownOIDCRetries); there is
+// no settings-reload path that rebuilds providers at runtime, so this wrapper lives
+// with the tests rather than in the production binary.
+func cancelAllOIDCRetries() {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	cancelAllOIDCRetriesLocked()
 }
 
 func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {

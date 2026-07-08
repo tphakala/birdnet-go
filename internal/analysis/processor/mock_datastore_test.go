@@ -15,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"gorm.io/gorm"
 )
 
@@ -263,6 +264,9 @@ func (m *ActionMockDatastore) GetLockedNotesClipPaths() ([]string, error) {
 }
 func (m *ActionMockDatastore) ClearNoteClipPathsByNames(_ []string) (int64, error) {
 	return 0, nil
+}
+func (m *ActionMockDatastore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
+	return nil, nil
 }
 func (m *ActionMockDatastore) CountHourlyDetections(_, _ string, _ int) (int64, error) {
 	return 0, nil

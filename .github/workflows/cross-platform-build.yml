@@ -114,12 +114,12 @@ jobs:
           go vet -tags noembed,skipfrontend ./...
 
   # Compile-coverage gate for the OpenVINO inference backend
-  # (internal/inference/openvino, //go:build openvino). No other workflow
-  # compiles the openvino-tagged code: cross-build above and release/nightly omit
-  # the tag, and the Docker images build with OPENVINO=false. Without this job a
-  # compile error (including an arch-specific one) in the openvino-tagged backend
-  # or its tests would not be caught pre-merge. The backend is linux-only, so this
-  # covers linux/amd64 (native) and linux/arm64 (cross).
+  # (internal/inference/openvino, //go:build openvino). This is the fast, dedicated
+  # per-arch compile+vet gate for the openvino-tagged code: it runs on every PR and
+  # catches a compile error (including an arch-specific one) in the openvino-tagged
+  # backend or its tests before the heavier Docker image build (which now compiles
+  # the tag and bundles the OpenVINO runtime) runs. The backend is linux-only, so
+  # this covers linux/amd64 (native) and linux/arm64 (cross).
   openvino-build:
     name: openvino-build (linux/${{ matrix.goarch }})
     runs-on: ubuntu-24.04
@@ -146,7 +146,7 @@ jobs:
       - run: go version
 
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}

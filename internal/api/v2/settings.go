@@ -2190,30 +2190,32 @@ const (
 	reasonWebserverRestart = "restart.reasons.webserver"
 	reasonDatabaseRestart  = "restart.reasons.database"
 	reasonLoggingRestart   = "restart.reasons.logging"
+	reasonOAuthRestart     = "restart.reasons.oauth"
 )
 
 // settingsChangeChecks defines all settings change detectors in order of execution.
 // Each check has a detection function, action to trigger, and toast notification.
 var settingsChangeChecks = []settingsChangeCheck{
-	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, "info", toastDurationLong},
-	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, "info", toastDurationMedium},
-	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, "info", toastDurationShort},
-	{"Base threshold", "recalculate_dynamic_thresholds", baseThresholdChanged, "Recalculating dynamic thresholds...", notification.MsgSettingsRecalculatingThresholds, "info", toastDurationShort},
-	{"Dynamic thresholds", "reconfigure_dynamic_thresholds", dynamicThresholdEnabledChanged, "Reconfiguring dynamic thresholds...", notification.MsgSettingsReconfiguringDynamicThresholds, "info", toastDurationMedium},
-	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", notification.MsgSettingsReconfiguringMqtt, "info", toastDurationMedium},
-	{"BirdWeather", "reconfigure_birdweather", birdWeatherSettingsChanged, "Reconfiguring BirdWeather integration...", notification.MsgSettingsReconfiguringBirdweather, "info", toastDurationMedium},
-	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, "info", toastDurationMedium},
-	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, "info", toastDurationShort},
-	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, "info", toastDurationShort},
-	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
-	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
-	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
-	{"Database", "", outputSettingsChanged, "Database settings changed. Restart required to apply.", notification.MsgSettingsDatabaseRestart, "warning", toastDurationExtended},
-	{"Logging", "", loggingSettingsChanged, "Logging settings changed. Restart required to apply.", notification.MsgSettingsLoggingRestart, "warning", toastDurationExtended},
-	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", "info", toastDurationShort},
-	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", "info", toastDurationShort},
-	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", "info", toastDurationShort},
-	{"Live stream", "reconfigure_livestream", liveStreamSettingsChanged, "Reconfiguring live stream settings...", "", "info", toastDurationShort},
+	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
+	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
+	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, ToastTypeInfo, toastDurationShort},
+	{"Base threshold", "recalculate_dynamic_thresholds", baseThresholdChanged, "Recalculating dynamic thresholds...", notification.MsgSettingsRecalculatingThresholds, ToastTypeInfo, toastDurationShort},
+	{"Dynamic thresholds", "reconfigure_dynamic_thresholds", dynamicThresholdEnabledChanged, "Reconfiguring dynamic thresholds...", notification.MsgSettingsReconfiguringDynamicThresholds, ToastTypeInfo, toastDurationMedium},
+	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", notification.MsgSettingsReconfiguringMqtt, ToastTypeInfo, toastDurationMedium},
+	{"BirdWeather", "reconfigure_birdweather", birdWeatherSettingsChanged, "Reconfiguring BirdWeather integration...", notification.MsgSettingsReconfiguringBirdweather, ToastTypeInfo, toastDurationMedium},
+	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, ToastTypeInfo, toastDurationMedium},
+	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, ToastTypeInfo, toastDurationShort},
+	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, ToastTypeInfo, toastDurationShort},
+	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
+	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
+	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, ToastTypeWarning, toastDurationExtended},
+	{"OAuth providers", "", oauthProvidersChanged, "Authentication provider settings changed. Restart required to apply.", notification.MsgSettingsOauthRestart, ToastTypeWarning, toastDurationExtended},
+	{"Database", "", outputSettingsChanged, "Database settings changed. Restart required to apply.", notification.MsgSettingsDatabaseRestart, ToastTypeWarning, toastDurationExtended},
+	{"Logging", "", loggingSettingsChanged, "Logging settings changed. Restart required to apply.", notification.MsgSettingsLoggingRestart, ToastTypeWarning, toastDurationExtended},
+	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", ToastTypeInfo, toastDurationShort},
+	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", ToastTypeInfo, toastDurationShort},
+	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", ToastTypeInfo, toastDurationShort},
+	{"Live stream", "reconfigure_livestream", liveStreamSettingsChanged, "Reconfiguring live stream settings...", "", ToastTypeInfo, toastDurationShort},
 }
 
 // restartRequiringChecks maps a settingsChangeChecks entry (by name) to the i18n
@@ -2223,9 +2225,10 @@ var settingsChangeChecks = []settingsChangeCheck{
 // above; settings_restart_test.go cross-validates these keys against the table
 // names and against the hot-reload registry's `restart` category.
 var restartRequiringChecks = map[string]string{
-	"Web server": reasonWebserverRestart,
-	"Database":   reasonDatabaseRestart,
-	"Logging":    reasonLoggingRestart,
+	"Web server":      reasonWebserverRestart,
+	"OAuth providers": reasonOAuthRestart,
+	"Database":        reasonDatabaseRestart,
+	"Logging":         reasonLoggingRestart,
 }
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
@@ -2621,17 +2624,62 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 		return true
 	}
 
-	// Check security/TLS settings that affect the server
+	// Check security/TLS settings that affect the server. BaseURL is included
+	// because it feeds the HTTP->HTTPS redirect authority (api.Config.RedirectAuthority)
+	// and the session-cookie Secure decision (SessionCookiesSecure), both captured
+	// once at server start; it also seeds OAuth callback URLs at startup. Its only
+	// live consumer is notification link generation, so prompting restart matches the
+	// existing Host handling (Host is also read live by notifications yet restart-gated).
 	oldSec := oldSettings.Security
 	newSec := currentSettings.Security
 
 	if oldSec.Host != newSec.Host ||
+		oldSec.BaseURL != newSec.BaseURL ||
 		oldSec.TLSMode != newSec.TLSMode ||
 		oldSec.AutoTLS != newSec.AutoTLS || //nolint:staticcheck // Intentional: backward-compatible migration
 		oldSec.RedirectToHTTPS != newSec.RedirectToHTTPS {
 		return true
 	}
 
+	return false
+}
+
+// oauthProvidersChanged reports whether OAuth provider REGISTRATION config changed.
+// Provider registration (the goth providers built from client id/secret and the
+// callback URL derived from the base URL) binds once at startup via
+// security.InitializeGoth and does not hot-reload, so a change needs a restart to
+// take effect. Comparison is keyed by provider ID so reordering the list alone is
+// not treated as a change. UserID is intentionally excluded: the per-provider
+// allowlist is read live by the auth check (via currentSettings), so allowlist
+// edits already hot-reload without a restart.
+func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldProviders := oldSettings.Security.OAuthProviders
+	newProviders := currentSettings.Security.OAuthProviders
+	if len(oldProviders) != len(newProviders) {
+		return true
+	}
+	// Keyed by provider ID; duplicate IDs (a malformed config) collapse last-wins,
+	// which is acceptable and fail-safe: a missed change only delays a not-yet-active
+	// provider from registering until the next restart, never grants access.
+	newByID := make(map[string]*conf.OAuthProviderConfig, len(newProviders))
+	for i := range newProviders {
+		newByID[newProviders[i].Provider] = &newProviders[i]
+	}
+	for i := range oldProviders {
+		oldProvider := &oldProviders[i]
+		newProvider, ok := newByID[oldProvider.Provider]
+		if !ok {
+			return true
+		}
+		if oldProvider.Enabled != newProvider.Enabled ||
+			oldProvider.ClientID != newProvider.ClientID ||
+			oldProvider.ClientSecret != newProvider.ClientSecret ||
+			oldProvider.RedirectURI != newProvider.RedirectURI ||
+			oldProvider.IssuerURL != newProvider.IssuerURL ||
+			!slices.Equal(oldProvider.Scopes, newProvider.Scopes) {
+			return true
+		}
+	}
 	return false
 }
 

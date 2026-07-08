@@ -16,7 +16,11 @@ vars:
       if [ ! -z "$BUILD_VERSION" ]; then
         echo "$BUILD_VERSION"
       else
-        git describe --tags --always 2>/dev/null || echo "unknown"
+        # Describe only against real release tags (semver v* and nightly-*).
+        # The auto-update feature publishes a permanent "manifest" prerelease
+        # whose git tag would otherwise be the nearest ancestor, making local
+        # builds report a confusing "manifest-<n>-g<hash>" version.
+        git describe --tags --always --match 'v*' --match 'nightly-*' 2>/dev/null || echo "unknown"
       fi
   UNAME_S:
     sh: uname -s
@@ -510,7 +514,7 @@ tasks:
         if ! command -v golangci-lint >/dev/null 2>&1; then
           echo "📥 Installing golangci-lint..."
           # Add timeout for install script download and execution
-          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin"; then
+          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.12.2"; then
             echo "❌ Failed to install golangci-lint"
             echo "   Check your internet connection and try again"
             exit 1
@@ -1342,8 +1346,9 @@ tasks:
           GOARCH: amd64
           BINARY_SUFFIX: ''
           # amd64 includes the OpenVINO backend by default (activates on an Intel
-          # iGPU at runtime, otherwise falls back to ONNX Runtime). The standard
-          # Docker and CI images pass OPENVINO=false to stay ONNX-only.
+          # iGPU at runtime when the host provides the GPU drivers, otherwise falls
+          # back to ONNX Runtime). The published Docker images bundle the OpenVINO
+          # runtime libraries; pass OPENVINO=false to build an ONNX-only binary.
           OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_linux_arm64:
@@ -1363,8 +1368,9 @@ tasks:
           # does not link libtensorflowlite_c (issue #1103).
           NOTFLITE: 'true'
           # arm64 includes the OpenVINO backend by default (activates on A76/ARMv8.2
-          # at runtime, otherwise falls back to ONNX Runtime). The standard Docker
-          # and CI images pass OPENVINO=false to stay strictly ONNX-only.
+          # at runtime, otherwise falls back to ONNX Runtime). The published Docker
+          # images bundle the OpenVINO runtime libraries; pass OPENVINO=false to
+          # build a strictly ONNX-only binary.
           OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_windows_amd64:

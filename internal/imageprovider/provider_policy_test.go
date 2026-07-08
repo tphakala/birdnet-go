@@ -66,7 +66,7 @@ func TestProviderNameConsistency(t *testing.T) {
 }
 
 // TestFallbackPolicyEnforcement verifies that the fallback policy is respected
-// in both batchLoadFromDB and Get methods
+// in the single-item Get path
 func TestFallbackPolicyEnforcement(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -135,118 +135,13 @@ func TestFallbackPolicyEnforcement(t *testing.T) {
 	}
 }
 
-// TestBatchLoadFromDBFallbackPolicy verifies that batchLoadFromDB respects
-// the fallback policy setting
-func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
-	// Helper to test GetBatchCachedOnly which uses batchLoadFromDB internally
-	testCases := []struct {
-		name               string
-		fallbackPolicy     string
-		setupStore         func(t *testing.T, store *mockStore)
-		expectedProviders  map[string]bool
-		expectedImageCount int
-	}{
-		{
-			name:           "no_fallback_when_policy_none",
-			fallbackPolicy: "none",
-			setupStore: func(t *testing.T, store *mockStore) {
-				t.Helper()
-				// Add image only for wikimedia provider
-				err := store.SaveImageCache(&datastore.ImageCache{
-					ScientificName: "Parus major",
-					ProviderName:   providerWikimedia,
-					URL:            "http://wiki.example.com/parus.jpg",
-					CachedAt:       time.Now(),
-				})
-				require.NoError(t, err, "Failed to save test image to cache")
-			},
-			expectedProviders:  map[string]bool{providerAvicommons: true}, // Only avicommons should be checked
-			expectedImageCount: 0,                                         // No images found because avicommons has none
-		},
-		{
-			name:           "fallback_when_policy_all",
-			fallbackPolicy: "all",
-			setupStore: func(t *testing.T, store *mockStore) {
-				t.Helper()
-				// Add image only for wikimedia provider
-				err := store.SaveImageCache(&datastore.ImageCache{
-					ScientificName: "Parus major",
-					ProviderName:   providerWikimedia,
-					URL:            "http://wiki.example.com/parus.jpg",
-					CachedAt:       time.Now(),
-				})
-				require.NoError(t, err, "Failed to save test image to cache")
-			},
-			expectedProviders:  map[string]bool{providerAvicommons: true, providerWikimedia: true},
-			expectedImageCount: 1, // Should find the wikimedia image via fallback
-		},
-		{
-			name:           "primary_provider_has_image",
-			fallbackPolicy: "none",
-			setupStore: func(t *testing.T, store *mockStore) {
-				t.Helper()
-				// Add image for primary provider
-				err := store.SaveImageCache(&datastore.ImageCache{
-					ScientificName: "Parus major",
-					ProviderName:   providerAvicommons,
-					URL:            "http://avi.example.com/parus.jpg",
-					CachedAt:       time.Now(),
-				})
-				require.NoError(t, err, "Failed to save test image to cache")
-			},
-			expectedProviders:  map[string]bool{providerAvicommons: true},
-			expectedImageCount: 1, // Should find avicommons image without fallback
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Set up test configuration
-			settings := conftest.GetTestSettings()
-			settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
-			settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = tc.fallbackPolicy
-			applyGlobalSettings(t, settings)
-
-			// Create store and set up test data
-			store := newMockStoreWithTracking()
-			tc.setupStore(t, store.mockStore)
-
-			// Create cache for avicommons (primary provider)
-			mockProvider := &mockImageProvider{}
-			cache := imageprovider.InitCache(providerAvicommons, mockProvider, nil, store)
-			defer func() {
-				err := cache.Close()
-				assert.NoError(t, err, "Failed to close cache")
-			}()
-
-			// Test GetBatchCachedOnly which internally uses batchLoadFromDB
-			species := []string{"Parus major"}
-			results := cache.GetBatchCachedOnly(species)
-
-			// Verify result count
-			assert.Len(t, results, tc.expectedImageCount,
-				"Expected %d images but got %d", tc.expectedImageCount, len(results))
-
-			// Verify which providers were queried
-			for provider, expected := range tc.expectedProviders {
-				if expected {
-					assert.True(t, store.WasProviderQueried(provider),
-						"Expected provider %s to be queried", provider)
-				} else {
-					assert.False(t, store.WasProviderQueried(provider),
-						"Expected provider %s NOT to be queried", provider)
-				}
-			}
-		})
-	}
-}
-
 // isImageNotFoundError checks if an error is an image not found error
 func isImageNotFoundError(err error) bool {
 	return err != nil && err.Error() == "image not found by provider"
 }
 
-// mockStoreWithTracking extends mockStore to track which providers were queried
+// mockStoreWithTracking extends mockStore to track which providers had their DB
+// cache consulted via the single-item GetImageCache lookup (loadFromDBCache).
 type mockStoreWithTracking struct {
 	*mockStore
 	queriedProviders map[string]bool
@@ -259,12 +154,12 @@ func newMockStoreWithTracking() *mockStoreWithTracking {
 	}
 }
 
-func (m *mockStoreWithTracking) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
+func (m *mockStoreWithTracking) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
 	m.mu.Lock()
-	m.queriedProviders[providerName] = true
+	m.queriedProviders[query.ProviderName] = true
 	m.mu.Unlock()
 
-	return m.mockStore.GetImageCacheBatch(providerName, scientificNames)
+	return m.mockStore.GetImageCache(query)
 }
 
 func (m *mockStoreWithTracking) WasProviderQueried(providerName string) bool {

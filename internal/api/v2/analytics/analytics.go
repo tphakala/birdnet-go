@@ -20,11 +20,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-const placeholderImageURL = "/ui/assets/bird-placeholder.svg"
 const maxSpeciesBatch = 10
 
 // Analytics constants (file-local)
@@ -329,9 +327,13 @@ func (c *Handler) processBatchDates(ctx context.Context, dates []string, minConf
 			break
 		}
 		// Bound each date's queries individually so one slow date cannot hang the batch.
-		dateCtx, cancel := context.WithTimeout(ctx, analyticsQueryTimeout)
-		result, err := c.processSingleDateForBatch(dateCtx, selectedDate, minConfidence, limit, ip, path)
-		cancel()
+		// Run in a closure with defer cancel() so the context timer is released even if
+		// processSingleDateForBatch panics, instead of leaking until the timeout fires.
+		result, err := func() ([]SpeciesDailySummary, error) {
+			dateCtx, cancel := context.WithTimeout(ctx, analyticsQueryTimeout)
+			defer cancel()
+			return c.processSingleDateForBatch(dateCtx, selectedDate, minConfidence, limit, ip, path)
+		}()
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				break // client disconnected; stop the batch without recording a failure
@@ -502,9 +504,6 @@ func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]agg
 	// Collect species names with detections
 	scientificNames := collectSpeciesWithDetections(aggregatedData)
 
-	// Batch fetch thumbnail URLs (cached only for fast response)
-	thumbnailURLs := c.batchFetchCachedThumbnails(scientificNames)
-
 	// Parse selected date for status computation
 	statusTime := parseStatusTimeFromDate(selectedDate)
 
@@ -515,7 +514,13 @@ func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]agg
 	result := make([]SpeciesDailySummary, 0, len(scientificNames))
 	for _, scientificName := range scientificNames {
 		data := aggregatedData[scientificName]
-		thumbnailURL := getThumbnailWithFallback(thumbnailURLs, scientificName)
+		// Emit the media-proxy URL directly rather than pre-resolving from the
+		// cache-only batch path. The proxy (ServeSpeciesImageProxy) resolves via
+		// the single-item Get() fallback chain and the local file cache, so
+		// dashboard thumbnails honor the configured fallback provider even when
+		// the primary provider has a negative cache entry (issue #3806). The
+		// frontend swaps to the placeholder on a 404 via handleBirdImageError.
+		thumbnailURL := buildThumbnailURL(scientificName)
 		summary := buildSpeciesSummaryFromData(&data, thumbnailURL)
 		if status, exists := batchSpeciesStatus[scientificName]; exists {
 			applySpeciesStatusToSummary(&summary, &status)
@@ -535,23 +540,6 @@ func collectSpeciesWithDetections(aggregatedData map[string]aggregatedBirdInfo) 
 		}
 	}
 	return names
-}
-
-// batchFetchCachedThumbnails fetches thumbnail URLs from cache only
-func (c *Handler) batchFetchCachedThumbnails(scientificNames []string) map[string]string {
-	thumbnailURLs := make(map[string]string)
-	cache := c.BirdImageCache
-	if cache == nil || len(scientificNames) == 0 {
-		return thumbnailURLs
-	}
-
-	batchResults := cache.GetBatchCachedOnly(scientificNames)
-	for name := range batchResults {
-		if img := batchResults[name]; img.URL != "" && !img.IsNegativeEntry() {
-			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
-		}
-	}
-	return thumbnailURLs
 }
 
 // parseStatusTimeFromDate parses selected date for species status computation
@@ -579,14 +567,6 @@ func (c *Handler) batchFetchSpeciesStatus(scientificNames []string, statusTime t
 		return nil
 	}
 	return tracker.GetBatchSpeciesStatus(scientificNames, statusTime)
-}
-
-// getThumbnailWithFallback returns thumbnail URL or placeholder
-func getThumbnailWithFallback(thumbnailURLs map[string]string, scientificName string) string {
-	if url, ok := thumbnailURLs[scientificName]; ok && url != "" {
-		return url
-	}
-	return placeholderImageURL
 }
 
 // buildSpeciesSummaryFromData creates a SpeciesDailySummary from aggregated data
@@ -674,10 +654,12 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 		)
 	}
 
-	// Build response with thumbnails
-	scientificNames := extractScientificNames(summaryData)
-	thumbnailURLs := c.batchFetchThumbnailsWithLogging(scientificNames, ip, path)
-	response := c.convertSummaryDataToResponse(summaryData, thumbnailURLs)
+	// Build response. Emit the media-proxy URL for every species (defer-to-proxy,
+	// matching the dashboard fix in #3806): ServeSpeciesImageProxy resolves images via
+	// the single-item Get() fallback chain and the local file cache, so species the
+	// primary provider lacks but a fallback has are honored at request time and a 404
+	// is cached. The frontend swaps to a placeholder on error.
+	response := c.convertSummaryDataToResponse(summaryData)
 
 	// Apply limit
 	response, limit := c.applyOptionalLimit(ctx, response, ip, path)
@@ -703,43 +685,8 @@ func (c *Handler) fetchSpeciesSummaryData(ctx echo.Context, startDate, endDate s
 	return summaryData, time.Since(dbStart), err
 }
 
-// extractScientificNames extracts scientific names from summary data
-func extractScientificNames(summaryData []datastore.SpeciesSummaryData) []string {
-	names := make([]string, 0, len(summaryData))
-	for i := range summaryData {
-		names = append(names, summaryData[i].ScientificName)
-	}
-	return names
-}
-
-// batchFetchThumbnailsWithLogging fetches thumbnails with debug logging
-func (c *Handler) batchFetchThumbnailsWithLogging(scientificNames []string, ip, path string) map[string]imageprovider.BirdImage {
-	cache := c.BirdImageCache
-	if cache == nil || len(scientificNames) == 0 {
-		return nil
-	}
-
-	c.LogDebugIfEnabled("Fetching cached thumbnails only",
-		logger.Int("count", len(scientificNames)),
-		logger.String("ip", ip),
-		logger.String("path", path),
-	)
-	thumbStart := time.Now()
-	thumbnailURLs := cache.GetBatchCachedOnly(scientificNames)
-	thumbDuration := time.Since(thumbStart)
-	c.LogInfoIfEnabled("Cached thumbnail fetch completed",
-		logger.Int64("duration_ms", thumbDuration.Milliseconds()),
-		logger.Int("cached_count", len(thumbnailURLs)),
-		logger.Int("requested_count", len(scientificNames)),
-		logger.String("ip", ip),
-		logger.String("path", path),
-	)
-
-	return thumbnailURLs
-}
-
 // convertSummaryDataToResponse converts datastore models to API response
-func (c *Handler) convertSummaryDataToResponse(summaryData []datastore.SpeciesSummaryData, thumbnailURLs map[string]imageprovider.BirdImage) []SpeciesSummary {
+func (c *Handler) convertSummaryDataToResponse(summaryData []datastore.SpeciesSummaryData) []SpeciesSummary {
 	response := make([]SpeciesSummary, 0, len(summaryData))
 
 	for i := range summaryData {
@@ -753,30 +700,23 @@ func (c *Handler) convertSummaryDataToResponse(summaryData []datastore.SpeciesSu
 			LastHeard:      formatTimeIfNotZero(data.LastSeen),
 			AvgConfidence:  data.AvgConfidence,
 			MaxConfidence:  data.MaxConfidence,
-			ThumbnailURL:   getThumbnailURLFromBirdImage(thumbnailURLs, data.ScientificName),
+			ThumbnailURL:   buildThumbnailURL(data.ScientificName),
 		})
 	}
 
 	return response
 }
 
-// formatTimeIfNotZero formats time as string if not zero
+// formatTimeIfNotZero formats a timestamp as an ISO 8601 (RFC3339) string with a
+// timezone offset, or "" if the time is zero. RFC3339 is the timestamp format used
+// across the rest of the v2 API (detections, SSE, weather, notifications), so the
+// species summary's first_heard/last_heard match it and carry an unambiguous offset
+// for timezone-aware clients. See issue #3793.
 func formatTimeIfNotZero(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.Format(time.DateTime)
-}
-
-// getThumbnailURLFromBirdImage extracts URL from BirdImage map
-func getThumbnailURLFromBirdImage(thumbnailURLs map[string]imageprovider.BirdImage, scientificName string) string {
-	if thumbnailURLs == nil {
-		return ""
-	}
-	if img, ok := thumbnailURLs[scientificName]; ok && img.URL != "" && !img.IsNegativeEntry() {
-		return imageprovider.ProxyImageURL(scientificName)
-	}
-	return ""
+	return t.Format(time.RFC3339)
 }
 
 // applyOptionalLimit parses and applies limit parameter
@@ -2323,48 +2263,22 @@ func (c *Handler) validateNewSpeciesDateParams(ctx echo.Context, startDate, endD
 	return c.validateDateOrderWithResponse(ctx, startDate, endDate, operation)
 }
 
-// convertNewSpeciesToResponse converts new species data to API response format
+// convertNewSpeciesToResponse converts new species data to API response format.
+// Thumbnails defer to the media proxy (see buildThumbnailURL / #3806): the proxy
+// resolves via the single-item Get() fallback chain and local file cache, so a
+// species the primary provider lacks but a fallback has is honored at request time.
 func (c *Handler) convertNewSpeciesToResponse(newSpeciesData []datastore.NewSpeciesData) []NewSpeciesResponse {
-	scientificNames := extractNewSpeciesNames(newSpeciesData)
-	thumbnailURLs := c.batchFetchThumbnailURLs(scientificNames)
-
 	response := make([]NewSpeciesResponse, 0, len(newSpeciesData))
 	for _, data := range newSpeciesData {
 		response = append(response, NewSpeciesResponse{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
 			FirstHeardDate: data.FirstSeenDate,
-			ThumbnailURL:   getThumbnailWithFallback(thumbnailURLs, data.ScientificName),
+			ThumbnailURL:   buildThumbnailURL(data.ScientificName),
 			CountInPeriod:  data.CountInPeriod,
 		})
 	}
 	return response
-}
-
-// extractNewSpeciesNames extracts scientific names from new species data
-func extractNewSpeciesNames(data []datastore.NewSpeciesData) []string {
-	names := make([]string, 0, len(data))
-	for _, d := range data {
-		names = append(names, d.ScientificName)
-	}
-	return names
-}
-
-// batchFetchThumbnailURLs fetches thumbnail URLs from cache
-func (c *Handler) batchFetchThumbnailURLs(scientificNames []string) map[string]string {
-	thumbnailURLs := make(map[string]string)
-	cache := c.BirdImageCache
-	if cache == nil {
-		return thumbnailURLs
-	}
-
-	batchResults := cache.GetBatch(scientificNames)
-	for name := range batchResults {
-		if img := batchResults[name]; img.URL != "" && !img.IsNegativeEntry() {
-			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
-		}
-	}
-	return thumbnailURLs
 }
 
 // Helper function to sum array values
@@ -2462,36 +2376,16 @@ func (c *Handler) GetSpeciesThumbnails(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, result)
 }
 
-// buildThumbnailMap creates a map of species names to thumbnail URLs.
+// buildThumbnailMap maps each requested species to its media-proxy thumbnail URL.
+// Defer-to-proxy (see buildThumbnailURL / #3806): ServeSpeciesImageProxy resolves via
+// the single-item Get() fallback chain and the local file cache and caches a 404, so a
+// species the primary provider lacks but a fallback has is honored at request time. The
+// frontend swaps to a placeholder on error.
 func (c *Handler) buildThumbnailMap(speciesParams []string) map[string]string {
-	result := make(map[string]string)
-
-	cache := c.BirdImageCache
-	if cache == nil {
-		for _, name := range speciesParams {
-			result[name] = placeholderImageURL
-		}
-		return result
-	}
-
-	images := cache.GetBatch(speciesParams)
-
-	// Convert to simple map of scientific name -> proxy URL
-	for name := range images {
-		if img := images[name]; img.URL != "" && !img.IsNegativeEntry() {
-			result[name] = imageprovider.ProxyImageURL(name)
-		} else {
-			result[name] = placeholderImageURL
-		}
-	}
-
-	// Add placeholder for any missing species
+	result := make(map[string]string, len(speciesParams))
 	for _, name := range speciesParams {
-		if _, exists := result[name]; !exists {
-			result[name] = placeholderImageURL
-		}
+		result[name] = buildThumbnailURL(name)
 	}
-
 	return result
 }
 

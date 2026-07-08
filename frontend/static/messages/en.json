@@ -206,10 +206,19 @@
     "componentError": "Component Load Error",
     "speciesAnalytics": "Species Analytics",
     "detectionDetails": "Detection Details",
-    "settingsNotAvailable": "Settings Not Available"
+    "settingsNotAvailable": "Settings Not Available",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytics - Nocturnal Activity",
+    "analyticsWeather": "Analytics - Weather Correlation",
+    "analyticsSoundscape": "Analytics - Soundscape"
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "liveAudio": "Live Audio",
     "settingsMenu": "Settings menu",
     "theme": "Theme",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Report a bug on GitHub (opens in new window)",
     "askQuestionAriaLabel": "Ask a question on GitHub Discussions (opens in new window)",
     "viewOnGithubAriaLabel": "View BirdNET-Go on GitHub (opens in new window)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Explore",
+      "patterns": "Patterns",
+      "environment": "Environment",
+      "dataQuality": "Data Quality"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Recalculating dynamic thresholds for new base value",
         "reconfiguringDynamicThresholds": "Reconfiguring dynamic thresholds...",
         "webserverRestartRequired": "Web server settings changed. Restart required.",
+        "oauthRestartRequired": "Authentication provider settings changed. Restart required.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Overview",
         "patterns": "Activity Patterns",
         "trends": "Trends",
         "biodiversity": "Biodiversity",
-        "quality": "Review & Accuracy"
+        "quality": "Review & Accuracy",
+        "summary": "Summary",
+        "nocturnal": "Nocturnal Activity",
+        "weather": "Weather",
+        "soundscape": "Soundscape"
       },
       "aria": {
         "tabs": "Analytics sections"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "This chart needs at least {min} data points. Keep recording and check back soon.",
         "export": "Export",
         "exportComingSoon": "CSV export is coming soon."
-      },
-      "comingSoon": {
-        "description": "This section is under construction and will arrive in an upcoming update."
       }
     },
-    "title": "Overview",
     "loadingError": "Failed to load some analytics data. Please try again later.",
+    "comingSoon": {
+      "badge": "Coming soon",
+      "plannedTitle": "Planned capabilities",
+      "weather": {
+        "description": "Bird activity tracked against local weather conditions. This view will correlate your detections with temperature, wind, and rainfall.",
+        "feature1": "Correlate detections with temperature, wind, and precipitation",
+        "feature2": "See how weather fronts shift species activity",
+        "feature3": "Compare seasonal activity against historical weather"
+      },
+      "soundscape": {
+        "description": "A look at the overall acoustic character of your environment, using acoustic indices to summarize soundscape diversity over time.",
+        "feature1": "Acoustic indices that summarize soundscape complexity",
+        "feature2": "Track biodiversity through ambient sound over time",
+        "feature3": "Spot dawn and dusk choruses in the acoustic record"
+      }
+    },
     "stats": {
       "totalDetections": "Total Detections",
       "uniqueSpecies": "Unique Species",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Failed to initiate restart",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

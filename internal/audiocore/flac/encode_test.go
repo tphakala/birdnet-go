@@ -445,6 +445,25 @@ func TestEncodePCMToBuffer_NoSeekTable(t *testing.T) {
 	assert.Equal(t, pcm, decodeFLACBytes(t, buf.Bytes()), "stream must still decode losslessly")
 }
 
+// TestEncodePCMToBuffer_FinalizesTotalSamples verifies the buffer path writes a
+// finalized STREAMINFO.total_samples up front rather than the zero "unknown"
+// sentinel, so a non-seekable sink still yields the correct sample count.
+// Consumers like BirdWeather derive the soundscape duration from this field.
+func TestEncodePCMToBuffer_FinalizesTotalSamples(t *testing.T) {
+	t.Parallel()
+	const sampleCount = 12345 // mono, so frames == samples
+	pcm := makeTestPCM(sampleCount)
+	buf, err := EncodePCMToBuffer(t.Context(), bufferBaseOpts(pcm))
+	require.NoError(t, err)
+
+	dec, err := goflac.NewDecoder(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+	info := dec.Info()
+	assert.NotZero(t, info.TotalSamples, "total_samples must be finalized, not the unknown sentinel")
+	assert.Equal(t, uint64(sampleCount), info.TotalSamples,
+		"total_samples must equal the input frame count")
+}
+
 func TestEncodePCMToBuffer_Validation(t *testing.T) {
 	t.Parallel()
 	t.Run("nil options", func(t *testing.T) {

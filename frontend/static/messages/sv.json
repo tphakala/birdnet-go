@@ -206,10 +206,19 @@
     "componentError": "Komponentladdningsfel",
     "speciesAnalytics": "Artanalys",
     "detectionDetails": "Detektionsdetaljer",
-    "settingsNotAvailable": "Inställningar ej tillgängliga"
+    "settingsNotAvailable": "Inställningar ej tillgängliga",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analys - Nattaktivitet",
+    "analyticsWeather": "Analys - Väderkorrelation",
+    "analyticsSoundscape": "Analys - Ljudlandskap"
   },
   "navigation": {
     "dashboard": "Instrumentpanel",
+    "liveAudio": "Direktljud",
     "settingsMenu": "Inställningsmeny",
     "theme": "Tema",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Rapportera en bugg på GitHub (öppnas i nytt fönster)",
     "askQuestionAriaLabel": "Ställ en fråga på GitHub Discussions (öppnas i nytt fönster)",
     "viewOnGithubAriaLabel": "Visa BirdNET-Go på GitHub (öppnas i nytt fönster)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Utforska",
+      "patterns": "Mönster",
+      "environment": "Miljö",
+      "dataQuality": "Datakvalitet"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Beräknar om dynamiska tröskelvärden för nytt basvärde",
         "reconfiguringDynamicThresholds": "Konfigurerar om dynamiska tröskelvärden...",
         "webserverRestartRequired": "Webbserverinställningar ändrade. Omstart krävs.",
+        "oauthRestartRequired": "Autentiseringsleverantörsinställningar ändrade. Omstart krävs.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Översikt",
         "patterns": "Aktivitetsmönster",
         "trends": "Trender",
         "biodiversity": "Biologisk mångfald",
-        "quality": "Granskning och noggrannhet"
+        "quality": "Granskning och noggrannhet",
+        "summary": "Summary",
+        "nocturnal": "Nattaktivitet",
+        "weather": "Väder",
+        "soundscape": "Ljudlandskap"
       },
       "aria": {
         "tabs": "Analysavsnitt"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "Det här diagrammet behöver minst {min} datapunkter. Fortsätt spela in och titta tillbaka snart.",
         "export": "Exportera",
         "exportComingSoon": "CSV-export kommer snart."
-      },
-      "comingSoon": {
-        "description": "Det här avsnittet är under uppbyggnad och kommer i en kommande uppdatering."
       }
     },
-    "title": "Översikt",
     "loadingError": "Kunde inte ladda vissa analysdata. Försök igen senare.",
+    "comingSoon": {
+      "badge": "Kommer snart",
+      "plannedTitle": "Planerade funktioner",
+      "weather": {
+        "description": "Fågelaktivitet spårad mot lokala väderförhållanden. Den här vyn korrelerar detektioner med temperatur, vind och nederbörd.",
+        "feature1": "Korrelera detektioner med temperatur, vind och nederbörd",
+        "feature2": "Se hur väderfronter förändrar artaktiviteten",
+        "feature3": "Jämför säsongsaktivitet med historiska väderdata"
+      },
+      "soundscape": {
+        "description": "En inblick i miljöns övergripande akustiska karaktär, med hjälp av akustiska index för att sammanfatta ljudlandskapets mångfald över tid.",
+        "feature1": "Akustiska index som sammanfattar ljudlandskapets komplexitet",
+        "feature2": "Spåra biologisk mångfald genom omgivande ljud över tid",
+        "feature3": "Identifiera grynings- och skymningskörer i det akustiska registret"
+      }
+    },
     "stats": {
       "totalDetections": "Totala detektioner",
       "uniqueSpecies": "Unika arter",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Det gick inte att starta om",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

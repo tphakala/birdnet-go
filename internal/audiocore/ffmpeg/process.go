@@ -37,6 +37,18 @@ const ffmpegRTSPTimeoutParam = "-timeout"
 // ffmpegLegacyRTSPTimeoutParam is the RTSP timeout flag required by FFmpeg 4.x.
 const ffmpegLegacyRTSPTimeoutParam = "-stimeout"
 
+// ffmpegAllowedMediaTypesFlag restricts the RTSP demuxer to SETUP only the
+// listed media types during the RTSP handshake. BirdNET-Go consumes audio only,
+// so requesting audio alone avoids opening a video client slot on cameras with a
+// limited number of RTSP sessions (issue #3798). Shared by every RTSP-opening
+// path: live capture (buildInputArgs), stream inspection (buildProbeArgs), and
+// channel-energy analysis (buildAnalysisArgs), so they stay in lockstep.
+const ffmpegAllowedMediaTypesFlag = "-allowed_media_types"
+
+// ffmpegAllowedMediaTypesAudio is the value paired with ffmpegAllowedMediaTypesFlag
+// to accept audio tracks only.
+const ffmpegAllowedMediaTypesAudio = "audio"
+
 // ffmpegMajorCache stores detected FFmpeg major versions by binary path.
 var ffmpegMajorCache sync.Map
 
@@ -530,7 +542,7 @@ func buildInputArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 	timeoutFlag := timeoutParamForSource(cfg.sourceType(), ffmpegMajor)
 
 	if cfg.sourceType() == audiocore.SourceTypeRTSP {
-		args = append(args, "-rtsp_transport", cfg.Transport)
+		args = append(args, "-rtsp_transport", cfg.Transport, ffmpegAllowedMediaTypesFlag, ffmpegAllowedMediaTypesAudio)
 	}
 
 	hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters)

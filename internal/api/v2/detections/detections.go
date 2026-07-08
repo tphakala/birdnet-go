@@ -98,9 +98,9 @@ func parseVerificationStatus(status string) (verificationStatus, error) {
 		return verificationStatus{IsSet: false}, nil
 	}
 	switch status {
-	case "correct":
+	case VerificationStatusCorrect:
 		return verificationStatus{IsSet: true, Verified: true}, nil
-	case "false_positive":
+	case VerificationStatusFalsePositive:
 		return verificationStatus{IsSet: true, Verified: false}, nil
 	default:
 		return verificationStatus{}, fmt.Errorf("invalid verification status: %s", status)
@@ -153,6 +153,7 @@ type DetectionResponse struct {
 	ScientificName     string            `json:"scientificName"`
 	CommonName         string            `json:"commonName"`
 	Confidence         float64           `json:"confidence"`
+	ClipName           string            `json:"clipName,omitempty"`  // Audio clip filename (basename only, no path); empty when no clip exists
 	ModelType          string            `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
@@ -689,8 +690,13 @@ func (c *Handler) noteToDetectionResponse(note *datastore.Note, includeWeather b
 		ScientificName: note.ScientificName,
 		CommonName:     note.CommonName,
 		Confidence:     note.Confidence,
-		Locked:         note.Locked,
-		Unlikely:       note.Unlikely,
+		// ClipName is the per-detection signal the frontend gates audio playback
+		// on. It is basename-stripped to match the SSE privacy contract
+		// (apicore.SafeBaseName): only the filename is exposed, never the on-disk
+		// directory layout, and an empty clip name stays empty (no clip exists).
+		ClipName: apicore.SafeBaseName(note.ClipName),
+		Locked:   note.Locked,
+		Unlikely: note.Unlikely,
 	}
 
 	// populate source info if available
@@ -1654,7 +1660,7 @@ func (c *Handler) canonicalizeExcludeList(exclude []string) []string {
 
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
 func (c *Handler) addToIgnoredSpecies(verified, ignoreSpecies string) error {
-	if verified == "false_positive" && ignoreSpecies != "" {
+	if verified == VerificationStatusFalsePositive && ignoreSpecies != "" {
 		return c.addSpeciesToIgnoredList(c.resolveExcludeName(ignoreSpecies))
 	}
 	return nil
@@ -1764,8 +1770,8 @@ func (c *Handler) AddComment(noteID uint, commentText string) error {
 func (c *Handler) AddReview(noteID uint, verified bool) error {
 	// Convert bool to string value
 	verifiedStr := map[bool]string{
-		true:  "correct",
-		false: "false_positive",
+		true:  VerificationStatusCorrect,
+		false: VerificationStatusFalsePositive,
 	}[verified]
 
 	review := &datastore.NoteReview{

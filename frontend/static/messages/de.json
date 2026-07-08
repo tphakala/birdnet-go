@@ -206,10 +206,19 @@
     "componentError": "Komponentenladefehler",
     "speciesAnalytics": "Arten-Analysen",
     "detectionDetails": "Erkennungsdetails",
-    "settingsNotAvailable": "Einstellungen nicht verfügbar"
+    "settingsNotAvailable": "Einstellungen nicht verfügbar",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytics - Nachtaktivität",
+    "analyticsWeather": "Analytics - Wetterkorrelation",
+    "analyticsSoundscape": "Analytics - Klanglandschaft"
   },
   "navigation": {
     "dashboard": "Übersicht",
+    "liveAudio": "Live-Audio",
     "settingsMenu": "Einstellungsmenü",
     "theme": "Thema",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Einen Fehler auf GitHub melden (öffnet in neuem Fenster)",
     "askQuestionAriaLabel": "Eine Frage in GitHub Discussions stellen (öffnet in neuem Fenster)",
     "viewOnGithubAriaLabel": "BirdNET-Go auf GitHub ansehen (öffnet in neuem Fenster)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Erkunden",
+      "patterns": "Muster",
+      "environment": "Umgebung",
+      "dataQuality": "Datenqualität"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Dynamische Schwellenwerte werden für neuen Basiswert neu berechnet",
         "reconfiguringDynamicThresholds": "Dynamische Schwellenwerte werden neu konfiguriert...",
         "webserverRestartRequired": "Webserver-Einstellungen geändert. Neustart erforderlich.",
+        "oauthRestartRequired": "Authentifizierungsanbieter-Einstellungen geändert. Neustart erforderlich.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Übersicht",
         "patterns": "Aktivitätsmuster",
         "trends": "Trends",
         "biodiversity": "Artenvielfalt",
-        "quality": "Überprüfung & Genauigkeit"
+        "quality": "Überprüfung & Genauigkeit",
+        "summary": "Summary",
+        "nocturnal": "Nachtaktivität",
+        "weather": "Wetter",
+        "soundscape": "Klanglandschaft"
       },
       "aria": {
         "tabs": "Analysebereiche"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "Dieses Diagramm benötigt mindestens {min} Datenpunkte. Nimm weiter auf und schau bald wieder vorbei.",
         "export": "Exportieren",
         "exportComingSoon": "CSV-Export kommt bald."
-      },
-      "comingSoon": {
-        "description": "Dieser Bereich befindet sich im Aufbau und kommt in einem kommenden Update."
       }
     },
-    "title": "Übersicht",
     "loadingError": "Fehler beim Laden einiger Analysedaten. Bitte versuchen Sie es später erneut.",
+    "comingSoon": {
+      "badge": "Demnächst verfügbar",
+      "plannedTitle": "Geplante Funktionen",
+      "weather": {
+        "description": "Vogelaktivität im Vergleich zu lokalen Wetterbedingungen. Diese Ansicht korreliert Erkennungen mit Temperatur, Wind und Niederschlag.",
+        "feature1": "Erkennungen mit Temperatur, Wind und Niederschlag korrelieren",
+        "feature2": "Sehen, wie Wetterfronten die Artenaktivität verschieben",
+        "feature3": "Saisonale Aktivität mit historischen Wetterdaten vergleichen"
+      },
+      "soundscape": {
+        "description": "Ein Blick auf den akustischen Charakter Ihrer Umgebung, mit akustischen Indizes zur Zusammenfassung der Klanglandschaftsvielfalt über die Zeit.",
+        "feature1": "Akustische Indizes, die die Komplexität der Klanglandschaft zusammenfassen",
+        "feature2": "Biodiversität durch Umgebungsgeräusche über die Zeit verfolgen",
+        "feature3": "Morgen- und Abendchöre im akustischen Protokoll erkennen"
+      }
+    },
     "stats": {
       "totalDetections": "Erkennungen gesamt",
       "uniqueSpecies": "Einzigartige Arten",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Neustart konnte nicht eingeleitet werden",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

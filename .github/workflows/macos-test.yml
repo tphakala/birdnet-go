@@ -23,6 +23,9 @@ on:
       - '.github/workflows/macos-test.yml'
       - '.github/actions/**'
   pull_request:
+    # Include labeled/unlabeled so adding or removing the `full-ci` label
+    # re-evaluates the job gate immediately instead of waiting for the next push.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - '**/*.go'
       - 'go.mod'
@@ -41,6 +44,14 @@ concurrency:
 jobs:
   unit-tests-macos:
     name: unit-tests (macos-arm64)
+    # Demoted off the per-commit PR critical path: this native run is slow (~20m)
+    # and already advisory (continue-on-error). It still runs on every push to
+    # main and on workflow_dispatch; on a PR it runs only when the `full-ci`
+    # label is present. A skipped job reports as success, so adding it as a
+    # required check later will not deadlock label-less PRs.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: macos-latest
     # Non-blocking until the pre-existing macOS test failures are fixed.
     continue-on-error: true
@@ -70,7 +81,7 @@ jobs:
         run: brew install ffmpeg sox
 
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}

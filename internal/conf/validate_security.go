@@ -102,8 +102,8 @@ func validateTLSMode(settings *Security) error {
 			return err
 		}
 		if RunningInContainer() {
-			GetLogger().Warn("AutoTLS requires ports 80 and 443 to be exposed",
-				logger.String("ports", "80:80 (ACME HTTP-01), 443:443 (HTTPS)"),
+			GetLogger().Warn("AutoTLS requires host ports 80 and 443 to be exposed",
+				logger.String("ports", "80:8080 (ACME HTTP-01), 443:8443 (HTTPS)"),
 				logger.String("hint", "Consider using docker-compose.autotls.yml for proper AutoTLS configuration"))
 		}
 

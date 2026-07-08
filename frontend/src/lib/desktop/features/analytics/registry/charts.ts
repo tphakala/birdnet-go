@@ -884,7 +884,7 @@ export const CHART_REGISTRY: ChartDef[] = [
   },
   {
     id: 'nocturnal-clock',
-    group: 'patterns',
+    group: 'nocturnal',
     titleKey: 'analytics.advanced.charts.nocturnal.title',
     descKey: 'analytics.advanced.charts.nocturnal.description',
     emptyKey: 'analytics.advanced.charts.nocturnal.noData',
@@ -1021,12 +1021,10 @@ export const CHART_REGISTRY: ChartDef[] = [
     // (the species count) drives the not-enough-data gate; a one-bar Gantt is not a comparison.
     mapProps: (data, _params, ctx) => ({
       data: {
-        rows: (data as PhenologyDatum[]).map(
-          (d): PhenologyRow => ({
-            ...d,
-            commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-          })
-        ),
+        rows: (data as PhenologyDatum[]).map((d): PhenologyRow => ({
+          ...d,
+          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+        })),
       } as PhenologyData,
     }),
     size: 'full',

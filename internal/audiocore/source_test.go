@@ -70,3 +70,35 @@ func TestStreamTypeToSourceType(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamSourceType(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		conn       string
+		wantType   SourceType
+		wantStream bool
+	}{
+		{"rtsp", "rtsp://192.168.1.10/stream", SourceTypeRTSP, true},
+		{"rtsps", "rtsps://192.168.1.10/stream", SourceTypeRTSP, true},
+		{"rtmp", "rtmp://example.com/live", SourceTypeRTMP, true},
+		{"rtmps", "rtmps://example.com/live", SourceTypeRTMP, true},
+		{"udp", "udp://239.0.0.1:1234", SourceTypeUDP, true},
+		{"rtp", "rtp://239.0.0.1:1234", SourceTypeUDP, true},
+		{"hls m3u8", "https://example.com/stream.m3u8", SourceTypeHLS, true},
+		{"http", "http://example.com/audio", SourceTypeHTTP, true},
+		{"https", "https://example.com/audio", SourceTypeHTTP, true},
+		{"sound card hw", "hw:0,0", SourceTypeAudioCard, false},
+		{"sound card sysdefault", "sysdefault", SourceTypeAudioCard, false},
+		{"file path", "/tmp/x.wav", SourceTypeFile, false},
+		{"empty", "", SourceTypeUnknown, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotType, gotOk := StreamSourceType(tt.conn)
+			assert.Equal(t, tt.wantType, gotType)
+			assert.Equal(t, tt.wantStream, gotOk)
+		})
+	}
+}

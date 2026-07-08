@@ -12,8 +12,8 @@ type Detection struct {
 
 	// Timestamps (consolidated - Unix timestamp is single source of truth)
 	DetectedAt int64  `gorm:"not null;index;index:idx_detection_label_date;index:idx_detection_confidence"`
-	BeginTime  *int64 // Milliseconds offset from source start
-	EndTime    *int64 // Milliseconds offset from source start
+	BeginTime  *int64 // Absolute capture begin time, Unix milliseconds (Save: BeginTime.UnixMilli)
+	EndTime    *int64 // Absolute capture completion time, Unix milliseconds (Save: EndTime.UnixMilli)
 
 	// Detection metadata
 	Confidence float64 `gorm:"not null;index:idx_detection_confidence"`

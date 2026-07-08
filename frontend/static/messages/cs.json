@@ -206,10 +206,19 @@
     "componentError": "Chyba načítání komponenty",
     "speciesAnalytics": "Analýza druhů",
     "detectionDetails": "Podrobnosti detekce",
-    "settingsNotAvailable": "Nastavení není k dispozici"
+    "settingsNotAvailable": "Nastavení není k dispozici",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytika - Noční aktivita",
+    "analyticsWeather": "Analytika - Korelace s počasím",
+    "analyticsSoundscape": "Analytika - Zvuková krajina"
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "liveAudio": "Živý zvuk",
     "settingsMenu": "Nabídka nastavení",
     "theme": "Motiv",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Nahlásit chybu na GitHubu (otevře se v novém okně)",
     "askQuestionAriaLabel": "Položit dotaz na GitHub Discussions (otevře se v novém okně)",
     "viewOnGithubAriaLabel": "Zobrazit BirdNET-Go na GitHubu (otevře se v novém okně)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Prozkoumat",
+      "patterns": "Vzorce",
+      "environment": "Prostředí",
+      "dataQuality": "Kvalita dat"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Přepočítávám dynamické prahy pro novou základní hodnotu",
         "reconfiguringDynamicThresholds": "Překonfiguruji dynamické prahy…",
         "webserverRestartRequired": "Nastavení webového serveru byla změněna. Je vyžadován restart.",
+        "oauthRestartRequired": "Nastavení poskytovatele ověřování byla změněna. Je vyžadován restart.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Aktualizuji monitorování hladiny zvuku…",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Přehled",
         "patterns": "Vzorce aktivity",
         "trends": "Trendy",
         "biodiversity": "Biodiverzita",
-        "quality": "Kontrola a přesnost"
+        "quality": "Kontrola a přesnost",
+        "summary": "Summary",
+        "nocturnal": "Noční aktivita",
+        "weather": "Počasí",
+        "soundscape": "Zvuková krajina"
       },
       "aria": {
         "tabs": "Sekce analýzy"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "Tento graf potřebuje alespoň {min} datových bodů. Pokračujte v nahrávání a vraťte se brzy.",
         "export": "Exportovat",
         "exportComingSoon": "Export do CSV brzy přijde."
-      },
-      "comingSoon": {
-        "description": "Tato sekce se připravuje a přijde v některé z příštích aktualizací."
       }
     },
-    "title": "Přehled",
     "loadingError": "Nepodařilo se načíst některá analytická data. Zkuste to prosím později.",
+    "comingSoon": {
+      "badge": "Připravujeme",
+      "plannedTitle": "Plánované funkce",
+      "weather": {
+        "description": "Aktivita ptáků v závislosti na místních povětrnostních podmínkách. Toto zobrazení bude korelovat vaše detekce s teplotou, větrem a srážkami.",
+        "feature1": "Korelace detekcí s teplotou, větrem a srážkami",
+        "feature2": "Zjistit, jak atmosférické fronty ovlivňují aktivitu druhů",
+        "feature3": "Porovnat sezónní aktivitu s historickými meteorologickými daty"
+      },
+      "soundscape": {
+        "description": "Pohled na celkový akustický charakter vašeho prostředí pomocí akustických indexů pro shrnutí diverzity zvukové krajiny v čase.",
+        "feature1": "Akustické indexy shrnující složitost zvukové krajiny",
+        "feature2": "Sledování biodiverzity prostřednictvím okolního zvuku v průběhu času",
+        "feature3": "Odhalení úsvitových a soumračných chorů v akustickém záznamu"
+      }
+    },
     "stats": {
       "totalDetections": "Celkem detekcí",
       "uniqueSpecies": "Unikátní druhy",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Restart se nepodařilo spustit",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

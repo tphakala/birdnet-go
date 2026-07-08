@@ -77,11 +77,9 @@ type mockCorruptStore struct {
 	mockStore
 	corruptGet     atomic.Bool
 	corruptSave    atomic.Bool
-	corruptBatch   atomic.Bool
 	corruptLoadAll atomic.Bool
 	getCalls       atomic.Int32
 	saveCalls      atomic.Int32
-	batchCalls     atomic.Int32
 	loadAllCalls   atomic.Int32
 }
 
@@ -107,14 +105,6 @@ func (m *mockCorruptStore) SaveImageCache(cache *datastore.ImageCache) error {
 		return errCorrupt
 	}
 	return m.mockStore.SaveImageCache(cache)
-}
-
-func (m *mockCorruptStore) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
-	m.batchCalls.Add(1)
-	if m.corruptBatch.Load() {
-		return nil, errCorrupt
-	}
-	return m.mockStore.GetImageCacheBatch(providerName, scientificNames)
 }
 
 func (m *mockCorruptStore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
@@ -210,41 +200,6 @@ func TestImageCacheDisablesWritesOnCorruption(t *testing.T) {
 
 	assert.Equal(t, savesAfterFirst, store.saveCalls.Load(),
 		"SaveImageCache must not be retried after corruption is latched")
-}
-
-// TestImageCacheDisablesBatchOnCorruption verifies that a corruption error
-// from GetImageCacheBatch (the dashboard's batch thumbnail path) latches the
-// flag too. Without this guard, every dashboard render would re-issue a batch
-// query against the corrupted DB (Forgejo #762 batch path).
-func TestImageCacheDisablesBatchOnCorruption(t *testing.T) {
-	t.Parallel()
-
-	provider := &mockImageProvider{}
-	store := newMockCorruptStore()
-	metrics, err := observability.NewMetrics()
-	require.NoError(t, err)
-
-	cache, err := imageprovider.CreateDefaultCache(metrics, store)
-	require.NoError(t, err)
-	cache.SetImageProvider(provider)
-	t.Cleanup(func() {
-		require.NoError(t, cache.Close())
-	})
-
-	store.corruptBatch.Store(true)
-
-	// First batch fetch triggers the corrupted batch read.
-	_ = cache.GetBatch([]string{"Turdus merula", "Parus major"})
-	batchesAfterFirst := store.batchCalls.Load()
-	require.GreaterOrEqual(t, batchesAfterFirst, int32(1),
-		"first batch call must reach GetImageCacheBatch so corruption can be detected")
-
-	// Subsequent batch fetches must not retry the corrupted call.
-	_ = cache.GetBatch([]string{"Cyanistes caeruleus", "Sitta europaea"})
-	_ = cache.GetBatch([]string{"Erithacus rubecula"})
-
-	assert.Equal(t, batchesAfterFirst, store.batchCalls.Load(),
-		"GetImageCacheBatch must not be retried after corruption is latched")
 }
 
 // TestImageCacheCorruptionAtStartup verifies that a corruption error raised

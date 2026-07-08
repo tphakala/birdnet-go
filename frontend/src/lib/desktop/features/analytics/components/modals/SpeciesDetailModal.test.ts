@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup } from '@testing-library/svelte';
+import { cleanup, fireEvent } from '@testing-library/svelte';
 import { createComponentTestFactory, screen } from '../../../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import SpeciesDetailModal from './SpeciesDetailModal.svelte';
@@ -99,6 +99,40 @@ describe('SpeciesDetailModal', () => {
     await user.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the thumbnail image when thumbnail_url is set', () => {
+    const { container } = modalTest.render({
+      props: {
+        isOpen: true,
+        species: { ...mockSpecies, thumbnail_url: '/api/v2/media/image/Passer%20domesticus' },
+      },
+    });
+
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img).toHaveAttribute('src', '/api/v2/media/image/Passer%20domesticus');
+  });
+
+  // Under defer-to-proxy every species gets a media-proxy URL that can 404, so the
+  // modal degrades to the shared bird-silhouette placeholder (handleBirdImageError) on
+  // error, matching the dashboard and analytics overview. The img is kept (alt text
+  // preserved) with its src swapped to the placeholder asset.
+  it('swaps to the bird placeholder when the thumbnail fails to load', async () => {
+    const { container } = modalTest.render({
+      props: {
+        isOpen: true,
+        species: { ...mockSpecies, thumbnail_url: '/api/v2/media/image/Passer%20domesticus' },
+      },
+    });
+
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    if (img) await fireEvent.error(img);
+
+    const afterError = container.querySelector('img');
+    expect(afterError).not.toBeNull();
+    expect(afterError?.getAttribute('src')).toContain('bird-placeholder.svg');
   });
 
   it('closes when clicking outside the modal content', async () => {

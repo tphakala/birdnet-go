@@ -206,10 +206,19 @@
     "componentError": "Feil ved lasting av komponent",
     "speciesAnalytics": "Artsanalyse",
     "detectionDetails": "Registreringsdetaljer",
-    "settingsNotAvailable": "Innstillinger ikke tilgjengelig"
+    "settingsNotAvailable": "Innstillinger ikke tilgjengelig",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analyse - Nattaktivitet",
+    "analyticsWeather": "Analyse - Værkorrelasjon",
+    "analyticsSoundscape": "Analyse - Lydlandskap"
   },
   "navigation": {
     "dashboard": "Dashbord",
+    "liveAudio": "Direktelyd",
     "settingsMenu": "Innstillingsmeny",
     "theme": "Tema",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Rapporter en feil på GitHub (åpnes i nytt vindu)",
     "askQuestionAriaLabel": "Still et spørsmål på GitHub Discussions (åpnes i nytt vindu)",
     "viewOnGithubAriaLabel": "Vis BirdNET-Go på GitHub (åpnes i nytt vindu)",
-    "health": "Helse"
+    "health": "Helse",
+    "sections": {
+      "explore": "Utforsk",
+      "patterns": "Mønstre",
+      "environment": "Miljø",
+      "dataQuality": "Datakvalitet"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Beregner dynamiske terskler for ny basisverdi",
         "reconfiguringDynamicThresholds": "Konfigurerer dynamiske terskler på nytt...",
         "webserverRestartRequired": "Webserverinnstillinger endret. Omstart kreves.",
+        "oauthRestartRequired": "Autentiseringsleverandørinnstillinger endret. Omstart kreves.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Oppdaterer lydnivåovervåkning...",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Oversikt",
         "patterns": "Aktivitetsmønstre",
         "trends": "Trender",
         "biodiversity": "Biologisk mangfold",
-        "quality": "Gjennomgang og nøyaktighet"
+        "quality": "Gjennomgang og nøyaktighet",
+        "summary": "Summary",
+        "nocturnal": "Nattaktivitet",
+        "weather": "Vær",
+        "soundscape": "Lydlandskap"
       },
       "aria": {
         "tabs": "Analyseseksjoner"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "Dette diagrammet trenger minst {min} datapunkter. Fortsett å ta opp, og kom tilbake snart.",
         "export": "Eksporter",
         "exportComingSoon": "CSV-eksport kommer snart."
-      },
-      "comingSoon": {
-        "description": "Denne seksjonen er under utvikling og kommer i en kommende oppdatering."
       }
     },
-    "title": "Oversikt",
     "loadingError": "Innlasting av noen analysedata mislyktes. Prøv igjen senere.",
+    "comingSoon": {
+      "badge": "Kommer snart",
+      "plannedTitle": "Planlagte funksjoner",
+      "weather": {
+        "description": "Fugleaktivitet spores mot lokale værforhold. Denne visningen vil korrelere deteksjonene med temperatur, vind og nedbør.",
+        "feature1": "Korreler deteksjoner med temperatur, vind og nedbør",
+        "feature2": "Se hvordan værsystemer påvirker artsaktiviteten",
+        "feature3": "Sammenlign sesongaktivitet med historiske værdata"
+      },
+      "soundscape": {
+        "description": "Et innblikk i den overordnede akustiske karakteren til miljøet, ved bruk av akustiske indekser for å oppsummere lydlandskapets mangfold over tid.",
+        "feature1": "Akustiske indekser som oppsummerer lydlandskapets kompleksitet",
+        "feature2": "Spor biodiversitet gjennom omgivende lyd over tid",
+        "feature3": "Oppdag morgen- og kveldskorer i det akustiske registeret"
+      }
+    },
     "stats": {
       "totalDetections": "Totalt registreringer",
       "uniqueSpecies": "Unike arter",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Oppstart av omstart mislyktes",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

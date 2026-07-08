@@ -206,10 +206,19 @@
     "componentError": "Erreur de chargement du composant",
     "speciesAnalytics": "Analyses des espèces",
     "detectionDetails": "Détails de détection",
-    "settingsNotAvailable": "Paramètres non disponibles"
+    "settingsNotAvailable": "Paramètres non disponibles",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytique - Activité nocturne",
+    "analyticsWeather": "Analytique - Corrélation météo",
+    "analyticsSoundscape": "Analytique - Paysage sonore"
   },
   "navigation": {
     "dashboard": "Tableau de bord",
+    "liveAudio": "Audio en direct",
     "settingsMenu": "Menu des paramètres",
     "theme": "Thème",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Signaler un bug sur GitHub (ouvre dans une nouvelle fenêtre)",
     "askQuestionAriaLabel": "Poser une question sur GitHub Discussions (ouvre dans une nouvelle fenêtre)",
     "viewOnGithubAriaLabel": "Voir BirdNET-Go sur GitHub (ouvre dans une nouvelle fenêtre)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Explorer",
+      "patterns": "Modèles",
+      "environment": "Environnement",
+      "dataQuality": "Qualité des données"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Recalcul des seuils dynamiques pour la nouvelle valeur de base",
         "reconfiguringDynamicThresholds": "Reconfiguration des seuils dynamiques...",
         "webserverRestartRequired": "Les paramètres du serveur web ont changé. Redémarrage requis.",
+        "oauthRestartRequired": "Les paramètres du fournisseur d'authentification ont changé. Redémarrage requis.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Mise à jour de la surveillance du niveau sonore...",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Vue d'ensemble",
         "patterns": "Schémas d'activité",
         "trends": "Tendances",
         "biodiversity": "Biodiversité",
-        "quality": "Vérification et précision"
+        "quality": "Vérification et précision",
+        "summary": "Summary",
+        "nocturnal": "Activité nocturne",
+        "weather": "Météo",
+        "soundscape": "Paysage sonore"
       },
       "aria": {
         "tabs": "Sections d'analyse"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "Ce graphique nécessite au moins {min} points de données. Continuez l'enregistrement et revenez bientôt.",
         "export": "Exporter",
         "exportComingSoon": "L'export CSV arrive bientôt."
-      },
-      "comingSoon": {
-        "description": "Cette section est en cours de construction et arrivera dans une prochaine mise à jour."
       }
     },
-    "title": "Vue d'ensemble",
     "loadingError": "Échec du chargement de certaines données analytiques. Veuillez réessayer plus tard.",
+    "comingSoon": {
+      "badge": "Bientôt disponible",
+      "plannedTitle": "Fonctionnalités prévues",
+      "weather": {
+        "description": "Activité des oiseaux corrélée aux conditions météorologiques locales. Cette vue mettra en relation les détections avec la température, le vent et les précipitations.",
+        "feature1": "Corréler les détections avec la température, le vent et les précipitations",
+        "feature2": "Observer comment les fronts météo influencent l'activité des espèces",
+        "feature3": "Comparer l'activité saisonnière avec les données météo historiques"
+      },
+      "soundscape": {
+        "description": "Un aperçu du caractère acoustique global de l'environnement, à l'aide d'indices acoustiques pour résumer la diversité du paysage sonore dans le temps.",
+        "feature1": "Indices acoustiques résumant la complexité du paysage sonore",
+        "feature2": "Suivre la biodiversité à travers le son ambiant dans le temps",
+        "feature3": "Repérer les choeurs de l'aube et du crépuscule dans l'enregistrement acoustique"
+      }
+    },
     "stats": {
       "totalDetections": "Total des détections",
       "uniqueSpecies": "Espèces uniques",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Échec du lancement du redémarrage",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

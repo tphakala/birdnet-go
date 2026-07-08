@@ -206,10 +206,19 @@
     "componentError": "Component laadfout",
     "speciesAnalytics": "Soortanalyses",
     "detectionDetails": "Detectiedetails",
-    "settingsNotAvailable": "Instellingen niet beschikbaar"
+    "settingsNotAvailable": "Instellingen niet beschikbaar",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analyse - Nachtelijke activiteit",
+    "analyticsWeather": "Analyse - Weercorrelatie",
+    "analyticsSoundscape": "Analyse - Geluidlandschap"
   },
   "navigation": {
     "dashboard": "Overzicht",
+    "liveAudio": "Live audio",
     "settingsMenu": "Instellingenmenu",
     "theme": "Thema",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Meld een bug op GitHub (opent in nieuw venster)",
     "askQuestionAriaLabel": "Stel een vraag op GitHub Discussions (opent in nieuw venster)",
     "viewOnGithubAriaLabel": "Bekijk BirdNET-Go op GitHub (opent in nieuw venster)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Verkennen",
+      "patterns": "Patronen",
+      "environment": "Omgeving",
+      "dataQuality": "Gegevenskwaliteit"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Dynamische drempels worden herberekend voor nieuwe basiswaarde",
         "reconfiguringDynamicThresholds": "Dynamische drempels worden opnieuw geconfigureerd...",
         "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
+        "oauthRestartRequired": "Authenticatieproviderinstellingen gewijzigd. Herstart vereist.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
@@ -1794,11 +1810,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Overzicht",
         "patterns": "Activiteitspatronen",
         "trends": "Trends",
         "biodiversity": "Biodiversiteit",
-        "quality": "Controle en nauwkeurigheid"
+        "quality": "Controle en nauwkeurigheid",
+        "summary": "Summary",
+        "nocturnal": "Nachtelijke activiteit",
+        "weather": "Weer",
+        "soundscape": "Geluidlandschap"
       },
       "aria": {
         "tabs": "Analysesecties"
@@ -1818,13 +1837,25 @@
         "notEnoughDataHint": "Deze grafiek heeft minstens {min} gegevenspunten nodig. Blijf opnemen en kom snel terug.",
         "export": "Exporteren",
         "exportComingSoon": "CSV-export komt binnenkort."
-      },
-      "comingSoon": {
-        "description": "Deze sectie is in aanbouw en komt in een toekomstige update."
       }
     },
-    "title": "Aantallen",
     "loadingError": "Kon analyse gegevens niet inladen. Probeer het later opnieuw.",
+    "comingSoon": {
+      "badge": "Binnenkort beschikbaar",
+      "plannedTitle": "Geplande mogelijkheden",
+      "weather": {
+        "description": "Vogelactiviteit bijgehouden ten opzichte van lokale weersomstandigheden. Deze weergave correleert detecties met temperatuur, wind en neerslag.",
+        "feature1": "Correleer detecties met temperatuur, wind en neerslag",
+        "feature2": "Bekijk hoe weerfronten de soortactiviteit beïnvloeden",
+        "feature3": "Vergelijk seizoensactiviteit met historische weergegevens"
+      },
+      "soundscape": {
+        "description": "Een blik op het algehele akoestische karakter van de omgeving, met behulp van akoestische indices om de diversiteit van het geluidlandschap in de loop der tijd samen te vatten.",
+        "feature1": "Akoestische indices die de complexiteit van het geluidlandschap samenvatten",
+        "feature2": "Biodiversiteit volgen via omgevingsgeluid door de tijd heen",
+        "feature3": "Dageraad- en schemerchoreussen in het akoestische register opsporen"
+      }
+    },
     "stats": {
       "totalDetections": "Totaal herkend",
       "uniqueSpecies": "Unieke soorten",
@@ -5287,6 +5318,7 @@
     "restartFailed": "Kan herstart niet starten",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

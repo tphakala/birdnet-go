@@ -145,8 +145,8 @@ type BirdImageCache struct {
 	closed       atomic.Bool   // Set during shutdown to reject new DB operations
 	// dbCorrupted is latched the first time the datastore reports a SQLite
 	// corruption error ("database disk image is malformed"). Once latched,
-	// loadFromDBCache, saveToDB, fetchFromDBWithFallback and loadCachedImages
-	// all return ErrCacheMiss without touching the DB, so the cache continues
+	// loadFromDBCache, saveToDB and loadCachedImages all return ErrCacheMiss
+	// (and the refresh path short-circuits too) without touching the DB, so the cache continues
 	// to serve fresh fetches from the provider instead of generating an
 	// unbounded stream of Sentry events (Forgejo #762, BIRDNET-GO-ZR/ZS).
 	dbCorrupted  atomic.Bool
@@ -183,13 +183,6 @@ func GetLogger() logger.Logger {
 	return logger.Global().Module("imageprovider")
 }
 
-// emptyImageProvider is an ImageProvider that always returns an empty BirdImage.
-type emptyImageProvider struct{}
-
-func (l *emptyImageProvider) Fetch(scientificName string) (BirdImage, error) {
-	return BirdImage{}, nil
-}
-
 // SetNonBirdImageProvider allows setting a custom ImageProvider for non-bird entries
 func (c *BirdImageCache) SetNonBirdImageProvider(provider ImageProvider) {
 	GetLogger().Debug("Setting non-bird image provider",
@@ -215,7 +208,6 @@ const (
 
 	// Configuration constants
 	fallbackPolicyAll = "all" // Fallback policy to allow all providers
-	percentMultiplier = 100   // Multiplier for percentage calculations
 
 	// Performance threshold constants
 	dbCacheLookupSlowThreshold = 50 * time.Millisecond  // Threshold for slow DB cache lookups
@@ -862,165 +854,6 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 	return birdImage, nil
 }
 
-// batchLoadFromDB loads multiple BirdImages from the database cache in a single query
-func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]BirdImage, error) {
-	log := GetLogger().With(
-		logger.String("provider", c.providerName),
-		logger.Int("batch_size", len(scientificNames)))
-	log.Debug("Attempting batch load from DB cache")
-
-	// Reject DB reads after shutdown to avoid "database is closed" errors
-	if c.closed.Load() {
-		log.Debug("Skipping batch DB load: cache is shutting down")
-		return nil, ErrCacheMiss
-	}
-
-	if c.store == nil {
-		log.Warn("Cannot batch load from DB cache: DB store is nil")
-		return nil, ErrCacheMiss
-	}
-
-	dbImages, err := c.fetchFromDBWithFallback(scientificNames)
-	if err != nil {
-		return nil, err
-	}
-
-	result := c.convertDBImagesToValidBirdImages(dbImages)
-	log.Debug("Batch DB load completed",
-		logger.Int("found", len(result)),
-		logger.Int("requested", len(scientificNames)))
-	return result, nil
-}
-
-// fetchFromDBWithFallback fetches images from DB, trying fallback providers if needed.
-func (c *BirdImageCache) fetchFromDBWithFallback(scientificNames []string) (map[string]*datastore.ImageCache, error) {
-	log := GetLogger().With(logger.String("provider", c.providerName))
-
-	// Reject DB reads after shutdown to avoid "database is closed" errors
-	if c.closed.Load() {
-		log.Debug("Skipping batch DB load: cache is shutting down")
-		return nil, ErrCacheMiss
-	}
-	// Skip batch reads once corruption has been detected (Forgejo #762).
-	if c.dbCorrupted.Load() {
-		log.Debug("Skipping batch DB load: image cache database is corrupted")
-		return nil, ErrCacheMiss
-	}
-
-	settings := conf.Setting()
-	debug := settings.Realtime.Dashboard.Thumbnails.Debug
-
-	if debug {
-		log.Debug("Calling GetImageCacheBatch",
-			logger.String("provider_name", c.providerName),
-			logger.Int("species_count", len(scientificNames)))
-	}
-
-	dbImages, err := c.store.GetImageCacheBatch(c.providerName, scientificNames)
-	if err != nil {
-		if c.handleDBCorruption(err, "get_image_cache_batch") {
-			return nil, ErrCacheMiss
-		}
-		log.Error("Failed to batch load from DB cache",
-			logger.Error(err))
-		return nil, err
-	}
-
-	if debug {
-		log.Debug("GetImageCacheBatch completed",
-			logger.String("provider_name", c.providerName),
-			logger.Int("found_count", len(dbImages)))
-	}
-
-	// Try fallback providers if no images found
-	if len(dbImages) == 0 && len(scientificNames) > 0 {
-		dbImages = c.tryBatchFallbackProviders(scientificNames, debug)
-	}
-
-	return dbImages, nil
-}
-
-// tryBatchFallbackProviders attempts to load images from fallback providers for batch operations.
-func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, debug bool) map[string]*datastore.ImageCache {
-	log := GetLogger().With(logger.String("provider", c.providerName))
-
-	if c.closed.Load() {
-		return nil
-	}
-	// Skip fallback DB lookups once corruption is latched (Forgejo #762).
-	if c.dbCorrupted.Load() {
-		return nil
-	}
-
-	settings := conf.Setting()
-
-	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
-		if debug {
-			log.Debug("No images found with primary provider, but fallback policy is 'none'")
-		}
-		return nil
-	}
-
-	if debug {
-		log.Debug("No images found with primary provider, trying fallback providers (policy: all)")
-	}
-
-	for _, fallbackProvider := range fallbackProviders {
-		if fallbackProvider == c.providerName {
-			continue
-		}
-		fallbackImages, err := c.store.GetImageCacheBatch(fallbackProvider, scientificNames)
-		if err != nil {
-			// Stop iterating fallbacks if the DB is corrupted; the next batch
-			// query would also fail and inflate the corruption metric.
-			if c.handleDBCorruption(err, "batch_fallback_lookup") {
-				return nil
-			}
-			continue
-		}
-		if len(fallbackImages) > 0 {
-			if debug {
-				log.Debug("Found images using fallback provider",
-					logger.String("fallback_provider", fallbackProvider),
-					logger.Int("found_count", len(fallbackImages)))
-			}
-			return fallbackImages
-		}
-	}
-	return nil
-}
-
-// convertDBImagesToValidBirdImages converts DB entries to BirdImages, filtering out stale entries.
-func (c *BirdImageCache) convertDBImagesToValidBirdImages(dbImages map[string]*datastore.ImageCache) map[string]BirdImage {
-	log := GetLogger().With(logger.String("provider", c.providerName))
-	result := make(map[string]BirdImage)
-	now := time.Now()
-
-	for name, dbImage := range dbImages {
-		if dbImage == nil {
-			continue
-		}
-
-		birdImage := dbEntryToBirdImage(dbImage)
-		cutoff := now.Add(-birdImage.GetTTL())
-
-		if dbImage.CachedAt.After(cutoff) {
-			result[name] = birdImage
-			if birdImage.IsNegativeEntry() {
-				log.Debug("Loaded negative cache entry from DB batch",
-					logger.String("scientific_name", name),
-					logger.Time("cached_at", dbImage.CachedAt))
-			}
-		} else {
-			log.Debug("Skipping stale DB entry from batch",
-				logger.String("scientific_name", name),
-				logger.Time("cached_at", dbImage.CachedAt),
-				logger.Bool("is_negative", birdImage.IsNegativeEntry()))
-		}
-	}
-	return result
-}
-
 // saveToDB saves a BirdImage to the database cache
 func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	log := GetLogger().With(
@@ -1160,7 +993,11 @@ func (c *BirdImageCache) loadCachedImages() error {
 
 		// Only load non-stale entries into memory
 		if entries[i].CachedAt.After(cutoff) {
-			c.dataMap.Store(birdImage.ScientificName, &birdImage)
+			// birdImage is already a *BirdImage; store it directly. Storing
+			// &birdImage would put a **BirdImage in the map, which every reader
+			// (checkCachedEntryAfterLock, MemoryUsage) fails to type-assert as
+			// *BirdImage, silently defeating the startup warmup (Forgejo #1311).
+			c.dataMap.Store(birdImage.ScientificName, birdImage)
 			loadedCount++
 			if birdImage.IsNegativeEntry() {
 				log.Debug("Loaded negative cache entry from DB",
@@ -2028,248 +1865,4 @@ func (r *ImageProviderRegistry) GetCaches() map[string]*BirdImageCache {
 	cachesCopy := make(map[string]*BirdImageCache, len(r.caches))
 	maps.Copy(cachesCopy, r.caches)
 	return cachesCopy
-}
-
-// batchFetchResult holds the result of fetching a single image
-type batchFetchResult struct {
-	name  string
-	image BirdImage
-	err   error
-}
-
-// GetBatch fetches multiple bird images at once and returns them as a map
-// This is more efficient than multiple individual Get calls when many images are needed
-func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage {
-	batchStart := time.Now()
-	result := make(map[string]BirdImage, len(scientificNames))
-
-	// Phase 1: Check memory cache
-	missingNames := c.checkMemoryCache(scientificNames, result)
-
-	// Early return if all found in memory
-	if len(missingNames) == 0 {
-		c.logBatchComplete(batchStart, len(result), len(scientificNames))
-		return result
-	}
-
-	// Phase 2: Check database cache
-	if c.store != nil && len(missingNames) > 0 {
-		missingNames = c.checkDatabaseCache(missingNames, result)
-	}
-
-	// Phase 3: Fetch from provider
-	if len(missingNames) > 0 {
-		c.fetchFromProvider(missingNames, result)
-	}
-
-	c.logBatchComplete(batchStart, len(result), len(scientificNames))
-	return result
-}
-
-// GetBatchCachedOnly retrieves multiple bird images from cache only (memory + database)
-// without triggering any provider fetches. This is useful for fast initial page loads.
-// Missing images will simply not be included in the result map.
-func (c *BirdImageCache) GetBatchCachedOnly(scientificNames []string) map[string]BirdImage {
-	batchStart := time.Now()
-	result := make(map[string]BirdImage, len(scientificNames))
-
-	// Phase 1: Check memory cache
-	missingNames := c.checkMemoryCache(scientificNames, result)
-
-	// Phase 2: Check database cache (if there are missing names)
-	if c.store != nil && len(missingNames) > 0 {
-		_ = c.checkDatabaseCache(missingNames, result)
-	}
-
-	// Note: We do NOT fetch from provider - just return what we have cached
-	if c.debug {
-		GetLogger().Debug("GetBatchCachedOnly: Completed",
-			logger.Duration("duration", time.Since(batchStart)),
-			logger.Int("found", len(result)),
-			logger.Int("total", len(scientificNames)))
-	}
-
-	return result
-}
-
-// checkMemoryCache checks memory cache for requested images and populates result map
-// Returns list of names not found in memory cache
-func (c *BirdImageCache) checkMemoryCache(scientificNames []string, result map[string]BirdImage) []string {
-	memoryCacheStart := time.Now()
-	missingNames := make([]string, 0, len(scientificNames))
-
-	for _, name := range scientificNames {
-		if name == "" {
-			continue
-		}
-
-		// Check memory cache first
-		if value, ok := c.dataMap.Load(name); ok {
-			if image, ok := value.(*BirdImage); ok {
-				if c.metrics != nil {
-					c.metrics.IncrementCacheHits()
-				}
-				result[name] = *image
-				continue
-			}
-		}
-
-		// If not in memory cache, add to list for fetching
-		missingNames = append(missingNames, name)
-	}
-
-	if c.debug {
-		GetLogger().Debug("GetBatch: Memory cache check completed",
-			logger.Duration("duration", time.Since(memoryCacheStart)),
-			logger.Int("found", len(result)),
-			logger.Int("total", len(scientificNames)))
-	}
-
-	return missingNames
-}
-
-// checkDatabaseCache checks database cache for missing images and populates result map
-// Returns list of names not found in database cache
-func (c *BirdImageCache) checkDatabaseCache(missingNames []string, result map[string]BirdImage) []string {
-	dbBatchStart := time.Now()
-	if c.debug {
-		GetLogger().Debug("GetBatch: Attempting batch DB cache lookup",
-			logger.Int("item_count", len(missingNames)))
-	}
-
-	dbImages, err := c.batchLoadFromDB(missingNames)
-	if isRealError(err) {
-		if c.debug {
-			GetLogger().Debug("GetBatch: Batch DB load error", logger.Error(err))
-		}
-		// On error, return original list to continue with provider fetch
-		return missingNames
-	}
-
-	// Process DB results
-	stillMissing := make([]string, 0, len(missingNames))
-	dbHitCount := 0
-
-	for _, name := range missingNames {
-		if img, found := dbImages[name]; found {
-			result[name] = img
-			// Store in memory cache for future requests
-			copyImg := img // Make a copy to store pointer to
-			c.dataMap.Store(name, &copyImg)
-			if c.metrics != nil {
-				c.metrics.IncrementCacheMisses() // Memory miss but DB hit
-			}
-			dbHitCount++
-		} else {
-			stillMissing = append(stillMissing, name)
-		}
-	}
-
-	if c.debug {
-		hitRate := float64(dbHitCount) / float64(len(missingNames)) * percentMultiplier
-		GetLogger().Debug("GetBatch: Batch DB lookup completed",
-			logger.Duration("duration", time.Since(dbBatchStart)),
-			logger.Int("db_hits", dbHitCount),
-			logger.Float64("hit_rate_percent", hitRate),
-			logger.Int("still_missing", len(stillMissing)))
-	}
-
-	return stillMissing
-}
-
-// fetchFromProvider fetches missing images from the provider in parallel
-func (c *BirdImageCache) fetchFromProvider(missingNames []string, result map[string]BirdImage) {
-	if c.debug {
-		GetLogger().Debug("GetBatch: Need to fetch images from provider",
-			logger.Int("count", len(missingNames)))
-	}
-	fetchStart := time.Now()
-
-	// Use goroutines for parallel fetching with a worker pool
-	const maxWorkers = 5 // Limit concurrent requests to avoid overwhelming the provider
-	sem := make(chan struct{}, maxWorkers)
-	resultChan := make(chan batchFetchResult, len(missingNames))
-
-	// Launch goroutines for parallel fetching
-	for _, name := range missingNames {
-		go c.fetchSingleImage(name, sem, resultChan)
-	}
-
-	// Collect results
-	c.collectFetchResults(len(missingNames), resultChan, result)
-	close(resultChan)
-
-	if c.debug {
-		GetLogger().Debug("GetBatch: Provider fetch phase completed",
-			logger.Duration("duration", time.Since(fetchStart)),
-			logger.Int("max_workers", maxWorkers))
-	}
-}
-
-// fetchSingleImage fetches a single image from the provider
-func (c *BirdImageCache) fetchSingleImage(scientificName string, sem chan struct{}, resultChan chan<- batchFetchResult) {
-	sem <- struct{}{}        // Acquire semaphore
-	defer func() { <-sem }() // Release semaphore
-
-	singleFetchStart := time.Now()
-	image, err := c.fetchAndStore(scientificName)
-	singleFetchDuration := time.Since(singleFetchStart)
-
-	if c.debug && singleFetchDuration > providerFetchSlowThreshold {
-		GetLogger().Warn("GetBatch: Slow provider fetch",
-			logger.String("scientific_name", scientificName),
-			logger.Duration("duration", singleFetchDuration))
-	}
-
-	resultChan <- batchFetchResult{
-		name:  scientificName,
-		image: image,
-		err:   err,
-	}
-}
-
-// collectFetchResults collects results from parallel fetches
-func (c *BirdImageCache) collectFetchResults(count int, resultChan <-chan batchFetchResult, result map[string]BirdImage) {
-	for i := range count {
-		res := <-resultChan
-		if res.err == nil {
-			result[res.name] = res.image
-		} else {
-			if c.debug {
-				GetLogger().Debug("GetBatch: Failed to fetch from provider",
-					logger.String("scientific_name", res.name),
-					logger.Error(res.err))
-			}
-			// Report critical errors to telemetry
-			if !errors.Is(res.err, ErrImageNotFound) {
-				enhancedErr := errors.New(res.err).
-					Component("imageprovider").
-					Category(errors.CategoryImageProvider).
-					Context("provider", c.providerName).
-					Context("scientific_name", res.name).
-					Context("operation", "batch_fetch_single").
-					Build()
-				GetLogger().Error("Failed to fetch image in batch operation",
-					logger.Error(enhancedErr),
-					logger.String("scientific_name", res.name),
-					logger.String("provider", c.providerName))
-			}
-		}
-
-		if c.debug && (i+1)%10 == 0 {
-			GetLogger().Debug("GetBatch: Progress",
-				logger.Int("completed", i+1),
-				logger.Int("total", count))
-		}
-	}
-}
-
-// logBatchComplete logs the completion of a batch operation
-func (c *BirdImageCache) logBatchComplete(startTime time.Time, resultCount, requestCount int) {
-	if c.debug {
-		GetLogger().Debug("GetBatch: Completed batch operation",
-			logger.Int("returned", resultCount),
-			logger.Int("requested", requestCount),
-			logger.Duration("duration", time.Since(startTime)))
-	}
 }
