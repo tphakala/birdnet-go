@@ -449,3 +449,27 @@ func TestBuildTestSettingsConcurrentWithCountEndpoint(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestCalculateWeek_MonthEndClamp(t *testing.T) {
+	tests := []struct {
+		name     string
+		dateStr  string
+		expected float32
+	}{
+		{"Dec 28", "2023-12-28", 48.0},
+		{"Dec 29", "2023-12-29", 48.0},
+		{"Dec 30", "2023-12-30", 48.0},
+		{"Dec 31", "2023-12-31", 48.0},
+		{"Jan 1", "2023-01-01", 1.0},
+		{"Jan 31", "2023-01-31", 4.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			date, err := time.Parse(time.DateOnly, tt.dateStr)
+			require.NoError(t, err)
+			week := calculateWeek(date)
+			assert.InDelta(t, tt.expected, week, 0.0001)
+		})
+	}
+}

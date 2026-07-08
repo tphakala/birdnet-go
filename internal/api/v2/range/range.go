@@ -90,7 +90,7 @@ func calculateWeek(date time.Time) float32 {
 	month := int(date.Month())
 	day := date.Day()
 	weeksFromMonths := (month - 1) * apicore.WeeksPerMonth
-	weekInMonth := (day-1)/apicore.DaysPerWeek + 1
+	weekInMonth := min((day-1)/apicore.DaysPerWeek+1, apicore.WeeksPerMonth)
 	return float32(weeksFromMonths + weekInMonth)
 }
 
