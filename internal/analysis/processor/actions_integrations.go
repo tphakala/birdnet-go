@@ -356,16 +356,6 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 	return nil
 }
 
-// localNoon returns 12:00:00 on the calendar day of t, evaluated in t's own
-// time zone. time.Time.Truncate operates on absolute (UTC) time, so truncating
-// to a 24h boundary rounds to UTC midnight and, near the local day boundary on
-// hosts with a non-zero UTC offset, computes the geomodel week for the wrong
-// calendar day. Using noon (rather than midnight) also sidesteps zones whose
-// DST transition happens at 00:00.
-func localNoon(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 12, 0, 0, 0, t.Location())
-}
-
 // Execute updates the range filter species list, this is run every day
 // Note: The ShouldUpdateRangeFilterToday() check in processor.go ensures this action
 // is only created once per day, preventing duplicate concurrent updates (GitHub issue #1357)
@@ -374,7 +364,7 @@ func (a *UpdateRangeFilterAction) Execute(ctx context.Context, data any) error {
 	defer a.mu.Unlock()
 
 	// Get current local calendar date for the range filter calculation
-	today := localNoon(time.Now())
+	today := conf.LocalNoon(time.Now())
 
 	// Update location based species list
 	speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)

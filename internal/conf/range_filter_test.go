@@ -88,6 +88,56 @@ func TestShouldUpdateRangeFilterToday_MorningStampStaysClosed(t *testing.T) {
 		"gate must remain closed on subsequent same-day detections (no morning re-fire)")
 }
 
+// TestLocalNoon verifies that LocalNoon anchors to the local calendar day at
+// 12:00, instead of the old time.Now().Truncate(24h) which rounds to UTC midnight
+// and reports the UTC calendar day near the local day boundary.
+func TestLocalNoon(t *testing.T) {
+	t.Parallel()
+
+	// The boundary cases are instants where the old time.Now().Truncate(24h)
+	// (which rounds to UTC midnight) produced a different, wrong calendar day
+	// than the local one.
+	tests := []struct {
+		name    string
+		now     time.Time
+		wantDay int
+	}{
+		{
+			name:    "positive offset late evening keeps local day",
+			now:     time.Date(2026, 7, 8, 23, 30, 0, 0, time.FixedZone("UTC+2", 2*60*60)),
+			wantDay: 8,
+		},
+		{
+			// 2026-07-08 22:30 UTC: local date (9th) != UTC date (8th).
+			name:    "positive offset after local midnight keeps local day",
+			now:     time.Date(2026, 7, 9, 0, 30, 0, 0, time.FixedZone("UTC+2", 2*60*60)),
+			wantDay: 9,
+		},
+		{
+			// 2026-07-08 10:00 UTC-5 = 15:00 UTC. Old Truncate(24h) rounds to UTC
+			// midnight, the previous local day (7th) in a west zone; LocalNoon keeps
+			// the local 8th.
+			name:    "negative offset daytime keeps local day",
+			now:     time.Date(2026, 7, 8, 10, 0, 0, 0, time.FixedZone("UTC-5", -5*60*60)),
+			wantDay: 8,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := LocalNoon(tc.now)
+
+			assert.Equal(t, tc.now.Year(), got.Year(), "year")
+			assert.Equal(t, tc.now.Month(), got.Month(), "month")
+			assert.Equal(t, tc.wantDay, got.Day(), "local calendar day")
+			assert.Equal(t, tc.now.Day(), got.Day(), "day matches the input's local day")
+			assert.Equal(t, 12, got.Hour(), "anchored to noon")
+			assert.Equal(t, tc.now.Location(), got.Location(), "keeps input location")
+		})
+	}
+}
+
 // TestShouldUpdateRangeFilterToday_PublishesNewSnapshot verifies that the
 // function publishes a new snapshot with LastUpdated set to today.
 func TestShouldUpdateRangeFilterToday_PublishesNewSnapshot(t *testing.T) {

@@ -30,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -376,15 +377,9 @@ func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName stri
 	return false
 }
 
-// localNoon returns a time.Time representing 12:00:00 on the calendar day of
-// the provided time, evaluated in its local time zone.
-func localNoon(now time.Time) time.Time {
-	return time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
-}
-
 func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
 	// Get current local date
-	today := localNoon(time.Now())
+	today := conf.LocalNoon(time.Now())
 	settings := bn.CurrentSettings()
 
 	// Rarity is the geomodel occurrence probability, so use the geomodel-backed

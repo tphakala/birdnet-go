@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -144,68 +143,6 @@ func TestCalculateRarityStatus(t *testing.T) {
 			t.Parallel()
 			result := calculateRarityStatus(tt.score)
 			assert.Equal(t, tt.expected, result, "Score %.4f should map to %s", tt.score, tt.expected)
-		})
-	}
-}
-
-// TestLocalNoon tests that localNoon correctly handles timezone offsets
-// rather than using UTC midnight truncation.
-func TestLocalNoon(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "species")
-	t.Attr("type", "unit")
-	t.Attr("feature", "rarity-calculation")
-
-	// localNoon must report the LOCAL calendar day at 12:00, regardless of the
-	// host's UTC offset. The boundary cases are instants where the old
-	// time.Now().Truncate(24h) (which rounds to UTC midnight) produced a
-	// different, wrong calendar day than the local one.
-	tests := []struct {
-		name      string
-		now       time.Time
-		wantYear  int
-		wantMonth time.Month
-		wantDay   int
-	}{
-		{
-			name:      "positive offset, late evening",
-			now:       time.Date(2026, 7, 8, 23, 30, 0, 0, time.FixedZone("UTC+2", 2*60*60)),
-			wantYear:  2026,
-			wantMonth: 7,
-			wantDay:   8,
-		},
-		{
-			// 2026-07-08 22:30 UTC: local date (9th) != UTC date (8th).
-			name:      "positive offset, just after local midnight",
-			now:       time.Date(2026, 7, 9, 0, 30, 0, 0, time.FixedZone("UTC+2", 2*60*60)),
-			wantYear:  2026,
-			wantMonth: 7,
-			wantDay:   9,
-		},
-		{
-			// 2026-07-08 10:00 UTC-5 = 15:00 UTC. Old Truncate(24h) rounds to UTC
-			// midnight, which in a west zone renders as the previous local day (the
-			// 7th); localNoon correctly keeps the local 8th.
-			name:      "negative offset, daytime",
-			now:       time.Date(2026, 7, 8, 10, 0, 0, 0, time.FixedZone("UTC-5", -5*60*60)),
-			wantYear:  2026,
-			wantMonth: 7,
-			wantDay:   8,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := localNoon(tc.now)
-
-			assert.Equal(t, tc.wantYear, got.Year(), "year")
-			assert.Equal(t, tc.wantMonth, got.Month(), "month")
-			assert.Equal(t, tc.wantDay, got.Day(), "local calendar day")
-			assert.Equal(t, tc.now.Day(), got.Day(), "day matches the input's local day")
-			assert.Equal(t, 12, got.Hour(), "hour anchored to noon")
-			assert.Equal(t, 0, got.Minute(), "minute")
-			assert.Equal(t, tc.now.Location(), got.Location(), "keeps the input location")
 		})
 	}
 }
