@@ -203,7 +203,13 @@
     return (value * 100).toFixed(1) + '%';
   }
 
+  // Guards fetchData against out-of-order responses: when filters change in quick
+  // succession, a slow earlier request must not overwrite the results (or clear the
+  // loading flag) of a newer one.
+  let fetchSeq = 0;
+
   async function fetchData() {
+    const currentSeq = ++fetchSeq;
     isLoading = true;
     // Apply Filters (and mount/reset) commit the pending dropdown selection.
     appliedSortOrder = filters.sortOrder;
@@ -265,6 +271,8 @@
       }
 
       const rawSpecies: SpeciesData[] = await response.json();
+      // A newer fetchData superseded this request; drop its now-stale response.
+      if (currentSeq !== fetchSeq) return;
       // Backend returns relative URLs (e.g. /api/v2/media/image/...). Run them
       // through buildAppUrl so they include the configured base path (e.g.
       // /birdnet, HA Ingress token) before they end up in <img src=...>.
@@ -274,10 +282,13 @@
           : species
       );
     } catch (error) {
+      // Ignore a stale request's failure so it cannot blank out fresher results.
+      if (currentSeq !== fetchSeq) return;
       logger.error('Error fetching species data:', error);
       speciesData = [];
     } finally {
-      isLoading = false;
+      // Only the latest request owns the loading flag.
+      if (currentSeq === fetchSeq) isLoading = false;
     }
   }
 
