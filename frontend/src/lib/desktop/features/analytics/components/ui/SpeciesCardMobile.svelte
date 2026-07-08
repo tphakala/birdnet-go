@@ -36,6 +36,13 @@
     imageLoadFailed = true;
   }
 
+  // Reset the failed-load flag when a new species is provided so a reused
+  // component instance retries its thumbnail instead of keeping a prior
+  // species' placeholder (matches SpeciesDetailModal).
+  $effect(() => {
+    if (species) imageLoadFailed = false;
+  });
+
   function handleClick() {
     if (onClick) {
       onClick(species);
@@ -105,7 +112,7 @@
     <div class="flex-shrink-0">
       <div class="avatar w-16 h-16">
         <div class="mask mask-squircle bg-[var(--color-base-300)]">
-          {#if species.thumbnail_url}
+          {#if species.thumbnail_url && !imageLoadFailed}
             <img
               src={species.thumbnail_url}
               alt={displayName}
@@ -152,7 +159,7 @@
   >
     <div class="avatar flex-shrink-0">
       <div class="mask mask-squircle w-12 h-12 bg-[var(--color-base-300)]">
-        {#if species.thumbnail_url}
+        {#if species.thumbnail_url && !imageLoadFailed}
           <img
             src={species.thumbnail_url}
             alt={displayName}

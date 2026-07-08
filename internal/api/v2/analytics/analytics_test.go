@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"testing"
 	"time"
@@ -1034,6 +1035,127 @@ func TestGetDailySpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
 		"dashboard thumbnail must not fall back to the static placeholder on the summary path")
 
 	mockDS.AssertExpectations(t)
+}
+
+// TestGetSpeciesSummary_ThumbnailDefersToProxy is a regression test for Forgejo #1311.
+// The species summary endpoint must emit the media-proxy URL for every species,
+// independent of the image cache, so the proxy resolves images through the single-item
+// fallback chain instead of showing a placeholder when the primary provider has a
+// negative cache entry. A nil BirdImageCache proves the thumbnail URL no longer depends
+// on the (negative-blind) batch cache lookup.
+func TestGetSpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "regression")
+	t.Attr("feature", "species-summary")
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	const sciName = sciAmericanCrow
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{
+		{ScientificName: sciName, CommonName: "American Crow", Count: 5},
+	}, nil)
+
+	// Deliberately no BirdImageCache: the thumbnail URL must not depend on it.
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetSpeciesSummary(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response []SpeciesSummary
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response, 1)
+
+	assert.Equal(t, imageprovider.ProxyImageURL(sciName), response[0].ThumbnailURL,
+		"species summary must emit the media-proxy URL so the proxy applies the fallback chain (#1311)")
+	assert.Contains(t, response[0].ThumbnailURL, "/api/v2/media/image/Corvus%20brachyrhynchos")
+	assert.NotContains(t, response[0].ThumbnailURL, "bird-placeholder",
+		"species summary thumbnail must not fall back to the static placeholder")
+
+	mockDS.AssertExpectations(t)
+}
+
+// TestGetNewSpeciesDetections_ThumbnailDefersToProxy is a regression test for Forgejo
+// #1311. Like the species summary, the new-species endpoint must emit the media-proxy
+// URL for every species independent of the image cache.
+func TestGetNewSpeciesDetections_ThumbnailDefersToProxy(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "regression")
+	t.Attr("feature", "new-species")
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	const sciName = sciAmericanCrow
+	mockDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]datastore.NewSpeciesData{
+			{ScientificName: sciName, CommonName: "American Crow", FirstSeenDate: "2025-03-07", CountInPeriod: 3},
+		}, nil)
+
+	// Deliberately no BirdImageCache: the thumbnail URL must not depend on it.
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/detections/new", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetNewSpeciesDetections(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response []NewSpeciesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response, 1)
+
+	assert.Equal(t, imageprovider.ProxyImageURL(sciName), response[0].ThumbnailURL,
+		"new species detections must emit the media-proxy URL so the proxy applies the fallback chain (#1311)")
+	assert.Contains(t, response[0].ThumbnailURL, "/api/v2/media/image/Corvus%20brachyrhynchos")
+	assert.NotContains(t, response[0].ThumbnailURL, "bird-placeholder",
+		"new species thumbnail must not fall back to the static placeholder")
+
+	mockDS.AssertExpectations(t)
+}
+
+// TestGetSpeciesThumbnails_DefersToProxy is a regression test for Forgejo #1311. The
+// batch thumbnails endpoint previously returned the static placeholder for a species
+// with no positive cache entry (masking a fallback image); it must now emit the
+// media-proxy URL for every requested species, independent of the image cache.
+func TestGetSpeciesThumbnails_DefersToProxy(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "regression")
+	t.Attr("feature", "species-thumbnails")
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	// Deliberately no BirdImageCache: buildThumbnailMap must not touch the cache.
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v2/analytics/species/thumbnails?species="+url.QueryEscape(sciAmericanCrow)+
+			"&species="+url.QueryEscape(sciRedBelliedWoodpecker), http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetSpeciesThumbnails(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response, 2)
+
+	for _, sciName := range []string{sciAmericanCrow, sciRedBelliedWoodpecker} {
+		assert.Equal(t, imageprovider.ProxyImageURL(sciName), response[sciName],
+			"species thumbnails must emit the media-proxy URL so the proxy applies the fallback chain (#1311)")
+		assert.NotContains(t, response[sciName], "bird-placeholder",
+			"species thumbnails must not fall back to the static placeholder")
+	}
 }
 
 // TestGetDailySpeciesSummary_SingleDetection tests that the GetDailySpeciesSummary function

@@ -32,6 +32,13 @@
   function handleImageError() {
     imageLoadFailed = true;
   }
+
+  // Reset the failed-load flag when a new species is provided so a reused
+  // component instance retries its thumbnail instead of keeping a prior
+  // species' placeholder (matches SpeciesDetailModal).
+  $effect(() => {
+    if (species) imageLoadFailed = false;
+  });
 </script>
 
 <div class={cn('card bg-[var(--color-base-200)]', className)}>
