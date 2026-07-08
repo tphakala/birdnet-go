@@ -114,10 +114,11 @@ describe('SpeciesDetailModal', () => {
     expect(img).toHaveAttribute('src', '/api/v2/media/image/Passer%20domesticus');
   });
 
-  // Regression for Forgejo #1311: under defer-to-proxy every species gets a media-proxy
-  // URL that can 404, so the modal must swap to the placeholder background on error
-  // rather than showing a broken image.
-  it('degrades to the placeholder (removes the img) when the thumbnail fails to load', async () => {
+  // Under defer-to-proxy every species gets a media-proxy URL that can 404, so the
+  // modal degrades to the shared bird-silhouette placeholder (handleBirdImageError) on
+  // error, matching the dashboard and analytics overview. The img is kept (alt text
+  // preserved) with its src swapped to the placeholder asset.
+  it('swaps to the bird placeholder when the thumbnail fails to load', async () => {
     const { container } = modalTest.render({
       props: {
         isOpen: true,
@@ -129,7 +130,9 @@ describe('SpeciesDetailModal', () => {
     expect(img).not.toBeNull();
     if (img) await fireEvent.error(img);
 
-    expect(container.querySelector('img')).toBeNull();
+    const afterError = container.querySelector('img');
+    expect(afterError).not.toBeNull();
+    expect(afterError?.getAttribute('src')).toContain('bird-placeholder.svg');
   });
 
   it('closes when clicking outside the modal content', async () => {

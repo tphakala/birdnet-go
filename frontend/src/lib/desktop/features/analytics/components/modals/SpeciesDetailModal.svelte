@@ -4,6 +4,7 @@
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
 
   interface SpeciesData {
     common_name: string;
@@ -29,11 +30,6 @@
   // while isOpen transitions to false.
   let cachedSpecies = $state<SpeciesData | null>(null);
 
-  // Tracks a thumbnail load failure so a 404 from the media proxy degrades to the
-  // placeholder background instead of a broken image. Reset when the displayed species
-  // changes, since the modal reuses cachedSpecies across species.
-  let imageLoadFailed = $state(false);
-
   // Clear stale cache when the modal opens so previous species data doesn't flash.
   // The cache is only useful during the close transition (species becomes null while
   // isOpen transitions to false), not during open.
@@ -48,7 +44,6 @@
   $effect(() => {
     if (species) {
       cachedSpecies = species;
-      imageLoadFailed = false;
     }
   });
 
@@ -60,10 +55,6 @@
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
-  }
-
-  function handleImageError() {
-    imageLoadFailed = true;
   }
 
   function handleClose() {
@@ -98,14 +89,12 @@
     {#if displaySpecies}
       {#if displaySpecies.thumbnail_url}
         <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)]">
-          {#if !imageLoadFailed}
-            <img
-              src={displaySpecies.thumbnail_url}
-              alt={displayName}
-              class="w-full h-full object-cover"
-              onerror={handleImageError}
-            />
-          {/if}
+          <img
+            src={displaySpecies.thumbnail_url}
+            alt={displayName}
+            class="w-full h-full object-cover"
+            onerror={handleBirdImageError}
+          />
         </div>
       {/if}
 

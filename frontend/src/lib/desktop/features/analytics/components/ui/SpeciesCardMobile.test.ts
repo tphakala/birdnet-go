@@ -35,10 +35,10 @@ describe('SpeciesCardMobile', () => {
     cleanup();
   });
 
-  // Regression for Forgejo #1311: under defer-to-proxy every species gets a media-proxy
-  // URL that can 404, so each variant must remove the img on error (the wrapper's
-  // bg-base-300 shows as the placeholder) rather than leaving a broken image. Before the
-  // fix the compact and list variants set imageLoadFailed but never read it in the guard.
+  // Under defer-to-proxy every species gets a media-proxy URL that can 404, so each
+  // variant degrades to the shared bird-silhouette placeholder (handleBirdImageError)
+  // on error, matching the dashboard and analytics overview. The <img> is kept (its
+  // alt text is preserved) and its src is swapped to the placeholder asset.
   for (const variant of ['card', 'compact', 'list'] as const) {
     it(`renders the thumbnail image for the ${variant} variant`, () => {
       const { container } = render(SpeciesCardMobile, {
@@ -50,7 +50,7 @@ describe('SpeciesCardMobile', () => {
       expect(img).toHaveAttribute('src', '/api/v2/media/image/Passer%20domesticus');
     });
 
-    it(`removes the img on load error for the ${variant} variant`, async () => {
+    it(`swaps to the bird placeholder on load error for the ${variant} variant`, async () => {
       const { container } = render(SpeciesCardMobile, {
         props: { species: mockSpecies, variant },
       });
@@ -59,10 +59,14 @@ describe('SpeciesCardMobile', () => {
       expect(img).not.toBeNull();
       if (img) await fireEvent.error(img);
 
-      expect(container.querySelector('img')).toBeNull();
+      // The img is kept (alt preserved) with its src swapped to the placeholder,
+      // rather than being removed.
+      const afterError = container.querySelector('img');
+      expect(afterError).not.toBeNull();
+      expect(afterError?.getAttribute('src')).toContain('bird-placeholder.svg');
     });
 
-    it(`resets the failed-load flag when the species prop changes for the ${variant} variant`, async () => {
+    it(`rebinds to the new thumbnail when the species prop changes for the ${variant} variant`, async () => {
       const { container, rerender } = render(SpeciesCardMobile, {
         props: { species: mockSpecies, variant },
       });
@@ -70,9 +74,10 @@ describe('SpeciesCardMobile', () => {
       const img = container.querySelector('img');
       expect(img).not.toBeNull();
       if (img) await fireEvent.error(img);
-      expect(container.querySelector('img')).toBeNull();
+      expect(container.querySelector('img')?.getAttribute('src')).toContain('bird-placeholder.svg');
 
-      // A reused instance showing a different species must retry its thumbnail.
+      // A reused instance showing a different species must display the new
+      // thumbnail again, not stay on the previous placeholder.
       await rerender({
         species: {
           ...mockSpecies,
@@ -82,7 +87,9 @@ describe('SpeciesCardMobile', () => {
         },
       });
 
-      expect(container.querySelector('img')).not.toBeNull();
+      const rebound = container.querySelector('img');
+      expect(rebound).not.toBeNull();
+      expect(rebound).toHaveAttribute('src', '/api/v2/media/image/Corvus%20brachyrhynchos');
     });
   }
 });
