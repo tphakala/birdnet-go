@@ -382,9 +382,15 @@ func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName stri
 	return false
 }
 
+// localMidnight returns a time.Time representing 00:00:00 on the calendar day of
+// the provided time, evaluated in its local time zone.
+func localMidnight(now time.Time) time.Time {
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+}
+
 func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
-	// Get current date
-	today := time.Now().Truncate(hoursPerDay * time.Hour)
+	// Get current local date
+	today := localMidnight(time.Now())
 	settings := bn.CurrentSettings()
 
 	// Rarity is the geomodel occurrence probability, so use the geomodel-backed

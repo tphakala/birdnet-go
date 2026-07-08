@@ -147,6 +147,32 @@ func TestCalculateRarityStatus(t *testing.T) {
 	}
 }
 
+// TestLocalMidnight tests that localMidnight correctly handles timezone offsets
+// rather than using UTC midnight truncation.
+func TestLocalMidnight(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species")
+	t.Attr("type", "unit")
+	t.Attr("feature", "rarity-calculation")
+
+	// Create a location with a +2 hour offset
+	loc := time.FixedZone("UTC+2", 2*60*60)
+
+	// Time: 2026-07-08 23:30:00 local (which is 21:30:00 UTC)
+	now := time.Date(2026, 7, 8, 23, 30, 0, 0, loc)
+
+	// A UTC truncation would yield 2026-07-08 00:00:00 UTC, which is 2026-07-08 02:00:00 local.
+	// We want the local calendar midnight: 2026-07-08 00:00:00 local.
+	expected := time.Date(2026, 7, 8, 0, 0, 0, 0, loc)
+	actual := localMidnight(now)
+
+	assert.Equal(t, expected.Unix(), actual.Unix(), "Should anchor to local calendar day")
+	assert.Equal(t, 2026, actual.Year())
+	assert.Equal(t, time.Month(7), actual.Month())
+	assert.Equal(t, 8, actual.Day())
+	assert.Equal(t, 0, actual.Hour())
+}
+
 // TestRarityStatusConstants tests that rarity status constants are correctly defined.
 func TestRarityStatusConstants(t *testing.T) {
 	t.Parallel()
