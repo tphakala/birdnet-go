@@ -18,7 +18,6 @@ import (
 // 3. Cache miss with provider fetch - measuring full fetch cycle
 // 4. Concurrent access patterns - measuring contention/locking overhead
 // 5. Rate limiting impact - measuring how rate limiting affects throughput
-// 6. Batch operations - measuring GetBatch performance
 
 // benchmarkCacheSetup creates a cache for benchmarking with proper cleanup.
 func benchmarkCacheSetup(b *testing.B, provider imageprovider.ImageProvider, store datastore.Interface) *imageprovider.BirdImageCache {
@@ -275,40 +274,6 @@ func BenchmarkRateLimitedFetch(b *testing.B) {
 		}
 		i++
 	}
-}
-
-// BenchmarkGetBatch measures batch fetch performance
-func BenchmarkGetBatch(b *testing.B) {
-	mockProvider := &mockImageProvider{}
-	mockStore := newMockStore()
-	cache := benchmarkCacheSetup(b, mockProvider, mockStore)
-
-	batchSizes := []int{10, 50, 100}
-	for _, size := range batchSizes {
-		b.Run(fmt.Sprintf("BatchSize_%d", size), func(b *testing.B) {
-			species := generateSpeciesNames(size, "Species")
-			benchmarkPrePopulateCache(b, cache, species[:size/2])
-
-			b.ReportAllocs()
-			b.ResetTimer()
-
-			for b.Loop() {
-				results := cache.GetBatch(species)
-				if len(results) != size {
-					b.Fatalf("Expected %d results, got %d", size, len(results))
-				}
-			}
-		})
-	}
-}
-
-// generateSpeciesNames creates a slice of species names with the given prefix.
-func generateSpeciesNames(count int, prefix string) []string {
-	species := make([]string, count)
-	for i := range count {
-		species[i] = fmt.Sprintf("%s_%d", prefix, i)
-	}
-	return species
 }
 
 // BenchmarkMemoryUsage measures the memory overhead of the cache
