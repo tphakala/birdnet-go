@@ -95,6 +95,17 @@ func (s *Settings) IsSpeciesIncluded(result string) bool {
 	return false
 }
 
+// LocalNoon returns 12:00:00 on the calendar day of t, evaluated in t's own time
+// zone. Range-filter date logic uses it to anchor "today" on the local calendar
+// day: time.Time.Truncate operates on absolute (UTC) time, so truncating to a 24h
+// boundary rounds to UTC midnight and, near the local day boundary on hosts with a
+// non-zero UTC offset, yields the wrong calendar day for the geomodel week lookup
+// (and rolls the daily-update marker over at UTC rather than local midnight). Using
+// noon rather than midnight also sidesteps zones whose DST transition is at 00:00.
+func LocalNoon(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 12, 0, 0, 0, t.Location())
+}
+
 // ShouldUpdateRangeFilterToday atomically checks whether the range filter
 // should be updated today and, if so, publishes a new snapshot with
 // LastUpdated set to today. Only the first caller on a given day gets true;
@@ -111,8 +122,15 @@ func ShouldUpdateRangeFilterToday() bool {
 		return false
 	}
 
-	today := time.Now().Truncate(24 * time.Hour)
-	if !current.BirdNET.RangeFilter.LastUpdated.Before(today) {
+	today := LocalNoon(time.Now())
+	// Compare local-day to local-day. UpdateIncludedSpecies stamps LastUpdated with
+	// the wall-clock time.Now() of the rebuild, which is earlier than today's noon
+	// anchor for any rebuild that finishes in the local morning. Comparing the raw
+	// stamp against noon would re-open this gate on every detection until local noon,
+	// triggering a full geomodel rebuild each time. Bucketing LastUpdated to its own
+	// local noon keeps the "only the first caller on a given local day gets true"
+	// guarantee (issue #1357) regardless of what time the last rebuild ran.
+	if !LocalNoon(current.BirdNET.RangeFilter.LastUpdated).Before(today) {
 		return false
 	}
 

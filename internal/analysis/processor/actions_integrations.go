@@ -363,8 +363,8 @@ func (a *UpdateRangeFilterAction) Execute(ctx context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// Get current date for the range filter calculation
-	today := time.Now().Truncate(24 * time.Hour)
+	// Get current local calendar date for the range filter calculation
+	today := conf.LocalNoon(time.Now())
 
 	// Update location based species list
 	speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)

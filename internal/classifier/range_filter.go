@@ -98,7 +98,7 @@ func writeIncludedSpeciesDebug(includedSpecies []string) {
 // which is limited to the BirdNET classifier's label set.
 func BuildRangeFilter(o *Orchestrator) error {
 	start := time.Now()
-	today := start.Truncate(24 * time.Hour)
+	today := conf.LocalNoon(start)
 	// Read settings via the atomic-safe accessor: o.Settings is reassigned at
 	// runtime by Orchestrator.ReloadModel (under o.mu), so a raw field read here
 	// would race with concurrent reloads.
