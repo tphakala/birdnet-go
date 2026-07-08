@@ -753,3 +753,28 @@ func TestGetByHour_PaginationHonored(t *testing.T) {
 	assert.Equal(t, int64(5), total, "total must count all rows in the hour")
 	assert.Len(t, dets, 2, "LIMIT must be honored; query reuse after Count would return all 5")
 }
+
+func TestGetTopSpecies_DeterministicOrder(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	labelA := createTestLabel(t, db, "Species A", 1)
+	labelB := createTestLabel(t, db, "Species B", 1)
+	labelC := createTestLabel(t, db, "Species C", 1)
+
+	// Create equal detection count
+	for i := range 5 {
+		createDetectionForLabel(t, db, labelA.ID, int64(1000+i))
+		createDetectionForLabel(t, db, labelB.ID, int64(1000+i))
+		createDetectionForLabel(t, db, labelC.ID, int64(1000+i))
+	}
+
+	results, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, 3)
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+
+	assert.Equal(t, labelA.ID, results[0].LabelID)
+	assert.Equal(t, labelB.ID, results[1].LabelID)
+	assert.Equal(t, labelC.ID, results[2].LabelID)
+}
