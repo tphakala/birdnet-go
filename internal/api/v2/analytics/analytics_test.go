@@ -805,53 +805,11 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 		sciRedBelliedWoodpecker: expectedRbwoHourlyCounts,
 	}, nil)
 
-	// Mock for image cache initialization
-	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
-
-	// GetImageCache not needed when using GetImageCacheBatch
-	// mockDS.On("GetImageCache", mock.AnythingOfType("datastore.ImageCacheQuery")).Return(nil, nil)
-
-	// Mock GetImageCacheBatch to return cached images with URLs containing scientific names
-	// Use dynamic return based on input parameters
-	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(
-		func(provider string, names []string) map[string]*datastore.ImageCache {
-			result := make(map[string]*datastore.ImageCache)
-			for _, name := range names {
-				result[name] = &datastore.ImageCache{
-					ScientificName: name,
-					URL:            "http://example.com/" + name + ".jpg",
-					CachedAt:       time.Now(),
-					ProviderName:   provider,
-				}
-			}
-			return result
-		}, nil)
-
-	// Expect calls to SaveImageCache - not needed since we're returning cached images
-	// mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
-
-	// Create a mock image provider (can be nil if cache doesn't need real fetching)
-	mockImageProvider := &apitest.TestImageProvider{
-		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
-			// Return placeholder or specific mock image data if needed
-			return imageprovider.BirdImage{
-				ScientificName: scientificName,
-				URL:            fmt.Sprintf("http://example.com/%s.jpg", scientificName),
-				// Add other fields if necessary
-			}, nil
-		},
-	}
-
-	// Create a bird image cache with our mock provider
-	// ---> FIX: Provide a non-nil observability.Metrics instance <---
-	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
-	imageCache := imageprovider.InitCache("test", mockImageProvider, testMetrics, mockDS)
-	t.Cleanup(func() {
-		assert.NoError(t, imageCache.Close(), "Failed to close image cache")
-	})
-
-	// Create a controller with our mocks
-	controller := newTestHandler(&apicore.Core{DS: mockDS, BirdImageCache: imageCache})
+	// The daily summary emits the media-proxy URL directly and no longer queries
+	// the image cache for thumbnails (#3806), so no BirdImageCache is needed here.
+	// The ThumbnailURLContain assertions below prove the proxy URL is emitted
+	// regardless of cache state.
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v2/analytics/species/daily?date=%s", testDate), http.NoBody)
@@ -1027,6 +985,57 @@ func TestGetDailySpeciesSummary_LocalizedNonPrimarySpecies(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetDailySpeciesSummary_ThumbnailDefersToProxy is a regression test for #3806.
+// The dashboard daily summary must emit the media-proxy URL for every species with
+// detections, independent of the image cache, so the proxy resolves images through
+// the single-item fallback chain instead of the dashboard showing a placeholder when
+// the primary provider has a negative cache entry. A nil BirdImageCache proves the
+// thumbnail URL no longer depends on a cache-only lookup.
+func TestGetDailySpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "regression")
+	t.Attr("feature", "species-summary")
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	const testDate = "2025-03-07"
+	const minConfidence = 0.0
+	const sciName = sciAmericanCrow
+
+	mockDS.On("GetTopBirdsData", mock.Anything, testDate, minConfidence, 0).Return([]datastore.Note{
+		{ID: 1, ScientificName: sciName, CommonName: "American Crow", Confidence: 0.9, Date: testDate, Time: "08:15:00"},
+	}, nil)
+
+	var hourly [24]int
+	hourly[8] = 1
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, mock.Anything, minConfidence).
+		Return(map[string][24]int{sciName: hourly}, nil)
+
+	// Deliberately no BirdImageCache: the thumbnail URL must not depend on it.
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date="+testDate, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetDailySpeciesSummary(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response []SpeciesDailySummary
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response, 1)
+
+	assert.Equal(t, imageprovider.ProxyImageURL(sciName), response[0].ThumbnailURL,
+		"daily summary must emit the media-proxy URL so the proxy applies the fallback chain (#3806)")
+	assert.Contains(t, response[0].ThumbnailURL, "/api/v2/media/image/Corvus%20brachyrhynchos")
+	assert.NotContains(t, response[0].ThumbnailURL, "bird-placeholder",
+		"dashboard thumbnail must not fall back to the static placeholder on the summary path")
+
+	mockDS.AssertExpectations(t)
+}
+
 // TestGetDailySpeciesSummary_SingleDetection tests that the GetDailySpeciesSummary function
 // correctly handles the case where each species has only one detection
 func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
@@ -1074,41 +1083,9 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 		sciRedBelliedWoodpecker: expectedRbwoSingleHourly,
 	}, nil)
 
-	// Mock for image cache initialization
-	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
-	// Mock GetImageCacheBatch to return cached images with URLs containing scientific names
-	// Use dynamic return based on input parameters
-	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(
-		func(provider string, names []string) map[string]*datastore.ImageCache {
-			result := make(map[string]*datastore.ImageCache)
-			for _, name := range names {
-				result[name] = &datastore.ImageCache{
-					ScientificName: name,
-					URL:            "http://example.com/" + name + ".jpg",
-					CachedAt:       time.Now(),
-					ProviderName:   provider,
-				}
-			}
-			return result
-		}, nil)
-	// SaveImageCache not needed since we're returning already cached images
-	// mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
-
-	// Create a mock image provider
-	mockImageProvider := &apitest.TestImageProvider{
-		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
-			return imageprovider.BirdImage{
-				ScientificName: scientificName,
-				URL:            "http://example.com/" + scientificName + ".jpg",
-			}, nil
-		},
-	}
-
-	// Create a bird image cache with our mock provider
-	imageCache := imageprovider.InitCache("test", mockImageProvider, apitest.NewTestMetrics(t), mockDS)
-
-	// Create a controller with our mocks
-	controller := newTestHandler(&apicore.Core{DS: mockDS, BirdImageCache: imageCache})
+	// The daily summary emits proxy URLs directly and no longer queries the image
+	// cache for thumbnails (#3806), so no BirdImageCache is needed here.
+	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
@@ -1136,9 +1113,6 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	for _, species := range response {
 		assert.Equal(t, 1, species.Count, "%s should have 1 detection", species.CommonName)
 	}
-
-	// Close the image cache to clean up resources
-	require.NoError(t, imageCache.Close(), "Failed to close image cache")
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)
