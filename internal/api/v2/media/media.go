@@ -1872,6 +1872,14 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 
 		defer func() {
 			if r := recover(); r != nil {
+				if queueKey != "" {
+					failedStatus := &SpectrogramQueueStatus{}
+					failedStatus.Update(spectrogramStatusFailed, 0, "Generation failed")
+					spectrogramQueue.Store(queueKey, failedStatus)
+					time.AfterFunc(failedStatusRetentionTime, func() {
+						deleteFailedStatusIfUnchanged(queueKey, failedStatus)
+					})
+				}
 				c.LogErrorIfEnabled("Panic in async spectrogram generation",
 					logger.String("note_id", noteID),
 					logger.Any("panic", r))
