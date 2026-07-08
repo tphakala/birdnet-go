@@ -1470,8 +1470,11 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 		}
 	}
 
-	// Fallback to calculating probable species if cache miss
-	day := detectionTime.Truncate(24 * time.Hour)
+	// Fallback to calculating probable species if cache miss. Anchor to the
+	// local calendar day (matching getCachedSpeciesScores, which keys on the
+	// local DateOnly of detectionTime) rather than UTC-truncating, so the
+	// fallback computes the same geomodel week as the cache path.
+	day := localNoon(detectionTime)
 	speciesScores, err := bn.GetProbableSpecies(day, 0.0)
 	if err != nil {
 		bn.Debug("Error getting probable species for occurrence: %v", err)

@@ -98,7 +98,7 @@ func writeIncludedSpeciesDebug(includedSpecies []string) {
 // which is limited to the BirdNET classifier's label set.
 func BuildRangeFilter(o *Orchestrator) error {
 	start := time.Now()
-	today := start.Truncate(24 * time.Hour)
+	today := localNoon(start)
 	// Read settings via the atomic-safe accessor: o.Settings is reassigned at
 	// runtime by Orchestrator.ReloadModel (under o.mu), so a raw field read here
 	// would race with concurrent reloads.
@@ -671,6 +671,17 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32, settings *conf.Se
 	})
 
 	return results, nil
+}
+
+// localNoon returns 12:00:00 on the calendar day of t, evaluated in t's own
+// time zone. It anchors range-filter date computations to the local calendar
+// day: time.Time.Truncate operates on absolute (UTC) time, so truncating to a
+// 24h boundary rounds to UTC midnight and, near the local day boundary on hosts
+// with a non-zero UTC offset, yields the wrong calendar day for the geomodel
+// week lookup. Using noon (rather than midnight) also sidesteps zones whose DST
+// transition happens at 00:00.
+func localNoon(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 12, 0, 0, 0, t.Location())
 }
 
 // getWeekForFilter calculates the current week number for the filter model.

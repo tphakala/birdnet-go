@@ -64,6 +64,30 @@ func TestShouldUpdateRangeFilterToday_AlreadyUpdated(t *testing.T) {
 	assert.False(t, ShouldUpdateRangeFilterToday(), "Should return false when already updated today")
 }
 
+// TestShouldUpdateRangeFilterToday_MorningStampStaysClosed guards the local-day
+// gate against a morning re-fire regression. The gate anchors "today" on local
+// noon so the daily rebuild follows the local calendar day, but UpdateIncludedSpecies
+// stamps LastUpdated with the wall-clock time.Now() of the rebuild. A rebuild that
+// finished earlier the same local day (e.g. during the dawn chorus) must NOT re-open
+// the gate; comparing the raw morning stamp against noon would return true on every
+// subsequent detection until local noon, rebuilding the geomodel each time. This
+// asserts the gate stays closed for a same-day morning stamp (would fail if the
+// comparison used the raw LastUpdated instead of bucketing it to its local day).
+func TestShouldUpdateRangeFilterToday_MorningStampStaysClosed(t *testing.T) {
+	now := time.Now()
+	// A rebuild that completed at the start of the current local day (before noon).
+	morningToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	settings := &Settings{}
+	settings.BirdNET.RangeFilter.LastUpdated = morningToday
+	setupGlobalSettings(t, settings)
+
+	assert.False(t, ShouldUpdateRangeFilterToday(),
+		"gate must stay closed when the last rebuild already ran earlier today")
+	assert.False(t, ShouldUpdateRangeFilterToday(),
+		"gate must remain closed on subsequent same-day detections (no morning re-fire)")
+}
+
 // TestShouldUpdateRangeFilterToday_PublishesNewSnapshot verifies that the
 // function publishes a new snapshot with LastUpdated set to today.
 func TestShouldUpdateRangeFilterToday_PublishesNewSnapshot(t *testing.T) {

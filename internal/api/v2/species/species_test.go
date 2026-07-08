@@ -156,22 +156,58 @@ func TestLocalNoon(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "rarity-calculation")
 
-	// Create a location with a +2 hour offset
-	loc := time.FixedZone("UTC+2", 2*60*60)
+	// localNoon must report the LOCAL calendar day at 12:00, regardless of the
+	// host's UTC offset. The boundary cases are instants where the old
+	// time.Now().Truncate(24h) (which rounds to UTC midnight) produced a
+	// different, wrong calendar day than the local one.
+	tests := []struct {
+		name      string
+		now       time.Time
+		wantYear  int
+		wantMonth time.Month
+		wantDay   int
+	}{
+		{
+			name:      "positive offset, late evening",
+			now:       time.Date(2026, 7, 8, 23, 30, 0, 0, time.FixedZone("UTC+2", 2*60*60)),
+			wantYear:  2026,
+			wantMonth: 7,
+			wantDay:   8,
+		},
+		{
+			// 2026-07-08 22:30 UTC: local date (9th) != UTC date (8th).
+			name:      "positive offset, just after local midnight",
+			now:       time.Date(2026, 7, 9, 0, 30, 0, 0, time.FixedZone("UTC+2", 2*60*60)),
+			wantYear:  2026,
+			wantMonth: 7,
+			wantDay:   9,
+		},
+		{
+			// 2026-07-08 10:00 UTC-5 = 15:00 UTC. Old Truncate(24h) rounds to UTC
+			// midnight, which in a west zone renders as the previous local day (the
+			// 7th); localNoon correctly keeps the local 8th.
+			name:      "negative offset, daytime",
+			now:       time.Date(2026, 7, 8, 10, 0, 0, 0, time.FixedZone("UTC-5", -5*60*60)),
+			wantYear:  2026,
+			wantMonth: 7,
+			wantDay:   8,
+		},
+	}
 
-	// Time: 2026-07-08 23:30:00 local (which is 21:30:00 UTC)
-	now := time.Date(2026, 7, 8, 23, 30, 0, 0, loc)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := localNoon(tc.now)
 
-	// A UTC truncation would yield 2026-07-08 00:00:00 UTC, which is 2026-07-08 02:00:00 local.
-	// We want the local calendar noon: 2026-07-08 12:00:00 local.
-	expected := time.Date(2026, 7, 8, 12, 0, 0, 0, loc)
-	actual := localNoon(now)
-
-	assert.Equal(t, expected.Unix(), actual.Unix(), "Should anchor to local calendar day")
-	assert.Equal(t, 2026, actual.Year())
-	assert.Equal(t, time.Month(7), actual.Month())
-	assert.Equal(t, 8, actual.Day())
-	assert.Equal(t, 12, actual.Hour())
+			assert.Equal(t, tc.wantYear, got.Year(), "year")
+			assert.Equal(t, tc.wantMonth, got.Month(), "month")
+			assert.Equal(t, tc.wantDay, got.Day(), "local calendar day")
+			assert.Equal(t, tc.now.Day(), got.Day(), "day matches the input's local day")
+			assert.Equal(t, 12, got.Hour(), "hour anchored to noon")
+			assert.Equal(t, 0, got.Minute(), "minute")
+			assert.Equal(t, tc.now.Location(), got.Location(), "keeps the input location")
+		})
+	}
 }
 
 // TestRarityStatusConstants tests that rarity status constants are correctly defined.
