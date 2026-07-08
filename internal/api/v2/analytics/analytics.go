@@ -502,9 +502,6 @@ func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]agg
 	// Collect species names with detections
 	scientificNames := collectSpeciesWithDetections(aggregatedData)
 
-	// Batch fetch thumbnail URLs (cached only for fast response)
-	thumbnailURLs := c.batchFetchCachedThumbnails(scientificNames)
-
 	// Parse selected date for status computation
 	statusTime := parseStatusTimeFromDate(selectedDate)
 
@@ -515,7 +512,13 @@ func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]agg
 	result := make([]SpeciesDailySummary, 0, len(scientificNames))
 	for _, scientificName := range scientificNames {
 		data := aggregatedData[scientificName]
-		thumbnailURL := getThumbnailWithFallback(thumbnailURLs, scientificName)
+		// Emit the media-proxy URL directly rather than pre-resolving from the
+		// cache-only batch path. The proxy (ServeSpeciesImageProxy) resolves via
+		// the single-item Get() fallback chain and the local file cache, so
+		// dashboard thumbnails honor the configured fallback provider even when
+		// the primary provider has a negative cache entry (issue #3806). The
+		// frontend swaps to the placeholder on a 404 via handleBirdImageError.
+		thumbnailURL := buildThumbnailURL(scientificName)
 		summary := buildSpeciesSummaryFromData(&data, thumbnailURL)
 		if status, exists := batchSpeciesStatus[scientificName]; exists {
 			applySpeciesStatusToSummary(&summary, &status)
@@ -535,23 +538,6 @@ func collectSpeciesWithDetections(aggregatedData map[string]aggregatedBirdInfo) 
 		}
 	}
 	return names
-}
-
-// batchFetchCachedThumbnails fetches thumbnail URLs from cache only
-func (c *Handler) batchFetchCachedThumbnails(scientificNames []string) map[string]string {
-	thumbnailURLs := make(map[string]string)
-	cache := c.BirdImageCache
-	if cache == nil || len(scientificNames) == 0 {
-		return thumbnailURLs
-	}
-
-	batchResults := cache.GetBatchCachedOnly(scientificNames)
-	for name := range batchResults {
-		if img := batchResults[name]; img.URL != "" && !img.IsNegativeEntry() {
-			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
-		}
-	}
-	return thumbnailURLs
 }
 
 // parseStatusTimeFromDate parses selected date for species status computation
