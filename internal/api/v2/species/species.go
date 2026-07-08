@@ -36,12 +36,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// hoursPerDay is the number of hours in a day, used to truncate a timestamp to
-// the start of the local day. Defined locally so the species package does not
-// depend on a package-api constant; a physical constant with no need to stay in
-// sync with anything else.
-const hoursPerDay = 24
-
 // Handler serves the species domain endpoints. It embeds *apicore.Core BY
 // POINTER so the shared Core members promote onto it without re-wiring; Core
 // carries atomic/lock-bearing fields and must never be copied by value.
@@ -382,15 +376,15 @@ func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName stri
 	return false
 }
 
-// localMidnight returns a time.Time representing 00:00:00 on the calendar day of
+// localNoon returns a time.Time representing 12:00:00 on the calendar day of
 // the provided time, evaluated in its local time zone.
-func localMidnight(now time.Time) time.Time {
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+func localNoon(now time.Time) time.Time {
+	return time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
 }
 
 func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
 	// Get current local date
-	today := localMidnight(time.Now())
+	today := localNoon(time.Now())
 	settings := bn.CurrentSettings()
 
 	// Rarity is the geomodel occurrence probability, so use the geomodel-backed

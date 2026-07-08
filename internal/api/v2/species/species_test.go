@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -147,9 +148,9 @@ func TestCalculateRarityStatus(t *testing.T) {
 	}
 }
 
-// TestLocalMidnight tests that localMidnight correctly handles timezone offsets
+// TestLocalNoon tests that localNoon correctly handles timezone offsets
 // rather than using UTC midnight truncation.
-func TestLocalMidnight(t *testing.T) {
+func TestLocalNoon(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "species")
 	t.Attr("type", "unit")
@@ -162,15 +163,15 @@ func TestLocalMidnight(t *testing.T) {
 	now := time.Date(2026, 7, 8, 23, 30, 0, 0, loc)
 
 	// A UTC truncation would yield 2026-07-08 00:00:00 UTC, which is 2026-07-08 02:00:00 local.
-	// We want the local calendar midnight: 2026-07-08 00:00:00 local.
-	expected := time.Date(2026, 7, 8, 0, 0, 0, 0, loc)
-	actual := localMidnight(now)
+	// We want the local calendar noon: 2026-07-08 12:00:00 local.
+	expected := time.Date(2026, 7, 8, 12, 0, 0, 0, loc)
+	actual := localNoon(now)
 
 	assert.Equal(t, expected.Unix(), actual.Unix(), "Should anchor to local calendar day")
 	assert.Equal(t, 2026, actual.Year())
 	assert.Equal(t, time.Month(7), actual.Month())
 	assert.Equal(t, 8, actual.Day())
-	assert.Equal(t, 0, actual.Hour())
+	assert.Equal(t, 12, actual.Hour())
 }
 
 // TestRarityStatusConstants tests that rarity status constants are correctly defined.
