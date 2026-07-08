@@ -4,6 +4,7 @@
   import { formatDate } from '$lib/utils/formatters';
   import { ChevronRight } from '@lucide/svelte';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
 
   interface SpeciesData {
     common_name: string;
@@ -29,19 +30,7 @@
     return (value * 100).toFixed(1) + '%';
   }
 
-  let imageLoadFailed = $state(false);
   let displayName = $derived(localizeSpeciesName(species.scientific_name, species.common_name));
-
-  function handleImageError() {
-    imageLoadFailed = true;
-  }
-
-  // Reset the failed-load flag when a new species is provided so a reused
-  // component instance retries its thumbnail instead of keeping a prior
-  // species' placeholder (matches SpeciesDetailModal).
-  $effect(() => {
-    if (species) imageLoadFailed = false;
-  });
 
   function handleClick() {
     if (onClick) {
@@ -61,12 +50,12 @@
   >
     <figure class="px-4 pt-4">
       <div class="rounded-xl w-full aspect-[4/3] overflow-hidden bg-[var(--color-base-300)]">
-        {#if species.thumbnail_url && !imageLoadFailed}
+        {#if species.thumbnail_url}
           <img
             src={species.thumbnail_url}
             alt={displayName}
             class="h-full w-full object-cover"
-            onerror={handleImageError}
+            onerror={handleBirdImageError}
           />
         {/if}
       </div>
@@ -112,12 +101,12 @@
     <div class="flex-shrink-0">
       <div class="avatar w-16 h-16">
         <div class="mask mask-squircle bg-[var(--color-base-300)]">
-          {#if species.thumbnail_url && !imageLoadFailed}
+          {#if species.thumbnail_url}
             <img
               src={species.thumbnail_url}
               alt={displayName}
               class="object-cover"
-              onerror={handleImageError}
+              onerror={handleBirdImageError}
             />
           {/if}
         </div>
@@ -159,12 +148,12 @@
   >
     <div class="avatar flex-shrink-0">
       <div class="mask mask-squircle w-12 h-12 bg-[var(--color-base-300)]">
-        {#if species.thumbnail_url && !imageLoadFailed}
+        {#if species.thumbnail_url}
           <img
             src={species.thumbnail_url}
             alt={displayName}
             class="object-cover"
-            onerror={handleImageError}
+            onerror={handleBirdImageError}
           />
         {/if}
       </div>
