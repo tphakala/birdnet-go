@@ -124,16 +124,36 @@ func resolveLocalizedName(resolver *classifier.Orchestrator, locale string, sp d
 // response format with probability score pointers. When resolver and locale
 // are provided, common names are resolved to the user's locale.
 func convertSpeciesScores(scores []classifier.SpeciesScore, resolver *classifier.Orchestrator, locale string) []dto.RangeFilterSpecies {
+	return buildRangeFilterSpecies(scores, func(label string) string {
+		return resolveLocalizedName(resolver, locale, detection.ParseSpeciesString(label))
+	})
+}
+
+// convertSpeciesScoresNoNames converts geomodel scores without resolving localized
+// common names. Name resolution is the dominant cost when converting all geomodel
+// species (threshold 0), so callers that only need scientificName->score skip it.
+func convertSpeciesScoresNoNames(scores []classifier.SpeciesScore) []dto.RangeFilterSpecies {
+	return buildRangeFilterSpecies(scores, nil)
+}
+
+// buildRangeFilterSpecies converts geomodel scores into API species entries. When
+// resolveName is non-nil it supplies the localized common name for each label;
+// passing nil skips common-name resolution entirely (the expensive step for large
+// species sets). The scientific name is extracted with detection.ExtractScientificName,
+// which avoids the per-label slice allocation of ParseSpeciesString.
+func buildRangeFilterSpecies(scores []classifier.SpeciesScore, resolveName func(label string) string) []dto.RangeFilterSpecies {
 	species := make([]dto.RangeFilterSpecies, 0, len(scores))
 	for _, s := range scores {
-		sp := detection.ParseSpeciesString(s.Label)
 		score := s.Score
-		species = append(species, dto.RangeFilterSpecies{
+		entry := dto.RangeFilterSpecies{
 			Label:          s.Label,
-			ScientificName: sp.ScientificName,
-			CommonName:     resolveLocalizedName(resolver, locale, sp),
+			ScientificName: detection.ExtractScientificName(s.Label),
 			Score:          &score,
-		})
+		}
+		if resolveName != nil {
+			entry.CommonName = resolveName(s.Label)
+		}
+		species = append(species, entry)
 	}
 	return species
 }
@@ -394,7 +414,16 @@ func (c *Handler) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get species scores", http.StatusInternalServerError)
 	}
 
-	speciesList := convertSpeciesScores(speciesScores, birdnetInstance, locale)
+	// Resolving localized common names is O(species) and dominates latency when
+	// all geomodel species are requested (threshold 0). Callers that only need
+	// scientificName->score (e.g. rare-species highlighting) pass names=false to
+	// skip it. Names are included by default for backward compatibility.
+	var speciesList []dto.RangeFilterSpecies
+	if ctx.QueryParam("names") == "false" {
+		speciesList = convertSpeciesScoresNoNames(speciesScores)
+	} else {
+		speciesList = convertSpeciesScores(speciesScores, birdnetInstance, locale)
+	}
 
 	response := RangeFilterScoresResponse{
 		Species:   speciesList,
