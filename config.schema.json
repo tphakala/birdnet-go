@@ -635,6 +635,10 @@
         "livespectrogram": {
           "type": "boolean",
           "description": "auto-start live spectrogram on dashboard"
+        },
+        "rarity": {
+          "$ref": "#/$defs/RarityHighlight",
+          "description": "rare-species highlight settings"
         }
       },
       "additionalProperties": false,
@@ -1763,6 +1767,23 @@
       "additionalProperties": false,
       "type": "object",
       "description": "RangeFilterSettings contains settings for the range filter"
+    },
+    "RarityHighlight": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "show the rare-species highlight icon on detections"
+        },
+        "threshold": {
+          "type": "number",
+          "maximum": 1,
+          "minimum": 0,
+          "description": "occurrence probability (0-1) at or below which a detection is flagged rare"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RarityHighlight controls highlighting of detections whose geomodel occurrence probability is at or below Threshold (a \"rare\" sighting for the configured location and time of year)."
     },
     "RateLimitingConfig": {
       "properties": {

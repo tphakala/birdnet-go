@@ -574,6 +574,17 @@ export interface WebServerSettings {
   enableTerminal?: boolean; // Enable browser terminal (security risk - disabled by default)
 }
 
+// Rare-species highlight settings
+export interface RarityHighlight {
+  enabled: boolean; // Show the rare-species highlight icon on detections
+  threshold: number; // Occurrence probability (0-1) at or below which a detection is flagged rare
+}
+
+// Default rare-species highlight settings. Disabled by default so upgrading users
+// see no change until they opt in. Mirrors conf.Dashboard.Rarity defaults; the
+// threshold matches conf.DefaultRarityHighlightThreshold.
+export const DEFAULT_RARITY: RarityHighlight = { enabled: false, threshold: 0.25 };
+
 // Dashboard settings
 export interface Dashboard {
   thumbnails: Thumbnails;
@@ -586,6 +597,7 @@ export interface Dashboard {
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
   defaultAudioGain?: number; // Default playback gain in dB (0-24)
+  rarity?: RarityHighlight; // Rare-species highlight settings
 }
 
 // Dashboard layout configuration
@@ -1008,6 +1020,7 @@ function createEmptySettings(): SettingsFormData {
         summaryLimit: 30,
         spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
         temperatureUnit: 'celsius',
+        rarity: { ...DEFAULT_RARITY },
         layout: {
           elements: [
             {
@@ -1369,6 +1382,26 @@ export const settingsActions = {
         const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
         if (isValidLocale(newLocale)) {
           setLocale(newLocale);
+        }
+      }
+
+      // If the configured location changed, drop the cached rarity scores so the
+      // next dashboard mount refetches occurrence data for the new location. The
+      // scores are location-specific and the endpoint carries no location marker
+      // to key the cache on, so we invalidate on the location-changing save here.
+      const newLat = coercedFormData.birdnet.latitude;
+      const newLng = coercedFormData.birdnet.longitude;
+      const origLat = currentState.originalData.birdnet.latitude;
+      const origLng = currentState.originalData.birdnet.longitude;
+      if (newLat !== origLat || newLng !== origLng) {
+        // Isolated try-catch: failure here must not mask a successful settings save.
+        try {
+          const { resetRarityScores } = await import('$lib/stores/rarity.svelte');
+          resetRarityScores();
+        } catch (e) {
+          // Non-critical: rarity cache invalidation failed, but settings were saved.
+          // Cached scores may be stale for the old location until next page load.
+          logger.error('Failed to reset rarity scores after location change:', e);
         }
       }
 

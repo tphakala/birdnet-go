@@ -210,6 +210,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.dashboard.layout.elements` | dashboard-element[] |  |
 | `realtime.dashboard.defaultaudiogain` | number | Default playback gain in dB (0-24) |
 | `realtime.dashboard.livespectrogram` | boolean | auto-start live spectrogram on dashboard |
+| `realtime.dashboard.rarity.enabled` | boolean | show the rare-species highlight icon on detections |
+| `realtime.dashboard.rarity.threshold` | number | occurrence probability (0-1) at or below which a detection is flagged rare |
 | `realtime.dynamicthreshold.enabled` | boolean | true to enable dynamic threshold |
 | `realtime.dynamicthreshold.debug` | boolean | true to enable debug mode |
 | `realtime.dynamicthreshold.trigger` | number | trigger threshold for dynamic threshold |

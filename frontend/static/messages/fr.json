@@ -1009,6 +1009,7 @@
       "title": "Rareté de l'espèce",
       "score": "Score",
       "basedOnLocation": "Basé sur l'emplacement : {latitude}, {longitude}",
+      "highlightTooltip": "Rare ({percent} % de présence)",
       "statuses": {
         "very_common": "Très commun",
         "common": "Commun",
@@ -4562,6 +4563,19 @@
         "defaultGain": "Amplification du volume par défaut",
         "defaultGainHelpText": "Gain initial appliqué lors de la lecture des enregistrements. Les sons d'oiseaux sont souvent faibles, une amplification de 6 à 12 dB est recommandée.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Mise en évidence des espèces rares",
+        "description": "Mettre en évidence les détections d'espèces rares pour votre emplacement et la période de l'année.",
+        "enabled": {
+          "label": "Mettre en évidence les espèces rares",
+          "helpText": "Affiche une étoile rouge sur les détections dont la probabilité de présence est inférieure ou égale au seuil."
+        },
+        "threshold": {
+          "label": "Seuil de rareté",
+          "helpText": "Les espèces dont la probabilité de présence est inférieure ou égale à cette valeur sont marquées comme rares.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Certaines modifications nécessitent un redémarrage du serveur pour prendre effet. Veuillez redémarrer BirdNET-Go."

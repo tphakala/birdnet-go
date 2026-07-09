@@ -1009,6 +1009,7 @@
       "title": "Sugas retums",
       "score": "Vērtējums",
       "basedOnLocation": "Pamatojoties uz atrašanās vietu: {latitude}, {longitude}",
+      "highlightTooltip": "Rets ({percent}% sastopamība)",
       "statuses": {
         "very_common": "Ļoti izplatīta",
         "common": "Izplatīta",
@@ -4562,6 +4563,19 @@
         "defaultGain": "Noklusējuma skaļuma pastiprināšana",
         "defaultGainHelpText": "Sākotnējā pastiprināšana, kas tiek piemērota, atskaņojot ierakstus. Putnu skaņas bieži ir klusas, tāpēc ieteicama 6-12 dB pastiprināšana.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Reto sugu izcelšana",
+        "description": "Izcelt to sugu atklājumus, kas ir retas jūsu atrašanās vietai un gadalaikam.",
+        "enabled": {
+          "label": "Izcelt retās sugas",
+          "helpText": "Rāda sarkanu zvaigzni pie atklājumiem, kuru sastopamības varbūtība ir vienāda ar slieksni vai mazāka."
+        },
+        "threshold": {
+          "label": "Retuma slieksnis",
+          "helpText": "Sugas, kuru sastopamības varbūtība ir vienāda ar šo vērtību vai mazāka, tiek atzīmētas kā retas.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Dažām izmaiņām nepieciešama servera pārstartēšana, lai tās stātos spēkā. Lūdzu, pārstartējiet BirdNET-Go."

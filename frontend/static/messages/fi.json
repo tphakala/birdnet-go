@@ -1009,6 +1009,7 @@
       "title": "Lajin harvinaisuus",
       "score": "Pisteet",
       "basedOnLocation": "Sijainnin perusteella: {latitude}, {longitude}",
+      "highlightTooltip": "Harvinainen ({percent} % esiintyvyys)",
       "statuses": {
         "very_common": "Hyvin yleinen",
         "common": "Yleinen",
@@ -4562,6 +4563,19 @@
         "defaultGain": "Oletusäänenvahvistus",
         "defaultGainHelpText": "Alkuvahvistus äänitteiden toistossa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB:n vahvistus on suositeltavaa.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Harvinaisten lajien korostus",
+        "description": "Korosta havainnot lajeista, jotka ovat harvinaisia sijainnillesi ja vuodenajalle.",
+        "enabled": {
+          "label": "Korosta harvinaiset lajit",
+          "helpText": "Näyttää punaisen tähden havainnoissa, joiden esiintymistodennäköisyys on enintään kynnysarvo."
+        },
+        "threshold": {
+          "label": "Harvinaisuuden kynnysarvo",
+          "helpText": "Lajit, joiden esiintymistodennäköisyys on enintään tämä arvo, merkitään harvinaisiksi.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Jotkin muutokset vaativat palvelimen uudelleenkäynnistyksen astuakseen voimaan. Käynnistä BirdNET-Go uudelleen."

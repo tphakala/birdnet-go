@@ -176,6 +176,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.defaultaudiogain", 0.0)      // Default playback gain in dB (no boost)
 	viper.SetDefault("realtime.dashboard.livespectrogram", false)     // Auto-start live spectrogram on dashboard
 
+	// Rare-species highlighting: flag detections whose geomodel occurrence
+	// probability is at or below the threshold (0-1, lower = rarer). Off by
+	// default so existing installs are unchanged on upgrade; opt in via the UI.
+	viper.SetDefault("realtime.dashboard.rarity.enabled", false)
+	viper.SetDefault("realtime.dashboard.rarity.threshold", DefaultRarityHighlightThreshold)
+
 	// Spectrogram pre-rendering configuration
 	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false)                                // Opt-in for safety
 	viper.SetDefault("realtime.dashboard.spectrogram.mode", "auto")                                  // Default to auto mode (generate on demand)

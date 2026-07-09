@@ -1009,6 +1009,7 @@
       "title": "Soort zeldzaamheid",
       "score": "Score",
       "basedOnLocation": "Gebaseerd op locatie: {latitude}, {longitude}",
+      "highlightTooltip": "Zeldzaam ({percent}% voorkomen)",
       "statuses": {
         "very_common": "Zeer algemeen",
         "common": "Algemeen",
@@ -4562,6 +4563,19 @@
         "defaultGain": "Standaard volumeversterking",
         "defaultGainHelpText": "Initiële versterking bij het afspelen van opnames. Vogelgeluiden zijn vaak zacht, dus een versterking van 6-12 dB wordt aanbevolen.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Zeldzame soorten markeren",
+        "description": "Markeer detecties van soorten die zeldzaam zijn voor jouw locatie en tijd van het jaar.",
+        "enabled": {
+          "label": "Zeldzame soorten markeren",
+          "helpText": "Toont een rode ster bij detecties waarvan de voorkomenswaarschijnlijkheid gelijk is aan of lager dan de drempel."
+        },
+        "threshold": {
+          "label": "Zeldzaamheidsdrempel",
+          "helpText": "Soorten met een voorkomenswaarschijnlijkheid gelijk aan of lager dan deze waarde worden als zeldzaam gemarkeerd.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Sommige wijzigingen vereisen een herstart van de server. Herstart BirdNET-Go."

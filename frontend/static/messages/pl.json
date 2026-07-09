@@ -1009,6 +1009,7 @@
       "title": "Rzadkość Gatunku",
       "score": "Wynik",
       "basedOnLocation": "Na podstawie lokalizacji: {latitude}, {longitude}",
+      "highlightTooltip": "Rzadki ({percent}% występowania)",
       "statuses": {
         "very_common": "Bardzo pospolity",
         "common": "Pospolity",
@@ -4562,6 +4563,19 @@
         "defaultGain": "Domyślne wzmocnienie głośności",
         "defaultGainHelpText": "Początkowe wzmocnienie stosowane podczas odtwarzania nagrań. Dźwięki ptaków są często ciche, dlatego zalecane jest wzmocnienie 6-12 dB.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Wyróżnianie rzadkich gatunków",
+        "description": "Wyróżnia wykrycia gatunków, które są rzadkie dla Twojej lokalizacji i pory roku.",
+        "enabled": {
+          "label": "Wyróżniaj rzadkie gatunki",
+          "helpText": "Pokazuje czerwoną gwiazdkę przy wykryciach, których prawdopodobieństwo występowania jest równe progowi lub niższe."
+        },
+        "threshold": {
+          "label": "Próg rzadkości",
+          "helpText": "Gatunki o prawdopodobieństwie występowania równym tej wartości lub niższym są oznaczane jako rzadkie.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Niektóre zmiany wymagają ponownego uruchomienia serwera. Uruchom ponownie BirdNET-Go."

@@ -1009,6 +1009,7 @@
       "title": "Faj ritkasága",
       "score": "Pontszám",
       "basedOnLocation": "Helyszín alapján: {latitude}, {longitude}",
+      "highlightTooltip": "Ritka ({percent}% előfordulás)",
       "statuses": {
         "very_common": "Nagyon gyakori",
         "common": "Gyakori",
@@ -4562,6 +4563,19 @@
         "defaultGain": "Alapértelmezett hangerő növelés",
         "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Ritka fajok kiemelése",
+        "description": "Kiemeli azoknak a fajoknak az észleléseit, amelyek ritkák az Ön helyszínén és az évszakban.",
+        "enabled": {
+          "label": "Ritka fajok kiemelése",
+          "helpText": "Piros csillagot jelenít meg azoknál az észleléseknél, amelyek előfordulási valószínűsége a küszöbértéken vagy az alatt van."
+        },
+        "threshold": {
+          "label": "Ritkasági küszöb",
+          "helpText": "Az olyan fajok, amelyek előfordulási valószínűsége a küszöbértéken vagy az alatt van, ritkaként vannak megjelölve.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t."
