@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
+	"github.com/tphakala/birdnet-go/internal/api/v2/specieslists"
 	"github.com/tphakala/birdnet-go/internal/api/v2/analytics"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/app"
@@ -145,6 +147,9 @@ type Controller struct {
 	// calls c.alerts.Shutdown() during teardown to stop the engine and its
 	// global event bus.
 	alerts *alerts.Handler
+
+	// specieslists serves the /api/v2/species-lists/* endpoints.
+	specieslists *specieslists.Handler
 
 	// control serves the /api/v2/control/* endpoints (restart analysis, reload
 	// model, rebuild range filter, restart server/container, restart a single
@@ -484,6 +489,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// the shared core here (V2Manager, auth middleware, and the error/log helpers
 	// all promote from it).
 	c.alerts = alerts.New(c.Core)
+	c.specieslists = specieslists.New(c.Core, c.controlChan, func(ctx context.Context) error {
+		if c.alerts != nil {
+			return c.alerts.RefreshSpeciesLists(ctx)
+		}
+		return nil
+	})
 	// The control handler owns its sourceRestarter and receives the shared
 	// control-signal channel as a send-only injection. c.controlChan is already
 	// set in the Controller literal above; passing it here narrows it to a
@@ -649,6 +660,7 @@ func (c *Controller) initRoutes() {
 		{"species routes", func() { c.species.RegisterRoutes(c.Group) }},
 		{"dynamic threshold routes", func() { c.dynamicThresholds.RegisterRoutes(c.Group) }},
 		{"alert routes", func() { c.alerts.RegisterRoutes(c.Group) }},
+		{"species-lists routes", func() { c.specieslists.RegisterRoutes(c.Group) }},
 		{"model routes", func() { c.models.RegisterRoutes(c.Group) }},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", func() { c.tlsHandler.RegisterRoutes(c.Group) }},

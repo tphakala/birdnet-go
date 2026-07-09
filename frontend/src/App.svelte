@@ -504,6 +504,13 @@
   }
 
   function handleRouting(path: string): void {
+    // If we loaded at Vite's dev-server fallback URL '/ui/assets/' or '/ui/assets',
+    // redirect to the canonical '/ui/' path.
+    if (path === uiPath('assets') + '/' || path === uiPath('assets')) {
+      navigation.redirect(uiPath() + '/');
+      return;
+    }
+
     // Analytics routes: redirect the bare hub, the retired /advanced path, and
     // legacy ?tab= deep links onto the per-view routes (single hop), preserving
     // other query params. resolveAnalyticsRedirect returns null when canonical.

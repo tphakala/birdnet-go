@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	datastoreRepository "github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -101,7 +102,7 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 // Migration infrastructure is initialized when not in v2-only mode.
 //
 //nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
-func (d *DatabaseService) Start(_ context.Context) error {
+func (d *DatabaseService) Start(ctx context.Context) error {
 	settings := d.settings
 
 	// If Start fails after opening the database, clean up to prevent resource leaks.
@@ -236,6 +237,16 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	default:
 		// Legacy mode: use legacy datastore
 		d.dataStore = datastore.New(settings)
+	}
+
+
+	if datastoreV2.IsEnhancedDatabase() && d.v2Manager != nil {
+		if err := datastoreRepository.SyncSystemLists(ctx, d.v2Manager.DB(), settings); err != nil {
+			datastoreLog.Error("failed to synchronize system species lists", logger.Error(err))
+		}
+		if err := datastoreRepository.MigrateLegacyAlertLists(ctx, d.v2Manager.DB(), settings.BirdNET.Locale); err != nil {
+			datastoreLog.Error("failed to migrate legacy alert species lists", logger.Error(err))
+		}
 	}
 
 	// Connect metrics to datastore before opening

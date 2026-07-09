@@ -10,6 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/middleware"
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
@@ -41,6 +42,7 @@ type AppConfigResponse struct {
 	LogoStyle          string                `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
 	LiveSpectrogram    bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
 	AudioExportEnabled bool                  `json:"audioExportEnabled"`        // whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI
+	IsEnhancedDatabase bool                  `json:"isEnhancedDatabase"`        // whether enhanced database features are active
 	Layout             *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
 	FreshInstall       bool                  `json:"freshInstall"`              // true when this is a brand-new installation
 	NewVersion         bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
@@ -202,6 +204,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		LogoStyle:          settings.Realtime.Dashboard.LogoStyle,
 		LiveSpectrogram:    settings.Realtime.Dashboard.LiveSpectrogram,
 		AudioExportEnabled: settings.Realtime.Audio.Export.Enabled,
+		IsEnhancedDatabase: datastoreV2.IsEnhancedDatabase(),
 		FreshInstall:       freshInstall,
 		NewVersion:         newVersion,
 		PreviousVersion:    previousVersion,

@@ -44,6 +44,10 @@
     schemaOperatorLabel,
   } from '$lib/utils/alertSchema';
   import { translateField } from '$lib/utils/notifications';
+  import { onMount } from 'svelte';
+  import { api } from '$lib/utils/api';
+  import { appState } from '$lib/stores/appState.svelte';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   interface Props {
     rule: AlertRule | null;
@@ -54,6 +58,23 @@
   }
 
   let { rule, schema, onSave, onClose, onDelete }: Props = $props();
+
+  interface SpeciesList {
+    id: number;
+    name: string;
+  }
+  let speciesLists = $state<SpeciesList[]>([]);
+
+  onMount(async () => {
+    if (appState.isEnhancedDatabase) {
+      try {
+        const response = await api.get<{ lists: SpeciesList[] }>('/api/v2/species-lists');
+        speciesLists = response.lists ?? [];
+      } catch (err) {
+        console.error('Failed to load species lists in rule editor', err);
+      }
+    }
+  });
 
   // Form state
   let name = $state('');
@@ -669,7 +690,20 @@
             >
               <!-- Property -->
               <select
-                bind:value={condition.property}
+                value={condition.property}
+                onchange={e => {
+                  const newProp = e.currentTarget.value;
+                  condition.property = newProp;
+                  const validOps = operatorsForProperty(newProp);
+                  if (validOps.length > 0) {
+                    condition.operator = validOps[0].value;
+                  }
+                  const isListOp = condition.operator === 'in' || condition.operator === 'not_in';
+                  const supportsList = newProp === 'scientific_name' || newProp === 'species_name';
+                  if (condition.value?.startsWith('list:') && (!isListOp || !supportsList)) {
+                    condition.value = '';
+                  }
+                }}
                 aria-label={t('settings.alerts.editor.property')}
                 class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
               >
@@ -679,7 +713,25 @@
               </select>
               <!-- Operator -->
               <select
-                bind:value={condition.operator}
+                value={condition.operator}
+                onchange={e => {
+                  const newOp = e.currentTarget.value;
+                  condition.operator = newOp;
+                  const isListOp = newOp === 'in' || newOp === 'not_in';
+                  const supportsList =
+                    condition.property === 'scientific_name' ||
+                    condition.property === 'species_name';
+                  if (condition.value?.startsWith('list:') && (!isListOp || !supportsList)) {
+                    condition.value = '';
+                  }
+                  if (
+                    isListOp &&
+                    supportsList &&
+                    (!condition.value || !condition.value.startsWith('list:'))
+                  ) {
+                    condition.value = '';
+                  }
+                }}
                 aria-label={t('settings.alerts.editor.operator')}
                 class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] font-mono cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
               >
@@ -688,13 +740,60 @@
                 {/each}
               </select>
               <!-- Value -->
-              <input
-                type="text"
-                bind:value={condition.value}
-                aria-label={t('settings.alerts.editor.value')}
-                placeholder={t('settings.alerts.editor.valuePlaceholder')}
-                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30 tabular-nums placeholder:text-[var(--color-base-content)]/40"
-              />
+              {#if appState.isEnhancedDatabase && (condition.property === 'scientific_name' || condition.property === 'species_name') && (condition.operator === 'in' || condition.operator === 'not_in')}
+                <div class="flex-1 flex flex-col gap-1">
+                  {#if speciesLists.length === 0}
+                    <div class="text-xs text-[var(--color-base-content)]/70 py-1">
+                      {t('settings.alerts.editor.noSpeciesLists')}
+                      <button
+                        type="button"
+                        onclick={() => {
+                          onClose(); // Close the editor first
+                          navigation.navigate('/ui/settings/species?tab=managedLists');
+                        }}
+                        class="text-[var(--color-primary)] hover:underline font-semibold ml-1 focus:outline-none"
+                      >
+                        {t('settings.alerts.editor.createSpeciesList')}
+                      </button>
+                    </div>
+                  {:else}
+                    <div class="flex items-center gap-2">
+                      <select
+                        value={condition.value?.startsWith('list:') ? condition.value : ''}
+                        onchange={e => {
+                          condition.value = e.currentTarget.value;
+                        }}
+                        class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30 cursor-pointer"
+                      >
+                        <option value="" disabled
+                          >{t('settings.alerts.editor.selectSpeciesList')}</option
+                        >
+                        {#each speciesLists as list}
+                          <option value={`list:${list.id}`}>{list.name}</option>
+                        {/each}
+                      </select>
+                      <button
+                        type="button"
+                        onclick={() => {
+                          onClose(); // Close the editor first
+                          navigation.navigate('/ui/settings/species?tab=managedLists');
+                        }}
+                        class="text-[11px] text-[var(--color-primary)] hover:underline whitespace-nowrap focus:outline-none"
+                      >
+                        {t('settings.alerts.editor.manageLists')}
+                      </button>
+                    </div>
+                  {/if}
+                </div>
+              {:else}
+                <input
+                  type="text"
+                  bind:value={condition.value}
+                  aria-label={t('settings.alerts.editor.value')}
+                  placeholder={t('settings.alerts.editor.valuePlaceholder')}
+                  class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30 tabular-nums placeholder:text-[var(--color-base-content)]/40"
+                />
+              {/if}
               <!-- Duration (metric only) -->
               {#if triggerType === 'metric'}
                 <div class="flex items-center gap-1">

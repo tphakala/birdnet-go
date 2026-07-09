@@ -2968,6 +2968,61 @@ export type TranslationKey =
   | 'settings.species.alwaysExclude.tabLabel'
   | 'settings.species.alwaysExclude.description'
   | 'settings.species.alwaysExclude.noSpeciesMessage'
+  | 'settings.species.managedLists.title'
+  | 'settings.species.managedLists.tabLabel'
+  | 'settings.species.managedLists.description'
+  | 'settings.species.managedLists.createList'
+  | 'settings.species.managedLists.searchPlaceholder'
+  | 'settings.species.managedLists.noListsFound'
+  | 'settings.species.managedLists.noListsHint'
+  | 'settings.species.managedLists.yamlBacked'
+  | 'settings.species.managedLists.speciesCount' // params: count
+  | 'settings.species.managedLists.speciesCountOne' // params: count
+  | 'settings.species.managedLists.noDescription'
+  | 'settings.species.managedLists.moreCount' // params: count
+  | 'settings.species.managedLists.confirmDelete'
+  | 'settings.species.managedLists.yesDelete'
+  | 'settings.species.managedLists.cancel'
+  | 'settings.species.managedLists.edit'
+  | 'settings.species.managedLists.delete'
+  | 'settings.species.managedLists.editTitle'
+  | 'settings.species.managedLists.createTitle'
+  | 'settings.species.managedLists.editSub'
+  | 'settings.species.managedLists.createSub'
+  | 'settings.species.managedLists.listName'
+  | 'settings.species.managedLists.listNamePlaceholder'
+  | 'settings.species.managedLists.descriptionLabel'
+  | 'settings.species.managedLists.descriptionPlaceholder'
+  | 'settings.species.managedLists.addHeader'
+  | 'settings.species.managedLists.searchLabel'
+  | 'settings.species.managedLists.manualLabel'
+  | 'settings.species.managedLists.addManual'
+  | 'settings.species.managedLists.unrecognizedTitle'
+  | 'settings.species.managedLists.save'
+  | 'settings.species.managedLists.cancelEditor'
+  | 'settings.species.managedLists.saving'
+  | 'settings.species.managedLists.backTitle'
+  | 'settings.species.managedLists.clearAll'
+  | 'settings.species.managedLists.noSpeciesInList'
+  | 'settings.species.managedLists.system.extendedCapture.name'
+  | 'settings.species.managedLists.system.extendedCapture.description'
+  | 'settings.species.managedLists.system.dogBark.name'
+  | 'settings.species.managedLists.system.dogBark.description'
+  | 'settings.species.managedLists.system.daylight.name'
+  | 'settings.species.managedLists.system.daylight.description'
+  | 'settings.species.managedLists.usage.usageLabel'
+  | 'settings.species.managedLists.usage.usedInAlertRule' // params: name
+  | 'settings.species.managedLists.usage.usedInExtendedCapture'
+  | 'settings.species.managedLists.usage.usedInDogBarkFilter'
+  | 'settings.species.managedLists.usage.usedInDaylightFilter'
+  | 'settings.species.managedLists.usage.notUsed'
+  | 'settings.species.managedLists.toasts.loadFailed'
+  | 'settings.species.managedLists.toasts.nameRequired'
+  | 'settings.species.managedLists.toasts.updateSuccess'
+  | 'settings.species.managedLists.toasts.createSuccess'
+  | 'settings.species.managedLists.toasts.saveFailed'
+  | 'settings.species.managedLists.toasts.deleteSuccess'
+  | 'settings.species.managedLists.toasts.deleteFailed'
   | 'settings.species.customConfiguration.title'
   | 'settings.species.customConfiguration.tabLabel'
   | 'settings.species.customConfiguration.description'
@@ -3238,6 +3293,11 @@ export type TranslationKey =
   | 'settings.alerts.editor.metricsCount'
   | 'settings.alerts.editor.durationFor'
   | 'settings.alerts.editor.durationSec'
+  | 'settings.alerts.editor.noSpeciesLists'
+  | 'settings.alerts.editor.createSpeciesList'
+  | 'settings.alerts.editor.selectSpeciesList'
+  | 'settings.alerts.editor.manageLists'
+  | 'settings.alerts.editor.readOnlyYaml'
   | 'settings.alerts.export'
   | 'settings.alerts.import'
   | 'settings.alerts.exporting'
@@ -4285,6 +4345,10 @@ export type TranslationParams = {
   'settings.species.duplicateConfigError': { species: string | number };
   'settings.species.activeSpecies.stats.minutesAgo': { count: string | number };
   'settings.species.activeSpecies.stats.hoursAgo': { count: string | number };
+  'settings.species.managedLists.speciesCount': { count: string | number };
+  'settings.species.managedLists.speciesCountOne': { count: string | number };
+  'settings.species.managedLists.moreCount': { count: string | number };
+  'settings.species.managedLists.usage.usedInAlertRule': { name: string | number };
   'settings.species.customConfiguration.badges.threshold': { value: string | number };
   'settings.species.customConfiguration.badges.interval': { value: string | number };
   'settings.species.customConfiguration.editing': { species: string | number };

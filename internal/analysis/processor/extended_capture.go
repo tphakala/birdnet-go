@@ -1,13 +1,18 @@
 package processor
 
 import (
+	"context"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
+	"gorm.io/gorm"
 )
 
 // Extended capture timeout thresholds.
@@ -70,8 +75,45 @@ func (p *Processor) initExtendedCapture() {
 	// Get cached taxonomy database for genus/family/order resolution
 	taxonomyDB := p.getTaxonomyDB()
 
+	configSpecies := settings.Realtime.ExtendedCapture.Species
+	if p.Ds != nil {
+		if managerGetter, ok := p.Ds.(interface{ GetDB() *gorm.DB }); ok {
+			db := managerGetter.GetDB()
+			if db != nil && datastoreV2.IsEnhancedDatabase() {
+				repo := repository.NewSpeciesListRepository(db, nil)
+				var expandedSpecies []string
+				for _, sp := range configSpecies {
+					if strings.HasPrefix(sp, "list:") {
+						listIDStr := strings.TrimPrefix(sp, "list:")
+						listID64, parseErr := strconv.ParseUint(listIDStr, 10, 32)
+						if parseErr != nil {
+							GetLogger().Warn("invalid species list ID in extended capture config",
+								logger.String("list_entry", sp), logger.Error(parseErr))
+							continue
+						}
+						sciNames, resolveErr := repo.ResolveSpeciesList(context.Background(), uint(listID64))
+						if resolveErr == nil && len(sciNames) > 0 {
+							expandedSpecies = append(expandedSpecies, sciNames...)
+						} else {
+							if resolveErr != nil {
+								GetLogger().Warn("failed to resolve species list for extended capture",
+									logger.String("list_id", listIDStr), logger.Error(resolveErr))
+							}
+							// Keep the unresolved list:ID entry so that resolveSpeciesFilter
+							// fails closed instead of falling back to capturing all species.
+							expandedSpecies = append(expandedSpecies, sp)
+						}
+					} else {
+						expandedSpecies = append(expandedSpecies, sp)
+					}
+				}
+				configSpecies = expandedSpecies
+			}
+		}
+	}
+
 	isAll, resolved := resolveSpeciesFilter(
-		settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB, locale, "extended_capture",
+		configSpecies, labels, taxonomyDB, locale, "extended_capture",
 	)
 
 	p.extendedCaptureMu.Lock()

@@ -12,12 +12,15 @@
 package alerts
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"slices"
 	"strconv"
+	"sync"
+	"sync/atomic"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/alerting"
@@ -55,8 +58,13 @@ type Handler struct {
 	*apicore.Core
 
 	alertRuleRepo  repository.AlertRuleRepository
-	alertEngine    *alerting.Engine
+	// alertEngine is accessed from concurrent request goroutines (read) and from
+	// ensureEngineReady (write, under initMu). Using atomic.Pointer makes every
+	// load/store a single pointer-width atomic op, eliminating the data race
+	// without requiring callers to acquire initMu on the read path.
+	alertEngine    atomic.Pointer[alerting.Engine]
 	alertEngineErr error
+	initMu         sync.Mutex
 }
 
 // New builds an alerts Handler around the shared core. The alert-rule repository
@@ -114,11 +122,12 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 	// Initialize repository lazily from V2Manager
 	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB(), nil)
+	speciesListRepo := repository.NewSpeciesListRepository(c.V2Manager.DB(), nil)
 
 	// Initialize the alerting engine - seeds default rules and starts event processing
 	alertTelemetry := alerting.NewAlertingTelemetry()
 	eventBus := alerting.NewAlertEventBus(alertTelemetry)
-	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, apicore.GetLogger(), alertTelemetry)
+	engine, err := alerting.Initialize(c.alertRuleRepo, speciesListRepo, eventBus, apicore.GetLogger(), alertTelemetry)
 	if err != nil {
 		apicore.GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
 		eventBus.Stop() // Stop the bus goroutine since Initialize didn't set it as global
@@ -126,8 +135,16 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 		// silently no-opping. CRUD reads still work, but engine actions cannot.
 		c.alertEngineErr = err
 	} else {
-		c.alertEngine = engine
+		c.alertEngine.Store(engine)
 	}
+}
+
+// RefreshSpeciesLists reloads the species lists cache in the alerting engine.
+func (c *Handler) RefreshSpeciesLists(ctx context.Context) error {
+	if engine := c.alertEngine.Load(); engine != nil {
+		return engine.RefreshSpeciesLists(ctx)
+	}
+	return nil
 }
 
 // alertsAvailable reports whether the enhanced (v2) database backing the
@@ -162,8 +179,8 @@ func (c *Handler) requireV2Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 // is safe to call when the engine was never initialized: alertEngine is nil and
 // GetGlobalBus returns nil when Initialize failed or was skipped.
 func (c *Handler) Shutdown() {
-	if c.alertEngine != nil {
-		c.alertEngine.Stop()
+	if engine := c.alertEngine.Load(); engine != nil {
+		engine.Stop()
 	}
 	if bus := alerting.GetGlobalBus(); bus != nil {
 		bus.Stop()
@@ -225,19 +242,68 @@ func (c *Handler) requireV2(ctx echo.Context) error {
 		"Alert rules require the enhanced (v2) database", http.StatusConflict, notification.MsgErrAlertV2Required, nil)
 }
 
-// engineUnavailable writes a 503 Service Unavailable response carrying the recorded
-// alerting-engine initialization error when one is present. Engine-dependent
-// handlers call it when they cannot act: the mutating handlers guard on
-// alertEngineErr != nil (init attempted and failed), while TestAlertRule guards on
-// alertEngine == nil (absent for any reason) because it dereferences the engine
-// directly. Either way the 503 surfaces a real failure instead of a silent no-op or
-// a false success. alertEngineErr may be nil here (the defensive engine-nil case),
-// in which case HandleErrorWithKey falls back to the generic message. For a
-// deployment where alerting is simply disabled, the requireV2 group middleware
-// returns 409 before any handler runs, so this 503 never fires for that case.
-func (c *Handler) engineUnavailable(ctx echo.Context) error {
+// engineUnavailableLocked writes a 503 Service Unavailable response carrying the
+// recorded alerting-engine initialization error when one is present.
+// Callers must hold c.initMu before calling this.
+func (c *Handler) engineUnavailableLocked(ctx echo.Context) error {
 	return c.HandleErrorWithKey(ctx, c.alertEngineErr,
 		"Alerting engine is unavailable", http.StatusServiceUnavailable, notification.MsgErrAlertEngineUnavailable, nil)
+}
+
+// engineUnavailable writes a 503 Service Unavailable response carrying the recorded
+// alerting-engine initialization error when one is present. It acquires the mutex
+// to prevent data races on alertEngineErr.
+func (c *Handler) engineUnavailable(ctx echo.Context) error {
+	c.initMu.Lock()
+	err := c.alertEngineErr
+	c.initMu.Unlock()
+	return c.HandleErrorWithKey(ctx, err,
+		"Alerting engine is unavailable", http.StatusServiceUnavailable, notification.MsgErrAlertEngineUnavailable, nil)
+}
+
+// ensureEngineReady checks if the alerting engine is available and, if not,
+// attempts to re-initialize it to recover from transient startup failures.
+// It returns true if the engine is ready, and false if it is unavailable (in which
+// case the error response has already been written to the client).
+func (c *Handler) ensureEngineReady(ctx echo.Context) bool {
+	// Fast path: engine already running — atomic load, no lock needed.
+	if c.alertEngine.Load() != nil {
+		return true
+	}
+
+	// Slow path: attempt re-initialization under the mutex so only one goroutine
+	// retries at a time. A second goroutine that races here will wait, then see
+	// the engine non-nil on its post-lock check and return true immediately.
+	c.initMu.Lock()
+	defer c.initMu.Unlock()
+
+	// Double-check after acquiring the lock.
+	if c.alertEngine.Load() != nil {
+		return true
+	}
+
+	if !c.alertsAvailable() {
+		_ = c.engineUnavailableLocked(ctx)
+		return false
+	}
+
+	apicore.GetLogger().Info("attempting to re-initialize alerting engine after previous failure")
+
+	speciesListRepo := repository.NewSpeciesListRepository(c.V2Manager.DB(), nil)
+	alertTelemetry := alerting.NewAlertingTelemetry()
+	eventBus := alerting.NewAlertEventBus(alertTelemetry)
+	engine, err := alerting.Initialize(c.alertRuleRepo, speciesListRepo, eventBus, apicore.GetLogger(), alertTelemetry)
+	if err != nil {
+		apicore.GetLogger().Error("failed to re-initialize alerting engine", logger.Error(err))
+		eventBus.Stop()
+		c.alertEngineErr = err
+		_ = c.engineUnavailableLocked(ctx)
+		return false
+	}
+
+	c.alertEngine.Store(engine)
+	c.alertEngineErr = nil
+	return true
 }
 
 // GetAlertSchema returns the alerting schema for the UI. v2 availability is
@@ -295,8 +361,8 @@ func (c *Handler) GetAlertRule(ctx echo.Context) error {
 func (c *Handler) CreateAlertRule(ctx echo.Context) error {
 	// A created rule must become active via the engine; refuse with 503 if the
 	// engine failed to initialize rather than persisting an inert rule.
-	if c.alertEngineErr != nil {
-		return c.engineUnavailable(ctx)
+	if !c.ensureEngineReady(ctx) {
+		return nil
 	}
 
 	rule, err := c.bindAndValidateAlertRule(ctx)
@@ -333,8 +399,8 @@ func (c *Handler) CreateAlertRule(ctx echo.Context) error {
 func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 	// The updated rule must be refreshed into the engine; refuse with 503 if the
 	// engine failed to initialize rather than silently persisting an inert change.
-	if c.alertEngineErr != nil {
-		return c.engineUnavailable(ctx)
+	if !c.ensureEngineReady(ctx) {
+		return nil
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -373,8 +439,8 @@ func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 func (c *Handler) ToggleAlertRule(ctx echo.Context) error {
 	// Toggling enabled state must be refreshed into the engine; refuse with 503 if
 	// the engine failed to initialize rather than silently no-opping the refresh.
-	if c.alertEngineErr != nil {
-		return c.engineUnavailable(ctx)
+	if !c.ensureEngineReady(ctx) {
+		return nil
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -406,8 +472,8 @@ func (c *Handler) ToggleAlertRule(ctx echo.Context) error {
 func (c *Handler) DeleteAlertRule(ctx echo.Context) error {
 	// The deletion must be refreshed out of the engine cache; refuse with 503 if
 	// the engine failed to initialize rather than leaving a deleted rule live.
-	if c.alertEngineErr != nil {
-		return c.engineUnavailable(ctx)
+	if !c.ensureEngineReady(ctx) {
+		return nil
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -438,7 +504,13 @@ func (c *Handler) TestAlertRule(ctx echo.Context) error {
 	// "test fired" success. Checked before parsing/fetching the rule so unavailability
 	// is reported regardless of input; engineUnavailable carries the recorded init
 	// error when set and a generic message otherwise.
-	if c.alertEngine == nil {
+	if !c.ensureEngineReady(ctx) {
+		return nil
+	}
+	// ensureEngineReady guarantees the engine is non-nil when it returns true;
+	// load it once and use the local variable throughout this handler.
+	engine := c.alertEngine.Load()
+	if engine == nil {
 		return c.engineUnavailable(ctx)
 	}
 
@@ -455,9 +527,8 @@ func (c *Handler) TestAlertRule(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get alert rule", http.StatusInternalServerError)
 	}
 
-	// Fire the rule's actions directly, bypassing condition evaluation. The engine
-	// is guaranteed non-nil here by the c.alertEngine == nil guard above.
-	c.alertEngine.TestFireRule(rule)
+	// Fire the rule's actions directly, bypassing condition evaluation.
+	engine.TestFireRule(rule)
 
 	return ctx.JSON(http.StatusOK, map[string]string{"status": "test fired"})
 }
@@ -466,8 +537,8 @@ func (c *Handler) TestAlertRule(ctx echo.Context) error {
 func (c *Handler) ResetDefaultAlertRules(ctx echo.Context) error {
 	// Re-seeded defaults must be refreshed into the engine; refuse with 503 if the
 	// engine failed to initialize rather than leaving the engine cache stale.
-	if c.alertEngineErr != nil {
-		return c.engineUnavailable(ctx)
+	if !c.ensureEngineReady(ctx) {
+		return nil
 	}
 
 	reqCtx := ctx.Request().Context()
@@ -565,8 +636,8 @@ func (c *Handler) ExportAlertRules(ctx echo.Context) error {
 func (c *Handler) ImportAlertRules(ctx echo.Context) error {
 	// Imported rules must be refreshed into the engine; refuse with 503 if the
 	// engine failed to initialize rather than importing inert rules.
-	if c.alertEngineErr != nil {
-		return c.engineUnavailable(ctx)
+	if !c.ensureEngineReady(ctx) {
+		return nil
 	}
 
 	var payload struct {
@@ -616,8 +687,8 @@ func (c *Handler) ImportAlertRules(ctx echo.Context) error {
 
 // refreshAlertEngine refreshes the engine's rule cache if the engine is set.
 func (c *Handler) refreshAlertEngine(ctx echo.Context) {
-	if c.alertEngine != nil {
-		if err := c.alertEngine.RefreshRules(ctx.Request().Context()); err != nil {
+	if engine := c.alertEngine.Load(); engine != nil {
+		if err := engine.RefreshRules(ctx.Request().Context()); err != nil {
 			c.LogErrorIfEnabled("failed to refresh alert engine rules", logger.Error(err))
 		}
 	}

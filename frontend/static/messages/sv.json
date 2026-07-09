@@ -4047,6 +4047,75 @@
         "description": "Arter i denna lista kommer alltid att exkluderas från detektering",
         "noSpeciesMessage": "Inga arter tillagda i exkluderingslistan"
       },
+      "managedLists": {
+        "title": "Managed Species Lists",
+        "tabLabel": "Managed Lists",
+        "description": "Database-backed custom species lists that can be used in alerting rules and extended capture filters",
+        "createList": "Create List",
+        "searchPlaceholder": "Search lists...",
+        "noListsFound": "No species lists found",
+        "noListsHint": "Get started by creating your first managed species list.",
+        "yamlBacked": "YAML-Backed",
+        "speciesCount": "{count} species",
+        "speciesCountOne": "{count} species",
+        "noDescription": "No description provided.",
+        "moreCount": "+{count} more",
+        "confirmDelete": "Are you sure?",
+        "yesDelete": "Yes, Delete",
+        "cancel": "Cancel",
+        "edit": "Edit",
+        "delete": "Delete",
+        "editTitle": "Edit Species List",
+        "createTitle": "Create Species List",
+        "editSub": "Update this list's details and members.",
+        "createSub": "Add a new list and configure its species.",
+        "listName": "List Name",
+        "listNamePlaceholder": "e.g. Rare Birds, Backyard Owls",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "Describe the purpose of this species list",
+        "addHeader": "Add Species to List",
+        "searchLabel": "Search Species (Autocomplete)",
+        "manualLabel": "Manual Scientific Name...",
+        "addManual": "Add Manual",
+        "unrecognizedTitle": "Unrecognized species (Edit list to correct)",
+        "save": "Save",
+        "cancelEditor": "Cancel",
+        "saving": "Saving...",
+        "backTitle": "Back to lists",
+        "clearAll": "Clear All",
+        "noSpeciesInList": "No species added to this list yet.",
+        "system": {
+          "extendedCapture": {
+            "name": "YAML: Extended Capture",
+            "description": "Configured via realtime.extendedcapture.species settings in config.yaml"
+          },
+          "dogBark": {
+            "name": "YAML: Dog Bark Filter",
+            "description": "Configured via realtime.dogbarkfilter.species settings in config.yaml"
+          },
+          "daylight": {
+            "name": "YAML: Daylight Filter",
+            "description": "Configured via realtime.daylightfilter.species settings in config.yaml"
+          }
+        },
+        "usage": {
+          "usageLabel": "Used In",
+          "usedInAlertRule": "Alert rule: {name}",
+          "usedInExtendedCapture": "Extended Capture",
+          "usedInDogBarkFilter": "Dog Bark Filter",
+          "usedInDaylightFilter": "Daylight Filter",
+          "notUsed": "Not used in any active configurations"
+        },
+        "toasts": {
+          "loadFailed": "Failed to load species lists",
+          "nameRequired": "Name is required",
+          "updateSuccess": "Species list updated",
+          "createSuccess": "Species list created",
+          "saveFailed": "Failed to save species list",
+          "deleteSuccess": "Species list deleted",
+          "deleteFailed": "Failed to delete species list"
+        }
+      },
       "customConfiguration": {
         "title": "Anpassad artkonfiguration",
         "tabLabel": "Anpassad",
@@ -4415,7 +4484,12 @@
         "eventsCount": "händelser",
         "metricsCount": "mätvärden",
         "durationFor": "i",
-        "durationSec": "sek"
+        "durationSec": "sek",
+        "noSpeciesLists": "No species lists found.",
+        "createSpeciesList": "Create a Species List",
+        "selectSpeciesList": "Select a species list...",
+        "manageLists": "Manage Lists",
+        "readOnlyYaml": "Read-only (configured in config.yaml)"
       },
       "export": "Exportera",
       "import": "Importera",

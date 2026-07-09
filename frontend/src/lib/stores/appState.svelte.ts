@@ -72,6 +72,7 @@ interface AppConfigResponse {
   liveSpectrogram?: boolean;
   /** Whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI */
   audioExportEnabled?: boolean;
+  isEnhancedDatabase?: boolean;
   layout?: {
     elements: {
       id?: string;
@@ -136,6 +137,7 @@ interface AppState {
   liveSpectrogram: boolean;
   /** Whether audio clip export is enabled; when false, per-detection spectrogram/audio UI is hidden */
   audioExportEnabled: boolean;
+  isEnhancedDatabase: boolean;
   /** Dataset version for the per-locale species-name dictionary. Empty string when unknown. */
   speciesDictVersion: string;
   /** Dashboard layout from public config (available before auth) */
@@ -186,6 +188,7 @@ const DEFAULT_STATE: AppState = {
   previousVersion: null,
   liveSpectrogram: false,
   audioExportEnabled: true,
+  isEnhancedDatabase: false,
   speciesDictVersion: '',
   layout: null,
   projectLinks: DEFAULT_PROJECT_LINKS,
@@ -317,6 +320,7 @@ export async function initApp(): Promise<boolean> {
       appState.previousVersion = config.previousVersion ?? null;
       appState.liveSpectrogram = config.liveSpectrogram ?? false;
       appState.audioExportEnabled = config.audioExportEnabled ?? true;
+      appState.isEnhancedDatabase = config.isEnhancedDatabase ?? false;
       appState.speciesDictVersion = config.speciesDictVersion ?? '';
       appState.layout = config.layout ?? null;
       appState.projectLinks = config.projectLinks ?? DEFAULT_PROJECT_LINKS;

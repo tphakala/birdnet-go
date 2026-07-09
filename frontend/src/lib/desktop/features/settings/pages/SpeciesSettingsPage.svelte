@@ -48,6 +48,8 @@
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import DynamicThresholdTab from '$lib/desktop/features/settings/components/DynamicThresholdTab.svelte';
   import SpeciesTable from '$lib/desktop/features/settings/components/SpeciesTable.svelte';
+  import { appState } from '$lib/stores/appState.svelte';
+  import ManagedSpeciesListsTab from '../components/ManagedSpeciesListsTab.svelte';
   import SpeciesListCard from '$lib/desktop/features/settings/components/SpeciesListCard.svelte';
   import SpeciesConfigEditor from '$lib/desktop/features/settings/components/SpeciesConfigEditor.svelte';
   import SpeciesConfigTable from '$lib/desktop/features/settings/components/SpeciesConfigTable.svelte';
@@ -77,6 +79,7 @@
     CircleMinus,
     Settings2,
     ListCheck,
+    List,
     MapPin,
     SlidersHorizontal,
     Clock,
@@ -86,6 +89,7 @@
     TriangleAlert,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   const logger = loggers.settings;
 
@@ -156,6 +160,11 @@
   // Load species data on mount
   onMount(() => {
     loadSpeciesData();
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam) {
+      activeTab = tabParam;
+    }
   });
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
@@ -1178,6 +1187,10 @@
   // Tab state
   let activeTab = $state('active');
 
+  // Hide the global save/reset bar on the managed lists tab — it has its own
+  // inline CRUD actions and the global bar would be confusing there.
+  let showActions = $derived(activeTab !== 'managedLists');
+
   // Tab definitions for the species settings page
   let tabs = $derived<TabDefinition[]>([
     {
@@ -1229,6 +1242,16 @@
       content: dynamicThresholdTabContent,
       // No hasChanges - this is read-only runtime data with its own save/reset actions
     },
+    ...(appState.isEnhancedDatabase
+      ? [
+          {
+            id: 'managedLists',
+            label: t('settings.species.managedLists.tabLabel'),
+            icon: List,
+            content: managedListsTabContent,
+          },
+        ]
+      : []),
   ]);
 </script>
 
@@ -1410,6 +1433,10 @@
               </p>
               <a
                 href="/ui/settings/main"
+                onclick={e => {
+                  e.preventDefault();
+                  navigation.navigate('/ui/settings/main');
+                }}
                 class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:bg-[var(--color-warning-hover)] transition-colors mt-3"
               >
                 {t('settings.species.activeSpecies.locationNotConfigured.action') ||
@@ -1993,6 +2020,11 @@
   <DynamicThresholdTab />
 {/snippet}
 
+<!-- Managed Species Lists Tab Content -->
+{#snippet managedListsTabContent()}
+  <ManagedSpeciesListsTab />
+{/snippet}
+
 <main class="settings-page-content" aria-label={t('settings.species.pageLabel')}>
-  <SettingsTabs {tabs} bind:activeTab />
+  <SettingsTabs {tabs} bind:activeTab {showActions} />
 </main>

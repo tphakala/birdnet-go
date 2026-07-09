@@ -167,7 +167,7 @@ func TestTestAlertRuleReturns503WhenEngineNilWithoutError(t *testing.T) {
 	core := apitest.NewCore(t)
 	h := New(core)
 	// Defensive state: engine absent AND no recorded init error, no repo wired.
-	require.Nil(t, h.alertEngine)
+	require.Nil(t, h.alertEngine.Load())
 	require.NoError(t, h.alertEngineErr)
 
 	ctx, rec := newContextForRouteParam(t, http.MethodPost, "/api/v2/alerts/rules/1/test", "id", "1")
@@ -203,7 +203,7 @@ func TestTestAlertRuleReturns200WithWorkingEngine(t *testing.T) {
 	// A live engine over the mock repo with a no-op action; alertEngineErr stays nil.
 	noopAction := func(_ *entities.AlertRule, _ *alerting.AlertEvent) {}
 	h.alertRuleRepo = repo
-	h.alertEngine = alerting.NewEngine(repo, noopAction, logger.Global().Module("alerts-test"), alerting.NewAlertingTelemetry())
+	h.alertEngine.Store(alerting.NewEngine(repo, noopAction, logger.Global().Module("alerts-test"), alerting.NewAlertingTelemetry()))
 
 	ctx, rec := newContextForRouteParam(t, http.MethodPost, "/api/v2/alerts/rules/1/test", "id", "1")
 	err := h.TestAlertRule(ctx)

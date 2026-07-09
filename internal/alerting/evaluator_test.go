@@ -8,7 +8,7 @@ import (
 )
 
 func TestEvaluateConditions_EmptyConditions(t *testing.T) {
-	result := EvaluateConditions(nil, map[string]any{"species_name": "Robin"})
+	result := EvaluateConditions(nil, map[string]any{"species_name": "Robin"}, nil)
 	assert.True(t, result, "empty conditions should match")
 }
 
@@ -57,7 +57,7 @@ func TestEvaluateConditions_StringOperators(t *testing.T) {
 				{Property: tt.property, Operator: tt.operator, Value: tt.value},
 			}
 			props := map[string]any{tt.property: tt.propVal}
-			assert.Equal(t, tt.want, EvaluateConditions(conds, props))
+			assert.Equal(t, tt.want, EvaluateConditions(conds, props, nil))
 		})
 	}
 }
@@ -92,7 +92,7 @@ func TestEvaluateConditions_NumericOperators(t *testing.T) {
 				{Property: PropertyConfidence, Operator: tt.operator, Value: tt.value},
 			}
 			props := map[string]any{PropertyConfidence: tt.propVal}
-			assert.Equal(t, tt.want, EvaluateConditions(conds, props))
+			assert.Equal(t, tt.want, EvaluateConditions(conds, props, nil))
 		})
 	}
 }
@@ -101,7 +101,7 @@ func TestEvaluateConditions_MissingProperty(t *testing.T) {
 	conds := []entities.AlertCondition{
 		{Property: "nonexistent", Operator: OperatorIs, Value: "test"},
 	}
-	result := EvaluateConditions(conds, map[string]any{"species_name": "Robin"})
+	result := EvaluateConditions(conds, map[string]any{"species_name": "Robin"}, nil)
 	assert.False(t, result, "missing property should fail condition")
 }
 
@@ -113,17 +113,17 @@ func TestEvaluateConditions_MultipleConditionsAND(t *testing.T) {
 
 	t.Run("both match", func(t *testing.T) {
 		props := map[string]any{PropertySpeciesName: "Great Horned Owl", PropertyConfidence: 0.95}
-		assert.True(t, EvaluateConditions(conds, props))
+		assert.True(t, EvaluateConditions(conds, props, nil))
 	})
 
 	t.Run("first fails", func(t *testing.T) {
 		props := map[string]any{PropertySpeciesName: "Robin", PropertyConfidence: 0.95}
-		assert.False(t, EvaluateConditions(conds, props))
+		assert.False(t, EvaluateConditions(conds, props, nil))
 	})
 
 	t.Run("second fails", func(t *testing.T) {
 		props := map[string]any{PropertySpeciesName: "Great Horned Owl", PropertyConfidence: 0.80}
-		assert.False(t, EvaluateConditions(conds, props))
+		assert.False(t, EvaluateConditions(conds, props, nil))
 	})
 }
 
@@ -131,7 +131,7 @@ func TestEvaluateConditions_UnknownOperator(t *testing.T) {
 	conds := []entities.AlertCondition{
 		{Property: "species_name", Operator: "unknown_op", Value: "test"},
 	}
-	result := EvaluateConditions(conds, map[string]any{"species_name": "Robin"})
+	result := EvaluateConditions(conds, map[string]any{"species_name": "Robin"}, nil)
 	assert.False(t, result, "unknown operator should fail condition")
 }
 
@@ -139,7 +139,7 @@ func TestEvaluateConditions_InvalidNumericValue(t *testing.T) {
 	conds := []entities.AlertCondition{
 		{Property: PropertyConfidence, Operator: OperatorGreaterThan, Value: "not_a_number"},
 	}
-	result := EvaluateConditions(conds, map[string]any{PropertyConfidence: 0.95})
+	result := EvaluateConditions(conds, map[string]any{PropertyConfidence: 0.95}, nil)
 	assert.False(t, result, "non-numeric condition value should fail")
 }
 
@@ -149,12 +149,12 @@ func TestEvaluateConditions_UnsupportedPropertyType(t *testing.T) {
 	}
 
 	// bool is not a supported numeric type
-	result := EvaluateConditions(conds, map[string]any{PropertyConfidence: true})
+	result := EvaluateConditions(conds, map[string]any{PropertyConfidence: true}, nil)
 	assert.False(t, result, "unsupported type (bool) should fail numeric comparison")
 
 	// struct is not supported
 	type custom struct{ val int }
-	result = EvaluateConditions(conds, map[string]any{PropertyConfidence: custom{val: 1}})
+	result = EvaluateConditions(conds, map[string]any{PropertyConfidence: custom{val: 1}}, nil)
 	assert.False(t, result, "unsupported type (struct) should fail numeric comparison")
 }
 
@@ -177,7 +177,77 @@ func TestEvaluateConditions_AdditionalIntTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			props := map[string]any{PropertyValue: tt.val}
-			assert.Equal(t, tt.want, EvaluateConditions(conds, props))
+			assert.Equal(t, tt.want, EvaluateConditions(conds, props, nil))
 		})
 	}
+}
+
+type mockSpeciesResolver struct {
+	lists map[uint][]string
+}
+
+func (r *mockSpeciesResolver) ResolveSpeciesList(id uint) []string {
+	return r.lists[id]
+}
+
+func TestEvaluateConditions_WithSpeciesListResolver(t *testing.T) {
+	resolver := &mockSpeciesResolver{
+		lists: map[uint][]string{
+			5: {"columba livia", "cyanistes caeruleus"},
+		},
+	}
+
+	t.Run("operator in with match", func(t *testing.T) {
+		conds := []entities.AlertCondition{
+			{Property: PropertyScientificName, Operator: OperatorIn, Value: "list:5"},
+		}
+		props := map[string]any{PropertyScientificName: "Columba livia"} // detection may have mixed case
+		assert.True(t, EvaluateConditions(conds, props, resolver))
+	})
+
+	t.Run("operator in with no match", func(t *testing.T) {
+		conds := []entities.AlertCondition{
+			{Property: PropertyScientificName, Operator: OperatorIn, Value: "list:5"},
+		}
+		props := map[string]any{PropertyScientificName: "Turdus migratorius"}
+		assert.False(t, EvaluateConditions(conds, props, resolver))
+	})
+
+	t.Run("operator not_in with match", func(t *testing.T) {
+		conds := []entities.AlertCondition{
+			{Property: PropertyScientificName, Operator: OperatorNotIn, Value: "list:5"},
+		}
+		props := map[string]any{PropertyScientificName: "Turdus migratorius"}
+		assert.True(t, EvaluateConditions(conds, props, resolver))
+	})
+
+	t.Run("operator not_in with no match", func(t *testing.T) {
+		conds := []entities.AlertCondition{
+			{Property: PropertyScientificName, Operator: OperatorNotIn, Value: "list:5"},
+		}
+		props := map[string]any{PropertyScientificName: "Columba livia"}
+		assert.False(t, EvaluateConditions(conds, props, resolver))
+	})
+
+	t.Run("species_name property matches scientific_name list members in list", func(t *testing.T) {
+		conds := []entities.AlertCondition{
+			{Property: PropertySpeciesName, Operator: OperatorIn, Value: "list:5"},
+		}
+		props := map[string]any{
+			PropertyScientificName: "Cyanistes caeruleus",
+			PropertySpeciesName:    "Eurasian Blue Tit",
+		}
+		assert.True(t, EvaluateConditions(conds, props, resolver))
+	})
+
+	t.Run("species_name property with no match in list", func(t *testing.T) {
+		conds := []entities.AlertCondition{
+			{Property: PropertySpeciesName, Operator: OperatorIn, Value: "list:5"},
+		}
+		props := map[string]any{
+			PropertyScientificName: "Turdus merula",
+			PropertySpeciesName:    "Eurasian Blackbird",
+		}
+		assert.False(t, EvaluateConditions(conds, props, resolver))
+	})
 }

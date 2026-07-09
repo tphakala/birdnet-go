@@ -900,21 +900,21 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &rawResponse)
 	require.NoError(t, err)
 
-	// Only these top-level keys should exist
 	expectedKeys := map[string]bool{
-		"csrfToken":          true,
-		"security":           true,
-		"version":            true,
-		"speciesDictVersion": true,
-		"basePath":           true,
-		"colorScheme":        true,
-		"customColors":       true,
-		"logoStyle":          true,
-		"liveSpectrogram":    true,
-		"audioExportEnabled": true,
-		"freshInstall":       true,
-		"newVersion":         true,
-		"projectLinks":       true,
+		"csrfToken":           true,
+		"security":            true,
+		"version":             true,
+		"speciesDictVersion":  true,
+		"basePath":            true,
+		"colorScheme":         true,
+		"customColors":        true,
+		"logoStyle":           true,
+		"liveSpectrogram":     true,
+		"audioExportEnabled":  true,
+		"freshInstall":        true,
+		"newVersion":          true,
+		"projectLinks":        true,
+		"isEnhancedDatabase":  true,
 	}
 
 	for key := range rawResponse {
