@@ -246,6 +246,17 @@
     "reportBugAriaLabel": "Nahlásit chybu na GitHubu (otevře se v novém okně)",
     "askQuestionAriaLabel": "Položit dotaz na GitHub Discussions (otevře se v novém okně)",
     "viewOnGithubAriaLabel": "Zobrazit BirdNET-Go na GitHubu (otevře se v novém okně)",
+    "updateAvailable": "Dostupná aktualizace: {version}",
+    "update": {
+      "title": "Dostupná aktualizace",
+      "critical": "Toto je kriticky důležitá bezpečnostní aktualizace. Aktualizujte co nejdříve.",
+      "currentVersion": "Aktuální verze",
+      "latestVersion": "Nejnovější verze",
+      "released": "Vydáno",
+      "channel": "Kanál",
+      "whatsChanged": "Co je nového",
+      "viewRelease": "Zobrazit vydání"
+    },
     "health": "Health",
     "sections": {
       "explore": "Prozkoumat",

@@ -224,6 +224,15 @@ export type TranslationKey =
   | 'navigation.reportBugAriaLabel'
   | 'navigation.askQuestionAriaLabel'
   | 'navigation.viewOnGithubAriaLabel'
+  | 'navigation.updateAvailable' // params: version
+  | 'navigation.update.title'
+  | 'navigation.update.critical'
+  | 'navigation.update.currentVersion'
+  | 'navigation.update.latestVersion'
+  | 'navigation.update.released'
+  | 'navigation.update.channel'
+  | 'navigation.update.whatsChanged'
+  | 'navigation.update.viewRelease'
   | 'navigation.health'
   | 'navigation.sections.explore'
   | 'navigation.sections.patterns'
@@ -3993,6 +4002,7 @@ export type TranslationParams = {
   'common.aria.imageCredit': { name: string | number };
   'common.review.modalTitle': { species: string | number };
   'common.review.form.commentCount': { chars: string | number };
+  'navigation.updateAvailable': { version: string | number };
   'notifications.timeAgo.minutesAgo': { minutes: string | number };
   'notifications.timeAgo.hoursAgo': { hours: string | number };
   'notifications.timeAgo.daysAgo': { days: string | number };

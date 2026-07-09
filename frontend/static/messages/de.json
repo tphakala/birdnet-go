@@ -246,6 +246,17 @@
     "reportBugAriaLabel": "Einen Fehler auf GitHub melden (öffnet in neuem Fenster)",
     "askQuestionAriaLabel": "Eine Frage in GitHub Discussions stellen (öffnet in neuem Fenster)",
     "viewOnGithubAriaLabel": "BirdNET-Go auf GitHub ansehen (öffnet in neuem Fenster)",
+    "updateAvailable": "Update verfügbar: {version}",
+    "update": {
+      "title": "Update verfügbar",
+      "critical": "Dies ist ein sicherheitskritisches Update. Bitte aktualisieren Sie so bald wie möglich.",
+      "currentVersion": "Aktuelle Version",
+      "latestVersion": "Neueste Version",
+      "released": "Veröffentlicht",
+      "channel": "Kanal",
+      "whatsChanged": "Was ist neu",
+      "viewRelease": "Release anzeigen"
+    },
     "health": "Health",
     "sections": {
       "explore": "Erkunden",

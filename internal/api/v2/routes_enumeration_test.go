@@ -165,6 +165,7 @@ var goldenRoutes = []string{
 	"GET /api/v2/system/resources",
 	"GET /api/v2/system/restart-status",
 	"GET /api/v2/system/temperature/cpu",
+	"GET /api/v2/system/update-check",
 	"GET /api/v2/taxonomy/family/:family",
 	"GET /api/v2/taxonomy/genus/:genus",
 	"GET /api/v2/taxonomy/tree/:scientific_name",

@@ -99,6 +99,7 @@ func (c *Handler) RegisterSystemRoutes(g *echo.Group) {
 	protectedGroup.GET("/restart-status", c.GetRestartStatus)
 	protectedGroup.GET("/models", c.GetActiveModels)
 	protectedGroup.GET("/inference", c.GetInferenceStatus)
+	protectedGroup.GET("/update-check", c.GetUpdateCheck)
 
 	// Events routes (detection lifecycle + operational logs).
 	c.registerEventsRoutes(protectedGroup)

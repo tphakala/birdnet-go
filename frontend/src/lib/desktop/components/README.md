@@ -89,6 +89,7 @@ This folder contains **shared components** used across the application. Feature-
 - `ConfirmModal.svelte` - Confirmation dialog
 - `LoginModal.svelte` - User login modal
 - `ReviewModal.svelte` - Detection review modal
+- `UpdateAvailableModal.svelte` - "What's changed" window for a newer build (latest version, changelog, release link); driven by `/api/v2/system/update-check`
 - `SpeciesBadges.svelte` - Reusable species status and lock badges for modals
 - `SpeciesThumbnail.svelte` - Reusable species thumbnail image component
 
