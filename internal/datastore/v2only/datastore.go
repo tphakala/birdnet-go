@@ -2956,18 +2956,30 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 	// Escape LIKE metacharacters with '!' (see scientificNameLikeEscaper).
 	escapedScientificName := scientificNameLikeEscaper.Replace(scientificName)
 	prefix := ds.manager.TablePrefix()
+
+	// Resolve the species to its label id(s) in a subquery so the planner drives
+	// off the (label_id, detected_at) index. Joining labels and filtering
+	// scientific_name inline instead makes SQLite drive off the near-unbounded
+	// "detected_at < before" range, scanning almost the entire detections table
+	// for a single, highly selective species — this function is called once per
+	// species during novelty-episode restore, so that plan is O(species * rows).
+	//
+	// Match the bare scientific name exactly, or a legacy concatenated label
+	// stored as "ScientificName_CommonName". The "!_%" suffix is "literal
+	// underscore separator, then anything" ('!_' is an escaped underscore,
+	// '%' is the wildcard), mirroring how such labels are split on the first
+	// underscore (see detection.ExtractScientificName).
+	labelIDs := ds.manager.DB().WithContext(ctx).
+		Table(prefix+"labels").
+		Select("id").
+		Where("scientific_name = ? OR scientific_name LIKE ? ESCAPE '!'", scientificName, escapedScientificName+`!_%`)
+
 	query := ds.manager.DB().WithContext(ctx).
 		Table(prefix+"detections d").
 		Select(fmt.Sprintf("COALESCE(MAX(%s), '') as last_seen_date", dateExpr)).
-		Joins(fmt.Sprintf("JOIN %slabels l ON d.label_id = l.id", prefix)).
 		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
 		Where("d.detected_at < ?", before.Unix()).
-		// Match the bare scientific name exactly, or a legacy concatenated label
-		// stored as "ScientificName_CommonName". The "!_%" suffix is "literal
-		// underscore separator, then anything" ('!_' is an escaped underscore,
-		// '%' is the wildcard), mirroring how such labels are split on the first
-		// underscore (see detection.ExtractScientificName).
-		Where("(l.scientific_name = ? OR l.scientific_name LIKE ? ESCAPE '!')", scientificName, escapedScientificName+`!_%`).
+		Where("d.label_id IN (?)", labelIDs).
 		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
 
 	if err := query.Scan(&result).Error; err != nil {
