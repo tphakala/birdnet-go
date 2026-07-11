@@ -1281,7 +1281,7 @@
           "label": "Database + lydklipp",
           "description": "Importer deteksjoner og de tilhørende lydopptakene.",
           "badge": "Ikke tilgjengelig",
-          "disabledReason": "Import av lydklipp er ikke tilgjengelig ennå. Bare import av bare database støttes."
+          "disabledReason": "Import av lydklipp er ikke tilgjengelig ennå. Bare import av databasen støttes."
         }
       },
       "confirm": {

@@ -1281,7 +1281,7 @@
           "label": "Base de dados + clipes de áudio",
           "description": "Importe os registos de deteção e as gravações de áudio associadas.",
           "badge": "Não disponível",
-          "disabledReason": "A importação de clipes de áudio ainda não está disponível. Apenas é suportada a importação só da base de dados."
+          "disabledReason": "A importação de clipes de áudio ainda não está disponível. Apenas é suportada a importação da base de dados."
         }
       },
       "confirm": {

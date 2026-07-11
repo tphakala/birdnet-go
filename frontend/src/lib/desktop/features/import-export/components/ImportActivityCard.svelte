@@ -98,7 +98,9 @@
       if (destroyed || generation !== loadGeneration) return;
       logger.error('Failed to load import status', err);
       loadError =
-        err instanceof ApiError ? err.userMessage : t('system.importExport.errors.loadFailed');
+        err instanceof ApiError && err.userMessage
+          ? err.userMessage
+          : t('system.importExport.errors.loadFailed');
     }
   }
 

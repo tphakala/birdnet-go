@@ -1281,7 +1281,7 @@
           "label": "Databas + ljudklipp",
           "description": "Importera detekteringar och tillhörande ljudinspelningar.",
           "badge": "Inte tillgänglig",
-          "disabledReason": "Import av ljudklipp är inte tillgänglig än. Endast import av enbart databas stöds."
+          "disabledReason": "Import av ljudklipp är inte tillgänglig än. Endast databasimport stöds; ljudklipp importeras inte."
         }
       },
       "confirm": {

@@ -1281,7 +1281,7 @@
           "label": "Databáze + zvukové klipy",
           "description": "Importujte záznamy detekcí a související zvukové nahrávky.",
           "badge": "Není k dispozici",
-          "disabledReason": "Import zvukových klipů zatím není k dispozici. Podporován je pouze import samotné databáze."
+          "disabledReason": "Import zvukových klipů zatím není k dispozici. Podporován je pouze import databáze."
         }
       },
       "confirm": {

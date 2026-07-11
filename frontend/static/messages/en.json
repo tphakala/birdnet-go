@@ -1281,7 +1281,7 @@
           "label": "Database + audio clips",
           "description": "Import detection records and associated audio recordings.",
           "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "disabledReason": "Audio clip import is not yet available. Only database import is supported."
         }
       },
       "confirm": {

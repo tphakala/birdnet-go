@@ -1281,7 +1281,7 @@
           "label": "Database + clip audio",
           "description": "Importa i record di rilevamento e le registrazioni audio associate.",
           "badge": "Non disponibile",
-          "disabledReason": "L'importazione dei clip audio non è ancora disponibile. È supportata solo l'importazione del solo database."
+          "disabledReason": "L'importazione dei clip audio non è ancora disponibile. È supportata solo l'importazione del database."
         }
       },
       "confirm": {

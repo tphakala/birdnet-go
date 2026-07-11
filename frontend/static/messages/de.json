@@ -1281,7 +1281,7 @@
           "label": "Datenbank + Audioclips",
           "description": "Importiere Erkennungsdatensätze und die zugehörigen Audioaufnahmen.",
           "badge": "Nicht verfügbar",
-          "disabledReason": "Der Import von Audioclips ist noch nicht verfügbar. Es wird nur der reine Datenbankimport unterstützt."
+          "disabledReason": "Der Import von Audioclips ist noch nicht verfügbar. Es wird nur der Datenbankimport unterstützt."
         }
       },
       "confirm": {

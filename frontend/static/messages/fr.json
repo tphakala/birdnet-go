@@ -1281,7 +1281,7 @@
           "label": "Base de données + extraits audio",
           "description": "Importez les enregistrements de détection et les enregistrements audio associés.",
           "badge": "Non disponible",
-          "disabledReason": "L'import des extraits audio n'est pas encore disponible. Seul l'import de la base de données seule est pris en charge."
+          "disabledReason": "L'import des extraits audio n'est pas encore disponible. Seul l'import de la base de données est pris en charge."
         }
       },
       "confirm": {

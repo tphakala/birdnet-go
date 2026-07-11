@@ -1281,7 +1281,7 @@
           "label": "Adatbázis + hangklipek",
           "description": "Importálja az észlelési rekordokat és a kapcsolódó hangfelvételeket.",
           "badge": "Nem érhető el",
-          "disabledReason": "A hangklipek importálása még nem érhető el. Csak a kizárólag adatbázis importálása támogatott."
+          "disabledReason": "A hangklipek importálása még nem érhető el. Csak az adatbázis importálása támogatott."
         }
       },
       "confirm": {

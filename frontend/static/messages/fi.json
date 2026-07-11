@@ -1281,7 +1281,7 @@
           "label": "Tietokanta + äänileikkeet",
           "description": "Tuo havaintotietueet ja niihin liittyvät äänitallenteet.",
           "badge": "Ei saatavilla",
-          "disabledReason": "Äänileikkeiden tuonti ei ole vielä saatavilla. Vain pelkän tietokannan tuonti on tuettu."
+          "disabledReason": "Äänileikkeiden tuonti ei ole vielä saatavilla. Vain tietokannan tuonti on tuettu."
         }
       },
       "confirm": {

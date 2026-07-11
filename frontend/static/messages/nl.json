@@ -1281,7 +1281,7 @@
           "label": "Database + audiofragmenten",
           "description": "Importeer detectiegegevens en de bijbehorende audio-opnamen.",
           "badge": "Niet beschikbaar",
-          "disabledReason": "Import van audiofragmenten is nog niet beschikbaar. Alleen import van alleen de database wordt ondersteund."
+          "disabledReason": "Import van audiofragmenten is nog niet beschikbaar. Alleen import van de database wordt ondersteund."
         }
       },
       "confirm": {

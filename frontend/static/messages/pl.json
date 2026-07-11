@@ -1281,7 +1281,7 @@
           "label": "Baza danych + klipy audio",
           "description": "Importuj rekordy wykryć i powiązane nagrania audio.",
           "badge": "Niedostępne",
-          "disabledReason": "Import klipów audio nie jest jeszcze dostępny. Obsługiwany jest tylko import samej bazy danych."
+          "disabledReason": "Import klipów audio nie jest jeszcze dostępny. Obsługiwany jest tylko import bazy danych."
         }
       },
       "confirm": {
