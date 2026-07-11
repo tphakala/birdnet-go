@@ -112,11 +112,14 @@ func TestDefaultClassifierModelInfo_AMD64AlwaysTFLite(t *testing.T) {
 	assert.Equal(t, BackendTFLite, info.Backend)
 }
 
-// TestRemapV24ForONNXOnly verifies that on ONNX-only (notflite) builds a
-// registry-resolved BirdNET v2.4 TFLite model (from version:"2.4" or the default)
-// is transparently remapped to the INT8 ONNX entry when present, so existing
-// arm64 configs keep starting instead of failing on the missing TFLite backend.
-func TestRemapV24ForONNXOnly(t *testing.T) {
+// TestRemapV24ToONNXOnARM64 verifies the stock v2.4 TFLite default is remapped to
+// the INT8-ARM ONNX entry when ONNX is the right stock backend and the file is
+// present: on arm64 (its reduced-memory default, TFLite still linked for custom
+// models) and on a non-arm64 notflite build (no TFLite backend to run). A normal
+// non-arm64 build keeps FP32 TFLite even with the ONNX file present, arm64 without
+// the ONNX file stays on TFLite, and a user-supplied .tflite (CustomPath) is never
+// swapped.
+func TestRemapV24ToONNXOnARM64(t *testing.T) {
 	t.Parallel()
 
 	v24 := ModelRegistry[DefaultModelVersion]
@@ -128,38 +131,48 @@ func TestRemapV24ForONNXOnly(t *testing.T) {
 	}
 	findMiss := func(string) (string, bool) { return "", false }
 
-	t.Run("tflite available: unchanged", func(t *testing.T) {
-		t.Parallel()
-		got := remapV24ForONNXOnly(&v24, true, findHit)
-		assert.Equal(t, DefaultModelVersion, got.ID)
-		assert.Equal(t, BackendTFLite, got.Backend)
-	})
-	t.Run("onnx-only + int8 present: remapped to unified ONNX", func(t *testing.T) {
-		t.Parallel()
-		got := remapV24ForONNXOnly(&v24, false, findHit)
+	assertRemappedToONNX := func(t *testing.T, got ModelInfo) {
+		t.Helper()
 		assert.Equal(t, DefaultModelVersion, got.ID)
 		assert.Equal(t, BackendONNX, got.Backend)
 		assert.Equal(t, QuantizationINT8, got.Quantization)
 		assert.True(t, got.IsStock)
 		assert.Equal(t, "/models/"+DefaultBirdNETINT8ONNXModelName, got.CustomPath)
-	})
-	t.Run("onnx-only but int8 absent: unchanged (fails clearly downstream)", func(t *testing.T) {
+	}
+
+	t.Run("arm64 (tflite linked) + int8 present: remapped to ONNX", func(t *testing.T) {
 		t.Parallel()
-		got := remapV24ForONNXOnly(&v24, false, findMiss)
+		assertRemappedToONNX(t, remapV24ToONNXOnARM64(&v24, "arm64", true, findHit))
+	})
+	t.Run("non-arm64 notflite + int8 present: remapped to ONNX (no-TFLite fallback)", func(t *testing.T) {
+		t.Parallel()
+		assertRemappedToONNX(t, remapV24ToONNXOnARM64(&v24, "amd64", false, findHit))
+	})
+	t.Run("normal amd64 (tflite available) + int8 present: not remapped", func(t *testing.T) {
+		t.Parallel()
+		got := remapV24ToONNXOnARM64(&v24, "amd64", true, findHit)
 		assert.Equal(t, DefaultModelVersion, got.ID)
+		assert.Equal(t, BackendTFLite, got.Backend)
+	})
+	t.Run("arm64 but int8 absent: unchanged (fails clearly downstream)", func(t *testing.T) {
+		t.Parallel()
+		got := remapV24ToONNXOnARM64(&v24, "arm64", true, findMiss)
+		assert.Equal(t, DefaultModelVersion, got.ID)
+		assert.Equal(t, BackendTFLite, got.Backend)
 	})
 	t.Run("explicit custom .tflite path: not remapped", func(t *testing.T) {
 		t.Parallel()
 		custom := v24
 		custom.CustomPath = "/data/model/my.tflite"
-		got := remapV24ForONNXOnly(&custom, false, findHit)
+		got := remapV24ToONNXOnARM64(&custom, "arm64", true, findHit)
 		assert.Equal(t, DefaultModelVersion, got.ID)
 		assert.Equal(t, "/data/model/my.tflite", got.CustomPath)
+		assert.Equal(t, BackendTFLite, got.Backend)
 	})
 	t.Run("non-v2.4 entry: unchanged", func(t *testing.T) {
 		t.Parallel()
 		perch := ModelRegistry[RegistryIDPerchV2]
-		got := remapV24ForONNXOnly(&perch, false, findHit)
+		got := remapV24ToONNXOnARM64(&perch, "arm64", true, findHit)
 		assert.Equal(t, RegistryIDPerchV2, got.ID)
 	})
 }
@@ -251,9 +264,9 @@ func TestDetermineModelInfoINT8ONNX(t *testing.T) {
 	assert.False(t, info.IsStock, "explicit modelpath is not stock")
 }
 
-// TestRemapV24ForONNXOnlyUnified verifies that remapV24ForONNXOnly returns the
+// TestRemapV24ToONNXOnARM64Unified verifies that remapV24ToONNXOnARM64 returns the
 // unified BirdNET_V2.4 ID (not the forked INT8 ID) when remapping to ONNX.
-func TestRemapV24ForONNXOnlyUnified(t *testing.T) {
+func TestRemapV24ToONNXOnARM64Unified(t *testing.T) {
 	t.Parallel()
 	find := func(name string) (string, bool) {
 		if name == DefaultBirdNETINT8ONNXModelName {
@@ -262,7 +275,7 @@ func TestRemapV24ForONNXOnlyUnified(t *testing.T) {
 		return "", false
 	}
 	base := ModelRegistry[DefaultModelVersion]
-	got := remapV24ForONNXOnly(&base, false /*tfliteAvailable*/, find)
+	got := remapV24ToONNXOnARM64(&base, "arm64", true, find)
 	assert.Equal(t, DefaultModelVersion, got.ID)
 	assert.Equal(t, BackendONNX, got.Backend)
 	assert.Equal(t, QuantizationINT8, got.Quantization)

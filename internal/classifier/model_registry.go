@@ -206,18 +206,27 @@ func isBirdNETV24Family(id string) bool {
 	return id == DefaultModelVersion
 }
 
-// remapV24ForONNXOnly remaps a registry-resolved BirdNET v2.4 TFLite model to the
-// INT8-ARM ONNX entry when this build has no TFLite backend (notflite, i.e. the
-// ONNX-only arm64 image) and the ONNX model is present in the standard paths.
-// This keeps arm64 configs that select v2.4 via `version: "2.4"` or the default
-// working on ONNX-only images instead of failing to start on the missing TFLite
-// backend. An explicit model path (CustomPath set) is left untouched so a
-// user-supplied model is never silently swapped.
-func remapV24ForONNXOnly(info *ModelInfo, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
-	if tfliteAvailable || info.CustomPath != "" {
+// remapV24ToONNXOnARM64 remaps a registry-resolved BirdNET v2.4 TFLite model to the
+// INT8-ARM ONNX entry when ONNX is the appropriate stock backend and the ONNX model
+// is present in the standard paths. That holds in two cases: on arm64 (where INT8-ARM
+// ONNX is the reduced-memory stock default; arm64 container images also link
+// libtensorflowlite_c so custom `.tflite` models still load), and on any build with
+// no TFLite backend (the notflite tag), whose stub classifier cannot run TFLite and
+// would otherwise fail to start. A normal non-arm64 build keeps its FP32 TFLite v2.4
+// default even when the ONNX file happens to be present, so a stray copy never
+// silently switches backends. An explicit model path (CustomPath set) is left
+// untouched so a user-supplied model is never swapped.
+func remapV24ToONNXOnARM64(info *ModelInfo, goarch string, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
+	if info.CustomPath != "" {
 		return *info
 	}
 	if info.Backend != BackendTFLite || info.ID != DefaultModelVersion {
+		return *info
+	}
+	// Remap to ONNX on arm64 (its stock default) or on a build with no TFLite
+	// backend (notflite), where TFLite cannot run. A normal non-arm64 build keeps
+	// FP32 TFLite even when the ONNX file is present, so nothing silently switches.
+	if goarch != defaultBirdNETClassifierARM64Arch && tfliteAvailable {
 		return *info
 	}
 	if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {

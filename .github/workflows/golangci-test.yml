@@ -69,6 +69,15 @@ jobs:
       - name: Setup ONNX Runtime
         uses: ./.github/actions/setup-onnxruntime
 
+      # notflite is retained as a minimal, strictly-ONNX build option, but after
+      # arm64 containers went back to linking libtensorflowlite_c no shipped
+      # artifact builds the notflite tag by default. Compile the whole tree with it
+      # once (shard 0) so the stub path (internal/inference/tflite/stub_notflite.go,
+      # internal/classifier/tflite_unavailable.go) cannot bitrot unnoticed.
+      - name: Compile check (notflite stub path)
+        if: matrix.shard == 0
+        run: go build -tags "noembed,skipfrontend,notflite" ./...
+
       - name: Install FFmpeg, SoX, and test dependencies
         uses: ./.github/actions/setup-apt-packages
         with:

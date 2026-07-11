@@ -166,9 +166,10 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:trixie-slim
 
-# Copy model files to /models. arm64 ships ONNX-only (issue #1103); other arches
-# ship the TFLite models. Stage all candidates in one cacheable layer, then keep
-# only the set for the target architecture.
+# Copy stock model files to /models. arm64 ships ONNX-only stock models (the
+# reduced-memory INT8-ARM default); other arches ship the TFLite models. Stage all
+# candidates in one cacheable layer, then keep only the set for the target
+# architecture. Custom models are supplied by the user at runtime, not shipped here.
 RUN mkdir -p /models /tmp/allmodels
 COPY --from=build /home/dev-user/src/BirdNET-Go/internal/classifier/data/*.tflite /tmp/allmodels/
 COPY --from=build /home/dev-user/src/BirdNET-Go/internal/classifier/data/*.onnx /tmp/allmodels/
@@ -213,14 +214,17 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
 # overwrite them if it happens to share that UID.
 COPY --chown=root:root --from=build /home/dev-user/lib/libonnxruntime*.so* /usr/lib/
 
-# TensorFlow Lite C library: installed for non-arm64 only. arm64 is ONNX-only
-# (issue #1103) and the binary does not link libtensorflowlite_c. Stage it, then
-# install per arch.
-ARG TARGETPLATFORM
+# TensorFlow Lite C library: installed for all arches. The stock default classifier
+# is ONNX on arm64 (reduced memory) and TFLite on amd64, but every arch links
+# libtensorflowlite_c so a user-supplied custom `.tflite` model path loads in any
+# container. No TFLite interpreter is created unless a .tflite model is actually
+# loaded, so the arm64 memory win for the ONNX default is preserved.
+# Stage then cp (not a direct COPY) so cp dereferences the build-stage soname
+# symlinks into regular files under /usr/lib; cp runs as root here, so the installed
+# libraries are root-owned. Fail the build loudly if the library is missing.
 COPY --from=build /home/dev-user/lib/libtensorflowlite_c.so* /tmp/tflite-lib/
-RUN if [ "$TARGETPLATFORM" != "linux/arm64" ]; then \
-        cp /tmp/tflite-lib/libtensorflowlite_c.so* /usr/lib/; \
-    fi && \
+RUN cp /tmp/tflite-lib/libtensorflowlite_c.so* /usr/lib/ && \
+    test -e /usr/lib/libtensorflowlite_c.so && \
     rm -rf /tmp/tflite-lib && \
     ldconfig
 

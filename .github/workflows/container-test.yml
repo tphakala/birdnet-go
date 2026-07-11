@@ -60,10 +60,12 @@ jobs:
         run: Docker/test/arbitrary-uid-smoke.sh birdnet-go:test
 
   arbitrary-uid-start-arm64:
-    name: ONNX-only arm64 startup
+    name: arm64 container startup
     # Native arm64 runner (free for public repos): the only PR-time job that
-    # exercises the arm64 Dockerfile path (ONNX-only, no libtensorflowlite_c).
-    # Without this the arm64 image first builds on push-to-main.
+    # exercises the arm64 Dockerfile path. The arm64 image ships the INT8-ARM ONNX
+    # stock default and links libtensorflowlite_c for custom .tflite models.
+    # Without this the arm64 image first builds on push-to-main. Custom-.tflite
+    # loading is not covered here; that is validated on real arm64 hardware.
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout code
@@ -74,7 +76,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Build container image (arm64 ONNX-only, load locally)
+      - name: Build container image (arm64, load locally)
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -90,5 +92,5 @@ jobs:
           cache-to: type=gha,mode=max,scope=arm64
           provenance: false
 
-      - name: Arbitrary-UID startup smoke test (arm64 ONNX-only)
+      - name: Arbitrary-UID startup smoke test (arm64)
         run: Docker/test/arbitrary-uid-smoke.sh birdnet-go:test-arm64
