@@ -1174,159 +1174,159 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "available": "Available",
+      "available": "Dostupné",
       "experimental": "Experimentální",
-      "comingSoon": "Coming soon",
-      "loading": "Loading...",
-      "runInBackground": "Close (import continues in background)",
-      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
-      "stepAnnouncement": "Step {current} of {total}: {name}",
+      "comingSoon": "Již brzy",
+      "loading": "Načítání...",
+      "runInBackground": "Zavřít (import pokračuje na pozadí)",
+      "runInBackgroundTitle": "Zavřít toto dialogové okno. Import pokračuje na pozadí.",
+      "stepAnnouncement": "Krok {current} z {total}: {name}",
       "steps": {
-        "source": "Source",
-        "mode": "Mode",
-        "confirm": "Confirm",
-        "progress": "Progress",
-        "done": "Done"
+        "source": "Zdroj",
+        "mode": "Režim",
+        "confirm": "Potvrdit",
+        "progress": "Průběh",
+        "done": "Hotovo"
       },
       "import": {
         "sectionTitle": "Import"
       },
       "export": {
         "sectionTitle": "Export",
-        "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats."
+        "cardTitle": "Exportovat detekce",
+        "cardDescription": "Exportujte svá data detekcí do formátu CSV, JSON nebo jiných formátů."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
-        "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
-        "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi",
+        "cardDescription": "Importujte historii detekcí z databáze SQLite BirdNET-Pi (birds.db).",
+        "startButton": "Importovat z BirdNET-Pi",
+        "wizardTitle": "Importovat z BirdNET-Pi",
         "experimentalNotice": "Import z BirdNET-Pi je experimentální a stále může mít problémy.",
         "reportBug": "Nahlásit chybu na GitHubu"
       },
       "birdsDbUpload": {
-        "cardTitle": "birds.db upload",
-        "cardDescription": "Upload a BirdNET-Pi database file directly from your browser."
+        "cardTitle": "Nahrání birds.db",
+        "cardDescription": "Nahrajte soubor databáze BirdNET-Pi přímo z prohlížeče."
       },
       "activity": {
-        "sectionTitle": "Import activity",
+        "sectionTitle": "Aktivita importu",
         "empty": {
-          "title": "No import activity",
-          "description": "When an import is running, its progress shows up here."
+          "title": "Žádná aktivita importu",
+          "description": "Když import běží, jeho průběh se zobrazí zde."
         },
-        "openWizard": "Open import wizard"
+        "openWizard": "Otevřít průvodce importem"
       },
       "wizard": {
-        "stepsLabel": "Import wizard steps"
+        "stepsLabel": "Kroky průvodce importem"
       },
       "sourceAccess": {
-        "pathLabel": "Path to birds.db (relative to mount root)",
-        "pathHelpText": "Enter the path relative to the external media mount root, e.g. birdnet-pi/birds.db",
-        "pathRequiredReason": "Enter the path to birds.db to continue",
-        "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
-        "mountRoot": "Mount root",
-        "nativeTitle": "External media mount required",
-        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
-        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
-        "missingTitle": "External media mount not found",
-        "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
-        "setupStepsLabel": "Setup steps",
-        "recheckButton": "Re-check",
-        "recheckHint": "After completing the setup steps, click Re-check to continue."
+        "pathLabel": "Cesta k birds.db (relativní ke kořenu připojení)",
+        "pathHelpText": "Zadejte cestu relativní ke kořenu připojení externího média, např. birdnet-pi/birds.db",
+        "pathRequiredReason": "Pokračujte zadáním cesty k birds.db",
+        "mountDescription": "Vaše databáze BirdNET-Pi by měla být na připojení externího média.",
+        "mountRoot": "Kořen připojení",
+        "nativeTitle": "Vyžadováno připojení externího média",
+        "nativeDescription": "Import z BirdNET-Pi vyžaduje připojení externího média, které je k dispozici pouze tehdy, když BirdNET-Go běží v kontejneru. Nativní (nekontejnerizované) instalace tuto funkci importu nemohou používat.",
+        "nativeHowTo": "Chcete-li importovat z BirdNET-Pi, spusťte BirdNET-Go v kontejneru s datovým adresářem BirdNET-Pi připojeným jako svazek externího média.",
+        "missingTitle": "Připojení externího média nenalezeno",
+        "missingDescription": "BirdNET-Go běží v kontejneru, ale připojení externího média není dostupné. Nastavte jej podle kroků níže.",
+        "setupStepsLabel": "Kroky nastavení",
+        "recheckButton": "Zkontrolovat znovu",
+        "recheckHint": "Po dokončení kroků nastavení pokračujte kliknutím na Zkontrolovat znovu."
       },
       "source": {
-        "title": "Where is your BirdNET-Pi data?",
-        "candidatesIntro": "We found these BirdNET-Pi databases:",
-        "selectButton": "Select",
-        "useThisButton": "Use this",
-        "detectionsSummary": "{count} detections, up to {date}",
-        "kindLocal": "On this device",
-        "kindRemovable": "Removable drive",
-        "kindNetwork": "Network location",
-        "unreadableTitle": "Found, but BirdNET-Go can't read it",
-        "unreadableOwner": "This data belongs to another user ({owner}).",
-        "manualEntryLink": "Don't see it? Enter the location manually",
-        "manualEntryLabel": "BirdNET-Pi database location",
-        "manualValidating": "Checking...",
-        "manualValid": "Found {count} detections.",
-        "manualNotFound": "We couldn't find a file there.",
-        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
-        "manualInvalid": "That file isn't a BirdNET-Pi database.",
-        "zeroTitle": "We couldn't find it automatically",
-        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
-        "checkAgainButton": "Check again",
-        "showCommandsLabel": "Show commands",
-        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "title": "Kde jsou vaše data BirdNET-Pi?",
+        "candidatesIntro": "Našli jsme tyto databáze BirdNET-Pi:",
+        "selectButton": "Vybrat",
+        "useThisButton": "Použít tuto",
+        "detectionsSummary": "{count} detekcí, do {date}",
+        "kindLocal": "V tomto zařízení",
+        "kindRemovable": "Vyměnitelný disk",
+        "kindNetwork": "Síťové umístění",
+        "unreadableTitle": "Nalezeno, ale BirdNET-Go to nemůže přečíst",
+        "unreadableOwner": "Tato data patří jinému uživateli ({owner}).",
+        "manualEntryLink": "Nevidíte to? Zadejte umístění ručně",
+        "manualEntryLabel": "Umístění databáze BirdNET-Pi",
+        "manualValidating": "Kontrola...",
+        "manualValid": "Nalezeno {count} detekcí.",
+        "manualNotFound": "Na tomto místě jsme nenašli žádný soubor.",
+        "manualUnreadable": "Nalezeno, ale BirdNET-Go to zatím nemůže přečíst.",
+        "manualInvalid": "Tento soubor není databáze BirdNET-Pi.",
+        "zeroTitle": "Nepodařilo se nám to najít automaticky",
+        "zeroDescription": "Připojte disk s daty BirdNET-Pi a zkontrolujte znovu.",
+        "checkAgainButton": "Zkontrolovat znovu",
+        "showCommandsLabel": "Zobrazit příkazy",
+        "containerUnreadableHint": "BirdNET-Go (běžící jako UID {uid}) nemůže tento soubor přečíst. Upravte oprávnění na hostiteli tak, aby jej UID {uid} mohl číst, a poté zkontrolujte znovu.",
         "elevation": {
-          "copying": "Copying your data...",
-          "passwordTitle": "BirdNET-Go needs permission to read this data",
-          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
-          "passwordLabel": "Administrator password",
-          "passwordRequiredReason": "Enter the administrator password to continue",
-          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
-          "submitButton": "Copy and continue",
-          "fallbackTitle": "Run this command to grant access",
-          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
-          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
-          "failed": "That didn't work. Check the password and try again, or use the command below."
+          "copying": "Kopírování vašich dat...",
+          "passwordTitle": "BirdNET-Go potřebuje oprávnění ke čtení těchto dat",
+          "passwordDescription": "Zadejte heslo správce tohoto zařízení, aby BirdNET-Go mohl data zkopírovat.",
+          "passwordLabel": "Heslo správce",
+          "passwordRequiredReason": "Pokračujte zadáním hesla správce",
+          "httpWarning": "Tato stránka nepoužívá HTTPS. Heslo správce bude odesláno přes vaši místní síť nešifrovaně. Pokračujte pouze v síti, které důvěřujete.",
+          "submitButton": "Zkopírovat a pokračovat",
+          "fallbackTitle": "Spusťte tento příkaz pro udělení přístupu",
+          "fallbackDescription": "BirdNET-Go nemůže oprávnění zvýšit automaticky. Spusťte příkaz níže a poté klikněte na Zkontrolovat znovu.",
+          "disabledNote": "Zvýšení oprávnění v aplikaci je vypnuté. Pro udělení přístupu použijte příkaz níže.",
+          "failed": "Nefungovalo to. Zkontrolujte heslo a zkuste to znovu, nebo použijte příkaz níže."
         }
       },
       "mode": {
-        "label": "What do you want to import?",
+        "label": "Co chcete importovat?",
         "dbOnly": {
-          "label": "Database only",
-          "description": "Import detection records from birds.db. Audio clips are not imported."
+          "label": "Pouze databáze",
+          "description": "Importujte záznamy detekcí z birds.db. Zvukové klipy se neimportují."
         },
         "dbAudio": {
-          "label": "Database + audio clips",
-          "description": "Import detection records and associated audio recordings.",
-          "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "label": "Databáze + zvukové klipy",
+          "description": "Importujte záznamy detekcí a související zvukové nahrávky.",
+          "badge": "Není k dispozici",
+          "disabledReason": "Import zvukových klipů zatím není k dispozici. Podporován je pouze import samotné databáze."
         }
       },
       "confirm": {
-        "description": "Review your import settings before starting. Imported detections are tagged with the source birdnet-pi and duplicates are skipped automatically.",
-        "source": "Source path",
-        "mode": "Import mode",
-        "tagging": "Source tag",
-        "taggingValue": "birdnet-pi (auto-applied)",
-        "deduplicationNote": "Duplicate detections (same species, time, and date already in the database) are skipped automatically. Exact counts will be shown live during the import.",
-        "startButton": "Start import"
+        "description": "Před spuštěním zkontrolujte nastavení importu. Importované detekce jsou označeny zdrojem birdnet-pi a duplicity jsou automaticky přeskočeny.",
+        "source": "Zdrojová cesta",
+        "mode": "Režim importu",
+        "tagging": "Značka zdroje",
+        "taggingValue": "birdnet-pi (použito automaticky)",
+        "deduplicationNote": "Duplicitní detekce (stejný druh, čas a datum již v databázi) jsou automaticky přeskočeny. Přesné počty se během importu zobrazí živě.",
+        "startButton": "Spustit import"
       },
       "progress": {
-        "label": "Import progress",
-        "runningLabel": "Import running",
-        "progressLabel": "{percent}% complete",
-        "cancelButton": "Cancel",
-        "cancellingLabel": "Cancelling...",
-        "cancelledMessage": "Import was cancelled.",
-        "processed": "Processed",
-        "inserted": "Inserted",
-        "skipped": "Skipped",
-        "errors": "Errors",
+        "label": "Průběh importu",
+        "runningLabel": "Import probíhá",
+        "progressLabel": "{percent} % dokončeno",
+        "cancelButton": "Zrušit",
+        "cancellingLabel": "Rušení...",
+        "cancelledMessage": "Import byl zrušen.",
+        "processed": "Zpracováno",
+        "inserted": "Vloženo",
+        "skipped": "Přeskočeno",
+        "errors": "Chyby",
         "phase": {
-          "validate": "Validating",
-          "dedup": "Deduplicating",
-          "import": "Importing"
+          "validate": "Ověřování",
+          "dedup": "Odstraňování duplicit",
+          "import": "Import"
         }
       },
       "done": {
-        "successTitle": "Import complete",
-        "successDescription": "Your BirdNET-Pi detections have been imported successfully.",
-        "cancelledTitle": "Import cancelled",
-        "cancelledDescription": "The import was cancelled before completing.",
-        "errorTitle": "Import failed",
-        "viewDetectionsLink": "View imported detections",
-        "partialInserted": "{count} detections were imported before cancellation.",
-        "importAnother": "Import another"
+        "successTitle": "Import dokončen",
+        "successDescription": "Vaše detekce BirdNET-Pi byly úspěšně importovány.",
+        "cancelledTitle": "Import zrušen",
+        "cancelledDescription": "Import byl zrušen před dokončením.",
+        "errorTitle": "Import se nezdařil",
+        "viewDetectionsLink": "Zobrazit importované detekce",
+        "partialInserted": "Před zrušením bylo importováno {count} detekcí.",
+        "importAnother": "Importovat další"
       },
       "errors": {
-        "loadFailed": "Failed to load import status. Please try again.",
-        "mediaLoadFailed": "Failed to check external media. Please try again.",
-        "alreadyRunning": "An import is already in progress. Please wait for it to complete.",
-        "startFailed": "Failed to start import. Please try again.",
-        "cancelFailed": "Failed to cancel import.",
-        "importFailed": "Import failed. Please check your configuration and try again."
+        "loadFailed": "Nepodařilo se načíst stav importu. Zkuste to prosím znovu.",
+        "mediaLoadFailed": "Nepodařilo se zkontrolovat externí média. Zkuste to prosím znovu.",
+        "alreadyRunning": "Import již probíhá. Počkejte prosím na jeho dokončení.",
+        "startFailed": "Nepodařilo se spustit import. Zkuste to prosím znovu.",
+        "cancelFailed": "Nepodařilo se zrušit import.",
+        "importFailed": "Import se nezdařil. Zkontrolujte prosím konfiguraci a zkuste to znovu."
       }
     },
     "database": {

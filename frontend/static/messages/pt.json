@@ -1174,159 +1174,159 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "available": "Available",
+      "available": "Disponível",
       "experimental": "Experimental",
-      "comingSoon": "Coming soon",
-      "loading": "Loading...",
-      "runInBackground": "Close (import continues in background)",
-      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
-      "stepAnnouncement": "Step {current} of {total}: {name}",
+      "comingSoon": "Brevemente",
+      "loading": "A carregar...",
+      "runInBackground": "Fechar (a importação continua em segundo plano)",
+      "runInBackgroundTitle": "Fechar esta caixa de diálogo. A importação continua em segundo plano.",
+      "stepAnnouncement": "Passo {current} de {total}: {name}",
       "steps": {
-        "source": "Source",
-        "mode": "Mode",
-        "confirm": "Confirm",
-        "progress": "Progress",
-        "done": "Done"
+        "source": "Origem",
+        "mode": "Modo",
+        "confirm": "Confirmar",
+        "progress": "Progresso",
+        "done": "Concluído"
       },
       "import": {
-        "sectionTitle": "Import"
+        "sectionTitle": "Importação"
       },
       "export": {
-        "sectionTitle": "Export",
-        "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats."
+        "sectionTitle": "Exportação",
+        "cardTitle": "Exportar deteções",
+        "cardDescription": "Exporte os seus dados de deteção para CSV, JSON ou outros formatos."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
-        "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
-        "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi",
+        "cardDescription": "Importe o histórico de deteções a partir de uma base de dados SQLite do BirdNET-Pi (birds.db).",
+        "startButton": "Importar do BirdNET-Pi",
+        "wizardTitle": "Importar do BirdNET-Pi",
         "experimentalNotice": "A importação do BirdNET-Pi é experimental e ainda pode apresentar problemas.",
         "reportBug": "Relatar um erro no GitHub"
       },
       "birdsDbUpload": {
-        "cardTitle": "birds.db upload",
-        "cardDescription": "Upload a BirdNET-Pi database file directly from your browser."
+        "cardTitle": "Carregamento de birds.db",
+        "cardDescription": "Carregue um ficheiro de base de dados do BirdNET-Pi diretamente a partir do seu navegador."
       },
       "activity": {
-        "sectionTitle": "Import activity",
+        "sectionTitle": "Atividade de importação",
         "empty": {
-          "title": "No import activity",
-          "description": "When an import is running, its progress shows up here."
+          "title": "Sem atividade de importação",
+          "description": "Quando uma importação estiver em curso, o seu progresso aparece aqui."
         },
-        "openWizard": "Open import wizard"
+        "openWizard": "Abrir o assistente de importação"
       },
       "wizard": {
-        "stepsLabel": "Import wizard steps"
+        "stepsLabel": "Passos do assistente de importação"
       },
       "sourceAccess": {
-        "pathLabel": "Path to birds.db (relative to mount root)",
-        "pathHelpText": "Enter the path relative to the external media mount root, e.g. birdnet-pi/birds.db",
-        "pathRequiredReason": "Enter the path to birds.db to continue",
-        "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
-        "mountRoot": "Mount root",
-        "nativeTitle": "External media mount required",
-        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
-        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
-        "missingTitle": "External media mount not found",
-        "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
-        "setupStepsLabel": "Setup steps",
-        "recheckButton": "Re-check",
-        "recheckHint": "After completing the setup steps, click Re-check to continue."
+        "pathLabel": "Caminho para birds.db (relativo à raiz de montagem)",
+        "pathHelpText": "Introduza o caminho relativo à raiz da montagem de suportes externos, por ex. birdnet-pi/birds.db",
+        "pathRequiredReason": "Introduza o caminho para birds.db para continuar",
+        "mountDescription": "A sua base de dados do BirdNET-Pi deve estar na montagem de suportes externos.",
+        "mountRoot": "Raiz de montagem",
+        "nativeTitle": "É necessária uma montagem de suportes externos",
+        "nativeDescription": "A importação do BirdNET-Pi requer uma montagem de suportes externos, que só está disponível quando o BirdNET-Go é executado num contentor. As instalações nativas (sem contentor) não podem utilizar esta funcionalidade de importação.",
+        "nativeHowTo": "Para importar do BirdNET-Pi, execute o BirdNET-Go num contentor com o diretório de dados do BirdNET-Pi montado como volume de suportes externos.",
+        "missingTitle": "Montagem de suportes externos não encontrada",
+        "missingDescription": "O BirdNET-Go está a ser executado num contentor, mas a montagem de suportes externos não está acessível. Siga os passos abaixo para a configurar.",
+        "setupStepsLabel": "Passos de configuração",
+        "recheckButton": "Verificar novamente",
+        "recheckHint": "Depois de concluir os passos de configuração, clique em Verificar novamente para continuar."
       },
       "source": {
-        "title": "Where is your BirdNET-Pi data?",
-        "candidatesIntro": "We found these BirdNET-Pi databases:",
-        "selectButton": "Select",
-        "useThisButton": "Use this",
-        "detectionsSummary": "{count} detections, up to {date}",
-        "kindLocal": "On this device",
-        "kindRemovable": "Removable drive",
-        "kindNetwork": "Network location",
-        "unreadableTitle": "Found, but BirdNET-Go can't read it",
-        "unreadableOwner": "This data belongs to another user ({owner}).",
-        "manualEntryLink": "Don't see it? Enter the location manually",
-        "manualEntryLabel": "BirdNET-Pi database location",
-        "manualValidating": "Checking...",
-        "manualValid": "Found {count} detections.",
-        "manualNotFound": "We couldn't find a file there.",
-        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
-        "manualInvalid": "That file isn't a BirdNET-Pi database.",
-        "zeroTitle": "We couldn't find it automatically",
-        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
-        "checkAgainButton": "Check again",
-        "showCommandsLabel": "Show commands",
-        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "title": "Onde estão os seus dados do BirdNET-Pi?",
+        "candidatesIntro": "Encontrámos estas bases de dados do BirdNET-Pi:",
+        "selectButton": "Selecionar",
+        "useThisButton": "Utilizar esta",
+        "detectionsSummary": "{count} deteções, até {date}",
+        "kindLocal": "Neste dispositivo",
+        "kindRemovable": "Unidade removível",
+        "kindNetwork": "Localização de rede",
+        "unreadableTitle": "Encontrada, mas o BirdNET-Go não a consegue ler",
+        "unreadableOwner": "Estes dados pertencem a outro utilizador ({owner}).",
+        "manualEntryLink": "Não a vê? Introduza a localização manualmente",
+        "manualEntryLabel": "Localização da base de dados do BirdNET-Pi",
+        "manualValidating": "A verificar...",
+        "manualValid": "Encontradas {count} deteções.",
+        "manualNotFound": "Não encontrámos nenhum ficheiro aí.",
+        "manualUnreadable": "Encontrámo-la, mas o BirdNET-Go ainda não a consegue ler.",
+        "manualInvalid": "Esse ficheiro não é uma base de dados do BirdNET-Pi.",
+        "zeroTitle": "Não a conseguimos encontrar automaticamente",
+        "zeroDescription": "Ligue a unidade que contém os seus dados do BirdNET-Pi e verifique novamente.",
+        "checkAgainButton": "Verificar novamente",
+        "showCommandsLabel": "Mostrar comandos",
+        "containerUnreadableHint": "O BirdNET-Go (a ser executado como UID {uid}) não consegue ler este ficheiro. Corrija as permissões no anfitrião para que o UID {uid} o possa ler e, em seguida, verifique novamente.",
         "elevation": {
-          "copying": "Copying your data...",
-          "passwordTitle": "BirdNET-Go needs permission to read this data",
-          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
-          "passwordLabel": "Administrator password",
-          "passwordRequiredReason": "Enter the administrator password to continue",
-          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
-          "submitButton": "Copy and continue",
-          "fallbackTitle": "Run this command to grant access",
-          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
-          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
-          "failed": "That didn't work. Check the password and try again, or use the command below."
+          "copying": "A copiar os seus dados...",
+          "passwordTitle": "O BirdNET-Go precisa de permissão para ler estes dados",
+          "passwordDescription": "Introduza a palavra-passe de administrador deste dispositivo para permitir que o BirdNET-Go copie os dados.",
+          "passwordLabel": "Palavra-passe de administrador",
+          "passwordRequiredReason": "Introduza a palavra-passe de administrador para continuar",
+          "httpWarning": "Esta página não utiliza HTTPS. A palavra-passe de administrador será enviada sem encriptação pela sua rede local. Continue apenas numa rede fiável.",
+          "submitButton": "Copiar e continuar",
+          "fallbackTitle": "Execute este comando para conceder acesso",
+          "fallbackDescription": "O BirdNET-Go não consegue elevar os privilégios automaticamente. Execute o comando abaixo e, em seguida, clique em Verificar novamente.",
+          "disabledNote": "A elevação de privilégios na aplicação está desativada. Utilize o comando abaixo para conceder acesso.",
+          "failed": "Não funcionou. Verifique a palavra-passe e tente novamente, ou utilize o comando abaixo."
         }
       },
       "mode": {
-        "label": "What do you want to import?",
+        "label": "O que pretende importar?",
         "dbOnly": {
-          "label": "Database only",
-          "description": "Import detection records from birds.db. Audio clips are not imported."
+          "label": "Apenas base de dados",
+          "description": "Importe os registos de deteção a partir de birds.db. Os clipes de áudio não são importados."
         },
         "dbAudio": {
-          "label": "Database + audio clips",
-          "description": "Import detection records and associated audio recordings.",
-          "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "label": "Base de dados + clipes de áudio",
+          "description": "Importe os registos de deteção e as gravações de áudio associadas.",
+          "badge": "Não disponível",
+          "disabledReason": "A importação de clipes de áudio ainda não está disponível. Apenas é suportada a importação só da base de dados."
         }
       },
       "confirm": {
-        "description": "Review your import settings before starting. Imported detections are tagged with the source birdnet-pi and duplicates are skipped automatically.",
-        "source": "Source path",
-        "mode": "Import mode",
-        "tagging": "Source tag",
-        "taggingValue": "birdnet-pi (auto-applied)",
-        "deduplicationNote": "Duplicate detections (same species, time, and date already in the database) are skipped automatically. Exact counts will be shown live during the import.",
-        "startButton": "Start import"
+        "description": "Reveja as suas definições de importação antes de começar. As deteções importadas são marcadas com a origem birdnet-pi e os duplicados são ignorados automaticamente.",
+        "source": "Caminho de origem",
+        "mode": "Modo de importação",
+        "tagging": "Etiqueta de origem",
+        "taggingValue": "birdnet-pi (aplicada automaticamente)",
+        "deduplicationNote": "As deteções duplicadas (mesma espécie, hora e data já presentes na base de dados) são ignoradas automaticamente. As contagens exatas serão mostradas em direto durante a importação.",
+        "startButton": "Iniciar importação"
       },
       "progress": {
-        "label": "Import progress",
-        "runningLabel": "Import running",
-        "progressLabel": "{percent}% complete",
-        "cancelButton": "Cancel",
-        "cancellingLabel": "Cancelling...",
-        "cancelledMessage": "Import was cancelled.",
-        "processed": "Processed",
-        "inserted": "Inserted",
-        "skipped": "Skipped",
-        "errors": "Errors",
+        "label": "Progresso da importação",
+        "runningLabel": "Importação em curso",
+        "progressLabel": "{percent}% concluído",
+        "cancelButton": "Cancelar",
+        "cancellingLabel": "A cancelar...",
+        "cancelledMessage": "A importação foi cancelada.",
+        "processed": "Processadas",
+        "inserted": "Inseridas",
+        "skipped": "Ignoradas",
+        "errors": "Erros",
         "phase": {
-          "validate": "Validating",
-          "dedup": "Deduplicating",
-          "import": "Importing"
+          "validate": "A validar",
+          "dedup": "A remover duplicados",
+          "import": "A importar"
         }
       },
       "done": {
-        "successTitle": "Import complete",
-        "successDescription": "Your BirdNET-Pi detections have been imported successfully.",
-        "cancelledTitle": "Import cancelled",
-        "cancelledDescription": "The import was cancelled before completing.",
-        "errorTitle": "Import failed",
-        "viewDetectionsLink": "View imported detections",
-        "partialInserted": "{count} detections were imported before cancellation.",
-        "importAnother": "Import another"
+        "successTitle": "Importação concluída",
+        "successDescription": "As suas deteções do BirdNET-Pi foram importadas com êxito.",
+        "cancelledTitle": "Importação cancelada",
+        "cancelledDescription": "A importação foi cancelada antes de concluir.",
+        "errorTitle": "A importação falhou",
+        "viewDetectionsLink": "Ver deteções importadas",
+        "partialInserted": "{count} deteções foram importadas antes do cancelamento.",
+        "importAnother": "Importar outra"
       },
       "errors": {
-        "loadFailed": "Failed to load import status. Please try again.",
-        "mediaLoadFailed": "Failed to check external media. Please try again.",
-        "alreadyRunning": "An import is already in progress. Please wait for it to complete.",
-        "startFailed": "Failed to start import. Please try again.",
-        "cancelFailed": "Failed to cancel import.",
-        "importFailed": "Import failed. Please check your configuration and try again."
+        "loadFailed": "Não foi possível carregar o estado da importação. Tente novamente.",
+        "mediaLoadFailed": "Não foi possível verificar os suportes externos. Tente novamente.",
+        "alreadyRunning": "Já está em curso uma importação. Aguarde que termine.",
+        "startFailed": "Não foi possível iniciar a importação. Tente novamente.",
+        "cancelFailed": "Não foi possível cancelar a importação.",
+        "importFailed": "A importação falhou. Verifique a sua configuração e tente novamente."
       }
     },
     "database": {

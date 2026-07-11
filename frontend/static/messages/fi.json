@@ -1174,159 +1174,159 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "available": "Available",
+      "available": "Saatavilla",
       "experimental": "Kokeellinen",
-      "comingSoon": "Coming soon",
-      "loading": "Loading...",
-      "runInBackground": "Close (import continues in background)",
-      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
-      "stepAnnouncement": "Step {current} of {total}: {name}",
+      "comingSoon": "Tulossa pian",
+      "loading": "Ladataan...",
+      "runInBackground": "Sulje (tuonti jatkuu taustalla)",
+      "runInBackgroundTitle": "Sulje tämä valintaikkuna. Tuonti jatkuu taustalla.",
+      "stepAnnouncement": "Vaihe {current}/{total}: {name}",
       "steps": {
-        "source": "Source",
-        "mode": "Mode",
-        "confirm": "Confirm",
-        "progress": "Progress",
-        "done": "Done"
+        "source": "Lähde",
+        "mode": "Tila",
+        "confirm": "Vahvista",
+        "progress": "Edistyminen",
+        "done": "Valmis"
       },
       "import": {
-        "sectionTitle": "Import"
+        "sectionTitle": "Tuonti"
       },
       "export": {
-        "sectionTitle": "Export",
-        "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats."
+        "sectionTitle": "Vienti",
+        "cardTitle": "Vie havainnot",
+        "cardDescription": "Vie havaintotietosi CSV-, JSON- tai muihin muotoihin."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
-        "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
-        "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi",
+        "cardDescription": "Tuo havaintohistoria BirdNET-Pi-SQLite-tietokannasta (birds.db).",
+        "startButton": "Tuo BirdNET-Pi:stä",
+        "wizardTitle": "Tuo BirdNET-Pi:stä",
         "experimentalNotice": "BirdNET-Pi-tuonti on kokeellinen ja siinä voi olla vielä ongelmia.",
         "reportBug": "Ilmoita viasta GitHubissa"
       },
       "birdsDbUpload": {
-        "cardTitle": "birds.db upload",
-        "cardDescription": "Upload a BirdNET-Pi database file directly from your browser."
+        "cardTitle": "birds.db-tiedoston lataus",
+        "cardDescription": "Lataa BirdNET-Pi-tietokantatiedosto suoraan selaimestasi."
       },
       "activity": {
-        "sectionTitle": "Import activity",
+        "sectionTitle": "Tuonnin tila",
         "empty": {
-          "title": "No import activity",
-          "description": "When an import is running, its progress shows up here."
+          "title": "Ei tuontia käynnissä",
+          "description": "Kun tuonti on käynnissä, sen edistyminen näkyy tässä."
         },
-        "openWizard": "Open import wizard"
+        "openWizard": "Avaa ohjattu tuonti"
       },
       "wizard": {
-        "stepsLabel": "Import wizard steps"
+        "stepsLabel": "Ohjatun tuonnin vaiheet"
       },
       "sourceAccess": {
-        "pathLabel": "Path to birds.db (relative to mount root)",
-        "pathHelpText": "Enter the path relative to the external media mount root, e.g. birdnet-pi/birds.db",
-        "pathRequiredReason": "Enter the path to birds.db to continue",
-        "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
-        "mountRoot": "Mount root",
-        "nativeTitle": "External media mount required",
-        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
-        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
-        "missingTitle": "External media mount not found",
-        "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
-        "setupStepsLabel": "Setup steps",
-        "recheckButton": "Re-check",
-        "recheckHint": "After completing the setup steps, click Re-check to continue."
+        "pathLabel": "birds.db-polku (suhteessa liitoskohdan juureen)",
+        "pathHelpText": "Anna polku suhteessa ulkoisen median liitoksen juureen, esim. birdnet-pi/birds.db",
+        "pathRequiredReason": "Jatka antamalla polku birds.db-tiedostoon",
+        "mountDescription": "BirdNET-Pi-tietokantasi tulisi olla ulkoisen median liitoksessa.",
+        "mountRoot": "Liitoksen juuri",
+        "nativeTitle": "Ulkoisen median liitos vaaditaan",
+        "nativeDescription": "BirdNET-Pi-tuonti vaatii ulkoisen median liitoksen, joka on käytettävissä vain, kun BirdNET-Go on käynnissä kontissa. Natiivit (kontittomat) asennukset eivät voi käyttää tätä tuontitoimintoa.",
+        "nativeHowTo": "Tuodaksesi BirdNET-Pi:stä suorita BirdNET-Go kontissa, jossa BirdNET-Pi:n datahakemisto on liitetty ulkoisen median levynä.",
+        "missingTitle": "Ulkoisen median liitosta ei löytynyt",
+        "missingDescription": "BirdNET-Go on käynnissä kontissa, mutta ulkoisen median liitos ei ole käytettävissä. Määritä se alla olevien ohjeiden mukaan.",
+        "setupStepsLabel": "Määritysvaiheet",
+        "recheckButton": "Tarkista uudelleen",
+        "recheckHint": "Kun olet suorittanut määritysvaiheet, jatka napsauttamalla Tarkista uudelleen."
       },
       "source": {
-        "title": "Where is your BirdNET-Pi data?",
-        "candidatesIntro": "We found these BirdNET-Pi databases:",
-        "selectButton": "Select",
-        "useThisButton": "Use this",
-        "detectionsSummary": "{count} detections, up to {date}",
-        "kindLocal": "On this device",
-        "kindRemovable": "Removable drive",
-        "kindNetwork": "Network location",
-        "unreadableTitle": "Found, but BirdNET-Go can't read it",
-        "unreadableOwner": "This data belongs to another user ({owner}).",
-        "manualEntryLink": "Don't see it? Enter the location manually",
-        "manualEntryLabel": "BirdNET-Pi database location",
-        "manualValidating": "Checking...",
-        "manualValid": "Found {count} detections.",
-        "manualNotFound": "We couldn't find a file there.",
-        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
-        "manualInvalid": "That file isn't a BirdNET-Pi database.",
-        "zeroTitle": "We couldn't find it automatically",
-        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
-        "checkAgainButton": "Check again",
-        "showCommandsLabel": "Show commands",
-        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "title": "Missä BirdNET-Pi-tietosi ovat?",
+        "candidatesIntro": "Löysimme nämä BirdNET-Pi-tietokannat:",
+        "selectButton": "Valitse",
+        "useThisButton": "Käytä tätä",
+        "detectionsSummary": "{count} havaintoa, {date} asti",
+        "kindLocal": "Tällä laitteella",
+        "kindRemovable": "Siirrettävä asema",
+        "kindNetwork": "Verkkosijainti",
+        "unreadableTitle": "Löytyi, mutta BirdNET-Go ei voi lukea sitä",
+        "unreadableOwner": "Nämä tiedot kuuluvat toiselle käyttäjälle ({owner}).",
+        "manualEntryLink": "Etkö näe sitä? Anna sijainti manuaalisesti",
+        "manualEntryLabel": "BirdNET-Pi-tietokannan sijainti",
+        "manualValidating": "Tarkistetaan...",
+        "manualValid": "Löytyi {count} havaintoa.",
+        "manualNotFound": "Emme löytäneet tiedostoa sieltä.",
+        "manualUnreadable": "Löytyi, mutta BirdNET-Go ei voi vielä lukea sitä.",
+        "manualInvalid": "Tuo tiedosto ei ole BirdNET-Pi-tietokanta.",
+        "zeroTitle": "Emme löytäneet sitä automaattisesti",
+        "zeroDescription": "Liitä asema, jolla BirdNET-Pi-tietosi ovat, ja tarkista uudelleen.",
+        "checkAgainButton": "Tarkista uudelleen",
+        "showCommandsLabel": "Näytä komennot",
+        "containerUnreadableHint": "BirdNET-Go (käynnissä UID:llä {uid}) ei voi lukea tätä tiedostoa. Korjaa oikeudet isäntäkoneessa niin, että UID {uid} voi lukea sen, ja tarkista sitten uudelleen.",
         "elevation": {
-          "copying": "Copying your data...",
-          "passwordTitle": "BirdNET-Go needs permission to read this data",
-          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
-          "passwordLabel": "Administrator password",
-          "passwordRequiredReason": "Enter the administrator password to continue",
-          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
-          "submitButton": "Copy and continue",
-          "fallbackTitle": "Run this command to grant access",
-          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
-          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
-          "failed": "That didn't work. Check the password and try again, or use the command below."
+          "copying": "Tietojasi kopioidaan...",
+          "passwordTitle": "BirdNET-Go tarvitsee luvan lukea nämä tiedot",
+          "passwordDescription": "Anna tämän laitteen järjestelmänvalvojan salasana, jotta BirdNET-Go voi kopioida tiedot.",
+          "passwordLabel": "Järjestelmänvalvojan salasana",
+          "passwordRequiredReason": "Jatka antamalla järjestelmänvalvojan salasana",
+          "httpWarning": "Tämä sivu ei käytä HTTPS:ää. Järjestelmänvalvojan salasana lähetetään salaamattomana paikallisverkkosi kautta. Jatka vain verkossa, johon luotat.",
+          "submitButton": "Kopioi ja jatka",
+          "fallbackTitle": "Myönnä käyttöoikeus suorittamalla tämä komento",
+          "fallbackDescription": "BirdNET-Go ei voi korottaa oikeuksia automaattisesti. Suorita alla oleva komento ja napsauta sitten Tarkista uudelleen.",
+          "disabledNote": "Oikeuksien korotus sovelluksessa on poistettu käytöstä. Myönnä käyttöoikeus alla olevalla komennolla.",
+          "failed": "Se ei toiminut. Tarkista salasana ja yritä uudelleen, tai käytä alla olevaa komentoa."
         }
       },
       "mode": {
-        "label": "What do you want to import?",
+        "label": "Mitä haluat tuoda?",
         "dbOnly": {
-          "label": "Database only",
-          "description": "Import detection records from birds.db. Audio clips are not imported."
+          "label": "Vain tietokanta",
+          "description": "Tuo havaintotietueet birds.db-tiedostosta. Äänileikkeitä ei tuoda."
         },
         "dbAudio": {
-          "label": "Database + audio clips",
-          "description": "Import detection records and associated audio recordings.",
-          "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "label": "Tietokanta + äänileikkeet",
+          "description": "Tuo havaintotietueet ja niihin liittyvät äänitallenteet.",
+          "badge": "Ei saatavilla",
+          "disabledReason": "Äänileikkeiden tuonti ei ole vielä saatavilla. Vain pelkän tietokannan tuonti on tuettu."
         }
       },
       "confirm": {
-        "description": "Review your import settings before starting. Imported detections are tagged with the source birdnet-pi and duplicates are skipped automatically.",
-        "source": "Source path",
-        "mode": "Import mode",
-        "tagging": "Source tag",
-        "taggingValue": "birdnet-pi (auto-applied)",
-        "deduplicationNote": "Duplicate detections (same species, time, and date already in the database) are skipped automatically. Exact counts will be shown live during the import.",
-        "startButton": "Start import"
+        "description": "Tarkista tuontiasetukset ennen aloittamista. Tuodut havainnot merkitään lähteellä birdnet-pi ja kaksoiskappaleet ohitetaan automaattisesti.",
+        "source": "Lähdepolku",
+        "mode": "Tuontitila",
+        "tagging": "Lähdemerkintä",
+        "taggingValue": "birdnet-pi (lisätään automaattisesti)",
+        "deduplicationNote": "Päällekkäiset havainnot (sama laji, aika ja päivämäärä jo tietokannassa) ohitetaan automaattisesti. Tarkat määrät näytetään reaaliaikaisesti tuonnin aikana.",
+        "startButton": "Aloita tuonti"
       },
       "progress": {
-        "label": "Import progress",
-        "runningLabel": "Import running",
-        "progressLabel": "{percent}% complete",
-        "cancelButton": "Cancel",
-        "cancellingLabel": "Cancelling...",
-        "cancelledMessage": "Import was cancelled.",
-        "processed": "Processed",
-        "inserted": "Inserted",
-        "skipped": "Skipped",
-        "errors": "Errors",
+        "label": "Tuonnin edistyminen",
+        "runningLabel": "Tuonti käynnissä",
+        "progressLabel": "{percent} % valmis",
+        "cancelButton": "Peruuta",
+        "cancellingLabel": "Peruutetaan...",
+        "cancelledMessage": "Tuonti peruutettiin.",
+        "processed": "Käsitelty",
+        "inserted": "Lisätty",
+        "skipped": "Ohitettu",
+        "errors": "Virheet",
         "phase": {
-          "validate": "Validating",
-          "dedup": "Deduplicating",
-          "import": "Importing"
+          "validate": "Vahvistetaan",
+          "dedup": "Poistetaan kaksoiskappaleita",
+          "import": "Tuodaan"
         }
       },
       "done": {
-        "successTitle": "Import complete",
-        "successDescription": "Your BirdNET-Pi detections have been imported successfully.",
-        "cancelledTitle": "Import cancelled",
-        "cancelledDescription": "The import was cancelled before completing.",
-        "errorTitle": "Import failed",
-        "viewDetectionsLink": "View imported detections",
-        "partialInserted": "{count} detections were imported before cancellation.",
-        "importAnother": "Import another"
+        "successTitle": "Tuonti valmis",
+        "successDescription": "BirdNET-Pi-havaintosi on tuotu onnistuneesti.",
+        "cancelledTitle": "Tuonti peruutettu",
+        "cancelledDescription": "Tuonti peruutettiin ennen valmistumista.",
+        "errorTitle": "Tuonti epäonnistui",
+        "viewDetectionsLink": "Näytä tuodut havainnot",
+        "partialInserted": "{count} havaintoa tuotiin ennen peruutusta.",
+        "importAnother": "Tuo uudelleen"
       },
       "errors": {
-        "loadFailed": "Failed to load import status. Please try again.",
-        "mediaLoadFailed": "Failed to check external media. Please try again.",
-        "alreadyRunning": "An import is already in progress. Please wait for it to complete.",
-        "startFailed": "Failed to start import. Please try again.",
-        "cancelFailed": "Failed to cancel import.",
-        "importFailed": "Import failed. Please check your configuration and try again."
+        "loadFailed": "Tuonnin tilan lataaminen epäonnistui. Yritä uudelleen.",
+        "mediaLoadFailed": "Ulkoisen median tarkistaminen epäonnistui. Yritä uudelleen.",
+        "alreadyRunning": "Tuonti on jo käynnissä. Odota, että se valmistuu.",
+        "startFailed": "Tuonnin aloittaminen epäonnistui. Yritä uudelleen.",
+        "cancelFailed": "Tuonnin peruuttaminen epäonnistui.",
+        "importFailed": "Tuonti epäonnistui. Tarkista asetukset ja yritä uudelleen."
       }
     },
     "database": {
