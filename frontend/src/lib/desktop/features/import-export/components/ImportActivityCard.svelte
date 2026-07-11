@@ -75,9 +75,9 @@
         return;
       }
       status = resp;
-      if (resp.progress) {
-        progress = resp.progress;
-      }
+      // Sync progress with the response so a status without progress (e.g. an
+      // idle snapshot) never leaves stale metrics from a previous job on screen.
+      progress = resp.progress ?? null;
       if (resp.running && resp.job_id) {
         finalKind = null;
         connectEventSource(resp.job_id);
@@ -92,7 +92,6 @@
         }
       } else {
         finalKind = null;
-        progress = null;
       }
     } catch (err) {
       if (destroyed || generation !== loadGeneration) return;
