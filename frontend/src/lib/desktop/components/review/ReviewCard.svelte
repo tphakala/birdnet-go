@@ -31,6 +31,7 @@
   let lockDetection = $state(false);
   let ignoreSpecies = $state(false);
   let comment = $state('');
+  let originalComment = $state('');
   let isLoadingReview = $state(false);
   let reviewErrorMessage = $state<string | null>(null);
   let showCommentSection = $state(false);
@@ -48,6 +49,7 @@
           ? detection.comments[0]?.entry || ''
           : '';
       comment = firstComment;
+      originalComment = firstComment;
       // Use firstComment (local variable) instead of comment ($state) to avoid
       // creating a reactive dependency that would reset the section when typing
       showCommentSection = !!firstComment;
@@ -74,7 +76,7 @@
           verified: reviewStatus,
           lock_detection: desiredLockState,
           ignore_species: ignoreSpecies ? detection.commonName : null,
-          comment: comment,
+          comment: comment !== originalComment ? comment : undefined,
         }),
       });
 
