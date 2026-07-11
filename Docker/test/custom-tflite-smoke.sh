@@ -20,9 +20,8 @@
 # Backend=TFLite from the extension, and initializeTFLiteModel loads it from the path.
 #
 # Usage: Docker/test/custom-tflite-smoke.sh <image-ref> [model-path]
-#   [model-path] should be a space-free absolute path inside the image (the log
-#   encoder quotes values containing whitespace, which the literal marker match
-#   would then miss); the default is space-free.
+#   [model-path] should be an absolute path inside the image; the default is
+#   /models/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite.
 #
 # The docker run/poll/cleanup harness mirrors arbitrary-uid-smoke.sh. Kept as a
 # separate copy (not a shared helper) while there are only two smoke tests with
@@ -41,22 +40,22 @@ IMAGE="${1:?usage: custom-tflite-smoke.sh <image-ref> [model-path]}"
 MODEL_PATH="${2:-/models/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite}"
 TIMEOUT_SECONDS="${SMOKE_TIMEOUT:-90}"
 
-# Markers, kept in one place so a production log refactor updates both sides.
-# SUCCESS: the TFLite init path logs this (internal/classifier/birdnet.go:368). The
-# birdnet module mirrors model-init to the console (logging.modules.birdnet.console_also
-# defaults to true), so it reaches `docker logs`. It carries the model path
-# (birdnet.go:360-362), so it also proves the CUSTOM path was taken, not the stock
-# default (which logs a version string). Matched literally (grep -F): the path holds
-# regex metacharacters, and a space-bearing path would be quoted by the log encoder.
-SUCCESS_MARKER="BirdNET model initialized model=${MODEL_PATH}"
+# Markers. The model-init line is "<message> ... model=<path>" (logfmt). We match the
+# MESSAGE and the PATH on the SAME line rather than the exact "model=<path>" substring,
+# so the check survives a log-encoder change (value quoting, JSON) and supports paths
+# with spaces, while staying precise. Same-line coupling is load-bearing: the entrypoint
+# echoes the path on its OWN line ("Custom model path configured: ...") and a secondary
+# ONNX model (perch) logs the ONNX message with a DIFFERENT path, so a cross-line "path
+# appears anywhere" check would false-pass (entrypoint echo) or false-fail (perch).
+# SUCCESS: the TFLite init path logs this (internal/classifier/birdnet.go:368), mirrored
+# to the console by logging.modules.birdnet.console_also (default true) so it reaches
+# `docker logs`. The ONNX path logs a different message, so it discriminates the backend.
+SUCCESS_MSG="BirdNET model initialized"
 # FAIL (any of): the notflite stub hard-fail (internal/inference/tflite/stub_notflite.go),
 # a model-init failure, or a startup abort. Static strings, matched as an ERE alternation.
 FAIL_MARKERS="use an ONNX model|failed to initialize BirdNET|APPLICATION STARTUP FAILED|Cannot load settings"
-# The .tflite misrouted to the ONNX backend logs this (internal/classifier/model_onnx.go:86)
-# with OUR model path. Matched literally (grep -F, not folded into the ERE above) so a
-# path with regex metacharacters cannot corrupt the pattern, and so a legitimately-loaded
-# secondary ONNX model (e.g. perch) with a different path does not false-trip it.
-ONNX_MISROUTE_MARKER="ONNX model initialized model=${MODEL_PATH}"
+# MISROUTE: OUR .tflite loaded via the ONNX backend logs this (internal/classifier/model_onnx.go:86).
+ONNX_MISROUTE_MSG="ONNX model initialized"
 
 echo "==> Starting '$IMAGE' with BIRDNET_MODELPATH=$MODEL_PATH"
 cid=$(docker run -d \
@@ -72,12 +71,17 @@ status="timeout"
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 while [ "$SECONDS" -lt "$deadline" ]; do
     logs=$(docker logs "$cid" 2>&1 || true)
+    # Capture the message lines first (SIGPIPE-safe: never pipe grep into grep -q under
+    # pipefail), then require OUR path on one of them, so message and path stay coupled
+    # to the same line.
+    init_lines=$(grep -F "$SUCCESS_MSG" <<<"$logs" || true)
+    onnx_lines=$(grep -F "$ONNX_MISROUTE_MSG" <<<"$logs" || true)
     # Check failure first: a fail marker plus the success line (unlikely) should still fail.
-    if grep -Eiq "$FAIL_MARKERS" <<<"$logs" || grep -qF "$ONNX_MISROUTE_MARKER" <<<"$logs"; then
+    if grep -Eiq "$FAIL_MARKERS" <<<"$logs" || grep -qF "$MODEL_PATH" <<<"$onnx_lines"; then
         status="failed"
         break
     fi
-    if grep -qF "$SUCCESS_MARKER" <<<"$logs"; then
+    if grep -qF "$MODEL_PATH" <<<"$init_lines"; then
         status="ok"
         break
     fi
@@ -94,7 +98,7 @@ echo "---------------------------------"
 
 if [ "$status" != "ok" ]; then
     echo "FAIL: custom .tflite ($MODEL_PATH) did not load via the TFLite backend (status=$status)"
-    echo "      expected log marker: '$SUCCESS_MARKER'"
+    echo "      expected '$SUCCESS_MSG' on the same log line as '$MODEL_PATH'"
     exit 1
 fi
 
