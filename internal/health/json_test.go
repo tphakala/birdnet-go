@@ -4,16 +4,22 @@ package health
 import (
 	"encoding/json"
 	"math"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDiagnosticsReportMarshalJSON_NonFinite verifies that a report containing
 // non-finite floats (which encoding/json rejects) still marshals to valid JSON,
 // with the offending values replaced by null (or 0 for duration fields) and
-// finite values left intact.
+// finite values left intact. Nested typed containers (e.g. []map[string]any and
+// map[string]float64) must be sanitized too, since Go's type system would let
+// them bypass a plain type switch.
 func TestDiagnosticsReportMarshalJSON_NonFinite(t *testing.T) {
+	t.Parallel()
+
 	r := DiagnosticsReport{
 		ID:         "test",
 		DurationMS: math.Inf(1),
@@ -26,6 +32,8 @@ func TestDiagnosticsReportMarshalJSON_NonFinite(t *testing.T) {
 				"percent":          math.Inf(1),
 				"per_core_percent": []float64{12.5, math.Inf(-1), 30.0},
 				"nested":           map[string]any{"rate": math.NaN(), "ok": 3},
+				"slice_of_maps":    []map[string]any{{"val": math.NaN()}},
+				"typed_map":        map[string]float64{"val": math.Inf(1)},
 				"finite":           42.0,
 				"label":            "cpu0",
 			},
@@ -34,60 +42,76 @@ func TestDiagnosticsReportMarshalJSON_NonFinite(t *testing.T) {
 	}
 
 	b, err := json.Marshal(r)
-	if err != nil {
-		t.Fatalf("marshal returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// No non-finite tokens leak into the output.
 	for _, bad := range []string{"Inf", "inf", "NaN"} {
-		if strings.Contains(string(b), bad) {
-			t.Errorf("output contains %q: %s", bad, b)
-		}
+		assert.NotContains(t, string(b), bad)
 	}
 
 	// Output round-trips as valid JSON.
 	var back map[string]any
-	if err := json.Unmarshal(b, &back); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(b, &back))
 
-	if back["duration_ms"] != 0.0 {
-		t.Errorf("report duration_ms = %v, want 0", back["duration_ms"])
-	}
+	assert.Equal(t, 0.0, back["duration_ms"])
 
-	res0 := back["results"].([]any)[0].(map[string]any)
-	if res0["duration_ms"] != 0.0 {
-		t.Errorf("result duration_ms = %v, want 0", res0["duration_ms"])
-	}
+	results, ok := back["results"].([]any)
+	require.True(t, ok)
+	require.Len(t, results, 1)
+	res0, ok := results[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 0.0, res0["duration_ms"])
 
-	details := res0["details"].(map[string]any)
-	if details["percent"] != nil {
-		t.Errorf("percent = %v, want null", details["percent"])
-	}
-	if details["finite"] != 42.0 {
-		t.Errorf("finite = %v, want 42", details["finite"])
-	}
-	if details["label"] != "cpu0" {
-		t.Errorf("label = %v, want cpu0", details["label"])
-	}
-	if got := details["per_core_percent"].([]any); got[0] != 12.5 || got[1] != nil || got[2] != 30.0 {
-		t.Errorf("per_core_percent = %v, want [12.5, null, 30]", got)
-	}
-	if nested := details["nested"].(map[string]any); nested["rate"] != nil || nested["ok"] != 3.0 {
-		t.Errorf("nested = %v, want {rate:null, ok:3}", nested)
-	}
+	details, ok := res0["details"].(map[string]any)
+	require.True(t, ok)
+
+	assert.Nil(t, details["percent"])
+	assert.Equal(t, 42.0, details["finite"])
+	assert.Equal(t, "cpu0", details["label"])
+
+	perCore, ok := details["per_core_percent"].([]any)
+	require.True(t, ok)
+	require.Len(t, perCore, 3)
+	assert.Equal(t, 12.5, perCore[0])
+	assert.Nil(t, perCore[1])
+	assert.Equal(t, 30.0, perCore[2])
+
+	nested, ok := details["nested"].(map[string]any)
+	require.True(t, ok)
+	assert.Nil(t, nested["rate"])
+	assert.Equal(t, 3.0, nested["ok"])
+
+	sliceOfMaps, ok := details["slice_of_maps"].([]any)
+	require.True(t, ok)
+	require.Len(t, sliceOfMaps, 1)
+	firstMap, ok := sliceOfMaps[0].(map[string]any)
+	require.True(t, ok)
+	assert.Nil(t, firstMap["val"])
+
+	typedMap, ok := details["typed_map"].(map[string]any)
+	require.True(t, ok)
+	assert.Nil(t, typedMap["val"])
 }
 
 // TestSanitizeValue_FiniteUnchanged confirms sanitizeValue leaves finite and
 // non-float values untouched.
 func TestSanitizeValue_FiniteUnchanged(t *testing.T) {
-	if got := sanitizeValue(3.14); got != 3.14 {
-		t.Errorf("finite float changed: %v", got)
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input any
+		want  any
+	}{
+		{"finite_float", 3.14, 3.14},
+		{"string", "x", "x"},
+		{"int", 7, 7},
 	}
-	if got := sanitizeValue("x"); got != "x" {
-		t.Errorf("string changed: %v", got)
-	}
-	if got := sanitizeValue(7); got != 7 {
-		t.Errorf("int changed: %v", got)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, sanitizeValue(tc.input), "value should be unchanged")
+		})
 	}
 }

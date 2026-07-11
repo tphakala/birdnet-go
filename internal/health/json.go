@@ -4,6 +4,7 @@ package health
 import (
 	"encoding/json"
 	"math"
+	"reflect"
 )
 
 // MarshalJSON implements json.Marshaler for DiagnosticsReport. It replaces any
@@ -48,11 +49,16 @@ func finiteOrZero(f float64) float64 {
 }
 
 // sanitizeValue returns a JSON-safe copy of v with every non-finite float
-// (NaN, +Inf, -Inf) replaced by nil. Health-check Details hold primitives,
-// float slices, and nested maps/slices; those shapes are walked recursively and
-// any other value is returned unchanged.
+// (NaN, +Inf, -Inf) replaced by nil. Scalars take a fast path; slices, arrays,
+// and maps are walked generically via reflection. Reflection is required
+// because Go slices/maps are not covariant, so a type switch would miss the
+// nested shapes health checks can produce (e.g. []map[string]any or
+// map[string]float64), letting a non-finite float slip through and break
+// encoding/json. Any other value (structs, etc.) is returned unchanged.
 func sanitizeValue(v any) any {
 	switch x := v.(type) {
+	case nil:
+		return nil
 	case float64:
 		if math.IsNaN(x) || math.IsInf(x, 0) {
 			return nil
@@ -63,26 +69,35 @@ func sanitizeValue(v any) any {
 			return nil
 		}
 		return x
-	case []any:
-		out := make([]any, len(x))
-		for i, e := range x {
-			out[i] = sanitizeValue(e)
+	case string, bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64:
+		return v
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		out := make([]any, rv.Len())
+		for i := range out {
+			out[i] = sanitizeValue(rv.Index(i).Interface())
 		}
 		return out
-	case []float64:
-		out := make([]any, len(x))
-		for i, e := range x {
-			out[i] = sanitizeValue(e)
+	case reflect.Map:
+		out := make(map[string]any, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			// JSON object keys are strings; skip any non-string-keyed map.
+			if k := iter.Key(); k.Kind() == reflect.String {
+				out[k.String()] = sanitizeValue(iter.Value().Interface())
+			}
 		}
 		return out
-	case []float32:
-		out := make([]any, len(x))
-		for i, e := range x {
-			out[i] = sanitizeValue(e)
+	case reflect.Pointer:
+		if rv.IsNil() {
+			return nil
 		}
-		return out
-	case map[string]any:
-		return sanitizeMap(x)
+		return sanitizeValue(rv.Elem().Interface())
 	default:
 		return v
 	}
