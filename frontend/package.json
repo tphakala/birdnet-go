@@ -126,7 +126,7 @@
     "vite": "8.0.16",
     "vite-bundle-analyzer": "^1.3.8",
     "vitest": "^4.1.9",
-    "vitest-browser-svelte": "^2.1.1"
+    "vitest-browser-svelte": "^3.0.0"
   },
   "dependencies": {
     "@bybas/weather-icons": "^2.0.0",
