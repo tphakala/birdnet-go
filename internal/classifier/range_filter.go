@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
@@ -673,23 +674,17 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32, settings *conf.Se
 	return results, nil
 }
 
-// getWeekForFilter calculates the current week number for the filter model.
+// getWeekForFilter calculates the BirdNET week number for the filter model.
+// BirdNET assumes 4 weeks per month, so days 29-31 are clamped to week 4 of
+// their month; the result is always in [1, 48]. It delegates to the canonical
+// onnx.CalculateWeek instead of reimplementing the formula: a drifted, un-clamped
+// copy here was the original source of the out-of-range week (e.g. 49 for
+// Dec 29-31) fed into the range filter model.
 func getWeekForFilter(date time.Time) float32 {
-	var month int
-	var day int
-
 	if date.IsZero() {
 		date = time.Now()
 	}
-
-	month = int(date.Month())
-	day = date.Day()
-
-	// Calculate the week number
-	weeksFromMonths := (month - 1) * 4
-	weekInMonth := (day-1)/7 + 1
-
-	return float32(weeksFromMonths + weekInMonth)
+	return onnx.CalculateWeek(int(date.Month()), date.Day())
 }
 
 // debug functions
