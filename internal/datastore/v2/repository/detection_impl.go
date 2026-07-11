@@ -868,7 +868,7 @@ func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int6
 	}
 
 	err := query.Group("label_id").
-		Order("count DESC").
+		Order("count DESC, label_id ASC").
 		Limit(limit).
 		Scan(&results).Error
 
@@ -1135,7 +1135,7 @@ func (r *detectionRepository) GetTopSpeciesByModel(ctx context.Context, modelID 
 			r.labelsTable(), r.labelsTable(), r.tableName())).
 		Where(fmt.Sprintf("%s.model_id = ?", r.tableName()), modelID).
 		Group("label_id").
-		Order("count DESC").
+		Order("count DESC, label_id ASC").
 		Limit(limit).
 		Scan(&results).Error
 
