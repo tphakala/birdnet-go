@@ -59,6 +59,13 @@ jobs:
       - name: Arbitrary-UID startup smoke test
         run: Docker/test/arbitrary-uid-smoke.sh birdnet-go:test
 
+      # Guards custom-.tflite users: the amd64 image must link libtensorflowlite_c
+      # and route a birdnet.modelpath .tflite to the TFLite backend (the regression
+      # class #3864 fixed for arm64). Selection is unit-tested; this covers the
+      # runtime dlopen + Dockerfile shipping dimension unit tests cannot.
+      - name: Custom .tflite model load smoke test
+        run: Docker/test/custom-tflite-smoke.sh birdnet-go:test
+
   arbitrary-uid-start-arm64:
     name: arm64 container startup
     # Native arm64 runner (free for public repos): the only PR-time job that
