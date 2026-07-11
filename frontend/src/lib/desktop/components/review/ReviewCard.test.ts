@@ -86,5 +86,99 @@ describe('ReviewCard', () => {
       // Section should still be expanded (textarea visible)
       expect(screen.getByRole('textbox')).toBeInTheDocument();
     });
+
+    it('should omit comment from payload when unchanged', async () => {
+      const user = userEvent.setup();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      render(ReviewCardTestWrapper as any, {
+        props: {
+          detection: {
+            id: 1,
+            date: '2024-12-30',
+            time: '12:00:00',
+            source: 'test',
+            beginTime: '12:00:00',
+            endTime: '12:00:03',
+            speciesCode: 'test',
+            scientificName: 'Testus birdus',
+            commonName: 'Test Bird',
+            confidence: 0.95,
+            verified: 'unverified',
+            locked: false,
+            comments: [
+              {
+                id: 1,
+                entry: 'Existing comment',
+                createdAt: '2024-12-30T12:00:00Z',
+                updatedAt: '2024-12-30T12:00:00Z',
+              },
+            ],
+          },
+        },
+      });
+
+      const saveButton = screen.getByRole('button', { name: /common\.review\.form\.saveReview/i });
+      await user.click(saveButton);
+
+      const fetchMock = (await import('$lib/utils/api')).fetchWithCSRF;
+      expect(fetchMock).toHaveBeenCalled();
+      // Use the most recent call (the mock accumulates calls across tests in this
+      // file), so this stays correct if a Save-clicking test is added earlier.
+      const lastCall = vi.mocked(fetchMock).mock.lastCall;
+      const body = JSON.parse((lastCall?.[1]?.body ?? '{}') as string);
+      expect(body.comment).toBeUndefined();
+    });
+
+    it('should include comment in payload when changed', async () => {
+      const user = userEvent.setup();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      render(ReviewCardTestWrapper as any, {
+        props: {
+          detection: {
+            id: 1,
+            date: '2024-12-30',
+            time: '12:00:00',
+            source: 'test',
+            beginTime: '12:00:00',
+            endTime: '12:00:03',
+            speciesCode: 'test',
+            scientificName: 'Testus birdus',
+            commonName: 'Test Bird',
+            confidence: 0.95,
+            verified: 'unverified',
+            locked: false,
+            comments: [
+              {
+                id: 1,
+                entry: 'Existing comment',
+                createdAt: '2024-12-30T12:00:00Z',
+                updatedAt: '2024-12-30T12:00:00Z',
+              },
+            ],
+          },
+        },
+      });
+
+      // Wait for rendering to complete
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /common\.review\.form\.saveReview/i })
+        ).toBeInTheDocument();
+      });
+
+      const textarea = await waitFor(() => screen.getByRole('textbox'));
+      await user.clear(textarea);
+      await user.type(textarea, 'New comment');
+
+      const saveButton = screen.getByRole('button', { name: /common\.review\.form\.saveReview/i });
+      await user.click(saveButton);
+
+      const fetchMock = (await import('$lib/utils/api')).fetchWithCSRF;
+      const lastCall = vi.mocked(fetchMock).mock.lastCall;
+      const body = JSON.parse((lastCall?.[1]?.body ?? '{}') as string);
+      expect(body.comment).toBe('New comment');
+    });
   });
 });

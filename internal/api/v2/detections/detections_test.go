@@ -1328,6 +1328,8 @@ func TestReviewDetection(t *testing.T) {
 		{
 			name:        "Locked detection",
 			detectionID: "4",
+			// No lock_detection field: with LockDetection as a *bool this stays nil,
+			// so a verify-only request cannot unlock a locked detection (409 stands).
 			requestBody: `{"verified": "correct"}`,
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "4").Return(datastore.Note{ID: 4, Locked: true}, nil)
@@ -1430,6 +1432,83 @@ func TestReviewDetectionFalsePositiveLocalizedResolution(t *testing.T) {
 	assert.NotContains(t, controller.Settings.Load().Realtime.Species.Exclude, "mopsilepakko")
 
 	mockDS.AssertExpectations(t)
+}
+
+// TestReviewDetectionLockState verifies that a locked detection is frozen against changes
+// unless the request is explicitly unlocking it.
+func TestReviewDetectionLockState(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	t.Run("Unlock a locked detection should succeed", func(t *testing.T) {
+		mockDS.ExpectedCalls = nil
+
+		note := datastore.Note{ID: 10, Locked: true}
+		mockDS.On("Get", "10").Return(note, nil)
+
+		// checkDetectionNotLocked is bypassed when unlocking, so we process the review.
+		mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+		mockDS.On("UnlockNote", "10").Return(nil)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/10/review",
+			strings.NewReader(`{"verified":"false_positive","lock_detection":false}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("10")
+
+		err := controller.ReviewDetection(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		mockDS.AssertExpectations(t)
+	})
+
+	t.Run("Locking an already locked detection should return 409", func(t *testing.T) {
+		mockDS.ExpectedCalls = nil
+
+		note := datastore.Note{ID: 11, Locked: true}
+		mockDS.On("Get", "11").Return(note, nil)
+		// No IsNoteLocked check is needed since in-memory check fails first.
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/11/review",
+			strings.NewReader(`{"verified":"false_positive","lock_detection":true}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("11")
+
+		err := controller.ReviewDetection(c)
+		require.NoError(t, err) // Handled error logic within controller
+		assert.Equal(t, http.StatusConflict, rec.Code)
+
+		mockDS.AssertExpectations(t)
+	})
+
+	t.Run("Verify-only without lock_detection on a locked detection stays 409", func(t *testing.T) {
+		mockDS.ExpectedCalls = nil
+
+		note := datastore.Note{ID: 12, Locked: true}
+		mockDS.On("Get", "12").Return(note, nil)
+
+		// lock_detection is omitted, so LockDetection binds to nil. That is NOT an
+		// unlock, so the freeze guard applies and the detection is left untouched.
+		// A plain bool would read the omitted field as false and silently unlock it.
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/12/review",
+			strings.NewReader(`{"verified":"false_positive"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("12")
+
+		err := controller.ReviewDetection(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusConflict, rec.Code)
+
+		mockDS.AssertExpectations(t)
+	})
 }
 
 // TestLockDetection tests the LockDetection endpoint
