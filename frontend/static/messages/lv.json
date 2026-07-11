@@ -1175,6 +1175,7 @@
     },
     "importExport": {
       "available": "Available",
+      "experimental": "Eksperimentāls",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
       "runInBackground": "Close (import continues in background)",
@@ -1201,7 +1202,9 @@
         "cardTitle": "BirdNET-Pi",
         "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
         "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi"
+        "wizardTitle": "Import from BirdNET-Pi",
+        "experimentalNotice": "BirdNET-Pi imports ir eksperimentāls, un tam joprojām var būt problēmas.",
+        "reportBug": "Ziņot par kļūdu vietnē GitHub"
       },
       "wizard": {
         "stepsLabel": "Import wizard steps"

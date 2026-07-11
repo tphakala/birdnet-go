@@ -1175,6 +1175,7 @@
     },
     "importExport": {
       "available": "Available",
+      "experimental": "Experimentální",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
       "runInBackground": "Close (import continues in background)",
@@ -1201,7 +1202,9 @@
         "cardTitle": "BirdNET-Pi",
         "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
         "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi"
+        "wizardTitle": "Import from BirdNET-Pi",
+        "experimentalNotice": "Import z BirdNET-Pi je experimentální a stále může mít problémy.",
+        "reportBug": "Nahlásit chybu na GitHubu"
       },
       "wizard": {
         "stepsLabel": "Import wizard steps"

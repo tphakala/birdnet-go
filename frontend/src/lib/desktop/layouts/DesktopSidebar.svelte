@@ -77,10 +77,7 @@ Performance Optimizations:
     ArrowDownToLine,
     TrendingUp,
     Leaf,
-    BadgeCheck,
     Moon,
-    CloudSun,
-    AudioLines,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { Component } from 'svelte';
@@ -346,36 +343,11 @@ Performance Optimizations:
           },
         ],
       },
-      {
-        id: 'environment',
-        headerLabel: t('navigation.sections.environment'),
-        items: [
-          {
-            icon: CloudSun,
-            label: t('analytics.hub.tabs.weather'),
-            url: withQuery(navigationUrls.analyticsWeather),
-            routeKey: 'analyticsWeather',
-          },
-          {
-            icon: AudioLines,
-            label: t('analytics.hub.tabs.soundscape'),
-            url: withQuery(navigationUrls.analyticsSoundscape),
-            routeKey: 'analyticsSoundscape',
-          },
-        ],
-      },
-      {
-        id: 'dataQuality',
-        headerLabel: t('navigation.sections.dataQuality'),
-        items: [
-          {
-            icon: BadgeCheck,
-            label: t('analytics.hub.tabs.quality'),
-            url: withQuery(navigationUrls.analyticsReview),
-            routeKey: 'analyticsReview',
-          },
-        ],
-      },
+      // NOTE: The "Environment" (Weather, Soundscape) and "Data Quality" (Review)
+      // sections are intentionally omitted for now: those pages are not finished
+      // enough to ship. The routes and pages still exist and stay reachable by
+      // direct URL; re-add the sections here (restoring the CloudSun / AudioLines /
+      // BadgeCheck icon imports) once they are release-ready.
     ];
   });
 
@@ -661,7 +633,7 @@ Performance Optimizations:
           />
         {/if}
 
-        <!-- Flat task-grouped analytics sections (Explore / Patterns / Environment / Data Quality).
+        <!-- Flat task-grouped analytics sections (Explore / Patterns).
              Rendered above the auth gate so analytics + Search stay publicly visible. The same
              markup serves collapsed (header self-hides via sr-only; items render icon-only with
              tooltips) and expanded modes - no flyout (collapsed flat-icon mode). -->
