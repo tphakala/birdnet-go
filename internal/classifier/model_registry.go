@@ -206,18 +206,25 @@ func isBirdNETV24Family(id string) bool {
 	return id == DefaultModelVersion
 }
 
-// remapV24ForONNXOnly remaps a registry-resolved BirdNET v2.4 TFLite model to the
-// INT8-ARM ONNX entry when this build has no TFLite backend (notflite, i.e. the
-// ONNX-only arm64 image) and the ONNX model is present in the standard paths.
-// This keeps arm64 configs that select v2.4 via `version: "2.4"` or the default
-// working on ONNX-only images instead of failing to start on the missing TFLite
-// backend. An explicit model path (CustomPath set) is left untouched so a
+// remapV24ToONNXOnARM64 remaps a registry-resolved BirdNET v2.4 TFLite model to the
+// INT8-ARM ONNX entry on arm64 when the ONNX model is present in the standard
+// paths. arm64 container images ship the INT8-ARM ONNX model as the stock default
+// (for the reduced-memory win) yet also link libtensorflowlite_c so custom
+// `.tflite` models still load; this remap keeps the stock default and a config that
+// selects v2.4 via `version: "2.4"` on ONNX regardless of whether the TFLite
+// backend is compiled in. It mirrors defaultClassifierModelInfo: the arch gate
+// keeps the "amd64/native unchanged" invariant structural, since only the arm64
+// image ships BirdNET_INT8_ARM.onnx (a stray copy on another arch must not silently
+// switch backends). An explicit model path (CustomPath set) is left untouched so a
 // user-supplied model is never silently swapped.
-func remapV24ForONNXOnly(info *ModelInfo, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
-	if tfliteAvailable || info.CustomPath != "" {
+func remapV24ToONNXOnARM64(info *ModelInfo, goarch string, find func(name string) (path string, ok bool)) ModelInfo {
+	if info.CustomPath != "" {
 		return *info
 	}
 	if info.Backend != BackendTFLite || info.ID != DefaultModelVersion {
+		return *info
+	}
+	if goarch != defaultBirdNETClassifierARM64Arch {
 		return *info
 	}
 	if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {

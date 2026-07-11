@@ -181,10 +181,11 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 		bn.ModelInfo = defaultClassifierModelInfo(runtime.GOARCH, findModelPathInStandardPaths)
 	}
 
-	// On ONNX-only builds (notflite, the arm64 image), transparently remap a
-	// resolved v2.4 TFLite model (from version:"2.4" or the default) to the INT8
-	// ONNX entry so existing arm64 configs keep starting without a TFLite backend.
-	bn.ModelInfo = remapV24ForONNXOnly(&bn.ModelInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
+	// On arm64 (container images ship the INT8-ARM ONNX model), transparently remap
+	// a resolved v2.4 TFLite model (from version:"2.4" or the default) to the INT8
+	// ONNX entry so arm64 keeps the reduced-memory ONNX default; the TFLite backend
+	// stays available for custom `.tflite` model paths (CustomPath, left untouched).
+	bn.ModelInfo = remapV24ToONNXOnARM64(&bn.ModelInfo, runtime.GOARCH, findModelPathInStandardPaths)
 
 	// Seed the runtime triplet from the resolved static metadata so a model that
 	// somehow loads without an initialize*Model path still reports a sane value.
@@ -1285,12 +1286,12 @@ func (bn *BirdNET) reloadModelInternal() error {
 				Build()
 		}
 		newInfo.CustomPath = bn.Settings.BirdNET.ModelPath
-		// Mirror NewBirdNET (the remap at construction): on ONNX-only builds (notflite,
-		// arm64) a v2.4 TFLite model resolved from version:"2.4" is remapped to the INT8
-		// ONNX entry. Without this, a no-op reload re-resolves to the TFLite entry, and the
-		// identity check below misreads it as a model change requiring an orchestrator
-		// restart, so in-place hot-reloads fail and roll back.
-		newInfo = remapV24ForONNXOnly(&newInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
+		// Mirror NewBirdNET (the remap at construction): on arm64 a v2.4 TFLite model
+		// resolved from version:"2.4" is remapped to the INT8 ONNX entry. Without this, a
+		// no-op reload re-resolves to the TFLite entry, and the identity check below
+		// misreads it as a model change requiring an orchestrator restart, so in-place
+		// hot-reloads fail and roll back.
+		newInfo = remapV24ToONNXOnARM64(&newInfo, runtime.GOARCH, findModelPathInStandardPaths)
 		if newInfo.ID != bn.ModelInfo.ID || newInfo.CustomPath != bn.ModelInfo.CustomPath {
 			rollback()
 			return errors.Newf("model identity changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).

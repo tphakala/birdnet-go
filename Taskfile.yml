@@ -1352,7 +1352,7 @@ tasks:
           OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_linux_arm64:
-    desc: Build Linux ARM64 without embedded models (ONNX + OpenVINO, no TFLite)
+    desc: Build Linux ARM64 without embedded models (ONNX + TFLite + OpenVINO)
     cmds:
       - task: noembed_build
         vars:
@@ -1364,9 +1364,10 @@ tasks:
           CROSS_COMPILE_CHECK: 'aarch64'
           CC: 'aarch64-linux-gnu-gcc'
           BINARY_SUFFIX: ''
-          # arm64 ships ONNX-only: build without the TFLite backend so the binary
-          # does not link libtensorflowlite_c (issue #1103).
-          NOTFLITE: 'true'
+          # arm64 links the TFLite backend (like amd64) so custom `.tflite` model
+          # paths load; the stock default classifier is still INT8-ARM ONNX for the
+          # reduced-memory win. Pass NOTFLITE=true to build a strictly ONNX-only
+          # binary (no libtensorflowlite_c) for a minimal image.
           # arm64 includes the OpenVINO backend by default (activates on A76/ARMv8.2
           # at runtime, otherwise falls back to ONNX Runtime). The published Docker
           # images bundle the OpenVINO runtime libraries; pass OPENVINO=false to

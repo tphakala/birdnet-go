@@ -3,7 +3,7 @@
 package tflite
 
 // This file provides stub implementations of the TFLite backend for builds with
-// the notflite tag (ONNX-only builds, e.g. arm64 container images). The stubs
+// the notflite tag (a strictly-ONNX build with no libtensorflowlite_c). The stubs
 // keep the same exported API as the real backend but return an error and, most
 // importantly, do not import go-tflite, so the binary does not link
 // libtensorflowlite_c.
