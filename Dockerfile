@@ -219,8 +219,12 @@ COPY --chown=root:root --from=build /home/dev-user/lib/libonnxruntime*.so* /usr/
 # libtensorflowlite_c so a user-supplied custom `.tflite` model path loads in any
 # container. No TFLite interpreter is created unless a .tflite model is actually
 # loaded, so the arm64 memory win for the ONNX default is preserved.
+# Stage then cp (not a direct COPY) so cp dereferences the build-stage soname
+# symlinks into regular files under /usr/lib; cp runs as root here, so the installed
+# libraries are root-owned. Fail the build loudly if the library is missing.
 COPY --from=build /home/dev-user/lib/libtensorflowlite_c.so* /tmp/tflite-lib/
 RUN cp /tmp/tflite-lib/libtensorflowlite_c.so* /usr/lib/ && \
+    test -e /usr/lib/libtensorflowlite_c.so && \
     rm -rf /tmp/tflite-lib && \
     ldconfig
 

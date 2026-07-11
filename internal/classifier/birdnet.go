@@ -185,7 +185,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 	// a resolved v2.4 TFLite model (from version:"2.4" or the default) to the INT8
 	// ONNX entry so arm64 keeps the reduced-memory ONNX default; the TFLite backend
 	// stays available for custom `.tflite` model paths (CustomPath, left untouched).
-	bn.ModelInfo = remapV24ToONNXOnARM64(&bn.ModelInfo, runtime.GOARCH, findModelPathInStandardPaths)
+	bn.ModelInfo = remapV24ToONNXOnARM64(&bn.ModelInfo, runtime.GOARCH, tfliteBackendAvailable, findModelPathInStandardPaths)
 
 	// Seed the runtime triplet from the resolved static metadata so a model that
 	// somehow loads without an initialize*Model path still reports a sane value.
@@ -1291,7 +1291,7 @@ func (bn *BirdNET) reloadModelInternal() error {
 		// no-op reload re-resolves to the TFLite entry, and the identity check below
 		// misreads it as a model change requiring an orchestrator restart, so in-place
 		// hot-reloads fail and roll back.
-		newInfo = remapV24ToONNXOnARM64(&newInfo, runtime.GOARCH, findModelPathInStandardPaths)
+		newInfo = remapV24ToONNXOnARM64(&newInfo, runtime.GOARCH, tfliteBackendAvailable, findModelPathInStandardPaths)
 		if newInfo.ID != bn.ModelInfo.ID || newInfo.CustomPath != bn.ModelInfo.CustomPath {
 			rollback()
 			return errors.Newf("model identity changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).

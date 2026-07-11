@@ -1348,7 +1348,8 @@ tasks:
           # amd64 includes the OpenVINO backend by default (activates on an Intel
           # iGPU at runtime when the host provides the GPU drivers, otherwise falls
           # back to ONNX Runtime). The published Docker images bundle the OpenVINO
-          # runtime libraries; pass OPENVINO=false to build an ONNX-only binary.
+          # runtime libraries; pass OPENVINO=false to build without the OpenVINO
+          # backend (ONNX Runtime + TFLite only).
           OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_linux_arm64:
@@ -1366,12 +1367,12 @@ tasks:
           BINARY_SUFFIX: ''
           # arm64 links the TFLite backend (like amd64) so custom `.tflite` model
           # paths load; the stock default classifier is still INT8-ARM ONNX for the
-          # reduced-memory win. Pass NOTFLITE=true to build a strictly ONNX-only
-          # binary (no libtensorflowlite_c) for a minimal image.
+          # reduced-memory win. Pass NOTFLITE=true to drop the TFLite backend and
+          # libtensorflowlite_c for a minimal ONNX-only image.
           # arm64 includes the OpenVINO backend by default (activates on A76/ARMv8.2
           # at runtime, otherwise falls back to ONNX Runtime). The published Docker
           # images bundle the OpenVINO runtime libraries; pass OPENVINO=false to
-          # build a strictly ONNX-only binary.
+          # build without the OpenVINO backend (ONNX Runtime + TFLite only).
           OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_windows_amd64:
