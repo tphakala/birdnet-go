@@ -600,7 +600,7 @@ Performance Optimizations:
     </div>
 
     <!-- Navigation Menu -->
-    <div class={cn('flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
+    <div class={cn('sidebar-scroll flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
       <div class="flex flex-col gap-1">
         <!-- Dashboard -->
         <NavFlatItem
@@ -818,5 +818,32 @@ Performance Optimizations:
     border-top: 5px solid transparent;
     border-bottom: 5px solid transparent;
     border-right: 5px solid var(--color-base-300);
+  }
+
+  /* Thin, theme-aware scrollbar for the nav list, replacing the wide default OS
+     bar. Mirrors the terminal viewport treatment: a 6px transparent track with a
+     rounded thumb tinted from --color-base-content, so it stays subtle and works
+     in every color scheme. :global is required because the class is applied via a
+     dynamic class expression (matches how the codebase styles other scrollbars). */
+  :global(.sidebar-scroll) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-base-content) 25%, transparent) transparent;
+  }
+
+  :global(.sidebar-scroll::-webkit-scrollbar) {
+    width: 6px;
+  }
+
+  :global(.sidebar-scroll::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+
+  :global(.sidebar-scroll::-webkit-scrollbar-thumb) {
+    background-color: color-mix(in srgb, var(--color-base-content) 25%, transparent);
+    border-radius: 9999px;
+  }
+
+  :global(.sidebar-scroll::-webkit-scrollbar-thumb:hover) {
+    background-color: color-mix(in srgb, var(--color-base-content) 40%, transparent);
   }
 </style>
