@@ -180,10 +180,7 @@ Performance Optimizations:
     analyticsActivity: actualRoute === '/ui/analytics/activity',
     analyticsTrends: actualRoute === '/ui/analytics/trends',
     analyticsBiodiversity: actualRoute === '/ui/analytics/biodiversity',
-    analyticsReview: actualRoute === '/ui/analytics/review',
     analyticsNocturnal: actualRoute === '/ui/analytics/nocturnal',
-    analyticsWeather: actualRoute === '/ui/analytics/weather',
-    analyticsSoundscape: actualRoute === '/ui/analytics/soundscape',
     analyticsSpecies: actualRoute === '/ui/analytics/species',
     search: actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
@@ -239,10 +236,7 @@ Performance Optimizations:
     analyticsActivity: onNavigate ? '/analytics/activity' : '/ui/analytics/activity',
     analyticsTrends: onNavigate ? '/analytics/trends' : '/ui/analytics/trends',
     analyticsBiodiversity: onNavigate ? '/analytics/biodiversity' : '/ui/analytics/biodiversity',
-    analyticsReview: onNavigate ? '/analytics/review' : '/ui/analytics/review',
     analyticsNocturnal: onNavigate ? '/analytics/nocturnal' : '/ui/analytics/nocturnal',
-    analyticsWeather: onNavigate ? '/analytics/weather' : '/ui/analytics/weather',
-    analyticsSoundscape: onNavigate ? '/analytics/soundscape' : '/ui/analytics/soundscape',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
@@ -345,9 +339,10 @@ Performance Optimizations:
       },
       // NOTE: The "Environment" (Weather, Soundscape) and "Data Quality" (Review)
       // sections are intentionally omitted for now: those pages are not finished
-      // enough to ship. The routes and pages still exist and stay reachable by
-      // direct URL; re-add the sections here (restoring the CloudSun / AudioLines /
-      // BadgeCheck icon imports) once they are release-ready.
+      // enough to ship. Their routes and pages still exist and stay reachable by
+      // direct URL. To restore, re-add each section object here plus its
+      // routeCache / navigationUrls entries and the CloudSun / AudioLines /
+      // BadgeCheck icon imports, once they are release-ready.
     ];
   });
 
