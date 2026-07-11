@@ -1194,9 +1194,7 @@
       "export": {
         "sectionTitle": "Export",
         "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats.",
-        "startButton": "Export",
-        "disabledReason": "Export is not yet available. Check back in a future release."
+        "cardDescription": "Export your detection data to CSV, JSON, or other formats."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
@@ -1205,6 +1203,16 @@
         "wizardTitle": "Import from BirdNET-Pi",
         "experimentalNotice": "L'importazione da BirdNET-Pi è sperimentale e potrebbe ancora presentare problemi.",
         "reportBug": "Segnala un bug su GitHub"
+      },
+      "birdsDbUpload": {
+        "cardTitle": "birds.db upload",
+        "cardDescription": "Upload a BirdNET-Pi database file directly from your browser."
+      },
+      "activity": {
+        "title": "Import activity",
+        "emptyTitle": "No import activity",
+        "emptyDescription": "When an import is running, its progress shows up here.",
+        "openWizard": "Open import wizard"
       },
       "wizard": {
         "stepsLabel": "Import wizard steps"

@@ -2,9 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import ImportExportPage from './ImportExportPage.svelte';
 
-// Mock the wizard component so we don't need to test its internals here.
+// Mock the wizard and activity card so we don't test their internals here.
 // Must return a valid Svelte 5 component (a function).
 vi.mock('../components/BirdNetPiImportWizard.svelte', () => ({
+  default: vi.fn(() => null),
+}));
+vi.mock('../components/ImportActivityCard.svelte', () => ({
   default: vi.fn(() => null),
 }));
 
@@ -19,13 +22,13 @@ describe('ImportExportPage', () => {
     expect(screen.getByText('system.importExport.export.sectionTitle')).toBeInTheDocument();
   });
 
-  it('shows the BirdNET-Pi import card title and description', () => {
+  it('shows the BirdNET-Pi source row with title and description', () => {
     render(ImportExportPage);
     expect(screen.getByText('system.importExport.birdnetPi.cardTitle')).toBeInTheDocument();
     expect(screen.getByText('system.importExport.birdnetPi.cardDescription')).toBeInTheDocument();
   });
 
-  it('shows the BirdNET-Pi start button', () => {
+  it('shows the BirdNET-Pi start button enabled', () => {
     render(ImportExportPage);
     const button = screen.getByRole('button', {
       name: /system.importExport.birdnetPi.startButton/,
@@ -34,38 +37,37 @@ describe('ImportExportPage', () => {
     expect(button).not.toBeDisabled();
   });
 
-  it('shows export section as coming soon', () => {
+  it('marks the BirdNET-Pi source as experimental', () => {
     render(ImportExportPage);
-    expect(screen.getByText('system.importExport.comingSoon')).toBeInTheDocument();
+    expect(screen.getByText('system.importExport.experimental')).toBeInTheDocument();
+    expect(
+      screen.getByText('system.importExport.birdnetPi.experimentalNotice')
+    ).toBeInTheDocument();
   });
 
-  it('export button is disabled', () => {
+  it('shows planned sources as coming soon without action buttons', () => {
     render(ImportExportPage);
-    const exportButton = screen.getByRole('button', {
-      name: /system.importExport.export.startButton/,
-    });
-    expect(exportButton).toBeDisabled();
+    // birds.db upload and detections export are both planned
+    expect(screen.getByText('system.importExport.birdsDbUpload.cardTitle')).toBeInTheDocument();
+    expect(screen.getByText('system.importExport.export.cardTitle')).toBeInTheDocument();
+    expect(screen.getAllByText('system.importExport.comingSoon')).toHaveLength(2);
+    // The only button on the page is the BirdNET-Pi import action
+    expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
-  it('export disabled button has a visible reason', () => {
+  it('renders the import activity card with initial props', async () => {
+    const { default: ActivityMock } = await import('../components/ImportActivityCard.svelte');
     render(ImportExportPage);
-    // The disabled reason text should appear exactly once in the DOM
-    const reasons = screen.getAllByText('system.importExport.export.disabledReason');
-    expect(reasons).toHaveLength(1);
-  });
-
-  it('export disabled button has aria-describedby pointing to the reason', () => {
-    render(ImportExportPage);
-    const exportButton = screen.getByRole('button', {
-      name: /system.importExport.export.startButton/,
-    });
-    expect(exportButton).toHaveAttribute('aria-describedby', 'export-disabled-reason');
+    expect(vi.mocked(ActivityMock)).toHaveBeenCalled();
+    const props = vi.mocked(ActivityMock).mock.calls[0]?.[1] as
+      { refreshSignal?: number; onOpenWizard?: () => void } | undefined;
+    expect(props?.refreshSignal).toBe(0);
+    expect(typeof props?.onOpenWizard).toBe('function');
   });
 
   it('wizard is not shown initially', async () => {
     const { default: WizardMock } = await import('../components/BirdNetPiImportWizard.svelte');
     render(ImportExportPage);
-    // The wizard mock component should not have been called before clicking start
     expect(vi.mocked(WizardMock)).not.toHaveBeenCalled();
   });
 
@@ -76,7 +78,26 @@ describe('ImportExportPage', () => {
       name: /system.importExport.birdnetPi.startButton/,
     });
     await fireEvent.click(startButton);
-    // The wizard component should have been mounted after clicking start
     expect(vi.mocked(WizardMock)).toHaveBeenCalled();
+  });
+
+  it('closing the wizard bumps the activity refresh signal', async () => {
+    const { default: WizardMock } = await import('../components/BirdNetPiImportWizard.svelte');
+    const { default: ActivityMock } = await import('../components/ImportActivityCard.svelte');
+    render(ImportExportPage);
+    const activityProps = vi.mocked(ActivityMock).mock.calls[0]?.[1] as {
+      refreshSignal?: number;
+    };
+    expect(activityProps.refreshSignal).toBe(0);
+
+    const startButton = screen.getByRole('button', {
+      name: /system.importExport.birdnetPi.startButton/,
+    });
+    await fireEvent.click(startButton);
+    const wizardProps = vi.mocked(WizardMock).mock.calls[0]?.[1] as { onClose?: () => void };
+    wizardProps.onClose?.();
+
+    // Props are live getters in Svelte 5; the mocked child sees the new value.
+    expect(activityProps.refreshSignal).toBe(1);
   });
 });
