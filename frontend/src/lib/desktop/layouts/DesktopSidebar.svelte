@@ -77,10 +77,7 @@ Performance Optimizations:
     ArrowDownToLine,
     TrendingUp,
     Leaf,
-    BadgeCheck,
     Moon,
-    CloudSun,
-    AudioLines,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { Component } from 'svelte';
@@ -183,10 +180,7 @@ Performance Optimizations:
     analyticsActivity: actualRoute === '/ui/analytics/activity',
     analyticsTrends: actualRoute === '/ui/analytics/trends',
     analyticsBiodiversity: actualRoute === '/ui/analytics/biodiversity',
-    analyticsReview: actualRoute === '/ui/analytics/review',
     analyticsNocturnal: actualRoute === '/ui/analytics/nocturnal',
-    analyticsWeather: actualRoute === '/ui/analytics/weather',
-    analyticsSoundscape: actualRoute === '/ui/analytics/soundscape',
     analyticsSpecies: actualRoute === '/ui/analytics/species',
     search: actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
@@ -242,10 +236,7 @@ Performance Optimizations:
     analyticsActivity: onNavigate ? '/analytics/activity' : '/ui/analytics/activity',
     analyticsTrends: onNavigate ? '/analytics/trends' : '/ui/analytics/trends',
     analyticsBiodiversity: onNavigate ? '/analytics/biodiversity' : '/ui/analytics/biodiversity',
-    analyticsReview: onNavigate ? '/analytics/review' : '/ui/analytics/review',
     analyticsNocturnal: onNavigate ? '/analytics/nocturnal' : '/ui/analytics/nocturnal',
-    analyticsWeather: onNavigate ? '/analytics/weather' : '/ui/analytics/weather',
-    analyticsSoundscape: onNavigate ? '/analytics/soundscape' : '/ui/analytics/soundscape',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
@@ -346,36 +337,12 @@ Performance Optimizations:
           },
         ],
       },
-      {
-        id: 'environment',
-        headerLabel: t('navigation.sections.environment'),
-        items: [
-          {
-            icon: CloudSun,
-            label: t('analytics.hub.tabs.weather'),
-            url: withQuery(navigationUrls.analyticsWeather),
-            routeKey: 'analyticsWeather',
-          },
-          {
-            icon: AudioLines,
-            label: t('analytics.hub.tabs.soundscape'),
-            url: withQuery(navigationUrls.analyticsSoundscape),
-            routeKey: 'analyticsSoundscape',
-          },
-        ],
-      },
-      {
-        id: 'dataQuality',
-        headerLabel: t('navigation.sections.dataQuality'),
-        items: [
-          {
-            icon: BadgeCheck,
-            label: t('analytics.hub.tabs.quality'),
-            url: withQuery(navigationUrls.analyticsReview),
-            routeKey: 'analyticsReview',
-          },
-        ],
-      },
+      // NOTE: The "Environment" (Weather, Soundscape) and "Data Quality" (Review)
+      // sections are intentionally omitted for now: those pages are not finished
+      // enough to ship. Their routes and pages still exist and stay reachable by
+      // direct URL. To restore, re-add each section object here plus its
+      // routeCache / navigationUrls entries and the CloudSun / AudioLines /
+      // BadgeCheck icon imports, once they are release-ready.
     ];
   });
 
@@ -661,7 +628,7 @@ Performance Optimizations:
           />
         {/if}
 
-        <!-- Flat task-grouped analytics sections (Explore / Patterns / Environment / Data Quality).
+        <!-- Flat task-grouped analytics sections (Explore / Patterns).
              Rendered above the auth gate so analytics + Search stay publicly visible. The same
              markup serves collapsed (header self-hides via sr-only; items render icon-only with
              tooltips) and expanded modes - no flyout (collapsed flat-icon mode). -->

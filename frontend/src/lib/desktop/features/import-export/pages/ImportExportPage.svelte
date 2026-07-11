@@ -3,7 +3,9 @@
   import Card from '$lib/desktop/components/ui/Card.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
-  import { Import } from '@lucide/svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import { Import, ExternalLink } from '@lucide/svelte';
+  import { appState } from '$lib/stores/appState.svelte';
   import BirdNetPiImportWizard from '../components/BirdNetPiImportWizard.svelte';
 
   let wizardOpen = $state(false);
@@ -37,12 +39,25 @@
                 {t('system.importExport.birdnetPi.cardTitle')}
               </h4>
             </div>
-            <Badge variant="success" size="sm" text={t('system.importExport.available')} />
+            <Badge variant="warning" size="sm" text={t('system.importExport.experimental')} />
           </div>
         {/snippet}
         <p class="text-sm text-[var(--color-base-content)]/70 mb-4">
           {t('system.importExport.birdnetPi.cardDescription')}
         </p>
+        <ErrorAlert type="warning" role="note" className="mb-4">
+          {t('system.importExport.birdnetPi.experimentalNotice')}
+          <a
+            href={appState.projectLinks.newIssueUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t('navigation.reportBugAriaLabel')}
+            class="inline-flex items-center gap-1 font-medium underline text-[var(--color-primary)] hover:opacity-80"
+          >
+            {t('system.importExport.birdnetPi.reportBug')}
+            <ExternalLink class="size-3" aria-hidden="true" />
+          </a>
+        </ErrorAlert>
         <Button variant="primary" onclick={openWizard}>
           <Import class="size-4" />
           {t('system.importExport.birdnetPi.startButton')}

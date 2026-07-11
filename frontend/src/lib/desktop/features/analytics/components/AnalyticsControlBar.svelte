@@ -11,10 +11,12 @@
   toggle (the date range stays visible) to keep the toolbar compact. Each
   control honors the active tab's chart `supports` flags: when no chart in the
   active tab filters by species (e.g. Biodiversity), the species toggle is
-  disabled with an explanation. The source/mic filter follows the same rule via
-  `sourceApplicable`: it is enabled only when a chart in the active tab consumes
-  the source dimension and sources exist, and otherwise carries a specific
-  disabled reason rather than being a silent dead end.
+  disabled with an explanation. The source/mic filter is governed by
+  `sourceApplicable`: no chart consumes the source dimension yet, so the control
+  is hidden until a source-aware chart lands. It still renders (enabled, so it is
+  clearable) when a stale `source` value arrives from a URL/bookmark, so that
+  value is never stuck; when shown and applicable it carries a specific disabled
+  reason rather than being a silent dead end.
 -->
 <script lang="ts">
   import { ChevronDown, ChevronRight } from '@lucide/svelte';
@@ -74,12 +76,16 @@
   ]);
 
   // The source filter is enabled when a chart in the active tab consumes the source dimension and
-  // either there are sources to choose from or a source is already selected. The selected-source case
+  // either there are sources to choose from or a source is already selected; the selected-source case
   // keeps a stale filter from a URL/bookmark clearable back to "All sources" even when the live list
-  // came back empty. Otherwise it is disabled with a specific reason, so the control is never a silent
-  // dead end (no chart sets supports.source yet, so this stays disabled until the per-mic chart lands).
+  // came back empty. No chart sets supports.source yet, so the control is normally hidden (see the
+  // {#if} gate below); the second clause keeps it enabled when it is shown solely to clear a stale
+  // `source` value while sourceApplicable is false, so that value is never stuck.
   const sourceEnabled = $derived(
-    sourceApplicable && !loadingSources && (availableSources.length > 0 || params.source !== '')
+    (sourceApplicable &&
+      !loadingSources &&
+      (availableSources.length > 0 || params.source !== '')) ||
+      (!sourceApplicable && params.source !== '')
   );
 
   const sourceDisabledReason = $derived.by(() => {
@@ -134,7 +140,7 @@
 </script>
 
 <div class="pb-3 border-b border-[var(--color-base-300)]/60">
-  <!-- Compact controls row: date range + source always visible, species behind a toggle -->
+  <!-- Compact controls row: date range always visible, source only when applicable, species behind a toggle -->
   <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
     <!-- Date range -->
     <div class="w-44 max-w-full space-y-1">
@@ -186,26 +192,31 @@
       </div>
     {/if}
 
-    <!-- Source / mic filter. Enabled only when a chart in the active tab consumes the source
-         dimension and sources exist; otherwise disabled with a specific reason surfaced as visible
-         help text (SelectDropdown wires it to the control via aria-describedby), so the reason is
-         discoverable on touch/tablet and to screen readers, matching the species control rather than
-         relying on a hover-only tooltip. -->
-    <div class="w-44 max-w-full space-y-1">
-      <SelectDropdown
-        value={params.source}
-        options={sourceOptions}
-        disabled={!sourceEnabled}
-        onChange={handleSourceChange}
-        id="analyticsSourceFilter"
-        label={t('analytics.hub.controls.source')}
-        placeholder={t('analytics.hub.controls.sourceAll')}
-        helpText={sourceDisabledReason}
-        variant="select"
-        size="sm"
-        menuSize="sm"
-      />
-    </div>
+    <!-- Source / mic filter. No chart consumes the source dimension (supports.source) yet, so this
+         control is normally hidden and returns automatically once a source-aware chart lands. It is
+         still rendered (and enabled, so it is clearable) when a stale `source` value arrives from a
+         URL/bookmark while sourceApplicable is false, so that value is never stuck; selecting
+         "All sources" clears it and the control disappears again. When applicable it is enabled only
+         when sources exist; otherwise it carries a specific disabled reason as visible help text
+         (SelectDropdown wires it via aria-describedby), discoverable on touch/tablet and to screen
+         readers, matching the species control rather than relying on a hover-only tooltip. -->
+    {#if sourceApplicable || params.source !== ''}
+      <div class="w-44 max-w-full space-y-1">
+        <SelectDropdown
+          value={params.source}
+          options={sourceOptions}
+          disabled={!sourceEnabled}
+          onChange={handleSourceChange}
+          id="analyticsSourceFilter"
+          label={t('analytics.hub.controls.source')}
+          placeholder={t('analytics.hub.controls.sourceAll')}
+          helpText={sourceDisabledReason}
+          variant="select"
+          size="sm"
+          menuSize="sm"
+        />
+      </div>
+    {/if}
 
     <div class="grow"></div>
 

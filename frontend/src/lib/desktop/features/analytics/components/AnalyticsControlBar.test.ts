@@ -39,10 +39,11 @@ function makeParams(overrides: Partial<AnalyticsParams> = {}): AnalyticsParams {
 }
 
 describe('AnalyticsControlBar', () => {
-  it('disables the source filter with a reason when no chart on the tab uses source', () => {
+  it('hides the source filter when no chart on the tab uses source and no source is selected', () => {
     const onParamsChange = vi.fn();
     render(AnalyticsControlBar, {
-      // sourceApplicable defaults to false: the control is disabled with the not-applicable reason.
+      // sourceApplicable defaults to false and no source is set: the control is hidden entirely
+      // (no chart consumes the source dimension yet, so a permanently-disabled control is dropped).
       props: {
         params: makeParams(),
         availableSpecies: species,
@@ -51,9 +52,31 @@ describe('AnalyticsControlBar', () => {
       },
     });
 
+    expect(screen.queryByText('analytics.hub.controls.source')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('analytics.hub.controls.sourceNotApplicable')
+    ).not.toBeInTheDocument();
+  });
+
+  it('still shows the source filter (enabled, so it is clearable) when a stale source is set even though no chart uses source', () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      // sourceApplicable defaults to false, but a stale source arrived via a URL/bookmark. The
+      // control must render so the value is never stuck, and stay enabled so it can be cleared.
+      props: {
+        params: makeParams({ source: '7' }),
+        availableSpecies: species,
+        availableSources: [],
+        onParamsChange,
+      },
+    });
+
     expect(screen.getByText('analytics.hub.controls.source')).toBeInTheDocument();
-    // The reason is surfaced as visible help text (wired to the control via aria-describedby).
-    expect(screen.getByText('analytics.hub.controls.sourceNotApplicable')).toBeInTheDocument();
+    // Enabled: no disabled-reason help text is present, so "All sources" can be selected to clear it.
+    expect(
+      screen.queryByText('analytics.hub.controls.sourceNotApplicable')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('analytics.hub.controls.sourceNone')).not.toBeInTheDocument();
   });
 
   it('disables the source filter with a distinct reason when applicable but no sources exist', () => {

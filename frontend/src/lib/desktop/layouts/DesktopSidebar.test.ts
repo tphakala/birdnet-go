@@ -126,20 +126,16 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     analyticsControls.applyParams({ range: 'month', start: '', end: '', species: [], source: '' });
   });
 
-  it('renders Dashboard, Live Audio, then the four section headers in order, each wired to its group via aria-labelledby', () => {
+  it('renders Dashboard, Live Audio, then the two section headers in order, each wired to its group via aria-labelledby', () => {
     const { container } = sidebarTest.render({ currentRoute: '/ui/dashboard' });
 
     // Top-level flat items.
     expect(screen.getByText('navigation.dashboard')).toBeInTheDocument();
     expect(screen.getByText('navigation.liveAudio')).toBeInTheDocument();
 
-    // Four section headers in the spec'd order.
-    const headerLabels = [
-      'navigation.sections.explore',
-      'navigation.sections.patterns',
-      'navigation.sections.environment',
-      'navigation.sections.dataQuality',
-    ];
+    // The Environment and Data Quality sections are intentionally omitted until those
+    // pages are release-ready, leaving Explore and Patterns in the spec'd order.
+    const headerLabels = ['navigation.sections.explore', 'navigation.sections.patterns'];
     headerLabels.forEach(label => expect(screen.getByText(label)).toBeInTheDocument());
 
     // Each section is a role="group" labelled by its header id, in document order.
@@ -149,8 +145,6 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(groups.map(g => g.getAttribute('aria-labelledby'))).toEqual([
       'nav-section-explore',
       'nav-section-patterns',
-      'nav-section-environment',
-      'nav-section-dataQuality',
     ]);
 
     // Each group's aria-labelledby resolves to a header element carrying that id.
@@ -173,9 +167,6 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
       ['analytics.hub.tabs.trends', '/analytics/trends'],
       ['analytics.hub.tabs.nocturnal', '/analytics/nocturnal'],
       ['analytics.hub.tabs.biodiversity', '/analytics/biodiversity'],
-      ['analytics.hub.tabs.weather', '/analytics/weather'],
-      ['analytics.hub.tabs.soundscape', '/analytics/soundscape'],
-      ['analytics.hub.tabs.quality', '/analytics/review'],
     ];
 
     for (const [text] of expectations) {
@@ -261,22 +252,6 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(patternsLabels[1]).toContain('analytics.hub.tabs.trends');
     expect(patternsLabels[2]).toContain('analytics.hub.tabs.nocturnal');
     expect(patternsLabels[3]).toContain('analytics.hub.tabs.biodiversity');
-  });
-
-  it('ENVIRONMENT section renders Weather and Soundscape items without a coming-soon chip', () => {
-    sidebarTest.render({ currentRoute: '/ui/dashboard' });
-
-    // Both items must be accessible buttons (t() mock returns key verbatim).
-    const weatherBtn = screen.getByRole('button', { name: 'analytics.hub.tabs.weather' });
-    const soundscapeBtn = screen.getByRole('button', { name: 'analytics.hub.tabs.soundscape' });
-    expect(weatherBtn).toBeInTheDocument();
-    expect(soundscapeBtn).toBeInTheDocument();
-
-    // The ENVIRONMENT group must not contain any badge or chip element that
-    // would indicate a coming-soon state. Resolve the group by its accessible
-    // name (aria-labelledby -> the section header) rather than a raw selector.
-    const envGroup = screen.getByRole('group', { name: 'navigation.sections.environment' });
-    expect(envGroup.querySelector('[class*="badge"], [class*="chip"]')).toBeNull();
   });
 
   it('deep-link: analytics item URLs carry the active query while Search/Dashboard stay query-less', async () => {
