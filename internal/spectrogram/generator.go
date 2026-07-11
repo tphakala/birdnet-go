@@ -125,13 +125,17 @@ func fftFriendlyHeight(width int) int {
 // FFmpeg showspectrumpic color mode constants for style mapping.
 // These are the closest FFmpeg equivalents to the Sox style presets.
 const (
-	// ffmpegColorDefault is FFmpeg's default colorful spectrogram (channel mode).
-	// Matches Sox default style (colorful with dark background).
-	ffmpegColorDefault = "channel"
+	// ffmpegColorDefault is FFmpeg's colorful heat map ("intensity", the
+	// showspectrumpic default). Matches Sox default style (colorful with
+	// dark background). Not "channel": that mode assigns one color per
+	// audio channel, which renders mono clips in a single hue, i.e.
+	// black and white (issue #3835).
+	ffmpegColorDefault = "intensity"
 
-	// ffmpegColorIntensity produces a grayscale spectrogram in FFmpeg.
-	// Matches Sox monochrome mode (-m) used by scientific styles.
-	ffmpegColorIntensity = "intensity"
+	// ffmpegColorGrayscale produces a grayscale spectrogram for mono audio
+	// ("channel" assigns one color per audio channel). Closest FFmpeg
+	// equivalent to Sox monochrome mode (-m) used by scientific styles.
+	ffmpegColorGrayscale = "channel"
 
 	// ffmpegColorFire produces a high-saturation warm-toned spectrogram in FFmpeg.
 	// Matches Sox high-contrast mode (-h) used by high_contrast_dark style.
@@ -165,13 +169,13 @@ func getFFmpegColorMode(style string) string {
 	switch style {
 	case conf.SpectrogramStyleScientificDark:
 		// Grayscale - closest FFmpeg equivalent to Sox -m (monochrome)
-		return ffmpegColorIntensity
+		return ffmpegColorGrayscale
 	case conf.SpectrogramStyleHighContrastDark:
 		// High saturation - closest FFmpeg equivalent to Sox -h (high color)
 		return ffmpegColorFire
 	case conf.SpectrogramStyleScientific:
 		// Grayscale - closest FFmpeg equivalent to Sox -m -l (monochrome, light)
-		return ffmpegColorIntensity
+		return ffmpegColorGrayscale
 	default:
 		// Default colorful style
 		return ffmpegColorDefault
