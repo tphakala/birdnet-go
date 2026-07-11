@@ -144,7 +144,7 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.16/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.17/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
@@ -194,7 +194,7 @@ Source: ISC
 
 ### github.com/klauspost/cpuid/v2
 
-License: https://github.com/klauspost/cpuid/blob/v2.3.0/LICENSE
+License: https://github.com/klauspost/cpuid/blob/v2.4.0/LICENSE
 Source: MIT
 
 ### github.com/kr/fs
@@ -499,12 +499,12 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.53.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.54.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.56.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.57.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -514,22 +514,22 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sync
 
-License: https://cs.opensource.google/go/x/sync/+/v0.21.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.22.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.47.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.44.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.45.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.38.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.40.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
@@ -539,17 +539,17 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.286.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.288.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/b703f567277d/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/925bb5da69e7/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.81.1/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.82.0/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
