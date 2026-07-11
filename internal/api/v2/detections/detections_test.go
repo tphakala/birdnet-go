@@ -1410,8 +1410,11 @@ func TestReviewDetectionFalsePositiveLocalizedResolution(t *testing.T) {
 	mockDS.ExpectedCalls = nil
 	setupValidReviewMock(&mockDS.Mock, "7", 7, false)
 
+	// Payload uses the snake_case "ignore_species" key that the frontend actually
+	// sends (see ReviewCard.svelte / ReviewModal.svelte); a camelCase key would not
+	// bind to DetectionRequest.IgnoreSpecies and would silently skip the exclusion.
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/7/review",
-		strings.NewReader(`{"verified": "false_positive", "ignoreSpecies": "mopsilepakko"}`))
+		strings.NewReader(`{"verified": "false_positive", "ignore_species": "mopsilepakko"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)

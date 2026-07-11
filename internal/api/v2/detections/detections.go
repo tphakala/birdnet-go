@@ -198,7 +198,7 @@ type WeatherInfo struct {
 type DetectionRequest struct {
 	Comment       string `json:"comment,omitempty"`
 	Verified      string `json:"verified,omitempty"`
-	IgnoreSpecies string `json:"ignoreSpecies,omitempty"`
+	IgnoreSpecies string `json:"ignore_species,omitempty"`
 	Locked        bool   `json:"locked,omitempty"`
 	LockDetection bool   `json:"lock_detection,omitempty"`
 }
