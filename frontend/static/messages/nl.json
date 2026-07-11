@@ -1174,149 +1174,159 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "available": "Available",
+      "available": "Beschikbaar",
       "experimental": "Experimenteel",
-      "comingSoon": "Coming soon",
-      "loading": "Loading...",
-      "runInBackground": "Close (import continues in background)",
-      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
-      "stepAnnouncement": "Step {current} of {total}: {name}",
+      "comingSoon": "Binnenkort beschikbaar",
+      "loading": "Laden...",
+      "runInBackground": "Sluiten (import gaat door op de achtergrond)",
+      "runInBackgroundTitle": "Dit venster sluiten. De import blijft op de achtergrond doorlopen.",
+      "stepAnnouncement": "Stap {current} van {total}: {name}",
       "steps": {
-        "source": "Source",
-        "mode": "Mode",
-        "confirm": "Confirm",
-        "progress": "Progress",
-        "done": "Done"
+        "source": "Bron",
+        "mode": "Modus",
+        "confirm": "Bevestigen",
+        "progress": "Voortgang",
+        "done": "Klaar"
       },
       "import": {
-        "sectionTitle": "Import"
+        "sectionTitle": "Importeren"
       },
       "export": {
-        "sectionTitle": "Export",
-        "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats.",
-        "startButton": "Export",
-        "disabledReason": "Export is not yet available. Check back in a future release."
+        "sectionTitle": "Exporteren",
+        "cardTitle": "Detecties exporteren",
+        "cardDescription": "Exporteer je detectiegegevens naar CSV, JSON of andere formaten."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
-        "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
-        "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi",
+        "cardDescription": "Importeer detectiegeschiedenis uit een BirdNET-Pi-SQLite-database (birds.db).",
+        "startButton": "Importeren uit BirdNET-Pi",
+        "wizardTitle": "Importeren uit BirdNET-Pi",
         "experimentalNotice": "Importeren vanuit BirdNET-Pi is experimenteel en kan nog problemen hebben.",
         "reportBug": "Een bug melden op GitHub"
       },
+      "birdsDbUpload": {
+        "cardTitle": "birds.db uploaden",
+        "cardDescription": "Upload een BirdNET-Pi-databasebestand rechtstreeks vanuit je browser."
+      },
+      "activity": {
+        "sectionTitle": "Importactiviteit",
+        "empty": {
+          "title": "Geen importactiviteit",
+          "description": "Wanneer een import loopt, verschijnt de voortgang hier."
+        },
+        "openWizard": "Importassistent openen"
+      },
       "wizard": {
-        "stepsLabel": "Import wizard steps"
+        "stepsLabel": "Stappen van de importassistent"
       },
       "sourceAccess": {
-        "pathLabel": "Path to birds.db (relative to mount root)",
-        "pathHelpText": "Enter the path relative to the external media mount root, e.g. birdnet-pi/birds.db",
-        "pathRequiredReason": "Enter the path to birds.db to continue",
-        "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
-        "mountRoot": "Mount root",
-        "nativeTitle": "External media mount required",
-        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
-        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
-        "missingTitle": "External media mount not found",
-        "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
-        "setupStepsLabel": "Setup steps",
-        "recheckButton": "Re-check",
-        "recheckHint": "After completing the setup steps, click Re-check to continue."
+        "pathLabel": "Pad naar birds.db (relatief aan de koppelmap)",
+        "pathHelpText": "Voer het pad in relatief aan de hoofdmap van de externe media-koppeling, bijv. birdnet-pi/birds.db",
+        "pathRequiredReason": "Voer het pad naar birds.db in om door te gaan",
+        "mountDescription": "Je BirdNET-Pi-database moet zich op de externe media-koppeling bevinden.",
+        "mountRoot": "Hoofdmap van de koppeling",
+        "nativeTitle": "Externe media-koppeling vereist",
+        "nativeDescription": "Voor de BirdNET-Pi-import is een externe media-koppeling nodig, die alleen beschikbaar is wanneer BirdNET-Go in een container draait. Native (niet-gecontaineriseerde) installaties kunnen deze importfunctie niet gebruiken.",
+        "nativeHowTo": "Om uit BirdNET-Pi te importeren, draai je BirdNET-Go in een container waarin de BirdNET-Pi-datamap als extern media-volume is gekoppeld.",
+        "missingTitle": "Externe media-koppeling niet gevonden",
+        "missingDescription": "BirdNET-Go draait in een container, maar de externe media-koppeling is niet bereikbaar. Volg de onderstaande stappen om deze in te stellen.",
+        "setupStepsLabel": "Installatiestappen",
+        "recheckButton": "Opnieuw controleren",
+        "recheckHint": "Klik na het voltooien van de installatiestappen op Opnieuw controleren om door te gaan."
       },
       "source": {
-        "title": "Where is your BirdNET-Pi data?",
-        "candidatesIntro": "We found these BirdNET-Pi databases:",
-        "selectButton": "Select",
-        "useThisButton": "Use this",
-        "detectionsSummary": "{count} detections, up to {date}",
-        "kindLocal": "On this device",
-        "kindRemovable": "Removable drive",
-        "kindNetwork": "Network location",
-        "unreadableTitle": "Found, but BirdNET-Go can't read it",
-        "unreadableOwner": "This data belongs to another user ({owner}).",
-        "manualEntryLink": "Don't see it? Enter the location manually",
-        "manualEntryLabel": "BirdNET-Pi database location",
-        "manualValidating": "Checking...",
-        "manualValid": "Found {count} detections.",
-        "manualNotFound": "We couldn't find a file there.",
-        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
-        "manualInvalid": "That file isn't a BirdNET-Pi database.",
-        "zeroTitle": "We couldn't find it automatically",
-        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
-        "checkAgainButton": "Check again",
-        "showCommandsLabel": "Show commands",
-        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "title": "Waar staan je BirdNET-Pi-gegevens?",
+        "candidatesIntro": "We hebben deze BirdNET-Pi-databases gevonden:",
+        "selectButton": "Selecteren",
+        "useThisButton": "Deze gebruiken",
+        "detectionsSummary": "{count} detecties, tot {date}",
+        "kindLocal": "Op dit apparaat",
+        "kindRemovable": "Verwisselbare schijf",
+        "kindNetwork": "Netwerklocatie",
+        "unreadableTitle": "Gevonden, maar BirdNET-Go kan het niet lezen",
+        "unreadableOwner": "Deze gegevens behoren toe aan een andere gebruiker ({owner}).",
+        "manualEntryLink": "Staat het er niet bij? Voer de locatie handmatig in",
+        "manualEntryLabel": "Locatie van de BirdNET-Pi-database",
+        "manualValidating": "Controleren...",
+        "manualValid": "{count} detecties gevonden.",
+        "manualNotFound": "We konden daar geen bestand vinden.",
+        "manualUnreadable": "Gevonden, maar BirdNET-Go kan het nog niet lezen.",
+        "manualInvalid": "Dat bestand is geen BirdNET-Pi-database.",
+        "zeroTitle": "We konden het niet automatisch vinden",
+        "zeroDescription": "Sluit de schijf met je BirdNET-Pi-gegevens aan en controleer opnieuw.",
+        "checkAgainButton": "Opnieuw controleren",
+        "showCommandsLabel": "Opdrachten tonen",
+        "containerUnreadableHint": "BirdNET-Go (draait als UID {uid}) kan dit bestand niet lezen. Pas de rechten op de host aan zodat UID {uid} het kan lezen en controleer daarna opnieuw.",
         "elevation": {
-          "copying": "Copying your data...",
-          "passwordTitle": "BirdNET-Go needs permission to read this data",
-          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
-          "passwordLabel": "Administrator password",
-          "passwordRequiredReason": "Enter the administrator password to continue",
-          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
-          "submitButton": "Copy and continue",
-          "fallbackTitle": "Run this command to grant access",
-          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
-          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
-          "failed": "That didn't work. Check the password and try again, or use the command below."
+          "copying": "Je gegevens worden gekopieerd...",
+          "passwordTitle": "BirdNET-Go heeft toestemming nodig om deze gegevens te lezen",
+          "passwordDescription": "Voer het beheerderswachtwoord voor dit apparaat in zodat BirdNET-Go de gegevens kan kopiëren.",
+          "passwordLabel": "Beheerderswachtwoord",
+          "passwordRequiredReason": "Voer het beheerderswachtwoord in om door te gaan",
+          "httpWarning": "Deze pagina gebruikt geen HTTPS. Het beheerderswachtwoord wordt onversleuteld over je lokale netwerk verzonden. Ga alleen verder op een netwerk dat je vertrouwt.",
+          "submitButton": "Kopiëren en doorgaan",
+          "fallbackTitle": "Voer deze opdracht uit om toegang te verlenen",
+          "fallbackDescription": "BirdNET-Go kan de rechten niet automatisch verhogen. Voer de onderstaande opdracht uit en klik daarna op Opnieuw controleren.",
+          "disabledNote": "Rechtenverhoging in de app is uitgeschakeld. Gebruik de onderstaande opdracht om toegang te verlenen.",
+          "failed": "Dat werkte niet. Controleer het wachtwoord en probeer het opnieuw, of gebruik de onderstaande opdracht."
         }
       },
       "mode": {
-        "label": "What do you want to import?",
+        "label": "Wat wil je importeren?",
         "dbOnly": {
-          "label": "Database only",
-          "description": "Import detection records from birds.db. Audio clips are not imported."
+          "label": "Alleen database",
+          "description": "Importeer detectiegegevens uit birds.db. Audiofragmenten worden niet geïmporteerd."
         },
         "dbAudio": {
-          "label": "Database + audio clips",
-          "description": "Import detection records and associated audio recordings.",
-          "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "label": "Database + audiofragmenten",
+          "description": "Importeer detectiegegevens en de bijbehorende audio-opnamen.",
+          "badge": "Niet beschikbaar",
+          "disabledReason": "Import van audiofragmenten is nog niet beschikbaar. Alleen import van de database wordt ondersteund."
         }
       },
       "confirm": {
-        "description": "Review your import settings before starting. Imported detections are tagged with the source birdnet-pi and duplicates are skipped automatically.",
-        "source": "Source path",
-        "mode": "Import mode",
-        "tagging": "Source tag",
-        "taggingValue": "birdnet-pi (auto-applied)",
-        "deduplicationNote": "Duplicate detections (same species, time, and date already in the database) are skipped automatically. Exact counts will be shown live during the import.",
-        "startButton": "Start import"
+        "description": "Controleer je importinstellingen voordat je begint. Geïmporteerde detecties worden gemarkeerd met de bron birdnet-pi en duplicaten worden automatisch overgeslagen.",
+        "source": "Bronpad",
+        "mode": "Importmodus",
+        "tagging": "Bronlabel",
+        "taggingValue": "birdnet-pi (automatisch toegepast)",
+        "deduplicationNote": "Dubbele detecties (dezelfde soort, tijd en datum die al in de database staan) worden automatisch overgeslagen. De exacte aantallen worden live tijdens de import getoond.",
+        "startButton": "Import starten"
       },
       "progress": {
-        "label": "Import progress",
-        "runningLabel": "Import running",
-        "progressLabel": "{percent}% complete",
-        "cancelButton": "Cancel",
-        "cancellingLabel": "Cancelling...",
-        "cancelledMessage": "Import was cancelled.",
-        "processed": "Processed",
-        "inserted": "Inserted",
-        "skipped": "Skipped",
-        "errors": "Errors",
+        "label": "Importvoortgang",
+        "runningLabel": "Import loopt",
+        "progressLabel": "{percent}% voltooid",
+        "cancelButton": "Annuleren",
+        "cancellingLabel": "Annuleren...",
+        "cancelledMessage": "Import is geannuleerd.",
+        "processed": "Verwerkt",
+        "inserted": "Toegevoegd",
+        "skipped": "Overgeslagen",
+        "errors": "Fouten",
         "phase": {
-          "validate": "Validating",
-          "dedup": "Deduplicating",
-          "import": "Importing"
+          "validate": "Valideren",
+          "dedup": "Duplicaten verwijderen",
+          "import": "Importeren"
         }
       },
       "done": {
-        "successTitle": "Import complete",
-        "successDescription": "Your BirdNET-Pi detections have been imported successfully.",
-        "cancelledTitle": "Import cancelled",
-        "cancelledDescription": "The import was cancelled before completing.",
-        "errorTitle": "Import failed",
-        "viewDetectionsLink": "View imported detections",
-        "partialInserted": "{count} detections were imported before cancellation.",
-        "importAnother": "Import another"
+        "successTitle": "Import voltooid",
+        "successDescription": "Je BirdNET-Pi-detecties zijn succesvol geïmporteerd.",
+        "cancelledTitle": "Import geannuleerd",
+        "cancelledDescription": "De import is geannuleerd voordat deze voltooid was.",
+        "errorTitle": "Import mislukt",
+        "viewDetectionsLink": "Geïmporteerde detecties bekijken",
+        "partialInserted": "{count} detecties zijn geïmporteerd vóór de annulering.",
+        "importAnother": "Nog een import uitvoeren"
       },
       "errors": {
-        "loadFailed": "Failed to load import status. Please try again.",
-        "mediaLoadFailed": "Failed to check external media. Please try again.",
-        "alreadyRunning": "An import is already in progress. Please wait for it to complete.",
-        "startFailed": "Failed to start import. Please try again.",
-        "cancelFailed": "Failed to cancel import.",
-        "importFailed": "Import failed. Please check your configuration and try again."
+        "loadFailed": "Kan de importstatus niet laden. Probeer het opnieuw.",
+        "mediaLoadFailed": "Kan de externe media niet controleren. Probeer het opnieuw.",
+        "alreadyRunning": "Er loopt al een import. Wacht tot deze voltooid is.",
+        "startFailed": "Kan de import niet starten. Probeer het opnieuw.",
+        "cancelFailed": "Kan de import niet annuleren.",
+        "importFailed": "Import mislukt. Controleer je configuratie en probeer het opnieuw."
       }
     },
     "database": {

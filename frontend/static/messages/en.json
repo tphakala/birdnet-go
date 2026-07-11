@@ -1194,9 +1194,7 @@
       "export": {
         "sectionTitle": "Export",
         "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats.",
-        "startButton": "Export",
-        "disabledReason": "Export is not yet available. Check back in a future release."
+        "cardDescription": "Export your detection data to CSV, JSON, or other formats."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
@@ -1205,6 +1203,18 @@
         "wizardTitle": "Import from BirdNET-Pi",
         "experimentalNotice": "BirdNET-Pi import is experimental and may still have issues.",
         "reportBug": "Report a bug on GitHub"
+      },
+      "birdsDbUpload": {
+        "cardTitle": "birds.db upload",
+        "cardDescription": "Upload a BirdNET-Pi database file directly from your browser."
+      },
+      "activity": {
+        "sectionTitle": "Import activity",
+        "empty": {
+          "title": "No import activity",
+          "description": "When an import is running, its progress shows up here."
+        },
+        "openWizard": "Open import wizard"
       },
       "wizard": {
         "stepsLabel": "Import wizard steps"
@@ -1271,7 +1281,7 @@
           "label": "Database + audio clips",
           "description": "Import detection records and associated audio recordings.",
           "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "disabledReason": "Audio clip import is not yet available. Only database import is supported."
         }
       },
       "confirm": {

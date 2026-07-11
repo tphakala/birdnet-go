@@ -1174,149 +1174,159 @@
       "importExport": "Import / Export"
     },
     "importExport": {
-      "available": "Available",
+      "available": "Tillgänglig",
       "experimental": "Experimentell",
-      "comingSoon": "Coming soon",
-      "loading": "Loading...",
-      "runInBackground": "Close (import continues in background)",
-      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
-      "stepAnnouncement": "Step {current} of {total}: {name}",
+      "comingSoon": "Kommer snart",
+      "loading": "Laddar...",
+      "runInBackground": "Stäng (importen fortsätter i bakgrunden)",
+      "runInBackgroundTitle": "Stäng den här dialogrutan. Importen fortsätter i bakgrunden.",
+      "stepAnnouncement": "Steg {current} av {total}: {name}",
       "steps": {
-        "source": "Source",
-        "mode": "Mode",
-        "confirm": "Confirm",
-        "progress": "Progress",
-        "done": "Done"
+        "source": "Källa",
+        "mode": "Läge",
+        "confirm": "Bekräfta",
+        "progress": "Förlopp",
+        "done": "Klar"
       },
       "import": {
         "sectionTitle": "Import"
       },
       "export": {
         "sectionTitle": "Export",
-        "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats.",
-        "startButton": "Export",
-        "disabledReason": "Export is not yet available. Check back in a future release."
+        "cardTitle": "Exportera detekteringar",
+        "cardDescription": "Exportera dina detekteringsdata till CSV, JSON eller andra format."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
-        "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
-        "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi",
+        "cardDescription": "Importera detekteringshistorik från en BirdNET-Pi-SQLite-databas (birds.db).",
+        "startButton": "Importera från BirdNET-Pi",
+        "wizardTitle": "Importera från BirdNET-Pi",
         "experimentalNotice": "Import från BirdNET-Pi är experimentell och kan fortfarande ha problem.",
         "reportBug": "Rapportera ett fel på GitHub"
       },
+      "birdsDbUpload": {
+        "cardTitle": "Uppladdning av birds.db",
+        "cardDescription": "Ladda upp en BirdNET-Pi-databasfil direkt från din webbläsare."
+      },
+      "activity": {
+        "sectionTitle": "Importaktivitet",
+        "empty": {
+          "title": "Ingen importaktivitet",
+          "description": "När en import körs visas förloppet här."
+        },
+        "openWizard": "Öppna importguiden"
+      },
       "wizard": {
-        "stepsLabel": "Import wizard steps"
+        "stepsLabel": "Steg i importguiden"
       },
       "sourceAccess": {
-        "pathLabel": "Path to birds.db (relative to mount root)",
-        "pathHelpText": "Enter the path relative to the external media mount root, e.g. birdnet-pi/birds.db",
-        "pathRequiredReason": "Enter the path to birds.db to continue",
-        "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
-        "mountRoot": "Mount root",
-        "nativeTitle": "External media mount required",
-        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
-        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
-        "missingTitle": "External media mount not found",
-        "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
-        "setupStepsLabel": "Setup steps",
-        "recheckButton": "Re-check",
-        "recheckHint": "After completing the setup steps, click Re-check to continue."
+        "pathLabel": "Sökväg till birds.db (relativ till monteringsroten)",
+        "pathHelpText": "Ange sökvägen relativt till roten för den externa mediemonteringen, t.ex. birdnet-pi/birds.db",
+        "pathRequiredReason": "Ange sökvägen till birds.db för att fortsätta",
+        "mountDescription": "Din BirdNET-Pi-databas bör finnas på den externa mediemonteringen.",
+        "mountRoot": "Monteringsrot",
+        "nativeTitle": "Extern mediemontering krävs",
+        "nativeDescription": "BirdNET-Pi-import kräver en extern mediemontering, som endast är tillgänglig när BirdNET-Go körs i en container. Nativa (icke-containeriserade) installationer kan inte använda den här importfunktionen.",
+        "nativeHowTo": "För att importera från BirdNET-Pi, kör BirdNET-Go i en container där BirdNET-Pi-datakatalogen är monterad som den externa medievolymen.",
+        "missingTitle": "Extern mediemontering hittades inte",
+        "missingDescription": "BirdNET-Go körs i en container, men den externa mediemonteringen är inte åtkomlig. Följ stegen nedan för att ställa in den.",
+        "setupStepsLabel": "Installationssteg",
+        "recheckButton": "Kontrollera igen",
+        "recheckHint": "När du har slutfört installationsstegen klickar du på Kontrollera igen för att fortsätta."
       },
       "source": {
-        "title": "Where is your BirdNET-Pi data?",
-        "candidatesIntro": "We found these BirdNET-Pi databases:",
-        "selectButton": "Select",
-        "useThisButton": "Use this",
-        "detectionsSummary": "{count} detections, up to {date}",
-        "kindLocal": "On this device",
-        "kindRemovable": "Removable drive",
-        "kindNetwork": "Network location",
-        "unreadableTitle": "Found, but BirdNET-Go can't read it",
-        "unreadableOwner": "This data belongs to another user ({owner}).",
-        "manualEntryLink": "Don't see it? Enter the location manually",
-        "manualEntryLabel": "BirdNET-Pi database location",
-        "manualValidating": "Checking...",
-        "manualValid": "Found {count} detections.",
-        "manualNotFound": "We couldn't find a file there.",
-        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
-        "manualInvalid": "That file isn't a BirdNET-Pi database.",
-        "zeroTitle": "We couldn't find it automatically",
-        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
-        "checkAgainButton": "Check again",
-        "showCommandsLabel": "Show commands",
-        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "title": "Var finns dina BirdNET-Pi-data?",
+        "candidatesIntro": "Vi hittade dessa BirdNET-Pi-databaser:",
+        "selectButton": "Välj",
+        "useThisButton": "Använd den här",
+        "detectionsSummary": "{count} detekteringar, fram till {date}",
+        "kindLocal": "På den här enheten",
+        "kindRemovable": "Flyttbar enhet",
+        "kindNetwork": "Nätverksplats",
+        "unreadableTitle": "Hittades, men BirdNET-Go kan inte läsa den",
+        "unreadableOwner": "Dessa data tillhör en annan användare ({owner}).",
+        "manualEntryLink": "Ser du den inte? Ange platsen manuellt",
+        "manualEntryLabel": "Plats för BirdNET-Pi-databasen",
+        "manualValidating": "Kontrollerar...",
+        "manualValid": "Hittade {count} detekteringar.",
+        "manualNotFound": "Vi kunde inte hitta någon fil där.",
+        "manualUnreadable": "Hittade den, men BirdNET-Go kan inte läsa den än.",
+        "manualInvalid": "Den filen är inte en BirdNET-Pi-databas.",
+        "zeroTitle": "Vi kunde inte hitta den automatiskt",
+        "zeroDescription": "Anslut enheten som innehåller dina BirdNET-Pi-data och kontrollera igen.",
+        "checkAgainButton": "Kontrollera igen",
+        "showCommandsLabel": "Visa kommandon",
+        "containerUnreadableHint": "BirdNET-Go (körs som UID {uid}) kan inte läsa den här filen. Ändra behörigheterna på värden så att UID {uid} kan läsa den, och kontrollera sedan igen.",
         "elevation": {
-          "copying": "Copying your data...",
-          "passwordTitle": "BirdNET-Go needs permission to read this data",
-          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
-          "passwordLabel": "Administrator password",
-          "passwordRequiredReason": "Enter the administrator password to continue",
-          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
-          "submitButton": "Copy and continue",
-          "fallbackTitle": "Run this command to grant access",
-          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
-          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
-          "failed": "That didn't work. Check the password and try again, or use the command below."
+          "copying": "Dina data kopieras...",
+          "passwordTitle": "BirdNET-Go behöver behörighet för att läsa dessa data",
+          "passwordDescription": "Ange administratörslösenordet för den här enheten så att BirdNET-Go kan kopiera data.",
+          "passwordLabel": "Administratörslösenord",
+          "passwordRequiredReason": "Ange administratörslösenordet för att fortsätta",
+          "httpWarning": "Den här sidan använder inte HTTPS. Administratörslösenordet skickas okrypterat över ditt lokala nätverk. Fortsätt endast i ett nätverk du litar på.",
+          "submitButton": "Kopiera och fortsätt",
+          "fallbackTitle": "Kör det här kommandot för att ge åtkomst",
+          "fallbackDescription": "BirdNET-Go kan inte höja behörigheten automatiskt. Kör kommandot nedan och klicka sedan på Kontrollera igen.",
+          "disabledNote": "Behörighetshöjning i appen är avstängd. Använd kommandot nedan för att ge åtkomst.",
+          "failed": "Det fungerade inte. Kontrollera lösenordet och försök igen, eller använd kommandot nedan."
         }
       },
       "mode": {
-        "label": "What do you want to import?",
+        "label": "Vad vill du importera?",
         "dbOnly": {
-          "label": "Database only",
-          "description": "Import detection records from birds.db. Audio clips are not imported."
+          "label": "Endast databas",
+          "description": "Importera detekteringar från birds.db. Ljudklipp importeras inte."
         },
         "dbAudio": {
-          "label": "Database + audio clips",
-          "description": "Import detection records and associated audio recordings.",
-          "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "label": "Databas + ljudklipp",
+          "description": "Importera detekteringar och tillhörande ljudinspelningar.",
+          "badge": "Inte tillgänglig",
+          "disabledReason": "Import av ljudklipp är inte tillgänglig än. Endast databasimport stöds; ljudklipp importeras inte."
         }
       },
       "confirm": {
-        "description": "Review your import settings before starting. Imported detections are tagged with the source birdnet-pi and duplicates are skipped automatically.",
-        "source": "Source path",
-        "mode": "Import mode",
-        "tagging": "Source tag",
-        "taggingValue": "birdnet-pi (auto-applied)",
-        "deduplicationNote": "Duplicate detections (same species, time, and date already in the database) are skipped automatically. Exact counts will be shown live during the import.",
-        "startButton": "Start import"
+        "description": "Granska dina importinställningar innan du börjar. Importerade detekteringar märks med källan birdnet-pi och dubbletter hoppas över automatiskt.",
+        "source": "Källsökväg",
+        "mode": "Importläge",
+        "tagging": "Källtagg",
+        "taggingValue": "birdnet-pi (tillämpas automatiskt)",
+        "deduplicationNote": "Dubbla detekteringar (samma art, tid och datum som redan finns i databasen) hoppas över automatiskt. De exakta antalen visas i realtid under importen.",
+        "startButton": "Starta import"
       },
       "progress": {
-        "label": "Import progress",
-        "runningLabel": "Import running",
-        "progressLabel": "{percent}% complete",
-        "cancelButton": "Cancel",
-        "cancellingLabel": "Cancelling...",
-        "cancelledMessage": "Import was cancelled.",
-        "processed": "Processed",
-        "inserted": "Inserted",
-        "skipped": "Skipped",
-        "errors": "Errors",
+        "label": "Importförlopp",
+        "runningLabel": "Import pågår",
+        "progressLabel": "{percent} % klart",
+        "cancelButton": "Avbryt",
+        "cancellingLabel": "Avbryter...",
+        "cancelledMessage": "Importen avbröts.",
+        "processed": "Bearbetade",
+        "inserted": "Infogade",
+        "skipped": "Överhoppade",
+        "errors": "Fel",
         "phase": {
-          "validate": "Validating",
-          "dedup": "Deduplicating",
-          "import": "Importing"
+          "validate": "Validerar",
+          "dedup": "Tar bort dubbletter",
+          "import": "Importerar"
         }
       },
       "done": {
-        "successTitle": "Import complete",
-        "successDescription": "Your BirdNET-Pi detections have been imported successfully.",
-        "cancelledTitle": "Import cancelled",
-        "cancelledDescription": "The import was cancelled before completing.",
-        "errorTitle": "Import failed",
-        "viewDetectionsLink": "View imported detections",
-        "partialInserted": "{count} detections were imported before cancellation.",
-        "importAnother": "Import another"
+        "successTitle": "Import slutförd",
+        "successDescription": "Dina BirdNET-Pi-detekteringar har importerats.",
+        "cancelledTitle": "Import avbruten",
+        "cancelledDescription": "Importen avbröts innan den slutfördes.",
+        "errorTitle": "Importen misslyckades",
+        "viewDetectionsLink": "Visa importerade detekteringar",
+        "partialInserted": "{count} detekteringar importerades före avbrottet.",
+        "importAnother": "Importera igen"
       },
       "errors": {
-        "loadFailed": "Failed to load import status. Please try again.",
-        "mediaLoadFailed": "Failed to check external media. Please try again.",
-        "alreadyRunning": "An import is already in progress. Please wait for it to complete.",
-        "startFailed": "Failed to start import. Please try again.",
-        "cancelFailed": "Failed to cancel import.",
-        "importFailed": "Import failed. Please check your configuration and try again."
+        "loadFailed": "Det gick inte att läsa in importstatusen. Försök igen.",
+        "mediaLoadFailed": "Det gick inte att kontrollera de externa medierna. Försök igen.",
+        "alreadyRunning": "En import pågår redan. Vänta tills den är klar.",
+        "startFailed": "Det gick inte att starta importen. Försök igen.",
+        "cancelFailed": "Det gick inte att avbryta importen.",
+        "importFailed": "Importen misslyckades. Kontrollera din konfiguration och försök igen."
       }
     },
     "database": {
