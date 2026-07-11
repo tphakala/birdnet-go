@@ -118,14 +118,16 @@ describe('ReviewCard', () => {
         },
       });
 
+      const fetchMock = vi.mocked((await import('$lib/utils/api')).fetchWithCSRF);
+      const callsBefore = fetchMock.mock.calls.length;
+
       const saveButton = screen.getByRole('button', { name: /common\.review\.form\.saveReview/i });
       await user.click(saveButton);
 
-      const fetchMock = (await import('$lib/utils/api')).fetchWithCSRF;
-      expect(fetchMock).toHaveBeenCalled();
-      // Use the most recent call (the mock accumulates calls across tests in this
-      // file), so this stays correct if a Save-clicking test is added earlier.
-      const lastCall = vi.mocked(fetchMock).mock.lastCall;
+      // This click must issue exactly one new request; assert that before reading
+      // lastCall, since the mock accumulates calls across tests in this file.
+      expect(fetchMock.mock.calls.length).toBe(callsBefore + 1);
+      const lastCall = fetchMock.mock.lastCall;
       const body = JSON.parse((lastCall?.[1]?.body ?? '{}') as string);
       expect(body.comment).toBeUndefined();
     });
@@ -172,11 +174,14 @@ describe('ReviewCard', () => {
       await user.clear(textarea);
       await user.type(textarea, 'New comment');
 
+      const fetchMock = vi.mocked((await import('$lib/utils/api')).fetchWithCSRF);
+      const callsBefore = fetchMock.mock.calls.length;
+
       const saveButton = screen.getByRole('button', { name: /common\.review\.form\.saveReview/i });
       await user.click(saveButton);
 
-      const fetchMock = (await import('$lib/utils/api')).fetchWithCSRF;
-      const lastCall = vi.mocked(fetchMock).mock.lastCall;
+      expect(fetchMock.mock.calls.length).toBe(callsBefore + 1);
+      const lastCall = fetchMock.mock.lastCall;
       const body = JSON.parse((lastCall?.[1]?.body ?? '{}') as string);
       expect(body.comment).toBe('New comment');
     });
