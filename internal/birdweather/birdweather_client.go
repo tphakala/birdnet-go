@@ -557,7 +557,7 @@ func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ff
 
 	// --- Calculate gain needed to reach target loudness ---
 	inputLUFS := parseDouble(loudnessStats.InputI, -70.0)
-	gainNeeded := targetIntegratedLoudnessLUFS - inputLUFS
+	gainNeeded := soundscapeGainDB(inputLUFS)
 
 	// Apply safety limits to prevent excessive amplification or attenuation
 	maxGain := 30.0 // Maximum gain in dB (absolute value)
@@ -623,6 +623,23 @@ func parseDouble(s string, defaultValue float64) float64 {
 		return defaultValue
 	}
 	return val
+}
+
+// soundscapeGainDB returns the gain (dB) needed to bring a clip whose measured
+// integrated loudness is inputLUFS to targetIntegratedLoudnessLUFS.
+//
+// ffmpeg's loudnorm analysis reports input_i as "-inf" for a silent clip, which
+// parseDouble turns into -Inf, making the raw gain +Inf. Amplifying silence
+// only lifts the noise floor, and the non-finite value is not JSON-encodable so
+// it corrupts the structured gain-limit log. A non-finite measurement therefore
+// yields 0 dB — leave the clip untouched — matching the native encoder path,
+// which returns GainDB 0 for silence (see encode_native.go).
+func soundscapeGainDB(inputLUFS float64) float64 {
+	gain := targetIntegratedLoudnessLUFS - inputLUFS
+	if math.IsInf(gain, 0) || math.IsNaN(gain) {
+		return 0
+	}
+	return gain
 }
 
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
