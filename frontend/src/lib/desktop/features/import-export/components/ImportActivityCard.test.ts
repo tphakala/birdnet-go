@@ -1,18 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 
-vi.mock('$lib/utils/logger', () => ({
-  loggers: {
-    ui: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-  },
-}));
-
-// Mock api before importing the component.
+// Mock api before importing the component (needs userMessage on ApiError).
 vi.mock('$lib/utils/api', () => ({
   api: {
     get: vi.fn(),
@@ -77,6 +66,15 @@ function dispatchMockEvent(type: string, data: unknown) {
   }
 }
 
+/** Helper to dispatch a bare transport event (no data payload). */
+function dispatchPlainEvent(type: string) {
+  const handlers = mockEsListeners.get(type) ?? [];
+  const event = new Event(type);
+  for (const handler of handlers) {
+    handler(event);
+  }
+}
+
 import ImportActivityCard from './ImportActivityCard.svelte';
 import { api } from '$lib/utils/api';
 import type { ImportProgress, ImportStatusResponse } from '../types';
@@ -114,12 +112,13 @@ describe('ImportActivityCard', () => {
     cleanup();
   });
 
-  it('shows the empty state when no import has run', async () => {
+  it('fetches the import status endpoint and shows the empty state when idle', async () => {
     vi.mocked(api.get).mockResolvedValue(idleStatus);
     renderCard();
     await waitFor(() => {
-      expect(screen.getByText('system.importExport.activity.emptyTitle')).toBeInTheDocument();
+      expect(screen.getByText('system.importExport.activity.empty.title')).toBeInTheDocument();
     });
+    expect(api.get).toHaveBeenCalledWith('/api/v2/import/status');
     expect(MockReconnectingEventSource).not.toHaveBeenCalled();
   });
 
@@ -161,6 +160,20 @@ describe('ImportActivityCard', () => {
     });
   });
 
+  it('ignores bare transport error events and keeps the stream open', async () => {
+    vi.mocked(api.get).mockResolvedValue(runningStatus);
+    renderCard();
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalled();
+    });
+    dispatchPlainEvent('error');
+    await waitFor(() => {
+      expect(screen.getByText(/system.importExport.progress.runningLabel/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('system.importExport.done.errorTitle')).not.toBeInTheDocument();
+    expect(mockEsInstance?.close).not.toHaveBeenCalled();
+  });
+
   it('shows the success summary and detections link after the complete event', async () => {
     vi.mocked(api.get).mockResolvedValue(runningStatus);
     renderCard();
@@ -182,7 +195,7 @@ describe('ImportActivityCard', () => {
     expect(mockEsInstance?.close).toHaveBeenCalled();
   });
 
-  it('shows the cancelled summary after the cancelled event', async () => {
+  it('shows the cancelled summary and closes the stream after the cancelled event', async () => {
     vi.mocked(api.get).mockResolvedValue(runningStatus);
     renderCard();
     await waitFor(() => {
@@ -192,9 +205,10 @@ describe('ImportActivityCard', () => {
     await waitFor(() => {
       expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
     });
+    expect(mockEsInstance?.close).toHaveBeenCalled();
   });
 
-  it('shows the error summary after a terminal error event', async () => {
+  it('shows the error summary and closes the stream after a terminal error event', async () => {
     vi.mocked(api.get).mockResolvedValue(runningStatus);
     renderCard();
     await waitFor(() => {
@@ -204,6 +218,17 @@ describe('ImportActivityCard', () => {
     await waitFor(() => {
       expect(screen.getByText('system.importExport.done.errorTitle')).toBeInTheDocument();
     });
+    expect(mockEsInstance?.close).toHaveBeenCalled();
+  });
+
+  it('closes the SSE stream on unmount', async () => {
+    vi.mocked(api.get).mockResolvedValue(runningStatus);
+    const { unmount } = renderCard();
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalled();
+    });
+    unmount();
+    expect(mockEsInstance?.close).toHaveBeenCalled();
   });
 
   it('shows a finished import summary when loading after completion', async () => {
@@ -218,6 +243,20 @@ describe('ImportActivityCard', () => {
       expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
     });
     expect(MockReconnectingEventSource).not.toHaveBeenCalled();
+  });
+
+  it('shows the cancelled summary when status reports a cancelled run', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      running: false,
+      job_id: 'job-1',
+      status: 'done',
+      progress: runningProgress,
+      cancelled: true,
+    } satisfies ImportStatusResponse);
+    renderCard();
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
+    });
   });
 
   it('shows the failed import summary when status reports an error', async () => {
@@ -242,6 +281,24 @@ describe('ImportActivityCard', () => {
     });
   });
 
+  it('shows loading, not the empty state, while retrying after a failed load', async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error('network down'));
+    const onOpenWizard = vi.fn();
+    const { rerender } = render(ImportActivityCard, {
+      props: { onOpenWizard, refreshSignal: 0 },
+    });
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.errors.loadFailed')).toBeInTheDocument();
+    });
+    // Retry hangs: the card must show the loading state, not "no activity".
+    vi.mocked(api.get).mockImplementation(() => new Promise(() => {}));
+    await rerender({ onOpenWizard, refreshSignal: 1 });
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.loading')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('system.importExport.activity.empty.title')).not.toBeInTheDocument();
+  });
+
   it('refetches status when refreshSignal changes', async () => {
     vi.mocked(api.get).mockResolvedValue(idleStatus);
     const onOpenWizard = vi.fn();
@@ -259,5 +316,60 @@ describe('ImportActivityCard', () => {
         '/api/v2/import/jobs/job-1/progress'
       );
     });
+  });
+
+  it('does not open a second stream when a refetch returns the same running job', async () => {
+    vi.mocked(api.get).mockResolvedValue(runningStatus);
+    const onOpenWizard = vi.fn();
+    const { rerender } = render(ImportActivityCard, {
+      props: { onOpenWizard, refreshSignal: 0 },
+    });
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
+    });
+    await rerender({ onOpenWizard, refreshSignal: 1 });
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledTimes(2);
+    });
+    expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
+    expect(mockEsInstance?.close).not.toHaveBeenCalled();
+  });
+
+  it('keeps the terminal state when a stale running response arrives after the SSE terminal event', async () => {
+    // Refetch resolves only when released, snapshotting "running" before the
+    // SSE terminal event lands.
+    let releaseRefetch: ((value: ImportStatusResponse) => void) | undefined;
+    vi.mocked(api.get)
+      .mockResolvedValueOnce(runningStatus)
+      .mockImplementationOnce(
+        () =>
+          new Promise<ImportStatusResponse>(resolve => {
+            releaseRefetch = resolve;
+          })
+      );
+    const onOpenWizard = vi.fn();
+    const { rerender } = render(ImportActivityCard, {
+      props: { onOpenWizard, refreshSignal: 0 },
+    });
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
+    });
+
+    await rerender({ onOpenWizard, refreshSignal: 1 });
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledTimes(2);
+    });
+
+    dispatchMockEvent('cancelled', runningProgress);
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
+    });
+
+    releaseRefetch?.(runningStatus);
+    // The stale running snapshot must not flip the view back or reconnect.
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.cancelledTitle')).toBeInTheDocument();
+    });
+    expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
   });
 });

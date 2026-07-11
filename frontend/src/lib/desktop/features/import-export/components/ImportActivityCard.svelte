@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
-  import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
+  import type { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { loggers } from '$lib/utils/logger';
   import Card from '$lib/desktop/components/ui/Card.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
@@ -10,9 +10,13 @@
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import ProgressBar from '$lib/desktop/components/ui/ProgressBar.svelte';
   import { Activity, CheckCircle2, XCircle, CircleSlash } from '@lucide/svelte';
-  import { formatNumber } from '$lib/utils/formatters';
-  import { buildDetectionsFilterUrl } from '../utils';
-  import type { ImportErrorEvent, ImportProgress, ImportStatusResponse } from '../types';
+  import ImportCountTile from './ImportCountTile.svelte';
+  import {
+    buildDetectionsFilterUrl,
+    connectImportProgressStream,
+    importProgressPercent,
+  } from '../utils';
+  import type { ImportProgress, ImportStatusResponse } from '../types';
 
   const logger = loggers.ui;
 
@@ -32,34 +36,25 @@
   let status = $state<ImportStatusResponse | null>(null);
   let progress = $state<ImportProgress | null>(null);
   let finalKind = $state<FinalKind | null>(null);
-  let isLoading = $state(true);
   let loadError = $state<string | null>(null);
 
   let eventSource: ReconnectingEventSource | null = null;
   let connectedJobId: string | null = null;
   let destroyed = false;
+  // Monotonic id so an out-of-order response cannot overwrite newer state
+  // (e.g. a stale 'idle' snapshot closing a live stream).
+  let loadGeneration = 0;
 
   type ActivityView = 'loading' | 'loadError' | 'running' | 'done' | 'idle';
 
   let view = $derived.by((): ActivityView => {
-    if (isLoading && status === null) return 'loading';
-    if (loadError !== null && status === null) return 'loadError';
     if (finalKind !== null) return 'done';
     if (status?.running) return 'running';
+    if (status === null) return loadError !== null ? 'loadError' : 'loading';
     return 'idle';
   });
 
-  let progressPercent = $derived.by(() => {
-    if (
-      !progress ||
-      typeof progress.total !== 'number' ||
-      typeof progress.processed !== 'number' ||
-      progress.total <= 0
-    ) {
-      return 0;
-    }
-    return Math.max(0, Math.min(100, Math.round((progress.processed / progress.total) * 100)));
-  });
+  let progressPercent = $derived(importProgressPercent(progress));
 
   // Refetch on mount and whenever the parent bumps refreshSignal.
   $effect(() => {
@@ -68,38 +63,42 @@
   });
 
   async function loadStatus() {
+    const generation = ++loadGeneration;
     loadError = null;
     try {
       const resp = await api.get<ImportStatusResponse>('/api/v2/import/status');
-      if (destroyed) return;
+      if (destroyed || generation !== loadGeneration) return;
+      // A response snapshotted while the job still ran can arrive after the
+      // SSE stream delivered the terminal event; a finished job id never runs
+      // again, so ignore the stale 'running' snapshot.
+      if (resp.running && resp.job_id === connectedJobId && finalKind !== null) {
+        return;
+      }
       status = resp;
       if (resp.progress) {
         progress = resp.progress;
       }
       if (resp.running && resp.job_id) {
-        // A new (or still-running) job: clear any previous terminal state.
         finalKind = null;
         connectEventSource(resp.job_id);
         return;
       }
       closeEventSource();
       if (resp.status === 'done') {
-        // Keep the more precise SSE-derived terminal kind (e.g. 'cancelled')
-        // for the job we watched; derive from the response otherwise.
+        // Keep the SSE-derived terminal kind for the job we watched; derive
+        // from the response otherwise.
         if (finalKind === null || resp.job_id !== connectedJobId) {
-          finalKind = resp.error ? 'error' : 'success';
+          finalKind = resp.cancelled ? 'cancelled' : resp.error ? 'error' : 'success';
         }
       } else {
         finalKind = null;
         progress = null;
       }
     } catch (err) {
-      if (destroyed) return;
+      if (destroyed || generation !== loadGeneration) return;
       logger.error('Failed to load import status', err);
       loadError =
         err instanceof ApiError ? err.userMessage : t('system.importExport.errors.loadFailed');
-    } finally {
-      isLoading = false;
     }
   }
 
@@ -107,63 +106,26 @@
     if (eventSource && connectedJobId === id) return;
     closeEventSource();
     connectedJobId = id;
-    const es = new ReconnectingEventSource(`/api/v2/import/jobs/${id}/progress`);
-
-    es.addEventListener('progress', (event: Event) => {
-      try {
-        progress = JSON.parse((event as MessageEvent).data) as ImportProgress;
-      } catch (e) {
-        logger.error('Failed to parse progress event', e);
-      }
+    eventSource = connectImportProgressStream(id, {
+      onProgress: p => {
+        progress = p;
+      },
+      onComplete: p => {
+        if (p) progress = p;
+        finalKind = 'success';
+        closeEventSource();
+      },
+      onCancelled: p => {
+        if (p) progress = p;
+        finalKind = 'cancelled';
+        closeEventSource();
+      },
+      onError: p => {
+        if (p) progress = p;
+        finalKind = 'error';
+        closeEventSource();
+      },
     });
-
-    es.addEventListener('complete', (event: Event) => {
-      try {
-        progress = JSON.parse((event as MessageEvent).data) as ImportProgress;
-      } catch (e) {
-        logger.error('Failed to parse complete event', e);
-      }
-      finalKind = 'success';
-      closeEventSource();
-    });
-
-    es.addEventListener('cancelled', (event: Event) => {
-      try {
-        progress = JSON.parse((event as MessageEvent).data) as ImportProgress;
-      } catch {
-        // ignore parse errors for cancelled event
-      }
-      finalKind = 'cancelled';
-      closeEventSource();
-    });
-
-    es.addEventListener('error', (event: Event) => {
-      // Transport drops fire 'error' without data; ReconnectingEventSource
-      // handles those, so only treat data-carrying events as terminal.
-      if (!(event instanceof MessageEvent) || typeof event.data !== 'string') {
-        return;
-      }
-      try {
-        const data = JSON.parse(event.data) as ImportErrorEvent;
-        progress = {
-          total: data.total,
-          processed: data.processed,
-          inserted: data.inserted,
-          skipped: data.skipped,
-          errors: data.errors,
-          phase: data.phase,
-        };
-      } catch (e) {
-        logger.error('Failed to parse import error event', e);
-      }
-      finalKind = 'error';
-      closeEventSource();
-    });
-
-    // heartbeat: keep-alive only, no-op
-    es.addEventListener('heartbeat', (_event: Event) => {});
-
-    eventSource = es;
   }
 
   function closeEventSource() {
@@ -190,12 +152,12 @@
   }
 </script>
 
-<Card className="h-full">
+<Card>
   <h3
     id="import-activity-heading"
     class="text-xs font-semibold uppercase tracking-wider text-[var(--color-base-content)]/60 mb-3"
   >
-    {t('system.importExport.activity.title')}
+    {t('system.importExport.activity.sectionTitle')}
   </h3>
 
   {#if view === 'loading'}
@@ -227,42 +189,25 @@
       />
       {#if progress}
         <div class="grid grid-cols-2 gap-2">
-          <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-            <div class="text-base font-semibold text-[var(--color-base-content)]">
-              {formatNumber(progress.processed)}
-            </div>
-            <div class="text-xs text-[var(--color-base-content)]/60">
-              {t('system.importExport.progress.processed')}
-            </div>
-          </div>
-          <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-            <div class="text-base font-semibold text-[var(--color-success)]">
-              {formatNumber(progress.inserted)}
-            </div>
-            <div class="text-xs text-[var(--color-base-content)]/60">
-              {t('system.importExport.progress.inserted')}
-            </div>
-          </div>
-          <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-            <div class="text-base font-semibold text-[var(--color-base-content)]/60">
-              {formatNumber(progress.skipped)}
-            </div>
-            <div class="text-xs text-[var(--color-base-content)]/60">
-              {t('system.importExport.progress.skipped')}
-            </div>
-          </div>
-          <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-            <div
-              class="text-base font-semibold {progress.errors > 0
-                ? 'text-[var(--color-error)]'
-                : 'text-[var(--color-base-content)]/60'}"
-            >
-              {formatNumber(progress.errors)}
-            </div>
-            <div class="text-xs text-[var(--color-base-content)]/60">
-              {t('system.importExport.progress.errors')}
-            </div>
-          </div>
+          <ImportCountTile
+            value={progress.processed}
+            label={t('system.importExport.progress.processed')}
+          />
+          <ImportCountTile
+            value={progress.inserted}
+            label={t('system.importExport.progress.inserted')}
+            tone="success"
+          />
+          <ImportCountTile
+            value={progress.skipped}
+            label={t('system.importExport.progress.skipped')}
+            tone="muted"
+          />
+          <ImportCountTile
+            value={progress.errors}
+            label={t('system.importExport.progress.errors')}
+            tone={progress.errors > 0 ? 'error' : 'muted'}
+          />
         </div>
       {/if}
       <Button variant="default" size="sm" onclick={onOpenWizard}>
@@ -285,22 +230,16 @@
       </div>
       {#if progress}
         <div class="grid grid-cols-2 gap-2">
-          <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-            <div class="text-base font-semibold text-[var(--color-success)]">
-              {formatNumber(progress.inserted)}
-            </div>
-            <div class="text-xs text-[var(--color-base-content)]/60">
-              {t('system.importExport.progress.inserted')}
-            </div>
-          </div>
-          <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-            <div class="text-base font-semibold text-[var(--color-base-content)]/60">
-              {formatNumber(progress.skipped)}
-            </div>
-            <div class="text-xs text-[var(--color-base-content)]/60">
-              {t('system.importExport.progress.skipped')}
-            </div>
-          </div>
+          <ImportCountTile
+            value={progress.inserted}
+            label={t('system.importExport.progress.inserted')}
+            tone="success"
+          />
+          <ImportCountTile
+            value={progress.skipped}
+            label={t('system.importExport.progress.skipped')}
+            tone="muted"
+          />
         </div>
       {/if}
       {#if finalKind === 'success' && (progress?.inserted ?? 0) > 0}
@@ -316,10 +255,10 @@
     <div class="flex flex-col items-center text-center py-6 gap-2">
       <Activity class="size-8 text-[var(--color-base-content)]/25" aria-hidden="true" />
       <p class="text-sm font-medium text-[var(--color-base-content)]/70">
-        {t('system.importExport.activity.emptyTitle')}
+        {t('system.importExport.activity.empty.title')}
       </p>
       <p class="text-xs text-[var(--color-base-content)]/50 max-w-48">
-        {t('system.importExport.activity.emptyDescription')}
+        {t('system.importExport.activity.empty.description')}
       </p>
     </div>
   {/if}

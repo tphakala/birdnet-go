@@ -1068,6 +1068,61 @@ func TestGetImportStatus_DoneJob(t *testing.T) {
 	assert.Empty(t, resp.Error)
 }
 
+// TestGetImportStatus_CancelledJob verifies a cancelled run reports done with
+// the cancelled flag set instead of a failure, so rehydrating UIs do not
+// misreport a deliberate cancel as "import failed".
+func TestGetImportStatus_CancelledJob(t *testing.T) {
+	_, c := newImportHandler(t)
+
+	_, jobCancel := context.WithCancel(t.Context())
+	jobCancel()
+	job := newImportJob("cancelled1", jobCancel)
+	require.True(t, c.importMgr.start(job))
+	job.finish(imports.ImportStats{Total: 10, Processed: 4, Inserted: 3, Skipped: 1, Phase: "done"}, context.Canceled)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.GetImportStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp importStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.False(t, resp.Running)
+	assert.Equal(t, importStatusDone, resp.Status)
+	assert.True(t, resp.Cancelled)
+	assert.Empty(t, resp.Error)
+}
+
+// TestGetImportStatus_FailedJob verifies a failed run reports the generic
+// error message and does not set the cancelled flag.
+func TestGetImportStatus_FailedJob(t *testing.T) {
+	_, c := newImportHandler(t)
+
+	_, jobCancel := context.WithCancel(t.Context())
+	jobCancel()
+	job := newImportJob("failed1", jobCancel)
+	require.True(t, c.importMgr.start(job))
+	job.finish(imports.ImportStats{Total: 10, Processed: 2, Errors: 1, Phase: "done"}, assert.AnError)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, c.GetImportStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp importStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.False(t, resp.Running)
+	assert.Equal(t, importStatusDone, resp.Status)
+	assert.False(t, resp.Cancelled)
+	assert.Equal(t, importErrorMessage, resp.Error)
+}
+
 // TestImportRoutes_Registered verifies all import routes are registered.
 func TestImportRoutes_Registered(t *testing.T) {
 	e, c := newImportHandler(t)

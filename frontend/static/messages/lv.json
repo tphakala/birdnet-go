@@ -1209,9 +1209,11 @@
         "cardDescription": "Upload a BirdNET-Pi database file directly from your browser."
       },
       "activity": {
-        "title": "Import activity",
-        "emptyTitle": "No import activity",
-        "emptyDescription": "When an import is running, its progress shows up here.",
+        "sectionTitle": "Import activity",
+        "empty": {
+          "title": "No import activity",
+          "description": "When an import is running, its progress shows up here."
+        },
         "openWizard": "Open import wizard"
       },
       "wizard": {

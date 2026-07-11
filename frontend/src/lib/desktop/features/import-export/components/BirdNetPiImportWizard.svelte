@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
-  import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
+  import type { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { toastActions } from '$lib/stores/toast';
   import { loggers } from '$lib/utils/logger';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
@@ -21,12 +21,18 @@
     StartImportRequest,
     StartImportResponse,
     ImportProgress,
-    ImportErrorEvent,
     CancelResponse,
     ImportStatusResponse,
     WizardStep,
   } from '../types';
-  import { deriveSourceStepState, isUnreadable, buildDetectionsFilterUrl } from '../utils';
+  import ImportCountTile from './ImportCountTile.svelte';
+  import {
+    buildDetectionsFilterUrl,
+    connectImportProgressStream,
+    deriveSourceStepState,
+    importProgressPercent,
+    isUnreadable,
+  } from '../utils';
   import { formatNumber } from '$lib/utils/formatters';
 
   const logger = loggers.ui;
@@ -87,26 +93,13 @@
 
   let currentStepIndex = $derived(stepLabels.indexOf(currentStep));
 
-  let progressPercent = $derived.by(() => {
-    if (
-      !importProgress ||
-      typeof importProgress.total !== 'number' ||
-      typeof importProgress.processed !== 'number' ||
-      importProgress.total <= 0
-    ) {
-      return 0;
-    }
-    return Math.max(
-      0,
-      Math.min(100, Math.round((importProgress.processed / importProgress.total) * 100))
-    );
-  });
+  let progressPercent = $derived(importProgressPercent(importProgress));
 
   function applyFinalStatus(s: ImportStatusResponse) {
     if (s.progress) importProgress = s.progress;
+    importCancelled = s.cancelled === true;
     importError = s.error ? t('system.importExport.errors.importFailed') : null;
-    importComplete = !s.error;
-    importCancelled = false;
+    importComplete = !s.error && !importCancelled;
     currentStep = 'done';
   }
 
@@ -295,70 +288,30 @@
 
   function connectEventSource(id: string) {
     closeEventSource();
-    const es = new ReconnectingEventSource(`/api/v2/import/jobs/${id}/progress`);
-
-    es.addEventListener('progress', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data) as ImportProgress;
-        importProgress = data;
-      } catch (e) {
-        logger.error('Failed to parse progress event', e);
-      }
+    eventSource = connectImportProgressStream(id, {
+      onProgress: p => {
+        importProgress = p;
+      },
+      onComplete: p => {
+        if (p) importProgress = p;
+        importComplete = true;
+        currentStep = 'done';
+        closeEventSource();
+      },
+      onCancelled: p => {
+        if (p) importProgress = p;
+        importCancelled = true;
+        currentStep = 'done';
+        closeEventSource();
+      },
+      onError: p => {
+        if (p) importProgress = p;
+        // Always show the localized message, never the raw backend string.
+        importError = t('system.importExport.errors.importFailed');
+        currentStep = 'done';
+        closeEventSource();
+      },
     });
-
-    es.addEventListener('complete', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data) as ImportProgress;
-        importProgress = data;
-      } catch (e) {
-        logger.error('Failed to parse complete event', e);
-      }
-      importComplete = true;
-      currentStep = 'done';
-      closeEventSource();
-    });
-
-    es.addEventListener('cancelled', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data) as ImportProgress;
-        importProgress = data;
-      } catch {
-        // ignore parse errors for cancelled event
-      }
-      importCancelled = true;
-      currentStep = 'done';
-      closeEventSource();
-    });
-
-    es.addEventListener('error', (event: Event) => {
-      // EventSource also fires 'error' for native transport drops (no .data);
-      // ReconnectingEventSource reconnects those, so do not terminate the job on them.
-      if (!(event instanceof MessageEvent) || typeof event.data !== 'string') {
-        return;
-      }
-      try {
-        const data = JSON.parse(event.data) as ImportErrorEvent;
-        importProgress = {
-          total: data.total,
-          processed: data.processed,
-          inserted: data.inserted,
-          skipped: data.skipped,
-          errors: data.errors,
-          phase: data.phase,
-        };
-      } catch (e) {
-        logger.error('Failed to parse import error event', e);
-      }
-      // Always show the localized message, never the raw backend string.
-      importError = t('system.importExport.errors.importFailed');
-      currentStep = 'done';
-      closeEventSource();
-    });
-
-    // heartbeat: keep-alive only, no-op
-    es.addEventListener('heartbeat', (_event: Event) => {});
-
-    eventSource = es;
   }
 
   function closeEventSource() {
@@ -932,42 +885,29 @@
 
           {#if importProgress}
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-                <div class="text-lg font-semibold text-[var(--color-base-content)]">
-                  {formatNumber(importProgress.processed)}
-                </div>
-                <div class="text-xs text-[var(--color-base-content)]/60">
-                  {t('system.importExport.progress.processed')}
-                </div>
-              </div>
-              <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-                <div class="text-lg font-semibold text-[var(--color-success)]">
-                  {formatNumber(importProgress.inserted)}
-                </div>
-                <div class="text-xs text-[var(--color-base-content)]/60">
-                  {t('system.importExport.progress.inserted')}
-                </div>
-              </div>
-              <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-                <div class="text-lg font-semibold text-[var(--color-base-content)]/60">
-                  {formatNumber(importProgress.skipped)}
-                </div>
-                <div class="text-xs text-[var(--color-base-content)]/60">
-                  {t('system.importExport.progress.skipped')}
-                </div>
-              </div>
-              <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-                <div
-                  class="text-lg font-semibold {importProgress.errors > 0
-                    ? 'text-[var(--color-error)]'
-                    : 'text-[var(--color-base-content)]/60'}"
-                >
-                  {formatNumber(importProgress.errors)}
-                </div>
-                <div class="text-xs text-[var(--color-base-content)]/60">
-                  {t('system.importExport.progress.errors')}
-                </div>
-              </div>
+              <ImportCountTile
+                value={importProgress.processed}
+                label={t('system.importExport.progress.processed')}
+                size="md"
+              />
+              <ImportCountTile
+                value={importProgress.inserted}
+                label={t('system.importExport.progress.inserted')}
+                tone="success"
+                size="md"
+              />
+              <ImportCountTile
+                value={importProgress.skipped}
+                label={t('system.importExport.progress.skipped')}
+                tone="muted"
+                size="md"
+              />
+              <ImportCountTile
+                value={importProgress.errors}
+                label={t('system.importExport.progress.errors')}
+                tone={importProgress.errors > 0 ? 'error' : 'muted'}
+                size="md"
+              />
             </div>
           {/if}
 
@@ -999,34 +939,24 @@
             </div>
             {#if importProgress}
               <div class="grid grid-cols-3 gap-3 text-left">
-                <div class="p-3 rounded-lg bg-[var(--color-base-200)] text-center">
-                  <div class="text-xl font-bold text-[var(--color-success)]">
-                    {formatNumber(importProgress.inserted)}
-                  </div>
-                  <div class="text-xs text-[var(--color-base-content)]/60">
-                    {t('system.importExport.progress.inserted')}
-                  </div>
-                </div>
-                <div class="p-3 rounded-lg bg-[var(--color-base-200)] text-center">
-                  <div class="text-xl font-bold text-[var(--color-base-content)]/60">
-                    {formatNumber(importProgress.skipped)}
-                  </div>
-                  <div class="text-xs text-[var(--color-base-content)]/60">
-                    {t('system.importExport.progress.skipped')}
-                  </div>
-                </div>
-                <div class="p-3 rounded-lg bg-[var(--color-base-200)] text-center">
-                  <div
-                    class="text-xl font-bold {importProgress.errors > 0
-                      ? 'text-[var(--color-error)]'
-                      : 'text-[var(--color-base-content)]/60'}"
-                  >
-                    {formatNumber(importProgress.errors)}
-                  </div>
-                  <div class="text-xs text-[var(--color-base-content)]/60">
-                    {t('system.importExport.progress.errors')}
-                  </div>
-                </div>
+                <ImportCountTile
+                  value={importProgress.inserted}
+                  label={t('system.importExport.progress.inserted')}
+                  tone="success"
+                  size="lg"
+                />
+                <ImportCountTile
+                  value={importProgress.skipped}
+                  label={t('system.importExport.progress.skipped')}
+                  tone="muted"
+                  size="lg"
+                />
+                <ImportCountTile
+                  value={importProgress.errors}
+                  label={t('system.importExport.progress.errors')}
+                  tone={importProgress.errors > 0 ? 'error' : 'muted'}
+                  size="lg"
+                />
               </div>
               <div class="mt-2">
                 <a

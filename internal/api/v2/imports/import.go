@@ -131,6 +131,10 @@ type importStatusResponse struct {
 	Status   string          `json:"status"`
 	Progress *importProgress `json:"progress,omitempty"`
 	Error    string          `json:"error,omitempty"`
+	// Cancelled distinguishes a user-cancelled (or deadline-expired) run from a
+	// failed one, matching the SSE terminal event split. Without it, polling UIs
+	// rehydrating after a cancel would misreport the run as failed.
+	Cancelled bool `json:"cancelled,omitempty"`
 }
 
 // toImportProgress converts engine stats to the API DTO.
@@ -583,7 +587,12 @@ func (c *Handler) GetImportStatus(ctx echo.Context) error {
 			Status:   importStatusDone,
 			Progress: &prog,
 		}
-		if runErr != nil {
+		switch {
+		case runErr == nil:
+			// success: neither Error nor Cancelled set
+		case errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded):
+			resp.Cancelled = true
+		default:
 			resp.Error = importErrorMessage
 		}
 		return ctx.JSON(http.StatusOK, resp)

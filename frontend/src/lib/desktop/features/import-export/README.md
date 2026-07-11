@@ -20,7 +20,7 @@ into BirdNET-Go.
 
 ### Endpoints used
 
-- `GET /api/v2/system/external-media` - source discovery
+- `GET /api/v2/import/sources` - source discovery
 - `POST /api/v2/import/birdnet-pi` - start import
 - `GET /api/v2/import/jobs/:jobId/progress` - SSE progress stream
 - `POST /api/v2/import/jobs/:jobId/cancel` - cancel running import

@@ -51,18 +51,28 @@ describe('ImportExportPage', () => {
     expect(screen.getByText('system.importExport.birdsDbUpload.cardTitle')).toBeInTheDocument();
     expect(screen.getByText('system.importExport.export.cardTitle')).toBeInTheDocument();
     expect(screen.getAllByText('system.importExport.comingSoon')).toHaveLength(2);
-    // The only button on the page is the BirdNET-Pi import action
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+    // The only button rendered by this page component (the activity card is
+    // mocked) is the BirdNET-Pi import action.
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAccessibleName(
+      expect.stringContaining('system.importExport.birdnetPi.startButton')
+    );
   });
 
-  it('renders the import activity card with initial props', async () => {
+  it('renders the import activity card and wires onOpenWizard to the wizard', async () => {
     const { default: ActivityMock } = await import('../components/ImportActivityCard.svelte');
+    const { default: WizardMock } = await import('../components/BirdNetPiImportWizard.svelte');
     render(ImportExportPage);
     expect(vi.mocked(ActivityMock)).toHaveBeenCalled();
     const props = vi.mocked(ActivityMock).mock.calls[0]?.[1] as
       { refreshSignal?: number; onOpenWizard?: () => void } | undefined;
     expect(props?.refreshSignal).toBe(0);
-    expect(typeof props?.onOpenWizard).toBe('function');
+    expect(vi.mocked(WizardMock)).not.toHaveBeenCalled();
+    // The card's callback must actually open the wizard.
+    props?.onOpenWizard?.();
+    await Promise.resolve();
+    expect(vi.mocked(WizardMock)).toHaveBeenCalled();
   });
 
   it('wizard is not shown initially', async () => {
