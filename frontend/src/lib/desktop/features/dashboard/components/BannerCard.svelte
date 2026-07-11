@@ -351,7 +351,9 @@
             {/if}
 
             {#if config.description}
-              <p class="text-sm leading-relaxed text-[var(--color-base-content)]/70">
+              <p
+                class="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-base-content)]/70"
+              >
                 {config.description}
               </p>
             {/if}
