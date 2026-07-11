@@ -39,9 +39,11 @@
 
   interface Props {
     onClose: () => void;
+    /** Fires when the wizard starts a new import job (start or elevate). */
+    onImportStarted?: () => void;
   }
 
-  let { onClose }: Props = $props();
+  let { onClose, onImportStarted }: Props = $props();
 
   // Wizard state
   let currentStep = $state<WizardStep>('source');
@@ -274,6 +276,7 @@
       jobId = resp.job_id;
       currentStep = 'progress';
       connectEventSource(resp.job_id);
+      onImportStarted?.();
     } catch (err) {
       if (destroyed) return;
       // Genuine HTTP/network error: show the error and allow retry.
@@ -337,6 +340,7 @@
       jobId = resp.job_id;
       currentStep = 'progress';
       connectEventSource(resp.job_id);
+      onImportStarted?.();
     } catch (err) {
       if (destroyed) return;
       if (err instanceof ApiError) {

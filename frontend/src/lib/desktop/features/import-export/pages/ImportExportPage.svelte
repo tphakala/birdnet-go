@@ -9,16 +9,21 @@
   import ImportActivityCard from '../components/ImportActivityCard.svelte';
 
   let wizardOpen = $state(false);
-  // Bumped when the wizard closes so the activity card refetches import status.
+  // Bumped when the wizard closes or starts a job so the activity card
+  // refetches import status.
   let activityRefresh = $state(0);
 
   function openWizard() {
     wizardOpen = true;
   }
 
+  function refreshActivity() {
+    activityRefresh += 1;
+  }
+
   function closeWizard() {
     wizardOpen = false;
-    activityRefresh += 1;
+    refreshActivity();
   }
 </script>
 
@@ -131,5 +136,5 @@
 </div>
 
 {#if wizardOpen}
-  <BirdNetPiImportWizard onClose={closeWizard} />
+  <BirdNetPiImportWizard onClose={closeWizard} onImportStarted={refreshActivity} />
 {/if}

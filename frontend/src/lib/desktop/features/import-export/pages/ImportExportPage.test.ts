@@ -91,7 +91,7 @@ describe('ImportExportPage', () => {
     expect(vi.mocked(WizardMock)).toHaveBeenCalled();
   });
 
-  it('closing the wizard bumps the activity refresh signal', async () => {
+  it('wizard start and close both bump the activity refresh signal', async () => {
     const { default: WizardMock } = await import('../components/BirdNetPiImportWizard.svelte');
     const { default: ActivityMock } = await import('../components/ImportActivityCard.svelte');
     render(ImportExportPage);
@@ -104,10 +104,18 @@ describe('ImportExportPage', () => {
       name: /system.importExport.birdnetPi.startButton/,
     });
     await fireEvent.click(startButton);
-    const wizardProps = vi.mocked(WizardMock).mock.calls[0]?.[1] as { onClose?: () => void };
-    wizardProps.onClose?.();
+    const wizardProps = vi.mocked(WizardMock).mock.calls[0]?.[1] as {
+      onClose?: () => void;
+      onImportStarted?: () => void;
+    };
 
+    // A job started inside the wizard refreshes the card immediately, so it
+    // picks up the running import behind the open modal.
+    wizardProps.onImportStarted?.();
     // Props are live getters in Svelte 5; the mocked child sees the new value.
     expect(activityProps.refreshSignal).toBe(1);
+
+    wizardProps.onClose?.();
+    expect(activityProps.refreshSignal).toBe(2);
   });
 });
