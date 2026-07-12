@@ -38,6 +38,11 @@ jobs:
 
       - name: Determine build version
         id: ver
+        env:
+          # Passed via env, not inline ${{ }}, so a crafted ref name cannot
+          # inject shell (defense in depth against the template-injection class).
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           # On a release event the ref is the release tag. On a manual dispatch
           # from a branch, resolve the latest stable tag instead, so the binaries
@@ -45,10 +50,10 @@ jobs:
           # name (e.g. "main"). This matches the release the artifacts attach to
           # below and keeps BUILD_VERSION, the tarball name, and the attach
           # target consistent.
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
             VERSION=$(git describe --tags --abbrev=0 --match 'v*')
           else
-            VERSION="${{ github.ref_name }}"
+            VERSION="${REF_NAME}"
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building release version: ${VERSION}"

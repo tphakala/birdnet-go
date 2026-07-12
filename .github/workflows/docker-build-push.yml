@@ -194,9 +194,10 @@ jobs:
 
           # Stable GHCR ref used as the mirror source: a manifest list that all
           # the other GHCR tags for this run also point at.
+          # Use an immutable per-run ref (dated tag / version / commit SHA), not
+          # a floating alias, so nothing can re-point it between build and use.
           case "$STRATEGY" in
             nightly) source_ref="${GHCR_REPO}:nightly-${DATE}" ;;
-            dev)     source_ref="${GHCR_REPO}:dev" ;;
             *)       source_ref="${GHCR_REPO}:${VERSION}" ;;
           esac
 
@@ -377,10 +378,12 @@ jobs:
               exit 0
             fi
           elif [ "${{ inputs.tag-strategy }}" = "dev" ]; then
+            # Test the immutable commit-SHA tag, not the floating :dev, so a
+            # concurrent push cannot make this pull a different image.
             if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              TEST_IMAGE="${GHCR_REPO}:dev"
+              TEST_IMAGE="${GHCR_REPO}:${{ inputs.version }}"
             elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
-              TEST_IMAGE="${DOCKERHUB_REPO}:dev"
+              TEST_IMAGE="${DOCKERHUB_REPO}:${{ inputs.version }}"
             else
               echo "No image to test - both registries disabled"
               exit 0
