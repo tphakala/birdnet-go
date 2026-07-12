@@ -382,6 +382,97 @@ describe('ImportActivityCard', () => {
     expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves the interrupted state across an idle refresh (e.g. the wizard closing)', async () => {
+    // Running job -> stall -> interrupted; a later refreshSignal bump returns idle
+    // (the wizard closed). The interruption must remain, not revert to the empty view.
+    vi.mocked(api.get).mockResolvedValueOnce(runningStatus).mockResolvedValue(idleStatus);
+    const onOpenWizard = vi.fn();
+    const { rerender } = render(ImportActivityCard, {
+      props: { onOpenWizard, refreshSignal: 0 },
+    });
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
+    });
+
+    triggerStall(STREAM_STALL_THRESHOLD);
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.interruptedTitle')).toBeInTheDocument();
+    });
+
+    await rerender({ onOpenWizard, refreshSignal: 1 });
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledTimes(3);
+    });
+    expect(screen.getByText('system.importExport.done.interruptedTitle')).toBeInTheDocument();
+    expect(screen.queryByText('system.importExport.activity.empty.title')).not.toBeInTheDocument();
+  });
+
+  it('monitors a new running job when a different job appears during a stall', async () => {
+    const newJobStatus: ImportStatusResponse = {
+      running: true,
+      job_id: 'job-2',
+      status: 'running',
+      progress: runningProgress,
+    };
+    vi.mocked(api.get).mockResolvedValueOnce(runningStatus).mockResolvedValue(newJobStatus);
+    renderCard();
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalledWith(
+        '/api/v2/import/jobs/job-1/progress'
+      );
+    });
+
+    triggerStall(STREAM_STALL_THRESHOLD);
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalledWith(
+        '/api/v2/import/jobs/job-2/progress'
+      );
+    });
+    // It connected to the new job rather than freezing on an "interrupted" state.
+    expect(screen.queryByText('system.importExport.done.interruptedTitle')).not.toBeInTheDocument();
+    expect(screen.getByText(/system.importExport.progress.runningLabel/)).toBeInTheDocument();
+  });
+
+  it('a stall reconcile does not clobber a terminal SSE event that lands during its fetch', async () => {
+    let releaseStatus!: (v: unknown) => void;
+    let statusCalls = 0;
+    vi.mocked(api.get).mockImplementation(() => {
+      statusCalls++;
+      if (statusCalls === 1) return Promise.resolve(runningStatus);
+      return new Promise(resolve => {
+        releaseStatus = resolve;
+      });
+    });
+    renderCard();
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
+    });
+
+    // Stall kicks off the reconcile; its /status fetch is now pending.
+    triggerStall(STREAM_STALL_THRESHOLD);
+    await waitFor(() => {
+      expect(statusCalls).toBe(2);
+    });
+
+    // The SSE 'complete' terminal event lands while the reconcile fetch is in flight.
+    dispatchMockEvent('complete', {
+      ...runningProgress,
+      processed: 100,
+      inserted: 90,
+      phase: 'done',
+    });
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+
+    // The stale reconcile now resolves (job gone). The finalKind guard must drop it.
+    releaseStatus(idleStatus);
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('system.importExport.done.interruptedTitle')).not.toBeInTheDocument();
+  });
+
   it('keeps the terminal state when a stale running response arrives after the SSE terminal event', async () => {
     // Refetch resolves only when released, snapshotting "running" before the
     // SSE terminal event lands.

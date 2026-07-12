@@ -93,7 +93,10 @@
         if (finalKind === null || resp.job_id !== connectedJobId) {
           finalKind = resp.cancelled ? 'cancelled' : resp.error ? 'error' : 'success';
         }
-      } else {
+      } else if (finalKind !== 'interrupted') {
+        // Preserve a prior interruption across idle refreshes (e.g. the
+        // refreshSignal bump when the wizard closes) until a new running or
+        // finished job supersedes it; otherwise clear to the idle/empty view.
         finalKind = null;
       }
     } catch (err) {
@@ -149,8 +152,19 @@
     const generation = ++loadGeneration;
     try {
       const resp = await api.get<ImportStatusResponse>('/api/v2/import/status');
-      if (destroyed || generation !== loadGeneration) return;
-      if (resp.running && resp.job_id === watchedJobId) return; // transient blip; keep the stream
+      // Bail if superseded, unmounted, or a terminal SSE event already landed a
+      // real outcome during the fetch (it must not be clobbered by this reconcile).
+      if (destroyed || generation !== loadGeneration || finalKind !== null) return;
+      if (resp.running && resp.job_id) {
+        // Same job: a transient blip, keep the existing stream. Different job: a
+        // new import now holds the single slot, so monitor it instead of stalling.
+        if (resp.job_id !== watchedJobId) {
+          status = resp;
+          progress = resp.progress ?? null;
+          connectEventSource(resp.job_id);
+        }
+        return;
+      }
       closeEventSource();
       if (resp.status === 'done' && resp.job_id === watchedJobId) {
         status = resp;
@@ -158,8 +172,8 @@
         finalKind = resp.cancelled ? 'cancelled' : resp.error ? 'error' : 'success';
         return;
       }
-      // The watched job is gone (server restarted, or a different job now holds
-      // the single import slot). Report it honestly instead of going empty.
+      // The watched job is gone (server restarted). Report it honestly instead of
+      // going empty; loadStatus preserves this until a new job supersedes it.
       status = resp;
       progress = null;
       finalKind = watchedJobId ? 'interrupted' : null;
@@ -293,7 +307,7 @@
           {t('system.importExport.done.interruptedDescription')}
         </p>
       {/if}
-      {#if finalKind === 'success' ? (progress?.inserted ?? 0) > 0 : finalKind === 'interrupted'}
+      {#if (finalKind === 'success' && (progress?.inserted ?? 0) > 0) || finalKind === 'interrupted'}
         <a
           href={buildDetectionsFilterUrl()}
           class="inline-flex items-center gap-1 text-sm font-medium underline text-[var(--color-primary)] hover:opacity-80"
