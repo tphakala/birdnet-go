@@ -30,10 +30,14 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           # Prefer the release that triggered the calling pipeline; fall back to
-          # the latest published release for a standalone manual dispatch.
+          # the most recently created release for a caller without a release
+          # event (the workflow_dispatch nightly flow) or a standalone manual
+          # dispatch. Use the list endpoint, NOT releases/latest: the latter
+          # excludes prereleases, so it would resolve the wrong release for the
+          # prerelease nightly flow (flagged by CodeRabbit and Sentry).
           RID="${EVENT_RELEASE_ID}"
           if [ -z "$RID" ]; then
-            RID=$(gh api "repos/${REPO}/releases/latest" --jq '.id')
+            RID=$(gh api "repos/${REPO}/releases?per_page=1" --jq '.[0].id')
           fi
           echo "id=$RID" >> "$GITHUB_OUTPUT"
 
