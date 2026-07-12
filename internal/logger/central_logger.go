@@ -906,6 +906,17 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 				kStr = fmt.Sprint(k.Interface())
 			}
 
+			// Prevent key collisions for distinct keys that stringify to the same value
+			origKStr := kStr
+			counter := 1
+			for {
+				if _, exists := cp[kStr]; !exists {
+					break
+				}
+				kStr = fmt.Sprintf("%s_%d", origKStr, counter)
+				counter++
+			}
+
 			switch {
 			case vMod:
 				cp[kStr] = vSan
@@ -959,6 +970,7 @@ func getTraceIDFromContext(ctx context.Context) string {
 	return ""
 }
 
+//nolint:gocognit // Recursive struct flattening naturally has higher complexity
 func structNeedsCopy(rv reflect.Value, visited map[uintptr]bool) bool {
 	if rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
 		if rv.IsNil() {
@@ -979,14 +991,32 @@ func structNeedsCopy(rv reflect.Value, visited map[uintptr]bool) bool {
 		
 		if field.Anonymous {
 			fvElem := fv
+			var ptr uintptr
+			var isPtr bool
 			if fvElem.Kind() == reflect.Pointer || fvElem.Kind() == reflect.Interface {
 				if !fvElem.IsNil() {
+					if fvElem.Kind() == reflect.Pointer {
+						ptr = fvElem.Pointer()
+						isPtr = true
+					}
 					fvElem = fvElem.Elem()
 				}
 			}
 			if fvElem.Kind() == reflect.Struct {
+				if isPtr {
+					if visited[ptr] {
+						continue
+					}
+					visited[ptr] = true
+				}
 				if structNeedsCopy(fvElem, visited) {
+					if isPtr {
+						delete(visited, ptr)
+					}
 					return true
+				}
+				if isPtr {
+					delete(visited, ptr)
 				}
 				continue
 			}
@@ -999,6 +1029,7 @@ func structNeedsCopy(rv reflect.Value, visited map[uintptr]bool) bool {
 	return false
 }
 
+//nolint:gocognit // Recursive struct flattening naturally has higher complexity
 func flattenStruct(rv reflect.Value, cp map[string]any, visited map[uintptr]bool) {
 	if rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
 		if rv.IsNil() {
@@ -1018,13 +1049,28 @@ func flattenStruct(rv reflect.Value, cp map[string]any, visited map[uintptr]bool
 		fv := rv.Field(i)
 		if field.Anonymous {
 			fvElem := fv
+			var ptr uintptr
+			var isPtr bool
 			if fvElem.Kind() == reflect.Pointer || fvElem.Kind() == reflect.Interface {
 				if !fvElem.IsNil() {
+					if fvElem.Kind() == reflect.Pointer {
+						ptr = fvElem.Pointer()
+						isPtr = true
+					}
 					fvElem = fvElem.Elem()
 				}
 			}
 			if fvElem.Kind() == reflect.Struct {
+				if isPtr {
+					if visited[ptr] {
+						continue
+					}
+					visited[ptr] = true
+				}
 				flattenStruct(fvElem, cp, visited)
+				if isPtr {
+					delete(visited, ptr)
+				}
 				continue
 			}
 		}
