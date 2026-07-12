@@ -565,14 +565,13 @@ func TestSlogLogger_Timezone(t *testing.T) {
 		var logEntry map[string]any
 		err = json.Unmarshal(buf.Bytes(), &logEntry)
 		require.NoError(t, err)
-
 		timeStr, ok := logEntry["time"].(string)
 		require.True(t, ok)
 		parsedTime, err := time.Parse(time.RFC3339Nano, timeStr)
 		require.NoError(t, err)
 
 		_, offset := parsedTime.Zone()
-		_, expectedOffset := time.Now().In(tz).Zone()
+		_, expectedOffset := parsedTime.In(tz).Zone()
 		assert.Equal(t, expectedOffset, offset)
 	})
 }

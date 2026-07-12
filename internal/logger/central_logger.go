@@ -800,6 +800,24 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 		return nil, false
 	}
 
+	// Also check if the pointer to the value implements these interfaces (if addressable)
+	if rv.CanAddr() {
+		addr := rv.Addr()
+		ifaceAddr := addr.Interface()
+		if _, ok := ifaceAddr.(slog.LogValuer); ok {
+			return nil, false
+		}
+		if _, ok := ifaceAddr.(fmt.Stringer); ok {
+			return nil, false
+		}
+		if _, ok := ifaceAddr.(error); ok {
+			return nil, false
+		}
+		if addr.Type().Implements(reflect.TypeFor[interface{ MarshalJSON() ([]byte, error) }]()) {
+			return nil, false
+		}
+	}
+
 	switch rv.Kind() {
 	case reflect.Float32, reflect.Float64:
 		f := rv.Float()
