@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -565,8 +566,14 @@ func TestSlogLogger_Timezone(t *testing.T) {
 		err = json.Unmarshal(buf.Bytes(), &logEntry)
 		require.NoError(t, err)
 
-		// Verify timestamp exists (actual timezone verification would require parsing the timestamp)
-		assert.Contains(t, logEntry, "time")
+		timeStr, ok := logEntry["time"].(string)
+		require.True(t, ok)
+		parsedTime, err := time.Parse(time.RFC3339Nano, timeStr)
+		require.NoError(t, err)
+
+		_, offset := parsedTime.Zone()
+		_, expectedOffset := time.Now().In(tz).Zone()
+		assert.Equal(t, expectedOffset, offset)
 	})
 }
 
@@ -575,7 +582,7 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 	t.Run("create logger with file output", func(t *testing.T) {
 		t.Helper()
 
-		tmpFile := t.TempDir() + "/test.log"
+		tmpFile := filepath.Join(t.TempDir(), "test.log")
 		tz, err := time.LoadLocation("Europe/Helsinki")
 		require.NoError(t, err)
 
@@ -604,7 +611,7 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 	t.Run("file logger with nil timezone defaults to UTC", func(t *testing.T) {
 		t.Helper()
 
-		tmpFile := t.TempDir() + "/test.log"
+		tmpFile := filepath.Join(t.TempDir(), "test.log")
 
 		logger, err := NewSlogLoggerWithFile(tmpFile, LogLevelInfo, nil)
 		require.NoError(t, err)
@@ -623,7 +630,7 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 			t.Skip("SIGHUP-based log rotation is a Unix-only pattern; Windows does not allow renaming open files")
 		}
 
-		tmpFile := t.TempDir() + "/test.log"
+		tmpFile := filepath.Join(t.TempDir(), "test.log")
 
 		logger, err := NewSlogLoggerWithFile(tmpFile, LogLevelInfo, time.UTC)
 		require.NoError(t, err)
@@ -694,7 +701,7 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 	t.Run("file logger Module preserves file handle", func(t *testing.T) {
 		t.Helper()
 
-		tmpFile := t.TempDir() + "/test.log"
+		tmpFile := filepath.Join(t.TempDir(), "test.log")
 
 		logger, err := NewSlogLoggerWithFile(tmpFile, LogLevelInfo, time.UTC)
 		require.NoError(t, err)
@@ -721,19 +728,28 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 // type Decibels float64 for testing named float type
 type Decibels float64
 
+type mockJSONMarshaler struct{}
+
+func (mockJSONMarshaler) MarshalJSON() ([]byte, error) { return []byte(`"mock"`), nil }
+
 func TestSanitizeAny(t *testing.T) {
+	t.Parallel()
+
 	//nolint:testifylint // Intentionally strict typing for our float return tests
 	t.Run("nil", func(t *testing.T) {
+		t.Parallel()
 		assert.Nil(t, sanitizeAny(nil))
 	})
 
 	t.Run("basic types", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, 42, sanitizeAny(42))
 		assert.Equal(t, "test", sanitizeAny("test"))
 		assert.Equal(t, true, sanitizeAny(true))
 	})
 
 	t.Run("finite floats", func(t *testing.T) {
+		t.Parallel()
 		if v := sanitizeAny(1.23); v != 1.23 {
 			t.Errorf("expected 1.23, got %v", v)
 		}
@@ -746,17 +762,22 @@ func TestSanitizeAny(t *testing.T) {
 	})
 
 	t.Run("non-finite floats", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "+inf", sanitizeAny(math.Inf(1)))
 		assert.Equal(t, "-inf", sanitizeAny(math.Inf(-1)))
 		assert.Equal(t, "nan", sanitizeAny(math.NaN()))
+		assert.Equal(t, "nan", sanitizeAny(float32(math.NaN())))
+		assert.Equal(t, "+inf", sanitizeAny(float32(math.Inf(1))))
 	})
 
 	t.Run("named non-finite floats", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "+inf", sanitizeAny(Decibels(math.Inf(1))))
 		assert.Equal(t, "-inf", sanitizeAny(Decibels(math.Inf(-1))))
 	})
 
 	t.Run("nested slice", func(t *testing.T) {
+		t.Parallel()
 		input := []any{1.23, math.Inf(1), "test"}
 		got := sanitizeAny(input)
 		expected := []any{1.23, "+inf", "test"}
@@ -764,20 +785,48 @@ func TestSanitizeAny(t *testing.T) {
 	})
 
 	t.Run("nested map", func(t *testing.T) {
+		t.Parallel()
 		input := map[string]any{"a": math.Inf(-1), "b": 1.23}
 		got := sanitizeAny(input)
-		expected := map[any]any{"a": "-inf", "b": 1.23}
+		expected := map[string]any{"a": "-inf", "b": 1.23}
 		assert.Equal(t, expected, got)
 	})
 
-	t.Run("nested struct", func(t *testing.T) {
+	t.Run("nested struct with tags and uncomparable types", func(t *testing.T) {
+		t.Parallel()
 		type Nested struct {
-			Val float64
-			Ok  bool
+			Val     float64 `json:"val"`
+			Ok      bool    `json:"ok"`
+			Ignored int     `json:"-"`
+			Slice   []int   `json:"slice"` // Uncomparable
 		}
-		input := Nested{Val: math.NaN(), Ok: true}
+		input := Nested{Val: math.NaN(), Ok: true, Ignored: 10, Slice: []int{1, 2}}
 		got := sanitizeAny(input)
-		expected := map[string]any{"Val": "nan", "Ok": true}
+		expected := map[string]any{"val": "nan", "ok": true, "slice": []int{1, 2}}
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("cyclic data structure", func(t *testing.T) {
+		t.Parallel()
+		// map pointing to itself
+		m := make(map[string]any)
+		m["self"] = m
+		m["val"] = math.NaN()
+
+		got := sanitizeAny(m)
+		// cycle detected at self, returned as is (without infinite recursion)
+		// the val should still be sanitized
+		resMap, ok := got.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "nan", resMap["val"])
+		assert.NotNil(t, resMap["self"])
+	})
+
+	t.Run("delegates to json.Marshaler", func(t *testing.T) {
+		t.Parallel()
+		input := []any{math.NaN(), mockJSONMarshaler{}}
+		got := sanitizeAny(input)
+		expected := []any{"nan", mockJSONMarshaler{}}
 		assert.Equal(t, expected, got)
 	})
 }

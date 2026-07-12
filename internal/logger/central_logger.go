@@ -752,7 +752,10 @@ func sanitizeAny(v any) any {
 	}
 
 	rv := reflect.ValueOf(v)
-	return sanitizeReflect(rv)
+	if san, mod := sanitizeReflect(rv, make(map[uintptr]bool)); mod {
+		return san
+	}
+	return v
 }
 
 func logSafeFloat(f float64) string {
@@ -770,68 +773,128 @@ func logSafeFloat(f float64) string {
 }
 
 // sanitizeReflect recursively traverses the reflect.Value and returns a sanitized any.
-// To avoid mutating user data, it creates copies of structs/maps/slices that contain
-// non-finite floats. If no non-finite floats are found, it returns the original value.
-//nolint:gocognit // Recursive reflection is inherently complex
-func sanitizeReflect(rv reflect.Value) any {
-	if !rv.IsValid() {
-		return nil
+// It tracks visited pointers to avoid stack overflows on cyclic data.
+// If no non-finite floats are found, it returns (nil, false) to avoid heap allocations.
+//nolint:gocognit,cyclop,gocyclo // Recursive reflection is inherently complex
+func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
+	if !rv.IsValid() || !rv.CanInterface() {
+		return nil, false
+	}
+
+	// Trust custom serialization for types that implement it natively.
+	// encoding/json relies on json.Marshaler, slog relies on slog.LogValuer
+	iface := rv.Interface()
+	if _, ok := iface.(slog.LogValuer); ok {
+		return nil, false
+	}
+	if _, ok := iface.(fmt.Stringer); ok {
+		return nil, false
+	}
+	if _, ok := iface.(error); ok {
+		return nil, false
+	}
+
+	// Avoid descending into json.Marshaler (we do this via reflection to avoid
+	// unnecessarily importing encoding/json here if not needed, though the package might).
+	if rv.Type().Implements(reflect.TypeFor[interface{ MarshalJSON() ([]byte, error) }]()) {
+		return nil, false
 	}
 
 	switch rv.Kind() {
 	case reflect.Float32, reflect.Float64:
 		f := rv.Float()
 		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return logSafeFloat(f)
+			return logSafeFloat(f), true
 		}
-		return rv.Interface()
+		return nil, false
 
 	case reflect.Slice, reflect.Array:
-		if rv.IsZero() {
-			return rv.Interface()
+		if rv.Len() == 0 || (rv.Kind() == reflect.Slice && rv.IsNil()) {
+			return nil, false
 		}
-		// Try to find if any element needs sanitizing first, to avoid allocation
+		if rv.Kind() == reflect.Slice {
+			ptr := rv.Pointer()
+			if visited[ptr] {
+				return nil, false
+			}
+			visited[ptr] = true
+			defer delete(visited, ptr)
+		}
+
 		needsCopy := false
 		for i := range rv.Len() {
-			elem := rv.Index(i)
-			sanitized := sanitizeReflect(elem)
-			if sanitized != elem.Interface() {
+			if _, mod := sanitizeReflect(rv.Index(i), visited); mod {
 				needsCopy = true
 				break
 			}
 		}
 		if !needsCopy {
-			return rv.Interface()
+			return nil, false
 		}
 
 		cp := make([]any, rv.Len())
 		for i := range rv.Len() {
-			cp[i] = sanitizeReflect(rv.Index(i))
+			elem := rv.Index(i)
+			san, mod := sanitizeReflect(elem, visited)
+			if mod {
+				cp[i] = san
+			} else if elem.CanInterface() {
+				cp[i] = elem.Interface()
+			}
 		}
-		return cp
+		return cp, true
 
 	case reflect.Map:
-		if rv.IsZero() {
-			return rv.Interface()
+		if rv.Len() == 0 || rv.IsNil() {
+			return nil, false
 		}
+		ptr := rv.Pointer()
+		if visited[ptr] {
+			return nil, false
+		}
+		visited[ptr] = true
+		defer delete(visited, ptr)
+
 		needsCopy := false
 		iter := rv.MapRange()
 		for iter.Next() {
-			if sanitizeReflect(iter.Key()) != iter.Key().Interface() || sanitizeReflect(iter.Value()) != iter.Value().Interface() {
+			_, kMod := sanitizeReflect(iter.Key(), visited)
+			_, vMod := sanitizeReflect(iter.Value(), visited)
+			if kMod || vMod {
 				needsCopy = true
 				break
 			}
 		}
 		if !needsCopy {
-			return rv.Interface()
+			return nil, false
 		}
 
-		cp := make(map[any]any, rv.Len())
+		cp := make(map[string]any, rv.Len())
 		iter = rv.MapRange()
 		for iter.Next() {
-			cp[sanitizeReflect(iter.Key())] = sanitizeReflect(iter.Value())
+			k := iter.Key()
+			v := iter.Value()
+			kSan, kMod := sanitizeReflect(k, visited)
+			vSan, vMod := sanitizeReflect(v, visited)
+
+			kStr := ""
+			switch {
+			case k.Kind() == reflect.String:
+				kStr = k.String()
+			case kMod:
+				kStr = fmt.Sprint(kSan)
+			case k.CanInterface():
+				kStr = fmt.Sprint(k.Interface())
+			}
+
+			switch {
+			case vMod:
+				cp[kStr] = vSan
+			case v.CanInterface():
+				cp[kStr] = v.Interface()
+			}
 		}
-		return cp
+		return cp, true
 
 	case reflect.Struct:
 		needsCopy := false
@@ -841,13 +904,13 @@ func sanitizeReflect(rv reflect.Value) any {
 			if !field.IsExported() {
 				continue
 			}
-			if sanitizeReflect(rv.Field(i)) != rv.Field(i).Interface() {
+			if _, mod := sanitizeReflect(rv.Field(i), visited); mod {
 				needsCopy = true
 				break
 			}
 		}
 		if !needsCopy {
-			return rv.Interface()
+			return nil, false
 		}
 
 		cp := make(map[string]any, rv.NumField())
@@ -857,25 +920,52 @@ func sanitizeReflect(rv reflect.Value) any {
 			if !field.IsExported() {
 				continue
 			}
-			cp[field.Name] = sanitizeReflect(rv.Field(i))
+
+			key := field.Name
+			tag := field.Tag.Get("json")
+			if tag == "-" {
+				continue
+			}
+			if tag != "" {
+				if idx := strings.Index(tag, ","); idx != -1 {
+					if idx > 0 {
+						key = tag[:idx]
+					}
+				} else {
+					key = tag
+				}
+			}
+
+			san, mod := sanitizeReflect(rv.Field(i), visited)
+			if mod {
+				cp[key] = san
+			} else if rv.Field(i).CanInterface() {
+				cp[key] = rv.Field(i).Interface()
+			}
 		}
-		return cp
+		return cp, true
 
 	case reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
-			return rv.Interface()
+			return nil, false
 		}
-		sanitized := sanitizeReflect(rv.Elem())
-		if sanitized != rv.Elem().Interface() {
-			return sanitized
+		if rv.Kind() == reflect.Pointer {
+			ptr := rv.Pointer()
+			if visited[ptr] {
+				return nil, false
+			}
+			visited[ptr] = true
+			defer delete(visited, ptr)
 		}
-		return rv.Interface()
+
+		san, mod := sanitizeReflect(rv.Elem(), visited)
+		if mod {
+			return san, true
+		}
+		return nil, false
 
 	default:
-		if rv.CanInterface() {
-			return rv.Interface()
-		}
-		return nil
+		return nil, false
 	}
 }
 
