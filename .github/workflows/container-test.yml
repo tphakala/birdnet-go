@@ -66,6 +66,10 @@ jobs:
       - name: Custom .tflite model load smoke test
         run: Docker/test/custom-tflite-smoke.sh birdnet-go:test
 
+      # tini must be PID 1 (baked into the image) and reap orphaned grandchildren.
+      - name: tini PID 1 + reaping smoke test
+        run: Docker/test/tini-pid1-smoke.sh birdnet-go:test
+
   arbitrary-uid-start-arm64:
     name: arm64 container startup
     # Native arm64 runner (free for public repos): the only PR-time job that
@@ -101,3 +105,7 @@ jobs:
 
       - name: Arbitrary-UID startup smoke test (arm64)
         run: Docker/test/arbitrary-uid-smoke.sh birdnet-go:test-arm64
+
+      # tini must be PID 1 (baked into the image) and reap orphaned grandchildren.
+      - name: tini PID 1 + reaping smoke test (arm64)
+        run: Docker/test/tini-pid1-smoke.sh birdnet-go:test-arm64
