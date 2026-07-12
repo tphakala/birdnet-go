@@ -59,7 +59,32 @@ func SetSSEHeaders(ctx echo.Context) {
 	ctx.Response().Header().Set("Connection", "keep-alive")
 	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+	DisableProxyBuffering(ctx)
+}
+
+// DisableProxyBuffering sets X-Accel-Buffering: no so nginx and compatible
+// reverse proxies stream the response immediately instead of buffering it.
+// Streaming endpoints that build their own headers (SSE as well as the
+// NDJSON/JSON progress streams) call this so the buffering behavior has a single
+// source of truth and cannot drift between endpoints.
+func DisableProxyBuffering(ctx echo.Context) {
 	ctx.Response().Header().Set("X-Accel-Buffering", "no")
+}
+
+// SetStreamWriteDeadline applies the shared SSE write deadline to the response
+// writer when it supports one, so a stalled or disconnected client cannot block
+// the writer indefinitely. It is best-effort: writers that do not implement
+// WriteDeadlineSetter are left unchanged, and a SetWriteDeadline failure is logged
+// at debug and otherwise ignored (the deadline is advisory). Streaming handlers
+// call it before each streamed write, like SendSSEMessage does inline.
+func SetStreamWriteDeadline(ctx echo.Context) {
+	conn, ok := ctx.Response().Writer.(WriteDeadlineSetter)
+	if !ok {
+		return
+	}
+	if err := conn.SetWriteDeadline(time.Now().Add(SSEWriteDeadline)); err != nil {
+		GetLogger().Debug("Failed to set stream write deadline", logger.Error(err))
+	}
 }
 
 // SafeMarshalJSON marshals data to JSON with panic recovery.
