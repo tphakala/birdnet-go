@@ -775,10 +775,13 @@ func sanitizeAny(v any) any {
 	// unexported embedded struct. If such a value still fails to encode because
 	// of a non-finite float, fall back to a string so the logger emits readable
 	// data instead of a corrupt "!ERROR: json: unsupported value" placeholder.
-	// Unsupported *types* (chan/func) are left untouched and render as before.
+	// Stringify the partially-sanitized san (not v): it preserves the float
+	// replacements already made and has any reference cycles broken, so it is
+	// both more informative and safe to format. Unsupported *types* (chan/func)
+	// are left untouched and render as before.
 	if _, err := json.Marshal(san); err != nil {
 		if _, ok := stderrors.AsType[*json.UnsupportedValueError](err); ok {
-			return fmt.Sprintf("%+v", v)
+			return fmt.Sprintf("%+v", san)
 		}
 	}
 	return san
@@ -870,26 +873,24 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 			defer delete(visited, ptr)
 		}
 
+		// Single lazy pass: sanitize each element once, tracking whether any
+		// changed. Recursing twice (detect then copy) is O(2^depth) on nested
+		// dirty values.
+		cp := make([]any, rv.Len())
 		needsCopy := false
 		for i := range rv.Len() {
-			if _, mod := sanitizeReflect(rv.Index(i), visited); mod {
+			elem := rv.Index(i)
+			san, mod := sanitizeReflect(elem, visited)
+			switch {
+			case mod:
 				needsCopy = true
-				break
+				cp[i] = san
+			case elem.CanInterface():
+				cp[i] = elem.Interface()
 			}
 		}
 		if !needsCopy {
 			return nil, false
-		}
-
-		cp := make([]any, rv.Len())
-		for i := range rv.Len() {
-			elem := rv.Index(i)
-			san, mod := sanitizeReflect(elem, visited)
-			if mod {
-				cp[i] = san
-			} else if elem.CanInterface() {
-				cp[i] = elem.Interface()
-			}
 		}
 		return cp, true
 
@@ -904,27 +905,19 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 		visited[ptr] = true
 		defer delete(visited, ptr)
 
+		// Single lazy pass: sanitize each key/value once, tracking whether any
+		// changed, then discard the copy if nothing did.
+		cp := make(map[string]any, rv.Len())
 		needsCopy := false
 		iter := rv.MapRange()
-		for iter.Next() {
-			_, kMod := sanitizeReflect(iter.Key(), visited)
-			_, vMod := sanitizeReflect(iter.Value(), visited)
-			if kMod || vMod {
-				needsCopy = true
-				break
-			}
-		}
-		if !needsCopy {
-			return nil, false
-		}
-
-		cp := make(map[string]any, rv.Len())
-		iter = rv.MapRange()
 		for iter.Next() {
 			k := iter.Key()
 			v := iter.Value()
 			kSan, kMod := sanitizeReflect(k, visited)
 			vSan, vMod := sanitizeReflect(v, visited)
+			if kMod || vMod {
+				needsCopy = true
+			}
 
 			kStr := ""
 			switch {
@@ -954,14 +947,16 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 				cp[kStr] = v.Interface()
 			}
 		}
+		if !needsCopy {
+			return nil, false
+		}
 		return cp, true
 
 	case reflect.Struct:
-		if !structNeedsCopy(rv, visited) {
+		cp := make(map[string]any)
+		if !flattenStruct(rv, cp, visited) {
 			return nil, false
 		}
-		cp := make(map[string]any)
-		flattenStruct(rv, cp, visited)
 		return cp, true
 
 	case reflect.Pointer, reflect.Interface:
@@ -1000,8 +995,15 @@ func getTraceIDFromContext(ctx context.Context) string {
 	return ""
 }
 
+// flattenStruct writes rv's exported fields into cp, mirroring encoding/json's
+// promotion of anonymous fields and its json tag / omitempty / omitzero
+// handling, with non-finite floats sanitized. It reports whether any value was
+// modified so the caller can discard cp (and fall back to the original struct)
+// when nothing needed changing. Doing detection and copying in one pass avoids
+// the O(2^depth) re-walk of a separate needs-copy probe.
+//
 //nolint:gocognit // Recursive struct flattening naturally has higher complexity
-func structNeedsCopy(rv reflect.Value, visited map[uintptr]bool) bool {
+func flattenStruct(rv reflect.Value, cp map[string]any, visited map[uintptr]bool) bool {
 	if rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
 		if rv.IsNil() {
 			return false
@@ -1011,65 +1013,7 @@ func structNeedsCopy(rv reflect.Value, visited map[uintptr]bool) bool {
 	if rv.Kind() != reflect.Struct {
 		return false
 	}
-	//nolint:gocritic // rv.NumField() is appropriate for iterating over fields
-	for i := 0; i < rv.NumField(); i++ {
-		field := rv.Type().Field(i)
-		if !field.IsExported() {
-			continue
-		}
-		fv := rv.Field(i)
-
-		if field.Anonymous {
-			fvElem := fv
-			var ptr uintptr
-			var isPtr bool
-			if fvElem.Kind() == reflect.Pointer || fvElem.Kind() == reflect.Interface {
-				if !fvElem.IsNil() {
-					if fvElem.Kind() == reflect.Pointer {
-						ptr = fvElem.Pointer()
-						isPtr = true
-					}
-					fvElem = fvElem.Elem()
-				}
-			}
-			if fvElem.Kind() == reflect.Struct {
-				if isPtr {
-					if visited[ptr] {
-						continue
-					}
-					visited[ptr] = true
-				}
-				if structNeedsCopy(fvElem, visited) {
-					if isPtr {
-						delete(visited, ptr)
-					}
-					return true
-				}
-				if isPtr {
-					delete(visited, ptr)
-				}
-				continue
-			}
-		}
-
-		if _, mod := sanitizeReflect(fv, visited); mod {
-			return true
-		}
-	}
-	return false
-}
-
-//nolint:gocognit // Recursive struct flattening naturally has higher complexity
-func flattenStruct(rv reflect.Value, cp map[string]any, visited map[uintptr]bool) {
-	if rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
-		if rv.IsNil() {
-			return
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return
-	}
+	modified := false
 	//nolint:gocritic // rv.NumField() is appropriate for iterating over fields in a struct.
 	for i := 0; i < rv.NumField(); i++ {
 		field := rv.Type().Field(i)
@@ -1097,7 +1041,9 @@ func flattenStruct(rv reflect.Value, cp map[string]any, visited map[uintptr]bool
 					}
 					visited[ptr] = true
 				}
-				flattenStruct(fvElem, cp, visited)
+				if flattenStruct(fvElem, cp, visited) {
+					modified = true
+				}
 				if isPtr {
 					delete(visited, ptr)
 				}
@@ -1129,6 +1075,9 @@ func flattenStruct(rv reflect.Value, cp map[string]any, visited map[uintptr]bool
 		}
 
 		san, mod := sanitizeReflect(fv, visited)
+		if mod {
+			modified = true
+		}
 		var val any
 		if mod {
 			val = san
@@ -1144,6 +1093,7 @@ func flattenStruct(rv reflect.Value, cp map[string]any, visited map[uintptr]bool
 		}
 		cp[key] = val
 	}
+	return modified
 }
 
 func isEmptyValue(v reflect.Value, val any) bool {
