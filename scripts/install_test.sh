@@ -92,6 +92,13 @@ log_message() { :; }
 log_command_result() { :; }
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
+# Deterministic stubs for the helpers generate_systemd_service_content calls: force
+# audio/thermal/Pi detection off and resolve the timezone to the passed value so the
+# generated unit is stable across hosts.
+resolve_host_timezone() { printf '%s' "${1:-UTC}"; }
+check_directory_exists() { return 1; }
+is_raspberry_pi() { return 1; }
+
 # Globals the extracted functions reference (install.sh defines these at the top; the harness
 # only pulls function bodies, so under set -u they must exist here).
 RED=""; GREEN=""; YELLOW=""; NC=""; GRAY=""
@@ -108,6 +115,7 @@ for fn in \
     set_first_audio_source \
     _extract_bind_addr \
     load_existing_service_config \
+    generate_systemd_service_content \
     apply_tls_settings \
     ensure_internal_port_8080 \
     configure_rtsp_in_config \
@@ -339,7 +347,8 @@ cat > "$unit" <<'EOF'
 ExecStart=/usr/bin/docker run --rm \
     --name birdnet-go \
     -p 127.0.0.1:9000:8080 \
-    -p 443:443 \
+    -p 80:8080 \
+    -p 443:8443 \
     -p 8090:8090 \
     --env TZ="Europe/Helsinki" \
     -v /home/pi/birdnet-go-app/config:/config \
@@ -351,8 +360,43 @@ load_existing_service_config "$unit"
 assert_eq "restored web port" "9000" "$WEB_PORT"
 assert_eq "restored web bind addr" "127.0.0.1" "$WEB_PORT_BIND_ADDR"
 assert_eq "restored TLS binding" "true" "$BIND_TLS_PORTS"
+assert_eq "restored TLS bind addr (none)" "" "$TLS_BIND_ADDR"
 assert_eq "restored metrics binding" "true" "$BIND_METRICS_PORT"
 assert_eq "restored timezone" "Europe/Helsinki" "$CONFIGURED_TZ"
+
+# A legacy (pre-fix) AutoTLS unit still maps the dead 80:80 / 443:443 ports. It must still
+# be detected as AutoTLS-enabled so a regenerate produces the corrected 443:8443 mapping
+# instead of silently dropping AutoTLS.
+cat > "$unit" <<'EOF'
+[Service]
+ExecStart=/usr/bin/docker run --rm \
+    -p 8080:8080 \
+    -p 80:80 \
+    -p 443:443 \
+    ghcr.io/tphakala/birdnet-go:nightly
+EOF
+WEB_PORT=""; WEB_PORT_BIND_ADDR=""; BIND_TLS_PORTS="false"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""; CONFIGURED_TZ=""
+load_existing_service_config "$unit"
+assert_eq "legacy 443:443: web port restored" "8080" "$WEB_PORT"
+assert_eq "legacy 443:443: TLS binding restored" "true" "$BIND_TLS_PORTS"
+assert_eq "legacy 443:443: TLS bind addr (none)" "" "$TLS_BIND_ADDR"
+
+# A localhost-bound AutoTLS mapping must preserve the host bind address so an update does
+# not silently re-expose it on all interfaces.
+cat > "$unit" <<'EOF'
+[Service]
+ExecStart=/usr/bin/docker run --rm \
+    -p 127.0.0.1:8080:8080 \
+    -p 127.0.0.1:80:8080 \
+    -p 127.0.0.1:443:8443 \
+    ghcr.io/tphakala/birdnet-go:nightly
+EOF
+WEB_PORT=""; WEB_PORT_BIND_ADDR=""; BIND_TLS_PORTS="false"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""; CONFIGURED_TZ=""
+load_existing_service_config "$unit"
+assert_eq "bind-addr: TLS binding restored" "true" "$BIND_TLS_PORTS"
+assert_eq "bind-addr: TLS bind addr preserved" "127.0.0.1" "$TLS_BIND_ADDR"
 
 # A unit with only the web port (no 80/443, no 8090) leaves TLS/metrics off.
 cat > "$unit" <<'EOF'
@@ -367,6 +411,36 @@ load_existing_service_config "$unit"
 assert_eq "web-only: port restored" "8080" "$WEB_PORT"
 assert_eq "web-only: TLS stays off" "false" "$BIND_TLS_PORTS"
 assert_eq "web-only: metrics stays off" "false" "$BIND_METRICS_PORT"
+
+# ===========================================================================
+# generate_systemd_service_content: AutoTLS maps host 80/443 to container 8080/8443
+# (never dead 443:443), adds no NET_BIND_SERVICE, and round-trips cleanly through the
+# parser (the new 80:8080 line must not be mistaken for the web-port mapping).
+# ===========================================================================
+it "generate_systemd_service_content AutoTLS ports"
+
+CONFIG_DIR="/home/pi/birdnet-go-app/config"
+DATA_DIR="/home/pi/birdnet-go-app/data"
+BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:nightly"
+WEB_PORT="9000"; WEB_PORT_BIND_ADDR=""
+BIND_TLS_PORTS="true"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""
+CONFIGURED_TZ="UTC"
+
+autotls_unit="${WORK}/autotls.service"
+generate_systemd_service_content > "$autotls_unit"
+assert_eq "AutoTLS unit maps host 80 -> container 8080" "1" "$(grep -c -- '-p 80:8080' "$autotls_unit")"
+assert_eq "AutoTLS unit maps host 443 -> container 8443" "1" "$(grep -c -- '-p 443:8443' "$autotls_unit")"
+assert_eq "AutoTLS unit has no dead 443:443 mapping" "0" "$(grep -c -- '443:443' "$autotls_unit")"
+assert_eq "AutoTLS unit still publishes the web port" "1" "$(grep -c -- '-p 9000:8080' "$autotls_unit")"
+assert_eq "AutoTLS unit adds no NET_BIND_SERVICE" "0" "$(grep -c 'NET_BIND_SERVICE' "$autotls_unit")"
+
+WEB_PORT=""; WEB_PORT_BIND_ADDR=""; BIND_TLS_PORTS="false"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""; CONFIGURED_TZ=""
+load_existing_service_config "$autotls_unit"
+assert_eq "round-trip: web port restored (not 80)" "9000" "$WEB_PORT"
+assert_eq "round-trip: TLS binding restored" "true" "$BIND_TLS_PORTS"
+assert_eq "round-trip: TLS bind addr empty" "" "$TLS_BIND_ADDR"
 
 # ===========================================================================
 # apply_tls_settings (full slate; mode switch must clear stale host)

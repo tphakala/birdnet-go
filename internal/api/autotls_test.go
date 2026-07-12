@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -198,11 +199,17 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	e.HidePort = true
 
 	s := &Server{
-		config:   cfg,
-		settings: settings,
-		echo:     e,
-		slogger:  GetLogger(),
+		config:    cfg,
+		settings:  settings,
+		echo:      e,
+		slogger:   GetLogger(),
+		startTime: time.Now(),
 	}
+
+	// Register the health route the AutoTLS HTTP fallback serves over plain HTTP.
+	// This test constructs the echo instance directly and never calls setupRoutes,
+	// so without this the /health probe below would hit echo's default 404.
+	e.GET(healthCheckPath, s.healthCheck)
 
 	// Echo.Shutdown returns early (skipping Server.Shutdown) if TLSServer.Shutdown
 	// returns context.Canceled — which happens when ctx is already done. Use an
@@ -255,6 +262,17 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 		"redirect should target the advertised host with no internal port")
 	assert.NotContains(t, location, ":"+tlsPort,
 		"redirect must not leak the internal TLS port")
+
+	// The unauthenticated /health endpoint must be served as JSON over the plain-HTTP
+	// AutoTLS listener even though RedirectToHTTPS is on, so a container healthcheck
+	// probing this listener is not answered with a 308 (which carries no JSON body).
+	resp, err = client.Get(httpBase + healthCheckPath)
+	require.NoError(t, err)
+	healthBody, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "/health must be served, not redirected")
+	assert.Contains(t, string(healthBody), `"status":"healthy"`, "/health must return health JSON")
 
 	// TLS listener should accept TCP connections (full TLS handshake won't
 	// complete without a real cert, but a successful TCP connect proves the
@@ -623,8 +641,12 @@ func TestAutoTLS_RedirectDisabled_ServesApp(t *testing.T) {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
-	e.GET("/health", func(c echo.Context) error {
-		return c.String(http.StatusOK, "ok")
+	// Register a generic (non-health) app route. /health is special-cased by the
+	// health-over-HTTP bypass and would return 200 regardless of the redirect
+	// setting, so probing it here would not prove the app itself is served over
+	// plain HTTP when RedirectToHTTPS is disabled.
+	e.GET("/dashboard", func(c echo.Context) error {
+		return c.String(http.StatusOK, "app-content")
 	})
 
 	s := &Server{
@@ -658,12 +680,16 @@ func TestAutoTLS_RedirectDisabled_ServesApp(t *testing.T) {
 
 	// With RedirectToHTTPS=false, the app should be served over plain HTTP
 	httpBase := fmt.Sprintf("http://127.0.0.1:%s", httpPort)
-	resp, err := client.Get(httpBase + "/health")
+	resp, err := client.Get(httpBase + "/dashboard")
 	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
+	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode,
 		"with RedirectToHTTPS=false, HTTP should serve app content, not redirect")
+	assert.Contains(t, string(body), "app-content",
+		"the plain-HTTP listener should return the app response, not a redirect")
 }
 
 func mustGetFreePort(t *testing.T) string {
@@ -687,4 +713,45 @@ func requirePortOpen(t *testing.T, port string) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatalf("port %s did not open within 2s", port)
+}
+
+// TestServer_healthOrRedirect verifies the AutoTLS / manual-TLS HTTP fallback
+// serves the unauthenticated /health endpoint as JSON while redirecting everything
+// else, so a plain-HTTP container healthcheck is never answered with a 308.
+func TestServer_healthOrRedirect(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	e.HideBanner = true
+	s := &Server{
+		echo:      e,
+		settings:  conftest.NewTestSettings().Build(),
+		startTime: time.Now(),
+	}
+	e.GET(healthCheckPath, s.healthCheck)
+
+	const sentinel = "redirected-elsewhere"
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusPermanentRedirect)
+		_, _ = w.Write([]byte(sentinel))
+	})
+	handler := s.healthOrRedirect(next)
+
+	t.Run("health served as JSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, healthCheckPath, http.NoBody)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), `"status":"healthy"`)
+		assert.NotContains(t, rec.Body.String(), sentinel,
+			"health must be served by echo, not delegated to the redirect handler")
+	})
+
+	t.Run("non-health delegated to next", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/dashboard", http.NoBody)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusPermanentRedirect, rec.Code)
+		assert.Contains(t, rec.Body.String(), sentinel)
+	})
 }

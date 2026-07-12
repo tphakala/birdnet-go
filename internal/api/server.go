@@ -475,10 +475,15 @@ func (s *Server) setupMiddleware() {
 	s.echo.Use(mw.NewSecureHeaders(securityConfig))
 }
 
+// healthCheckPath is the unauthenticated health endpoint. It is served over every
+// listener, including the plain-HTTP AutoTLS/redirect listener, so a container
+// healthcheck or load balancer can verify the server without a valid certificate.
+const healthCheckPath = "/health"
+
 // setupRoutes configures all HTTP routes.
 func (s *Server) setupRoutes() error {
 	// Health check endpoint at root level
-	s.echo.GET("/health", s.healthCheck)
+	s.echo.GET(healthCheckPath, s.healthCheck)
 
 	// Social OAuth routes (Google, GitHub, Microsoft)
 	// These must be at /auth/:provider to match frontend expectations
@@ -651,7 +656,11 @@ func (s *Server) startBlocking() error {
 		//   mappings such as host 443 -> container 8443.
 		var httpFallback http.Handler
 		if s.config.RedirectToHTTPS {
-			httpFallback = httpsRedirectHandler(s.config.RedirectAuthority, "")
+			// Redirect non-ACME traffic to HTTPS, but keep serving the
+			// unauthenticated /health endpoint as JSON so a container healthcheck
+			// probing this plain-HTTP listener is answered with health status, not
+			// a 308 (which has no JSON body and fails the healthcheck's jq check).
+			httpFallback = s.healthOrRedirect(httpsRedirectHandler(s.config.RedirectAuthority, ""))
 		} else {
 			httpFallback = s.echo
 		}
@@ -816,6 +825,21 @@ func httpsRedirectHandler(externalAuthority, fallbackPort string) http.Handler {
 	})
 }
 
+// healthOrRedirect returns an http.Handler that serves the unauthenticated health
+// endpoint via echo (so a plain-HTTP container healthcheck receives JSON rather
+// than a 308) and delegates every other request to next. It backs the AutoTLS
+// ACME/redirect listener and the manual-TLS HTTP redirect server, both of which
+// otherwise 308 all traffic (including /health) to HTTPS.
+func (s *Server) healthOrRedirect(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == healthCheckPath {
+			s.echo.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // newHTTPRedirectServer creates an HTTP server that redirects all requests to HTTPS.
 // The server is created synchronously to avoid a race between assignment and shutdown.
 func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
@@ -825,7 +849,7 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 
 	return &http.Server{
 		Addr:         httpAddr,
-		Handler:      httpsRedirectHandler(s.config.RedirectAuthority, tlsPort),
+		Handler:      s.healthOrRedirect(httpsRedirectHandler(s.config.RedirectAuthority, tlsPort)),
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
