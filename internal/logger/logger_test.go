@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -564,9 +565,14 @@ func TestSlogLogger_Timezone(t *testing.T) {
 		var logEntry map[string]any
 		err = json.Unmarshal(buf.Bytes(), &logEntry)
 		require.NoError(t, err)
+		timeStr, ok := logEntry["time"].(string)
+		require.True(t, ok)
+		parsedTime, err := time.Parse(time.RFC3339Nano, timeStr)
+		require.NoError(t, err)
 
-		// Verify timestamp exists (actual timezone verification would require parsing the timestamp)
-		assert.Contains(t, logEntry, "time")
+		_, offset := parsedTime.Zone()
+		_, expectedOffset := parsedTime.In(tz).Zone()
+		assert.Equal(t, expectedOffset, offset)
 	})
 }
 
@@ -575,7 +581,7 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 	t.Run("create logger with file output", func(t *testing.T) {
 		t.Helper()
 
-		tmpFile := t.TempDir() + "/test.log"
+		tmpFile := filepath.Join(t.TempDir(), "test.log")
 		tz, err := time.LoadLocation("Europe/Helsinki")
 		require.NoError(t, err)
 
@@ -604,7 +610,7 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 	t.Run("file logger with nil timezone defaults to UTC", func(t *testing.T) {
 		t.Helper()
 
-		tmpFile := t.TempDir() + "/test.log"
+		tmpFile := filepath.Join(t.TempDir(), "test.log")
 
 		logger, err := NewSlogLoggerWithFile(tmpFile, LogLevelInfo, nil)
 		require.NoError(t, err)
@@ -623,7 +629,7 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 			t.Skip("SIGHUP-based log rotation is a Unix-only pattern; Windows does not allow renaming open files")
 		}
 
-		tmpFile := t.TempDir() + "/test.log"
+		tmpFile := filepath.Join(t.TempDir(), "test.log")
 
 		logger, err := NewSlogLoggerWithFile(tmpFile, LogLevelInfo, time.UTC)
 		require.NoError(t, err)
@@ -694,7 +700,7 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 	t.Run("file logger Module preserves file handle", func(t *testing.T) {
 		t.Helper()
 
-		tmpFile := t.TempDir() + "/test.log"
+		tmpFile := filepath.Join(t.TempDir(), "test.log")
 
 		logger, err := NewSlogLoggerWithFile(tmpFile, LogLevelInfo, time.UTC)
 		require.NoError(t, err)
@@ -715,5 +721,307 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "module message")
 		assert.Contains(t, string(content), "test-module")
+	})
+}
+
+// type Decibels float64 for testing named float type
+type Decibels float64
+
+type mockJSONMarshaler struct{}
+
+func (mockJSONMarshaler) MarshalJSON() ([]byte, error) { return []byte(`"mock"`), nil }
+
+func TestSanitizeAny(t *testing.T) {
+	t.Parallel()
+
+	//nolint:testifylint // Intentionally strict typing for our float return tests
+	t.Run("nil", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, sanitizeAny(nil))
+	})
+
+	t.Run("basic types", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 42, sanitizeAny(42))
+		assert.Equal(t, "test", sanitizeAny("test"))
+		assert.Equal(t, true, sanitizeAny(true))
+	})
+
+	t.Run("finite floats", func(t *testing.T) {
+		t.Parallel()
+		if v := sanitizeAny(1.23); v != 1.23 {
+			t.Errorf("expected 1.23, got %v", v)
+		}
+		if v := sanitizeAny(float32(1.23)); v != float32(1.23) {
+			t.Errorf("expected float32 1.23, got %v", v)
+		}
+		if v := sanitizeAny(Decibels(1.23)); v != Decibels(1.23) {
+			t.Errorf("expected Decibels 1.23, got %v", v)
+		}
+	})
+
+	t.Run("non-finite floats", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "+Inf", sanitizeAny(math.Inf(1)))
+		assert.Equal(t, "-Inf", sanitizeAny(math.Inf(-1)))
+		assert.Equal(t, "NaN", sanitizeAny(math.NaN()))
+		assert.Equal(t, "NaN", sanitizeAny(float32(math.NaN())))
+		assert.Equal(t, "+Inf", sanitizeAny(float32(math.Inf(1))))
+	})
+
+	t.Run("named non-finite floats", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "+Inf", sanitizeAny(Decibels(math.Inf(1))))
+		assert.Equal(t, "-Inf", sanitizeAny(Decibels(math.Inf(-1))))
+	})
+
+	t.Run("nested slice", func(t *testing.T) {
+		t.Parallel()
+		input := []any{1.23, math.Inf(1), "test"}
+		got := sanitizeAny(input)
+		expected := []any{1.23, "+Inf", "test"}
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("nested map", func(t *testing.T) {
+		t.Parallel()
+		input := map[string]any{"a": math.Inf(-1), "b": 1.23}
+		got := sanitizeAny(input)
+		expected := map[string]any{"a": "-Inf", "b": 1.23}
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("nested struct with tags and uncomparable types", func(t *testing.T) {
+		t.Parallel()
+		type Nested struct {
+			Val     float64 `json:"val"`
+			Ok      bool    `json:"ok"`
+			Ignored int     `json:"-"`
+			Slice   []int   `json:"slice"` // Uncomparable
+		}
+		input := Nested{Val: math.NaN(), Ok: true, Ignored: 10, Slice: []int{1, 2}}
+		got := sanitizeAny(input)
+		expected := map[string]any{"val": "NaN", "ok": true, "slice": []int{1, 2}}
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("cyclic data structure", func(t *testing.T) {
+		t.Parallel()
+		// map pointing to itself
+		m := make(map[string]any)
+		m["self"] = m
+		m["val"] = math.NaN()
+
+		got := sanitizeAny(m)
+		// The cycle is broken with a "[Circular]" placeholder (not the original
+		// self-referential map), and the sibling non-finite float is sanitized.
+		resMap, ok := got.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "NaN", resMap["val"])
+		assert.Equal(t, "[Circular]", resMap["self"])
+		// The whole result must be JSON-encodable (no residual cycle or NaN).
+		_, err := json.Marshal(resMap)
+		require.NoError(t, err)
+	})
+
+	t.Run("delegates to json.Marshaler", func(t *testing.T) {
+		t.Parallel()
+		input := []any{math.NaN(), mockJSONMarshaler{}}
+		got := sanitizeAny(input)
+		expected := []any{"NaN", mockJSONMarshaler{}}
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("clean struct is returned unchanged (not flattened)", func(t *testing.T) {
+		t.Parallel()
+		type Clean struct {
+			A int    `json:"a"`
+			B string `json:"b"`
+		}
+		in := Clean{A: 1, B: "x"}
+		// No non-finite float: the value must pass through untouched so slog
+		// serializes it with real encoding/json semantics.
+		assert.Equal(t, in, sanitizeAny(in))
+	})
+
+	t.Run("clean composites pass through by identity", func(t *testing.T) {
+		t.Parallel()
+		s := []int{1, 2, 3}
+		assert.Equal(t, s, sanitizeAny(s))
+		m := map[string]int{"a": 1}
+		assert.Equal(t, m, sanitizeAny(m))
+	})
+
+	t.Run("array with non-finite float", func(t *testing.T) {
+		t.Parallel()
+		got := sanitizeAny([3]any{1.23, math.Inf(1), "x"})
+		assert.Equal(t, []any{1.23, "+Inf", "x"}, got)
+	})
+
+	t.Run("map with non-string keys", func(t *testing.T) {
+		t.Parallel()
+		got := sanitizeAny(map[int]float64{1: math.NaN(), 2: 3.0})
+		resMap, ok := got.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "NaN", resMap["1"])
+		assert.InEpsilon(t, 3.0, resMap["2"], 1e-9)
+	})
+
+	t.Run("pointer to struct with non-finite float", func(t *testing.T) {
+		t.Parallel()
+		type P struct {
+			V float64 `json:"v"`
+		}
+		got := sanitizeAny(&P{V: math.NaN()})
+		requireJSONSafe(t, got)
+	})
+}
+
+// --- Helpers and types for sanitizeAny corruption/fuzz tests ---
+
+// requireJSONSafe asserts a value can be JSON-encoded without a non-finite-float
+// error (the corruption sanitizeAny exists to prevent). Unsupported *types*
+// (chan/func) are out of scope and tolerated.
+func requireJSONSafe(t *testing.T, v any) {
+	t.Helper()
+	_, err := json.Marshal(v)
+	_, isValueErr := errors.AsType[*json.UnsupportedValueError](err)
+	require.Falsef(t, isValueErr, "sanitized value must not carry a non-finite float: %v", err)
+}
+
+// logDataField renders v through the real slog JSON handler exactly like
+// fieldToAttr's default case does, and returns the emitted line.
+func logDataField(t *testing.T, v any) string {
+	t.Helper()
+	var buf bytes.Buffer
+	slog.New(slog.NewJSONHandler(&buf, nil)).Info("m", slog.Any("data", sanitizeAny(v)))
+	return buf.String()
+}
+
+func assertNoCorruption(t *testing.T, line string) {
+	t.Helper()
+	assert.NotContains(t, line, "!ERROR", "log line must not contain a marshal-error placeholder")
+	var m map[string]any
+	require.NoError(t, json.Unmarshal([]byte(line), &m), "log line must be valid JSON")
+}
+
+// stringerWithFloat implements fmt.Stringer and carries a float field. Under the
+// JSON handler slog ignores String() and marshals the fields, so a non-finite
+// float here must still be sanitized.
+type stringerWithFloat struct {
+	Gain float64
+}
+
+func (stringerWithFloat) String() string { return "src" }
+
+// floatFieldError implements error and carries a float field.
+type floatFieldError struct {
+	Gain float64
+}
+
+func (floatFieldError) Error() string { return "boom" }
+
+// innerFloat is an unexported type whose exported field is promoted into
+// outerEmbed, mirroring encoding/json's promotion of unexported embedded structs.
+type innerFloat struct {
+	Y float64
+}
+
+type outerEmbed struct {
+	innerFloat
+	Name string
+}
+
+// fuzzStruct is a small mixed struct used by FuzzSanitizeAny.
+type fuzzStruct struct {
+	V float64
+	S string
+}
+
+// TestSanitizeAny_NonFiniteBehindInterfaces covers the classes the reflective
+// walk cannot reach on its own (values behind fmt.Stringer/error, or promoted
+// from an unexported embedded struct): the safety net must still keep the log
+// line uncorrupted.
+func TestSanitizeAny_NonFiniteBehindInterfaces(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		val  any
+	}{
+		{"top-level Stringer with NaN", stringerWithFloat{Gain: math.NaN()}},
+		{"nested Stringer with NaN", map[string]any{"src": stringerWithFloat{Gain: math.NaN()}, "trigger": math.Inf(1)}},
+		{"top-level error with Inf", floatFieldError{Gain: math.Inf(1)}},
+		{"nested error with NaN", map[string]any{"err": floatFieldError{Gain: math.NaN()}, "trigger": math.Inf(1)}},
+		{"unexported embedded struct with NaN", outerEmbed{innerFloat: innerFloat{Y: math.NaN()}, Name: "x"}},
+		{"pointer to Stringer with NaN", &stringerWithFloat{Gain: math.NaN()}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			requireJSONSafe(t, sanitizeAny(tt.val))
+			assertNoCorruption(t, logDataField(t, tt.val))
+		})
+	}
+}
+
+// TestSanitizeAny_MatchesEncodingJSONForCleanValues pins the "no schema drift"
+// property: a value with no non-finite float must marshal identically to what
+// encoding/json produces for the original.
+func TestSanitizeAny_MatchesEncodingJSONForCleanValues(t *testing.T) {
+	t.Parallel()
+	type Inner struct {
+		A int    `json:"a"`
+		B string `json:"b,omitempty"`
+	}
+	type Outer struct {
+		Inner
+		Name  string  `json:"name"`
+		Ptr   *int    `json:"ptr,omitempty"`
+		Score float64 `json:"score"`
+	}
+	cases := []any{
+		Outer{Inner: Inner{A: 1}, Name: "x", Score: 2.5},
+		[]any{1, "two", 3.5, true},
+		map[string]any{"a": 1, "b": []int{1, 2}},
+		Inner{A: 7, B: "z"},
+	}
+	for i, c := range cases {
+		want, err := json.Marshal(c)
+		require.NoError(t, err)
+		got, err := json.Marshal(sanitizeAny(c))
+		require.NoErrorf(t, err, "case %d", i)
+		assert.JSONEqf(t, string(want), string(got), "case %d", i)
+	}
+}
+
+// FuzzSanitizeAny asserts the two load-bearing invariants over generated input:
+// sanitizeAny never panics, and its output never fails to JSON-encode because of
+// a non-finite float.
+func FuzzSanitizeAny(f *testing.F) {
+	f.Add([]byte("hello"), 3, 1.5)
+	f.Add([]byte{}, 0, math.NaN())
+	f.Add([]byte("x"), -1, math.Inf(1))
+	f.Fuzz(func(t *testing.T, b []byte, n int, x float64) {
+		inputs := []any{
+			x,
+			float32(x),
+			Decibels(x),
+			[]any{x, string(b), n},
+			map[string]any{"x": x, "s": string(b)},
+			map[int]float64{n: x},
+			fuzzStruct{V: x, S: string(b)},
+			stringerWithFloat{Gain: x},
+			floatFieldError{Gain: x},
+			outerEmbed{innerFloat: innerFloat{Y: x}, Name: string(b)},
+			&fuzzStruct{V: x, S: string(b)},
+			[]float64{x, float64(n)},
+		}
+		for i, in := range inputs {
+			out := sanitizeAny(in) // must not panic
+			_, err := json.Marshal(out)
+			if _, ok := errors.AsType[*json.UnsupportedValueError](err); ok {
+				t.Fatalf("input %d (%T) still fails to encode on a non-finite float: %v", i, in, err)
+			}
+		}
 	})
 }
