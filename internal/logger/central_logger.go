@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -723,7 +724,158 @@ func fieldToAttr(f Field) slog.Attr {
 		// slog.Duration outputs nanoseconds in JSON which is not human-friendly
 		return slog.String(f.Key, v.Round(time.Millisecond).String())
 	default:
-		return slog.Any(f.Key, v)
+		return slog.Any(f.Key, sanitizeAny(v))
+	}
+}
+
+// sanitizeAny recursively sanitizes a value passed to logger.Any to ensure it contains
+// no non-finite floats (NaN, +Inf, -Inf) which would corrupt the JSON log output.
+func sanitizeAny(v any) any {
+	if v == nil {
+		return nil
+	}
+
+	// Fast path for common basic types to avoid reflection overhead
+	switch val := v.(type) {
+	case float64:
+		if math.IsNaN(val) || math.IsInf(val, 0) {
+			return logSafeFloat(val)
+		}
+		return val
+	case float32:
+		if math.IsNaN(float64(val)) || math.IsInf(float64(val), 0) {
+			return logSafeFloat(float64(val))
+		}
+		return val
+	case int, int64, string, bool:
+		return val
+	}
+
+	rv := reflect.ValueOf(v)
+	return sanitizeReflect(rv)
+}
+
+func logSafeFloat(f float64) string {
+	switch {
+	case math.IsNaN(f):
+		return "nan"
+	case math.IsInf(f, 1):
+		return "+inf"
+	case math.IsInf(f, -1):
+		return "-inf"
+	default:
+		// Should not be reached, but fallback safely
+		return "unknown"
+	}
+}
+
+// sanitizeReflect recursively traverses the reflect.Value and returns a sanitized any.
+// To avoid mutating user data, it creates copies of structs/maps/slices that contain
+// non-finite floats. If no non-finite floats are found, it returns the original value.
+//nolint:gocognit // Recursive reflection is inherently complex
+func sanitizeReflect(rv reflect.Value) any {
+	if !rv.IsValid() {
+		return nil
+	}
+
+	switch rv.Kind() {
+	case reflect.Float32, reflect.Float64:
+		f := rv.Float()
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return logSafeFloat(f)
+		}
+		return rv.Interface()
+
+	case reflect.Slice, reflect.Array:
+		if rv.IsZero() {
+			return rv.Interface()
+		}
+		// Try to find if any element needs sanitizing first, to avoid allocation
+		needsCopy := false
+		for i := range rv.Len() {
+			elem := rv.Index(i)
+			sanitized := sanitizeReflect(elem)
+			if sanitized != elem.Interface() {
+				needsCopy = true
+				break
+			}
+		}
+		if !needsCopy {
+			return rv.Interface()
+		}
+
+		cp := make([]any, rv.Len())
+		for i := range rv.Len() {
+			cp[i] = sanitizeReflect(rv.Index(i))
+		}
+		return cp
+
+	case reflect.Map:
+		if rv.IsZero() {
+			return rv.Interface()
+		}
+		needsCopy := false
+		iter := rv.MapRange()
+		for iter.Next() {
+			if sanitizeReflect(iter.Key()) != iter.Key().Interface() || sanitizeReflect(iter.Value()) != iter.Value().Interface() {
+				needsCopy = true
+				break
+			}
+		}
+		if !needsCopy {
+			return rv.Interface()
+		}
+
+		cp := make(map[any]any, rv.Len())
+		iter = rv.MapRange()
+		for iter.Next() {
+			cp[sanitizeReflect(iter.Key())] = sanitizeReflect(iter.Value())
+		}
+		return cp
+
+	case reflect.Struct:
+		needsCopy := false
+		//nolint:gocritic
+		for i := 0; i < rv.NumField(); i++ {
+			field := rv.Type().Field(i)
+			if !field.IsExported() {
+				continue
+			}
+			if sanitizeReflect(rv.Field(i)) != rv.Field(i).Interface() {
+				needsCopy = true
+				break
+			}
+		}
+		if !needsCopy {
+			return rv.Interface()
+		}
+
+		cp := make(map[string]any, rv.NumField())
+		//nolint:gocritic
+		for i := 0; i < rv.NumField(); i++ {
+			field := rv.Type().Field(i)
+			if !field.IsExported() {
+				continue
+			}
+			cp[field.Name] = sanitizeReflect(rv.Field(i))
+		}
+		return cp
+
+	case reflect.Pointer, reflect.Interface:
+		if rv.IsNil() {
+			return rv.Interface()
+		}
+		sanitized := sanitizeReflect(rv.Elem())
+		if sanitized != rv.Elem().Interface() {
+			return sanitized
+		}
+		return rv.Interface()
+
+	default:
+		if rv.CanInterface() {
+			return rv.Interface()
+		}
+		return nil
 	}
 }
 

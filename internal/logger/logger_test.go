@@ -717,3 +717,67 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 		assert.Contains(t, string(content), "test-module")
 	})
 }
+
+// type Decibels float64 for testing named float type
+type Decibels float64
+
+func TestSanitizeAny(t *testing.T) {
+	//nolint:testifylint // Intentionally strict typing for our float return tests
+	t.Run("nil", func(t *testing.T) {
+		assert.Nil(t, sanitizeAny(nil))
+	})
+
+	t.Run("basic types", func(t *testing.T) {
+		assert.Equal(t, 42, sanitizeAny(42))
+		assert.Equal(t, "test", sanitizeAny("test"))
+		assert.Equal(t, true, sanitizeAny(true))
+	})
+
+	t.Run("finite floats", func(t *testing.T) {
+		if v := sanitizeAny(1.23); v != 1.23 {
+			t.Errorf("expected 1.23, got %v", v)
+		}
+		if v := sanitizeAny(float32(1.23)); v != float32(1.23) {
+			t.Errorf("expected float32 1.23, got %v", v)
+		}
+		if v := sanitizeAny(Decibels(1.23)); v != Decibels(1.23) {
+			t.Errorf("expected Decibels 1.23, got %v", v)
+		}
+	})
+
+	t.Run("non-finite floats", func(t *testing.T) {
+		assert.Equal(t, "+inf", sanitizeAny(math.Inf(1)))
+		assert.Equal(t, "-inf", sanitizeAny(math.Inf(-1)))
+		assert.Equal(t, "nan", sanitizeAny(math.NaN()))
+	})
+
+	t.Run("named non-finite floats", func(t *testing.T) {
+		assert.Equal(t, "+inf", sanitizeAny(Decibels(math.Inf(1))))
+		assert.Equal(t, "-inf", sanitizeAny(Decibels(math.Inf(-1))))
+	})
+
+	t.Run("nested slice", func(t *testing.T) {
+		input := []any{1.23, math.Inf(1), "test"}
+		got := sanitizeAny(input)
+		expected := []any{1.23, "+inf", "test"}
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("nested map", func(t *testing.T) {
+		input := map[string]any{"a": math.Inf(-1), "b": 1.23}
+		got := sanitizeAny(input)
+		expected := map[any]any{"a": "-inf", "b": 1.23}
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("nested struct", func(t *testing.T) {
+		type Nested struct {
+			Val float64
+			Ok  bool
+		}
+		input := Nested{Val: math.NaN(), Ok: true}
+		got := sanitizeAny(input)
+		expected := map[string]any{"Val": "nan", "Ok": true}
+		assert.Equal(t, expected, got)
+	})
+}
