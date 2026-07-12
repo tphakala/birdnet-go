@@ -31,140 +31,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-          check-latest: true
-
-      - name: Install Linux system dependencies
-        if: matrix.os == 'ubuntu-24.04'
-        # Route through the shared composite for the continue-on-error +
-        # outcome-checked reinstall fallback, so a corrupt apt cache (tar exit 2)
-        # cannot hard-fail this build. execute-install-scripts: 'false' preserves
-        # the prior behavior; the symlink fix step below handles post-install.
-        uses: ./.github/actions/setup-apt-packages
-        with:
-          packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
-          cache-version: '1.0'
-          execute-install-scripts: 'false'
-
-      - name: Fix cross-compiler symlinks
-        if: matrix.os == 'ubuntu-24.04'
-        run: |
-          # cache-apt-pkgs-action restores debs but skips post-install triggers,
-          # so create the symlinks that update-alternatives would normally manage
-          sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc-posix /usr/bin/x86_64-w64-mingw32-gcc
-          sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++-posix /usr/bin/x86_64-w64-mingw32-g++
-          # Resolve the installed aarch64 gcc version dynamically so a future
-          # runner-image gcc bump does not break the symlink.
-          aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
-          if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
-          sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
-
-      - name: Install Task
-        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json'
-
       - name: Get Build Version
         id: get_build_version
         run: |
           # Use simple date format for nightly builds
           DATE=$(date +'%Y%m%d')
-          BUILD_VERSION="nightly-${DATE}"
-          echo "BUILD_VERSION=${BUILD_VERSION}" >> ${GITHUB_ENV}
-          echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
+          echo "build_version=nightly-${DATE}" >> "$GITHUB_OUTPUT"
 
-      - name: Setup ONNX Runtime
-        uses: ./.github/actions/setup-onnxruntime
+      - name: Build BirdNET-Go binary
+        uses: ./.github/actions/build-birdnet-binary
         with:
-          target-platform: ${{ matrix.goos }}-${{ matrix.goarch }}
-
-      - name: Build BirdNET-Go
-        run: |
-          # Build the application
-          task ${{ matrix.goos }}_${{ matrix.goarch }}
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 1
-          BUILD_VERSION: ${{ env.BUILD_VERSION }}
-          # Baked into the binary via ldflags. Empty if the secret is unset
-          # (e.g. fork PR builds), which leaves telemetry off by design.
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          PUPPETEER_SKIP_DOWNLOAD: true
-          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
-
-      - name: Upload source maps to Sentry
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: tphakala
-          SENTRY_PROJECT: birdnet-go
-        run: |
-          npx @sentry/cli sourcemaps upload \
-            --release "birdnet-go@${{ env.BUILD_VERSION }}" \
-            --url-prefix '~/ui/assets/' \
-            frontend/dist/
-
-      - name: Create Release Artifacts
-        run: |
-          # Create artifacts directory
-          mkdir -p artifacts
-
-          # Set binary name based on OS
-          BINARY_NAME=birdnet-go
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            BINARY_NAME=birdnet-go.exe
-          fi
-
-          # Copy binary
-          cp bin/$BINARY_NAME artifacts/
-
-          # Copy required library files based on OS and architecture
-          if [ "${{ matrix.goos }}" = "linux" ]; then
-            if [ "${{ matrix.goarch }}" = "amd64" ]; then
-              cp /usr/lib/libtensorflowlite_c.so artifacts/
-              cp /usr/lib/libonnxruntime.so artifacts/
-            elif [ "${{ matrix.goarch }}" = "arm64" ]; then
-              cp /usr/aarch64-linux-gnu/lib/libtensorflowlite_c.so artifacts/
-              cp /usr/aarch64-linux-gnu/lib/libonnxruntime.so artifacts/
-            fi
-          elif [ "${{ matrix.goos }}" = "windows" ]; then
-            cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
-            cp "${RUNNER_TEMP}"/onnxruntime/lib/*.dll artifacts/
-          elif [ "${{ matrix.goos }}" = "darwin" ]; then
-            cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
-            cp "${RUNNER_TEMP}"/onnxruntime/lib/libonnxruntime.dylib artifacts/
-          fi
-
-          # Copy platform-specific README
-          if [ "${{ matrix.goos }}" = "linux" ]; then
-            cp dist/README-linux.md artifacts/README.md
-          elif [ "${{ matrix.goos }}" = "windows" ]; then
-            cp dist/README-windows.md artifacts/README.md
-          elif [ "${{ matrix.goos }}" = "darwin" ]; then
-            cp dist/README-darwin.md artifacts/README.md
-          fi
-
-          # Create tarball
-          cd artifacts
-          tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz *
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          build-version: ${{ steps.get_build_version.outputs.build_version }}
+          tarball-suffix: ''
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sentry-dsn: ${{ secrets.SENTRY_DSN }}
+          sentry-auth-token: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
   release:
     name: Create GitHub Release
