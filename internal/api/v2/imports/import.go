@@ -612,13 +612,7 @@ func (c *Handler) sendImportEvent(ctx echo.Context, id uint64, event string, dat
 		return fmt.Errorf("marshal import event: %w", err)
 	}
 	msg := fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", id, event, payload)
-	if conn, ok := ctx.Response().Writer.(apicore.WriteDeadlineSetter); ok {
-		if err := conn.SetWriteDeadline(time.Now().Add(apicore.SSEWriteDeadline)); err != nil {
-			// Best-effort: not all response writers support deadlines; log and proceed,
-			// matching SendSSEMessage in apicore.
-			c.LogDebugIfEnabled("Failed to set write deadline for import SSE event", logger.Error(err))
-		}
-	}
+	apicore.SetStreamWriteDeadline(ctx)
 	if _, err := ctx.Response().Write([]byte(msg)); err != nil {
 		return fmt.Errorf("write import event: %w", err)
 	}

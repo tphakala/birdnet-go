@@ -59,6 +59,19 @@ var precompressedRoutes = map[string]struct{}{
 	"/api/v2/species/dictionary/:locale": {},
 }
 
+// streamingJSONRoutes serve long-lived NDJSON/JSON progress streams (the
+// integration connection-test endpoints) that flush incremental results to the
+// client as a test proceeds. Gzipping them adds a buffering boundary that
+// withholds each flushed result until the compressor's window fills, defeating
+// the live progress UX, so they are skipped exactly like SSE. Matched on the
+// route template like binaryMediaRoutes.
+var streamingJSONRoutes = map[string]struct{}{
+	"/api/v2/integrations/mqtt/test":        {},
+	"/api/v2/integrations/birdweather/test": {},
+	"/api/v2/integrations/weather/test":     {},
+	"/api/v2/integrations/ebird/test":       {},
+}
+
 // hlsContentRoutePrefix matches token-based HLS playlist and segment routes.
 // The registered route template is /api/v2/streams/hls/t/:streamToken/* where
 // the trailing * is an Echo wildcard. We cannot lookup wildcard templates in
@@ -96,6 +109,9 @@ func NewGzipWithSkipper(level int, skipper middleware.Skipper) echo.MiddlewareFu
 //   - Server-Sent Events endpoints (see SSESkipper).
 //   - Binary media routes serving audio, images, or HLS content (see MediaPathSkipper).
 //   - Routes that serve already-compressed responses (see precompressedRoutes).
+//   - NDJSON/JSON progress-streaming routes (see streamingJSONRoutes), where a
+//     gzip buffering boundary would withhold flushed results and defeat the
+//     live progress UX.
 //   - Any request carrying a Range header, since gzip is incompatible with
 //     byte-range responses served via http.ServeContent.
 func DefaultGzipSkipper(c echo.Context) bool {
@@ -106,6 +122,9 @@ func DefaultGzipSkipper(c echo.Context) bool {
 		return true
 	}
 	if _, ok := precompressedRoutes[c.Path()]; ok {
+		return true
+	}
+	if _, ok := streamingJSONRoutes[c.Path()]; ok {
 		return true
 	}
 	return c.Request().Header.Get(headerRange) != ""

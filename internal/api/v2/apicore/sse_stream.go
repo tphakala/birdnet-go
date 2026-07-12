@@ -45,13 +45,6 @@ const (
 	SSEStatusDisconnected = "disconnected"
 )
 
-// WriteDeadlineSetter is implemented by response writers that support a write
-// deadline (e.g. the underlying TCP connection). SSE writers use it to avoid
-// hanging on stalled clients.
-type WriteDeadlineSetter interface {
-	SetWriteDeadline(time.Time) error
-}
-
 // SetSSEHeaders sets the required HTTP headers for a Server-Sent Events response.
 func SetSSEHeaders(ctx echo.Context) {
 	ctx.Response().Header().Set("Content-Type", "text/event-stream")
@@ -59,7 +52,31 @@ func SetSSEHeaders(ctx echo.Context) {
 	ctx.Response().Header().Set("Connection", "keep-alive")
 	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+	DisableProxyBuffering(ctx)
+}
+
+// DisableProxyBuffering sets X-Accel-Buffering: no so nginx and compatible
+// reverse proxies stream the response immediately instead of buffering it.
+// Streaming endpoints that build their own headers (SSE as well as the
+// NDJSON/JSON progress streams) call this so the buffering behavior has a single
+// source of truth and cannot drift between endpoints.
+func DisableProxyBuffering(ctx echo.Context) {
 	ctx.Response().Header().Set("X-Accel-Buffering", "no")
+}
+
+// SetStreamWriteDeadline extends the response write deadline by the shared SSE
+// window so a stalled or disconnected client cannot block the writer past it.
+// It uses http.NewResponseController (the Go 1.20+ idiom) so the deadline reaches
+// the underlying connection; asserting SetWriteDeadline directly on the response
+// writer is a no-op for the standard net/http writer, which does not expose it.
+// A writer that does not support deadlines yields http.ErrNotSupported, which is
+// logged at debug and otherwise ignored (the deadline is advisory). Streaming
+// handlers call it before each streamed write.
+func SetStreamWriteDeadline(ctx echo.Context) {
+	rc := http.NewResponseController(ctx.Response().Writer)
+	if err := rc.SetWriteDeadline(time.Now().Add(SSEWriteDeadline)); err != nil {
+		GetLogger().Debug("Failed to set stream write deadline", logger.Error(err))
+	}
 }
 
 // SafeMarshalJSON marshals data to JSON with panic recovery.
@@ -97,14 +114,8 @@ func (c *Core) SendSSEMessage(ctx echo.Context, event string, data any) error {
 	// Format SSE message
 	message := fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(jsonData))
 
-	// Set write deadline to prevent hanging on slow/disconnected clients
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		deadline := time.Now().Add(SSEWriteDeadline) // Write deadline timeout
-		if err := conn.SetWriteDeadline(deadline); err != nil {
-			// If we can't set deadline, log but continue - not all response writers support this
-			c.LogDebugIfEnabled("Failed to set write deadline for SSE message", logger.Error(err))
-		}
-	}
+	// Set write deadline to prevent hanging on slow/disconnected clients.
+	SetStreamWriteDeadline(ctx)
 
 	// Write to response
 	if _, err := ctx.Response().Write([]byte(message)); err != nil {

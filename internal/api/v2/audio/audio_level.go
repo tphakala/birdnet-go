@@ -656,10 +656,9 @@ func (c *Handler) extractRemoteAddr(ctx echo.Context) string {
 // resetAudioLevelWriteDeadline resets the write deadline for the SSE connection.
 // This prevents the server's WriteTimeout from terminating long-lived SSE connections.
 func (c *Handler) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
-	if conn, ok := ctx.Response().Writer.(apicore.WriteDeadlineSetter); ok {
-		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
-			c.LogDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
-		}
+	rc := http.NewResponseController(ctx.Response().Writer)
+	if err := rc.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
+		c.LogDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
 	}
 }
 

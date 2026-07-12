@@ -156,6 +156,85 @@ func TestDefaultGzipSkipper(t *testing.T) {
 	})
 }
 
+func TestDefaultGzipSkipper_SkipsStreamingJSONRoutes(t *testing.T) {
+	t.Parallel()
+
+	// Hardcoded route templates (NOT derived from streamingJSONRoutes) so that
+	// dropping or renaming an entry in the production map fails this test instead
+	// of silently reducing coverage. These must equal the templates the
+	// integrations handler registers (RegisterRoutes under the /api/v2 group).
+	streamingRoutes := []string{
+		"/api/v2/integrations/mqtt/test",
+		"/api/v2/integrations/birdweather/test",
+		"/api/v2/integrations/weather/test",
+		"/api/v2/integrations/ebird/test",
+	}
+	for _, route := range streamingRoutes {
+		t.Run("skips "+route, func(t *testing.T) {
+			t.Parallel()
+			// Fetch-based POSTs whose Accept is not text/event-stream, so SSESkipper
+			// does not cover them; the route-template skip must, otherwise gzip
+			// buffering would withhold the flushed progress results.
+			c, _ := newTestContext(t, http.MethodPost, "/irrelevant")
+			setPathForContext(t, c, route)
+			assert.True(t, DefaultGzipSkipper(c),
+				"streaming route %q must skip gzip so flushed results reach the client immediately", route)
+		})
+	}
+
+	// Negative: a non-streaming sibling endpoint must still be compressed.
+	t.Run("does not skip non-streaming integration route", func(t *testing.T) {
+		t.Parallel()
+		c, _ := newTestContext(t, http.MethodGet, "/irrelevant")
+		setPathForContext(t, c, "/api/v2/integrations/mqtt/status")
+		assert.False(t, DefaultGzipSkipper(c),
+			"the MQTT status route returns a normal JSON body and must still be gzip-compressed")
+	})
+
+	// Guard against the production map drifting from the hardcoded set: every known
+	// route must be present, and the map must contain nothing unexpected.
+	known := make(map[string]struct{}, len(streamingRoutes))
+	for _, r := range streamingRoutes {
+		known[r] = struct{}{}
+		if _, ok := streamingJSONRoutes[r]; !ok {
+			t.Errorf("streamingJSONRoutes is missing expected streaming route %q", r)
+		}
+	}
+	for r := range streamingJSONRoutes {
+		if _, ok := known[r]; !ok {
+			t.Errorf("streamingJSONRoutes has unexpected route %q not asserted by this test", r)
+		}
+	}
+}
+
+// TestNewGzip_EndToEnd_StreamingJSONRouteNotCompressed drives the real gzip
+// middleware stack against a registered streaming route template and verifies the
+// response is not gzip-wrapped even when the client advertises Accept-Encoding:
+// gzip. This complements the skipper unit test by exercising c.Path() through the
+// actual Echo router, so a mismatch between the skip-set template and the
+// registered route would surface here.
+func TestNewGzip_EndToEnd_StreamingJSONRouteNotCompressed(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	e.Use(NewGzip())
+	// Register the real streaming route template so c.Path() matches the skip set.
+	e.POST("/api/v2/integrations/mqtt/test", func(c echo.Context) error {
+		return c.String(http.StatusOK, strings.Repeat("PROGRESS_JSON_LINE", 2048))
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/test", http.NoBody)
+	req.Header.Set(echo.HeaderAcceptEncoding, "gzip")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, rec.Header().Get(echo.HeaderContentEncoding),
+		"streaming test route must not be gzip-compressed even when the client asks for it")
+	assert.False(t, bytes.HasPrefix(rec.Body.Bytes(), []byte{0x1f, 0x8b}),
+		"streaming test route body must not be a gzip stream")
+}
+
 // TestNewGzip_EndToEnd_AudioRouteNotCompressed is a regression test for
 // tphakala/birdnet-go#2709. It drives a real Echo router with the gzip
 // middleware stack used in production and verifies that a matched audio
