@@ -201,13 +201,9 @@ if [ -d "/dev/dri" ]; then
             fi
             DRM_GROUP=$(getent group "$RENDER_GID" | cut -d: -f1)
             if [ -n "$DRM_GROUP" ]; then
-                if [ "$(id -u)" -eq 0 ]; then
-                    adduser "$USER_NAME" "$DRM_GROUP" 2>/dev/null || \
-                        usermod -aG "$DRM_GROUP" "$USER_NAME" 2>/dev/null || true
-                    echo "Added $USER_NAME to group $DRM_GROUP (GID $RENDER_GID) for Intel iGPU access"
-                else
-                    echo "Warning: Cannot add $USER_NAME to group $DRM_GROUP (GID $RENDER_GID) - not running as root"
-                fi
+                adduser "$USER_NAME" "$DRM_GROUP" 2>/dev/null || \
+                    usermod -aG "$DRM_GROUP" "$USER_NAME" 2>/dev/null || true
+                echo "Added $USER_NAME to group $DRM_GROUP (GID $RENDER_GID) for Intel iGPU access"
             fi
         fi
     fi
