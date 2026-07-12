@@ -34,9 +34,18 @@ trap cleanup EXIT
 pid1=""
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 while [ "$SECONDS" -lt "$deadline" ]; do
-    if [ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)" = "true" ]; then
+    state=$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo unknown)
+    if [ "$state" = "running" ]; then
+        # cat may lose an exec race while the container is still coming up, so
+        # tolerate a transient failure here and retry on the next tick.
         pid1=$(docker exec "$cid" cat /proc/1/comm 2>/dev/null || true)
         [ -n "$pid1" ] && break
+    elif [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+        echo "----- container logs (tail) -----"
+        docker logs "$cid" 2>&1 | tail -30
+        echo "---------------------------------"
+        echo "FAIL: container exited prematurely (status=$state) before PID 1 could be checked"
+        exit 1
     fi
     sleep 1
 done
@@ -53,9 +62,12 @@ fi
 # Reaping: orphan a grandchild to PID 1 (the `( sleep 1 & )` subshell exits at
 # once, reparenting the sleep to PID 1) and confirm tini reaps it after it dies,
 # leaving no <defunct> zombie.
-docker exec "$cid" bash -c '( sleep 1 & )' 2>/dev/null || true
+# No 2>/dev/null || true here: the container is confirmed running, so a failure
+# to inject the orphan is a real error that must fail the test loudly rather than
+# silently pass the reaping check with no orphan ever created.
+docker exec "$cid" bash -c '( sleep 1 & )'
 sleep 3
-zombies=$(docker exec "$cid" ps -eo stat,pid,ppid,comm 2>/dev/null | awk 'NR>1 && $1 ~ /^Z/')
+zombies=$(docker exec "$cid" ps -eo stat,pid,ppid,comm | awk 'NR>1 && $1 ~ /^Z/')
 if [ -n "$zombies" ]; then
     echo "FAIL: zombie process present after the orphan exited (tini did not reap):"
     echo "$zombies"
