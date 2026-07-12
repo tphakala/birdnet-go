@@ -45,13 +45,6 @@ const (
 	SSEStatusDisconnected = "disconnected"
 )
 
-// WriteDeadlineSetter is implemented by response writers that support a write
-// deadline (e.g. the underlying TCP connection). SSE writers use it to avoid
-// hanging on stalled clients.
-type WriteDeadlineSetter interface {
-	SetWriteDeadline(time.Time) error
-}
-
 // SetSSEHeaders sets the required HTTP headers for a Server-Sent Events response.
 func SetSSEHeaders(ctx echo.Context) {
 	ctx.Response().Header().Set("Content-Type", "text/event-stream")
