@@ -29,6 +29,7 @@ let mockEsListeners = new Map<string, EventHandler[]>();
 let mockEsInstance: {
   addEventListener: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
+  onreconnectfailed: ((attempts: number) => void) | null;
 } | null = null;
 
 const { MockReconnectingEventSource } = vi.hoisted(() => {
@@ -51,11 +52,19 @@ vi.mock('$lib/utils/ReconnectingEventSource', () => {
         }
       }),
       close: vi.fn(),
+      // The helper assigns its stall callback here; tests invoke it to simulate a
+      // persistently failing reconnect.
+      onreconnectfailed: null,
     };
     return mockEsInstance;
   });
   return { ReconnectingEventSource: MockReconnectingEventSource };
 });
+
+/** Simulate the stream stalling (attempts consecutive failed reconnects). */
+function triggerStall(attempts: number) {
+  mockEsInstance?.onreconnectfailed?.(attempts);
+}
 
 /** Helper to dispatch a mock SSE event with JSON data. */
 function dispatchMockEvent(type: string, data: unknown) {
@@ -77,6 +86,7 @@ function dispatchPlainEvent(type: string) {
 
 import ImportActivityCard from './ImportActivityCard.svelte';
 import { api } from '$lib/utils/api';
+import { STREAM_STALL_THRESHOLD } from '../utils';
 import type { ImportProgress, ImportStatusResponse } from '../types';
 
 const idleStatus: ImportStatusResponse = { running: false, status: 'idle' };
@@ -333,6 +343,43 @@ describe('ImportActivityCard', () => {
     });
     expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
     expect(mockEsInstance?.close).not.toHaveBeenCalled();
+  });
+
+  it('reconciles to an interrupted state when the stream stalls and the job is gone', async () => {
+    // Mount sees the running job; the stall reconcile sees an empty manager
+    // (server restarted), so the card must stop the stream and show an honest
+    // interrupted state instead of the misleading "no activity" empty view.
+    vi.mocked(api.get).mockResolvedValueOnce(runningStatus).mockResolvedValue(idleStatus);
+    renderCard();
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
+    });
+
+    triggerStall(STREAM_STALL_THRESHOLD);
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.interruptedTitle')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('system.importExport.activity.empty.title')).not.toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(mockEsInstance?.close).toHaveBeenCalled();
+  });
+
+  it('keeps the running view and stream when the stall reconcile still reports the same job', async () => {
+    vi.mocked(api.get).mockResolvedValue(runningStatus);
+    renderCard();
+    await waitFor(() => {
+      expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
+    });
+
+    triggerStall(STREAM_STALL_THRESHOLD);
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByText(/system.importExport.progress.runningLabel/)).toBeInTheDocument();
+    expect(mockEsInstance?.close).not.toHaveBeenCalled();
+    expect(MockReconnectingEventSource).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the terminal state when a stale running response arrives after the SSE terminal event', async () => {

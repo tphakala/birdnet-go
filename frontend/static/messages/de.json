@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Import abgebrochen",
         "cancelledDescription": "Der Import wurde vor dem Abschluss abgebrochen.",
         "errorTitle": "Import fehlgeschlagen",
+        "interruptedTitle": "Import unterbrochen",
+        "interruptedDescription": "Die Verbindung zum Server ging während des Imports verloren, daher ist das endgültige Ergebnis unbekannt. Überprüfe deine Erkennungen und starte den Import bei Bedarf erneut.",
         "viewDetectionsLink": "Importierte Erkennungen ansehen",
         "partialInserted": "{count} Erkennungen wurden vor dem Abbruch importiert.",
         "importAnother": "Weiteren Import starten"

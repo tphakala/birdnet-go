@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { deriveSourceStepState, importProgressPercent, isUnreadable } from './utils';
+import {
+  deriveSourceStepState,
+  importProgressPercent,
+  isUnreadable,
+  shouldReconcileStalledStream,
+  STREAM_STALL_THRESHOLD,
+} from './utils';
 import type { ImportProgress, ImportSourcesResponse, SourceCandidate } from './types';
 
 const baseResp: ImportSourcesResponse = {
@@ -81,5 +87,20 @@ describe('importProgressPercent', () => {
 
   it('clamps below 0 when processed is negative', () => {
     expect(importProgressPercent(progress(10, -5))).toBe(0);
+  });
+});
+
+describe('shouldReconcileStalledStream', () => {
+  it('returns false below the threshold', () => {
+    for (let attempts = 0; attempts < STREAM_STALL_THRESHOLD; attempts++) {
+      expect(shouldReconcileStalledStream(attempts)).toBe(false);
+    }
+  });
+
+  it('returns true at the threshold and its multiples only', () => {
+    expect(shouldReconcileStalledStream(STREAM_STALL_THRESHOLD)).toBe(true);
+    expect(shouldReconcileStalledStream(STREAM_STALL_THRESHOLD + 1)).toBe(false);
+    expect(shouldReconcileStalledStream(STREAM_STALL_THRESHOLD * 2)).toBe(true);
+    expect(shouldReconcileStalledStream(STREAM_STALL_THRESHOLD * 3)).toBe(true);
   });
 });

@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Import annulé",
         "cancelledDescription": "L'import a été annulé avant la fin.",
         "errorTitle": "Échec de l'import",
+        "interruptedTitle": "Import interrompu",
+        "interruptedDescription": "La connexion au serveur a été perdue pendant l'import, son résultat final est donc inconnu. Vérifiez vos détections et relancez l'import si nécessaire.",
         "viewDetectionsLink": "Voir les détections importées",
         "partialInserted": "{count} détections ont été importées avant l'annulation.",
         "importAnother": "Importer à nouveau"

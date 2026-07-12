@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Import zrušen",
         "cancelledDescription": "Import byl zrušen před dokončením.",
         "errorTitle": "Import se nezdařil",
+        "interruptedTitle": "Import přerušen",
+        "interruptedDescription": "Spojení se serverem bylo během importu ztraceno, takže jeho konečný výsledek není známý. Zkontrolujte své detekce a v případě potřeby import spusťte znovu.",
         "viewDetectionsLink": "Zobrazit importované detekce",
         "partialInserted": "Před zrušením bylo importováno {count} detekcí.",
         "importAnother": "Importovat další"

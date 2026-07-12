@@ -44,6 +44,7 @@ let mockEsListeners = new Map<string, EventHandler[]>();
 let mockEsInstance: {
   addEventListener: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
+  onreconnectfailed: ((attempts: number) => void) | null;
 } | null = null;
 
 const { MockReconnectingEventSource } = vi.hoisted(() => {
@@ -67,11 +68,17 @@ vi.mock('$lib/utils/ReconnectingEventSource', () => {
         }
       }),
       close: vi.fn(),
+      onreconnectfailed: null,
     };
     return mockEsInstance;
   });
   return { ReconnectingEventSource: MockReconnectingEventSource };
 });
+
+/** Simulate the stream stalling (attempts consecutive failed reconnects). */
+function triggerStall(attempts: number) {
+  mockEsInstance?.onreconnectfailed?.(attempts);
+}
 
 /** Helper to dispatch a mock SSE event with JSON data. */
 function dispatchMockEvent(type: string, data: unknown) {
@@ -86,6 +93,7 @@ function dispatchMockEvent(type: string, data: unknown) {
 import BirdNetPiImportWizard from './BirdNetPiImportWizard.svelte';
 import { api } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
+import { STREAM_STALL_THRESHOLD } from '../utils';
 import { flushSync } from 'svelte';
 
 // Default sources response: one readable candidate in a container environment.
@@ -133,6 +141,7 @@ function makeMockEsImplementation() {
         }
       }),
       close: vi.fn(),
+      onreconnectfailed: null,
     };
     return mockEsInstance;
   };
@@ -639,6 +648,129 @@ describe('BirdNetPiImportWizard', () => {
     expect(mockEsInstance?.close).toHaveBeenCalledOnce();
   });
 
+  // ---- SSE stall reconcile (server restart mid-import, Forgejo #1323) ----
+
+  it('stall with an empty job manager shows the interrupted state and closes the stream', async () => {
+    render(BirdNetPiImportWizard, { props: { onClose } });
+
+    await navigatePastSource();
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    });
+
+    // The stream keeps failing to reconnect; the status re-poll (default mock) now
+    // reports idle because the server restarted and lost the in-memory job.
+    triggerStall(STREAM_STALL_THRESHOLD);
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.interruptedTitle')).toBeInTheDocument();
+    });
+    expect(mockEsInstance?.close).toHaveBeenCalledOnce();
+    // Not an error: the outcome is unknown, not failed.
+    expect(screen.queryByText('system.importExport.done.errorTitle')).not.toBeInTheDocument();
+  });
+
+  it('stall where status reports a finished job shows the real terminal summary', async () => {
+    let statusCalls = 0;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        statusCalls++;
+        if (statusCalls === 1) {
+          return Promise.resolve({ running: false, status: 'idle' });
+        }
+        return Promise.resolve({
+          running: false,
+          job_id: 'test-job-123',
+          status: 'done',
+          progress: { ...defaultProgress, processed: 1000, inserted: 990, phase: 'done' as const },
+          error: undefined,
+        });
+      }
+      if (url === '/api/v2/import/sources') {
+        return Promise.resolve(defaultSourcesResponse);
+      }
+      return Promise.reject(new Error(`Unmocked GET: ${url}`));
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+
+    await navigatePastSource();
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.progress.runningLabel')).toBeInTheDocument();
+    });
+
+    triggerStall(STREAM_STALL_THRESHOLD);
+
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+    // A finished job must NOT be reported as interrupted.
+    expect(screen.queryByText('system.importExport.done.interruptedTitle')).not.toBeInTheDocument();
+    expect(mockEsInstance?.close).toHaveBeenCalledOnce();
+  });
+
+  it('a stall reconcile does not clobber a terminal SSE event that lands during its fetch', async () => {
+    // Hold the reconcile's /status fetch open so an SSE terminal can land first.
+    let releaseStatus!: (v: unknown) => void;
+    let statusCalls = 0;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v2/import/status') {
+        statusCalls++;
+        if (statusCalls === 1) return Promise.resolve({ running: false, status: 'idle' });
+        return new Promise(resolve => {
+          releaseStatus = resolve;
+        });
+      }
+      if (url === '/api/v2/import/sources') return Promise.resolve(defaultSourcesResponse);
+      return Promise.reject(new Error(`Unmocked GET: ${url}`));
+    });
+
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await navigatePastSource();
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /system.importExport.confirm.startButton/ })
+    );
+    await waitFor(() => screen.getByText('system.importExport.progress.runningLabel'));
+
+    // Stall kicks off reconcileAfterStall; its /status fetch is now pending.
+    triggerStall(STREAM_STALL_THRESHOLD);
+    await waitFor(() => expect(statusCalls).toBe(2));
+
+    // The SSE 'complete' terminal event lands while the reconcile fetch is in flight.
+    flushSync(() => {
+      dispatchMockEvent('complete', {
+        ...defaultProgress,
+        processed: 1000,
+        inserted: 990,
+        phase: 'done',
+      });
+    });
+    await waitFor(() => screen.getByText('system.importExport.done.successTitle'));
+
+    // The stale reconcile now resolves (job gone). The post-await guard must drop
+    // it so the real success outcome is preserved, not overwritten by interrupted.
+    releaseStatus({ running: false, status: 'idle' });
+    await waitFor(() => {
+      expect(screen.getByText('system.importExport.done.successTitle')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('system.importExport.done.interruptedTitle')).not.toBeInTheDocument();
+  });
+
   // ---- Cancel ----
 
   it('cancel button posts to the cancel endpoint', async () => {
@@ -864,6 +996,7 @@ describe('BirdNetPiImportWizard', () => {
         }
         return Promise.resolve({
           running: false,
+          job_id: 'test-job-123',
           status: 'done',
           progress: completedProgress,
           error: undefined,

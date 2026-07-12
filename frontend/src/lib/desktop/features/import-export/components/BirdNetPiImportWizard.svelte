@@ -11,7 +11,7 @@
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import ProgressBar from '$lib/desktop/components/ui/ProgressBar.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { CheckCircle2, XCircle, ArrowLeft, ArrowRight } from '@lucide/svelte';
+  import { CheckCircle2, XCircle, Unplug, ArrowLeft, ArrowRight } from '@lucide/svelte';
   import type {
     ImportSourcesResponse,
     SourceCandidate,
@@ -86,6 +86,10 @@
   let importComplete = $state(false);
   let importCancelled = $state(false);
   let importError = $state<string | null>(null);
+  // Set when the progress stream stalls and a status re-poll confirms the job is
+  // gone (server restarted mid-import). Honest terminal state: the import did not
+  // finish here and its real outcome is unknown, so it is neither success nor error.
+  let importInterrupted = $state(false);
   let isCancelling = $state(false);
   let eventSource: ReconnectingEventSource | null = null;
   let destroyed = false;
@@ -154,6 +158,7 @@
     importComplete = false;
     importCancelled = false;
     importError = null;
+    importInterrupted = false;
     errorMessage = null;
     isCancelling = false;
     sourcePath = '';
@@ -314,7 +319,46 @@
         currentStep = 'done';
         closeEventSource();
       },
+      onStalled: () => {
+        void reconcileAfterStall();
+      },
     });
+  }
+
+  /**
+   * The progress stream has been failing to reconnect. Re-poll the authoritative
+   * status: a finished job shows its real terminal state; a job that is simply
+   * gone (server restarted mid-import) shows an honest "interrupted" state; a
+   * still-running same job keeps the stream. A failed fetch (server unreachable)
+   * is ignored so the stream keeps retrying and the next stall tick reconciles.
+   */
+  async function reconcileAfterStall() {
+    // Only meaningful while still on the progress step; a terminal SSE event may
+    // have already moved us to 'done'.
+    if (destroyed || currentStep !== 'progress') return;
+    const myJobId = jobId;
+    try {
+      const s = await api.get<ImportStatusResponse>('/api/v2/import/status');
+      // Re-check after the await: an SSE terminal event could have landed a real
+      // outcome, or a fresh import could have started, during the fetch. Either
+      // way this reconcile is stale and must not clobber the newer state.
+      if (destroyed || currentStep !== 'progress' || jobId !== myJobId) return;
+      // Adopt a finished status only when it describes the job we were watching;
+      // the single-slot status endpoint could otherwise report a different job.
+      if (s.status === 'done' && s.job_id === myJobId) {
+        closeEventSource();
+        applyFinalStatus(s);
+        return;
+      }
+      if (s.running && s.job_id === myJobId) return; // transient blip; keep the stream
+      // Our job is gone (server restarted, or a different job now holds the slot).
+      closeEventSource();
+      importInterrupted = true;
+      currentStep = 'done';
+    } catch (err) {
+      // Server unreachable: keep retrying; reconcile again on the next stall tick.
+      logger.debug('import status reconcile failed after stall; will retry', err);
+    }
   }
 
   function closeEventSource() {
@@ -369,9 +413,20 @@
           try {
             const s = await api.get<ImportStatusResponse>('/api/v2/import/status');
             if (destroyed) return;
-            applyFinalStatus(s);
+            if (s.job_id === jobId) {
+              applyFinalStatus(s);
+            } else {
+              // The status endpoint no longer describes the job we cancelled;
+              // report the cancellation rather than adopting an unrelated outcome.
+              importCancelled = true;
+              currentStep = 'done';
+            }
           } catch (err) {
             logger.error('Failed to load final import status after cancel', err);
+            // Fall back to a terminal state so the wizard never wedges on
+            // "Cancelling..." when the final status fetch fails.
+            importCancelled = true;
+            currentStep = 'done';
           }
         }
       }
@@ -932,7 +987,7 @@
         <!-- Done step -->
         <div class="space-y-4 text-center">
           {#if importComplete && !importError && !importCancelled}
-            <CheckCircle2 class="size-12 mx-auto text-[var(--color-success)]" />
+            <CheckCircle2 class="size-12 mx-auto text-[var(--color-success)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.successTitle')}
@@ -973,7 +1028,7 @@
               </div>
             {/if}
           {:else if importCancelled}
-            <XCircle class="size-12 mx-auto text-[var(--color-warning)]" />
+            <XCircle class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.cancelledTitle')}
@@ -990,12 +1045,31 @@
               </p>
             {/if}
           {:else if importError}
-            <XCircle class="size-12 mx-auto text-[var(--color-error)]" />
+            <XCircle class="size-12 mx-auto text-[var(--color-error)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.errorTitle')}
               </h4>
               <p class="text-sm text-[var(--color-base-content)]/70 mt-1">{importError}</p>
+            </div>
+          {:else if importInterrupted}
+            <Unplug class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
+            <div>
+              <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
+                {t('system.importExport.done.interruptedTitle')}
+              </h4>
+              <p class="text-sm text-[var(--color-base-content)]/70 mt-1">
+                {t('system.importExport.done.interruptedDescription')}
+              </p>
+            </div>
+            <div class="mt-2">
+              <a
+                href={buildDetectionsFilterUrl()}
+                onclick={() => onClose()}
+                class="inline-flex items-center gap-1.5 text-sm text-[var(--color-primary)] hover:underline"
+              >
+                {t('system.importExport.done.viewDetectionsLink')}
+              </a>
             </div>
           {/if}
         </div>

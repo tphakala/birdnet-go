@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Import cancelled",
         "cancelledDescription": "The import was cancelled before completing.",
         "errorTitle": "Import failed",
+        "interruptedTitle": "Import interrupted",
+        "interruptedDescription": "The connection to the server was lost while the import was running, so its final result is unknown. Check your detections and start the import again if needed.",
         "viewDetectionsLink": "View imported detections",
         "partialInserted": "{count} detections were imported before cancellation.",
         "importAnother": "Import another"

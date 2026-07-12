@@ -56,6 +56,15 @@ export class ReconnectingEventSource {
   onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
+  /**
+   * Fires after each (re)connect attempt that fails without the connection ever
+   * opening, with the running count of such failures since the last successful
+   * open (reset to 0 on open). Opt-in escalation hook so a caller can react to a
+   * persistently failing stream (e.g. a 404 after a server restart, which never
+   * reaches OPEN); default null preserves the reconnect-forever behaviour every
+   * other consumer relies on.
+   */
+  onreconnectfailed: ((attempts: number) => void) | null = null;
 
   private readonly maxRetryTime: number;
   private readonly eventSourceClass: typeof EventSource;
@@ -64,6 +73,9 @@ export class ReconnectingEventSource {
   private readonly listeners = new Map<string, Set<EventListenerFn>>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private retryDelay = INITIAL_RETRY_TIME_MS;
+  // Consecutive (re)connect failures since the last successful open; drives the
+  // opt-in onreconnectfailed escalation hook. Reset in handleOpen.
+  private failuresSinceOpen = 0;
   private closed = false;
 
   // A single bound forwarder so add/removeEventListener on the native source use
@@ -100,8 +112,9 @@ export class ReconnectingEventSource {
   }
 
   private handleOpen(event: Event): void {
-    // A successful (re)connect resets the backoff window.
+    // A successful (re)connect resets the backoff window and failure counter.
     this.retryDelay = INITIAL_RETRY_TIME_MS;
+    this.failuresSinceOpen = 0;
     if (this.readyState === ReconnectingEventSource.CONNECTING) {
       this.readyState = ReconnectingEventSource.OPEN;
       this.onopen?.(event);
@@ -119,7 +132,13 @@ export class ReconnectingEventSource {
     if (source?.readyState === NATIVE_CLOSED) {
       source.close();
       this.eventSource = null;
+      // A source in CONNECTING is retrying internally (transient drop) and never
+      // reaches here, so every increment is a genuine full-cycle failure.
+      this.failuresSinceOpen += 1;
       this.scheduleReconnect();
+      // Fire last: if the callback closes the source synchronously, close()
+      // clears the timer scheduleReconnect just set.
+      this.onreconnectfailed?.(this.failuresSinceOpen);
     }
   }
 

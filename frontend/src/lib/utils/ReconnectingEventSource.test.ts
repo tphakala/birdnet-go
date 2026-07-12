@@ -341,4 +341,77 @@ describe('ReconnectingEventSource', () => {
       expect(MockEventSource.instances).toHaveLength(1);
     });
   });
+
+  describe('onreconnectfailed escalation hook', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(Math, 'random').mockReturnValue(1);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    it('fires with an incrementing count on each never-opened (re)connect failure', () => {
+      const es = new ReconnectingEventSource('/x', { eventSourceClass: ESClass });
+      const onreconnectfailed = vi.fn();
+      es.onreconnectfailed = onreconnectfailed;
+
+      // 404-style failure: fails straight from CONNECTING, never opens.
+      lastInstance().simulateFailure();
+      expect(onreconnectfailed).toHaveBeenNthCalledWith(1, 1);
+
+      vi.advanceTimersByTime(500); // reconnect #2 created
+      lastInstance().simulateFailure();
+      expect(onreconnectfailed).toHaveBeenNthCalledWith(2, 2);
+
+      vi.advanceTimersByTime(1000); // reconnect #3 created
+      lastInstance().simulateFailure();
+      expect(onreconnectfailed).toHaveBeenNthCalledWith(3, 3);
+
+      es.close();
+    });
+
+    it('resets the failure count after a successful open', () => {
+      const es = new ReconnectingEventSource('/x', { eventSourceClass: ESClass });
+      const onreconnectfailed = vi.fn();
+      es.onreconnectfailed = onreconnectfailed;
+
+      lastInstance().simulateFailure();
+      expect(onreconnectfailed).toHaveBeenLastCalledWith(1);
+      vi.advanceTimersByTime(500);
+      lastInstance().simulateFailure();
+      expect(onreconnectfailed).toHaveBeenLastCalledWith(2);
+
+      // Reconnect succeeds, resetting the counter.
+      vi.advanceTimersByTime(1000);
+      lastInstance().simulateOpen();
+
+      // A subsequent failure counts from 1 again.
+      lastInstance().simulateFailure();
+      expect(onreconnectfailed).toHaveBeenLastCalledWith(1);
+
+      es.close();
+    });
+
+    it('does nothing when no callback is set (no throw, reconnect unaffected)', () => {
+      const es = new ReconnectingEventSource('/x', { eventSourceClass: ESClass });
+      lastInstance().simulateFailure();
+      vi.advanceTimersByTime(500);
+      expect(MockEventSource.instances).toHaveLength(2);
+      es.close();
+    });
+
+    it('stops reconnecting when the callback closes the source', () => {
+      const es = new ReconnectingEventSource('/x', { eventSourceClass: ESClass });
+      es.onreconnectfailed = () => es.close();
+
+      lastInstance().simulateFailure();
+      vi.advanceTimersByTime(10000);
+
+      // The scheduled reconnect timer was cleared by close() inside the callback.
+      expect(MockEventSource.instances).toHaveLength(1);
+    });
+  });
 });

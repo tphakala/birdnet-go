@@ -1018,6 +1018,8 @@ export type TranslationKey =
   | 'system.importExport.done.cancelledTitle'
   | 'system.importExport.done.cancelledDescription'
   | 'system.importExport.done.errorTitle'
+  | 'system.importExport.done.interruptedTitle'
+  | 'system.importExport.done.interruptedDescription'
   | 'system.importExport.done.viewDetectionsLink'
   | 'system.importExport.done.partialInserted' // params: count
   | 'system.importExport.done.importAnother'

@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Import avbrutt",
         "cancelledDescription": "Importen ble avbrutt før den var fullført.",
         "errorTitle": "Import mislyktes",
+        "interruptedTitle": "Import stanset",
+        "interruptedDescription": "Tilkoblingen til serveren ble brutt mens importen pågikk, så det endelige resultatet er ukjent. Sjekk deteksjonene dine og start importen på nytt om nødvendig.",
         "viewDetectionsLink": "Vis importerte deteksjoner",
         "partialInserted": "{count} deteksjoner ble importert før avbruddet.",
         "importAnother": "Importer på nytt"
