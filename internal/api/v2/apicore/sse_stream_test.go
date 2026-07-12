@@ -21,18 +21,23 @@ func Test_SetSSEHeaders(t *testing.T) {
 	SetSSEHeaders(ctx)
 
 	expectedHeaders := map[string]string{
-		"Content-Type":                 "text/event-stream",
-		"Cache-Control":                "no-cache",
-		"Connection":                   "keep-alive",
-		"Access-Control-Allow-Origin":  "*",
-		"Access-Control-Allow-Headers": "Cache-Control",
-		"X-Accel-Buffering":            "no",
+		"Content-Type":      "text/event-stream",
+		"Cache-Control":     "no-cache",
+		"Connection":        "keep-alive",
+		"X-Accel-Buffering": "no",
 	}
 
 	for key, expectedValue := range expectedHeaders {
 		actualValue := rec.Header().Get(key)
 		assert.Equal(t, expectedValue, actualValue, "SetSSEHeaders() header %q mismatch", key)
 	}
+
+	// CORS must NOT be set here; it is owned by the global CORS middleware so SSE
+	// endpoints honor the configured AllowedOrigins instead of a hardcoded wildcard.
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"),
+		"SetSSEHeaders must not hardcode Access-Control-Allow-Origin; CORS is the middleware's job")
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Headers"),
+		"SetSSEHeaders must not hardcode Access-Control-Allow-Headers")
 }
 
 func Test_DisableProxyBuffering(t *testing.T) {

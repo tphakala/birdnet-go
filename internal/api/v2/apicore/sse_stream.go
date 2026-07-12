@@ -46,12 +46,16 @@ const (
 )
 
 // SetSSEHeaders sets the required HTTP headers for a Server-Sent Events response.
+// CORS is intentionally left to the global CORS middleware (see middleware.NewCORS)
+// so SSE endpoints honor the configured AllowedOrigins. Previously this helper
+// hardcoded Access-Control-Allow-Origin: * , which clobbered the middleware and
+// let SSE bypass a restrictive CORS policy; the middleware's AllowHeaders now
+// includes Cache-Control so browsers that send that request header still pass
+// preflight.
 func SetSSEHeaders(ctx echo.Context) {
 	ctx.Response().Header().Set("Content-Type", "text/event-stream")
 	ctx.Response().Header().Set("Cache-Control", "no-cache")
 	ctx.Response().Header().Set("Connection", "keep-alive")
-	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
-	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
 	DisableProxyBuffering(ctx)
 }
 

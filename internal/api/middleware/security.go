@@ -101,6 +101,7 @@ func NewCORS(config *SecurityConfig) echo.MiddlewareFunc {
 			echo.HeaderContentType,
 			echo.HeaderAccept,
 			echo.HeaderAuthorization,
+			echo.HeaderCacheControl,
 			"X-Requested-With",
 			"X-CSRF-Token",
 		},
