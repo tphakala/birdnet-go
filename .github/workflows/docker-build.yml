@@ -23,56 +23,22 @@ permissions:
   packages: write
 
 jobs:
-  # Lint is handled by golangci-test.yml workflow - no need to duplicate here
-  build-and-push-docker-image:
+  # Publish the :dev / :<sha> multi-arch images through the shared reusable
+  # workflow (dev strategy), so dev, nightly, and release all build and tag the
+  # same way. Dev builds go to GHCR only (no Docker Hub) and skip the Podman
+  # validation and cleanup jobs. Gated to push-on-main to preserve the prior
+  # behaviour; the schedule/dispatch triggers above are currently no-ops under
+  # this gate (kept for parity with the previous workflow).
+  dev:
     if: github.event_name == 'push' && github.ref_name == 'main'
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout GitHub Action
-        uses: actions/checkout@v7
-
-      - name: Login to GitHub Container Registry
-        run: |
-          for attempt in 1 2 3; do
-            if echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin; then
-              echo "GHCR login succeeded"
-              exit 0
-            fi
-            echo "GHCR login attempt $attempt/3 failed, retrying in 15s..."
-            sleep 15
-          done
-          echo "GHCR login failed after 3 attempts"
-          exit 1
-
-      - name: Generate downcase repository name
-        run: |
-          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
-
-      - name: Build and push container images
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          push: true
-          # Tags for both Docker and Podman users
-          # Standard tags for Docker users
-          # Podman-prefixed tags for easier discovery by Podman users
-          # Same OCI image, just different tags for user convenience
-          tags: |
-            ghcr.io/${{ env.REPO }}:dev
-            ghcr.io/${{ env.REPO }}:${{ github.sha }}
-            ghcr.io/${{ env.REPO }}:podman-dev
-            ghcr.io/${{ env.REPO }}:podman-${{ github.sha }}
-          platforms: linux/arm64, linux/amd64
-          cache-from: |
-            type=gha
-            type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache,mode=max
-          provenance: false
-          build-args: |
-            SENTRY_DSN=${{ secrets.SENTRY_DSN }}
-            BUILDKIT_INLINE_CACHE=1
+    uses: ./.github/workflows/docker-build-push.yml
+    with:
+      tag-strategy: "dev"
+      version: ${{ github.sha }}
+      create-latest-tag: false
+      platforms: '["linux/amd64", "linux/arm64"]'
+      push-to-ghcr: true
+      push-to-dockerhub: false
+      cleanup-old-images: false
+      validate-podman: false
+    secrets: inherit

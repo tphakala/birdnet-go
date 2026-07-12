@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       tag-strategy:
-        description: "Tagging strategy: nightly or release"
+        description: "Tagging strategy: nightly, release, or dev"
         required: true
         type: string
       version:
@@ -33,6 +33,11 @@ on:
         default: true
       cleanup-old-images:
         description: "Clean up old images"
+        required: false
+        type: boolean
+        default: true
+      validate-podman:
+        description: "Run the Podman pull/run compatibility job after the build"
         required: false
         type: boolean
         default: true
@@ -131,7 +136,8 @@ jobs:
           #
           # Invariant: GHCR is both the build target and the Docker Hub mirror
           # source, so push-to-ghcr must be true whenever Docker Hub is enabled.
-          # Both callers (nightly-build.yml, release-build.yml) set it true.
+          # All callers (nightly-build.yml, release-build.yml, docker-build.yml)
+          # set push-to-ghcr true.
           DATE=$(date +'%Y%m%d')
           VERSION="${{ inputs.version }}"
           STRATEGY="${{ inputs.tag-strategy }}"
@@ -153,6 +159,21 @@ jobs:
             elif [ "$STRATEGY" = "release" ]; then
               emit "${repo}:${VERSION}"
               emit "${repo}:podman-${VERSION}"
+              # Also publish the version without the leading "v" (e.g. 1.2.3)
+              # for users who pin the unprefixed tag.
+              local no_v="${VERSION#v}"
+              if [ "$no_v" != "$VERSION" ]; then
+                emit "${repo}:${no_v}"
+                emit "${repo}:podman-${no_v}"
+              fi
+            elif [ "$STRATEGY" = "dev" ]; then
+              # Dev images built on every push to main: a floating :dev alias and
+              # the immutable commit SHA (passed in as version), plus podman
+              # discovery aliases.
+              emit "${repo}:dev"
+              emit "${repo}:${VERSION}"
+              emit "${repo}:podman-dev"
+              emit "${repo}:podman-${VERSION}"
             fi
             if [ "$WANT_LATEST" = "true" ]; then
               emit "${repo}:latest"
@@ -173,11 +194,11 @@ jobs:
 
           # Stable GHCR ref used as the mirror source: a manifest list that all
           # the other GHCR tags for this run also point at.
-          if [ "$STRATEGY" = "nightly" ]; then
-            source_ref="${GHCR_REPO}:nightly-${DATE}"
-          else
-            source_ref="${GHCR_REPO}:${VERSION}"
-          fi
+          case "$STRATEGY" in
+            nightly) source_ref="${GHCR_REPO}:nightly-${DATE}" ;;
+            dev)     source_ref="${GHCR_REPO}:dev" ;;
+            *)       source_ref="${GHCR_REPO}:${VERSION}" ;;
+          esac
 
           {
             echo "ghcr-tags<<__GHCR_EOF__"
@@ -188,6 +209,8 @@ jobs:
             echo "__DH_EOF__"
             echo "source-ref=${source_ref}"
             echo "date=${DATE}"
+            # RFC3339 build timestamp for the org.opencontainers.image.created label.
+            echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           } >> "$GITHUB_OUTPUT"
           echo "GHCR tags:"
           printf '%s' "$ghcr_tags"
@@ -211,6 +234,15 @@ jobs:
             SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             BUILDKIT_INLINE_CACHE=1
           tags: ${{ steps.tags.outputs.ghcr-tags }}
+          # OCI image labels. Set on the GHCR build; the Docker Hub mirror copies
+          # the image config, so the Docker Hub tags inherit these automatically.
+          labels: |
+            org.opencontainers.image.title=birdnet-go
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.created }}
           cache-from: |
             type=gha
             type=registry,ref=ghcr.io/${{ steps.repo-names.outputs.ghcr-repo }}:buildcache
@@ -277,7 +309,7 @@ jobs:
   validate-podman:
     needs: build
     runs-on: ubuntu-24.04
-    if: always() && needs.build.result != 'cancelled'
+    if: always() && needs.build.result != 'cancelled' && inputs.validate-podman
 
     steps:
       - name: Generate repository names
@@ -340,6 +372,15 @@ jobs:
               TEST_IMAGE="${GHCR_REPO}:${{ inputs.version }}"
             elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
               TEST_IMAGE="${DOCKERHUB_REPO}:${{ inputs.version }}"
+            else
+              echo "No image to test - both registries disabled"
+              exit 0
+            fi
+          elif [ "${{ inputs.tag-strategy }}" = "dev" ]; then
+            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
+              TEST_IMAGE="${GHCR_REPO}:dev"
+            elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
+              TEST_IMAGE="${DOCKERHUB_REPO}:dev"
             else
               echo "No image to test - both registries disabled"
               exit 0
