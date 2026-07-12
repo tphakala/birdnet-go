@@ -63,6 +63,10 @@ jobs:
       version: ${{ inputs.version }}
       ghcr-success: ${{ steps.push-status.outputs.ghcr-success }}
       dockerhub-success: ${{ steps.push-status.outputs.dockerhub-success }}
+      # The build date this run tagged with, so validate-podman pulls the exact
+      # dated tag the build published instead of recomputing it (which could
+      # differ across a UTC-midnight crossing between the two jobs).
+      build-date: ${{ steps.tags.outputs.date }}
 
     steps:
       - name: Checkout code
@@ -118,20 +122,27 @@ jobs:
       - name: Generate tags
         id: tags
         run: |
-          # Final multi-arch tags only. The single multi-platform build-push below
-          # publishes the manifest list directly under these tags, so there are no
-          # per-arch (-amd64/-arm64) intermediate tags and no separate manifest-
-          # assembly job (buildx emits the manifest list natively).
+          # Final multi-arch tags only, split by registry. The single multi-
+          # platform build-push below publishes the GHCR manifest lists directly;
+          # Docker Hub is mirrored from GHCR afterwards (see the mirror step), so
+          # a Docker Hub blip cannot fail the GHCR publish. No per-arch
+          # (-amd64/-arm64) intermediates and no manifest-assembly job (buildx
+          # emits the manifest list natively).
+          #
+          # Invariant: GHCR is both the build target and the Docker Hub mirror
+          # source, so push-to-ghcr must be true whenever Docker Hub is enabled.
+          # Both callers (nightly-build.yml, release-build.yml) set it true.
           DATE=$(date +'%Y%m%d')
           VERSION="${{ inputs.version }}"
           STRATEGY="${{ inputs.tag-strategy }}"
           WANT_LATEST="${{ inputs.create-latest-tag }}"
 
-          tags=""
-          emit() { tags="${tags}${1}"$'\n'; }
+          acc=""
+          emit() { acc="${acc}${1}"$'\n'; }
 
-          # Emit the tag set for one registry repo. The podman-* aliases are the
-          # same manifest list, published under discovery-friendly names.
+          # Accumulate the tag set for one registry repo into "acc". The podman-*
+          # aliases are the same manifest list, published under discovery-
+          # friendly names.
           gen() {
             local repo="$1"
             if [ "$STRATEGY" = "nightly" ]; then
@@ -149,23 +160,39 @@ jobs:
             fi
           }
 
+          ghcr_tags=""
           if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-            gen "${GHCR_REPO}"
+            acc=""; gen "${GHCR_REPO}"; ghcr_tags="$acc"
           fi
-          # Only tag Docker Hub when its (continue-on-error) login actually
-          # succeeded, so a Docker Hub outage never fails the push; GHCR still
-          # publishes on its own.
+          # Only mirror to Docker Hub when its (continue-on-error) login actually
+          # succeeded, so a Docker Hub outage never blocks the GHCR publish.
+          dockerhub_tags=""
           if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
-            gen "${DOCKERHUB_REPO}"
+            acc=""; gen "${DOCKERHUB_REPO}"; dockerhub_tags="$acc"
+          fi
+
+          # Stable GHCR ref used as the mirror source: a manifest list that all
+          # the other GHCR tags for this run also point at.
+          if [ "$STRATEGY" = "nightly" ]; then
+            source_ref="${GHCR_REPO}:nightly-${DATE}"
+          else
+            source_ref="${GHCR_REPO}:${VERSION}"
           fi
 
           {
-            echo "tags<<__TAGS_EOF__"
-            printf '%s' "$tags"
-            echo "__TAGS_EOF__"
+            echo "ghcr-tags<<__GHCR_EOF__"
+            printf '%s' "$ghcr_tags"
+            echo "__GHCR_EOF__"
+            echo "dockerhub-tags<<__DH_EOF__"
+            printf '%s' "$dockerhub_tags"
+            echo "__DH_EOF__"
+            echo "source-ref=${source_ref}"
+            echo "date=${DATE}"
           } >> "$GITHUB_OUTPUT"
-          echo "Generated tags:"
-          printf '%s' "$tags"
+          echo "GHCR tags:"
+          printf '%s' "$ghcr_tags"
+          echo "Docker Hub tags (mirrored from ${source_ref}):"
+          printf '%s' "$dockerhub_tags"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -174,14 +201,16 @@ jobs:
           context: .
           push: true
           # Single multi-arch build: buildx builds every platform and publishes
-          # one manifest list per tag, replacing the old per-arch matrix +
-          # `docker manifest create/push` assembly.
+          # one manifest list per GHCR tag, replacing the old per-arch matrix +
+          # `docker manifest create/push` assembly. Docker Hub is mirrored from
+          # GHCR in the next step, not pushed here, so a Docker Hub push flake
+          # cannot fail this (GHCR-authoritative) build.
           platforms: ${{ join(fromJson(inputs.platforms), ',') }}
           build-args: |
             BUILD_VERSION=${{ inputs.version }}
             SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             BUILDKIT_INLINE_CACHE=1
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.tags.outputs.ghcr-tags }}
           cache-from: |
             type=gha
             type=registry,ref=ghcr.io/${{ steps.repo-names.outputs.ghcr-repo }}:buildcache
@@ -190,25 +219,59 @@ jobs:
             type=registry,ref=ghcr.io/${{ steps.repo-names.outputs.ghcr-repo }}:buildcache,mode=max
           provenance: false
 
+      - name: Mirror image to Docker Hub
+        id: dockerhub-mirror
+        # Copy the GHCR manifest list to the Docker Hub tags with imagetools
+        # (no rebuild, cross-registry blob copy) instead of pushing Docker Hub
+        # in the build itself. continue-on-error keeps a transient Docker Hub
+        # failure non-fatal; GHCR has already published, and the retry loop
+        # restores the resilience the removed create-manifests job used to give.
+        if: ${{ inputs.push-to-ghcr && inputs.push-to-dockerhub && steps.dockerhub-login.outcome == 'success' && steps.build-push.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          DOCKERHUB_TAGS: ${{ steps.tags.outputs.dockerhub-tags }}
+          SOURCE_REF: ${{ steps.tags.outputs.source-ref }}
+        run: |
+          set -euo pipefail
+          # One -t target per Docker Hub tag; imagetools create copies the
+          # multi-arch manifest list from the GHCR source to every target at once.
+          targets=()
+          count=0
+          while IFS= read -r t; do
+            if [ -n "$t" ]; then
+              targets+=( -t "$t" )
+              count=$((count + 1))
+            fi
+          done <<< "$DOCKERHUB_TAGS"
+          if [ "$count" -eq 0 ]; then
+            echo "No Docker Hub tags to mirror"
+            exit 0
+          fi
+          echo "Mirroring ${count} Docker Hub tag(s) from ${SOURCE_REF}"
+          for attempt in 1 2 3; do
+            if docker buildx imagetools create "${targets[@]}" "$SOURCE_REF"; then
+              echo "Docker Hub mirror succeeded"
+              exit 0
+            fi
+            echo "Docker Hub mirror attempt ${attempt}/3 failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "Docker Hub mirror failed after 3 attempts"
+          exit 1
+
       - name: Check push status
         id: push-status
         run: |
-          # Default to success for outputs
-          echo "ghcr-success=true" >> $GITHUB_OUTPUT
-          echo "dockerhub-success=true" >> $GITHUB_OUTPUT
-
-          # Check if build failed
-          if [ "${{ steps.build-push.outcome }}" != "success" ]; then
-            echo "⚠️ Docker build/push had issues, but continuing workflow"
-
-            # Try to determine which registry failed by checking login status
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              echo "ghcr-success=false" >> $GITHUB_OUTPUT
-            fi
-
-            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" != "success" ]; then
-              echo "dockerhub-success=false" >> $GITHUB_OUTPUT
-            fi
+          # GHCR is published by the build-push step (fatal on failure, so we
+          # only reach here on GHCR success). Docker Hub is published by the
+          # (continue-on-error) mirror step; report its real outcome so a Docker
+          # Hub failure is visible in the outputs without failing the job.
+          echo "ghcr-success=true" >> "$GITHUB_OUTPUT"
+          if [ "${{ inputs.push-to-dockerhub }}" != "true" ] || [ "${{ steps.dockerhub-mirror.outcome }}" = "success" ]; then
+            echo "dockerhub-success=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "⚠️ Docker Hub mirror did not succeed (outcome=${{ steps.dockerhub-mirror.outcome }}); GHCR publish is unaffected"
+            echo "dockerhub-success=false" >> "$GITHUB_OUTPUT"
           fi
 
   validate-podman:
@@ -252,8 +315,15 @@ jobs:
 
           # Validate the exact image this run built: for nightly use the dated
           # tag (nightly-<DATE>), not the floating :nightly, so a failed build
-          # cannot false-pass by pulling a previous day's :nightly image.
-          DATE=$(date +'%Y%m%d')
+          # cannot false-pass by pulling a previous day's :nightly image. Reuse
+          # the build job's date rather than recomputing it here, so a run that
+          # crosses UTC midnight between the build and this job cannot try to
+          # pull a nightly-<DATE> tag the build never published.
+          DATE="${{ needs.build.outputs.build-date }}"
+          if [ -z "$DATE" ]; then
+            echo "::warning::build-date output was empty; falling back to current date"
+            DATE=$(date +'%Y%m%d')
+          fi
 
           # Determine which image to test based on strategy and availability
           if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
