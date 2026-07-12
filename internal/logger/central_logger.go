@@ -2,6 +2,8 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -246,7 +248,7 @@ func (cl *CentralLogger) createBaseHandler() error {
 
 		fileLevel := parseLogLevel(cl.config.FileOutput.Level)
 		opts := &slog.HandlerOptions{
-			Level: fileLevel,
+			Level:       fileLevel,
 			ReplaceAttr: timeZoneReplaceAttr(cl.timezone),
 		}
 		handlers = append(handlers, slog.NewJSONHandler(writer, opts))
@@ -752,21 +754,48 @@ func sanitizeAny(v any) any {
 		return val
 	}
 
-	rv := reflect.ValueOf(v)
-	if san, mod := sanitizeReflect(rv, make(map[uintptr]bool)); mod {
-		return san
+	// If the value already marshals cleanly it holds no non-finite floats (and
+	// no reference cycles), so return it unchanged: slog then serializes it with
+	// real encoding/json semantics and the reflective walk is skipped entirely.
+	// Only values encoding/json cannot encode fall through to the sanitizer.
+	if _, err := json.Marshal(v); err == nil {
+		return v
 	}
-	return v
+
+	// Best effort: recursively replace non-finite floats and break reference
+	// cycles so the value becomes encodable while preserving structure where
+	// possible.
+	san := v
+	if s, mod := sanitizeReflect(reflect.ValueOf(v), make(map[uintptr]bool)); mod {
+		san = s
+	}
+
+	// Safety net: the reflective walk cannot reach a non-finite float hidden
+	// behind a fmt.Stringer/error/json.Marshaler, or one promoted from an
+	// unexported embedded struct. If such a value still fails to encode because
+	// of a non-finite float, fall back to a string so the logger emits readable
+	// data instead of a corrupt "!ERROR: json: unsupported value" placeholder.
+	// Unsupported *types* (chan/func) are left untouched and render as before.
+	if _, err := json.Marshal(san); err != nil {
+		if _, ok := stderrors.AsType[*json.UnsupportedValueError](err); ok {
+			return fmt.Sprintf("%+v", v)
+		}
+	}
+	return san
 }
 
+// logSafeFloat renders a non-finite float as a JSON-safe string. It mirrors the
+// spelling used by floatAttr ("NaN"/"+Inf"/"-Inf", matching Go's %v) so the same
+// value renders identically whether it arrives as a typed float field or nested
+// inside an Any value.
 func logSafeFloat(f float64) string {
 	switch {
 	case math.IsNaN(f):
-		return "nan"
+		return "NaN"
 	case math.IsInf(f, 1):
-		return "+inf"
+		return "+Inf"
 	case math.IsInf(f, -1):
-		return "-inf"
+		return "-Inf"
 	default:
 		// Should not be reached, but fallback safely
 		return "unknown"
@@ -776,6 +805,7 @@ func logSafeFloat(f float64) string {
 // sanitizeReflect recursively traverses the reflect.Value and returns a sanitized any.
 // It tracks visited pointers to avoid stack overflows on cyclic data.
 // If no non-finite floats are found, it returns (nil, false) to avoid heap allocations.
+//
 //nolint:gocognit,cyclop,gocyclo // Recursive reflection is inherently complex
 func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 	if !rv.IsValid() || !rv.CanInterface() {
@@ -988,7 +1018,7 @@ func structNeedsCopy(rv reflect.Value, visited map[uintptr]bool) bool {
 			continue
 		}
 		fv := rv.Field(i)
-		
+
 		if field.Anonymous {
 			fvElem := fv
 			var ptr uintptr
