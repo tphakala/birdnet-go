@@ -5015,7 +5015,7 @@ EOF
     # (an actual parse error) is treated as a problem; benign advisory warnings are logged.
     if command_exists systemd-analyze; then
         local verify_out verify_rc
-        verify_out=$(systemd-analyze verify /etc/systemd/system/birdnet-go.service 2>&1)
+        verify_out=$(sudo systemd-analyze verify /etc/systemd/system/birdnet-go.service 2>&1)
         verify_rc=$?
         # In minimal chroots/containers systemd-analyze cannot reach the system bus and exits
         # non-zero with a bus-connection error even for a valid unit; do not warn on that.
