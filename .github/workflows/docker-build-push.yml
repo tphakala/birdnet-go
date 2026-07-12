@@ -126,6 +126,15 @@ jobs:
 
       - name: Generate tags
         id: tags
+        env:
+          # Inputs via env, not inline ${{ }}, so a crafted version cannot inject
+          # shell (inputs.version flows from github.ref_name on release builds).
+          VERSION: ${{ inputs.version }}
+          STRATEGY: ${{ inputs.tag-strategy }}
+          WANT_LATEST: ${{ inputs.create-latest-tag }}
+          PUSH_GHCR: ${{ inputs.push-to-ghcr }}
+          PUSH_DH: ${{ inputs.push-to-dockerhub }}
+          DH_LOGIN: ${{ steps.dockerhub-login.outcome }}
         run: |
           # Final multi-arch tags only, split by registry. The single multi-
           # platform build-push below publishes the GHCR manifest lists directly;
@@ -139,9 +148,6 @@ jobs:
           # All callers (nightly-build.yml, release-build.yml, docker-build.yml)
           # set push-to-ghcr true.
           DATE=$(date +'%Y%m%d')
-          VERSION="${{ inputs.version }}"
-          STRATEGY="${{ inputs.tag-strategy }}"
-          WANT_LATEST="${{ inputs.create-latest-tag }}"
 
           acc=""
           emit() { acc="${acc}${1}"$'\n'; }
@@ -182,13 +188,13 @@ jobs:
           }
 
           ghcr_tags=""
-          if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
+          if [ "$PUSH_GHCR" = "true" ]; then
             acc=""; gen "${GHCR_REPO}"; ghcr_tags="$acc"
           fi
           # Only mirror to Docker Hub when its (continue-on-error) login actually
           # succeeded, so a Docker Hub outage never blocks the GHCR publish.
           dockerhub_tags=""
-          if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
+          if [ "$PUSH_DH" = "true" ] && [ "$DH_LOGIN" = "success" ]; then
             acc=""; gen "${DOCKERHUB_REPO}"; dockerhub_tags="$acc"
           fi
 
@@ -294,16 +300,19 @@ jobs:
 
       - name: Check push status
         id: push-status
+        env:
+          PUSH_DH: ${{ inputs.push-to-dockerhub }}
+          MIRROR_OUTCOME: ${{ steps.dockerhub-mirror.outcome }}
         run: |
           # GHCR is published by the build-push step (fatal on failure, so we
           # only reach here on GHCR success). Docker Hub is published by the
           # (continue-on-error) mirror step; report its real outcome so a Docker
           # Hub failure is visible in the outputs without failing the job.
           echo "ghcr-success=true" >> "$GITHUB_OUTPUT"
-          if [ "${{ inputs.push-to-dockerhub }}" != "true" ] || [ "${{ steps.dockerhub-mirror.outcome }}" = "success" ]; then
+          if [ "$PUSH_DH" != "true" ] || [ "$MIRROR_OUTCOME" = "success" ]; then
             echo "dockerhub-success=true" >> "$GITHUB_OUTPUT"
           else
-            echo "⚠️ Docker Hub mirror did not succeed (outcome=${{ steps.dockerhub-mirror.outcome }}); GHCR publish is unaffected"
+            echo "::warning::Docker Hub mirror did not succeed (outcome=${MIRROR_OUTCOME}); GHCR publish is unaffected"
             echo "dockerhub-success=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -343,6 +352,14 @@ jobs:
           podman --version
 
       - name: Test Podman compatibility
+        env:
+          # Inputs via env, not inline ${{ }}, so a crafted value cannot inject
+          # shell (inputs.version flows from github.ref_name on release builds).
+          STRATEGY: ${{ inputs.tag-strategy }}
+          PUSH_GHCR: ${{ inputs.push-to-ghcr }}
+          PUSH_DH: ${{ inputs.push-to-dockerhub }}
+          VERSION: ${{ inputs.version }}
+          BUILD_DATE: ${{ needs.build.outputs.build-date }}
         run: |
           set +e  # Don't exit on error - we want to test both registries
 
@@ -352,38 +369,38 @@ jobs:
           # the build job's date rather than recomputing it here, so a run that
           # crosses UTC midnight between the build and this job cannot try to
           # pull a nightly-<DATE> tag the build never published.
-          DATE="${{ needs.build.outputs.build-date }}"
+          DATE="${BUILD_DATE}"
           if [ -z "$DATE" ]; then
             echo "::warning::build-date output was empty; falling back to current date"
             DATE=$(date +'%Y%m%d')
           fi
 
           # Determine which image to test based on strategy and availability
-          if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
+          if [ "$STRATEGY" = "nightly" ]; then
+            if [ "$PUSH_GHCR" = "true" ]; then
               TEST_IMAGE="${GHCR_REPO}:nightly-${DATE}"
-            elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
+            elif [ "$PUSH_DH" = "true" ]; then
               TEST_IMAGE="${DOCKERHUB_REPO}:nightly-${DATE}"
             else
               echo "No image to test - both registries disabled"
               exit 0
             fi
-          elif [ "${{ inputs.tag-strategy }}" = "release" ]; then
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              TEST_IMAGE="${GHCR_REPO}:${{ inputs.version }}"
-            elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
-              TEST_IMAGE="${DOCKERHUB_REPO}:${{ inputs.version }}"
+          elif [ "$STRATEGY" = "release" ]; then
+            if [ "$PUSH_GHCR" = "true" ]; then
+              TEST_IMAGE="${GHCR_REPO}:${VERSION}"
+            elif [ "$PUSH_DH" = "true" ]; then
+              TEST_IMAGE="${DOCKERHUB_REPO}:${VERSION}"
             else
               echo "No image to test - both registries disabled"
               exit 0
             fi
-          elif [ "${{ inputs.tag-strategy }}" = "dev" ]; then
+          elif [ "$STRATEGY" = "dev" ]; then
             # Test the immutable commit-SHA tag, not the floating :dev, so a
             # concurrent push cannot make this pull a different image.
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              TEST_IMAGE="${GHCR_REPO}:${{ inputs.version }}"
-            elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
-              TEST_IMAGE="${DOCKERHUB_REPO}:${{ inputs.version }}"
+            if [ "$PUSH_GHCR" = "true" ]; then
+              TEST_IMAGE="${GHCR_REPO}:${VERSION}"
+            elif [ "$PUSH_DH" = "true" ]; then
+              TEST_IMAGE="${DOCKERHUB_REPO}:${VERSION}"
             else
               echo "No image to test - both registries disabled"
               exit 0
