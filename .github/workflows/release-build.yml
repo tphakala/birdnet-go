@@ -181,3 +181,13 @@ jobs:
     uses: ./.github/workflows/release-manifest.yml
     permissions:
       contents: write
+
+  # Scan the attached tarballs and append VirusTotal results to the release body.
+  # Runs after build + checksums so the assets already exist; replaces the old
+  # release:published trigger on virustotal.yml, which fired before the build
+  # attached any assets and always failed with "No Assets Found".
+  virustotal:
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    needs: [build, checksums]
+    uses: ./.github/workflows/virustotal.yml
+    secrets: inherit

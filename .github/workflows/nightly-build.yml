@@ -115,6 +115,14 @@ jobs:
     permissions:
       contents: write
 
+  # Scan the attached tarballs and append VirusTotal results to the release body,
+  # after the release job has created the release with its assets. Replaces the
+  # old release:published trigger on virustotal.yml.
+  virustotal:
+    needs: release
+    uses: ./.github/workflows/virustotal.yml
+    secrets: inherit
+
   get-version:
     runs-on: ubuntu-24.04
     outputs:
