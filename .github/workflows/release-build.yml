@@ -36,148 +36,46 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-          check-latest: true
-
-      - name: Install Linux system dependencies
-        if: matrix.os == 'ubuntu-24.04'
-        # Route through the shared composite for the continue-on-error +
-        # outcome-checked reinstall fallback, so a corrupt apt cache (tar exit 2)
-        # cannot hard-fail the release build. execute-install-scripts: 'false'
-        # preserves the prior behavior; the symlink fix step below handles
-        # post-install.
-        uses: ./.github/actions/setup-apt-packages
-        with:
-          packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
-          cache-version: '1.0'
-          execute-install-scripts: 'false'
-
-      - name: Fix cross-compiler symlinks
-        if: matrix.os == 'ubuntu-24.04'
-        run: |
-          # cache-apt-pkgs-action restores debs but skips post-install triggers,
-          # so create the symlinks that update-alternatives would normally manage
-          sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc-posix /usr/bin/x86_64-w64-mingw32-gcc
-          sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++-posix /usr/bin/x86_64-w64-mingw32-g++
-          # Resolve the installed aarch64 gcc version dynamically so a future
-          # runner-image gcc bump does not break the symlink.
-          aarch64_gcc=$(find /usr/bin -maxdepth 1 -name 'aarch64-linux-gnu-gcc-[0-9]*' | sort -V | tail -1)
-          if [ -z "$aarch64_gcc" ]; then echo "::error::aarch64-linux-gnu-gcc not found"; exit 1; fi
-          sudo ln -sf "$aarch64_gcc" /usr/bin/aarch64-linux-gnu-gcc
-
-      - name: Install Task
-        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup ONNX Runtime
-        uses: ./.github/actions/setup-onnxruntime
-        with:
-          target-platform: ${{ matrix.goos }}-${{ matrix.goarch }}
-
-      - name: Build BirdNET-Go
-        run: |
-          # Build the application
-          task ${{ matrix.goos }}_${{ matrix.goarch }}
+      - name: Determine build version
+        id: ver
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 1
-          BUILD_VERSION: ${{ github.ref_name }}
-          # Baked into the binary via ldflags. Empty if the secret is unset
-          # (e.g. fork PR builds), which leaves telemetry off by design.
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # Passed via env, not inline ${{ }}, so a crafted ref name cannot
+          # inject shell (defense in depth against the template-injection class).
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          # On a release event the ref is the release tag. On a manual dispatch
+          # from a branch, resolve the latest stable tag instead, so the binaries
+          # are versioned and attached to that release rather than the branch
+          # name (e.g. "main"). This matches the release the artifacts attach to
+          # below and keeps BUILD_VERSION, the tarball name, and the attach
+          # target consistent.
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION=$(git describe --tags --abbrev=0 --match 'v*')
+          else
+            VERSION="${REF_NAME}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building release version: ${VERSION}"
 
-      - name: Setup Node.js for Sentry CLI
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
-        uses: actions/setup-node@v6
+      - name: Build BirdNET-Go binary
+        uses: ./.github/actions/build-birdnet-binary
         with:
-          node-version: '24'
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          build-version: ${{ steps.ver.outputs.version }}
+          tarball-suffix: "-${{ steps.ver.outputs.version }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sentry-dsn: ${{ secrets.SENTRY_DSN }}
+          sentry-auth-token: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
-      - name: Upload source maps to Sentry
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: tphakala
-          SENTRY_PROJECT: birdnet-go
-        run: |
-          npx @sentry/cli sourcemaps upload \
-            --release "birdnet-go@${{ github.ref_name }}" \
-            --url-prefix '~/ui/assets/' \
-            frontend/dist/
-
-      - name: Create Release Artifacts
-        run: |
-          # Create artifacts directory
-          mkdir -p artifacts
-          
-          # Set binary name based on OS
-          BINARY_NAME=birdnet-go
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            BINARY_NAME=birdnet-go.exe
-          fi
-          
-          # Copy binary
-          cp bin/$BINARY_NAME artifacts/
-          
-          # Copy required library files based on OS and architecture
-          if [ "${{ matrix.goos }}" = "linux" ]; then
-            if [ "${{ matrix.goarch }}" = "amd64" ]; then
-              cp /usr/lib/libtensorflowlite_c.so artifacts/
-              cp /usr/lib/libonnxruntime.so artifacts/
-            elif [ "${{ matrix.goarch }}" = "arm64" ]; then
-              cp /usr/aarch64-linux-gnu/lib/libtensorflowlite_c.so artifacts/
-              cp /usr/aarch64-linux-gnu/lib/libonnxruntime.so artifacts/
-            fi
-          elif [ "${{ matrix.goos }}" = "windows" ]; then
-            cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
-            cp "${RUNNER_TEMP}"/onnxruntime/lib/*.dll artifacts/
-          elif [ "${{ matrix.goos }}" = "darwin" ]; then
-            cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
-            cp "${RUNNER_TEMP}"/onnxruntime/lib/libonnxruntime.dylib artifacts/
-          fi
-          
-          # Copy platform-specific README
-          if [ "${{ matrix.goos }}" = "linux" ]; then
-            cp dist/README-linux.md artifacts/README.md
-          elif [ "${{ matrix.goos }}" = "windows" ]; then
-            cp dist/README-windows.md artifacts/README.md
-          elif [ "${{ matrix.goos }}" = "darwin" ]; then
-            cp dist/README-darwin.md artifacts/README.md
-          fi
-
-          # Create tarball
-          cd artifacts
-          tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz *
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz
-
-      - name: Get latest release tag
-        if: github.event_name == 'workflow_dispatch'
-        id: latest_release
-        run: |
-          # Get the latest release tag
-          # Restrict to stable release tags; the auto-update "manifest"
-          # prerelease tag would otherwise be picked as the nearest ancestor.
-          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'v*')
-          echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
-          echo "latest_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
-      
       - name: Add Artifacts to GitHub Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
-          files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz
-          # For release events, use the triggering release
-          # For workflow_dispatch, use the latest release tag
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && env.LATEST_TAG || '' }}
+          files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ steps.ver.outputs.version }}.tar.gz
+          # Release event: attach to the triggering release (empty tag_name).
+          # Dispatch: attach to the resolved latest stable tag.
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && steps.ver.outputs.version || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
