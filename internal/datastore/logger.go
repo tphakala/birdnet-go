@@ -99,6 +99,11 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	}
 
 	switch {
+	case err != nil && errors.Is(err, context.Canceled):
+		GetLogger().Debug("Query canceled",
+			logger.String("sql", sanitizeSQL(sql)),
+			logger.Duration("duration", elapsed),
+			logger.Int64("rows_affected", rows))
 	case err != nil && !errors.Is(err, gorm.ErrRecordNotFound):
 		// Sanitize SQL for logging (collapse whitespace)
 		sanitized := sanitizeSQL(sql)
