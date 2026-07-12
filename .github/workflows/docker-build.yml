@@ -26,11 +26,14 @@ jobs:
   # Publish the :dev / :<sha> multi-arch images through the shared reusable
   # workflow (dev strategy), so dev, nightly, and release all build and tag the
   # same way. Dev builds go to GHCR only (no Docker Hub) and skip the Podman
-  # validation and cleanup jobs. Gated to push-on-main to preserve the prior
-  # behaviour; the schedule/dispatch triggers above are currently no-ops under
-  # this gate (kept for parity with the previous workflow).
+  # validation and cleanup jobs. Runs on push-to-main (the normal path) and on a
+  # manual workflow_dispatch (used to cut a draft image for pre-release upgrade
+  # QA without moving :nightly/:latest). The scheduled cron stays a no-op by
+  # omission from this gate.
   dev:
-    if: github.event_name == 'push' && github.ref_name == 'main'
+    if: >-
+      (github.event_name == 'push' && github.ref_name == 'main') ||
+      github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/docker-build-push.yml
     with:
       tag-strategy: "dev"
