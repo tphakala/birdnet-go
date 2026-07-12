@@ -4510,10 +4510,15 @@ generate_systemd_service_content() {
     # because load_existing_service_config() restores these flags from the current unit.
     # Any restored host bind address is reapplied so a localhost-only mapping survives a
     # regenerate (default is no address: published on all interfaces).
+    #
+    # AutoTLS maps host 80/443 to the container's non-privileged listeners: the app
+    # binds the ACME HTTP-01 + HTTP->HTTPS redirect listener on 8080 and HTTPS on 8443
+    # (see internal/api/server.go), so the container never binds privileged ports and
+    # needs no NET_BIND_SERVICE. This mirrors the docker/podman AutoTLS compose files.
     local tls_ports_line=""
     if [ "$BIND_TLS_PORTS" = "true" ]; then
-        tls_ports_line="-p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}80:80 \\
-    -p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}443:443"
+        tls_ports_line="-p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}80:8080 \\
+    -p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}443:8443"
     fi
     local metrics_port_line=""
     if [ "$BIND_METRICS_PORT" = "true" ]; then
@@ -4594,7 +4599,10 @@ _extract_bind_addr() {
 # systemd unit so updates and reconfiguration preserve the user's prior choices instead of
 # resetting to fresh-install defaults. This is the backward-compatibility guarantee: an
 # unchanged update regenerates a byte-identical unit (check_systemd_service then reports no
-# change). It must be called before check_systemd_service / add_systemd_config on the
+# change). The one deliberate exception is a legacy AutoTLS unit that still maps the dead
+# 443:443 / 80:80 ports: it is detected as AutoTLS-enabled and regenerated with the corrected
+# 443:8443 / 80:8080 mapping, so that single update is intentionally not byte-identical.
+# It must be called before check_systemd_service / add_systemd_config on the
 # update and reconfigure paths. Sets globals WEB_PORT, BIND_TLS_PORTS, BIND_METRICS_PORT,
 # and CONFIGURED_TZ.
 # shellcheck disable=SC2120  # optional $1 (unit path) is intentional, used by tests
@@ -4644,10 +4652,20 @@ load_existing_service_config() {
     # NOTE: this is binding preservation, not feature detection, so an unchanged update keeps
     # exactly what the user already ran.
     local tls_map
-    tls_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:443' "$service_file" 2>/dev/null | head -1)
+    # Match the current 443:8443 mapping or the legacy 443:443 form. Pre-fix units
+    # published dead 443:443 / 80:80 mappings (the container binds 8080/8443); treat
+    # them as AutoTLS-enabled so a regenerate produces the corrected 443:8443 mapping
+    # instead of silently dropping AutoTLS. The trailing \b avoids a false match
+    # inside e.g. 443:4433.
+    tls_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:(8443|443)\b' "$service_file" 2>/dev/null | head -1)
     if [ -n "$tls_map" ]; then
         BIND_TLS_PORTS="true"
-        TLS_BIND_ADDR=$(_extract_bind_addr "$tls_map" "443:443")
+        # Strip whichever container-port suffix matched to recover any bind address.
+        local tls_portpair="443:8443"
+        case "$tls_map" in
+            *443:443) tls_portpair="443:443" ;;
+        esac
+        TLS_BIND_ADDR=$(_extract_bind_addr "$tls_map" "$tls_portpair")
     fi
     local metrics_map
     metrics_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?8090:8090' "$service_file" 2>/dev/null | head -1)
