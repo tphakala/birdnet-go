@@ -135,10 +135,21 @@ jobs:
 
       - name: Get version
         id: get_version
+        env:
+          # Passed via env, not inline ${{ }}, so a crafted ref name cannot
+          # inject shell (matches the build job's hardening).
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          # Restrict to stable release tags so a workflow_dispatch from a
-          # non-tagged ref does not resolve to the "manifest" prerelease tag.
-          VERSION=$(git describe --tags --always --match 'v*')
+          # On a release event the tag IS the version (a date-based 20260712 or
+          # a stable v1.2.3), so use it directly. Only fall back to git describe
+          # on a manual dispatch from a non-tagged ref, restricting to stable
+          # tags so it does not resolve the "manifest" prerelease tag.
+          if [ "${EVENT_NAME}" = "release" ]; then
+            VERSION="${REF_NAME}"
+          else
+            VERSION=$(git describe --tags --always --match 'v*')
+          fi
           echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
