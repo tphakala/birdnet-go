@@ -175,7 +175,7 @@ if [ -d "/dev/snd" ]; then
             adduser "$USER_NAME" audio || true
         fi
         # Make device accessible
-        chmod -R a+rw /dev/snd 2>/dev/null || true
+        chmod -R a+rw /dev/snd || true
     fi
 fi
 
