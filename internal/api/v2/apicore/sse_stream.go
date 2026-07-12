@@ -59,6 +59,7 @@ func SetSSEHeaders(ctx echo.Context) {
 	ctx.Response().Header().Set("Connection", "keep-alive")
 	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+	ctx.Response().Header().Set("X-Accel-Buffering", "no")
 }
 
 // SafeMarshalJSON marshals data to JSON with panic recovery.

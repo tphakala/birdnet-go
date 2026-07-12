@@ -25,6 +25,7 @@ func Test_SetSSEHeaders(t *testing.T) {
 		"Connection":                   "keep-alive",
 		"Access-Control-Allow-Origin":  "*",
 		"Access-Control-Allow-Headers": "Cache-Control",
+		"X-Accel-Buffering":            "no",
 	}
 
 	for key, expectedValue := range expectedHeaders {
