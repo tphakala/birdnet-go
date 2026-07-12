@@ -674,6 +674,31 @@ func roundFloat(val float64) float64 {
 	return math.Round(val*floatPrecisionRatio) / floatPrecisionRatio
 }
 
+// floatAttr renders a float value as a slog attribute. slog's JSON handler
+// cannot encode a non-finite float (+Inf, -Inf, NaN); it substitutes an
+// "!ERROR:json: unsupported value" string that corrupts the whole log line. A
+// non-finite value is therefore rendered as its symbolic string form (matching
+// Go's %v: "+Inf"/"-Inf"/"NaN"), while a finite value keeps the rounded numeric
+// form. The non-finite branch is cold, so the common path stays allocation-free.
+func floatAttr(key string, v float64) slog.Attr {
+	switch {
+	case math.IsNaN(v):
+		return slog.String(key, "NaN")
+	case math.IsInf(v, 1):
+		return slog.String(key, "+Inf")
+	case math.IsInf(v, -1):
+		return slog.String(key, "-Inf")
+	default:
+		// roundFloat multiplies by floatPrecisionRatio, which can overflow a very
+		// large finite magnitude to ±Inf; fall back to the raw (still finite)
+		// value in that rare case so it stays an encodable JSON number.
+		if r := roundFloat(v); !math.IsInf(r, 0) {
+			return slog.Float64(key, r)
+		}
+		return slog.Float64(key, v)
+	}
+}
+
 // fieldToAttr converts Field to slog.Attr
 func fieldToAttr(f Field) slog.Attr {
 	switch v := f.Value.(type) {
@@ -684,11 +709,11 @@ func fieldToAttr(f Field) slog.Attr {
 	case int64:
 		return slog.Int64(f.Key, v)
 	case float32:
-		// Round for cleaner output
-		return slog.Float64(f.Key, roundFloat(float64(v)))
+		// Round for cleaner output; guard non-finite values (see floatAttr).
+		return floatAttr(f.Key, float64(v))
 	case float64:
-		// Round for cleaner output
-		return slog.Float64(f.Key, roundFloat(v))
+		// Round for cleaner output; guard non-finite values (see floatAttr).
+		return floatAttr(f.Key, v)
 	case bool:
 		return slog.Bool(f.Key, v)
 	case time.Time:

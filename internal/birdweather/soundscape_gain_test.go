@@ -41,30 +41,3 @@ func TestSoundscapeGainDB(t *testing.T) {
 		})
 	}
 }
-
-// TestLogSafeLUFS verifies that a non-finite loudness measurement is rendered as
-// a plain symbolic string, so it can never reach slog's JSON handler as a
-// non-finite float (which would corrupt the log line with an "!ERROR:json"
-// substitution), while finite measurements render to their numeric form.
-func TestLogSafeLUFS(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		input float64
-		want  string
-	}{
-		{"silent clip (-inf)", math.Inf(-1), "-inf"},
-		{"positive inf", math.Inf(1), "+inf"},
-		{"nan", math.NaN(), "nan"},
-		{"finite negative", -23.4, "-23.4"},
-		{"finite zero", 0.0, "0"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := logSafeLUFS(tt.input)
-			assert.Equal(t, tt.want, got, "logSafeLUFS(%v) mismatch", tt.input)
-		})
-	}
-}

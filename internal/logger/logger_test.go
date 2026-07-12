@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"math"
 	"os"
 	"runtime"
 	"strings"
@@ -113,6 +115,79 @@ func TestNewSlogLogger(t *testing.T) {
 			assert.NotNil(t, logger)
 		}
 	})
+}
+
+// TestFieldToAttr_NonFiniteFloats verifies that non-finite float fields are
+// converted to symbolic string attrs (which slog's JSON handler can encode)
+// rather than raw float attrs (which it cannot), while finite floats keep the
+// rounded numeric form.
+func TestFieldToAttr_NonFiniteFloats(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		field     Field
+		wantKind  slog.Kind
+		wantStr   string  // expected when wantKind is KindString
+		wantFloat float64 // expected when wantKind is KindFloat64
+	}{
+		{"float64 -inf", Float64("k", math.Inf(-1)), slog.KindString, "-Inf", 0},
+		{"float64 +inf", Float64("k", math.Inf(1)), slog.KindString, "+Inf", 0},
+		{"float64 nan", Float64("k", math.NaN()), slog.KindString, "NaN", 0},
+		{"float64 finite rounds", Float64("k", 1.23456), slog.KindFloat64, "", 1.235},
+		// A finite magnitude whose rounding overflows to ±Inf must still log as a
+		// numeric attr (the raw value), never a symbolic string.
+		{"float64 max stays numeric", Float64("k", math.MaxFloat64), slog.KindFloat64, "", math.MaxFloat64},
+		{"float64 -max stays numeric", Float64("k", -math.MaxFloat64), slog.KindFloat64, "", -math.MaxFloat64},
+		{"float32 -inf", Float32("k", float32(math.Inf(-1))), slog.KindString, "-Inf", 0},
+		{"float32 +inf", Float32("k", float32(math.Inf(1))), slog.KindString, "+Inf", 0},
+		{"float32 nan", Float32("k", float32(math.NaN())), slog.KindString, "NaN", 0},
+		{"float32 finite", Float32("k", 2.5), slog.KindFloat64, "", 2.5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			attr := fieldToAttr(tt.field)
+			require.Equal(t, tt.wantKind, attr.Value.Kind(), "attr kind for %s", tt.name)
+			switch tt.wantKind {
+			case slog.KindString:
+				assert.Equal(t, tt.wantStr, attr.Value.String())
+			case slog.KindFloat64:
+				assert.InDelta(t, tt.wantFloat, attr.Value.Float64(), 1e-9)
+			default:
+				t.Fatalf("unexpected wantKind %v", tt.wantKind)
+			}
+		})
+	}
+}
+
+// TestSlogLogger_NonFiniteFloatJSON is the end-to-end guard: a non-finite float
+// field must produce a valid JSON log line with a readable value, never slog's
+// "!ERROR:json: unsupported value" substitution.
+func TestSlogLogger_NonFiniteFloatJSON(t *testing.T) {
+	t.Parallel()
+
+	buf := &bytes.Buffer{}
+	log := NewSlogLogger(buf, LogLevelInfo, time.UTC)
+	log.Info("loudness",
+		Float64("neg_inf", math.Inf(-1)),
+		Float64("pos_inf", math.Inf(1)),
+		Float64("nan", math.NaN()),
+		Float64("finite", 1.5),
+		Float64("huge", math.MaxFloat64),
+	)
+
+	out := buf.String()
+	assert.NotContains(t, out, "!ERROR", "non-finite float corrupted the log line: %s", out)
+
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &m), "log line must be valid JSON: %s", out)
+	assert.Equal(t, "-Inf", m["neg_inf"])
+	assert.Equal(t, "+Inf", m["pos_inf"])
+	assert.Equal(t, "NaN", m["nan"])
+	assert.InDelta(t, 1.5, m["finite"], 1e-9)
+	// A large finite value whose rounding overflows stays an encodable JSON number.
+	assert.InDelta(t, math.MaxFloat64, m["huge"], 1e292)
 }
 
 // TestSlogLogger_Module tests module scoping

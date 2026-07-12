@@ -2,6 +2,7 @@ package logger
 
 import (
 	"io"
+	"math"
 	"testing"
 	"time"
 )
@@ -52,11 +53,38 @@ func BenchmarkFieldCreation(b *testing.B) {
 		}
 	})
 
+	b.Run("Float64", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = Float64("confidence", 0.9512)
+		}
+	})
+
 	b.Run("Any", func(b *testing.B) {
 		b.ReportAllocs()
 		data := map[string]int{"a": 1, "b": 2}
 		for b.Loop() {
 			_ = Any("data", data)
+		}
+	})
+}
+
+// BenchmarkFieldToAttrFloat benchmarks the float Field->slog.Attr conversion,
+// including the non-finite guard in floatAttr. This is the per-field hot path.
+func BenchmarkFieldToAttrFloat(b *testing.B) {
+	b.Run("Finite", func(b *testing.B) {
+		b.ReportAllocs()
+		f := Float64("confidence", 0.9512)
+		for b.Loop() {
+			_ = fieldToAttr(f)
+		}
+	})
+
+	b.Run("NegInf", func(b *testing.B) {
+		b.ReportAllocs()
+		f := Float64("measured_lufs", math.Inf(-1))
+		for b.Loop() {
+			_ = fieldToAttr(f)
 		}
 	})
 }
