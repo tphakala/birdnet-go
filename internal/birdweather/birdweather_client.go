@@ -557,7 +557,7 @@ func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ff
 
 	// --- Calculate gain needed to reach target loudness ---
 	inputLUFS := parseDouble(loudnessStats.InputI, -70.0)
-	gainNeeded := targetIntegratedLoudnessLUFS - inputLUFS
+	gainNeeded := soundscapeGainDB(inputLUFS)
 
 	// Apply safety limits to prevent excessive amplification or attenuation
 	maxGain := 30.0 // Maximum gain in dB (absolute value)
@@ -576,7 +576,7 @@ func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ff
 	log.Debug("Calculated gain adjustment",
 		logger.Float64("gain_db", gainNeeded),
 		logger.Float64("target_lufs", targetIntegratedLoudnessLUFS),
-		logger.Float64("measured_lufs", inputLUFS),
+		logger.String("measured_lufs", logSafeLUFS(inputLUFS)),
 		logger.Bool("limited", gainLimited))
 
 	// --- Pass 2: Apply simple gain adjustment and encode ---
@@ -623,6 +623,41 @@ func parseDouble(s string, defaultValue float64) float64 {
 		return defaultValue
 	}
 	return val
+}
+
+// soundscapeGainDB returns the gain (dB) needed to bring a clip whose measured
+// integrated loudness is inputLUFS to targetIntegratedLoudnessLUFS.
+//
+// ffmpeg's loudnorm analysis reports input_i as "-inf" for a silent clip, which
+// parseDouble turns into -Inf, making the raw gain +Inf. Amplifying silence
+// only lifts the noise floor, and the non-finite value is not JSON-encodable so
+// it corrupts the structured gain-limit log. A non-finite measurement therefore
+// yields 0 dB — leave the clip untouched — matching the native encoder path,
+// which returns GainDB 0 for silence (see encode_native.go).
+func soundscapeGainDB(inputLUFS float64) float64 {
+	gain := targetIntegratedLoudnessLUFS - inputLUFS
+	if math.IsInf(gain, 0) || math.IsNaN(gain) {
+		return 0
+	}
+	return gain
+}
+
+// logSafeLUFS renders a measured loudness value for structured logging. ffmpeg
+// reports input_i as "-inf" for a silent clip, so the parsed measurement can be
+// non-finite, and slog's JSON handler cannot encode a non-finite float (it
+// substitutes an "!ERROR:json: unsupported value" string that corrupts the log
+// line). Render a non-finite measurement as its symbolic form instead.
+func logSafeLUFS(lufs float64) string {
+	switch {
+	case math.IsInf(lufs, -1):
+		return "-inf"
+	case math.IsInf(lufs, 1):
+		return "+inf"
+	case math.IsNaN(lufs):
+		return "nan"
+	default:
+		return strconv.FormatFloat(lufs, 'g', -1, 64)
+	}
 }
 
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
