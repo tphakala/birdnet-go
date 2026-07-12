@@ -247,6 +247,7 @@ func (cl *CentralLogger) createBaseHandler() error {
 		fileLevel := parseLogLevel(cl.config.FileOutput.Level)
 		opts := &slog.HandlerOptions{
 			Level: fileLevel,
+			ReplaceAttr: timeZoneReplaceAttr(cl.timezone),
 		}
 		handlers = append(handlers, slog.NewJSONHandler(writer, opts))
 	}
@@ -833,7 +834,7 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 		if rv.Kind() == reflect.Slice {
 			ptr := rv.Pointer()
 			if visited[ptr] {
-				return nil, false
+				return "[Circular]", true
 			}
 			visited[ptr] = true
 			defer delete(visited, ptr)
@@ -868,7 +869,7 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 		}
 		ptr := rv.Pointer()
 		if visited[ptr] {
-			return nil, false
+			return "[Circular]", true
 		}
 		visited[ptr] = true
 		defer delete(visited, ptr)
@@ -915,52 +916,11 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 		return cp, true
 
 	case reflect.Struct:
-		needsCopy := false
-		//nolint:gocritic
-		for i := 0; i < rv.NumField(); i++ {
-			field := rv.Type().Field(i)
-			if !field.IsExported() {
-				continue
-			}
-			if _, mod := sanitizeReflect(rv.Field(i), visited); mod {
-				needsCopy = true
-				break
-			}
-		}
-		if !needsCopy {
+		if !structNeedsCopy(rv, visited) {
 			return nil, false
 		}
-
-		cp := make(map[string]any, rv.NumField())
-		//nolint:gocritic
-		for i := 0; i < rv.NumField(); i++ {
-			field := rv.Type().Field(i)
-			if !field.IsExported() {
-				continue
-			}
-
-			key := field.Name
-			tag := field.Tag.Get("json")
-			if tag == "-" {
-				continue
-			}
-			if tag != "" {
-				if idx := strings.Index(tag, ","); idx != -1 {
-					if idx > 0 {
-						key = tag[:idx]
-					}
-				} else {
-					key = tag
-				}
-			}
-
-			san, mod := sanitizeReflect(rv.Field(i), visited)
-			if mod {
-				cp[key] = san
-			} else if rv.Field(i).CanInterface() {
-				cp[key] = rv.Field(i).Interface()
-			}
-		}
+		cp := make(map[string]any)
+		flattenStruct(rv, cp, visited)
 		return cp, true
 
 	case reflect.Pointer, reflect.Interface:
@@ -970,7 +930,7 @@ func sanitizeReflect(rv reflect.Value, visited map[uintptr]bool) (any, bool) {
 		if rv.Kind() == reflect.Pointer {
 			ptr := rv.Pointer()
 			if visited[ptr] {
-				return nil, false
+				return "[Circular]", true
 			}
 			visited[ptr] = true
 			defer delete(visited, ptr)
@@ -997,4 +957,158 @@ func getTraceIDFromContext(ctx context.Context) string {
 		return traceID
 	}
 	return ""
+}
+
+func structNeedsCopy(rv reflect.Value, visited map[uintptr]bool) bool {
+	if rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return false
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return false
+	}
+	//nolint:gocritic // rv.NumField() is appropriate for iterating over fields
+	for i := 0; i < rv.NumField(); i++ {
+		field := rv.Type().Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		fv := rv.Field(i)
+		
+		if field.Anonymous {
+			fvElem := fv
+			if fvElem.Kind() == reflect.Pointer || fvElem.Kind() == reflect.Interface {
+				if !fvElem.IsNil() {
+					fvElem = fvElem.Elem()
+				}
+			}
+			if fvElem.Kind() == reflect.Struct {
+				if structNeedsCopy(fvElem, visited) {
+					return true
+				}
+				continue
+			}
+		}
+
+		if _, mod := sanitizeReflect(fv, visited); mod {
+			return true
+		}
+	}
+	return false
+}
+
+func flattenStruct(rv reflect.Value, cp map[string]any, visited map[uintptr]bool) {
+	if rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return
+	}
+	//nolint:gocritic // rv.NumField() is appropriate for iterating over fields in a struct.
+	for i := 0; i < rv.NumField(); i++ {
+		field := rv.Type().Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		fv := rv.Field(i)
+		if field.Anonymous {
+			fvElem := fv
+			if fvElem.Kind() == reflect.Pointer || fvElem.Kind() == reflect.Interface {
+				if !fvElem.IsNil() {
+					fvElem = fvElem.Elem()
+				}
+			}
+			if fvElem.Kind() == reflect.Struct {
+				flattenStruct(fvElem, cp, visited)
+				continue
+			}
+		}
+
+		key := field.Name
+		tag := field.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+
+		omitempty := false
+		omitzero := false
+		if tag != "" {
+			parts := strings.Split(tag, ",")
+			if parts[0] != "" {
+				key = parts[0]
+			}
+			for _, part := range parts[1:] {
+				switch part {
+				case "omitempty":
+					omitempty = true
+				case "omitzero":
+					omitzero = true
+				}
+			}
+		}
+
+		san, mod := sanitizeReflect(fv, visited)
+		var val any
+		if mod {
+			val = san
+		} else if fv.CanInterface() {
+			val = fv.Interface()
+		}
+
+		if omitempty && isEmptyValue(fv, val) {
+			continue
+		}
+		if omitzero && isZeroValue(fv) {
+			continue
+		}
+		cp[key] = val
+	}
+}
+
+func isEmptyValue(v reflect.Value, val any) bool {
+	if val == nil {
+		return true
+	}
+	//nolint:exhaustive // Intentionally handling only types that can be empty values
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Pointer:
+		return v.IsNil()
+	}
+	return false
+}
+
+func isZeroValue(v reflect.Value) bool {
+	if !v.IsValid() {
+		return true
+	}
+	return v.IsZero()
+}
+
+func timeZoneReplaceAttr(tz *time.Location) func(groups []string, a slog.Attr) slog.Attr {
+	if tz == nil || tz == time.UTC {
+		return nil
+	}
+	return func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.TimeKey && len(groups) == 0 {
+			if t, ok := a.Value.Any().(time.Time); ok {
+				return slog.Time(a.Key, t.In(tz))
+			}
+		}
+		return a
+	}
 }
