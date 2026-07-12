@@ -148,7 +148,10 @@ jobs:
           if [ "${EVENT_NAME}" = "release" ]; then
             VERSION="${REF_NAME}"
           else
-            VERSION=$(git describe --tags --always --match 'v*')
+            # Match the build and checksums jobs exactly (--abbrev=0), so a
+            # workflow_dispatch run versions the binaries and the container
+            # images with the identical clean tag rather than a describe suffix.
+            VERSION=$(git describe --tags --abbrev=0 --match 'v*')
           fi
           echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
