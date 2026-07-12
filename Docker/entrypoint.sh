@@ -207,6 +207,8 @@ if [ -d "/dev/dri" ]; then
             fi
         fi
     fi
+    else
+        echo "Warning: /dev/dri detected but cannot configure Intel iGPU access without root privileges"
 fi
 
 # Pre-flight checks before starting application
