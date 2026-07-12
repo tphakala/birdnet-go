@@ -36,35 +36,41 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Determine build version
+        id: ver
+        run: |
+          # On a release event the ref is the release tag. On a manual dispatch
+          # from a branch, resolve the latest stable tag instead, so the binaries
+          # are versioned and attached to that release rather than the branch
+          # name (e.g. "main"). This matches the release the artifacts attach to
+          # below and keeps BUILD_VERSION, the tarball name, and the attach
+          # target consistent.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=$(git describe --tags --abbrev=0 --match 'v*')
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building release version: ${VERSION}"
+
       - name: Build BirdNET-Go binary
         uses: ./.github/actions/build-birdnet-binary
         with:
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          build-version: ${{ github.ref_name }}
-          tarball-suffix: "-${{ github.ref_name }}"
+          build-version: ${{ steps.ver.outputs.version }}
+          tarball-suffix: "-${{ steps.ver.outputs.version }}"
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sentry-dsn: ${{ secrets.SENTRY_DSN }}
           sentry-auth-token: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
-      - name: Get latest release tag
-        if: github.event_name == 'workflow_dispatch'
-        id: latest_release
-        run: |
-          # Get the latest release tag
-          # Restrict to stable release tags; the auto-update "manifest"
-          # prerelease tag would otherwise be picked as the nearest ancestor.
-          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'v*')
-          echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
-          echo "latest_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
-      
       - name: Add Artifacts to GitHub Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
-          files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz
-          # For release events, use the triggering release
-          # For workflow_dispatch, use the latest release tag
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && env.LATEST_TAG || '' }}
+          files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ steps.ver.outputs.version }}.tar.gz
+          # Release event: attach to the triggering release (empty tag_name).
+          # Dispatch: attach to the resolved latest stable tag.
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && steps.ver.outputs.version || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
