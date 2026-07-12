@@ -172,6 +172,14 @@ jobs:
                 emit "${repo}:${no_v}"
                 emit "${repo}:podman-${no_v}"
               fi
+              # Date-based release (YYYYMMDD): also move the :nightly alias so
+              # the install.sh userbase that pins :nightly keeps receiving each
+              # dated release. Gated to date tags so a stable vX.Y.Z release does
+              # not move :nightly.
+              if printf '%s' "$VERSION" | grep -qE '^[0-9]{8}$'; then
+                emit "${repo}:nightly"
+                emit "${repo}:podman-nightly"
+              fi
             elif [ "$STRATEGY" = "dev" ]; then
               # Dev images built on every push to main: a floating :dev alias and
               # the immutable commit SHA (passed in as version), plus podman
