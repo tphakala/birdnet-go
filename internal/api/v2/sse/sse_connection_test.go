@@ -174,6 +174,8 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 	require.True(t, strings.HasPrefix(contentType, "text/event-stream"),
 		"Content-Type should start with text/event-stream, got: %s", contentType)
 	require.Equal(t, "no-cache", resp.Header.Get("Cache-Control"))
+	require.Equal(t, "no", resp.Header.Get("X-Accel-Buffering"),
+		"SSE responses must set X-Accel-Buffering: no so reverse proxies stream events without buffering")
 
 	// Read first event (connection established)
 	scanner := bufio.NewScanner(resp.Body)
