@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Importazione annullata",
         "cancelledDescription": "L'importazione è stata annullata prima del completamento.",
         "errorTitle": "Importazione non riuscita",
+        "interruptedTitle": "Importazione interrotta",
+        "interruptedDescription": "La connessione al server è stata persa durante l'importazione, quindi il suo risultato finale è sconosciuto. Controlla i tuoi rilevamenti e riavvia l'importazione se necessario.",
         "viewDetectionsLink": "Visualizza i rilevamenti importati",
         "partialInserted": "{count} rilevamenti sono stati importati prima dell'annullamento.",
         "importAnother": "Importa di nuovo"

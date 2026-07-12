@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Importação cancelada",
         "cancelledDescription": "A importação foi cancelada antes de concluir.",
         "errorTitle": "A importação falhou",
+        "interruptedTitle": "Importação interrompida",
+        "interruptedDescription": "A ligação ao servidor foi perdida durante a importação, pelo que o seu resultado final é desconhecido. Verifique as suas deteções e reinicie a importação se necessário.",
         "viewDetectionsLink": "Ver deteções importadas",
         "partialInserted": "{count} deteções foram importadas antes do cancelamento.",
         "importAnother": "Importar outra"

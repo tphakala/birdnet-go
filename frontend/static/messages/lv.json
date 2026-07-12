@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Importēšana atcelta",
         "cancelledDescription": "Importēšana tika atcelta pirms pabeigšanas.",
         "errorTitle": "Importēšana neizdevās",
+        "interruptedTitle": "Importēšana pārtraukta",
+        "interruptedDescription": "Savienojums ar serveri tika zaudēts importēšanas laikā, tāpēc tās galīgais rezultāts nav zināms. Pārbaudiet savus konstatējumus un vajadzības gadījumā sāciet importēšanu vēlreiz.",
         "viewDetectionsLink": "Skatīt importētos konstatējumus",
         "partialInserted": "Pirms atcelšanas tika importēti {count} konstatējumi.",
         "importAnother": "Importēt citu"

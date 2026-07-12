@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Import anulowany",
         "cancelledDescription": "Import został anulowany przed ukończeniem.",
         "errorTitle": "Import nie powiódł się",
+        "interruptedTitle": "Import przerwany",
+        "interruptedDescription": "Połączenie z serwerem zostało utracone podczas trwania importu, więc jego ostateczny wynik jest nieznany. Sprawdź swoje wykrycia i w razie potrzeby rozpocznij import ponownie.",
         "viewDetectionsLink": "Zobacz zaimportowane wykrycia",
         "partialInserted": "Przed anulowaniem zaimportowano {count} wykryć.",
         "importAnother": "Importuj kolejny"

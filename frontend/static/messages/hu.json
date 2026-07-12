@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Importálás megszakítva",
         "cancelledDescription": "Az importálás a befejezés előtt megszakadt.",
         "errorTitle": "Az importálás sikertelen",
+        "interruptedTitle": "Importálás félbeszakadt",
+        "interruptedDescription": "A szerverrel való kapcsolat megszakadt az importálás közben, ezért a végeredménye ismeretlen. Ellenőrizze az észleléseit, és szükség esetén indítsa újra az importálást.",
         "viewDetectionsLink": "Importált észlelések megtekintése",
         "partialInserted": "{count} észlelést importáltunk a megszakítás előtt.",
         "importAnother": "Újabb importálása"

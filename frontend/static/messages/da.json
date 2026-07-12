@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Import annulleret",
         "cancelledDescription": "Importen blev annulleret, før den var fuldført.",
         "errorTitle": "Import mislykkedes",
+        "interruptedTitle": "Import afbrudt",
+        "interruptedDescription": "Forbindelsen til serveren gik tabt, mens importen kørte, så det endelige resultat er ukendt. Tjek dine registreringer, og start importen igen om nødvendigt.",
         "viewDetectionsLink": "Se importerede registreringer",
         "partialInserted": "{count} registreringer blev importeret før annulleringen.",
         "importAnother": "Importér igen"

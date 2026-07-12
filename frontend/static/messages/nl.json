@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Import geannuleerd",
         "cancelledDescription": "De import is geannuleerd voordat deze voltooid was.",
         "errorTitle": "Import mislukt",
+        "interruptedTitle": "Import onderbroken",
+        "interruptedDescription": "De verbinding met de server is verbroken terwijl de import bezig was, dus het uiteindelijke resultaat is onbekend. Controleer je detecties en start de import opnieuw als dat nodig is.",
         "viewDetectionsLink": "Geïmporteerde detecties bekijken",
         "partialInserted": "{count} detecties zijn geïmporteerd vóór de annulering.",
         "importAnother": "Nog een import uitvoeren"

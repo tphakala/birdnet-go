@@ -1316,6 +1316,8 @@
         "cancelledTitle": "Tuonti peruutettu",
         "cancelledDescription": "Tuonti peruutettiin ennen valmistumista.",
         "errorTitle": "Tuonti epäonnistui",
+        "interruptedTitle": "Tuonti keskeytyi",
+        "interruptedDescription": "Yhteys palvelimeen katkesi tuonnin aikana, joten sen lopullinen tulos ei ole tiedossa. Tarkista havaintosi ja aloita tuonti tarvittaessa uudelleen.",
         "viewDetectionsLink": "Näytä tuodut havainnot",
         "partialInserted": "{count} havaintoa tuotiin ennen peruutusta.",
         "importAnother": "Tuo uudelleen"
