@@ -250,12 +250,17 @@ jobs:
         run: |
           set +e  # Don't exit on error - we want to test both registries
 
+          # Validate the exact image this run built: for nightly use the dated
+          # tag (nightly-<DATE>), not the floating :nightly, so a failed build
+          # cannot false-pass by pulling a previous day's :nightly image.
+          DATE=$(date +'%Y%m%d')
+
           # Determine which image to test based on strategy and availability
           if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
             if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              TEST_IMAGE="${GHCR_REPO}:nightly"
+              TEST_IMAGE="${GHCR_REPO}:nightly-${DATE}"
             elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
-              TEST_IMAGE="${DOCKERHUB_REPO}:nightly"
+              TEST_IMAGE="${DOCKERHUB_REPO}:nightly-${DATE}"
             else
               echo "No image to test - both registries disabled"
               exit 0
