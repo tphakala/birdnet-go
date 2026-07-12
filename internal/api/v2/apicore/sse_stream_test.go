@@ -89,7 +89,8 @@ func Test_SetStreamWriteDeadline(t *testing.T) {
 		rec := httptest.NewRecorder()
 		ctx := e.NewContext(req, rec)
 
-		// A plain recorder does not implement WriteDeadlineSetter; this must not panic.
+		// A plain recorder does not support write deadlines, so NewResponseController
+		// returns http.ErrNotSupported; this must be handled without panicking.
 		assert.NotPanics(t, func() { SetStreamWriteDeadline(ctx) })
 	})
 }

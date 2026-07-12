@@ -71,18 +71,17 @@ func DisableProxyBuffering(ctx echo.Context) {
 	ctx.Response().Header().Set("X-Accel-Buffering", "no")
 }
 
-// SetStreamWriteDeadline applies the shared SSE write deadline to the response
-// writer when it supports one, so a stalled or disconnected client cannot block
-// the writer indefinitely. It is best-effort: writers that do not implement
-// WriteDeadlineSetter are left unchanged, and a SetWriteDeadline failure is logged
-// at debug and otherwise ignored (the deadline is advisory). Streaming handlers
-// call it before each streamed write, like SendSSEMessage does inline.
+// SetStreamWriteDeadline extends the response write deadline by the shared SSE
+// window so a stalled or disconnected client cannot block the writer past it.
+// It uses http.NewResponseController (the Go 1.20+ idiom) so the deadline reaches
+// the underlying connection; asserting SetWriteDeadline directly on the response
+// writer is a no-op for the standard net/http writer, which does not expose it.
+// A writer that does not support deadlines yields http.ErrNotSupported, which is
+// logged at debug and otherwise ignored (the deadline is advisory). Streaming
+// handlers call it before each streamed write.
 func SetStreamWriteDeadline(ctx echo.Context) {
-	conn, ok := ctx.Response().Writer.(WriteDeadlineSetter)
-	if !ok {
-		return
-	}
-	if err := conn.SetWriteDeadline(time.Now().Add(SSEWriteDeadline)); err != nil {
+	rc := http.NewResponseController(ctx.Response().Writer)
+	if err := rc.SetWriteDeadline(time.Now().Add(SSEWriteDeadline)); err != nil {
 		GetLogger().Debug("Failed to set stream write deadline", logger.Error(err))
 	}
 }
@@ -122,14 +121,8 @@ func (c *Core) SendSSEMessage(ctx echo.Context, event string, data any) error {
 	// Format SSE message
 	message := fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(jsonData))
 
-	// Set write deadline to prevent hanging on slow/disconnected clients
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		deadline := time.Now().Add(SSEWriteDeadline) // Write deadline timeout
-		if err := conn.SetWriteDeadline(deadline); err != nil {
-			// If we can't set deadline, log but continue - not all response writers support this
-			c.LogDebugIfEnabled("Failed to set write deadline for SSE message", logger.Error(err))
-		}
-	}
+	// Set write deadline to prevent hanging on slow/disconnected clients.
+	SetStreamWriteDeadline(ctx)
 
 	// Write to response
 	if _, err := ctx.Response().Write([]byte(message)); err != nil {
