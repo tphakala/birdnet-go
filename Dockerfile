@@ -183,7 +183,8 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
     chmod a+x /models && \
     rm -rf /tmp/allmodels
 
-# Install ALSA library and SOX for audio processing, and other system utilities for debugging
+# Install ALSA library and SOX for audio processing, tini (a tiny init run as
+# PID 1, see the ENTRYPOINT note below), and other system utilities for debugging
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     adduser \
     ca-certificates \
@@ -206,6 +207,7 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     lsof \
     bash-completion \
     gosu \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy ONNX Runtime libraries (used by all arches; arm64 relies on them exclusively).
@@ -299,6 +301,18 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null || exit 1
 
 # Container startup execution chain:
+# 0. tini - A tiny init run as PID 1. This is defense-in-depth, not a bug fix:
+#    the bash wrapper below already forwards signals and (via its SIGCHLD
+#    handling) reaps processes reparented to PID 1, and birdnet-go Wait()s the
+#    ffmpeg/sox children it spawns. tini makes correct PID 1 behaviour (orphan
+#    reaping + signal handling) intrinsic to the image instead of relying on the
+#    shell's semantics, so it stays correct across future entrypoint changes and
+#    matches Docker's own --init default. Baked into the image so every deploy
+#    path (docker/podman run, compose, quadlet, k8s) is covered without needing
+#    --init / init: true, which on Podman would require catatonit on the host.
+#    `-s` enables subreaper mode so it still reaps its subtree if a user also
+#    passes --init (tini as PID 2).
+#
 # 1. entrypoint.sh - Sets up user permissions, timezone, device access, and performs
 #    pre-flight checks (disk space, config writability). Handles both rootful and
 #    rootless container modes. Exits early with clear error messages if checks fail.
@@ -320,5 +334,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 #   - Clean signal handling for orchestration (Docker, Kubernetes)
 #   - Early failure detection before wasting resources
 #   - Actionable error messages for troubleshooting
-ENTRYPOINT ["/usr/bin/entrypoint.sh", "/usr/bin/startup-wrapper.sh"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/bin/entrypoint.sh", "/usr/bin/startup-wrapper.sh"]
 CMD ["birdnet-go", "realtime"]
