@@ -14,6 +14,10 @@ import (
 func TestSoundscapeGainDB(t *testing.T) {
 	t.Parallel()
 
+	// gainTolerance is effectively exact: both sides compute the same
+	// deterministic subtraction, so any real regression exceeds this bound.
+	const gainTolerance = 1e-9
+
 	tests := []struct {
 		name  string
 		input float64
@@ -33,7 +37,34 @@ func TestSoundscapeGainDB(t *testing.T) {
 			if math.IsNaN(got) || math.IsInf(got, 0) {
 				t.Fatalf("soundscapeGainDB(%v) returned non-finite %v", tt.input, got)
 			}
-			assert.Equal(t, tt.want, got, "soundscapeGainDB(%v) mismatch", tt.input)
+			assert.InDelta(t, tt.want, got, gainTolerance, "soundscapeGainDB(%v) mismatch", tt.input)
+		})
+	}
+}
+
+// TestLogSafeLUFS verifies that a non-finite loudness measurement is rendered as
+// a plain symbolic string, so it can never reach slog's JSON handler as a
+// non-finite float (which would corrupt the log line with an "!ERROR:json"
+// substitution), while finite measurements render to their numeric form.
+func TestLogSafeLUFS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input float64
+		want  string
+	}{
+		{"silent clip (-inf)", math.Inf(-1), "-inf"},
+		{"positive inf", math.Inf(1), "+inf"},
+		{"nan", math.NaN(), "nan"},
+		{"finite negative", -23.4, "-23.4"},
+		{"finite zero", 0.0, "0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := logSafeLUFS(tt.input)
+			assert.Equal(t, tt.want, got, "logSafeLUFS(%v) mismatch", tt.input)
 		})
 	}
 }
