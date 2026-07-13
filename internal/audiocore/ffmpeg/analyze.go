@@ -7,7 +7,6 @@ import (
 	"math"
 	"os/exec"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -55,10 +54,43 @@ func AnalyzeChannelEnergy(ctx context.Context, url, ffmpegPath string) (*Channel
 	// time budget for the actual analysis run.
 	ffmpegMajor := resolveFfmpegMajor(ffmpegBinary)
 
+	pcmData, err := runChannelAnalysis(ctx, ffmpegBinary, url, ffmpegMajor, true)
+	// Some cameras cannot SETUP the RTSP audio track alone, so the audio-only
+	// restriction breaks capture (issue #3902). Retry once requesting the full
+	// stream, from which -vn still extracts audio only. Skip the retry when the
+	// parent context is done (shutdown/caller cancel); a per-attempt analysis
+	// timeout leaves ctx live, so a hung audio-only handshake still falls back.
+	if err != nil && ctx.Err() == nil && isRTSPURL(url) {
+		pcmData, err = runChannelAnalysis(ctx, ffmpegBinary, url, ffmpegMajor, false)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	left, right := deinterleave(pcmData)
+
+	leftDbfs := computeRmsDbfs(left)
+	rightDbfs := computeRmsDbfs(right)
+
+	return &ChannelAnalysis{
+		Channels: analysisChannels,
+		Energy: []ChannelEnergy{
+			{Channel: 0, Label: "Left", RmsDbfs: math.Round(leftDbfs*10) / 10},
+			{Channel: 1, Label: "Right", RmsDbfs: math.Round(rightDbfs*10) / 10},
+		},
+		Recommended: recommendChannel(leftDbfs, rightDbfs),
+	}, nil
+}
+
+// runChannelAnalysis executes a single FFmpeg capture attempt and returns the
+// raw interleaved PCM. audioOnly controls whether the RTSP handshake is
+// restricted to audio tracks via -allowed_media_types audio; the fallback path
+// passes false for cameras that cannot SETUP audio alone (issue #3902).
+func runChannelAnalysis(ctx context.Context, ffmpegBinary, url string, ffmpegMajor int, audioOnly bool) ([]byte, error) {
 	analysisCtx, cancel := context.WithTimeout(ctx, analysisTimeout)
 	defer cancel()
 
-	args := buildAnalysisArgs(url, ffmpegMajor)
+	args := buildAnalysisArgs(url, ffmpegMajor, audioOnly)
 
 	cmd := exec.CommandContext(analysisCtx, ffmpegBinary, args...) //nolint:gosec // G204: ffmpegBinary validated by exec.LookPath, URL from user config
 	var stdout, stderr bytes.Buffer
@@ -88,26 +120,13 @@ func AnalyzeChannelEnergy(ctx context.Context, url, ffmpegPath string) (*Channel
 			Build()
 	}
 
-	left, right := deinterleave(pcmData)
-
-	leftDbfs := computeRmsDbfs(left)
-	rightDbfs := computeRmsDbfs(right)
-
-	return &ChannelAnalysis{
-		Channels: analysisChannels,
-		Energy: []ChannelEnergy{
-			{Channel: 0, Label: "Left", RmsDbfs: math.Round(leftDbfs*10) / 10},
-			{Channel: 1, Label: "Right", RmsDbfs: math.Round(rightDbfs*10) / 10},
-		},
-		Recommended: recommendChannel(leftDbfs, rightDbfs),
-	}, nil
+	return pcmData, nil
 }
 
-func buildAnalysisArgs(url string, ffmpegMajor int) []string {
+func buildAnalysisArgs(url string, ffmpegMajor int, audioOnly bool) []string {
 	args := make([]string, 0, 16)
 
-	lower := strings.ToLower(url)
-	isRTSP := strings.HasPrefix(lower, "rtsp://") || strings.HasPrefix(lower, "rtsps://")
+	isRTSP := isRTSPURL(url)
 	// Default to -timeout; RTSP on FFmpeg 4.x needs -stimeout instead, since 4.x
 	// treats -timeout on the RTSP demuxer as a listen timeout and fails to
 	// connect. Mirror the live capture path's flag selection.
@@ -115,8 +134,8 @@ func buildAnalysisArgs(url string, ffmpegMajor int) []string {
 	if isRTSP {
 		// Restrict the RTSP handshake to audio tracks; -vn below only drops video
 		// after decode, so without this the camera's video track is still SETUP
-		// (issue #3798).
-		args = append(args, "-rtsp_transport", "tcp", ffmpegAllowedMediaTypesFlag, ffmpegAllowedMediaTypesAudio)
+		// (issue #3798). audioOnly is false on the full-stream fallback (#3902).
+		args = appendRTSPMediaArgs(args, "tcp", audioOnly)
 		timeoutFlag = rtspTimeoutParamForMajor(ffmpegMajor)
 	}
 

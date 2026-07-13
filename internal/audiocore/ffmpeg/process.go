@@ -49,6 +49,27 @@ const ffmpegAllowedMediaTypesFlag = "-allowed_media_types"
 // to accept audio tracks only.
 const ffmpegAllowedMediaTypesAudio = "audio"
 
+// isRTSPURL reports whether a raw URL string is an RTSP or RTSPS stream. Used by
+// the probe and channel-analysis paths, which take a bare URL rather than a
+// StreamConfig, to decide whether RTSP-specific FFmpeg flags apply.
+func isRTSPURL(url string) bool {
+	lower := strings.ToLower(url)
+	return strings.HasPrefix(lower, "rtsp://") || strings.HasPrefix(lower, "rtsps://")
+}
+
+// appendRTSPMediaArgs appends the RTSP transport flag and, when audioOnly is
+// true, the -allowed_media_types audio restriction. audioOnly is false only when
+// a camera has proven it cannot SETUP the audio track alone and the caller has
+// fallen back to requesting the full stream (issue #3902); video is still
+// dropped after decode via -vn, so the fallback only affects the RTSP handshake.
+func appendRTSPMediaArgs(args []string, transport string, audioOnly bool) []string {
+	args = append(args, "-rtsp_transport", transport)
+	if audioOnly {
+		args = append(args, ffmpegAllowedMediaTypesFlag, ffmpegAllowedMediaTypesAudio)
+	}
+	return args
+}
+
 // ffmpegMajorCache stores detected FFmpeg major versions by binary path.
 var ffmpegMajorCache sync.Map
 
@@ -481,7 +502,9 @@ func ProcessAudioToFile(ctx context.Context, filePath, ffmpegPath string, filter
 // RTSP-specific flags like -rtsp_transport are only added for RTSP sources.
 // A default -timeout is added unless the caller supplies one via ffmpegParameters.
 func BuildFFmpegArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
-	args := buildInputArgs(cfg, ffmpegParameters)
+	// Audio-only restriction is on by default; the runtime path drops it per
+	// Stream via buildFFmpegInputArgs once a camera proves it cannot honor it.
+	args := buildInputArgs(cfg, ffmpegParameters, true)
 	return buildOutputArgs(args, cfg)
 }
 
@@ -536,13 +559,15 @@ func appendChannelArgs(args []string, channelMode string, sourceChannels int, nu
 // buildInputArgs constructs the pre-input FFmpeg flags (transport, timeout, extra parameters).
 // This mirrors the logic in Stream.buildFFmpegInputArgs but accepts explicit parameters.
 // RTSP streams use the timeout flag supported by the configured FFmpeg major version.
-func buildInputArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
+// When audioOnly is false, the RTSP handshake is not restricted to audio tracks
+// (the full-stream fallback for cameras that cannot SETUP audio alone, issue #3902).
+func buildInputArgs(cfg *StreamConfig, ffmpegParameters []string, audioOnly bool) []string {
 	args := make([]string, 0, 8+len(ffmpegParameters))
 	ffmpegMajor := resolveFfmpegMajor(cfg.FFmpegPath)
 	timeoutFlag := timeoutParamForSource(cfg.sourceType(), ffmpegMajor)
 
 	if cfg.sourceType() == audiocore.SourceTypeRTSP {
-		args = append(args, "-rtsp_transport", cfg.Transport, ffmpegAllowedMediaTypesFlag, ffmpegAllowedMediaTypesAudio)
+		args = appendRTSPMediaArgs(args, cfg.Transport, audioOnly)
 	}
 
 	hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters)
