@@ -24,17 +24,9 @@ var updateGoldenFiles = flag.Bool("update", false, "update golden files")
 
 // Test constants
 const (
-	// File sizes for testing
-	testLogSizeLimit  = 5000
-	testLogSizeSmall  = 1000
-	testLogSizeMedium = 4000
-	testLogSizeLarge  = 4500
-	testLogSizeTiny   = 0
-
 	// Test durations
 	testDuration24Hours = 24 * time.Hour
 	testDuration1Hour   = 1 * time.Hour
-	testDuration48Hours = 48 * time.Hour
 	testDuration1Minute = 1 * time.Minute
 
 	// Test sizes in bytes
@@ -42,11 +34,10 @@ const (
 	testSize1KB  = 1024
 )
 
-// TestLogFileCollector_isLogFile tests the log file detection
-func TestLogFileCollector_isLogFile(t *testing.T) {
+// TestHasLogSuffix tests the log-file suffix detection that selects which files
+// are collected into the support dump.
+func TestHasLogSuffix(t *testing.T) {
 	t.Parallel()
-
-	lfc := &logFileCollector{}
 
 	tests := []struct {
 		name     string
@@ -77,61 +68,7 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, lfc.isLogFile(tt.filename), "isLogFile(%q)", tt.filename)
-		})
-	}
-}
-
-// TestLogFileCollector_isFileWithinTimeRange tests time range checking
-func TestLogFileCollector_isFileWithinTimeRange(t *testing.T) {
-	now := time.Now()
-	lfc := &logFileCollector{
-		cutoffTime: now.Add(-testDuration24Hours), // 24 hours ago
-	}
-
-	tests := []struct {
-		name    string
-		modTime time.Time
-		want    bool
-	}{
-		{"recent file", now.Add(-testDuration1Hour), true},
-		{"file at cutoff", now.Add(-testDuration24Hours), true},
-		{"old file", now.Add(-testDuration48Hours), false},
-		{"future file", now.Add(testDuration1Hour), true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock FileInfo
-			info := &mockFileInfo{modTime: tt.modTime}
-			assert.Equal(t, tt.want, lfc.isFileWithinTimeRange(info), "isFileWithinTimeRange()")
-		})
-	}
-}
-
-// TestLogFileCollector_canAddFile tests size limit checking
-func TestLogFileCollector_canAddFile(t *testing.T) {
-	tests := []struct {
-		name      string
-		totalSize int64
-		maxSize   int64
-		fileSize  int64
-		want      bool
-	}{
-		{"within limit", testLogSizeSmall, testLogSizeLimit, testLogSizeSmall, true},
-		{"exactly at limit", testLogSizeMedium, testLogSizeLimit, testLogSizeSmall, true},
-		{"exceeds limit", testLogSizeLarge, testLogSizeLimit, testLogSizeSmall, false},
-		{"zero file size", testLogSizeSmall, testLogSizeLimit, testLogSizeTiny, true},
-		{"already at max", testLogSizeLimit, testLogSizeLimit, testLogSizeSmall, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			lfc := &logFileCollector{
-				totalSize: tt.totalSize,
-				maxSize:   tt.maxSize,
-			}
-			assert.Equal(t, tt.want, lfc.canAddFile(tt.fileSize), "canAddFile(%d)", tt.fileSize)
+			assert.Equal(t, tt.want, hasLogSuffix(tt.filename), "hasLogSuffix(%q)", tt.filename)
 		})
 	}
 }
@@ -564,22 +501,6 @@ func compareConfigs(a, b map[string]any) bool {
 	}
 	return true
 }
-
-// mockFileInfo implements os.FileInfo for testing
-type mockFileInfo struct {
-	name    string
-	size    int64
-	mode    os.FileMode
-	modTime time.Time
-	isDir   bool
-}
-
-func (m *mockFileInfo) Name() string       { return m.name }
-func (m *mockFileInfo) Size() int64        { return m.size }
-func (m *mockFileInfo) Mode() os.FileMode  { return m.mode }
-func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
-func (m *mockFileInfo) IsDir() bool        { return m.isDir }
-func (m *mockFileInfo) Sys() any           { return nil }
 
 // TestIsDefaultValue tests default value detection for redaction skipping
 func TestIsDefaultValue(t *testing.T) {
