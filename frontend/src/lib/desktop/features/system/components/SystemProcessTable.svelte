@@ -162,9 +162,10 @@
       </thead>
       <tbody>
         {#each sortedProcesses as proc (proc.pid)}
-          {@const cpuPct = Number.isFinite(proc.cpu) ? Math.min(proc.cpu, 100) : 0}
-          <!-- cpuPct clamps to 100% (matching the backend normalization) and guards
-               non-finite values so a missing/NaN cpu renders 0.0% instead of NaN%. -->
+          {@const cpuPct = Number.isFinite(proc.cpu) ? Math.max(0, Math.min(proc.cpu, 100)) : 0}
+          <!-- cpuPct clamps finite values to 0-100% (matching the backend
+               normalization) and guards non-finite values so a missing/NaN cpu
+               renders 0.0% instead of NaN%. -->
           <tr
             class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
           >
