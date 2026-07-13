@@ -5803,10 +5803,12 @@ verify_post_start() {
 # container image; other render nodes (AMD, NVIDIA, Pi VideoCore) gain nothing, so
 # they are not mapped into the container. Used to decide whether to pass /dev/dri.
 has_intel_gpu() {
-    local vendor
+    local vendor id
     for vendor in /sys/class/drm/renderD*/device/vendor; do
         [ -r "$vendor" ] || continue
-        if grep -qi '0x8086' "$vendor" 2>/dev/null; then
+        # Read the single-line sysfs vendor file with the bash builtin rather than
+        # spawning grep per node. The kernel writes lowercase; match both cases.
+        if read -r id < "$vendor" 2>/dev/null && [[ "$id" == *0x8086* || "$id" == *0X8086* ]]; then
             return 0  # True - Intel render node present
         fi
     done
