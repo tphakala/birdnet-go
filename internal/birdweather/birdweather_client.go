@@ -14,14 +14,11 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
-	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -46,13 +43,11 @@ const (
 	// httpClientTimeout is the default timeout for HTTP requests
 	httpClientTimeout = 45 * time.Second
 
-	// encodingTimeout is the timeout for audio encoding operations. FLAC
-	// encoding runs two sequential FFmpeg passes (loudness analysis, then the
-	// gain-adjusted encode) under this single budget, so on slow hardware
-	// (Raspberry Pi, Home Assistant add-ons) the analysis pass alone could
-	// previously exhaust a 30s budget and starve the encode pass. 60s gives both
-	// passes room; the upload still runs in a background worker, so a slower
-	// encode does not block the analysis pipeline or the UI.
+	// encodingTimeout bounds the native go-flac encode of a soundscape upload so a
+	// slow host (Raspberry Pi, Home Assistant add-on, tired SD card) cannot hang the
+	// upload. The audionorm loudness measurement is pure in-memory CPU work; only the
+	// encode pass runs under this budget. 60s leaves ample room, and the upload runs
+	// in a background worker, so a slow encode never blocks the analysis pipeline or UI.
 	encodingTimeout = 60 * time.Second
 
 	// http2ReadIdleTimeout and http2PingTimeout enable HTTP/2 connection health
@@ -503,147 +498,8 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 	return responseBody, nil
 }
 
-// encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg.
-// It applies a simple gain adjustment instead of dynamic loudness normalization
-// to avoid pumping effects. The final FLAC export uses a seekable temporary file
-// so FFmpeg can finalize STREAMINFO before the bytes are read into memory.
-// It accepts a context for timeout/cancellation control and the explicit path to the FFmpeg executable.
-func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath string, settings *conf.Settings) (*bytes.Buffer, error) {
-	log := GetLogger()
-
-	log.Debug("Starting FLAC encoding process")
-	// Add check for empty pcmData
-	if len(pcmData) == 0 {
-		log.Error("FLAC encoding failed: PCM data is empty")
-		return nil, fmt.Errorf("pcmData is empty")
-	}
-
-	// ffmpegPath is now passed directly
-	log.Debug("Using ffmpeg path", logger.String("path", ffmpegPath))
-
-	// --- Pass 1: Analyze Loudness ---
-	// Use the provided context for the analysis
-	log.Debug("Performing loudness analysis (Pass 1)")
-	loudnessStats, err := ffmpeg.AnalyzePCMLoudness(ctx, pcmData, ffmpegPath, conf.SampleRate, conf.BitDepth)
-	if err != nil {
-		// Check if the error is due to context cancellation
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			log.Warn("Loudness analysis cancelled or timed out", logger.Error(err))
-			return nil, err // Propagate context error
-		}
-
-		log.Warn("Loudness analysis (Pass 1) failed, falling back to fixed gain adjustment", logger.Error(err))
-		// Fallback to a conservative fixed gain adjustment
-		// A fixed gain of 15dB is a reasonable middle ground for bird call recordings
-		gainValue := 15.0
-		// Use the provided context for the fallback export operation
-		log.Debug("Starting fallback FLAC export with fixed gain", logger.Float64("gain_db", gainValue))
-		buffer, err := b.exportFlacFileToBuffer(ctx, pcmData, ffmpegPath, gainValue)
-		if err != nil {
-			log.Error("Fallback FLAC export with fixed gain failed",
-				logger.Float64("gain_db", gainValue),
-				logger.Error(err))
-			return nil, fmt.Errorf("fallback FLAC export with fixed gain failed: %w", err)
-		}
-		log.Info("Encoded PCM to FLAC using fixed gain (fallback)", logger.Float64("gain_db", gainValue))
-		return buffer, nil
-	}
-
-	log.Debug("Loudness analysis results",
-		logger.String("input_i", loudnessStats.InputI),
-		logger.String("input_lra", loudnessStats.InputLRA),
-		logger.String("input_tp", loudnessStats.InputTP),
-		logger.String("input_thresh", loudnessStats.InputThresh))
-
-	// --- Calculate gain needed to reach target loudness ---
-	inputLUFS := parseDouble(loudnessStats.InputI, -70.0)
-	gainNeeded := soundscapeGainDB(inputLUFS)
-
-	// Apply safety limits to prevent excessive amplification or attenuation
-	maxGain := 30.0 // Maximum gain in dB (absolute value)
-	gainLimited := false
-	if gainNeeded > maxGain {
-		b.logGainLimit(log, "Limiting gain to prevent excessive amplification",
-			"calculated_gain", gainNeeded, "max_gain", maxGain)
-		gainNeeded = maxGain
-		gainLimited = true
-	} else if gainNeeded < -maxGain {
-		b.logGainLimit(log, "Limiting gain to prevent excessive attenuation",
-			"calculated_gain", gainNeeded, "min_gain", -maxGain)
-		gainNeeded = -maxGain
-		gainLimited = true
-	}
-	log.Debug("Calculated gain adjustment",
-		logger.Float64("gain_db", gainNeeded),
-		logger.Float64("target_lufs", targetIntegratedLoudnessLUFS),
-		logger.Float64("measured_lufs", inputLUFS),
-		logger.Bool("limited", gainLimited))
-
-	// --- Pass 2: Apply simple gain adjustment and encode ---
-	log.Debug("Applying gain adjustment and encoding to FLAC (Pass 2)", logger.Float64("gain_db", gainNeeded))
-
-	// Use the provided context for the final encoding operation
-	buffer, err := b.exportFlacFileToBuffer(ctx, pcmData, ffmpegPath, gainNeeded)
-	if err != nil {
-		log.Error("FFmpeg FLAC encoding with gain adjustment failed",
-			logger.Float64("gain_db", gainNeeded),
-			logger.Error(err))
-		return nil, fmt.Errorf("failed to export PCM to FLAC with gain adjustment: %w", err)
-	}
-
-	log.Info("Encoded PCM to FLAC with gain adjustment", logger.Float64("gain_db", gainNeeded))
-
-	// Return the buffer containing the FLAC data
-	return buffer, nil
-}
-
-// exportFlacFileToBuffer encodes through a seekable temporary FLAC file, then
-// reads the finalized bytes back into memory for the existing upload path.
-// encodeUploadAudioToBuffer owns the os.MkdirTemp/os.ReadFile round-trip needed
-// for FFmpeg to patch STREAMINFO fields such as total samples.
-func (b *BwClient) exportFlacFileToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string, gainDB float64) (*bytes.Buffer, error) {
-	return encodeUploadAudioToBuffer("flac", func(outputPath string) error {
-		return ffmpeg.ExportAudio(ctx, &ffmpeg.ExportOptions{
-			PCMData:    pcmData,
-			OutputPath: outputPath,
-			Format:     ffmpeg.FormatFLAC,
-			SampleRate: conf.SampleRate,
-			Channels:   conf.NumChannels,
-			BitDepth:   conf.BitDepth,
-			GainDB:     gainDB,
-			FFmpegPath: ffmpegPath,
-		})
-	})
-}
-
-// parseDouble safely parses a string to float64, returning defaultValue on error.
-func parseDouble(s string, defaultValue float64) float64 {
-	val, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-	if err != nil {
-		return defaultValue
-	}
-	return val
-}
-
-// soundscapeGainDB returns the gain (dB) needed to bring a clip whose measured
-// integrated loudness is inputLUFS to targetIntegratedLoudnessLUFS.
-//
-// ffmpeg's loudnorm analysis reports input_i as "-inf" for a silent clip, which
-// parseDouble turns into -Inf, making the raw gain +Inf. Amplifying silence
-// only lifts the noise floor, and the non-finite value is not JSON-encodable so
-// it corrupts the structured gain-limit log. A non-finite measurement therefore
-// yields 0 dB — leave the clip untouched — matching the native encoder path,
-// which returns GainDB 0 for silence (see encode_native.go).
-func soundscapeGainDB(inputLUFS float64) float64 {
-	gain := targetIntegratedLoudnessLUFS - inputLUFS
-	if math.IsInf(gain, 0) || math.IsNaN(gain) {
-		return 0
-	}
-	return gain
-}
-
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
-// It handles the PCM to WAV conversion, compresses the data, and manages HTTP request creation and response handling safely.
+// It handles the PCM to FLAC conversion and manages HTTP request creation and response handling safely.
 func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
 	log := GetLogger()
 
@@ -665,8 +521,8 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 			Build()
 	}
 
-	// Encode PCM data to audio format (FLAC with FFmpeg, or WAV fallback)
-	encodingResult, err := b.encodeAudioForUpload(b.Settings, pcmData, timestamp)
+	// Encode PCM data to FLAC using the native go-flac encoder
+	encodingResult, err := b.encodeAudioForUpload(pcmData, timestamp)
 	if err != nil {
 		return "", errors.New(err).
 			Component("birdweather").
@@ -1169,57 +1025,13 @@ type audioEncodingResult struct {
 	ext    string
 }
 
-// encodeAudioForUpload encodes the PCM soundscape to FLAC for upload. With the
-// BIRDNET_FLAC_ENCODER=native gate on it uses the native go-flac + audionorm
-// path (no FFmpeg dependency); otherwise it falls back to the FFmpeg encoder,
-// which BirdWeather has always required for its FLAC-only API.
-func (b *BwClient) encodeAudioForUpload(settings *conf.Settings, pcmData []byte, timestamp string) (*audioEncodingResult, error) {
-	log := GetLogger()
-
-	// Native path first: gated by the same flag as the detection save path. This
-	// must be checked BEFORE the FFmpeg-availability guard so a host without
-	// FFmpeg can still upload natively.
-	if flac.NativeEncoderEnabled() && flac.SupportedBitDepth(conf.BitDepth) {
-		log.Debug("Using native go-flac encoder for BirdWeather upload",
-			logger.String("timestamp", timestamp))
-		return b.encodeWithNativeFLAC(pcmData, timestamp)
-	}
-
-	// Use the validated FFmpeg path from settings (validated at startup)
-	// This avoids redundant exec.LookPath calls on every upload
-	ffmpegPathForExec := settings.Realtime.Audio.FfmpegPath
-	ffmpegAvailable := ffmpegPathForExec != ""
-	log.Debug("Checking FFmpeg availability",
-		logger.String("path", ffmpegPathForExec),
-		logger.Bool("available", ffmpegAvailable))
-
-	if !ffmpegAvailable {
-		log.Error("FFmpeg not available, cannot encode to FLAC for BirdWeather",
-			logger.String("timestamp", timestamp))
-		return nil, fmt.Errorf("FFmpeg is required for BirdWeather uploads (FLAC encoding)")
-	}
-
-	return b.encodeWithFFmpeg(settings, pcmData, ffmpegPathForExec, timestamp)
-}
-
-// encodeWithFFmpeg encodes PCM to FLAC format using FFmpeg. The final FLAC mux
-// step is disk-backed so the upload contains finalized STREAMINFO metadata.
-func (b *BwClient) encodeWithFFmpeg(settings *conf.Settings, pcmData []byte, ffmpegPath, timestamp string) (*audioEncodingResult, error) {
-	log := GetLogger()
-
-	ctx, cancel := context.WithTimeout(context.Background(), encodingTimeout)
-	defer cancel()
-
-	audioBuffer, err := b.encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPath, settings)
-	if err != nil {
-		log.Error("FLAC encoding failed",
-			logger.String("timestamp", timestamp),
-			logger.Error(err))
-		logFLACEncodingError(err)
-		return nil, fmt.Errorf("FLAC encoding failed: %w", err)
-	}
-	log.Info("Encoded audio to FLAC format", logger.String("timestamp", timestamp))
-	return &audioEncodingResult{buffer: audioBuffer, ext: "flac"}, nil
+// encodeAudioForUpload encodes the PCM soundscape to FLAC for upload using the
+// native go-flac encoder with audionorm EBU R128 loudness normalization. FFmpeg is
+// neither used nor required; BirdWeather's FLAC-only API is served entirely in Go.
+func (b *BwClient) encodeAudioForUpload(pcmData []byte, timestamp string) (*audioEncodingResult, error) {
+	GetLogger().Debug("Encoding BirdWeather upload with native go-flac encoder",
+		logger.String("timestamp", timestamp))
+	return b.encodeWithNativeFLAC(pcmData, timestamp)
 }
 
 // logFLACEncodingError logs the appropriate message for FLAC encoding failures

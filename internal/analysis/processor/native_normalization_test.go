@@ -186,13 +186,12 @@ func TestAudionormSupportsTargets(t *testing.T) {
 // / Meter.AddInt16Bytes), which this path calls instead of a local helper.
 
 // TestEncodeClipSelectsNativeNormalization drives the real encodeClip switch with
-// the native gate on and normalization enabled, proving it routes to the native
-// audionorm path (returns encoderNativeFLAC, not FFmpeg) AND that the static
-// Export.Gain is NOT applied on top of the loudness gain (FFmpeg gives
-// normalization precedence over gain, and the native path must match). Not
-// parallel: it toggles the process-global native-encoder gate override.
+// normalization enabled, proving FLAC routes to the native audionorm path (returns
+// encoderNativeFLAC, not FFmpeg) AND that the static Export.Gain is NOT applied on
+// top of the loudness gain (FFmpeg gives normalization precedence over gain, and
+// the native path must match).
 func TestEncodeClipSelectsNativeNormalization(t *testing.T) {
-	t.Cleanup(flac.SetNativeEncoderEnabledForTest(true))
+	t.Parallel()
 
 	s := &conf.Settings{}
 	s.Realtime.Audio.Export.Normalization.Enabled = true
@@ -218,4 +217,80 @@ func TestEncodeClipSelectsNativeNormalization(t *testing.T) {
 	got := measureLUFS(t, decoded)
 	assert.InDelta(t, testTargetLUFS, got, 1.0,
 		"decoded clip must sit on the target; the +12 dB Export.Gain must NOT be added")
+}
+
+// TestEncodeClipFLACWithoutNormalization proves the default FLAC path: with
+// normalization DISABLED, encodeClip still routes FLAC to the native go-flac
+// encoder (no env gate, no FFmpeg) and applies the static Export.Gain verbatim.
+// This is the branch the native-encoder promotion newly routes through go-flac for
+// every user who has not enabled normalization, so it is the highest-value guard.
+func TestEncodeClipFLACWithoutNormalization(t *testing.T) {
+	t.Parallel()
+
+	const staticGainDB = 6.0
+	s := &conf.Settings{}
+	s.Realtime.Audio.Export.Normalization.Enabled = false
+	s.Realtime.Audio.Export.Gain = staticGainDB
+
+	pcm := sinePCMBytes(800, 1.0, 1000)
+	inputLUFS := measureLUFS(t, pcm)
+
+	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "test"}
+	out := filepath.Join(t.TempDir(), "clip.flac")
+	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	require.NoError(t, err)
+	assert.Equal(t, encoderNativeFLAC, enc, "FLAC must encode natively with no env gate and no FFmpeg")
+
+	data, err := os.ReadFile(out) //nolint:gosec // test-controlled temp path
+	require.NoError(t, err)
+	dec, err := goflac.NewDecoder(bytes.NewReader(data))
+	require.NoError(t, err)
+	decoded, err := io.ReadAll(dec)
+	require.NoError(t, err)
+
+	// Normalization is off, so the static +6 dB Export.Gain is applied verbatim with
+	// no loudness targeting: the decoded clip sits ~6 dB above the input loudness.
+	got := measureLUFS(t, decoded)
+	assert.InDelta(t, inputLUFS+staticGainDB, got, 1.0,
+		"static Export.Gain must be applied on the no-normalization FLAC path")
+}
+
+// TestEncodeClipFLACNormalizationSkipped drives the defensive branch inside the
+// FLAC case: normalization is enabled but the targets are outside audionorm's
+// range (unreachable for a validated config, which clamps them into range). With
+// FFmpeg FLAC removed there is no loudnorm fallback, so encodeClip must still
+// encode natively, skip normalization with a WARN, and apply the static Export.Gain.
+func TestEncodeClipFLACNormalizationSkipped(t *testing.T) {
+	t.Parallel()
+
+	const staticGainDB = 6.0
+	s := &conf.Settings{}
+	s.Realtime.Audio.Export.Normalization.Enabled = true
+	s.Realtime.Audio.Export.Normalization.TargetLUFS = testTargetLUFS
+	// TruePeak > 0 is outside audionorm's supported range, so audionormSupportsTargets
+	// returns false and encodeClip takes the skip-normalization branch.
+	s.Realtime.Audio.Export.Normalization.TruePeak = 5.0
+	s.Realtime.Audio.Export.Gain = staticGainDB
+
+	pcm := sinePCMBytes(800, 1.0, 1000)
+	inputLUFS := measureLUFS(t, pcm)
+
+	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "test"}
+	out := filepath.Join(t.TempDir(), "clip.flac")
+	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	require.NoError(t, err)
+	assert.Equal(t, encoderNativeFLAC, enc, "out-of-range normalization must still encode natively, never FFmpeg")
+
+	data, err := os.ReadFile(out) //nolint:gosec // test-controlled temp path
+	require.NoError(t, err)
+	dec, err := goflac.NewDecoder(bytes.NewReader(data))
+	require.NoError(t, err)
+	decoded, err := io.ReadAll(dec)
+	require.NoError(t, err)
+
+	// Normalization was skipped, so only the static +6 dB Export.Gain is applied:
+	// the decoded clip sits ~6 dB above the input, NOT on the loudness target.
+	got := measureLUFS(t, decoded)
+	assert.InDelta(t, inputLUFS+staticGainDB, got, 1.0,
+		"the skip-normalization branch must apply the static Export.Gain, not loudness targeting")
 }

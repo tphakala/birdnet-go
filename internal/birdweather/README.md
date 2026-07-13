@@ -8,9 +8,8 @@ BirdWeather is a service that allows sharing of bird detections and environmenta
 
 ## Features
 
-- **Audio Processing**: Convert PCM audio data to FLAC (preferred) or WAV format
-- **Format Selection**: Automatic selection between FLAC and WAV based on FFmpeg availability
-- **Loudness Normalization**: FLAC audio uploads are normalized to standard streaming loudness targets
+- **Audio Processing**: Encode PCM audio data to FLAC using the native go-flac encoder (no FFmpeg dependency)
+- **Loudness Normalization**: FLAC uploads are normalized to EBU R128 loudness with true-peak limiting via the native audionorm library
 - **API Integration**: Connect to the BirdWeather API for data submission
 - **Location Privacy**: Randomize location coordinates to protect precise location data
 - **Error Handling**: Comprehensive network and API error handling
@@ -50,36 +49,28 @@ type BwClient struct {
 
 ### Audio Processing
 
-The package includes functionality to convert PCM audio data to FLAC or WAV format for upload:
+BirdWeather's soundscape API is FLAC-only. The package encodes PCM to FLAC with
+the native go-flac encoder, entirely in Go:
 
 ```go
-// FLAC encoding using FFmpeg (preferred) with loudness normalization
-func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buffer, error)
-
-// WAV encoding as fallback
-func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error)
+// Native FLAC encoding with audionorm EBU R128 loudness normalization.
+func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audioEncodingResult, error)
 ```
 
-The FFmpeg FLAC path uses a short-lived, disk-backed temporary file before the
-upload buffer is created. FFmpeg cannot finalize `STREAMINFO` metadata such as
-the total sample count when it encodes to a non-seekable pipe; without that
-metadata BirdWeather can store the soundscape duration as `0.0`. That path
-creates a private temp directory with `os.MkdirTemp`, encodes the FLAC there,
-reads the finalized bytes with `os.ReadFile`, and removes the temporary file
-afterward.
-
-The native go-flac path (`BIRDNET_FLAC_ENCODER=native`) encodes directly to an
-in-memory buffer with no temp file. go-flac declares
-`STREAMINFO.total_samples` up front from the PCM length and verifies it against
-the samples written, so the duration is correct without a seekable sink.
+The encoder writes directly to an in-memory buffer with no temporary file and no
+FFmpeg dependency. go-flac declares `STREAMINFO.total_samples` up front from the
+PCM length and verifies it against the samples written, so BirdWeather derives the
+correct soundscape duration without a seekable sink. This makes FLAC uploads work
+even on hosts where FFmpeg is not installed.
 
 ### Loudness Normalization
 
-When FFmpeg is available, the package applies loudness normalization to FLAC audio files to ensure consistent playback quality:
+The package normalizes every FLAC upload with the native audionorm library
+(EBU R128), applied as a single linear gain during encoding:
 
-- **Target Loudness**: -14 LUFS (Loudness Units Full Scale) - optimal for web streaming
-- **True Peak Maximum**: -1 dB - prevents clipping in different playback environments
-- **Loudness Range**: 11 LU - balanced dynamic range
+- **Target Loudness**: -23 LUFS (EBU R128 integrated-loudness target)
+- **True Peak Ceiling**: -1 dBTP - prevents inter-sample clipping in different playback environments
+- **Gain Limit**: clamped to +/- `audionorm.DefaultMaxGainDB`; silent or very short (<400 ms) clips are left unchanged (0 dB) rather than boosted into noise
 
 The normalization makes bird vocalizations easier to hear across different devices and platforms while preserving audio quality through the lossless FLAC format.
 
@@ -115,7 +106,6 @@ func initBirdWeather(settings *conf.Settings) (*birdweather.BwClient, error) {
     // settings should contain:
     // - Realtime.Birdweather.ID: "your-station-id"
     // - Realtime.Birdweather.LocationAccuracy: 1000 (meters)
-    // - Realtime.Audio.FfmpegPath: "/path/to/ffmpeg"
     // - BirdNET.Latitude: 60.1234
     // - BirdNET.Longitude: 24.5678
 
@@ -175,14 +165,12 @@ func testConnection(client *birdweather.BwClient) {
 
 ## Cross-Platform Compatibility
 
-This package is designed to work across Linux, macOS, and Windows platforms. The Go code itself handles OS differences, but relies on external dependencies:
+This package is designed to work across Linux, macOS, and Windows platforms. The Go code itself handles OS differences:
 
-- **FFmpeg Dependency**: The primary cross-platform requirement is the **installation and proper configuration of FFmpeg** on each target system. The path to the `ffmpeg` executable must be set correctly in the application configuration or be available in the system's `PATH`.
+- **No FFmpeg dependency**: FLAC encoding and loudness normalization are pure Go (go-flac + audionorm), so BirdWeather uploads work whether or not FFmpeg is installed.
 - Network connectivity differences between platforms are handled internally.
 - Proper error handling for platform-specific network issues is implemented.
 - Fallback DNS resolution for network problems is used.
-- FFmpeg detection and usage for FLAC encoding with loudness normalization is performed.
-- WAV fallback when FFmpeg is not available ensures basic functionality.
 
 ## Error Handling
 
@@ -193,8 +181,7 @@ The package implements robust error handling, including:
 - Request timeout management
 - API response validation
 - Rate limiting for testing functions
-- Graceful fallback to WAV if FLAC encoding fails
-- Fallback to unnormalized FLAC if loudness normalization fails
+- Encode failures return a categorized error for the caller to retry; silent or very short clips are encoded without gain rather than failing
 
 ## Resource Management
 
@@ -203,8 +190,7 @@ Client connections are properly managed to prevent resource leaks:
 - HTTP client timeouts to prevent hanging connections
 - Proper cleanup of resources in the `Close()` method
 - Idle connection cleanup
-- **Seekable FLAC Uploads (FFmpeg path)**: FFmpeg FLAC uploads use a short-lived temporary file so FFmpeg can finalize seek metadata before upload. The path creates the temporary workspace with `os.MkdirTemp`, reads the finalized bytes back with `os.ReadFile`, and then uploads through the existing in-memory HTTP path. The native go-flac path skips the temp file and encodes in memory.
-- Temporary files and directories are properly cleaned up
+- **In-memory FLAC encoding**: the native go-flac encoder writes the upload buffer directly in memory, so there are no temporary files or directories to create or clean up
 
 ## Debug Capabilities
 
@@ -224,9 +210,9 @@ When debug mode is enabled (`Settings.Realtime.Birdweather.Debug = true`), the f
     - Audio specifications (sample rate, bit depth, etc.)
     - Expected duration
 
-- **Audio Files**: Saves the processed FLAC or WAV audio files
-  - Stored in `debug/birdweather/flac/` or `debug/birdweather/wav/` directory
-  - Filename format: `bw_debug_*.flac` or `bw_debug_*.wav`
+- **Audio Files**: Saves the processed FLAC upload file
+  - Stored in `debug/birdweather/flac/` directory
+  - Filename format: `bw_debug_*.flac`
   - Includes metadata in accompanying `.txt` file:
     - Timestamp information
     - File sizes (total file, buffer, PCM data)
@@ -258,35 +244,31 @@ debug/
 │   ├── pcm/                      # Raw PCM audio data
 │   │   ├── bw_pcm_debug_*.raw    # Raw PCM files
 │   │   └── bw_pcm_debug_*.txt    # Metadata files
-│   ├── flac/                     # Processed FLAC files (when FFmpeg is available)
-│   │   ├── bw_debug_*.flac       # FLAC audio files
-│   │   └── bw_debug_*.txt        # Metadata files
-│   └── wav/                      # Processed WAV files (when FFmpeg is not available)
-│       ├── bw_debug_*.wav        # WAV audio files
+│   └── flac/                     # Processed FLAC upload files
+│       ├── bw_debug_*.flac       # FLAC audio files
 │       └── bw_debug_*.txt        # Metadata files
 ```
 
 ## Loudness Normalization Technical Details
 
-When FFmpeg is available, bird call audio is processed using the `loudnorm` filter with a **two-pass** method to achieve these targets:
+Bird call audio is normalized with the native audionorm library (EBU R128) toward:
 
-- **Integrated Loudness (I)**: -23 LUFS - standard target for EBU R128 compliance
-- **True Peak (TP)**: -1 dB - prevents clipping during playback
-- **Loudness Range (LRA)**: 11 LU - maintains appropriate dynamic range
+- **Integrated Loudness (I)**: -23 LUFS - EBU R128 integrated-loudness target
+- **True Peak (TP)**: -1 dBTP - prevents inter-sample clipping during playback
 
 The normalization process involves:
 
-1.  **Pass 1 (Analysis)**: Reads raw PCM audio data and runs `loudnorm` in analysis mode (`print_format=json`) to measure the input audio's characteristics (I, LRA, TP, Threshold).
-2.  **Pass 2 (Normalization & Encoding)**: Reads the PCM data again, applies the `loudnorm` filter using the measured values from Pass 1 (`linear=true`, `measured_*` parameters), and encodes the normalized audio to a seekable temporary FLAC file before reading the finalized bytes for upload.
+1.  **Measurement**: audionorm decodes the 16-bit PCM in memory and measures the clip's integrated loudness and true peak.
+2.  **Gain planning**: a single linear gain toward the target is computed under the true-peak ceiling, then clamped to +/- `audionorm.DefaultMaxGainDB`. Silent or sub-400 ms input yields 0 dB, leaving the clip unchanged.
+3.  **Encoding**: the gain is applied in Go while the PCM is streamed into the go-flac encoder, producing the in-memory FLAC upload buffer.
 
 Benefits:
 
-- Produces higher quality, more consistent normalization compared to single-pass, avoiding audible artifacts like "pumping".
-- Improves listening experience across different devices.
+- Applies a single linear gain, avoiding the "pumping" artifacts of dynamic-range compression.
+- Adds true-peak limiting that the previous fixed-gain FFmpeg path lacked.
 - Makes quiet bird calls more audible without clipping loud ones.
 - Maintains audio quality through lossless compression.
-- Efficiently performs analysis on raw PCM data.
-- Falls back to single-pass normalization if the analysis pass fails.
+- Runs entirely in memory with no FFmpeg process or temporary files.
 
 ## Testing
 
@@ -304,16 +286,14 @@ Comprehensive tests are provided for all key functionality:
 - Location accuracy is limited to 4 decimal places
 - Network connectivity is required for all API operations
 - **Location coordinates** are currently ignored by BirdWeather's API. Despite the location randomization feature, BirdWeather always uses the coordinates assigned to your station ID/token rather than the coordinates submitted with detections.
-- FLAC encoding requires **FFmpeg to be installed and configured correctly** on the host system (Linux, macOS, Windows).
-- Loudness normalization requires FFmpeg with the `loudnorm` filter (available in most modern FFmpeg builds).
-- **Memory Usage**: FFmpeg loudness analysis remains in memory, but finalized FFmpeg FLAC upload encoding uses a short-lived temp file so `STREAMINFO` duration metadata can be written. The native go-flac path encodes entirely in memory, declaring `STREAMINFO.total_samples` up front.
+- **Memory Usage**: FLAC encoding and loudness normalization run entirely in memory (no FFmpeg process, no temporary files), declaring `STREAMINFO.total_samples` up front from the PCM length.
 
 ## Dependencies
 
 - Standard library packages (`net/http`, `encoding/binary`, etc.)
 - Internal `datastore` package for detection data structures
 - Internal `conf` package for configuration settings
-- Internal `myaudio` package for FFmpeg integration
+- Internal `audiocore/flac` and `audiocore/audionorm` packages for native FLAC encoding and loudness normalization
 
 ## Thread Safety
 

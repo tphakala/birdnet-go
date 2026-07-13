@@ -244,10 +244,6 @@ Put a reverse proxy in front (it can serve on port 80/443 and proxy to 8080). in
 
 MQTT discovery messages are retained by the broker, so after updating you need to republish them: **Settings > Integrations > MQTT > Send Discovery** (or restart BirdNET-Go) once your streams are registered. MQTT TLS certificates (CA/client cert/key) are uploaded through that same MQTT settings page.
 
-### BirdWeather test fails with "FFmpeg not available"
-
-BirdWeather uploads need FFmpeg. The official Docker image includes it, so this error means you are on a custom image or a native install without FFmpeg, install it, use the official image, or enable the native FLAC encoder.
-
 ### Push notifications never arrive even though the test works
 
 Update to the latest nightly (an old timeout bug made every push time out instantly). Also note BirdNET-Go's two-layer model: the **provider** (URL/template) lives in config, and an **alert rule** decides when to send. Built-in rules only ring the in-app bell by default, so open the rule and add a **Push** action. Use the "Bird detected" event for every detection, or "New species detected" for first-time only. For Discord, send a proper JSON embed template, not plain text lines.
