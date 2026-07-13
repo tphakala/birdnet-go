@@ -52,12 +52,20 @@
   const TRANSITION_MS = 120;
   const CATEGORY_LABEL_ROTATION = -30;
   const ROTATED_CATEGORY_LABEL_OFFSET = 70;
+  // Clearance for the vertical chart's rotated value-axis title so it does not overlap the
+  // y-axis tick numbers. Worked from the widest realistic tick label ("300,000"-scale detection
+  // counts, ~60px at the 12px axis font) plus D3's default axisLeft tick gap
+  // (tickSizeInner 6 + tickPadding 3 = 9px) plus the rotated title's own ~13px glyph thickness
+  // (ascent + descent), each with a few px of buffer: 9 + 60 + 4 + 13 + 4 = 90.
+  const VERTICAL_VALUE_AXIS_LABEL_OFFSET = 76;
 
   // Margins per orientation. Horizontal bars put long category names on the
   // left axis, so widen the left margin to avoid clipping. Vertical bars rotate
-  // their category labels along the bottom, so add bottom room for them.
+  // their category labels along the bottom, so add bottom room for them, and
+  // widen the left margin so the rotated value-axis title clears wide tick numbers
+  // (see VERTICAL_VALUE_AXIS_LABEL_OFFSET for the math).
   const HORIZONTAL_MARGIN = { top: 20, right: 20, bottom: 65, left: 130 };
-  const VERTICAL_MARGIN = { top: 20, right: 20, bottom: 90, left: 60 };
+  const VERTICAL_MARGIN = { top: 20, right: 20, bottom: 90, left: 90 };
   const margin = $derived(orientation === 'horizontal' ? HORIZONTAL_MARGIN : VERTICAL_MARGIN);
 
   let tooltip: ChartTooltip | null = null;
@@ -209,7 +217,7 @@
           {
             text: valueAxisLabel,
             orientation: 'left',
-            offset: AXIS_LABEL_OFFSET + 5,
+            offset: VERTICAL_VALUE_AXIS_LABEL_OFFSET,
             width: innerWidth,
             height: innerHeight,
           },
