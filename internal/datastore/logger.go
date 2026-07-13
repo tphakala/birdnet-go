@@ -106,12 +106,18 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		// instead of building an error-category EnhancedError. The matching
 		// user-notification suppression lives in internal/notification (see
 		// errors.IsSuppressibleOperationalError), so both paths stay consistent.
-		GetLogger().Debug("Query canceled or timed out",
-			logger.String("sql", sanitizeSQL(sql)),
-			logger.Duration("duration", elapsed),
-			logger.Int64("rows_affected", rows))
+		// Gate the log on the GORM LogLevel like the normal-query case below: a
+		// cancellation is expected, not a fault, so it should only surface at
+		// Info verbosity, not at Warn/Error.
+		if l.LogLevel >= gormlogger.Info {
+			GetLogger().Debug("Query canceled or timed out",
+				logger.String("sql", sanitizeSQL(sql)),
+				logger.Duration("duration", elapsed),
+				logger.Int64("rows_affected", rows))
+		}
 
-		// Keep cancellations observable without inflating the error counters.
+		// Record the outcome regardless of log level so cancellations stay
+		// observable in the operation counters without inflating the error count.
 		if l.metrics != nil {
 			l.metrics.RecordDbOperation(operation, table, "canceled")
 		}

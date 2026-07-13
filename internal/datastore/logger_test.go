@@ -59,6 +59,7 @@ func TestGormLogger_Trace_ContextCancellation(t *testing.T) {
 			output := buf.String()
 			assert.NotContains(t, output, "level=ERROR", "%s must not be logged at error level", tt.name)
 			assert.NotContains(t, output, "Database query failed", "%s must not be reported as a query failure", tt.name)
+			assert.Contains(t, output, "level=DEBUG", "%s must be logged at debug level", tt.name)
 			assert.Contains(t, output, "Query canceled or timed out", "%s should be logged as a debug message", tt.name)
 		})
 	}

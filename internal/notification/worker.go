@@ -328,14 +328,17 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 			logger.Int("batch_size", len(errorEvents)))
 	}
 
-	eventGroups := w.groupEventsByKey(errorEvents)
+	eventGroups, skipped := w.groupEventsByKey(errorEvents)
 	aggregatedErrors, successCount := w.processEventGroups(eventGroups)
 
+	// Intentionally skipped events (low priority, suppressed cancellations) are
+	// neither successes nor failures, so exclude them from the failure count.
 	w.log.Debug("processed event batch with aggregation",
 		logger.Int("total", len(errorEvents)),
 		logger.Int("groups", len(eventGroups)),
 		logger.Int("success", successCount),
-		logger.Int("failed", len(errorEvents)-successCount))
+		logger.Int("skipped", skipped),
+		logger.Int("failed", len(errorEvents)-successCount-skipped))
 
 	if len(aggregatedErrors) > 0 {
 		return errors.Join(aggregatedErrors...)
@@ -344,14 +347,19 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 }
 
 // groupEventsByKey groups events by component, category, and priority, skipping low priority.
-func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) map[eventKey][]events.ErrorEvent {
-	eventGroups := make(map[eventKey][]events.ErrorEvent)
+// groupEventsByKey groups events by component, category, and priority, skipping
+// low-priority and suppressed operational events. It also returns how many
+// events were intentionally skipped so batch accounting does not count those
+// skips as failures.
+func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) (eventGroups map[eventKey][]events.ErrorEvent, skipped int) {
+	eventGroups = make(map[eventKey][]events.ErrorEvent)
 
 	for _, event := range errorEvents {
 		// Same operational-interruption suppression as the single-event path, so
 		// batched context.Canceled database events are not aggregated into a
 		// critical notification either.
 		if w.shouldSuppressOperationalEvent(event) {
+			skipped++
 			continue
 		}
 
@@ -362,6 +370,7 @@ func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) m
 		priority := getNotificationPriority(event.GetCategory(), explicitPriority)
 
 		if priority == PriorityLow {
+			skipped++
 			continue
 		}
 
@@ -373,7 +382,7 @@ func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) m
 		eventGroups[key] = append(eventGroups[key], event)
 	}
 
-	return eventGroups
+	return eventGroups, skipped
 }
 
 // processEventGroups processes each event group and returns aggregated errors and success count.
