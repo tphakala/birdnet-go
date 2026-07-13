@@ -1308,6 +1308,7 @@ func (c *Collector) collectLogFilesWithDiagnostics(ctx context.Context, duration
 	// diagnostics describe every shipped file rather than a starved subset.
 	targets := c.gatherLogFileTargets(uniquePaths, cutoffTime)
 	allocateTailBudgets(targets, maxSize)
+	filesProcessed := 0
 	for i := range targets {
 		if nearDeadline(ctx) {
 			diagnostics.Details["stopped_reason"] = "deadline"
@@ -1318,9 +1319,13 @@ func (c *Collector) collectLogFilesWithDiagnostics(ctx context.Context, duration
 			continue
 		}
 		c.countLogFile(ctx, t.sourcePath, cutoffTime, t.budget, acc)
+		filesProcessed++
 	}
 
-	diagnostics.Details["files_processed"] = len(targets)
+	// Report the files actually counted, not len(targets): a deadline break or a
+	// zero-budget skip means fewer files were processed, and an inflated count
+	// would mislead an operator reading the diagnostics.
+	diagnostics.Details["files_processed"] = filesProcessed
 	diagnostics.Details["total_size_bytes"] = acc.size
 
 	return nil
@@ -1332,7 +1337,7 @@ func (c *Collector) collectLogFilesWithDiagnostics(ctx context.Context, duration
 // errors (e.g. permission denied) are returned so the caller can record them.
 func (c *Collector) countLogFilesInPath(logPath string, info os.FileInfo) (int, error) {
 	if !info.IsDir() {
-		if hasLogSuffix(logPath) {
+		if hasLogSuffix(logPath) && info.Mode().IsRegular() {
 			return 1, nil
 		}
 		return 0, nil
@@ -1344,7 +1349,10 @@ func (c *Collector) countLogFilesInPath(logPath string, info os.FileInfo) (int, 
 	}
 	count := 0
 	for _, file := range files {
-		if hasLogSuffix(file.Name()) {
+		// Match the regular-file filter gatherLogFileTargets applies, so the
+		// reported count reflects the files actually collectible rather than
+		// counting a subdirectory or device named "*.log".
+		if hasLogSuffix(file.Name()) && file.Type().IsRegular() {
 			count++
 		}
 	}
