@@ -148,6 +148,13 @@ func (w *NotificationWorker) Name() string {
 func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 	w.logEventProcessingStart(event)
 
+	// Drop expected operational interruptions (context cancellation/deadline on
+	// database/system operations) before they become critical notifications, so a
+	// normal client disconnect or graceful shutdown does not raise a false alarm.
+	if w.shouldSuppressOperationalEvent(event) {
+		return nil
+	}
+
 	if !w.circuitBreaker.Allow() {
 		return w.handleCircuitBreakerOpen(event)
 	}
@@ -203,6 +210,30 @@ func (w *NotificationWorker) shouldSkipLowPriority(event events.ErrorEvent, prio
 	w.log.Debug("skipping low priority error notification",
 		logger.String("category", event.GetCategory()),
 		logger.String("priority", string(priority)),
+		logger.String("component", event.GetComponent()))
+	return true
+}
+
+// shouldSuppressOperationalEvent reports whether the event is an expected
+// operational interruption (a context cancellation/deadline on a database or
+// system operation) that must not become a user-facing notification. The
+// datastore tags these context.Canceled failures CategoryDatabase, which maps
+// to PriorityCritical, so a normal RTSP client disconnect or graceful shutdown
+// would otherwise raise a false "Critical database error ... context canceled"
+// alert (issue #3891). It reuses the errors package's canonical predicate so
+// this path and the Sentry path share one definition of "expected
+// interruption". Events that are not *errors.EnhancedError (the type the errors
+// package publishes) are never suppressed here.
+func (w *NotificationWorker) shouldSuppressOperationalEvent(event events.ErrorEvent) bool {
+	ee, ok := event.(*errors.EnhancedError)
+	if !ok {
+		return false
+	}
+	if !errors.IsSuppressibleOperationalError(ee) {
+		return false
+	}
+	w.log.Debug("suppressing expected operational interruption",
+		logger.String("category", event.GetCategory()),
 		logger.String("component", event.GetComponent()))
 	return true
 }
@@ -315,6 +346,13 @@ func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) m
 	eventGroups := make(map[eventKey][]events.ErrorEvent)
 
 	for _, event := range errorEvents {
+		// Same operational-interruption suppression as the single-event path, so
+		// batched context.Canceled database events are not aggregated into a
+		// critical notification either.
+		if w.shouldSuppressOperationalEvent(event) {
+			continue
+		}
+
 		explicitPriority := ""
 		if enhancedErr, ok := event.(*errors.EnhancedError); ok {
 			explicitPriority = enhancedErr.GetPriority()

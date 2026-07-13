@@ -2,6 +2,7 @@
 package notification
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +111,85 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 				assert.Equal(t, tt.event.GetComponent(), notif.Component, "Component mismatch")
 			} else {
 				assert.Empty(t, notifications, "Expected no notifications")
+			}
+		})
+	}
+}
+
+// TestNotificationWorker_ProcessEvent_SuppressesOperationalCancellation verifies
+// that expected operational interruptions (context cancellation/deadline on
+// database/system operations) never become user-facing notifications, while a
+// genuine database failure still does. This is the fix for the false-positive
+// "Critical database error in datastore: ... context canceled" notification that
+// appeared on normal RTSP client disconnects and graceful shutdowns.
+func TestNotificationWorker_ProcessEvent_SuppressesOperationalCancellation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		event       events.ErrorEvent
+		expectNotif bool
+	}{
+		{
+			// Mirrors the reported case: the datastore wraps a canceled query as
+			// "batch hourly occurrences: %w" and tags it CategoryDatabase.
+			name: "database_context_canceled_suppressed",
+			event: errors.Newf("batch hourly occurrences: %w", context.Canceled).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Build(),
+			expectNotif: false,
+		},
+		{
+			name: "database_deadline_exceeded_suppressed",
+			event: errors.Newf("batch hourly occurrences: %w", context.DeadlineExceeded).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Build(),
+			expectNotif: false,
+		},
+		{
+			name: "system_context_canceled_suppressed",
+			event: errors.New(context.Canceled).
+				Component("myaudio").
+				Category(errors.CategorySystem).
+				Build(),
+			expectNotif: false,
+		},
+		{
+			// A real database fault (no context sentinel in the chain) must still
+			// raise a critical notification.
+			name: "genuine_database_error_still_notifies",
+			event: errors.Newf("disk I/O error: database is locked").
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Build(),
+			expectNotif: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			service := newTestService(t)
+			defer service.Stop()
+
+			worker, err := NewNotificationWorker(service, nil)
+			require.NoError(t, err, "failed to create worker")
+
+			err = worker.ProcessEvent(tt.event)
+			require.NoError(t, err, "ProcessEvent should not fail")
+
+			notifications, err := service.List(&FilterOptions{
+				Types: []Type{TypeError},
+			})
+			require.NoError(t, err, "failed to list notifications")
+
+			if tt.expectNotif {
+				require.Len(t, notifications, 1, "expected a notification for a genuine database error")
+			} else {
+				assert.Empty(t, notifications, "expected operational interruption to be suppressed")
 			}
 		})
 	}
