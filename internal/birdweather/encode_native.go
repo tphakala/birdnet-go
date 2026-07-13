@@ -33,9 +33,19 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	ctx, cancel := context.WithTimeout(context.Background(), encodingTimeout)
 	defer cancel()
 
-	// Pass 1: measure loudness + true peak directly from the PCM bytes; the
-	// original bytes are never mutated.
-	meas, err := audionorm.MeasureInt16Bytes(pcmData, conf.SampleRate, conf.NumChannels)
+	opts := audionorm.DefaultOptions()
+	opts.SampleRate = conf.SampleRate
+	opts.Channels = conf.NumChannels
+	// Target the same loudness as the FFmpeg path. The default -1.0 dBTP ceiling
+	// is kept, adding inter-sample-peak protection the volume filter lacked.
+	opts.TargetLUFS = targetIntegratedLoudnessLUFS
+
+	// Pass 1: measure loudness + true peak directly from the PCM bytes (never
+	// mutated), plan the gain toward opts.TargetLUFS, and clamp to the same
+	// +/-audionorm.DefaultMaxGainDB bound the FFmpeg path used. Silence yields
+	// GainDB == 0 (audionorm returns -Inf LUFS), so quiet clips stay quiet instead
+	// of being boosted into noise.
+	gainDB, meas, res, limited, err := audionorm.PlanClampedGainInt16Bytes(pcmData, opts, audionorm.DefaultMaxGainDB)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("birdweather").
@@ -45,19 +55,6 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 			Build()
 	}
 
-	opts := audionorm.DefaultOptions()
-	opts.SampleRate = conf.SampleRate
-	opts.Channels = conf.NumChannels
-	// Target the same loudness as the FFmpeg path. The default -1.0 dBTP ceiling
-	// is kept, adding inter-sample-peak protection the volume filter lacked.
-	opts.TargetLUFS = targetIntegratedLoudnessLUFS
-
-	res := audionorm.PlanGain(meas, opts)
-
-	// Clamp to the same +/-audionorm.DefaultMaxGainDB bound the FFmpeg path used.
-	// Silence yields GainDB == 0 (audionorm returns -Inf LUFS), so quiet clips stay quiet
-	// instead of being boosted into noise.
-	gainDB, limited := audionorm.ClampGainDB(res.GainDB, audionorm.DefaultMaxGainDB)
 	if limited {
 		if res.GainDB > 0 {
 			b.logGainLimit(log, "Limiting gain to prevent excessive amplification",
