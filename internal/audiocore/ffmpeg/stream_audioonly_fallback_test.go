@@ -26,15 +26,22 @@ func TestStream_AudioOnlyFallback_LatchesAfterThreshold(t *testing.T) {
 
 	// Failures below audioOnlyFallbackThreshold must not latch the fallback.
 	for i := 1; i < audioOnlyFallbackThreshold; i++ {
-		stream.maybeEngageAudioOnlyFallback()
+		assert.Falsef(t, stream.maybeEngageAudioOnlyFallback(),
+			"should report not-engaged after %d failure(s)", i)
 		assert.Falsef(t, stream.audioOnlyFallback.Load(), "should not latch after %d failure(s)", i)
 		assert.True(t, hasAudioOnlyFlag(stream.buildFFmpegInputArgs(nil)),
 			"expected audio-only flag to remain below threshold")
 	}
 
-	// The failure that reaches the threshold latches the fallback.
-	stream.maybeEngageAudioOnlyFallback()
+	// The failure that reaches the threshold latches the fallback and reports it
+	// engaged (so Run skips that iteration's backoff).
+	assert.True(t, stream.maybeEngageAudioOnlyFallback(),
+		"should report engaged on the call that reaches the threshold")
 	assert.True(t, stream.audioOnlyFallback.Load(), "should latch after reaching threshold")
+
+	// A further call after latching reports not-engaged (already engaged).
+	assert.False(t, stream.maybeEngageAudioOnlyFallback(),
+		"should report not-engaged once already latched")
 
 	args := stream.buildFFmpegInputArgs(nil)
 	assert.False(t, hasAudioOnlyFlag(args), "expected audio-only flag dropped after fallback")

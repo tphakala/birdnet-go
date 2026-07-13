@@ -758,12 +758,14 @@ func (s *Stream) Run(parentCtx context.Context) {
 
 			runtime := time.Since(processStartTime)
 
+			fallbackEngaged := false
 			if err != nil && !errors.Is(err, context.Canceled) {
 				s.recordFailure(runtime)
 				// Latch to the full-stream request if repeated RTSP failures with
 				// no audio point at an audio-only handshake the camera cannot
-				// honor (issue #3902).
-				s.maybeEngageAudioOnlyFallback()
+				// honor (issue #3902). When it engages, skip this iteration's
+				// backoff below so the full-stream attempt starts immediately.
+				fallbackEngaged = s.maybeEngageAudioOnlyFallback()
 				errorMsg := err.Error()
 				sanitizedError := privacy.SanitizeFFmpegError(errorMsg)
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
@@ -822,8 +824,11 @@ func (s *Stream) Run(parentCtx context.Context) {
 				s.onReset(s.config.SourceID)
 			}
 
+			// Skip the backoff on the iteration that engaged the audio-only
+			// fallback so the first full-stream attempt starts immediately
+			// (issue #3902); a later full-stream failure backs off normally.
 			currentState := s.GetProcessState()
-			if currentState != StateCircuitOpen {
+			if currentState != StateCircuitOpen && !fallbackEngaged {
 				s.handleRestartBackoff()
 			}
 		}
@@ -1937,25 +1942,30 @@ func (s *Stream) resetFailures() {
 // because a silence-timeout failure (connect succeeds, no audio flows) resets
 // those counters in Run, which would otherwise let a broken audio-only handshake
 // retry forever without ever falling back.
-func (s *Stream) maybeEngageAudioOnlyFallback() {
+//
+// Returns true on the call that engages the fallback, so Run can skip that
+// iteration's restart backoff and attempt the full stream immediately.
+func (s *Stream) maybeEngageAudioOnlyFallback() bool {
 	// Only RTSP carries the audio-only restriction; only act while it is still
 	// requested and the camera has never delivered audio under it.
 	if s.config.sourceType() != audiocore.SourceTypeRTSP {
-		return
+		return false
 	}
 	if s.audioOnlyFallback.Load() || s.receivedAudio.Load() {
-		return
+		return false
 	}
 
 	if s.audioOnlyFailures.Add(1) < audioOnlyFallbackThreshold {
-		return
+		return false
 	}
 
 	s.audioOnlyFallback.Store(true)
 
 	// Clear failure and circuit state accumulated during the audio-only attempts
-	// so the first full-stream attempt runs promptly instead of waiting out a
-	// backoff or circuit cooldown that the (now-resolved) audio-only failures caused.
+	// so a later full-stream failure backs off from a clean slate instead of the
+	// (now-resolved) audio-only failures' inflated count. The caller additionally
+	// skips this iteration's restart backoff (see Run) so the first full-stream
+	// attempt starts immediately rather than after a base backoff.
 	s.restartCountMu.Lock()
 	s.restartCount = 0
 	s.restartCountMu.Unlock()
@@ -1971,6 +1981,8 @@ func (s *Stream) maybeEngageAudioOnlyFallback() {
 		logger.Int("failures", int(s.audioOnlyFailures.Load())),
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "audio_only_fallback"))
+
+	return true
 }
 
 // conditionalFailureReset resets failures only after the process has proven
