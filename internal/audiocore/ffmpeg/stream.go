@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
@@ -55,6 +56,13 @@ const (
 	circuitBreakerImmediateThreshold = 3
 	circuitBreakerRapidThreshold     = 5
 	circuitBreakerQuickThreshold     = 8
+
+	// audioOnlyFallbackThreshold is the number of RTSP process failures with no
+	// audio ever received that trigger the audio-only fallback:
+	// the stream stops requesting -allowed_media_types audio and asks for the
+	// full stream instead (issue #3902). Kept below circuitBreakerImmediateThreshold
+	// so the fallback engages before the circuit breaker locks the source out.
+	audioOnlyFallbackThreshold = 2
 
 	// Circuit breaker runtime thresholds.
 	circuitBreakerImmediateRuntime = 1 * time.Second
@@ -507,6 +515,18 @@ type Stream struct {
 	circuitOpenTime     time.Time
 	circuitMu           sync.Mutex
 
+	// RTSP audio-only fallback state. BirdNET-Go requests audio-only via
+	// -allowed_media_types audio to avoid opening a camera video slot (#3798),
+	// but some cameras cannot SETUP the audio track alone and never deliver audio
+	// (#3902). audioOnlyFallback latches true after audioOnlyFailures reaches
+	// audioOnlyFallbackThreshold failures with no audio ever received, at which
+	// point the stream requests the full stream (video dropped via -vn).
+	// receivedAudio guards against engaging the fallback on a source that has
+	// already proven audio-only works, so a later transient failure never trips it.
+	audioOnlyFallback atomic.Bool
+	receivedAudio     atomic.Bool
+	audioOnlyFailures atomic.Int32
+
 	// Dropped data tracking.
 	lastDropLogTime time.Time
 	dropLogMu       sync.Mutex
@@ -738,8 +758,14 @@ func (s *Stream) Run(parentCtx context.Context) {
 
 			runtime := time.Since(processStartTime)
 
+			fallbackEngaged := false
 			if err != nil && !errors.Is(err, context.Canceled) {
 				s.recordFailure(runtime)
+				// Latch to the full-stream request if repeated RTSP failures with
+				// no audio point at an audio-only handshake the camera cannot
+				// honor (issue #3902). When it engages, skip this iteration's
+				// backoff below so the full-stream attempt starts immediately.
+				fallbackEngaged = s.maybeEngageAudioOnlyFallback()
 				errorMsg := err.Error()
 				sanitizedError := privacy.SanitizeFFmpegError(errorMsg)
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
@@ -798,8 +824,11 @@ func (s *Stream) Run(parentCtx context.Context) {
 				s.onReset(s.config.SourceID)
 			}
 
+			// Skip the backoff on the iteration that engaged the audio-only
+			// fallback so the first full-stream attempt starts immediately
+			// (issue #3902); a later full-stream failure backs off normally.
 			currentState := s.GetProcessState()
-			if currentState != StateCircuitOpen {
+			if currentState != StateCircuitOpen && !fallbackEngaged {
 				s.handleRestartBackoff()
 			}
 		}
@@ -891,9 +920,12 @@ func (s *Stream) startProcess() error {
 }
 
 // buildFFmpegInputArgs constructs the FFmpeg input arguments for this stream.
-// It delegates the actual argument construction to the shared buildInputArgs so
-// the runtime path stays in lockstep with the unit-tested BuildFFmpegArgs. The
-// only Stream-specific behavior is surfacing an invalid user-supplied timeout as
+// It delegates argument construction to the shared buildInputArgs so the runtime
+// path builds the same argument structure as the unit-tested BuildFFmpegArgs.
+// The two differ only where this stream intends them to: BuildFFmpegArgs always
+// requests audio-only, whereas this path passes audioOnly=false once the stream
+// has latched into the full-stream fallback (issue #3902). Stream-specific
+// behavior is otherwise limited to surfacing an invalid user-supplied timeout as
 // a warning log (buildInputArgs silently falls back to the default).
 func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
 	if hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters); hasUserTimeout {
@@ -906,7 +938,10 @@ func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
 				logger.String("operation", "validate_timeout"))
 		}
 	}
-	return buildInputArgs(&s.config, ffmpegParameters)
+	// Request audio-only unless this stream has fallen back to the full stream
+	// because the camera cannot SETUP the audio track alone (issue #3902).
+	audioOnly := !s.audioOnlyFallback.Load()
+	return buildInputArgs(&s.config, ffmpegParameters, audioOnly)
 }
 
 // readResult carries the outcome of a single stdout.Read call from the
@@ -1152,6 +1187,15 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 	defer ref.Release()
 
 	s.updateLastDataTime()
+
+	// Record that audio has flowed at least once. This confirms the current
+	// RTSP media-type request works for this camera, so the audio-only fallback
+	// never engages on a later transient failure (issue #3902). This is a
+	// set-once latch: the Load guard keeps the steady state a barrier-free read
+	// rather than a locked store on every audio chunk.
+	if !s.receivedAudio.Load() {
+		s.receivedAudio.Store(true)
+	}
 
 	n := len(data)
 	s.bytesReceivedMu.Lock()
@@ -1883,6 +1927,62 @@ func (s *Stream) resetFailures() {
 			logger.String("operation", "reset_failures"))
 		s.consecutiveFailures = 0
 	}
+}
+
+// maybeEngageAudioOnlyFallback latches the stream into full-stream mode when an
+// RTSP source repeatedly fails without ever delivering audio while audio-only
+// was requested. Some cameras cannot SETUP the audio track in isolation, so the
+// -allowed_media_types audio restriction (issue #3798) causes the handshake to
+// fail and no audio to arrive (issue #3902). Dropping the restriction restores
+// the pre-#3798 full-stream request; video is still discarded after decode via
+// -vn. This is a one-way latch per Stream instance: reconfiguring the source
+// creates a fresh Stream that retries audio-only.
+//
+// It uses its own failure counter rather than restartCount/consecutiveFailures
+// because a silence-timeout failure (connect succeeds, no audio flows) resets
+// those counters in Run, which would otherwise let a broken audio-only handshake
+// retry forever without ever falling back.
+//
+// Returns true on the call that engages the fallback, so Run can skip that
+// iteration's restart backoff and attempt the full stream immediately.
+func (s *Stream) maybeEngageAudioOnlyFallback() bool {
+	// Only RTSP carries the audio-only restriction; only act while it is still
+	// requested and the camera has never delivered audio under it.
+	if s.config.sourceType() != audiocore.SourceTypeRTSP {
+		return false
+	}
+	if s.audioOnlyFallback.Load() || s.receivedAudio.Load() {
+		return false
+	}
+
+	if s.audioOnlyFailures.Add(1) < audioOnlyFallbackThreshold {
+		return false
+	}
+
+	s.audioOnlyFallback.Store(true)
+
+	// Clear failure and circuit state accumulated during the audio-only attempts
+	// so a later full-stream failure backs off from a clean slate instead of the
+	// (now-resolved) audio-only failures' inflated count. The caller additionally
+	// skips this iteration's restart backoff (see Run) so the first full-stream
+	// attempt starts immediately rather than after a base backoff.
+	s.restartCountMu.Lock()
+	s.restartCount = 0
+	s.restartCountMu.Unlock()
+
+	s.circuitMu.Lock()
+	s.consecutiveFailures = 0
+	s.circuitOpenTime = time.Time{}
+	s.circuitMu.Unlock()
+
+	getStreamLogger().Warn("RTSP audio-only request failed repeatedly; falling back to full stream (audio decoded, video ignored)",
+		logger.String("url", s.config.safeURL()),
+		logger.String("source_id", s.config.SourceID),
+		logger.Int("failures", int(s.audioOnlyFailures.Load())),
+		logger.String("component", "ffmpeg-stream"),
+		logger.String("operation", "audio_only_fallback"))
+
+	return true
 }
 
 // conditionalFailureReset resets failures only after the process has proven
