@@ -1,9 +1,8 @@
 // encode_native.go implements the FFmpeg-free FLAC encoding path for BirdWeather
-// soundscape uploads. It is selected by the same BIRDNET_FLAC_ENCODER=native gate
-// as the detection save path (see internal/audiocore/flac). Loudness is matched
-// to the FFmpeg path's target (-23 LUFS) using the native audionorm library,
-// which additionally applies true-peak limiting the old volume-filter path
-// lacked.
+// soundscape uploads. It is the sole encoder for the FLAC-only upload API (see
+// internal/audiocore/flac). Loudness is matched to the historical FFmpeg target
+// (-23 LUFS) using the native audionorm library, which additionally applies
+// true-peak limiting the old volume-filter path lacked.
 package birdweather
 
 import (

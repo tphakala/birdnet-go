@@ -1,19 +1,16 @@
 package birdweather
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -33,9 +30,6 @@ func MockSettings() *conf.Settings {
 			Longitude: -74.0060, // Sample coordinates (New York City)
 		},
 		Realtime: conf.RealtimeSettings{
-			Audio: conf.AudioSettings{
-				FfmpegPath: findFFmpegPath(), // Find FFmpeg for testing
-			},
 			Birdweather: conf.BirdweatherSettings{
 				ID:               "test-station-123",
 				LocationAccuracy: 100, // 100 meters accuracy
@@ -43,52 +37,6 @@ func MockSettings() *conf.Settings {
 			},
 		},
 	}
-}
-
-// findFFmpegPath attempts to find FFmpeg executable for testing
-func findFFmpegPath() string {
-	// Try to find ffmpeg in PATH
-	if path, err := exec.LookPath("ffmpeg"); err == nil {
-		return path
-	}
-	return "" // Return empty if not found
-}
-
-// createTestFLACData creates FLAC-encoded audio data for testing
-func createTestFLACData(t *testing.T) []byte {
-	t.Helper()
-	// Create test PCM data (1 second of 48kHz mono audio)
-	pcmData := make([]byte, 48000*2) // 2 bytes per sample for 16-bit
-
-	// Fill with simple sine wave pattern for more realistic audio
-	for i := 0; i < len(pcmData); i += 2 {
-		// Simple 440Hz sine wave
-		sample := int16(3276) // Low amplitude to avoid clipping (10% of max)
-		pcmData[i] = byte(sample & 0xFF)
-		pcmData[i+1] = byte((sample >> 8) & 0xFF)
-	}
-
-	ffmpegPath := findFFmpegPath()
-	if ffmpegPath == "" {
-		t.Skip("FFmpeg not found in PATH, skipping FLAC test")
-	}
-
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-
-	// Use the same custom args as in the main code
-	customArgs := []string{
-		"-af", "volume=15.0dB", // Simple gain adjustment
-		"-c:a", "flac",
-		"-f", "flac",
-	}
-
-	// Use audiocore/ffmpeg to create FLAC data
-	flacBuffer, err := ffmpeg.ExportAudioToBuffer(ctx, pcmData, ffmpegPath, conf.SampleRate, conf.NumChannels, conf.BitDepth, customArgs)
-	require.NoError(t, err, "Failed to create test FLAC data")
-
-	return flacBuffer.Bytes()
 }
 
 // TestMain runs setup/teardown for all tests in this package

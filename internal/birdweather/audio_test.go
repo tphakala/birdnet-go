@@ -4,16 +4,12 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
-	"math"
-	"os"
-	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 func TestEncodePCMtoWAV_EmptyInput(t *testing.T) {
@@ -175,86 +171,4 @@ func TestContextTimeout(t *testing.T) {
 	_, err := convert.EncodePCMtoWAVWithContext(ctx, largeData)
 	require.Error(t, err, "Expected context timeout error")
 	assert.ErrorIs(t, err, context.DeadlineExceeded, "Expected context.DeadlineExceeded error")
-}
-
-func TestEncodeFlacUsingFFmpeg(t *testing.T) {
-	if _, err := exec.LookPath(conf.GetFfmpegBinaryName()); err != nil {
-		t.Skip("FFmpeg not available, skipping FLAC encoding test")
-	}
-
-	// Create a settings object with ffmpeg path
-	settings := &conf.Settings{
-		Realtime: conf.RealtimeSettings{
-			Audio: conf.AudioSettings{
-				FfmpegPath: getFFmpegPath(),
-			},
-			Birdweather: conf.BirdweatherSettings{
-				Debug: true, // Enable debug for testing
-			},
-		},
-	}
-
-	// Create test PCM data (1 second of audio at 48kHz, 16-bit mono)
-	// Using a simple sine wave pattern for better normalization testing
-	sampleCount := 48000 // 1 second at 48kHz
-	pcmData := make([]byte, sampleCount*2)
-
-	// Generate a sine wave at 440Hz (A4 note)
-	for i := range sampleCount {
-		// Calculate sine wave value (-32767 to 32767)
-		value := int16(32767.0 * math.Sin(2.0*math.Pi*440.0*float64(i)/48000.0))
-		// Convert to bytes and store in PCM data
-		binary.LittleEndian.PutUint16(pcmData[i*2:], uint16(value)) //nolint:gosec // G115: audio sample conversion within 16-bit range
-	}
-
-	// Determine the ffmpeg path for the test
-	ffmpegPathForTest := getFFmpegPath()
-
-	// Encode PCM to FLAC with normalization
-	// Pass a background context since this test doesn't need timeout control itself
-	ctx := t.Context()
-	client := &BwClient{Settings: settings}
-	flacBuffer, err := client.encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForTest, settings)
-	require.NoError(t, err, "encodeFlacUsingFFmpeg failed with valid input")
-	require.NotNil(t, flacBuffer, "encodeFlacUsingFFmpeg returned nil buffer")
-
-	// Validate FLAC header (just check signature bytes)
-	flacBytes := flacBuffer.Bytes()
-	require.GreaterOrEqual(t, len(flacBytes), 4, "FLAC buffer too small, need at least 4 bytes")
-
-	// Check FLAC signature (should start with "fLaC")
-	assert.Equal(t, "fLaC", string(flacBytes[0:4]), "FLAC signature not found")
-
-	sampleRate, totalSamples := flacStreamInfo(t, flacBytes)
-	assert.Equal(t, uint64(conf.SampleRate), sampleRate, "FLAC STREAMINFO sample rate mismatch")
-	assert.Equal(t, uint64(sampleCount), totalSamples, "FLAC STREAMINFO total samples should be finalized")
-
-	// The FLAC data should be smaller than the raw PCM (compression)
-	if flacBuffer.Len() >= len(pcmData) {
-		t.Logf("Warning: FLAC data (%d bytes) is not smaller than PCM data (%d bytes)",
-			flacBuffer.Len(), len(pcmData))
-	}
-
-	t.Logf("Successfully encoded PCM to normalized FLAC, size: %d bytes", flacBuffer.Len())
-}
-
-func getFFmpegPath() string {
-	// Honor an explicit override first.
-	if path := os.Getenv("FFMPEG_PATH"); path != "" {
-		return path
-	}
-
-	// Resolve the binary to an absolute path via PATH. The production encoder
-	// (ValidateFFmpegPath) requires an absolute path, and FFmpeg lives in
-	// different places across platforms (e.g. /usr/bin on Linux, /opt/homebrew/bin
-	// on macOS), so the old hardcoded /usr/bin/ffmpeg fell through to the bare
-	// "ffmpeg" name on macOS and was rejected as non-absolute. LookPath returns an
-	// absolute path for a binary found on PATH.
-	if path, err := exec.LookPath(conf.GetFfmpegBinaryName()); err == nil {
-		return path
-	}
-
-	// Last resort: the bare binary name. Callers requiring an absolute path will
-	// reject it, but TestEncodeFlacUsingFFmpeg skips when LookPath finds nothing.
-	return conf.GetFfmpegBinaryName()
 }

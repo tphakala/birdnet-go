@@ -147,7 +147,9 @@ func TestValidateAudioSettings_ClearsFFmpegMetadataOnFailure(t *testing.T) {
 	assert.Zero(t, settings.FfmpegMinor)
 }
 
-// Item 6: Export format is not rewritten when export is disabled and FFmpeg is missing.
+// Item 6: Export format is not rewritten when export is disabled and FFmpeg is
+// missing. Uses an FFmpeg-only format (MP3) so the test exercises the disabled
+// guard specifically, rather than the native WAV/FLAC exemption.
 func TestApplyFfmpegFormatFallback_NoRewriteWhenDisabled(t *testing.T) {
 	t.Parallel()
 
@@ -155,16 +157,17 @@ func TestApplyFfmpegFormatFallback_NoRewriteWhenDisabled(t *testing.T) {
 		FfmpegPath: "",
 		Export: ExportSettings{
 			Enabled: false,
-			Type:    AudioExportTypeFLAC,
+			Type:    AudioExportTypeMP3,
 		},
 	}
 	settings.applyFfmpegFormatFallback()
 
-	assert.Equal(t, AudioExportTypeFLAC, settings.Export.Type,
+	assert.Equal(t, AudioExportTypeMP3, settings.Export.Type,
 		"Export.Type should not be rewritten to WAV when export is disabled")
 }
 
-// Ensure the format IS rewritten when export is enabled and FFmpeg is missing.
+// Ensure an FFmpeg-only format IS rewritten when export is enabled and FFmpeg is
+// missing. FLAC is no longer rewritten (it encodes natively), so this uses MP3.
 func TestApplyFfmpegFormatFallback_RewritesWhenEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -172,7 +175,7 @@ func TestApplyFfmpegFormatFallback_RewritesWhenEnabled(t *testing.T) {
 		FfmpegPath: "",
 		Export: ExportSettings{
 			Enabled: true,
-			Type:    AudioExportTypeFLAC,
+			Type:    AudioExportTypeMP3,
 		},
 	}
 	settings.applyFfmpegFormatFallback()
@@ -196,4 +199,22 @@ func TestApplyFfmpegFormatFallback_LeavesWAVAlone(t *testing.T) {
 
 	assert.Equal(t, AudioExportTypeWAV, settings.Export.Type,
 		"WAV format should not be touched")
+}
+
+// Verify FLAC is left alone even when enabled and FFmpeg is missing: the native
+// go-flac encoder needs no FFmpeg, so a FLAC config must not be downgraded to WAV.
+func TestApplyFfmpegFormatFallback_LeavesFLACAlone(t *testing.T) {
+	t.Parallel()
+
+	settings := &AudioSettings{
+		FfmpegPath: "",
+		Export: ExportSettings{
+			Enabled: true,
+			Type:    AudioExportTypeFLAC,
+		},
+	}
+	settings.applyFfmpegFormatFallback()
+
+	assert.Equal(t, AudioExportTypeFLAC, settings.Export.Type,
+		"FLAC format should not be downgraded to WAV; it encodes natively without FFmpeg")
 }
