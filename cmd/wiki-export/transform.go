@@ -34,6 +34,7 @@ var pageSlugMap = map[string]string{
 	"faq":                          "FAQ",
 	"index":                        "Home",
 	"onnx-runtime-installation":    "ONNX-Runtime-Installation",
+	"openvino-acceleration":        "OpenVINO-Acceleration",
 	"database-doctor":              "Database-Doctor",
 	"file-analysis":                "File-Analysis",
 	"realtime-analysis":            "Realtime-Analysis",
