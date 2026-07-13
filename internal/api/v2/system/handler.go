@@ -15,9 +15,11 @@
 package system
 
 import (
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/health"
@@ -51,6 +53,15 @@ type Handler struct {
 	healthErrors       *health.ErrorRingBuffer
 	healthMetricsStore *observability.HealthMetricsStore
 	healthEvents       *observability.HealthEventBuffer
+
+	// selfProc caches the *process.Process for the current PID, created lazily on
+	// first use. Reusing one instance lets Percent(0) report CPU consumed since
+	// the previous sample (interval usage) instead of the lifetime average a
+	// freshly created instance's CPUPercent() returns. selfProcMu guards it
+	// because Percent(0) mutates the instance's stored sample and resource
+	// requests may run concurrently.
+	selfProc   *process.Process
+	selfProcMu sync.Mutex
 }
 
 // New constructs the system handler from the shared core, the facade controller

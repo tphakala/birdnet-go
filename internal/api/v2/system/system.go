@@ -458,9 +458,16 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 	// Get CPU usage from cache instead of blocking
 	cpuPercent := apicore.GetCachedCPUUsage()
 
-	// Get process information (current process)
-	proc, err := process.NewProcess(int32(os.Getpid())) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
+	// Get process information for the current process. Reuse the cached
+	// *process.Process (see the selfProc field) and sample CPU via Percent(0) so
+	// the value reflects usage since the previous request — interval usage —
+	// rather than the lifetime average a freshly created instance's CPUPercent()
+	// returns and which grows steadily more dampened as the process ages. The
+	// instance access is serialized because Percent(0) mutates its stored sample.
+	c.selfProcMu.Lock()
+	proc, err := c.selfProcessLocked()
 	if err != nil {
+		c.selfProcMu.Unlock()
 		c.LogErrorIfEnabled("Failed to get process information",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
@@ -468,23 +475,26 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 		)
 		return c.HandleError(ctx, err, "Failed to get process information", http.StatusInternalServerError)
 	}
+	procMem, memErr := proc.MemoryInfo()
+	// Percent(0) returns the CPU used since the previous call; the first call
+	// after startup primes the sample and returns 0.
+	procCPU, cpuErr := proc.Percent(0)
+	c.selfProcMu.Unlock()
 
-	procMem, err := proc.MemoryInfo()
-	if err != nil {
-		c.Debug("Failed to get process memory info: %v", err)
+	if memErr != nil {
+		c.Debug("Failed to get process memory info: %v", memErr)
 		c.LogWarnIfEnabled("Failed to get process memory info",
-			logger.Error(err),
+			logger.Error(memErr),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
 		// Continue with nil procMem, handled below
 	}
 
-	procCPU, err := proc.CPUPercent()
-	if err != nil {
-		c.Debug("Failed to get process CPU info: %v", err)
+	if cpuErr != nil {
+		c.Debug("Failed to get process CPU info: %v", cpuErr)
 		c.LogWarnIfEnabled("Failed to get process CPU info",
-			logger.Error(err),
+			logger.Error(cpuErr),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -554,6 +564,21 @@ func normalizeProcessCPU(cpuPercent float64) float64 {
 	default:
 		return cpuPercent
 	}
+}
+
+// selfProcessLocked returns the cached *process.Process for the current PID,
+// creating it on first use. Reusing a single instance is what lets Percent(0)
+// report interval CPU usage (see the selfProc field). Callers must hold
+// c.selfProcMu.
+func (c *Handler) selfProcessLocked() (*process.Process, error) {
+	if c.selfProc == nil {
+		p, err := process.NewProcess(int32(os.Getpid())) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
+		if err != nil {
+			return nil, err
+		}
+		c.selfProc = p
+	}
+	return c.selfProc, nil
 }
 
 // GetDiskInfo handles GET /api/v2/system/disks
