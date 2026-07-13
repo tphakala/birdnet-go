@@ -161,3 +161,99 @@ func TestClampGainDB(t *testing.T) {
 		})
 	}
 }
+
+// TestPlanClampedGainInt16Bytes proves the shared helper is a faithful
+// measure -> plan -> clamp composition of MeasureInt16Bytes, PlanGain and
+// ClampGainDB, so collapsing the two native-FLAC export call sites onto it does
+// not change the gain they apply, the measurement they log, or the clamp flag one
+// of them logs and the other discards.
+func TestPlanClampedGainInt16Bytes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sampleRate = 48000
+		channels   = 1
+		maxAbsGain = DefaultMaxGainDB
+	)
+	// A quiet clip (~-35 LUFS) that wants a real boost toward -23, well under the
+	// true-peak ceiling and the 30 dB clamp on both export paths.
+	quietOpts := Options{SampleRate: sampleRate, Channels: channels, TargetLUFS: -23, TruePeakDBTP: -1}
+	quietPCM := int16sToLEBytes(sineInt16(-35, 1000, 1, sampleRate))
+
+	t.Run("matches the primitive sequence", func(t *testing.T) {
+		t.Parallel()
+		wantMeas, err := MeasureInt16Bytes(quietPCM, sampleRate, channels)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantRes := PlanGain(wantMeas, quietOpts)
+		wantGain, wantLimited := ClampGainDB(wantRes.GainDB, maxAbsGain)
+
+		gotGain, gotMeas, gotRes, gotLimited, err := PlanClampedGainInt16Bytes(quietPCM, quietOpts, maxAbsGain)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotMeas != wantMeas {
+			t.Errorf("meas = %+v, want %+v", gotMeas, wantMeas)
+		}
+		if gotRes != wantRes {
+			t.Errorf("res = %+v, want %+v", gotRes, wantRes)
+		}
+		if gotGain != wantGain || gotLimited != wantLimited {
+			t.Errorf("gain/limited = (%v, %v), want (%v, %v)", gotGain, gotLimited, wantGain, wantLimited)
+		}
+		if gotLimited {
+			t.Error("a mid-range boost must not hit the clamp")
+		}
+	})
+
+	t.Run("clamp binds and exposes the pre-clamp gain", func(t *testing.T) {
+		t.Parallel()
+		// The same clip wants far more than 1 dB toward the target, so a 1 dB
+		// ceiling makes the clamp (not the true-peak limiter) the binding limit.
+		gotGain, _, res, limited, err := PlanClampedGainInt16Bytes(quietPCM, quietOpts, 1.0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !limited {
+			t.Fatal("clamp must bind for a boost above the 1 dB ceiling")
+		}
+		if math.Abs(gotGain-1.0) > 1e-9 {
+			t.Errorf("clamped gain = %v, want 1.0", gotGain)
+		}
+		if res.GainDB <= 1.0 {
+			t.Errorf("pre-clamp GainDB = %v, want > 1.0 so callers can log the real limiting", res.GainDB)
+		}
+		if res.PeakLimited {
+			t.Error("the true-peak ceiling must not bind here; the 1 dB clamp must be the sole limit")
+		}
+	})
+
+	t.Run("silence yields zero gain", func(t *testing.T) {
+		t.Parallel()
+		pcm := make([]byte, sampleRate*2) // 1 s of digital silence
+		gotGain, meas, _, limited, err := PlanClampedGainInt16Bytes(pcm, quietOpts, maxAbsGain)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotGain != 0 || limited {
+			t.Errorf("silence: gain/limited = (%v, %v), want (0, false)", gotGain, limited)
+		}
+		if !math.IsInf(meas.IntegratedLUFS, -1) {
+			t.Errorf("silence: IntegratedLUFS = %v, want -Inf", meas.IntegratedLUFS)
+		}
+	})
+
+	t.Run("measurement error returns zero values", func(t *testing.T) {
+		t.Parallel()
+		// A sub-minimum sample rate makes MeasureInt16Bytes reject the dimensions.
+		badOpts := Options{SampleRate: 4000, Channels: channels, TargetLUFS: -23, TruePeakDBTP: -1}
+		gotGain, meas, res, limited, err := PlanClampedGainInt16Bytes(quietPCM, badOpts, maxAbsGain)
+		if err == nil {
+			t.Fatal("want an error for a sub-minimum sample rate")
+		}
+		if gotGain != 0 || limited || meas != (Measurement{}) || res != (Result{}) {
+			t.Errorf("on error want zero values, got gain=%v limited=%v meas=%+v res=%+v", gotGain, limited, meas, res)
+		}
+	})
+}

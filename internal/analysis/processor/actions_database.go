@@ -623,8 +623,16 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	// audionorm decodes the PCM bytes inline; a.pcmData is not mutated.
-	meas, err := audionorm.MeasureInt16Bytes(a.pcmData, sampleRate, conf.NumChannels)
+	// audionorm decodes the PCM bytes inline; a.pcmData is not mutated. Silence
+	// yields GainDB == 0 (audionorm returns -Inf LUFS); the clamp is the secondary
+	// guard for low-peak clips and for attenuation, applied silently on this path
+	// (the BirdWeather path logs its own limiting, hence the discarded flag).
+	gainDB, meas, res, _, err := audionorm.PlanClampedGainInt16Bytes(a.pcmData, audionorm.Options{
+		SampleRate:   sampleRate,
+		Channels:     conf.NumChannels,
+		TargetLUFS:   targetLUFS,
+		TruePeakDBTP: truePeakDBTP,
+	}, audionorm.DefaultMaxGainDB)
 	if err != nil {
 		return 0, errors.New(err).
 			Component("analysis.processor").
@@ -633,18 +641,6 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 			Context("detection_id", a.CorrelationID).
 			Build()
 	}
-
-	res := audionorm.PlanGain(meas, audionorm.Options{
-		SampleRate:   sampleRate,
-		Channels:     conf.NumChannels,
-		TargetLUFS:   targetLUFS,
-		TruePeakDBTP: truePeakDBTP,
-	})
-
-	// Silence yields GainDB == 0 (audionorm returns -Inf LUFS); the clamp is the
-	// secondary guard for low-peak clips and for attenuation. Applied silently on
-	// this path (the BirdWeather path logs its own limiting).
-	gainDB, _ := audionorm.ClampGainDB(res.GainDB, audionorm.DefaultMaxGainDB)
 
 	GetLogger().Debug("Native FLAC loudness analysis (detection save)",
 		logger.Float64("measured_lufs", meas.IntegratedLUFS),

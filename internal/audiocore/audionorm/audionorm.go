@@ -228,6 +228,36 @@ func ClampGainDB(gainDB, maxAbsDB float64) (clamped float64, limited bool) {
 	}
 }
 
+// PlanClampedGainInt16Bytes runs the measure -> plan -> clamp sequence the native
+// FLAC export paths share: it measures the integrated loudness and true peak of
+// interleaved little-endian int16 PCM bytes (via MeasureInt16Bytes, which decodes
+// inline without mutating pcm), plans the single gain that brings the clip to
+// opts.TargetLUFS without its true peak exceeding opts.TruePeakDBTP (via PlanGain),
+// then clamps that gain to [-maxAbsGainDB, +maxAbsGainDB] (via ClampGainDB).
+//
+// It returns the clamped gain to apply, the pass-one measurement, the pre-clamp
+// planning Result (whose GainDB and PeakLimited callers use for logging), and
+// whether the clamp took effect. Silent or sub-400 ms input yields gainDB == 0,
+// leaving quiet clips unchanged rather than boosting the noise floor. On a
+// measurement error every value is its zero and err is the raw MeasureInt16Bytes
+// error, so callers can wrap it with their own component and context.
+//
+// Only the sample rate and channel count are validated (by MeasureInt16Bytes).
+// Like PlanGain, opts.TargetLUFS and opts.TruePeakDBTP are NOT range-checked
+// here, so callers must pass a target in (-70, 0) and a ceiling <= 0; a
+// non-finite or out-of-range target otherwise flows through as a NaN or garbage
+// gain. Both current callers gate their targets before calling (the detection
+// path via audionormSupportsTargets, the BirdWeather path with fixed constants).
+func PlanClampedGainInt16Bytes(pcm []byte, opts Options, maxAbsGainDB float64) (gainDB float64, meas Measurement, res Result, limited bool, err error) {
+	meas, err = MeasureInt16Bytes(pcm, opts.SampleRate, opts.Channels)
+	if err != nil {
+		return 0, Measurement{}, Result{}, false, err
+	}
+	res = PlanGain(meas, opts)
+	gainDB, limited = ClampGainDB(res.GainDB, maxAbsGainDB)
+	return gainDB, meas, res, limited, nil
+}
+
 func validateDims(sampleRate, channels, n int) error {
 	switch {
 	case sampleRate < minSampleRate:
