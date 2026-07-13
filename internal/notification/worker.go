@@ -232,9 +232,11 @@ func (w *NotificationWorker) shouldSuppressOperationalEvent(event events.ErrorEv
 	if !errors.IsSuppressibleOperationalError(ee) {
 		return false
 	}
-	w.log.Debug("suppressing expected operational interruption",
-		logger.String("category", event.GetCategory()),
-		logger.String("component", event.GetComponent()))
+	if w.config.Debug {
+		w.log.Debug("suppressing expected operational interruption",
+			logger.String("category", event.GetCategory()),
+			logger.String("component", event.GetComponent()))
+	}
 	return true
 }
 

@@ -178,6 +178,15 @@ func isContextCancellation(err error) bool {
 	return Is(err, context.Canceled) || Is(err, context.DeadlineExceeded)
 }
 
+// IsContextCancellation reports whether err (or any wrapped error in its chain)
+// is context.Canceled or context.DeadlineExceeded. It is exported so callers
+// outside this package (e.g. the datastore GORM logger) classify these expected
+// interruptions using the same two-sentinel definition the suppression
+// predicates use, instead of re-checking a single sentinel inline and drifting.
+func IsContextCancellation(err error) bool {
+	return isContextCancellation(err)
+}
+
 // isSuppressibleOperationalError reports whether ee is an expected operational
 // interruption that should not be forwarded to Sentry. Such interruptions arise
 // routinely during graceful shutdown, client disconnects, and request timeouts

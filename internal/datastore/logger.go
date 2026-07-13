@@ -99,11 +99,22 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	}
 
 	switch {
-	case err != nil && errors.Is(err, context.Canceled):
-		GetLogger().Debug("Query canceled",
+	case err != nil && errors.IsContextCancellation(err):
+		// Context cancellation and deadline-exceeded are expected operational
+		// interruptions (client disconnect, graceful shutdown, request timeout),
+		// not query faults: log at debug and record a distinct "canceled" outcome
+		// instead of building an error-category EnhancedError. The matching
+		// user-notification suppression lives in internal/notification (see
+		// errors.IsSuppressibleOperationalError), so both paths stay consistent.
+		GetLogger().Debug("Query canceled or timed out",
 			logger.String("sql", sanitizeSQL(sql)),
 			logger.Duration("duration", elapsed),
 			logger.Int64("rows_affected", rows))
+
+		// Keep cancellations observable without inflating the error counters.
+		if l.metrics != nil {
+			l.metrics.RecordDbOperation(operation, table, "canceled")
+		}
 	case err != nil && !errors.Is(err, gorm.ErrRecordNotFound):
 		// Sanitize SQL for logging (collapse whitespace)
 		sanitized := sanitizeSQL(sql)

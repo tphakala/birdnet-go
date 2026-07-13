@@ -195,6 +195,76 @@ func TestNotificationWorker_ProcessEvent_SuppressesOperationalCancellation(t *te
 	}
 }
 
+// TestNotificationWorker_ProcessBatch_SuppressesOperationalCancellation verifies
+// the batch aggregation path (groupEventsByKey) applies the same suppression as
+// the single-event path: a context.Canceled database event in a batch is
+// dropped while a genuine database error in the same batch still notifies.
+func TestNotificationWorker_ProcessBatch_SuppressesOperationalCancellation(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(t)
+	defer service.Stop()
+
+	worker, err := NewNotificationWorker(service, nil)
+	require.NoError(t, err, "failed to create worker")
+
+	canceled := errors.Newf("batch hourly occurrences: %w", context.Canceled).
+		Component("datastore").
+		Category(errors.CategoryDatabase).
+		Build()
+	genuine := errors.Newf("disk I/O error: database is locked").
+		Component("datastore").
+		Category(errors.CategoryDatabase).
+		Build()
+
+	err = worker.ProcessBatch([]events.ErrorEvent{canceled, genuine})
+	require.NoError(t, err, "ProcessBatch should not fail")
+
+	notifications, err := service.List(&FilterOptions{
+		Types: []Type{TypeError},
+	})
+	require.NoError(t, err, "failed to list notifications")
+	require.Len(t, notifications, 1, "only the genuine database error should notify")
+}
+
+// TestErrorNotificationHook_SuppressesOperationalCancellation verifies the
+// legacy synchronous notification path (used when the event bus is not active)
+// also drops operational cancellations while still notifying genuine database
+// errors.
+func TestErrorNotificationHook_SuppressesOperationalCancellation(t *testing.T) {
+	// Not parallel: errorNotificationHook reads the process-global notification
+	// service singleton (via GetService), so this test installs an isolated one.
+	svc := NewService(DefaultServiceConfig())
+	installIsolatedService(t, svc)
+
+	// A canceled database error must be dropped by the legacy hook.
+	canceled := errors.Newf("batch hourly occurrences: %w", context.Canceled).
+		Component("datastore").
+		Category(errors.CategoryDatabase).
+		Build()
+	errorNotificationHook(canceled)
+
+	suppressed, err := svc.List(&FilterOptions{
+		Types: []Type{TypeError},
+	})
+	require.NoError(t, err, "failed to list notifications")
+	assert.Empty(t, suppressed, "legacy hook must suppress operational cancellations")
+
+	// A genuine database error (unique message to avoid burst-tracker collision)
+	// must still notify via the hook.
+	genuine := errors.Newf("gate hook test: unique disk I/O fault").
+		Component("datastore").
+		Category(errors.CategoryDatabase).
+		Build()
+	errorNotificationHook(genuine)
+
+	notifications, err := svc.List(&FilterOptions{
+		Types: []Type{TypeError},
+	})
+	require.NoError(t, err, "failed to list notifications")
+	require.Len(t, notifications, 1, "legacy hook must still notify genuine database errors")
+}
+
 func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 	t.Parallel()
 
