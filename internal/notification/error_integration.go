@@ -31,6 +31,16 @@ func errorNotificationHook(ee any) {
 		return
 	}
 
+	// Drop expected operational interruptions (context cancellation/deadline on
+	// database/system operations during client disconnect or shutdown) before
+	// they become notifications. This is the legacy/synchronous path used when
+	// the event bus is not active; it mirrors the async worker path (which also
+	// suppresses before computing priority) and the Sentry-side suppression, so
+	// all three treat these identically.
+	if errors.IsSuppressibleOperationalError(enhancedErr) {
+		return
+	}
+
 	category := enhancedErr.GetCategory()
 	priority := getNotificationPriority(category, enhancedErr.GetPriority())
 
