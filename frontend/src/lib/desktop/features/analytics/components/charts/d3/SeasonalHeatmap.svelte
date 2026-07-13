@@ -274,17 +274,12 @@
 
     // Re-anchor the whole group so the "More" label's measured right edge lands within
     // innerWidth instead of the hard-coded `innerWidth - legendWidth`. getComputedTextLength()
-    // returns a real width in browsers but jsdom (unit tests) does not implement the method at
-    // all, so guard with a typeof check rather than just a null check -- calling straight through
-    // would throw `moreNode.getComputedTextLength is not a function` under jsdom. Falling back to
-    // 0 there reproduces the original flush-right placement, so tests are unaffected. The "Less"
-    // label (end-anchored at x = -6) stays inside the chart because the group only ever moves
-    // further left, never right.
+    // returns a real width in browsers; jsdom (unit tests) does not implement the method, so the
+    // optional call short-circuits and we fall back to 0, reproducing the original flush-right
+    // placement (tests unaffected). The "Less" label (end-anchored at x = -6) stays inside because
+    // the group only ever moves further left, never right.
     const moreNode = moreLabel.node();
-    const moreWidth =
-      moreNode && typeof moreNode.getComputedTextLength === 'function'
-        ? moreNode.getComputedTextLength()
-        : 0;
+    const moreWidth = moreNode?.getComputedTextLength?.() ?? 0;
     const groupX = Math.max(0, innerWidth - legendWidth - 6 - moreWidth);
     legend.attr('transform', `translate(${groupX},${-LEGEND_SWATCH - 6})`);
   }
