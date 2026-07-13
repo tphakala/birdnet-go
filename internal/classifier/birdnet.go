@@ -248,7 +248,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 	inputLocale := strings.ToLower(settings.BirdNET.Locale)
 	normalizedLocale, err := conf.NormalizeLocale(inputLocale)
 	if err != nil {
-		return nil, err
+		bn.Debug("Warning: Locale normalization fallback: %v", err)
 	}
 	settings.BirdNET.Locale = normalizedLocale
 

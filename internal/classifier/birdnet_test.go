@@ -496,3 +496,23 @@ func TestRangeFilterStatus_NoGeomodel(t *testing.T) {
 	assert.Zero(t, resp.Classifiers[0].WithoutRangeData)
 	assert.InDelta(t, 0.05, resp.Threshold, 0.001)
 }
+
+func TestNewBirdNET_LocaleNormalizationFallback(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.BirdNET.Locale = "en"
+	settings.BirdNET.Version = "2.4"
+	settings.BirdNET.ModelPath = "data/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
+
+	bn, err := NewBirdNET(settings, nil)
+	require.NoError(t, err, "NewBirdNET should not fail on locale normalization fallback")
+	require.NotNil(t, bn)
+
+	// Verify it fell back to en-uk which is the default for BirdNET_V2.4
+	assert.Equal(t, "en-uk", settings.BirdNET.Locale, "Locale should be normalized/fallback to en-uk")
+
+	if bn != nil {
+		bn.Delete()
+	}
+}
