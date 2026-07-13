@@ -182,7 +182,7 @@ fi
 # If Intel GPU device present, add user to render group for OpenVINO iGPU inference
 if [ -d "/dev/dri" ]; then
     if [ "$RUNNING_AS_ROOT" = true ]; then
-        # Detect the actual GID of the first render node on the host — it varies
+        # Detect the actual GID of the first render node on the host; it varies
         # across distributions (105, 109, 44, 989 …) and Docker preserves the
         # host GID when passing --device /dev/dri. Using a hardcoded GID would
         # mismatch. Use a glob so the code works whether the device landed as
@@ -206,9 +206,12 @@ if [ -d "/dev/dri" ]; then
                 echo "Added $USER_NAME to group $DRM_GROUP (GID $RENDER_GID) for Intel iGPU access"
             fi
         fi
-    fi
     else
-        echo "Warning: /dev/dri detected but cannot configure Intel iGPU access without root privileges"
+        # Rootless: cannot create or join groups. Intel iGPU access still works if
+        # the container user was started already in the host render group (e.g. via
+        # --group-add on docker run). This is a heads-up, not an error.
+        echo "Note: /dev/dri present but running rootless; relying on pre-set render group membership for Intel iGPU access"
+    fi
 fi
 
 # Pre-flight checks before starting application

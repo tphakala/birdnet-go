@@ -30,6 +30,10 @@ services:
     # For ALSA audio input (sound card)
     devices:
       - /dev/snd:/dev/snd
+      # For Intel iGPU OpenVINO acceleration (amd64 hosts with an Intel GPU),
+      # uncomment the next line to pass the render device into the container.
+      # Leave it commented on hosts without /dev/dri or `docker compose up` fails.
+      # - /dev/dri:/dev/dri
     # Add any host mappings needed
     extra_hosts:
       - "host.docker.internal:host-gateway"
