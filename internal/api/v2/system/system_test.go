@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -399,6 +400,39 @@ func TestGetResourceInfo(t *testing.T) {
 
 	// Process memory should be positive
 	assert.GreaterOrEqual(t, response.ProcessMem, float64(0), "ProcessMem should be >= 0")
+}
+
+// TestNormalizeProcessCPU verifies per-process CPU is normalized to a share of
+// total system capacity and clamped to [0, 100].
+func TestNormalizeProcessCPU(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "process-info")
+
+	numCPU := float64(runtime.NumCPU())
+
+	tests := []struct {
+		name string
+		in   float64
+		want float64
+	}{
+		{name: "zero stays zero", in: 0, want: 0},
+		{name: "negative clamps to zero", in: -10, want: 0},
+		{name: "single core share", in: numCPU * 25, want: 25},
+		{name: "full machine", in: numCPU * 100, want: 100},
+		{name: "over-full clamps to 100", in: numCPU * 250, want: 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := normalizeProcessCPU(tt.in)
+			assert.InDelta(t, tt.want, got, 0.001)
+			assert.GreaterOrEqual(t, got, float64(0), "result must be >= 0")
+			assert.LessOrEqual(t, got, float64(maxPercentage), "result must be <= 100")
+		})
+	}
 }
 
 // TestGetDiskInfo tests the GetDiskInfo endpoint

@@ -196,7 +196,9 @@
                     style:width="{Math.min(proc.cpu, 100)}%"
                   ></div>
                 </div>
-                <span class="font-mono tabular-nums text-xs">{proc.cpu.toFixed(1)}%</span>
+                <span class="font-mono tabular-nums text-xs"
+                  >{Math.min(proc.cpu, 100).toFixed(1)}%</span
+                >
               </div>
             </td>
             <td class="py-2 px-3">

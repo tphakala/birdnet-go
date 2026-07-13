@@ -491,6 +491,9 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 		// Will use 0 as default value
 		procCPU = 0
 	}
+	// Normalize to a share of total system capacity (0-100%) so it matches the
+	// system CPU gauge and cannot exceed 100% on multi-core hosts.
+	procCPU = normalizeProcessCPU(procCPU)
 
 	// Convert process memory to MB for readability
 	var procMemMB float64
@@ -531,6 +534,26 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, resourceInfo)
+}
+
+// normalizeProcessCPU converts a gopsutil per-process CPU percentage (reported
+// relative to a single core, so potentially >100% for a multi-threaded process)
+// into the process's share of total system capacity in the range
+// [0, maxPercentage]. Dividing by the logical core count matches the semantics of
+// the system CPU gauge; the clamp is a defensive guard against transient sampling
+// overshoot so the value never exceeds 100%.
+func normalizeProcessCPU(cpuPercent float64) float64 {
+	if numCPU := runtime.NumCPU(); numCPU > 0 {
+		cpuPercent /= float64(numCPU)
+	}
+	switch {
+	case cpuPercent > maxPercentage:
+		return maxPercentage
+	case cpuPercent < 0:
+		return 0
+	default:
+		return cpuPercent
+	}
 }
 
 // GetDiskInfo handles GET /api/v2/system/disks
@@ -716,6 +739,12 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 		c.LogWarnIfEnabled("Failed to get process CPU percent", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
 		cpuPercent = 0.0
 	}
+	// gopsutil reports per-process CPU relative to a single core, so a process
+	// spread across multiple cores can exceed 100% (e.g. 200% for two full cores).
+	// Normalize by the logical core count so the value is the process's share of
+	// total system capacity (0-100%), consistent with the system CPU gauge and
+	// never exceeding 100%.
+	cpuPercent = normalizeProcessCPU(cpuPercent)
 
 	memInfo, err := p.MemoryInfo()
 	var memRSS uint64
