@@ -4492,6 +4492,17 @@ generate_systemd_service_content() {
         audio_env_line="--device /dev/snd"
     fi
 
+    # Intel iGPU passthrough for OpenVINO GPU offload. Mapped only when an Intel
+    # render node is present: the amd64 image bundles the Intel OpenCL/Level-Zero
+    # userspace and the entrypoint grants the render group at runtime. Hardcoding
+    # /dev/dri on a host without it would make docker run fail, so gate on
+    # detection (mirrors the /dev/snd handling above). Re-detected on every
+    # regenerate, so adding or removing an Intel GPU later just needs a re-run.
+    local gpu_env_line=""
+    if has_intel_gpu; then
+        gpu_env_line="--device /dev/dri"
+    fi
+
     # Check for /sys/class/thermal, used for Raspberry Pi temperature reporting in system dashboard
     local thermal_volume_line=""
     if check_directory_exists "/sys/class/thermal"; then
@@ -4570,6 +4581,7 @@ ${tls_ports_line:+    ${tls_ports_line} \\
     --env BIRDNET_UID=${HOST_UID} \\
     --env BIRDNET_GID=${HOST_GID} \\
 ${audio_env_line:+    ${audio_env_line} \\
+}${gpu_env_line:+    ${gpu_env_line} \\
 }    -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
 ${thermal_volume_line:+    ${thermal_volume_line} \\
@@ -5784,6 +5796,23 @@ verify_post_start() {
             print_message "   AutoTLS needs your domain to resolve to this host with ports 80/443 reachable from the internet." "$YELLOW"
         fi
     fi
+}
+
+# Detect an Intel GPU render node (PCI vendor 0x8086) for OpenVINO iGPU offload.
+# Only Intel iGPUs are accelerated by the OpenVINO GPU plugin bundled in the amd64
+# container image; other render nodes (AMD, NVIDIA, Pi VideoCore) gain nothing, so
+# they are not mapped into the container. Used to decide whether to pass /dev/dri.
+has_intel_gpu() {
+    local vendor id
+    for vendor in /sys/class/drm/renderD*/device/vendor; do
+        [ -r "$vendor" ] || continue
+        # Read the single-line sysfs vendor file with the bash builtin rather than
+        # spawning grep per node. The kernel writes lowercase; match both cases.
+        if read -r id < "$vendor" 2>/dev/null && [[ "$id" == *0x8086* || "$id" == *0X8086* ]]; then
+            return 0  # True - Intel render node present
+        fi
+    done
+    return 1  # False - no Intel render node
 }
 
 # Function to check if system is a Raspberry Pi

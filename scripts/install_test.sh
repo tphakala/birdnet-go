@@ -93,11 +93,13 @@ log_command_result() { :; }
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 # Deterministic stubs for the helpers generate_systemd_service_content calls: force
-# audio/thermal/Pi detection off and resolve the timezone to the passed value so the
-# generated unit is stable across hosts.
+# audio/thermal/Pi/GPU detection off and resolve the timezone to the passed value so the
+# generated unit is stable across hosts (a CI runner with an Intel iGPU must not add
+# --device /dev/dri to the baseline units; the GPU-passthrough test overrides this stub).
 resolve_host_timezone() { printf '%s' "${1:-UTC}"; }
 check_directory_exists() { return 1; }
 is_raspberry_pi() { return 1; }
+has_intel_gpu() { return 1; }
 
 # Globals the extracted functions reference (install.sh defines these at the top; the harness
 # only pulls function bodies, so under set -u they must exist here).
@@ -441,6 +443,36 @@ load_existing_service_config "$autotls_unit"
 assert_eq "round-trip: web port restored (not 80)" "9000" "$WEB_PORT"
 assert_eq "round-trip: TLS binding restored" "true" "$BIND_TLS_PORTS"
 assert_eq "round-trip: TLS bind addr empty" "" "$TLS_BIND_ADDR"
+
+# ===========================================================================
+# generate_systemd_service_content: Intel iGPU passthrough is gated on has_intel_gpu.
+# With detection stubbed off the unit must omit --device /dev/dri; when an Intel render
+# node is present it must map /dev/dri into the container so the OpenVINO GPU plugin
+# (bundled in the amd64 image) can reach it. Mirrors the /dev/snd audio gating.
+# ===========================================================================
+it "generate_systemd_service_content GPU passthrough"
+
+CONFIG_DIR="/home/pi/birdnet-go-app/config"
+DATA_DIR="/home/pi/birdnet-go-app/data"
+BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:nightly"
+WEB_PORT="9000"; WEB_PORT_BIND_ADDR=""
+BIND_TLS_PORTS="false"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""
+CONFIGURED_TZ="UTC"
+
+# Default stub (has_intel_gpu -> 1): no Intel render node, so no device mapping.
+nogpu_unit="${WORK}/nogpu.service"
+generate_systemd_service_content > "$nogpu_unit"
+assert_eq "no Intel GPU: unit omits --device /dev/dri" "0" "$(grep -c -- '--device /dev/dri' "$nogpu_unit")"
+
+# Intel render node present (has_intel_gpu -> 0): exactly one /dev/dri mapping is added,
+# and generation is otherwise intact (web port still published).
+has_intel_gpu() { return 0; }
+gpu_unit="${WORK}/gpu.service"
+generate_systemd_service_content > "$gpu_unit"
+assert_eq "Intel GPU: unit maps /dev/dri exactly once" "1" "$(grep -c -- '--device /dev/dri' "$gpu_unit")"
+assert_eq "Intel GPU: web port still published" "1" "$(grep -c -- '-p 9000:8080' "$gpu_unit")"
+has_intel_gpu() { return 1; }   # restore the deterministic default for subsequent tests
 
 # ===========================================================================
 # apply_tls_settings (full slate; mode switch must clear stale host)
