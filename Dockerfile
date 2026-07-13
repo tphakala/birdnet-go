@@ -7,6 +7,17 @@ ARG OPENVINO_RELEASE=2026.2
 ARG OPENVINO_BUILD=2026.2.0.21903.52ddc073857
 ARG OPENVINO_SHA256_AMD64=86896e9347cd160370d16f80fa2c49c2b7a51ec33b55cea6493c7dc7c4c61c55
 ARG OPENVINO_SHA256_ARM64=8ce45467967e22fddb83a6b72a8bd1f9bfa6f43351e1ca2eaf5251064fe17767
+# Intel NEO (compute-runtime) and IGC (intel-graphics-compiler) pin for
+# amd64 iGPU inference. Only used on linux/amd64; arm64 has no Intel GPU plugin.
+ARG NEO_VERSION=26.22.38646.4
+ARG IGC_VERSION=2.36.3+21719
+ARG IGC_TAG=v2.36.3
+ARG GMMLIB_VERSION=22.10.0
+ARG NEO_SHA256_IGC_CORE=9e0975ac75015b431ebb2da81a802b9fd1e28a3c270313a97569cd1e6a6c6048
+ARG NEO_SHA256_IGC_OPENCL=350a52331e784bb7fb9ed42e993b5c44b7e6562fc74d2cf3102b29b6a576fa85
+ARG NEO_SHA256_OPENCL_ICD=6fdac2e8a2aacf844ebfd90521bf7102b3ebb44f69c1bced1a9785a7ce96a3c2
+ARG NEO_SHA256_IGDGMM=6031a63d6e8a12ce61c14efc15f2c8e727061286e3820b8594e6d00615e04d54
+ARG NEO_SHA256_ZE_GPU=8bef9f24e03f826f93c076081bda13c6ac3afbd9e42b9fb8f298fab652330e2f
 
 FROM --platform=$BUILDPLATFORM golang:1.26-trixie AS buildenv
 
@@ -229,6 +240,41 @@ RUN cp /tmp/tflite-lib/libtensorflowlite_c.so* /usr/lib/ && \
     test -e /usr/lib/libtensorflowlite_c.so && \
     rm -rf /tmp/tflite-lib && \
     ldconfig
+
+# Install Intel NEO compute runtime for amd64 iGPU inference.
+# NEO provides the OpenCL ICD that lets OpenVINO talk to the Intel iGPU when
+# /dev/dri is passed through from the host. OpenVINO libs for both arches are
+# installed via the COPY step below; this step only adds the OpenCL driver
+# stack required exclusively on amd64 Intel hardware.
+ARG NEO_VERSION
+ARG IGC_VERSION
+ARG IGC_TAG
+ARG GMMLIB_VERSION
+ARG NEO_SHA256_IGC_CORE
+ARG NEO_SHA256_IGC_OPENCL
+ARG NEO_SHA256_OPENCL_ICD
+ARG NEO_SHA256_IGDGMM
+ARG NEO_SHA256_ZE_GPU
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+    apt-get update -q && apt-get install -q -y --no-install-recommends \
+        ocl-icd-libopencl1 libdrm2 libdrm-intel1 && \
+    mkdir -p /tmp/neo && cd /tmp/neo && \
+    wget -q \
+        "https://github.com/intel/intel-graphics-compiler/releases/download/${IGC_TAG}/intel-igc-core-2_${IGC_VERSION}_amd64.deb" \
+        "https://github.com/intel/intel-graphics-compiler/releases/download/${IGC_TAG}/intel-igc-opencl-2_${IGC_VERSION}_amd64.deb" \
+        "https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-opencl-icd_${NEO_VERSION}-0_amd64.deb" \
+        "https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/libigdgmm12_${GMMLIB_VERSION}_amd64.deb" \
+        "https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/libze-intel-gpu1_${NEO_VERSION}-0_amd64.deb" && \
+    printf '%s\n' \
+        "${NEO_SHA256_IGC_CORE}  intel-igc-core-2_${IGC_VERSION}_amd64.deb" \
+        "${NEO_SHA256_IGC_OPENCL}  intel-igc-opencl-2_${IGC_VERSION}_amd64.deb" \
+        "${NEO_SHA256_OPENCL_ICD}  intel-opencl-icd_${NEO_VERSION}-0_amd64.deb" \
+        "${NEO_SHA256_IGDGMM}  libigdgmm12_${GMMLIB_VERSION}_amd64.deb" \
+        "${NEO_SHA256_ZE_GPU}  libze-intel-gpu1_${NEO_VERSION}-0_amd64.deb" \
+        | sha256sum -c - && \
+    dpkg -i *.deb && \
+    rm -rf /tmp/neo /var/lib/apt/lists/*; \
+    fi
 
 # OpenVINO runtime libraries (both arches). The openvino-tagged binary dlopens
 # libopenvino_c at runtime and self-gates: a non-A76 arm64 CPU, or an amd64 host
