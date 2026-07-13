@@ -11,7 +11,9 @@
   toggle (the date range stays visible) to keep the toolbar compact. Each
   control honors the active tab's chart `supports` flags: when no chart in the
   active tab filters by species (e.g. Biodiversity), the species toggle is
-  disabled with an explanation. The source/mic filter is governed by
+  hidden entirely (a permanently-disabled toggle showing a stale selection
+  count would be confusing) and a short note explains why. The source/mic
+  filter is governed by
   `sourceApplicable`: no chart consumes the source dimension yet, so the control
   is hidden until a source-aware chart lands. It still renders (enabled, so it is
   clearable) when a stale `source` value arrives from a URL/bookmark, so that
@@ -220,24 +222,27 @@
 
     <div class="grow"></div>
 
-    <!-- Species toggle: expands the chip selector; shows the current count -->
-    <button
-      id="analyticsSpeciesToggle"
-      type="button"
-      class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border border-[var(--color-base-300)] hover:bg-[var(--color-base-100)] disabled:opacity-50 disabled:cursor-not-allowed"
-      aria-expanded={speciesPanelOpen}
-      aria-controls={speciesPanelOpen ? 'analyticsSpeciesPanel' : undefined}
-      disabled={!speciesApplicable}
-      title={speciesApplicable ? undefined : t('analytics.hub.controls.speciesNotApplicable')}
-      onclick={() => (speciesExpanded = !speciesExpanded)}
-    >
-      {#if speciesPanelOpen}
-        <ChevronDown class="h-4 w-4" aria-hidden="true" />
-      {:else}
-        <ChevronRight class="h-4 w-4" aria-hidden="true" />
-      {/if}
-      <span>{speciesLabel}</span>
-    </button>
+    <!-- Species toggle: expands the chip selector; shows the current count. Only rendered when a
+         chart in the active tab filters by species — a permanently-disabled toggle showing a
+         selection count that is silently ignored is confusing, so the control is dropped entirely
+         rather than shown disabled (see the "not applicable" note below instead). -->
+    {#if speciesApplicable}
+      <button
+        id="analyticsSpeciesToggle"
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border border-[var(--color-base-300)] hover:bg-[var(--color-base-100)]"
+        aria-expanded={speciesPanelOpen}
+        aria-controls={speciesPanelOpen ? 'analyticsSpeciesPanel' : undefined}
+        onclick={() => (speciesExpanded = !speciesExpanded)}
+      >
+        {#if speciesPanelOpen}
+          <ChevronDown class="h-4 w-4" aria-hidden="true" />
+        {:else}
+          <ChevronRight class="h-4 w-4" aria-hidden="true" />
+        {/if}
+        <span>{speciesLabel}</span>
+      </button>
+    {/if}
   </div>
 
   {#if !speciesApplicable}

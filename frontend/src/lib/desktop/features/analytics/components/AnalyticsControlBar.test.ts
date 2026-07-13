@@ -230,7 +230,7 @@ describe('AnalyticsControlBar', () => {
     expect(document.querySelector('#analyticsSpeciesPanel')).not.toBeInTheDocument();
   });
 
-  it('disables the species toggle (collapsed, aria-expanded false) when species filtering does not apply', () => {
+  it('hides the species toggle entirely when species filtering does not apply', () => {
     const onParamsChange = vi.fn();
     render(AnalyticsControlBar, {
       props: {
@@ -241,10 +241,25 @@ describe('AnalyticsControlBar', () => {
       },
     });
 
-    const toggle = document.getElementById('analyticsSpeciesToggle') as HTMLButtonElement;
-    expect(toggle).toBeDisabled();
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(toggle).not.toHaveAttribute('aria-controls');
+    // A permanently-disabled toggle with a stale selection count is confusing, so the control is
+    // dropped entirely; the "not applicable" note (asserted above) is the only explanation shown.
+    expect(document.querySelector('#analyticsSpeciesToggle')).not.toBeInTheDocument();
     expect(document.querySelector('#analyticsSpeciesPanel')).not.toBeInTheDocument();
+  });
+
+  it('shows the species toggle when species filtering applies', () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      props: {
+        params: makeParams(),
+        availableSpecies: species,
+        speciesApplicable: true,
+        onParamsChange,
+      },
+    });
+
+    const toggle = document.getElementById('analyticsSpeciesToggle');
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).not.toBeDisabled();
   });
 });
