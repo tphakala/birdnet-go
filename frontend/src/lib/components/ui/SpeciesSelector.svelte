@@ -441,8 +441,7 @@
                       'inline-flex items-center justify-center size-4 rounded border shrink-0 transition-colors',
                       isSelected
                         ? 'bg-primary border-primary text-primary-content'
-                        : 'border-base-content/30',
-                      !canSelect && 'opacity-50'
+                        : 'border-base-content/30'
                     )}
                     data-checked={isSelected ? 'true' : 'false'}
                     aria-hidden="true"
