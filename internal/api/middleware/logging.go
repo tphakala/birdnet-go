@@ -11,7 +11,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
-var hlsTokenPathRegex = regexp.MustCompile(`(/streams/hls/t/)[^/?]+`)
+// hlsTokenPathPrefix is the path segment that precedes an HLS stream token, e.g.
+// /api/v2/streams/hls/t/<token>/playlist.m3u8. It is used both as a cheap presence
+// check and to build the token-collapsing regex.
+const hlsTokenPathPrefix = "/streams/hls/t/"
+
+var hlsTokenPathRegex = regexp.MustCompile(`(` + regexp.QuoteMeta(hlsTokenPathPrefix) + `)[^/?]+`)
 
 // scrubURIForLog redacts secrets from a raw request URI before it is written to the
 // access log. Media and HLS endpoints carry access tokens in the query string
@@ -24,7 +29,11 @@ var hlsTokenPathRegex = regexp.MustCompile(`(/streams/hls/t/)[^/?]+`)
 // because anonymizing the path structure would destroy the log's debugging value.
 func scrubURIForLog(uri string) string {
 	path, query, hasQuery := strings.Cut(uri, "?")
-	path = hlsTokenPathRegex.ReplaceAllString(path, "${1}:streamToken")
+	// Cheap guard: only run the regex when the HLS token prefix is present, so the
+	// vast majority of requests skip the regex machinery on this per-request path.
+	if strings.Contains(path, hlsTokenPathPrefix) {
+		path = hlsTokenPathRegex.ReplaceAllString(path, "${1}:streamToken")
+	}
 	if !hasQuery {
 		return path
 	}
