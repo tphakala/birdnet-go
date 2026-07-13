@@ -216,6 +216,27 @@ func ScrubMessage(message string) string {
 	return result
 }
 
+// ScrubQueryString redacts credential-bearing values from a raw URL query string
+// before it is logged. It percent-decodes the query first because ScrubMessage's
+// token scrubber pattern does not span percent-escapes, so an encoded token value
+// (for example token=ab%2Bcd1234) would otherwise slip through unredacted; on a
+// decode error it falls back to scrubbing the raw string. url.PathUnescape is used
+// rather than url.QueryUnescape because the latter turns a literal '+' into a space,
+// which would split a base64 token value (token=ab+cd...) and leak its tail past the
+// scrubber; PathUnescape still decodes %2B to '+' but preserves a literal '+', so the
+// whole token value stays a single matchable run. ScrubMessage also redacts URLs,
+// emails, UUIDs, IPs, coordinates, and file paths.
+func ScrubQueryString(rawQuery string) string {
+	if rawQuery == "" {
+		return ""
+	}
+	decoded, err := url.PathUnescape(rawQuery)
+	if err != nil {
+		decoded = rawQuery
+	}
+	return ScrubMessage(decoded)
+}
+
 // ScrubFilePaths anonymizes file paths in text messages using AnonymizePath.
 func ScrubFilePaths(message string) string {
 	return filePathPattern.ReplaceAllStringFunc(message, AnonymizePath)

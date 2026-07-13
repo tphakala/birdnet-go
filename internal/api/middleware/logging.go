@@ -2,8 +2,8 @@
 package middleware
 
 import (
-	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -12,6 +12,24 @@ import (
 )
 
 var hlsTokenPathRegex = regexp.MustCompile(`(/streams/hls/t/)[^/?]+`)
+
+// scrubURIForLog redacts secrets from a raw request URI before it is written to the
+// access log. Media and HLS endpoints carry access tokens in the query string
+// (?token=...) and HLS also embeds a stream token in the path
+// (/streams/hls/t/<token>/...), so both must be removed. The URI is split on the
+// first '?' (the Go HTTP server has already validated the request line, so no full
+// URL parse is needed): the HLS path token is collapsed to its route placeholder and
+// the query string is scrubbed via privacy.ScrubQueryString, which percent-decodes
+// before scrubbing. Scrubbing is applied only to the query, never the whole URI,
+// because anonymizing the path structure would destroy the log's debugging value.
+func scrubURIForLog(uri string) string {
+	path, query, hasQuery := strings.Cut(uri, "?")
+	path = hlsTokenPathRegex.ReplaceAllString(path, "${1}:streamToken")
+	if !hasQuery {
+		return path
+	}
+	return path + "?" + privacy.ScrubQueryString(query)
+}
 
 // NewRequestLogger creates a request logging middleware using Echo 4.14.0+ RequestLoggerWithConfig.
 // This replaces the deprecated middleware.Logger().
@@ -31,20 +49,7 @@ func NewRequestLoggerWithSkipper(skipper middleware.Skipper) echo.MiddlewareFunc
 		LogRemoteIP: true,
 		LogError:    true,
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			uri := v.URI
-
-			parsed, err := url.ParseRequestURI(uri)
-			if err == nil {
-				parsed.Path = hlsTokenPathRegex.ReplaceAllString(parsed.Path, "${1}:streamToken")
-				// Only scrub the query string; ScrubMessage on the full URI destroys the path
-				if parsed.RawQuery != "" {
-					parsed.RawQuery = privacy.ScrubMessage(parsed.RawQuery)
-				}
-				uri = parsed.String()
-			} else {
-				// Fallback if parsing fails
-				uri = hlsTokenPathRegex.ReplaceAllString(uri, "${1}:streamToken")
-			}
+			uri := scrubURIForLog(v.URI)
 
 			fields := []logger.Field{
 				logger.String("method", v.Method),
@@ -56,10 +61,8 @@ func NewRequestLoggerWithSkipper(skipper middleware.Skipper) echo.MiddlewareFunc
 
 			if v.Error != nil {
 				fields = append(fields, logger.Error(v.Error))
-				log.Error("request", fields...)
-			} else {
-				log.Info("request", fields...)
 			}
+			log.Info("request", fields...)
 			return nil
 		},
 	})
