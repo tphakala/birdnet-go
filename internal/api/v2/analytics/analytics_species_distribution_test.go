@@ -131,25 +131,27 @@ func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
 	}
 
 	runLimitClampTests(t, tests, func(t *testing.T, tc LimitClampTestCase) {
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+		t.Helper()
 
-	mockDS.On("GetHourlyDistributionBySpecies",
-		mock.Anything,
-		"2026-03-01",
-		"2026-03-02",
-		[]string(nil),
-		tc.WantLimit,
-	).Return(sampleSpeciesDistribution(), nil)
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	c, rec := newSpeciesDistributionContext(
-		e,
-		"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
-	)
+		mockDS.On("GetHourlyDistributionBySpecies",
+			mock.Anything,
+			"2026-03-01",
+			"2026-03-02",
+			[]string(nil),
+			tc.WantLimit,
+		).Return(sampleSpeciesDistribution(), nil)
 
-	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
-	require.Equal(t, http.StatusOK, rec.Code)
-	mockDS.AssertExpectations(t)
-})
+		c, rec := newSpeciesDistributionContext(
+			e,
+			"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
+		)
+
+		require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
+		require.Equal(t, http.StatusOK, rec.Code)
+		mockDS.AssertExpectations(t)
+	})
 }
 
 func TestGetSpeciesHourlyDistribution_MissingStartDate(t *testing.T) {

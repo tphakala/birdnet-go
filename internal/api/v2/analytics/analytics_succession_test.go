@@ -130,25 +130,27 @@ func TestGetAcousticSuccession_ClampsLimit(t *testing.T) {
 	}
 
 	runLimitClampTests(t, tests, func(t *testing.T, tc LimitClampTestCase) {
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+		t.Helper()
 
-	mockDS.On("GetAcousticSuccession",
-		mock.Anything,
-		"2026-03-01",
-		"2026-03-02",
-		[]string(nil),
-		tc.WantLimit,
-	).Return(sampleAcousticSuccession(), nil)
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	c, rec := newSuccessionContext(
-		e,
-		"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
-	)
+		mockDS.On("GetAcousticSuccession",
+			mock.Anything,
+			"2026-03-01",
+			"2026-03-02",
+			[]string(nil),
+			tc.WantLimit,
+		).Return(sampleAcousticSuccession(), nil)
 
-	require.NoError(t, controller.GetAcousticSuccession(c))
-	require.Equal(t, http.StatusOK, rec.Code)
-	mockDS.AssertExpectations(t)
-})
+		c, rec := newSuccessionContext(
+			e,
+			"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
+		)
+
+		require.NoError(t, controller.GetAcousticSuccession(c))
+		require.Equal(t, http.StatusOK, rec.Code)
+		mockDS.AssertExpectations(t)
+	})
 }
 
 func TestGetAcousticSuccession_MissingStartDate(t *testing.T) {
