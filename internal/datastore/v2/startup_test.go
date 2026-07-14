@@ -297,6 +297,36 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 
 		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for empty file")
 	})
+
+	t.Run("contaminated legacy database (PR #2165 bug)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		dbPath := filepath.Join(tmpDir, "contaminated.db")
+
+		// Create a v2 database
+		manager, err := NewSQLiteManager(Config{DirectPath: dbPath})
+		require.NoError(t, err)
+		err = manager.Initialize()
+		require.NoError(t, err)
+
+		// Set migration state to COMPLETED
+		now := time.Now()
+		state := entities.MigrationState{
+			ID:          1,
+			State:       entities.MigrationStatusCompleted,
+			StartedAt:   &now,
+			CompletedAt: &now,
+		}
+		err = manager.DB().Save(&state).Error
+		require.NoError(t, err)
+
+		// Add the legacy results table
+		err = manager.DB().Exec("CREATE TABLE results (id INTEGER PRIMARY KEY)").Error
+		require.NoError(t, err)
+
+		require.NoError(t, manager.Close())
+
+		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false when legacy table exists")
+	})
 }
 
 // newSchemaCheckDB opens a fresh temp-file SQLite GORM DB for hasCompleteFreshV2Schema
@@ -397,6 +427,18 @@ func TestHasCompleteFreshV2Schema(t *testing.T) {
 
 		assert.True(t, hasCompleteFreshV2Schema(db),
 			"legacy singular table name must still resolve")
+	})
+
+	t.Run("contaminated legacy database (PR #2165 bug)", func(t *testing.T) {
+		db := newSchemaCheckDB(t)
+		seedMigrationStatesTable(t, db, entities.MigrationStatusCompleted)
+		createBareDetectionsTable(t, db)
+
+		// Add the legacy results table
+		require.NoError(t, db.Exec("CREATE TABLE results (id INTEGER PRIMARY KEY)").Error)
+
+		assert.False(t, hasCompleteFreshV2Schema(db),
+			"should return false when legacy table exists")
 	})
 }
 

@@ -749,8 +749,19 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 		return false
 	}
 
-	// Only return true if the database is fully initialized (COMPLETED)
-	return state.State == entities.MigrationStatusCompleted
+	if state.State != entities.MigrationStatusCompleted {
+		return false
+	}
+
+	// A COMPLETED marker alone is NOT sufficient evidence of a usable fresh v2 schema:
+	// If a legacy table exists (e.g., 'results'), it's a contaminated legacy db.
+	var legacyTableCount int64
+	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('results', 'notes')").Scan(&legacyTableCount).Error
+	if err == nil && legacyTableCount > 0 {
+		return false
+	}
+
+	return true
 }
 
 // CheckMySQLHasFreshV2Schema reports whether a MySQL database holds a complete,
@@ -823,6 +834,9 @@ func hasCompleteFreshV2Schema(db *gorm.DB) bool {
 	// wedging the app in enhanced mode (GitHub #3575). Returning false makes
 	// initializeV2OnlyMode fall back to the v2_ prefixed schema, whose tables are
 	// (re)created by the subsequent Initialize()/AutoMigrate.
+	if db.Migrator().HasTable("results") {
+		return false
+	}
 	return db.Migrator().HasTable("detections")
 }
 
