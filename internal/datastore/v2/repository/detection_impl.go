@@ -851,8 +851,11 @@ func (r *detectionRepository) countByHalfOpenRange(ctx context.Context, start, e
 // Aggregations
 // ============================================================================
 
-// GetTopSpecies returns the most frequently detected species in a time range.
-func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int64, minConfidence float64, modelID *uint, limit int) ([]SpeciesCount, error) {
+// GetTopSpecies returns the most frequently detected species in a time range. species is an optional
+// scientific-name filter: when non-empty the ranking is restricted to those species (parameterized
+// IN, applied before the volume ORDER BY / LIMIT so the result stays volume-ordered and capped);
+// when nil/empty every species is ranked.
+func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int64, minConfidence float64, modelID *uint, species []string, limit int) ([]SpeciesCount, error) {
 	var results []SpeciesCount
 
 	query := r.db.WithContext(ctx).Table(r.tableName()).
@@ -865,6 +868,12 @@ func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int6
 
 	if modelID != nil {
 		query = query.Where(fmt.Sprintf("%s.model_id = ?", r.tableName()), *modelID)
+	}
+
+	// Optional species filter: parameterized IN over the joined labels table, applied before the
+	// ORDER BY count / LIMIT so the ranking is narrowed to the selection while staying volume-ordered.
+	if len(species) > 0 {
+		query = query.Where(fmt.Sprintf("%s.scientific_name IN ?", r.labelsTable()), species)
 	}
 
 	err := query.Group("label_id").

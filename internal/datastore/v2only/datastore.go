@@ -3085,9 +3085,11 @@ func (ds *Datastore) GetActivityHeatmap(ctx context.Context, startDate, endDate,
 // false-positive-excluded per-hour counts in a single batched (label_id, hour) group-by
 // (GetBatchHourlyOccurrences). The two charts differ only in how they fold these counts, so that
 // folding stays in the caller. minConfidence is 0 so it counts every detection, matching the heatmap
-// and the other time-based analytics endpoints. Returns a nil top slice (with nil error) when no
-// species qualify, so each caller emits its own empty, non-nil result.
-func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endDate string, limit int) ([]repository.SpeciesCount, map[uint][24]int, error) {
+// and the other time-based analytics endpoints. species is an optional scientific-name filter passed
+// straight to GetTopSpecies: when non-empty the ranking is restricted to those species (still
+// volume-ordered, capped at `limit`); when nil/empty it is the top-N by volume. Returns a nil top
+// slice (with nil error) when no species qualify, so each caller emits its own empty, non-nil result.
+func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endDate string, species []string, limit int) ([]repository.SpeciesCount, map[uint][24]int, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
 		return nil, nil, err
@@ -3105,7 +3107,7 @@ func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endD
 	if end != math.MaxInt64 {
 		topEnd--
 	}
-	top, err := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
+	top, err := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, species, limit)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("datastore").
@@ -3141,8 +3143,8 @@ func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endD
 // It selects the top-N species and their per-hour counts via selectTopSpeciesHourly, then merges and
 // normalizes per species in Go (buildSpeciesHourlyDistribution) so each species' timing shape is
 // comparable regardless of raw volume. Powers the who-sings-when ridgeline.
-func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
-	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, limit)
+func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, species []string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
+	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, species, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -3158,8 +3160,8 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 // same path as the ridgeline), then merges per species in Go (buildAcousticSuccession). Unlike the
 // ridgeline it does NOT normalize: the streamgraph stacks raw counts so band width is detection
 // volume. Powers the acoustic succession streamgraph.
-func (ds *Datastore) GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesHourlyCounts, error) {
-	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, limit)
+func (ds *Datastore) GetAcousticSuccession(ctx context.Context, startDate, endDate string, species []string, limit int) ([]datastore.SpeciesHourlyCounts, error) {
+	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, species, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -3255,7 +3257,7 @@ func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endD
 		if end != math.MaxInt64 {
 			topEnd--
 		}
-		top, topErr := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, limit)
+		top, topErr := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, nil, limit)
 		if topErr != nil {
 			return nil, errors.New(topErr).
 				Component("datastore").

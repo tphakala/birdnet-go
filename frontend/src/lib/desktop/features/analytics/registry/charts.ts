@@ -309,9 +309,11 @@ interface SpeciesDistributionDatum {
 }
 
 /**
- * Who-sings-when ridgeline: the top-N species by detection volume in range, each with a normalized
- * 24-bucket hour-of-day distribution. Server-ranked and server-normalized; this defensively coerces
- * the array payload. Common names are resolved later (registry mapProps) from the hub's species map.
+ * Who-sings-when ridgeline: per-species normalized 24-bucket hour-of-day distributions. With no
+ * species selected it is the top-N by detection volume in range; with a selection it is those species
+ * (still volume-ordered, capped at the limit), so Clear reverts to the top-N. Server-ranked and
+ * server-normalized; this defensively coerces the array payload. Common names are resolved later
+ * (registry mapProps) from the hub's species map.
  */
 async function fetchSpeciesDistribution(
   params: AnalyticsParams,
@@ -322,6 +324,8 @@ async function fetchSpeciesDistribution(
     end_date: formatDateForAPI(params.endDate),
     limit: String(SPECIES_RIDGELINE_LIMIT),
   });
+  // A non-empty selection narrows the ridgeline to those species; empty keeps the top-N default.
+  params.species.forEach(name => search.append('species', name));
 
   const response = await fetch(
     buildAppUrl(`/api/v2/analytics/time/distribution/species?${search}`),
@@ -367,12 +371,12 @@ interface SuccessionDatum {
 }
 
 /**
- * Acoustic succession streamgraph: the top-N species by detection volume in range, each with their
- * raw 24-bucket hour-of-day detection counts. Like the who-sings-when ridgeline (#1159) it always
- * requests the top-N and does not honor the species filter, so the chart shows the diel acoustic
- * handover among the dominant species rather than a single species; the server ranks. Defensively
- * coerces the array payload, padding/truncating counts to 24 so the chart's hour axis stays
- * well-defined even on a malformed payload.
+ * Acoustic succession streamgraph: per-species raw 24-bucket hour-of-day detection counts. With no
+ * species selected it is the top-N by detection volume in range (the diel acoustic handover among the
+ * dominant species); with a selection it is those species (still volume-ordered, capped at the
+ * limit), so Clear reverts to the top-N. The server ranks. Defensively coerces the array payload,
+ * padding/truncating counts to 24 so the chart's hour axis stays well-defined even on a malformed
+ * payload.
  */
 async function fetchAcousticSuccession(
   params: AnalyticsParams,
@@ -383,6 +387,8 @@ async function fetchAcousticSuccession(
     end_date: formatDateForAPI(params.endDate),
     limit: String(SUCCESSION_LIMIT),
   });
+  // A non-empty selection narrows the streamgraph to those species; empty keeps the top-N default.
+  params.species.forEach(name => search.append('species', name));
 
   const response = await fetch(buildAppUrl(`/api/v2/analytics/time/succession?${search}`), {
     signal,
@@ -819,17 +825,23 @@ export const CHART_REGISTRY: ChartDef[] = [
     emptyHintKey: 'analytics.advanced.charts.ridgeline.noDataHint',
     component: SpeciesRidgeline,
     fetch: fetchSpeciesDistribution,
-    // The endpoint is always top-N by volume; supports.species lets the patterns tab's species
-    // auto-select run, and the chart notes that it shows the top N regardless of selection.
-    mapProps: (data, _params, ctx) => ({
-      series: (data as SpeciesDistributionDatum[]).map(d => ({
-        scientificName: d.scientificName,
-        commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-        density: d.density,
-        total: d.total,
-      })),
-      noteKey: 'analytics.advanced.charts.ridgeline.note',
-    }),
+    // Honors the species selection: a non-empty selection filters to those species, empty falls back
+    // to top-N by volume. The "top N" note is shown only when nothing is selected, since with a
+    // selection the chart is no longer a top-N view.
+    mapProps: (data, params, ctx) => {
+      // The "top N" note is shown only when nothing is selected (a selection isn't a top-N view).
+      const noteKey =
+        params.species.length === 0 ? 'analytics.advanced.charts.ridgeline.note' : undefined;
+      return {
+        series: (data as SpeciesDistributionDatum[]).map(d => ({
+          scientificName: d.scientificName,
+          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+          density: d.density,
+          total: d.total,
+        })),
+        noteKey,
+      };
+    },
     size: 'full',
     supports: { species: true, source: false },
     // A ridgeline needs at least a couple of species to read as one; one lonely ridge is not useful.
@@ -845,19 +857,24 @@ export const CHART_REGISTRY: ChartDef[] = [
     emptyHintKey: 'analytics.advanced.charts.succession.noDataHint',
     component: AcousticSuccessionChart,
     fetch: fetchAcousticSuccession,
-    // The endpoint is always top-N by volume; like the sibling ridgeline, supports.species lets the
-    // patterns tab's species auto-select run, and the chart's note states it shows the top N
-    // regardless of selection. The fetch result is the raw row array, so the default array-length
-    // count (the band count) drives the not-enough-data gate.
-    mapProps: (data, _params, ctx) => ({
-      series: (data as SuccessionDatum[]).map(d => ({
-        scientificName: d.scientificName,
-        commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-        counts: d.counts,
-        total: d.total,
-      })),
-      noteKey: 'analytics.advanced.charts.succession.note',
-    }),
+    // Honors the species selection like the sibling ridgeline: a non-empty selection filters to those
+    // species, empty falls back to top-N by volume. The "top N" note is shown only when nothing is
+    // selected. The fetch result is the raw row array, so the default array-length count (the band
+    // count) drives the not-enough-data gate.
+    mapProps: (data, params, ctx) => {
+      // The "top N" note is shown only when nothing is selected (a selection isn't a top-N view).
+      const noteKey =
+        params.species.length === 0 ? 'analytics.advanced.charts.succession.note' : undefined;
+      return {
+        series: (data as SuccessionDatum[]).map(d => ({
+          scientificName: d.scientificName,
+          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+          counts: d.counts,
+          total: d.total,
+        })),
+        noteKey,
+      };
+    },
     size: 'full',
     supports: { species: true, source: false },
     // A streamgraph needs at least a few bands to weave into a visible handover; one or two bands is

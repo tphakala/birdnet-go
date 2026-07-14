@@ -1484,18 +1484,40 @@ func (c *Handler) GetAnalyticsSun(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, resp)
 }
 
+// parseSpeciesParams normalizes the repeated ?species query values into a scientific-name filter:
+// each value is trimmed and empty entries are dropped, so a stray "?species=" does not turn into a
+// filter that matches nothing. Returns nil when no usable value remains, which the datastore reads as
+// "no filter" (top-N by volume).
+func parseSpeciesParams(raw []string) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	species := make([]string, 0, len(raw))
+	for _, s := range raw {
+		if trimmed := strings.TrimSpace(s); trimmed != "" {
+			species = append(species, trimmed)
+		}
+	}
+	if len(species) == 0 {
+		return nil
+	}
+	return species
+}
+
 // serveTopNHourlyChart is the shared request flow for the top-N-by-volume hour-of-day analytics
 // endpoints (who-sings-when ridgeline, acoustic succession): require and strictly validate
-// start_date/end_date, default the end to a 30-day window, parse and clamp the limit, run the query
-// under the analytics timeout (mapping a deadline to HTTP 408), and serialize the response as a JSON
-// array. The endpoints differ only in their limit bounds, the datastore query, and the response
+// start_date/end_date, default the end to a 30-day window, parse and clamp the limit, read the
+// optional repeated species filter, run the query under the analytics timeout (mapping a deadline to
+// HTTP 408), and serialize the response as a JSON array. An empty species filter keeps the top-N
+// default; a non-empty one narrows the chart to the selection (still volume-ordered, capped at the
+// limit). The endpoints differ only in their limit bounds, the datastore query, and the response
 // shape, which are passed in; operation names the endpoint in validation/error messages and logs.
 func serveTopNHourlyChart[T any](
 	c *Handler,
 	ctx echo.Context,
 	operation string,
 	defaultLimit, maxLimit int,
-	query func(context.Context, string, string, int) ([]T, error),
+	query func(context.Context, string, string, []string, int) ([]T, error),
 	respond func([]T) any,
 ) error {
 	// Validate required parameter
@@ -1527,10 +1549,16 @@ func serveTopNHourlyChart[T any](
 
 	limit := apicore.ParsePaginationLimit(ctx.QueryParam("limit"), defaultLimit, maxLimit)
 
+	// Optional repeated species filter (?species=A&species=B): trimmed and empty-filtered. When empty
+	// the query keeps its top-N-by-volume default; when non-empty it narrows to the selection (still
+	// volume-ordered, capped at limit). Mirrors how the batch time-of-day endpoint reads species.
+	species := parseSpeciesParams(ctx.QueryParams()["species"])
+
 	c.LogInfoIfEnabled("Retrieving "+operation,
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
 		logger.Int("limit", limit),
+		logger.Int("species_filter_count", len(species)),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),
 	)
@@ -1539,7 +1567,7 @@ func serveTopNHourlyChart[T any](
 	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
 
-	data, err := query(ctxWithTimeout, startDate, endDate, limit)
+	data, err := query(ctxWithTimeout, startDate, endDate, species, limit)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, operation, "Failed to get "+operation,
 			logger.String("start_date", startDate),
@@ -1562,8 +1590,10 @@ func serveTopNHourlyChart[T any](
 }
 
 // GetSpeciesHourlyDistribution handles GET /api/v2/analytics/time/distribution/species
-// Returns the normalized hour-of-day activity distribution for the top N species by detection
-// volume over the date range, powering the who-sings-when ridgeline (design spec section 6.2).
+// Returns the normalized hour-of-day activity distribution powering the who-sings-when ridgeline
+// (design spec section 6.2). With no species filter it covers the top N species by detection volume
+// over the date range; with a repeated ?species filter it covers just the selected species (still
+// volume-ordered, capped at the limit).
 func (c *Handler) GetSpeciesHourlyDistribution(ctx echo.Context) error {
 	return serveTopNHourlyChart(c, ctx, "species hourly distribution",
 		defaultSpeciesRidgelineLimit, maxSpeciesRidgelineLimit,
@@ -1599,10 +1629,11 @@ func newAcousticSuccessionResponse(data []datastore.SpeciesHourlyCounts) []acous
 }
 
 // GetAcousticSuccession handles GET /api/v2/analytics/time/succession
-// Returns the per-species raw hour-of-day detection counts for the top-N species by volume, powering
-// the acoustic succession streamgraph in the Activity Patterns tab (design spec #1155, Tier-2). The
-// counts are unnormalized so the frontend can stack them into a streamgraph whose band width is
-// detection volume.
+// Returns the per-species raw hour-of-day detection counts powering the acoustic succession
+// streamgraph in the Activity Patterns tab (design spec #1155, Tier-2). With no species filter it
+// covers the top-N species by volume; with a repeated ?species filter it covers just the selected
+// species (still volume-ordered, capped at the limit). The counts are unnormalized so the frontend
+// can stack them into a streamgraph whose band width is detection volume.
 func (c *Handler) GetAcousticSuccession(ctx echo.Context) error {
 	return serveTopNHourlyChart(c, ctx, "acoustic succession",
 		defaultSpeciesSuccessionLimit, maxSpeciesSuccessionLimit,

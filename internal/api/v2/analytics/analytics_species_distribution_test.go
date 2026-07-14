@@ -46,7 +46,7 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Default limit (no ?limit) is the ridgeline's top-5.
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", 5).
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
 		Return(sampleSpeciesDistribution(), nil)
 
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
@@ -65,11 +65,29 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+func TestGetSpeciesHourlyDistribution_ForwardsSpeciesFilter(t *testing.T) {
+	t.Parallel()
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	// A repeated ?species filter is trimmed, empty-filtered, and forwarded to the datastore so the
+	// ridgeline narrows to the selection instead of the top-N default.
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02",
+		[]string{"Turdus migratorius", "Turdus merula"}, 5).
+		Return(sampleSpeciesDistribution(), nil)
+
+	c, rec := newSpeciesDistributionContext(e,
+		"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"+
+			"&species=Turdus+migratorius&species=+Turdus+merula+&species=")
+	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	mockDS.AssertExpectations(t)
+}
+
 func TestGetSpeciesHourlyDistribution_EmptyArrayNotNull(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", 5).
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
 		Return([]datastore.SpeciesHourlyDistribution{}, nil)
 
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
@@ -88,7 +106,7 @@ func TestGetSpeciesHourlyDistribution_DefaultsEndDate(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// With end_date omitted the handler defaults it to a 30-day window: 2026-03-01 + 30d = 2026-03-31.
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-31", 5).
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-31", []string(nil), 5).
 		Return(sampleSpeciesDistribution(), nil)
 
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01")
@@ -117,7 +135,7 @@ func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
 			t.Parallel()
 			e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-			mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", tt.wantLimit).
+			mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), tt.wantLimit).
 				Return(sampleSpeciesDistribution(), nil)
 
 			c, rec := newSpeciesDistributionContext(e,
@@ -153,7 +171,7 @@ func TestGetSpeciesHourlyDistribution_QueryTimeout(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", 5).
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
 		Return([]datastore.SpeciesHourlyDistribution(nil), context.DeadlineExceeded)
 
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")

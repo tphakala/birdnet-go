@@ -770,11 +770,43 @@ func TestGetTopSpecies_DeterministicOrder(t *testing.T) {
 		createDetectionForLabel(t, db, labelC.ID, int64(1000+i))
 	}
 
-	results, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, 3)
+	results, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, nil, 3)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
 	assert.Equal(t, labelA.ID, results[0].LabelID)
 	assert.Equal(t, labelB.ID, results[1].LabelID)
 	assert.Equal(t, labelC.ID, results[2].LabelID)
+}
+
+// TestGetTopSpecies_SpeciesFilter verifies the optional scientific-name filter narrows the ranking
+// to the selected species (applied before ORDER BY count / LIMIT) while an empty filter ranks all.
+func TestGetTopSpecies_SpeciesFilter(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	labelA := createTestLabel(t, db, "Species A", 1)
+	labelB := createTestLabel(t, db, "Species B", 1)
+	labelC := createTestLabel(t, db, "Species C", 1)
+
+	for i := range 5 {
+		createDetectionForLabel(t, db, labelA.ID, int64(1000+i))
+		createDetectionForLabel(t, db, labelB.ID, int64(1000+i))
+		createDetectionForLabel(t, db, labelC.ID, int64(1000+i))
+	}
+
+	t.Run("restricts to the selected species", func(t *testing.T) {
+		results, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, []string{"Species B"}, 3)
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		assert.Equal(t, labelB.ID, results[0].LabelID)
+		assert.Equal(t, "Species B", results[0].ScientificName)
+	})
+
+	t.Run("empty filter ranks every species", func(t *testing.T) {
+		results, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, []string{}, 3)
+		require.NoError(t, err)
+		require.Len(t, results, 3)
+	})
 }
