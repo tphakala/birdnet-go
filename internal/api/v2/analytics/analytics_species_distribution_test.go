@@ -122,11 +122,7 @@ func TestGetSpeciesHourlyDistribution_DefaultsEndDate(t *testing.T) {
 func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name      string
-		limitParm string
-		wantLimit int
-	}{
+	tests := []LimitClampTestCase{
 		{"valid in range passes through", "3", 3},
 		{"max allowed passes through", "8", 8},
 		{"over max falls back to default", "99", defaultSpeciesRidgelineLimit},
@@ -134,21 +130,26 @@ func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
 		{"non-numeric falls back to default", "abc", defaultSpeciesRidgelineLimit},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+	runLimitClampTests(t, tests, func(t *testing.T, tc LimitClampTestCase) {
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-			mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), tt.wantLimit).
-				Return(sampleSpeciesDistribution(), nil)
+	mockDS.On("GetHourlyDistributionBySpecies",
+		mock.Anything,
+		"2026-03-01",
+		"2026-03-02",
+		[]string(nil),
+		tc.WantLimit,
+	).Return(sampleSpeciesDistribution(), nil)
 
-			c, rec := newSpeciesDistributionContext(e,
-				"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02&limit="+tt.limitParm)
-			require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
-			require.Equal(t, http.StatusOK, rec.Code)
-			mockDS.AssertExpectations(t)
-		})
-	}
+	c, rec := newSpeciesDistributionContext(
+		e,
+		"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
+	)
+
+	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	mockDS.AssertExpectations(t)
+})
 }
 
 func TestGetSpeciesHourlyDistribution_MissingStartDate(t *testing.T) {

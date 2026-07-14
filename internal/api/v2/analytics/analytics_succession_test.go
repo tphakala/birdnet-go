@@ -121,11 +121,7 @@ func TestGetAcousticSuccession_DefaultsEndDate(t *testing.T) {
 func TestGetAcousticSuccession_ClampsLimit(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name      string
-		limitParm string
-		wantLimit int
-	}{
+	tests := []LimitClampTestCase{
 		{"valid in range passes through", "3", 3},
 		{"max allowed passes through", "10", 10},
 		{"over max falls back to default", "99", defaultSpeciesSuccessionLimit},
@@ -133,21 +129,26 @@ func TestGetAcousticSuccession_ClampsLimit(t *testing.T) {
 		{"non-numeric falls back to default", "abc", defaultSpeciesSuccessionLimit},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+	runLimitClampTests(t, tests, func(t *testing.T, tc LimitClampTestCase) {
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-			mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), tt.wantLimit).
-				Return(sampleAcousticSuccession(), nil)
+	mockDS.On("GetAcousticSuccession",
+		mock.Anything,
+		"2026-03-01",
+		"2026-03-02",
+		[]string(nil),
+		tc.WantLimit,
+	).Return(sampleAcousticSuccession(), nil)
 
-			c, rec := newSuccessionContext(e,
-				"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02&limit="+tt.limitParm)
-			require.NoError(t, controller.GetAcousticSuccession(c))
-			require.Equal(t, http.StatusOK, rec.Code)
-			mockDS.AssertExpectations(t)
-		})
-	}
+	c, rec := newSuccessionContext(
+		e,
+		"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
+	)
+
+	require.NoError(t, controller.GetAcousticSuccession(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	mockDS.AssertExpectations(t)
+})
 }
 
 func TestGetAcousticSuccession_MissingStartDate(t *testing.T) {

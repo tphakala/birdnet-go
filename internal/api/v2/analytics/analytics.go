@@ -1494,7 +1494,7 @@ func parseSpeciesParams(raw []string) []string {
 		return nil
 	}
 	seen := make(map[string]struct{}, len(raw))
-	species := make([]string, 0, len(raw))
+	speciesFilter := make([]string, 0, len(raw))
 	for _, s := range raw {
 		trimmed := strings.TrimSpace(s)
 		if trimmed == "" {
@@ -1505,12 +1505,12 @@ func parseSpeciesParams(raw []string) []string {
 			continue
 		}
 		seen[key] = struct{}{}
-		species = append(species, trimmed)
+		speciesFilter = append(speciesFilter, trimmed)
 	}
-	if len(species) == 0 {
+	if len(speciesFilter) == 0 {
 		return nil
 	}
-	return species
+	return speciesFilter
 }
 
 // serveTopNHourlyChart is the shared request flow for the top-N-by-volume hour-of-day analytics
@@ -1561,13 +1561,13 @@ func serveTopNHourlyChart[T any](
 	// Optional repeated species filter (?species=A&species=B): trimmed and empty-filtered. When empty
 	// the query keeps its top-N-by-volume default; when non-empty it narrows to the selection (still
 	// volume-ordered, capped at limit). Mirrors how the batch time-of-day endpoint reads species.
-	species := parseSpeciesParams(ctx.QueryParams()["species"])
+	speciesFilter := parseSpeciesParams(ctx.QueryParams()["species"])
 
 	c.LogInfoIfEnabled("Retrieving "+operation,
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
 		logger.Int("limit", limit),
-		logger.Int("species_filter_count", len(species)),
+		logger.Int("species_filter_count", len(speciesFilter)),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),
 	)
@@ -1576,7 +1576,7 @@ func serveTopNHourlyChart[T any](
 	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
 
-	data, err := query(ctxWithTimeout, startDate, endDate, species, limit)
+	data, err := query(ctxWithTimeout, startDate, endDate, speciesFilter, limit)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, operation, "Failed to get "+operation,
 			logger.String("start_date", startDate),
