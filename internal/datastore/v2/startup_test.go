@@ -273,6 +273,34 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		assert.True(t, CheckSQLiteHasV2Schema(dbPath), "should detect v2 schema")
 	})
 
+	t.Run("legacy contaminated database", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		dbPath := filepath.Join(tmpDir, "contaminated.db")
+
+		// Create a v2 database
+		manager, err := NewSQLiteManager(Config{DirectPath: dbPath})
+		require.NoError(t, err)
+		err = manager.Initialize()
+		require.NoError(t, err)
+
+		// Set migration state to COMPLETED
+		now := time.Now()
+		state := entities.MigrationState{
+			ID:          1,
+			State:       entities.MigrationStatusCompleted,
+			StartedAt:   &now,
+			CompletedAt: &now,
+		}
+		err = manager.DB().Save(&state).Error
+		require.NoError(t, err)
+
+		// Add legacy results table to simulate a contaminated DB
+		require.NoError(t, manager.DB().Exec("CREATE TABLE results (id INTEGER PRIMARY KEY)").Error)
+		require.NoError(t, manager.Close())
+
+		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for database with results table")
+	})
+
 	t.Run("non-existent database", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		dbPath := filepath.Join(tmpDir, "nonexistent.db")
@@ -347,6 +375,18 @@ func TestHasCompleteFreshV2Schema(t *testing.T) {
 
 		assert.True(t, hasCompleteFreshV2Schema(db),
 			"completed marker plus detections table is a usable fresh v2 schema")
+	})
+
+	t.Run("legacy contaminated database", func(t *testing.T) {
+		db := newSchemaCheckDB(t)
+		seedMigrationStatesTable(t, db, entities.MigrationStatusCompleted)
+		createBareDetectionsTable(t, db)
+
+		// Simulate legacy database
+		require.NoError(t, db.Exec("CREATE TABLE results (id INTEGER PRIMARY KEY)").Error)
+
+		assert.False(t, hasCompleteFreshV2Schema(db),
+			"must not treat legacy database with results table as a fresh v2 schema")
 	})
 
 	t.Run("completed marker without detections table", func(t *testing.T) {

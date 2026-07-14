@@ -726,6 +726,14 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
+	// Ensure legacy tables do NOT exist. A database with 'results' is a legacy DB,
+	// even if it has a stale migration_states=COMPLETED marker from PR #2165.
+	var legacyTableCount int64
+	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('results', 'notes')").Scan(&legacyTableCount).Error
+	if err == nil && legacyTableCount > 0 {
+		return false
+	}
+
 	// Check if migration_states table exists (v2 schema indicator).
 	// Also check for the old singular name "migration_state" which existed before PR #2165
 	// removed TableName() overrides (GORM now auto-pluralizes to "migration_states").
@@ -812,6 +820,12 @@ func hasCompleteFreshV2Schema(db *gorm.DB) bool {
 		return false
 	}
 	if state.State != entities.MigrationStatusCompleted {
+		return false
+	}
+
+	// Ensure legacy tables do NOT exist. A database with 'results' is a legacy DB,
+	// even if it has a stale migration_states=COMPLETED marker from PR #2165.
+	if db.Migrator().HasTable("results") {
 		return false
 	}
 
