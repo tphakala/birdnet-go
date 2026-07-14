@@ -65,19 +65,23 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetSpeciesHourlyDistribution_ForwardsSpeciesFilter verifies the ridgeline endpoint parses the
+// repeated ?species query param (trimming, dropping empties, and collapsing case-insensitive
+// duplicates) and forwards the resulting scientific-name filter to the datastore.
 func TestGetSpeciesHourlyDistribution_ForwardsSpeciesFilter(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	// A repeated ?species filter is trimmed, empty-filtered, and forwarded to the datastore so the
-	// ridgeline narrows to the selection instead of the top-N default.
+	// A repeated ?species filter is trimmed, empty-filtered, case-insensitively de-duplicated, and
+	// forwarded to the datastore so the ridgeline narrows to the selection instead of the top-N
+	// default. The trailing "turdus migratorius" is a case-variant duplicate that must collapse.
 	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02",
 		[]string{"Turdus migratorius", "Turdus merula"}, 5).
 		Return(sampleSpeciesDistribution(), nil)
 
 	c, rec := newSpeciesDistributionContext(e,
 		"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"+
-			"&species=Turdus+migratorius&species=+Turdus+merula+&species=")
+			"&species=Turdus+migratorius&species=+Turdus+merula+&species=&species=turdus+migratorius")
 	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	mockDS.AssertExpectations(t)

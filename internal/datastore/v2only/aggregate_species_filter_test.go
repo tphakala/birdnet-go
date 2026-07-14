@@ -14,8 +14,11 @@ import (
 // nil/empty falls back to the top-N default. Both charts share the selectTopSpeciesHourly path, so
 // the two subtests pin the same filter behavior for each fold.
 func TestV2OnlyDatastore_HourlyChartsSpeciesFilter(t *testing.T) {
+	t.Parallel()
 	ds, cleanup := setupTestDatastore(t)
-	defer cleanup()
+	// t.Cleanup (not defer) so the store stays open until the parallel subtests below finish; a
+	// deferred cleanup would close it as soon as this function returns, before they run.
+	t.Cleanup(cleanup)
 	ds.timezone = time.UTC
 	ctx := t.Context()
 
@@ -41,6 +44,7 @@ func TestV2OnlyDatastore_HourlyChartsSpeciesFilter(t *testing.T) {
 	seedAll("Troglodytes troglodytes", at(8, 1))
 
 	t.Run("GetHourlyDistributionBySpecies filters to the selected species", func(t *testing.T) {
+		t.Parallel()
 		got, err := ds.GetHourlyDistributionBySpecies(ctx, startDate, endDate, []string{"Turdus migratorius"}, 5)
 		require.NoError(t, err)
 		require.Len(t, got, 1)
@@ -48,6 +52,7 @@ func TestV2OnlyDatastore_HourlyChartsSpeciesFilter(t *testing.T) {
 	})
 
 	t.Run("GetHourlyDistributionBySpecies empty selection returns the top-N", func(t *testing.T) {
+		t.Parallel()
 		got, err := ds.GetHourlyDistributionBySpecies(ctx, startDate, endDate, nil, 5)
 		require.NoError(t, err)
 		require.Len(t, got, 3)
@@ -55,6 +60,7 @@ func TestV2OnlyDatastore_HourlyChartsSpeciesFilter(t *testing.T) {
 	})
 
 	t.Run("GetAcousticSuccession filters to the selected species", func(t *testing.T) {
+		t.Parallel()
 		got, err := ds.GetAcousticSuccession(ctx, startDate, endDate, []string{"Turdus migratorius"}, 6)
 		require.NoError(t, err)
 		require.Len(t, got, 1)
@@ -64,6 +70,7 @@ func TestV2OnlyDatastore_HourlyChartsSpeciesFilter(t *testing.T) {
 	})
 
 	t.Run("GetAcousticSuccession empty selection returns the top-N", func(t *testing.T) {
+		t.Parallel()
 		got, err := ds.GetAcousticSuccession(ctx, startDate, endDate, nil, 6)
 		require.NoError(t, err)
 		require.Len(t, got, 3)
@@ -71,6 +78,7 @@ func TestV2OnlyDatastore_HourlyChartsSpeciesFilter(t *testing.T) {
 	})
 
 	t.Run("multi-species selection returns all selected, volume-ordered", func(t *testing.T) {
+		t.Parallel()
 		got, err := ds.GetAcousticSuccession(ctx, startDate, endDate,
 			[]string{"Turdus merula", "Troglodytes troglodytes"}, 6)
 		require.NoError(t, err)

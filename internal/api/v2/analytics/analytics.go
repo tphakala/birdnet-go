@@ -1485,18 +1485,27 @@ func (c *Handler) GetAnalyticsSun(ctx echo.Context) error {
 }
 
 // parseSpeciesParams normalizes the repeated ?species query values into a scientific-name filter:
-// each value is trimmed and empty entries are dropped, so a stray "?species=" does not turn into a
-// filter that matches nothing. Returns nil when no usable value remains, which the datastore reads as
-// "no filter" (top-N by volume).
+// each value is trimmed, empty entries are dropped (so a stray "?species=" does not turn into a
+// filter that matches nothing), and case-insensitive duplicates are collapsed to their first
+// occurrence (preserving its original casing) so a repeated selection does not inflate the IN clause.
+// Returns nil when no usable value remains, which the datastore reads as "no filter" (top-N by volume).
 func parseSpeciesParams(raw []string) []string {
 	if len(raw) == 0 {
 		return nil
 	}
+	seen := make(map[string]struct{}, len(raw))
 	species := make([]string, 0, len(raw))
 	for _, s := range raw {
-		if trimmed := strings.TrimSpace(s); trimmed != "" {
-			species = append(species, trimmed)
+		trimmed := strings.TrimSpace(s)
+		if trimmed == "" {
+			continue
 		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		species = append(species, trimmed)
 	}
 	if len(species) == 0 {
 		return nil

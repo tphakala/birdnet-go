@@ -65,19 +65,23 @@ func TestGetAcousticSuccession_Shape(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetAcousticSuccession_ForwardsSpeciesFilter verifies the succession endpoint parses the
+// repeated ?species query param (trimming, dropping empties, and collapsing case-insensitive
+// duplicates) and forwards the resulting scientific-name filter to the datastore.
 func TestGetAcousticSuccession_ForwardsSpeciesFilter(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	// A repeated ?species filter is trimmed, empty-filtered, and forwarded to the datastore so the
-	// streamgraph narrows to the selection instead of the top-N default.
+	// A repeated ?species filter is trimmed, empty-filtered, case-insensitively de-duplicated, and
+	// forwarded to the datastore so the streamgraph narrows to the selection instead of the top-N
+	// default. The trailing "turdus migratorius" is a case-variant duplicate that must collapse.
 	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02",
 		[]string{"Turdus migratorius", "Turdus merula"}, 6).
 		Return(sampleAcousticSuccession(), nil)
 
 	c, rec := newSuccessionContext(e,
 		"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02"+
-			"&species=Turdus+migratorius&species=+Turdus+merula+&species=")
+			"&species=Turdus+migratorius&species=+Turdus+merula+&species=&species=turdus+migratorius")
 	require.NoError(t, controller.GetAcousticSuccession(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	mockDS.AssertExpectations(t)
