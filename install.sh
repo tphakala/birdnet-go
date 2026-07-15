@@ -36,6 +36,8 @@ MIGRATE_SSH_DIR=""
 MIGRATE_REMOTE_HOME=""
 MIGRATE_REMOTE_APP=""
 MIGRATE_TMP_UNIT=""
+MIGRATE_BACKUP=""
+MIGRATE_STOPPED_REMOTE="0"
 
 # Flag to track if Docker image was changed during update/rollback
 IMAGE_CHANGED="false"
@@ -1899,26 +1901,30 @@ resolve_remote_app() {
     return 1
 }
 
-# 0 = confirmed stopped, 1 = running or NOT confirmed stopped. Fail safe: an empty
-# or unrecognized answer (dropped SSH, MOTD noise, CRLF) is treated as "maybe
-# running" so we never copy a live database. Whitespace/CR is stripped so MOTD
-# banners and carriage returns do not defeat the match.
+# 0 = confirmed stopped, 1 = running or NOT confirmed stopped. Fails CLOSED: a
+# dropped SSH, missing systemctl, MOTD/shell noise, or any state other than a
+# definitive not-running one is treated as "maybe running" so a live database is
+# never copied. A remote without systemctl defaults to inactive (then the docker
+# check decides); tail -n 1 drops login banners; grep -Fx matches only the exact
+# container name so shell noise cannot look like a running container.
 check_remote_stopped() {
     local state
-    state="$(migrate_ssh 'systemctl is-active birdnet-go.service 2>/dev/null')"
-    state="$(printf '%s' "$state" | tr -d '[:space:]')"
+    state="$(migrate_ssh 'if command -v systemctl >/dev/null 2>&1; then systemctl is-active birdnet-go.service 2>/dev/null || true; else echo inactive; fi')" || return 1
+    state="$(printf '%s' "$state" | tail -n 1 | tr -d '[:space:]')"
     case "$state" in
-        active|activating|reloading|deactivating|"") return 1 ;;
+        inactive|failed|unknown) ;;   # systemd definitively not running; verify container
+        *) return 1 ;;                 # active/empty/unrecognized -> not confirmed stopped
     esac
-    local ctr
-    ctr="$(migrate_ssh 'docker ps --filter name=birdnet-go --format "{{.Names}}" 2>/dev/null')"
-    ctr="$(printf '%s' "$ctr" | tr -d '[:space:]')"
+    local ctr raw
+    raw="$(migrate_ssh 'if command -v docker >/dev/null 2>&1; then docker ps --filter name=birdnet-go --format "{{.Names}}" 2>/dev/null || true; fi')" || return 1
+    ctr="$(printf '%s' "$raw" | grep -Fx 'birdnet-go' | tr -d '[:space:]')"
     [ -n "$ctr" ] && return 1
     return 0
 }
 
-# Ensure the new host has room for the remote dataset (+10% margin). Fails open if
-# either size cannot be determined.
+# Ensure the new host has room for the remote dataset (+10% margin). Fails CLOSED:
+# if the remote or local size cannot be parsed, abort (or take an explicit
+# interactive override) rather than silently skip the check before a large copy.
 check_remote_disk() {
     local remote_kb avail_kb
     remote_kb="$(migrate_ssh "du -sk '$MIGRATE_REMOTE_APP' 2>/dev/null | cut -f1")"
@@ -1929,7 +1935,15 @@ check_remote_disk() {
             print_message "❌ Not enough disk space: need ~$(( need_kb / 1024 )) MB, have $(( avail_kb / 1024 )) MB" "$RED"
             return 1
         fi
+        return 0
     fi
+    print_message "⚠️  Could not verify free disk space for the transfer." "$YELLOW"
+    if [ "$SILENT_MODE" = "true" ]; then
+        print_message "❌ Aborting (silent mode); re-run interactively to override" "$RED"; return 1
+    fi
+    print_message "❓ Continue without the disk-space check? (y/n): " "$YELLOW" "nonewline"
+    local a; read -r a
+    [[ "$a" =~ ^[Yy]$ ]] || { print_message "Migration cancelled." "$NC"; return 1; }
     return 0
 }
 
@@ -1949,13 +1963,23 @@ adopt_migrated_installation() {
     fi
 
     local db="$dest/data/birdnet.db"
-    if [ -f "$db" ] && command_exists sqlite3; then
+    if [ -f "$db" ]; then
+        if ! command_exists sqlite3; then
+            print_message "❌ sqlite3 is unavailable; cannot verify database integrity" "$RED"
+            return 1
+        fi
         local res
         res="$(sqlite3 "$db" 'PRAGMA integrity_check;' 2>/dev/null)"
         if [ "$res" = "ok" ]; then
             print_message "✅ Database integrity verified" "$GREEN"
         else
-            print_message "⚠️  Database integrity check: ${res:-unreadable}. If the old service was running during copy, stop it and re-run." "$YELLOW"
+            print_message "❌ Database integrity check failed: ${res:-unreadable}" "$RED"
+            if [ "$SILENT_MODE" = "true" ]; then
+                return 1
+            fi
+            print_message "   Your data on $MIGRATE_DEST is untouched. Adopt anyway? (y/n): " "$YELLOW" "nonewline"
+            local a; read -r a
+            [[ "$a" =~ ^[Yy]$ ]] || return 1
         fi
     fi
 
@@ -1966,6 +1990,31 @@ adopt_migrated_installation() {
     load_telemetry_config
     MIGRATION_DONE="true"
     return 0
+}
+
+# Restore pre-migration state after a failure: drop the partial target, move any
+# backed-up data back into place, and restart the source service if THIS run
+# stopped it. Best effort; each step is guarded and reports what it did so the
+# user is never left thinking data was lost.
+migrate_rollback() {
+    local dest_dir="$HOME/birdnet-go-app"
+    rm -rf "$dest_dir" 2>/dev/null
+    if [ -n "$MIGRATE_BACKUP" ] && [ -d "$MIGRATE_BACKUP" ]; then
+        if mv "$MIGRATE_BACKUP" "$dest_dir" 2>/dev/null; then
+            print_message "↩️  Restored your previous data to $dest_dir" "$YELLOW"
+        else
+            print_message "⚠️  Could not auto-restore; your previous data is safe at $MIGRATE_BACKUP" "$YELLOW"
+        fi
+        MIGRATE_BACKUP=""
+    fi
+    if [ "$MIGRATE_STOPPED_REMOTE" = "1" ] && [ -n "$MIGRATE_SSH_SOCKET" ]; then
+        if ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl start birdnet-go.service' 2>/dev/null; then
+            print_message "↩️  Restarted BirdNET-Go on $MIGRATE_DEST" "$YELLOW"
+        else
+            print_message "⚠️  Could not restart BirdNET-Go on $MIGRATE_DEST; start it there manually" "$YELLOW"
+        fi
+        MIGRATE_STOPPED_REMOTE="0"
+    fi
 }
 
 # Pull an install from another host over SSH and adopt it. Returns nonzero on any
@@ -2006,28 +2055,13 @@ migrate_from_remote_host() {
     open_ssh_master || return 1
     resolve_remote_app || return 1
 
-    # Require the source service to be stopped so we never copy a live database.
-    if ! check_remote_stopped; then
-        print_message "⚠️  BirdNET-Go appears to be running on $MIGRATE_DEST. Copying a live database can corrupt it." "$YELLOW"
-        if [ "$SILENT_MODE" = "true" ]; then
-            print_message "❌ Stop birdnet-go on the old host, then re-run" "$RED"; return 1
-        fi
-        print_message "❓ Stop it now over SSH (sudo)? (y/n): " "$YELLOW" "nonewline"
-        local s; read -r s
-        if [[ "$s" =~ ^[Yy]$ ]]; then
-            ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl stop birdnet-go.service' || true
-            check_remote_stopped || { print_message "❌ Still running; stop it manually and re-run" "$RED"; return 1; }
-        else
-            print_message "❌ Stop birdnet-go on the old host, then re-run" "$RED"; return 1
-        fi
-    fi
-
+    # Verify capacity and settle the local target BEFORE stopping the source, so
+    # aborting on a disk or overwrite decision never leaves the old host offline.
     check_remote_disk || return 1
 
     # Overwrite guard: never merge into pre-existing data. setup_logging already
     # created data/logs here, so that alone must NOT count; trigger only on a real
-    # payload (config, database, or clips). Move it aside (never delete). Runs only
-    # after the remote checks pass, so a bad remote never displaces local data.
+    # payload (config, database, or clips). Move it aside (never delete).
     if [ -f "$dest_dir/config/config.yaml" ] || [ -f "$dest_dir/data/birdnet.db" ] || \
        { [ -d "$dest_dir/data/clips" ] && [ -n "$(ls -A "$dest_dir/data/clips" 2>/dev/null)" ]; }; then
         if [ "$SILENT_MODE" = "true" ]; then
@@ -2037,9 +2071,31 @@ migrate_from_remote_host() {
         print_message "❓ Move it aside to a backup and continue? (y/n): " "$YELLOW" "nonewline"
         local ans; read -r ans
         [[ "$ans" =~ ^[Yy]$ ]] || { print_message "Migration cancelled; nothing changed." "$NC"; return 1; }
-        local backup; backup="${dest_dir}.bak.$(date +%Y%m%d%H%M%S).$$"
-        mv "$dest_dir" "$backup" || { print_message "❌ Backup move failed" "$RED"; return 1; }
-        print_message "📦 Existing data moved to $backup (nothing deleted)" "$GREEN"
+        MIGRATE_BACKUP="${dest_dir}.bak.$(date +%Y%m%d%H%M%S).$$"
+        if ! mv "$dest_dir" "$MIGRATE_BACKUP"; then
+            print_message "❌ Backup move failed" "$RED"; MIGRATE_BACKUP=""; return 1
+        fi
+        print_message "📦 Existing data moved to $MIGRATE_BACKUP (nothing deleted)" "$GREEN"
+    fi
+
+    # Require the source service to be stopped so we never copy a live database.
+    # From here on, failures route through migrate_rollback, which restores the
+    # backed-up local data and restarts the source if this run stopped it.
+    if ! check_remote_stopped; then
+        print_message "⚠️  BirdNET-Go appears to be running on $MIGRATE_DEST. Copying a live database can corrupt it." "$YELLOW"
+        if [ "$SILENT_MODE" = "true" ]; then
+            print_message "❌ Stop birdnet-go on the old host, then re-run" "$RED"; migrate_rollback; return 1
+        fi
+        print_message "❓ Stop it now over SSH (sudo)? (y/n): " "$YELLOW" "nonewline"
+        local s; read -r s
+        if [[ "$s" =~ ^[Yy]$ ]]; then
+            if ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl stop birdnet-go.service'; then
+                MIGRATE_STOPPED_REMOTE="1"
+            fi
+            check_remote_stopped || { print_message "❌ Still running; stop it manually and re-run" "$RED"; migrate_rollback; return 1; }
+        else
+            print_message "❌ Stop birdnet-go on the old host, then re-run" "$RED"; migrate_rollback; return 1
+        fi
     fi
 
     # Transfer straight into the destination; rsync runs as the local user so
@@ -2049,8 +2105,8 @@ migrate_from_remote_host() {
         if ! rsync -aH --partial --info=progress2 --exclude 'config/hls/' \
                 -e "ssh -o ControlPath=$MIGRATE_SSH_SOCKET" \
                 "$MIGRATE_DEST:$MIGRATE_REMOTE_APP/" "$dest_dir/"; then
-            print_message "❌ rsync failed (incomplete transfer); nothing adopted" "$RED"
-            rm -rf "$dest_dir"; return 1
+            print_message "❌ rsync failed (incomplete transfer); rolling back" "$RED"
+            migrate_rollback; return 1
         fi
     else
         print_message "ℹ️  rsync not on the remote; using tar over SSH" "$YELLOW"
@@ -2062,18 +2118,18 @@ migrate_from_remote_host() {
         migrate_ssh "tar -C '$MIGRATE_REMOTE_APP' --exclude=./config/hls -cf - ." | tar -C "$dest_dir" -xf -
         local pstat=("${PIPESTATUS[@]}")
         if [ "${pstat[0]}" -ne 0 ] || [ "${pstat[1]}" -ne 0 ]; then
-            print_message "❌ tar transfer failed; nothing adopted" "$RED"
-            rm -rf "$dest_dir"; return 1
+            print_message "❌ tar transfer failed; rolling back" "$RED"
+            migrate_rollback; return 1
         fi
     fi
 
     if [ ! -f "$dest_dir/config/config.yaml" ]; then
-        print_message "❌ Transfer left no config.yaml; aborting" "$RED"
-        rm -rf "$dest_dir"; return 1
+        print_message "❌ Transfer left no config.yaml; rolling back" "$RED"
+        migrate_rollback; return 1
     fi
 
     if ! adopt_migrated_installation; then
-        print_message "❌ Adopt step failed" "$RED"; rm -rf "$dest_dir"; return 1
+        print_message "❌ Adopt step failed; rolling back" "$RED"; migrate_rollback; return 1
     fi
     print_message "✅ Migration data adopted; continuing with provisioning" "$GREEN"
     log_message "INFO" "Cross-host migration transfer and adopt complete"
