@@ -531,8 +531,10 @@ func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
 
 	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
 	// Only applies locally for routing; does NOT publish settings to avoid
-	// inconsistency if the backend fails to initialize.
-	if rf.Model == "" && bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
+	// inconsistency if the backend fails to initialize. Skipped when an explicit
+	// rangefilter.modelpath is set, so a user-provided range-filter path is never
+	// overridden by the stock geomodel (mirrors the arm64 default gate below).
+	if shouldAutoSelectV3GeomodelForConfig(rf.Model, rf.ModelPath, bn.ModelInfo.ID, bn.modelsDir) {
 		localSettings := conf.CloneSettings(settings)
 		applyAutoSelectedGeomodelPaths(localSettings, bn.modelsDir)
 		settings = localSettings
@@ -543,21 +545,22 @@ func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
 	}
 
 	// On arm64 (container images ship the ONNX range filter instead of the TFLite
-	// MData models), prefer the ONNX MData range filter when no range filter is
-	// configured and the v3 geomodel was not auto-selected above. Gated to the
-	// BirdNET v2.4 family: the MData V2 model outputs the v2.4 species set, and the
-	// strict ONNX path (no labels file) requires the model output dimension to
-	// equal the classifier label count, so it only fits a v2.4-family classifier.
-	// Routed locally only; settings are not published.
-	if rf.Model == "" && rf.ModelPath == "" && isBirdNETV24Family(bn.ModelInfo.ID) {
-		if path, ok := defaultRangeFilterONNXPath(runtime.GOARCH, findModelPathInStandardPaths); ok {
-			localSettings := conf.CloneSettings(settings)
-			localSettings.BirdNET.RangeFilter.ModelPath = path
-			settings = localSettings
-			rf = settings.BirdNET.RangeFilter
-			log.Info("Selected ONNX range filter (arm64 default)",
-				logger.String("model_path", path))
-		}
+	// MData models), prefer the ONNX MData range filter when the range filter is left
+	// on auto-select ("" or the "latest" default), no explicit model path is set, and
+	// the v3 geomodel was not auto-selected above. Gated to the BirdNET v2.4 family:
+	// the MData V2 model outputs the v2.4 species set, and the strict ONNX path (no
+	// labels file) requires the model output dimension to equal the classifier label
+	// count, so it only fits a v2.4-family classifier. Without this, the "latest"
+	// default dead-ends at the TFLite backend, which has no model file on ONNX-only
+	// arm64 images, leaving the instance unfiltered (#3932). Routed locally only;
+	// settings are not published.
+	if path, ok := shouldSelectDefaultONNXRangeFilter(rf.Model, rf.ModelPath, bn.ModelInfo.ID, runtime.GOARCH, findModelPathInStandardPaths); ok {
+		localSettings := conf.CloneSettings(settings)
+		localSettings.BirdNET.RangeFilter.ModelPath = path
+		settings = localSettings
+		rf = settings.BirdNET.RangeFilter
+		log.Info("Selected ONNX range filter (arm64 default)",
+			logger.String("model_path", path))
 	}
 
 	switch resolveRangeFilterBackend(&rf) {
@@ -1774,6 +1777,18 @@ func shouldAutoSelectV3Geomodel(modelID, modelsDir string) bool {
 		return false
 	}
 	return true
+}
+
+// shouldAutoSelectV3GeomodelForConfig reports whether initializeMetaModel should
+// auto-select the stock v3 geomodel for this range-filter config. It requires the
+// model to be auto-select ("" or the "latest" default), no explicit range-filter
+// modelpath (an explicit user path is never overridden), a known models dir, and a
+// compatible classifier with the stock geomodel files present on disk. The
+// modelpath guard mirrors shouldSelectDefaultONNXRangeFilter so both auto-select
+// gates honor an explicit path consistently.
+func shouldAutoSelectV3GeomodelForConfig(model, modelPath, classifierID, modelsDir string) bool {
+	return isAutoSelectRangeFilterModel(model) && modelPath == "" && modelsDir != "" &&
+		shouldAutoSelectV3Geomodel(classifierID, modelsDir)
 }
 
 // applyAutoSelectedGeomodelPaths configures the range filter settings to

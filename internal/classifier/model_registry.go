@@ -311,6 +311,32 @@ func defaultRangeFilterONNXPath(goarch string, find func(name string) (path stri
 	return find(DefaultRangeFilterV2ONNXModelName)
 }
 
+// isAutoSelectRangeFilterModel reports whether the configured range-filter model
+// requests automatic backend selection. Both "" and the "latest" sentinel (the
+// config default in defaults.go) mean "pick the best available range filter": the
+// v3 geomodel when its files are present, then the shipped ONNX MData model, then
+// the classifier's embedded/shipped TFLite MData model.
+//
+// Without treating "latest" as auto-select, the default config dead-ends at the
+// TFLite backend, which has no model file on ONNX-only (arm64) container images,
+// leaving the instance with no range filter and every species unfiltered (#3932).
+func isAutoSelectRangeFilterModel(model string) bool {
+	return model == "" || model == conf.RangeFilterModelLatest
+}
+
+// shouldSelectDefaultONNXRangeFilter reports the ONNX MData range-filter model path
+// to use as the arm64 default. It returns ("", false) unless the config requests
+// auto-selection (isAutoSelectRangeFilterModel), no explicit range-filter ModelPath
+// is set, the classifier is the BirdNET v2.4 family (whose labels match the MData V2
+// output dimension), and defaultRangeFilterONNXPath locates the ONNX MData model
+// (arm64 only). find resolves a model filename within the standard search paths.
+func shouldSelectDefaultONNXRangeFilter(model, modelPath, classifierID, goarch string, find func(name string) (path string, ok bool)) (string, bool) {
+	if !isAutoSelectRangeFilterModel(model) || modelPath != "" || !isBirdNETV24Family(classifierID) {
+		return "", false
+	}
+	return defaultRangeFilterONNXPath(goarch, find)
+}
+
 // birdnetVersionToRegistryID maps user-facing BirdNET version strings to registry IDs.
 var birdnetVersionToRegistryID = map[string]string{
 	"2.4": "BirdNET_V2.4",

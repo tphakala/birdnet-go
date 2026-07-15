@@ -281,3 +281,77 @@ func TestRemapV24ToONNXOnARM64Unified(t *testing.T) {
 	assert.Equal(t, QuantizationINT8, got.Quantization)
 	assert.True(t, got.IsStock)
 }
+
+// TestIsAutoSelectRangeFilterModel verifies that the empty string and the "latest"
+// default sentinel both request automatic range-filter backend selection, while
+// explicit model choices do not. Regression guard for #3932, where the default
+// "latest" dead-ended at the TFLite backend on ONNX-only arm64 images.
+func TestIsAutoSelectRangeFilterModel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		model string
+		want  bool
+	}{
+		{"empty string is auto-select", "", true},
+		{"latest sentinel is auto-select", conf.RangeFilterModelLatest, true},
+		{"explicit v3 is not auto-select", "v3", false},
+		{"legacy is not auto-select", "legacy", false},
+		{"custom value is not auto-select", "custom", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isAutoSelectRangeFilterModel(tt.model))
+		})
+	}
+}
+
+// TestShouldSelectDefaultONNXRangeFilter verifies the arm64 default ONNX MData
+// range-filter selection. It fires for the auto-select models ("" and "latest") on
+// arm64 with a v2.4-family classifier when the ONNX file is present, and is correctly
+// suppressed by an explicit ModelPath, a non-auto-select model, a non-v2.4 classifier,
+// amd64, or a missing file. The "latest" cases are the #3932 regression guard: the
+// default config must select the shipped ONNX MData model on ONNX-only arm64 images
+// instead of dead-ending at the unavailable TFLite model.
+func TestShouldSelectDefaultONNXRangeFilter(t *testing.T) {
+	t.Parallel()
+
+	onnxName := DefaultRangeFilterV2ONNXModelName
+	findHit := func(name string) (string, bool) {
+		if name == onnxName {
+			return "/models/" + name, true
+		}
+		return "", false
+	}
+	findMiss := func(string) (string, bool) { return "", false }
+	wantPath := "/models/" + onnxName
+
+	tests := []struct {
+		name       string
+		model      string
+		modelPath  string
+		classifier string
+		goarch     string
+		find       func(string) (string, bool)
+		wantPath   string
+		wantOK     bool
+	}{
+		{"latest on arm64 v2.4 with file selects ONNX MData", conf.RangeFilterModelLatest, "", DefaultModelVersion, "arm64", findHit, wantPath, true},
+		{"empty on arm64 v2.4 with file selects ONNX MData", "", "", DefaultModelVersion, "arm64", findHit, wantPath, true},
+		{"explicit v3 does not auto-select", "v3", "", DefaultModelVersion, "arm64", findHit, "", false},
+		{"legacy does not auto-select", "legacy", "", DefaultModelVersion, "arm64", findHit, "", false},
+		{"explicit ModelPath suppresses selection", conf.RangeFilterModelLatest, "/data/custom.onnx", DefaultModelVersion, "arm64", findHit, "", false},
+		{"non-v2.4 classifier is skipped", conf.RangeFilterModelLatest, "", RegistryIDPerchV2, "arm64", findHit, "", false},
+		{"amd64 is skipped", conf.RangeFilterModelLatest, "", DefaultModelVersion, "amd64", findHit, "", false},
+		{"arm64 without file falls through", conf.RangeFilterModelLatest, "", DefaultModelVersion, "arm64", findMiss, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path, ok := shouldSelectDefaultONNXRangeFilter(tt.model, tt.modelPath, tt.classifier, tt.goarch, tt.find)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantPath, path)
+		})
+	}
+}
