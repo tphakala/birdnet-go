@@ -126,6 +126,7 @@ for fn in \
     configure_auth \
     rewrite_migrated_config_paths \
     parse_ssh_dest \
+    remote_path_safe \
     remote_default_app_path
 do
     load_fn "$fn"
@@ -622,11 +623,26 @@ assert_eq "already-8080 stays 8080 (idempotent)" '"8080"' "$(yaml_after "$cfg" '
 # parse_ssh_dest (validate the migration ssh destination)
 # ===========================================================================
 it "parse_ssh_dest"
-assert_eq "accepts user@host" "pi@raspi4.local" "$(parse_ssh_dest 'pi@raspi4.local')"
+ssh_dest_out="$(parse_ssh_dest 'pi@raspi4.local')"; ssh_dest_rc=$?
+assert_eq "accepts user@host" "pi@raspi4.local" "$ssh_dest_out"
+assert_ok "user@host returns success rc" "$ssh_dest_rc"
 assert_eq "accepts bare alias" "oldpi" "$(parse_ssh_dest 'oldpi')"
+assert_eq "accepts underscore alias" "old_pi" "$(parse_ssh_dest 'old_pi')"
 parse_ssh_dest "" >/dev/null 2>&1; assert_nonzero "rejects empty" "$?"
 parse_ssh_dest "a b" >/dev/null 2>&1; assert_nonzero "rejects whitespace" "$?"
-parse_ssh_dest 'a;rm -rf /' >/dev/null 2>&1; assert_nonzero "rejects shell metacharacters" "$?"
+# metachar WITHOUT whitespace: isolates the charset guard from the whitespace guard
+parse_ssh_dest 'a;b' >/dev/null 2>&1; assert_nonzero "rejects semicolon (no whitespace)" "$?"
+parse_ssh_dest 'host|nc' >/dev/null 2>&1; assert_nonzero "rejects pipe" "$?"
+parse_ssh_dest 'host$(id)' >/dev/null 2>&1; assert_nonzero "rejects command substitution chars" "$?"
+# colon is rejected: the transfer appends :$path itself, so the dest must not carry one
+parse_ssh_dest 'host:22' >/dev/null 2>&1; assert_nonzero "rejects colon" "$?"
+# leading dash must not be accepted (would be read as an ssh/rsync flag)
+parse_ssh_dest '-oProxyCommand=x' >/dev/null 2>&1; assert_nonzero "rejects leading-dash flag-like dest" "$?"
+
+it "remote_path_safe"
+remote_path_safe "/home/pi/birdnet-go-app"; assert_ok "accepts a normal path" "$?"
+remote_path_safe ""; assert_nonzero "rejects empty" "$?"
+remote_path_safe "/data'; rm -rf ~"; assert_nonzero "rejects embedded single quote" "$?"
 
 # ===========================================================================
 # remote_default_app_path (default remote birdnet-go-app location)
