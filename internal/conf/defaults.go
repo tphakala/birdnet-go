@@ -87,7 +87,7 @@ func setDefaultConfig() {
 
 	// Range filter configuration
 	viper.SetDefault("birdnet.rangefilter.debug", false)
-	viper.SetDefault("birdnet.rangefilter.model", "latest")
+	viper.SetDefault("birdnet.rangefilter.model", RangeFilterModelLatest)
 	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
 	// Perch model configuration

@@ -132,14 +132,14 @@ func TestShouldAutoSelectV3GeomodelForConfig(t *testing.T) {
 		modelsDir string
 		want      bool
 	}{
-		{"latest + no path + PerchV2 + files -> auto-select", "latest", "", RegistryIDPerchV2, modelsDir, true},
+		{"latest + no path + PerchV2 + files -> auto-select", conf.RangeFilterModelLatest, "", RegistryIDPerchV2, modelsDir, true},
 		{"empty model + no path + BirdNET V3.0 + files -> auto-select", "", "", RegistryIDBirdNETV3, modelsDir, true},
-		{"latest + explicit modelpath suppresses (custom path honored)", "latest", "/data/custom_geomodel.onnx", RegistryIDPerchV2, modelsDir, false},
+		{"latest + explicit modelpath suppresses (custom path honored)", conf.RangeFilterModelLatest, "/data/custom_geomodel.onnx", RegistryIDPerchV2, modelsDir, false},
 		{"empty model + explicit modelpath suppresses", "", "/data/custom_geomodel.onnx", RegistryIDPerchV2, modelsDir, false},
 		{"explicit v3 is not auto-select", "v3", "", RegistryIDPerchV2, modelsDir, false},
 		{"legacy is not auto-select", "legacy", "", RegistryIDPerchV2, modelsDir, false},
-		{"v2.4 family classifier not eligible", "latest", "", "BirdNET_V2.4", modelsDir, false},
-		{"empty modelsDir -> false", "latest", "", RegistryIDPerchV2, "", false},
+		{"v2.4 family classifier not eligible", conf.RangeFilterModelLatest, "", "BirdNET_V2.4", modelsDir, false},
+		{"empty modelsDir -> false", conf.RangeFilterModelLatest, "", RegistryIDPerchV2, "", false},
 	}
 
 	for _, tt := range tests {

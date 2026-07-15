@@ -294,7 +294,7 @@ func TestIsAutoSelectRangeFilterModel(t *testing.T) {
 		want  bool
 	}{
 		{"empty string is auto-select", "", true},
-		{"latest sentinel is auto-select", "latest", true},
+		{"latest sentinel is auto-select", conf.RangeFilterModelLatest, true},
 		{"explicit v3 is not auto-select", "v3", false},
 		{"legacy is not auto-select", "legacy", false},
 		{"custom value is not auto-select", "custom", false},
@@ -337,14 +337,14 @@ func TestShouldSelectDefaultONNXRangeFilter(t *testing.T) {
 		wantPath   string
 		wantOK     bool
 	}{
-		{"latest on arm64 v2.4 with file selects ONNX MData", "latest", "", DefaultModelVersion, "arm64", findHit, wantPath, true},
+		{"latest on arm64 v2.4 with file selects ONNX MData", conf.RangeFilterModelLatest, "", DefaultModelVersion, "arm64", findHit, wantPath, true},
 		{"empty on arm64 v2.4 with file selects ONNX MData", "", "", DefaultModelVersion, "arm64", findHit, wantPath, true},
 		{"explicit v3 does not auto-select", "v3", "", DefaultModelVersion, "arm64", findHit, "", false},
 		{"legacy does not auto-select", "legacy", "", DefaultModelVersion, "arm64", findHit, "", false},
-		{"explicit ModelPath suppresses selection", "latest", "/data/custom.onnx", DefaultModelVersion, "arm64", findHit, "", false},
-		{"non-v2.4 classifier is skipped", "latest", "", RegistryIDPerchV2, "arm64", findHit, "", false},
-		{"amd64 is skipped", "latest", "", DefaultModelVersion, "amd64", findHit, "", false},
-		{"arm64 without file falls through", "latest", "", DefaultModelVersion, "arm64", findMiss, "", false},
+		{"explicit ModelPath suppresses selection", conf.RangeFilterModelLatest, "/data/custom.onnx", DefaultModelVersion, "arm64", findHit, "", false},
+		{"non-v2.4 classifier is skipped", conf.RangeFilterModelLatest, "", RegistryIDPerchV2, "arm64", findHit, "", false},
+		{"amd64 is skipped", conf.RangeFilterModelLatest, "", DefaultModelVersion, "amd64", findHit, "", false},
+		{"arm64 without file falls through", conf.RangeFilterModelLatest, "", DefaultModelVersion, "arm64", findMiss, "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

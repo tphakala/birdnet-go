@@ -321,7 +321,7 @@ func defaultRangeFilterONNXPath(goarch string, find func(name string) (path stri
 // TFLite backend, which has no model file on ONNX-only (arm64) container images,
 // leaving the instance with no range filter and every species unfiltered (#3932).
 func isAutoSelectRangeFilterModel(model string) bool {
-	return model == "" || model == "latest"
+	return model == "" || model == conf.RangeFilterModelLatest
 }
 
 // shouldSelectDefaultONNXRangeFilter reports the ONNX MData range-filter model path

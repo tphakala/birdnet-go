@@ -39,7 +39,7 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 	}
 
 	// Empty string, "latest", "legacy", or "v3" are valid
-	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != "latest" && cfg.RangeFilter.Model != "legacy" && cfg.RangeFilter.Model != "v3" {
+	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != RangeFilterModelLatest && cfg.RangeFilter.Model != RangeFilterModelLegacy && cfg.RangeFilter.Model != RangeFilterModelV3 {
 		result.Valid = false
 		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default), 'latest', 'legacy', or 'v3'")
 	}
