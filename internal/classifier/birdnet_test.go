@@ -108,6 +108,49 @@ func TestShouldAutoSelectV3Geomodel(t *testing.T) {
 	}
 }
 
+// TestShouldAutoSelectV3GeomodelForConfig covers the config-level gate that drives
+// the v3 geomodel auto-selection in initializeMetaModel: the model must be
+// auto-select ("" or the "latest" default), no explicit rangefilter.modelpath may be
+// set (an explicit user path is never overridden), and the classifier + stock files
+// must qualify. The explicit-modelpath rows are the #3932-followup regression guard:
+// extending auto-select to the default "latest" must not clobber a user-provided
+// range-filter path (mirrors shouldSelectDefaultONNXRangeFilter's ModelPath guard).
+func TestShouldAutoSelectV3GeomodelForConfig(t *testing.T) {
+	t.Parallel()
+
+	modelsDir := t.TempDir()
+	sharedDir := filepath.Join(modelsDir, "shared")
+	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, conf.GeomodelONNXLocalName), []byte("fake-onnx"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, conf.GeomodelLabelsLocalName), []byte("fake-labels"), 0o644))
+
+	tests := []struct {
+		name      string
+		model     string
+		modelPath string
+		modelID   string
+		modelsDir string
+		want      bool
+	}{
+		{"latest + no path + PerchV2 + files -> auto-select", "latest", "", RegistryIDPerchV2, modelsDir, true},
+		{"empty model + no path + BirdNET V3.0 + files -> auto-select", "", "", RegistryIDBirdNETV3, modelsDir, true},
+		{"latest + explicit modelpath suppresses (custom path honored)", "latest", "/data/custom_geomodel.onnx", RegistryIDPerchV2, modelsDir, false},
+		{"empty model + explicit modelpath suppresses", "", "/data/custom_geomodel.onnx", RegistryIDPerchV2, modelsDir, false},
+		{"explicit v3 is not auto-select", "v3", "", RegistryIDPerchV2, modelsDir, false},
+		{"legacy is not auto-select", "legacy", "", RegistryIDPerchV2, modelsDir, false},
+		{"v2.4 family classifier not eligible", "latest", "", "BirdNET_V2.4", modelsDir, false},
+		{"empty modelsDir -> false", "latest", "", RegistryIDPerchV2, "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := shouldAutoSelectV3GeomodelForConfig(tt.model, tt.modelPath, tt.modelID, tt.modelsDir)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestApplyAutoSelectedGeomodelPaths(t *testing.T) {
 	t.Parallel()
 
