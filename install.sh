@@ -1954,8 +1954,8 @@ adopt_migrated_installation() {
     log_message "INFO" "Adopting migrated installation at $dest (source $MIGRATE_DEST)"
     rewrite_migrated_config_paths "$dest/config/config.yaml" "$MIGRATE_REMOTE_HOME" "$HOME"
 
-    MIGRATE_TMP_UNIT="$(mktemp "${TMPDIR:-/tmp}/bng-mig-unit.XXXXXX")"
-    if migrate_ssh 'cat /etc/systemd/system/birdnet-go.service 2>/dev/null || cat /lib/systemd/system/birdnet-go.service 2>/dev/null' > "$MIGRATE_TMP_UNIT" && [ -s "$MIGRATE_TMP_UNIT" ]; then
+    MIGRATE_TMP_UNIT="$(mktemp "${TMPDIR:-/tmp}/bng-mig-unit.XXXXXX")" || MIGRATE_TMP_UNIT=""
+    if [ -n "$MIGRATE_TMP_UNIT" ] && migrate_ssh 'cat /etc/systemd/system/birdnet-go.service 2>/dev/null || cat /lib/systemd/system/birdnet-go.service 2>/dev/null' > "$MIGRATE_TMP_UNIT" && [ -s "$MIGRATE_TMP_UNIT" ]; then
         load_existing_service_config "$MIGRATE_TMP_UNIT"
         print_message "📍 Preserved old settings (web port: ${WEB_PORT:-default}, timezone: ${CONFIGURED_TZ:-unset})" "$GREEN"
     else
@@ -2089,10 +2089,15 @@ migrate_from_remote_host() {
         print_message "❓ Stop it now over SSH (sudo)? (y/n): " "$YELLOW" "nonewline"
         local s; read -r s
         if [[ "$s" =~ ^[Yy]$ ]]; then
-            if ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl stop birdnet-go.service'; then
+            ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl stop birdnet-go.service' || true
+            # Trust the observed state, not ssh's exit code: ssh -t can report
+            # failure even when the remote command stopped the service. If it is now
+            # stopped, this run stopped it, so rollback must be able to restart it.
+            if check_remote_stopped; then
                 MIGRATE_STOPPED_REMOTE="1"
+            else
+                print_message "❌ Still running; stop it manually and re-run" "$RED"; migrate_rollback; return 1
             fi
-            check_remote_stopped || { print_message "❌ Still running; stop it manually and re-run" "$RED"; migrate_rollback; return 1; }
         else
             print_message "❌ Stop birdnet-go on the old host, then re-run" "$RED"; migrate_rollback; return 1
         fi
