@@ -28,6 +28,14 @@ SILENT_MODE="false"
 # Force root mode - allow running as root despite warnings (set via --force-root flag)
 FORCE_ROOT="false"
 
+# Cross-host migration (set via --migrate / --migrate-from flags)
+MIGRATE_MODE="false"
+MIGRATE_DEST=""
+MIGRATE_SSH_SOCKET=""
+MIGRATE_REMOTE_HOME=""
+MIGRATE_REMOTE_APP=""
+MIGRATE_TMP_UNIT=""
+
 # Flag to track if Docker image was changed during update/rollback
 IMAGE_CHANGED="false"
 
@@ -57,6 +65,12 @@ cleanup_temp_files() {
     rm -f /tmp/version_history_*.tmp 2>/dev/null
     rm -f "$LOG_DIR/.last_backup_time" 2>/dev/null
     rm -f "$VERSION_HISTORY_FILE.lock" 2>/dev/null
+    # Migration teardown: close the shared ssh master and drop the temp unit file.
+    if [ -n "$MIGRATE_SSH_SOCKET" ] && [ -n "$MIGRATE_DEST" ]; then
+        ssh -o ControlPath="$MIGRATE_SSH_SOCKET" -O exit "$MIGRATE_DEST" 2>/dev/null || true
+    fi
+    [ -n "$MIGRATE_TMP_UNIT" ] && rm -f "$MIGRATE_TMP_UNIT" 2>/dev/null
+    return 0
 }
 trap cleanup_temp_files EXIT INT TERM
 
@@ -1610,7 +1624,7 @@ EOF
         fi
 
         if [ "$groups_added" = true ]; then
-            print_message "Please log out and log back in for group changes to take effect, and rerun install.sh to continue with install" "$YELLOW"
+            print_message "Please log out and log back in for group changes to take effect, and rerun install.sh to continue with install.$(migrate_rerun_hint)" "$YELLOW"
             exit 0
         fi
     }
@@ -1646,7 +1660,7 @@ EOF
             exit 1
         fi
         log_message "INFO" "Docker installation completed, user needs to log out and back in for group changes"
-        print_message "⚠️ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install" "$YELLOW"
+        print_message "⚠️ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install.$(migrate_rerun_hint)" "$YELLOW"
         # exit install script
         exit 0
     else
@@ -1775,6 +1789,229 @@ rewrite_migrated_config_paths() {
         sed -i -e "s|${esc_old}|${esc_new}|g" -- "$config"
     done
     log_message "INFO" "Rewrote migrated config paths from ${old_home}/* to ${new_home}/* in $config"
+}
+
+# ---------------------------------------------------------------------------
+# Cross-host migration: pull an existing install from another host over SSH.
+# ---------------------------------------------------------------------------
+
+# Validate a user-supplied ssh destination (alias or user@host). Rejects empty
+# input and anything with whitespace or shell-unsafe characters so it is safe to
+# splice into ssh/rsync command lines. Echoes the validated destination.
+parse_ssh_dest() {
+    local dest="$1"
+    [ -n "$dest" ] || return 1
+    case "$dest" in
+        *[!A-Za-z0-9._@-]*) return 1 ;;
+    esac
+    printf '%s' "$dest"
+}
+
+# When a group-change re-login is required mid-migration, tell the user the exact
+# flag to re-run with so the resumed run stays in migration mode.
+migrate_rerun_hint() {
+    [ "$MIGRATE_MODE" = "true" ] || return 0
+    if [ -n "$MIGRATE_DEST" ]; then
+        printf ' Re-run with: ./install.sh --migrate-from %s' "$MIGRATE_DEST"
+    else
+        printf ' Re-run with: ./install.sh --migrate'
+    fi
+}
+
+# The default remote app path for a given remote home. Pure; unit-tested.
+remote_default_app_path() {
+    printf '%s/birdnet-go-app' "$1"
+}
+
+# Run a command on the migration source over the shared ssh connection.
+migrate_ssh() {
+    ssh -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" "$@"
+}
+
+# Open one ControlMaster connection so the user authenticates once. Silent mode
+# must never block on a prompt.
+open_ssh_master() {
+    MIGRATE_SSH_SOCKET="$(mktemp -u "${TMPDIR:-/tmp}/bng-mig-ssh.XXXXXX")"
+    local opts=(-o ControlMaster=auto -o ControlPersist=300 -o ControlPath="$MIGRATE_SSH_SOCKET")
+    if [ "$SILENT_MODE" = "true" ]; then
+        opts+=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+    fi
+    if ! ssh "${opts[@]}" "$MIGRATE_DEST" true; then
+        print_message "❌ Could not connect to $MIGRATE_DEST over SSH" "$RED"
+        return 1
+    fi
+}
+
+# Resolve the old host's home and app dir; verify a real install is present.
+resolve_remote_app() {
+    MIGRATE_REMOTE_HOME="$(migrate_ssh 'printf %s "$HOME"')"
+    if [ -z "$MIGRATE_REMOTE_HOME" ]; then
+        print_message "❌ Could not determine the remote home directory" "$RED"
+        return 1
+    fi
+    local candidate
+    candidate="$(remote_default_app_path "$MIGRATE_REMOTE_HOME")"
+    if migrate_ssh "test -f '$candidate/config/config.yaml'"; then
+        MIGRATE_REMOTE_APP="$candidate"
+        return 0
+    fi
+    if [ "$SILENT_MODE" = "true" ]; then
+        print_message "❌ No install found at $candidate on the remote host" "$RED"
+        print_message "   If it lives under /root, run the root->user migration on the OLD host first." "$YELLOW"
+        return 1
+    fi
+    print_message "No install at $candidate. Enter the remote birdnet-go-app path: " "$YELLOW" "nonewline"
+    local p; read -r p
+    if [ -n "$p" ] && migrate_ssh "test -f '$p/config/config.yaml'"; then
+        MIGRATE_REMOTE_APP="$p"
+        return 0
+    fi
+    print_message "❌ No valid install at that path (need config/config.yaml readable by $MIGRATE_DEST)" "$RED"
+    return 1
+}
+
+# 0 = stopped/absent, 1 = still running. Compare the is-active OUTPUT string, not
+# the exit code (which cannot distinguish inactive from an ssh failure).
+check_remote_stopped() {
+    local state
+    state="$(migrate_ssh 'systemctl is-active birdnet-go.service 2>/dev/null' || true)"
+    [ "$state" = "active" ] && return 1
+    local ctr
+    ctr="$(migrate_ssh 'docker ps --filter name=birdnet-go --format "{{.Names}}" 2>/dev/null' || true)"
+    [ -n "$ctr" ] && return 1
+    return 0
+}
+
+# Ensure the new host has room for the remote dataset (+10% margin). Fails open if
+# either size cannot be determined.
+check_remote_disk() {
+    local remote_kb avail_kb
+    remote_kb="$(migrate_ssh "du -sk '$MIGRATE_REMOTE_APP' 2>/dev/null | cut -f1")"
+    avail_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
+    if [ -n "$remote_kb" ] && [ "$remote_kb" -gt 0 ] 2>/dev/null && [ -n "$avail_kb" ]; then
+        local need_kb=$(( remote_kb + remote_kb / 10 ))
+        if [ "$avail_kb" -lt "$need_kb" ]; then
+            print_message "❌ Not enough disk space: need ~$(( need_kb / 1024 )) MB, have $(( avail_kb / 1024 )) MB" "$RED"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Adopt an already-transferred birdnet-go-app: rewrite host paths, preserve the
+# old service settings, verify the DB, and flag migration complete.
+adopt_migrated_installation() {
+    local dest="$HOME/birdnet-go-app"
+    rewrite_migrated_config_paths "$dest/config/config.yaml" "$MIGRATE_REMOTE_HOME" "$HOME"
+
+    MIGRATE_TMP_UNIT="$(mktemp "${TMPDIR:-/tmp}/bng-mig-unit.XXXXXX")"
+    if migrate_ssh 'cat /etc/systemd/system/birdnet-go.service 2>/dev/null || cat /lib/systemd/system/birdnet-go.service 2>/dev/null' > "$MIGRATE_TMP_UNIT" && [ -s "$MIGRATE_TMP_UNIT" ]; then
+        load_existing_service_config "$MIGRATE_TMP_UNIT"
+        print_message "📍 Preserved old settings (web port: ${WEB_PORT:-default}, timezone: ${CONFIGURED_TZ:-unset})" "$GREEN"
+    else
+        print_message "⚠️  Could not read the old systemd unit; using default port/TLS/timezone" "$YELLOW"
+    fi
+
+    local db="$dest/data/birdnet.db"
+    if [ -f "$db" ] && command_exists sqlite3; then
+        local res
+        res="$(sqlite3 "$db" 'PRAGMA integrity_check;' 2>/dev/null)"
+        if [ "$res" = "ok" ]; then
+            print_message "✅ Database integrity verified" "$GREEN"
+        else
+            print_message "⚠️  Database integrity check: ${res:-unreadable}. If the old service was running during copy, stop it and re-run." "$YELLOW"
+        fi
+    fi
+
+    if grep -qiE '^[[:space:]]*type:[[:space:]]*mysql' "$dest/config/config.yaml" 2>/dev/null; then
+        print_message "⚠️  Config references a MySQL database; only config and clips migrated, not the external DB." "$YELLOW"
+    fi
+
+    load_telemetry_config
+    MIGRATION_DONE="true"
+    return 0
+}
+
+# Pull an install from another host over SSH and adopt it. Returns nonzero on any
+# failure (caller aborts the install); on success sets MIGRATION_DONE=true.
+migrate_from_remote_host() {
+    local dest_dir="$HOME/birdnet-go-app"
+    print_message "\n🔄 Migrating BirdNET-Go from another host over SSH" "$GREEN"
+
+    if [ -z "$MIGRATE_DEST" ]; then
+        if [ "$SILENT_MODE" = "true" ]; then
+            print_message "❌ --migrate needs --migrate-from <ssh-dest> in silent mode" "$RED"; return 1
+        fi
+        print_message "Old host (user@host or ssh alias): " "$YELLOW" "nonewline"
+        read -r MIGRATE_DEST
+    fi
+    if ! MIGRATE_DEST="$(parse_ssh_dest "$MIGRATE_DEST")"; then
+        print_message "❌ Invalid ssh destination" "$RED"; return 1
+    fi
+
+    # Overwrite guard: never rsync-merge into pre-existing data. Trigger on a real
+    # install (config.yaml), an existing database, OR any non-empty app dir, then
+    # move the whole dir aside so the transfer writes into a clean target.
+    if [ -f "$dest_dir/config/config.yaml" ] || [ -f "$dest_dir/data/birdnet.db" ] || \
+       { [ -d "$dest_dir" ] && [ -n "$(ls -A "$dest_dir" 2>/dev/null)" ]; }; then
+        if [ "$SILENT_MODE" = "true" ]; then
+            print_message "❌ $dest_dir already contains data; refusing to overwrite in silent mode" "$RED"; return 1
+        fi
+        print_message "⚠️  $dest_dir already contains data on this machine." "$YELLOW"
+        print_message "Move it aside to a backup and continue? [y/N]: " "$YELLOW" "nonewline"
+        local ans; read -r ans
+        [[ "$ans" =~ ^[Yy]$ ]] || { print_message "Migration cancelled; nothing changed." "$NC"; return 1; }
+        local backup="${dest_dir}.bak.$(date +%Y%m%d%H%M%S)"
+        mv "$dest_dir" "$backup" || { print_message "❌ Backup move failed" "$RED"; return 1; }
+        print_message "📦 Existing data moved to $backup (nothing deleted)" "$GREEN"
+    fi
+
+    command_exists rsync || { print_message "❌ rsync missing locally (should have been installed)" "$RED"; return 1; }
+
+    open_ssh_master || return 1
+    resolve_remote_app || return 1
+
+    if ! check_remote_stopped; then
+        print_message "⚠️  BirdNET-Go is still running on $MIGRATE_DEST. Copying a live database can corrupt it." "$YELLOW"
+        print_message "Stop it now over SSH (sudo)? [y/N]: " "$YELLOW" "nonewline"
+        local s; read -r s
+        if [[ "$s" =~ ^[Yy]$ ]]; then
+            ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl stop birdnet-go.service' || true
+            check_remote_stopped || { print_message "❌ Still running; stop it manually and re-run" "$RED"; return 1; }
+        else
+            print_message "❌ Stop birdnet-go on the old host, then re-run" "$RED"; return 1
+        fi
+    fi
+
+    check_remote_disk || return 1
+
+    print_message "📥 Transferring $MIGRATE_REMOTE_APP from $MIGRATE_DEST ..." "$YELLOW"
+    if migrate_ssh 'command -v rsync >/dev/null 2>&1'; then
+        if ! rsync -aH --partial --info=progress2 --exclude 'config/hls/' \
+                -e "ssh -o ControlPath=$MIGRATE_SSH_SOCKET" \
+                "$MIGRATE_DEST:$MIGRATE_REMOTE_APP/" "$dest_dir/"; then
+            print_message "❌ rsync failed (incomplete transfer); nothing adopted" "$RED"
+            rm -rf "$dest_dir"; return 1
+        fi
+    else
+        print_message "ℹ️  rsync not on the remote; using tar over SSH" "$YELLOW"
+        mkdir -p "$dest_dir"
+        if ! migrate_ssh "tar -C '$MIGRATE_REMOTE_HOME' --exclude='birdnet-go-app/config/hls' -cf - birdnet-go-app" | tar -C "$HOME" -xf -; then
+            print_message "❌ tar transfer failed; nothing adopted" "$RED"
+            rm -rf "$dest_dir"; return 1
+        fi
+    fi
+
+    if [ ! -f "$dest_dir/config/config.yaml" ]; then
+        print_message "❌ Transfer left no config.yaml; aborting" "$RED"
+        rm -rf "$dest_dir"; return 1
+    fi
+
+    if ! adopt_migrated_installation; then
+        print_message "❌ Adopt step failed" "$RED"; rm -rf "$dest_dir"; return 1
+    fi
+    print_message "✅ Migration data adopted; continuing with provisioning" "$GREEN"
+    return 0
 }
 
 # Function to migrate a root installation to the current user's home directory
@@ -5970,6 +6207,8 @@ show_usage() {
     echo "                          Default: nightly"
     echo "                          Examples: latest, v1.2.3, nightly, sha256:abc123..."
     echo "  --silent                Non-interactive install using environment variables"
+    echo "  --migrate                 Migrate an existing install from another host over SSH"
+    echo "  --migrate-from <ssh-dest> Non-interactive migrate source (user@host or ssh alias)"
     echo "  --force-root            Allow running as root (not recommended)"
     echo "  -h, --help              Show this help message"
     echo ""
@@ -6014,6 +6253,22 @@ parse_arguments() {
             --silent)
                 SILENT_MODE="true"
                 shift
+                ;;
+            --migrate)
+                MIGRATE_MODE="true"
+                shift
+                ;;
+            --migrate-from)
+                if [ -n "$2" ] && [[ $2 != -* ]]; then
+                    MIGRATE_MODE="true"
+                    MIGRATE_DEST="$2"
+                    shift 2
+                else
+                    echo "❌ Error: --migrate-from requires an ssh destination (user@host or ssh alias)" >&2
+                    echo ""
+                    show_usage
+                    exit 1
+                fi
                 ;;
             --force-root)
                 FORCE_ROOT="true"
@@ -6888,7 +7143,7 @@ sudo apt -qq update
 print_message "\n🔧 Checking and installing required packages..." "$YELLOW"
 
 # Check which packages need to be installed
-REQUIRED_PACKAGES=("alsa-utils" "curl" "bc" "jq" "apache2-utils" "netcat-openbsd" "iproute2" "lsof" "avahi-daemon" "libnss-mdns")
+REQUIRED_PACKAGES=("alsa-utils" "curl" "bc" "jq" "apache2-utils" "netcat-openbsd" "iproute2" "lsof" "avahi-daemon" "libnss-mdns" "sqlite3")
 TO_INSTALL=()
 
 for pkg in "${REQUIRED_PACKAGES[@]}"; do
@@ -6920,6 +7175,15 @@ fi
 
 # Pull Docker image
 pull_docker_image
+
+# Cross-host migration: pull and adopt an existing install before the normal
+# fresh-install directory/config steps run.
+if [ "$MIGRATE_MODE" = "true" ]; then
+    if ! migrate_from_remote_host; then
+        print_message "❌ Migration failed; no changes started. See messages above." "$RED"
+        exit 1
+    fi
+fi
 
 # Check if directories can be created
 check_directory "$CONFIG_DIR"

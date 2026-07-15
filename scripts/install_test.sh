@@ -124,7 +124,9 @@ for fn in \
     configure_audio_format \
     configure_locale \
     configure_auth \
-    rewrite_migrated_config_paths
+    rewrite_migrated_config_paths \
+    parse_ssh_dest \
+    remote_default_app_path
 do
     load_fn "$fn"
 done
@@ -615,6 +617,23 @@ ensure_internal_port_8080
 assert_eq "custom internal port normalized to 8080" '"8080"' "$(yaml_after "$cfg" '^webserver:' 2 port)"
 ensure_internal_port_8080
 assert_eq "already-8080 stays 8080 (idempotent)" '"8080"' "$(yaml_after "$cfg" '^webserver:' 2 port)"
+
+# ===========================================================================
+# parse_ssh_dest (validate the migration ssh destination)
+# ===========================================================================
+it "parse_ssh_dest"
+assert_eq "accepts user@host" "pi@raspi4.local" "$(parse_ssh_dest 'pi@raspi4.local')"
+assert_eq "accepts bare alias" "oldpi" "$(parse_ssh_dest 'oldpi')"
+parse_ssh_dest "" >/dev/null 2>&1; assert_nonzero "rejects empty" "$?"
+parse_ssh_dest "a b" >/dev/null 2>&1; assert_nonzero "rejects whitespace" "$?"
+parse_ssh_dest 'a;rm -rf /' >/dev/null 2>&1; assert_nonzero "rejects shell metacharacters" "$?"
+
+# ===========================================================================
+# remote_default_app_path (default remote birdnet-go-app location)
+# ===========================================================================
+it "remote_default_app_path"
+assert_eq "default app path from home" "/home/pi/birdnet-go-app" "$(remote_default_app_path /home/pi)"
+assert_eq "root home" "/root/birdnet-go-app" "$(remote_default_app_path /root)"
 
 # ===========================================================================
 # Result
