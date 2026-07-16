@@ -12,45 +12,82 @@ import (
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 )
 
-func TestAuthenticateMalformedHeaderAbortsChain(t *testing.T) {
-	// Setup mock auth service
+// newBasicAuthMiddleware builds a Middleware backed by a real security adapter
+// with basic auth enabled, matching the failing scenario from issue #3929.
+//
+// Note: these tests are intentionally NOT parallel. NewOAuth2ServerForTesting
+// publishes settings into the global conf snapshot via conf.StoreSettings, so
+// running them concurrently with other settings-mutating tests would race.
+func newBasicAuthMiddleware(t *testing.T) *Middleware {
+	t.Helper()
 	settings := &conf.Settings{}
 	settings.Security.BasicAuth.Enabled = true
 	settings.Security.BasicAuth.ClientID = "admin"
 	settings.Security.BasicAuth.Password = "correct-horse"
 	server := securitytest.NewOAuth2ServerForTesting(t, settings)
-	adapter := NewSecurityAdapter(server)
+	return NewMiddleware(NewSecurityAdapter(server))
+}
 
-	// Create middleware
-	mw := NewMiddleware(adapter)
-
-	e := echo.New()
-
-	// Track whether handler was executed
-	handlerExecuted := false
-
-	// Create protected endpoint
-	protectedHandler := func(c echo.Context) error {
-		handlerExecuted = true
-		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+// TestAuthenticateAbortsChainOnAuthFailure verifies that every auth-failure path
+// in the middleware writes its response AND terminates the chain, so the route
+// handler never runs after a failed authentication. This is the regression guard
+// for issue #3929, where c.JSON returning nil let the handler execute past a 401
+// (an unauthenticated mutation on routes like DELETE /api/v2/detections/:id).
+func TestAuthenticateAbortsChainOnAuthFailure(t *testing.T) {
+	tests := []struct {
+		name       string
+		middleware func(t *testing.T) *Middleware
+		authHeader string
+		wantStatus int
+	}{
+		{
+			name:       "malformed header (Basic instead of Bearer)",
+			middleware: newBasicAuthMiddleware,
+			authHeader: "Basic YWRtaW46Y29ycmVjdC1ob3JzZQ==",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "invalid bearer token",
+			middleware: newBasicAuthMiddleware,
+			authHeader: "Bearer not-a-real-token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name: "nil auth service",
+			middleware: func(t *testing.T) *Middleware {
+				t.Helper()
+				return NewMiddleware(nil)
+			},
+			authHeader: "Bearer not-a-real-token",
+			wantStatus: http.StatusInternalServerError,
+		},
 	}
 
-	// Create test request with malformed authorization header
-	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/999", http.NoBody)
-	// Malformed auth header (Basic instead of Bearer)
-	req.Header.Set("Authorization", "Basic YWRtaW46Y29ycmVjdC1ob3JzZQ==")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mw := tt.middleware(t)
+			e := echo.New()
 
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+			// Track whether the protected handler was executed.
+			handlerExecuted := false
+			protectedHandler := func(c echo.Context) error {
+				handlerExecuted = true
+				return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+			}
 
-	// Execute middleware chain
-	handler := mw.Authenticate(protectedHandler)
-	err := handler(c)
+			req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/999", http.NoBody)
+			req.Header.Set("Authorization", tt.authHeader)
 
-	// Validate response
-	require.NoError(t, err) // Middleware chain execution should not return an unhandled error
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
 
-	// Handler should NOT have been executed
-	assert.False(t, handlerExecuted, "Handler should not execute after authentication failure")
+			err := mw.Authenticate(protectedHandler)(c)
+
+			// The middleware writes the response itself and returns nil, so the
+			// chain should not surface an unhandled error to Echo.
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.False(t, handlerExecuted, "handler must not execute after authentication failure")
+		})
+	}
 }

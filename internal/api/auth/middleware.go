@@ -41,7 +41,9 @@ func NewMiddleware(service Service) *Middleware {
 // Authenticate is the main middleware function for authentication
 func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if aborted, err := m.validateAuthService(c); aborted {
+		// Fail closed: abort whenever the service reports an abort or returns an
+		// error, so a written response is never followed by the route handler.
+		if aborted, err := m.validateAuthService(c); aborted || err != nil {
 			return err
 		}
 
@@ -51,7 +53,10 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// Try token auth first (from Authorization header)
 		if result := m.tryTokenAuth(c); result.handled {
-			if result.aborted {
+			// Fail closed: a written 401 response returns nil from c.JSON, so
+			// gate on the explicit aborted flag (and any error) rather than err
+			// alone, otherwise the route handler would run past a failed auth.
+			if result.aborted || result.err != nil {
 				return result.err
 			}
 			return next(c)
@@ -69,7 +74,7 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 
 // authResult represents the result of an authentication attempt.
 type authResult struct {
-	handled bool  // Whether the auth attempt was processed (header present or valid session)
+	handled bool  // Whether an Authorization header was present and processed by token auth
 	aborted bool  // Whether to abort the middleware chain (response written or error)
 	err     error // Error to return to client (nil if successful)
 }
