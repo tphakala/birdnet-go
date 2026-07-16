@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"math"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -93,22 +91,11 @@ func (c *Handler) registerHealthChecks() {
 		checks.NewMemoryCheck(),
 		checks.NewCPULoadCheck(apicore.GetCachedCPUUsage),
 		checks.NewTemperatureCheck(func() (float64, error) {
-			temps, err := host.SensorsTemperatures()
-			// gopsutil returns partial results with warnings when some sensors
-			// are unreadable (common on RPi). Use data if available.
-			if len(temps) == 0 {
-				if err != nil {
-					return 0, err
-				}
+			celsius, _, err := readCPUTemperature(thermalBasePath)
+			if err != nil {
 				return 0, errNoTempSensors
 			}
-			maxTemp := math.Inf(-1)
-			for _, t := range temps {
-				if t.Temperature > maxTemp {
-					maxTemp = t.Temperature
-				}
-			}
-			return maxTemp, nil
+			return celsius, nil
 		}),
 		checks.NewUptimeCheck(c.startTime),
 
