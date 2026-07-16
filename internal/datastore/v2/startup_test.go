@@ -169,6 +169,50 @@ func TestCheckMigrationState_StaleEmptySidecar_V2Consolidated(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "stale sidecar should have been removed")
 }
 
+// TestCheckMigrationState_V2WithEmptyLegacyResidue_SQLite is a regression test for the
+// PR #3926 startup crash: a fully consolidated v2 database (COMPLETED marker, real v2 tables)
+// that still carries EMPTY leftover legacy tables ('notes'/'results') from an in-place
+// migration must route into v2-only mode. PR #3926 keyed on mere table existence and
+// misclassified such healthy databases as contaminated legacy, forcing legacy AutoMigrate,
+// which crashed with "Cannot add a NOT NULL column with default value NULL" (GitHub #3924).
+func TestCheckMigrationState_V2WithEmptyLegacyResidue_SQLite(t *testing.T) {
+	tmpDir := t.TempDir()
+	configuredPath := filepath.Join(tmpDir, "birdnet-2025.db")
+
+	createConsolidatedV2DBAt(t, configuredPath)
+
+	// Reproduce the production residue: empty legacy tables left behind by a completed
+	// in-place migration (GORM never drops them).
+	db, err := gorm.Open(sqlite.Open(configuredPath), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	// Ensure the writer handle is closed even if a require below fails, so t.TempDir()
+	// cleanup does not fail on Windows with an open file handle.
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	require.NoError(t, db.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY)").Error)
+	require.NoError(t, db.Exec("CREATE TABLE results (id INTEGER PRIMARY KEY)").Error)
+
+	// Close the writer handle before CheckMigrationStateBeforeStartup opens the file read-only.
+	require.NoError(t, sqlDB.Close())
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = configuredPath
+
+	startupState := CheckMigrationStateBeforeStartup(settings)
+
+	assert.False(t, startupState.FreshInstall, "should NOT be fresh install")
+	assert.True(t, startupState.V2Available, "v2 should be available")
+	assert.False(t, startupState.LegacyRequired,
+		"legacy must not be required for a completed v2 DB with empty legacy residue")
+	assert.Equal(t, entities.MigrationStatusCompleted, startupState.MigrationStatus)
+	require.NoError(t, startupState.Error)
+}
+
 // TestCheckMigrationState_EmptySidecar_NoConfigured covers the edge case
 // where a stray empty sidecar exists but the configured path is missing.
 // The fallback must not trigger (there is no v2 schema to fall back to)
@@ -298,11 +342,13 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for empty file")
 	})
 
-	// Both 'results' and 'notes' are legacy data tables; a COMPLETED marker alongside
-	// either one is PR #2165 contamination, so each must independently force a false result.
-	for _, lt := range []struct{ name, ddl string }{
-		{"results", "CREATE TABLE results (id INTEGER PRIMARY KEY)"},
-		{"notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY)"},
+	// A COMPLETED marker alongside a legacy data table that STILL HOLDS ROWS is PR #2165
+	// contamination: real user data was never migrated (GitHub #3924). Each populated legacy
+	// table must independently force a false result so CheckAndConsolidateAtStartup preserves
+	// the real migrated sidecar instead of deleting it.
+	for _, lt := range []struct{ name, ddl, insert string }{
+		{"results", "CREATE TABLE results (id INTEGER PRIMARY KEY)", "INSERT INTO results (id) VALUES (1)"},
+		{"notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY)", "INSERT INTO notes (id) VALUES (1)"},
 	} {
 		t.Run("contaminated legacy database (PR #2165 bug) - "+lt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
@@ -323,13 +369,50 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 			}
 			require.NoError(t, manager.DB().Save(&state).Error)
 
-			// Simulate PR #2165 contamination: a legacy data table alongside the COMPLETED marker.
+			// Simulate PR #2165 contamination: a legacy data table with UNMIGRATED ROWS
+			// alongside the COMPLETED marker.
 			require.NoError(t, manager.DB().Exec(lt.ddl).Error)
+			require.NoError(t, manager.DB().Exec(lt.insert).Error)
 
 			require.NoError(t, manager.Close())
 
 			assert.False(t, CheckSQLiteHasV2Schema(dbPath),
-				"should return false when legacy %s table exists", lt.name)
+				"should return false when legacy %s table holds unmigrated rows", lt.name)
+		})
+	}
+
+	// Regression test for PR #3926: an EMPTY leftover legacy table ('results' or 'notes') is
+	// harmless residue of a completed in-place migration (GORM never drops tables). The database
+	// is a genuine completed v2 schema and must still resolve as v2; the original "table exists"
+	// guard wrongly forced these into legacy mode, crashing AutoMigrate on startup (GitHub #3924).
+	for _, lt := range []struct{ name, ddl string }{
+		{"results", "CREATE TABLE results (id INTEGER PRIMARY KEY)"},
+		{"notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY)"},
+	} {
+		t.Run("completed v2 with empty leftover legacy table - "+lt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			dbPath := filepath.Join(tmpDir, "residue.db")
+
+			manager, err := NewSQLiteManager(Config{DirectPath: dbPath})
+			require.NoError(t, err)
+			require.NoError(t, manager.Initialize())
+
+			now := time.Now()
+			state := entities.MigrationState{
+				ID:          1,
+				State:       entities.MigrationStatusCompleted,
+				StartedAt:   &now,
+				CompletedAt: &now,
+			}
+			require.NoError(t, manager.DB().Save(&state).Error)
+
+			// Empty legacy table: residue of a completed migration, not contamination.
+			require.NoError(t, manager.DB().Exec(lt.ddl).Error)
+
+			require.NoError(t, manager.Close())
+
+			assert.True(t, CheckSQLiteHasV2Schema(dbPath),
+				"an empty leftover legacy %s table must still resolve as v2", lt.name)
 		})
 	}
 }
@@ -435,23 +518,101 @@ func TestHasCompleteFreshV2Schema(t *testing.T) {
 	})
 
 	// The MySQL/dialect-agnostic path must reject either legacy data table ('results' or
-	// 'notes') coexisting with a COMPLETED marker and a bare detections table.
-	for _, lt := range []struct{ name, ddl string }{
-		{"results", "CREATE TABLE results (id INTEGER PRIMARY KEY)"},
-		{"notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY)"},
+	// 'notes') when it STILL HOLDS ROWS (unmigrated data) alongside a COMPLETED marker and a
+	// bare detections table.
+	for _, lt := range []struct{ name, ddl, insert string }{
+		{"results", "CREATE TABLE results (id INTEGER PRIMARY KEY)", "INSERT INTO results (id) VALUES (1)"},
+		{"notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY)", "INSERT INTO notes (id) VALUES (1)"},
 	} {
 		t.Run("contaminated legacy database (PR #2165 bug) - "+lt.name, func(t *testing.T) {
 			db := newSchemaCheckDB(t)
 			seedMigrationStatesTable(t, db, entities.MigrationStatusCompleted)
 			createBareDetectionsTable(t, db)
 
-			// Simulate PR #2165 contamination: a legacy data table alongside the COMPLETED marker.
+			// Simulate PR #2165 contamination: a legacy data table with UNMIGRATED ROWS
+			// alongside the COMPLETED marker.
 			require.NoError(t, db.Exec(lt.ddl).Error)
+			require.NoError(t, db.Exec(lt.insert).Error)
 
 			assert.False(t, hasCompleteFreshV2Schema(db),
-				"should return false when legacy %s table exists", lt.name)
+				"should return false when legacy %s table holds unmigrated rows", lt.name)
 		})
 	}
+
+	// Regression test for PR #3926: an EMPTY leftover legacy table is harmless residue of a
+	// completed in-place migration and must NOT disqualify an otherwise complete fresh v2 schema.
+	for _, lt := range []struct{ name, ddl string }{
+		{"results", "CREATE TABLE results (id INTEGER PRIMARY KEY)"},
+		{"notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY)"},
+	} {
+		t.Run("completed v2 with empty leftover legacy table - "+lt.name, func(t *testing.T) {
+			db := newSchemaCheckDB(t)
+			seedMigrationStatesTable(t, db, entities.MigrationStatusCompleted)
+			createBareDetectionsTable(t, db)
+
+			// Empty legacy table: residue of a completed migration, not contamination.
+			require.NoError(t, db.Exec(lt.ddl).Error)
+
+			assert.True(t, hasCompleteFreshV2Schema(db),
+				"an empty leftover legacy %s table must not disqualify a fresh v2 schema", lt.name)
+		})
+	}
+}
+
+// TestLegacyDataPresent locks in the row-count discriminator directly: a legacy table signals
+// contamination only when it actually holds rows, and the probe walks past an empty table to
+// check the next one (order is results, then notes).
+func TestLegacyDataPresent(t *testing.T) {
+	t.Run("no legacy tables", func(t *testing.T) {
+		db := newSchemaCheckDB(t)
+		present, err := legacyDataPresent(db)
+		require.NoError(t, err)
+		assert.False(t, present, "a database with no legacy tables has no legacy data")
+	})
+
+	t.Run("empty legacy tables", func(t *testing.T) {
+		db := newSchemaCheckDB(t)
+		require.NoError(t, db.Exec("CREATE TABLE results (id INTEGER PRIMARY KEY)").Error)
+		require.NoError(t, db.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY)").Error)
+		present, err := legacyDataPresent(db)
+		require.NoError(t, err)
+		assert.False(t, present, "empty legacy tables are harmless residue, not contamination")
+	})
+
+	t.Run("populated notes", func(t *testing.T) {
+		db := newSchemaCheckDB(t)
+		require.NoError(t, db.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY)").Error)
+		require.NoError(t, db.Exec("INSERT INTO notes (id) VALUES (1)").Error)
+		present, err := legacyDataPresent(db)
+		require.NoError(t, err)
+		assert.True(t, present, "a populated legacy notes table is unmigrated data")
+	})
+
+	t.Run("empty results but populated notes", func(t *testing.T) {
+		// results is probed first and is empty; the loop must continue and still detect
+		// the unmigrated rows in notes.
+		db := newSchemaCheckDB(t)
+		require.NoError(t, db.Exec("CREATE TABLE results (id INTEGER PRIMARY KEY)").Error)
+		require.NoError(t, db.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY)").Error)
+		require.NoError(t, db.Exec("INSERT INTO notes (id) VALUES (1)").Error)
+		present, err := legacyDataPresent(db)
+		require.NoError(t, err)
+		assert.True(t, present, "contamination in the second legacy table must still be detected")
+	})
+
+	t.Run("metadata probe error fails closed", func(t *testing.T) {
+		// A failure to enumerate tables must propagate as an error (fail closed), never be
+		// reported as (false, nil) which callers would read as "clean v2". Close the underlying
+		// connection to force the GetTables metadata query to fail.
+		db := newSchemaCheckDB(t)
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+
+		present, err := legacyDataPresent(db)
+		require.Error(t, err, "a metadata-probe failure must propagate")
+		assert.False(t, present, "the bool must be the safe zero value on error")
+	})
 }
 
 // createLegacySQLite creates a minimal legacy SQLite database with a notes table

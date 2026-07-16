@@ -753,20 +753,24 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 		return false
 	}
 
-	// A COMPLETED marker alone is NOT sufficient evidence of a usable fresh v2 schema:
-	// if a legacy data table ('results' or 'notes') exists, this is a PR #2165-contaminated
-	// legacy database, not a real v2 database.
+	// A COMPLETED marker together with a *populated* legacy data table ('results' or 'notes')
+	// means real user data is still stranded in the legacy schema: a PR #2165-contaminated
+	// legacy database masquerading as v2 (GitHub #3924). Treating it as v2 lets
+	// CheckAndConsolidateAtStartup delete the real migrated sidecar, so reject it.
 	//
-	// Fail closed: this function gates destructive startup actions (deleting/renaming the
-	// migrated sidecar in CheckAndConsolidateAtStartup). If the probe itself errors we cannot
-	// prove the database is a clean v2 schema, so return false rather than risk misclassifying
-	// a contaminated or corrupt database as v2 (matches the migration_states probe above).
-	var legacyTableCount int64
-	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('results', 'notes')").Scan(&legacyTableCount).Error
-	if err != nil {
-		return false
-	}
-	if legacyTableCount > 0 {
+	// An EMPTY legacy table, by contrast, is harmless residue: a fully migrated v2 database can
+	// still carry the old 'notes'/'results' tables (GORM never drops tables) with no rows left in
+	// them. Such databases MUST still be recognised as v2. Keying on table existence alone (as
+	// PR #3926 first did) forced these healthy databases into legacy mode, where legacy AutoMigrate
+	// then crashes with "Cannot add a NOT NULL column with default value NULL" while adding a
+	// legacy column to an already-populated table. Discriminate on row count, not mere table
+	// existence.
+	//
+	// Fail closed on probe error: this function gates destructive startup actions, so if we
+	// cannot prove the legacy tables are empty, return false rather than risk misclassifying a
+	// contaminated or corrupt database as v2 (matches the migration_states probe above).
+	hasLegacyData, err := legacyDataPresent(db)
+	if err != nil || hasLegacyData {
 		return false
 	}
 
@@ -844,14 +848,63 @@ func hasCompleteFreshV2Schema(db *gorm.DB) bool {
 	// initializeV2OnlyMode fall back to the v2_ prefixed schema, whose tables are
 	// (re)created by the subsequent Initialize()/AutoMigrate.
 	//
-	// A COMPLETED marker alongside a legacy data table ('results' or 'notes') means
-	// this is a PR #2165-contaminated legacy database, not a fresh no-prefix v2 schema.
-	// Mirror the same legacy-table guard used by CheckSQLiteHasV2Schema so both the
-	// SQLite and MySQL/dialect-agnostic paths reject contamination identically.
-	if db.Migrator().HasTable("results") || db.Migrator().HasTable("notes") {
+	// A COMPLETED marker alongside a *populated* legacy data table ('results' or 'notes')
+	// means real user data is still stranded in the legacy schema: a PR #2165-contaminated
+	// legacy database, not a fresh no-prefix v2 schema (GitHub #3924). Reject it. An EMPTY
+	// legacy table is harmless residue that a fully migrated v2 database can still carry and
+	// must NOT disqualify the schema; keying on table existence alone (as PR #3926 first did)
+	// wrongly forced healthy v2 databases into legacy mode. Mirror the same row-based guard
+	// used by CheckSQLiteHasV2Schema, failing closed on a row-count probe error.
+	if hasLegacyData, err := legacyDataPresent(db); err != nil || hasLegacyData {
 		return false
 	}
 	return db.Migrator().HasTable("detections")
+}
+
+// legacyDataTables lists the v1 data tables. After a completed in-place migration these tables
+// are commonly left behind EMPTY (GORM never drops tables); that residue is harmless. Only rows
+// still sitting in them indicate real unmigrated legacy data, i.e. a PR #2165-contaminated
+// database masquerading as a completed v2 schema (GitHub #3924).
+var legacyDataTables = []string{"results", "notes"}
+
+// legacyDataPresent reports whether any legacy data table exists AND still holds at least one row.
+// Table existence alone is not contamination: a genuine completed migration leaves empty legacy
+// tables behind. The bool is meaningful only when the returned error is nil; because this decision
+// gates destructive startup actions, callers should fail closed (treat as not-clean-v2) on error.
+func legacyDataPresent(db *gorm.DB) (bool, error) {
+	// Resolve which tables exist with an error-returning probe. db.Migrator().HasTable swallows
+	// the underlying metadata-query error and just reports false, which would let a probe failure
+	// be misread as "no legacy data" (fail open) on a database this function is meant to fail
+	// closed for. GetTables surfaces the error so the caller can reject the database instead.
+	tables, err := db.Migrator().GetTables()
+	if err != nil {
+		return false, err
+	}
+	existing := make(map[string]struct{}, len(tables))
+	for _, t := range tables {
+		existing[t] = struct{}{}
+	}
+
+	for _, name := range legacyDataTables {
+		if _, ok := existing[name]; !ok {
+			continue
+		}
+		// Existence probe via SELECT EXISTS, not a full COUNT(*): a contaminated legacy table can
+		// hold hundreds of thousands of unmigrated rows (GitHub #3924), and counting all of them on
+		// every startup would scan the whole table and could approach the DB startup timeout. EXISTS
+		// short-circuits at the first row and yields an explicit 0/1, so it does not depend on GORM
+		// populating RowsAffected after Scan (which can vary by version/driver). The table name comes
+		// from the fixed legacyDataTables allowlist, so the interpolation is safe. Backtick quoting
+		// works on both SQLite and MySQL (mirrors cleanupLegacySchemaContamination in this package).
+		var hasRow int
+		if err := db.Raw("SELECT EXISTS(SELECT 1 FROM `" + name + "`)").Scan(&hasRow).Error; err != nil {
+			return false, err
+		}
+		if hasRow != 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // cleanupOrphanedBareV2Tables removes bare v2 tables that were created by a broken nightly
