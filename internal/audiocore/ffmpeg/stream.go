@@ -1169,7 +1169,7 @@ func (s *Stream) handleReadError(readErr error, startTime time.Time) error {
 			totalBytes := s.totalBytesReceived
 			s.bytesReceivedMu.RUnlock()
 			if totalBytes == 0 {
-				return errors.Newf("error reading from FFmpeg: stream ended without producing data (timeout)").
+				return errors.Newf("error reading from FFmpeg: stream ended without producing data").
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").
 					Context("operation", "process_audio").

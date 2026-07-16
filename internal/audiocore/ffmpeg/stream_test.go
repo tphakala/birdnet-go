@@ -1851,30 +1851,63 @@ func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
 func TestStream_HandleReadError(t *testing.T) {
 	t.Parallel()
 
-	cfg := newTestConfig()
-	stream := NewStream(&cfg, nil, nil, nil, nil)
-	ctx, cancel := context.WithCancelCause(t.Context())
-	stream.ctx = ctx
-	stream.cancel = cancel
-	defer cancel(nil)
+	// Start one second past the quick-exit window so handleReadError takes the
+	// EOF branch rather than handleQuickExitError. Derive it from the constant
+	// so the test keeps exercising the intended path if processQuickExitTime
+	// ever changes.
+	startTime := time.Now().Add(-(processQuickExitTime + time.Second))
 
-	// 10 seconds ago
-	startTime := time.Now().Add(-10 * time.Second)
+	tests := []struct {
+		name         string
+		totalBytes   int64
+		cancelCtx    bool
+		wantErr      bool
+		wantContains string
+	}{
+		{
+			name:         "EOF with no data and live context returns error",
+			totalBytes:   0,
+			cancelCtx:    false,
+			wantErr:      true,
+			wantContains: "stream ended without producing data",
+		},
+		{
+			name:       "EOF after data returns nil",
+			totalBytes: 100,
+			cancelCtx:  false,
+			wantErr:    false,
+		},
+		{
+			name:       "EOF with no data but canceled context returns nil",
+			totalBytes: 0,
+			cancelCtx:  true,
+			wantErr:    false,
+		},
+	}
 
-	// totalBytesReceived = 0 and ctx not canceled -> returns error
-	stream.totalBytesReceived = 0
-	err := stream.handleReadError(io.EOF, startTime)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "stream ended without producing data")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	// totalBytesReceived > 0 -> returns nil
-	stream.totalBytesReceived = 100
-	err = stream.handleReadError(io.EOF, startTime)
-	require.NoError(t, err)
+			cfg := newTestConfig()
+			stream := NewStream(&cfg, nil, nil, nil, nil)
+			ctx, cancel := context.WithCancelCause(t.Context())
+			stream.ctx = ctx
+			stream.cancel = cancel
+			t.Cleanup(func() { cancel(nil) })
 
-	// totalBytesReceived = 0 but context is canceled -> returns nil
-	stream.totalBytesReceived = 0
-	cancel(nil)
-	err = stream.handleReadError(io.EOF, startTime)
-	require.NoError(t, err)
+			stream.totalBytesReceived = tt.totalBytes
+			if tt.cancelCtx {
+				cancel(nil)
+			}
+
+			err := stream.handleReadError(io.EOF, startTime)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantContains)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
