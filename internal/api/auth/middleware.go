@@ -41,7 +41,9 @@ func NewMiddleware(service Service) *Middleware {
 // Authenticate is the main middleware function for authentication
 func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if err := m.validateAuthService(c); err != nil {
+		// Fail closed: abort whenever the service reports an abort or returns an
+		// error, so a written response is never followed by the route handler.
+		if aborted, err := m.validateAuthService(c); aborted || err != nil {
 			return err
 		}
 
@@ -51,7 +53,10 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// Try token auth first (from Authorization header)
 		if result := m.tryTokenAuth(c); result.handled {
-			if result.err != nil {
+			// Fail closed: a written 401 response returns nil from c.JSON, so
+			// gate on the explicit aborted flag (and any error) rather than err
+			// alone, otherwise the route handler would run past a failed auth.
+			if result.aborted || result.err != nil {
 				return result.err
 			}
 			return next(c)
@@ -69,21 +74,22 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 
 // authResult represents the result of an authentication attempt.
 type authResult struct {
-	handled bool  // Whether the auth attempt was processed (header present or valid session)
+	handled bool  // Whether an Authorization header was present and processed by token auth
+	aborted bool  // Whether to abort the middleware chain (response written or error)
 	err     error // Error to return to client (nil if successful)
 }
 
 // validateAuthService checks if AuthService is configured and returns an error response if not.
-func (m *Middleware) validateAuthService(c echo.Context) error {
+func (m *Middleware) validateAuthService(c echo.Context) (bool, error) {
 	if m.AuthService == nil {
 		m.log().Error("Authentication middleware called with nil AuthService",
 			logger.String("path", c.Request().URL.Path),
 			logger.String("ip", c.RealIP()))
-		return c.JSON(http.StatusInternalServerError, map[string]string{
+		return true, c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Internal configuration error: authentication service not available",
 		})
 	}
-	return nil
+	return false, nil
 }
 
 // shouldBypassAuth checks if authentication should be bypassed for this request.
@@ -138,7 +144,7 @@ func (m *Middleware) tryTokenAuth(c echo.Context) authResult {
 	// TODO: Consider adding username to AccessToken struct to support this use case.
 	c.Set(CtxKeyUsername, "")
 	c.Set(CtxKeyAuthMethod, AuthMethodToken)
-	return authResult{handled: true, err: nil}
+	return authResult{handled: true, aborted: false, err: nil}
 }
 
 // handleMalformedAuthHeader returns an error response for malformed Authorization headers.
@@ -149,6 +155,7 @@ func (m *Middleware) handleMalformedAuthHeader(c echo.Context, path, ip string) 
 	c.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 	return authResult{
 		handled: true,
+		aborted: true,
 		err: c.JSON(http.StatusUnauthorized, map[string]string{
 			"error": "Invalid Authorization header",
 		}),
@@ -164,6 +171,7 @@ func (m *Middleware) handleInvalidToken(c echo.Context, path, ip string) authRes
 		`Bearer realm="api", error="invalid_token", error_description="Invalid or expired token"`)
 	return authResult{
 		handled: true,
+		aborted: true,
 		err: c.JSON(http.StatusUnauthorized, map[string]string{
 			"error": "Invalid or expired token",
 		}),
