@@ -93,7 +93,9 @@ func (c *Handler) registerHealthChecks() {
 		checks.NewTemperatureCheck(func() (float64, error) {
 			celsius, _, err := readCPUTemperature(thermalBasePath)
 			if err != nil {
-				return 0, errNoTempSensors
+				// Surface the real reason (no sensor, unreadable, or out of
+				// range) so the health check reports an accurate cause.
+				return 0, err
 			}
 			return celsius, nil
 		}),
@@ -373,9 +375,6 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 	}
 	return result
 }
-
-// errNoTempSensors is returned when no temperature sensors are found on the system.
-var errNoTempSensors = errors.NewStd("no temperature sensors found")
 
 // buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
 // stream health data to the checks.StreamHealthInfo format. The closure

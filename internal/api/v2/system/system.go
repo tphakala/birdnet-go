@@ -827,11 +827,10 @@ func (c *Handler) isRelevantProcess(p *process.Process, currentPID int32) bool {
 	return p.Pid == currentPID || parentPID == currentPID
 }
 
-
 // GetSystemCPUTemperature handles GET /api/v2/system/temperature/cpu
 // It attempts to read the CPU temperature by scanning /sys/class/thermal/thermal_zone*
 // for specific types like 'cpu-thermal' or 'x86_pkg_temp'.
-// It validates the temperature to be within a reasonable range (0-100°C).
+// It validates the temperature to be within a reasonable range (0-120°C).
 // thermalBasePath is the base directory for thermal zones on Linux
 const thermalBasePath = "/sys/class/thermal/"
 
@@ -918,7 +917,12 @@ func readCPUTemperature(basePath string) (celsius float64, details string, err e
 		return 0, "", fmt.Errorf("failed to scan for thermal zones: %w", err)
 	}
 
-	var lastAttemptDetails string
+	var (
+		lastAttemptDetails string
+		hottestCelsius     float64
+		hottestDetails     string
+		found              bool
+	)
 	for _, zonePath := range zones {
 		zoneName := filepath.Base(zonePath)
 		typePath := filepath.Join(zonePath, "type")
@@ -949,13 +953,24 @@ func readCPUTemperature(basePath string) (celsius float64, details string, err e
 			continue
 		}
 
-		celsius := float64(tempMillCelsius) / float64(millisecondsPerSecond)
-		if celsius < 0.0 || celsius > 100.0 {
-			lastAttemptDetails = fmt.Sprintf("Invalid temp from %s (type: %s, value: %.1f°C, expected 0-100°C)", zoneName, sensorType, celsius)
+		zoneCelsius := float64(tempMillCelsius) / milliCelsiusPerCelsius
+		if zoneCelsius < minValidCPUTempCelsius || zoneCelsius > maxValidCPUTempCelsius {
+			lastAttemptDetails = fmt.Sprintf("Invalid temp from %s (type: %s, value: %.1f°C, expected %.0f-%.0f°C)", zoneName, sensorType, zoneCelsius, minValidCPUTempCelsius, maxValidCPUTempCelsius)
 			continue
 		}
 
-		return celsius, fmt.Sprintf("Source: %s, Type: %s", zoneName, sensorType), nil
+		// Track the hottest valid CPU zone rather than returning the first, so
+		// multi-zone systems (dual-socket, multi-die) still surface an
+		// overheating package and selection does not depend on glob ordering.
+		if !found || zoneCelsius > hottestCelsius {
+			hottestCelsius = zoneCelsius
+			hottestDetails = fmt.Sprintf("Source: %s, Type: %s", zoneName, sensorType)
+			found = true
+		}
+	}
+
+	if found {
+		return hottestCelsius, hottestDetails, nil
 	}
 
 	if lastAttemptDetails != "" {
