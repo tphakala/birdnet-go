@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
@@ -228,5 +229,10 @@ func TestErrAudioExportDeferred_IsSentinel(t *testing.T) {
 	t.Parallel()
 
 	wrapped := fmt.Errorf("deferred execute: %w", errAudioExportDeferred)
-	assert.ErrorIs(t, wrapped, errAudioExportDeferred)
+	require.ErrorIs(t, wrapped, errAudioExportDeferred)
+
+	// errAudioExportDeferred itself wraps jobqueue.ErrJobDeferred so the retry logger
+	// classifies the reschedule as expected backpressure (Debug), not a failure (Warn).
+	// If a refactor drops the wrap, deferrals would flood the warning stream again.
+	require.ErrorIs(t, errAudioExportDeferred, jobqueue.ErrJobDeferred)
 }

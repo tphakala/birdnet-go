@@ -5,11 +5,13 @@ package processor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
@@ -28,8 +30,10 @@ import (
 // errAudioExportDeferred signals that SaveAudioAction cannot yet read the
 // requested capture segment because the tail of the clip is still being
 // written (Extended Capture). The job queue's retry mechanism re-runs the
-// action after a backoff delay until the buffer has caught up.
-var errAudioExportDeferred = errors.NewStd("audio export deferred until capture tail is available")
+// action after a backoff delay until the buffer has caught up. It wraps
+// jobqueue.ErrJobDeferred so LogJobRetryScheduled records the reschedule at Debug
+// rather than Warn (this is expected backpressure, not a failure).
+var errAudioExportDeferred = fmt.Errorf("audio export deferred until capture tail is available: %w", jobqueue.ErrJobDeferred)
 
 // Encoder tags recorded in the audio-export success log so the active encoder is
 // visible per clip (native go-flac or native WAV writer, or FFmpeg for the lossy
