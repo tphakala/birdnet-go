@@ -1157,6 +1157,15 @@ func (s *Stream) handleReadError(readErr error, startTime time.Time) error {
 	}
 
 	if errors.Is(readErr, io.EOF) || errors.Is(readErr, context.Canceled) {
+		if errors.Is(readErr, io.EOF) && s.ctx.Err() == nil && s.totalBytesReceived == 0 {
+			return errors.Newf("error reading from FFmpeg: stream ended without producing data (timeout)").
+				Category(errors.CategoryRTSP).
+				Component("ffmpeg-stream").
+				Context("operation", "process_audio").
+				Context("url", s.config.safeURL()).
+				Context("runtime_seconds", time.Since(startTime).Seconds()).
+				Build()
+		}
 		return nil
 	}
 

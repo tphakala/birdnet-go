@@ -1847,3 +1847,34 @@ func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
 		t.Fatal("readStdout did not produce a readResult within 1s")
 	}
 }
+
+func TestStream_HandleReadError(t *testing.T) {
+	t.Parallel()
+
+	cfg := newTestConfig()
+	stream := NewStream(&cfg, nil, nil, nil, nil)
+	ctx, cancel := context.WithCancelCause(t.Context())
+	stream.ctx = ctx
+	stream.cancel = cancel
+	defer cancel(nil)
+
+	// 10 seconds ago
+	startTime := time.Now().Add(-10 * time.Second)
+
+	// totalBytesReceived = 0 and ctx not canceled -> returns error
+	stream.totalBytesReceived = 0
+	err := stream.handleReadError(io.EOF, startTime)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stream ended without producing data")
+
+	// totalBytesReceived > 0 -> returns nil
+	stream.totalBytesReceived = 100
+	err = stream.handleReadError(io.EOF, startTime)
+	require.NoError(t, err)
+
+	// totalBytesReceived = 0 but context is canceled -> returns nil
+	stream.totalBytesReceived = 0
+	cancel(nil)
+	err = stream.handleReadError(io.EOF, startTime)
+	require.NoError(t, err)
+}
