@@ -834,7 +834,12 @@ func hasCompleteFreshV2Schema(db *gorm.DB) bool {
 	// wedging the app in enhanced mode (GitHub #3575). Returning false makes
 	// initializeV2OnlyMode fall back to the v2_ prefixed schema, whose tables are
 	// (re)created by the subsequent Initialize()/AutoMigrate.
-	if db.Migrator().HasTable("results") {
+	//
+	// A COMPLETED marker alongside a legacy data table ('results' or 'notes') means
+	// this is a PR #2165-contaminated legacy database, not a fresh no-prefix v2 schema.
+	// Mirror the same legacy-table guard used by CheckSQLiteHasV2Schema so both the
+	// SQLite and MySQL/dialect-agnostic paths reject contamination identically.
+	if db.Migrator().HasTable("results") || db.Migrator().HasTable("notes") {
 		return false
 	}
 	return db.Migrator().HasTable("detections")
