@@ -9,7 +9,7 @@ https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 ### cloud.google.com/go/auth
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.20.0/auth/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.22.0/auth/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/auth/oauth2adapt
@@ -39,7 +39,7 @@ Source: MIT
 
 ### github.com/buger/jsonparser
 
-License: https://github.com/buger/jsonparser/blob/v1.1.2/LICENSE
+License: https://github.com/buger/jsonparser/blob/v1.2.0/LICENSE
 Source: MIT
 
 ### github.com/cespare/xxhash/v2
@@ -84,7 +84,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.47.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.48.0/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -104,7 +104,7 @@ Source: Apache-2.0
 
 ### github.com/go-chi/chi/v5
 
-License: https://github.com/go-chi/chi/blob/v5.3.0/LICENSE
+License: https://github.com/go-chi/chi/blob/v5.3.1/LICENSE
 Source: MIT
 
 ### github.com/go-logr/logr
@@ -144,12 +144,12 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.17/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.18/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.22.0/v2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.23.0/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -229,12 +229,12 @@ Source: MIT
 
 ### github.com/mattn/go-isatty
 
-License: https://github.com/mattn/go-isatty/blob/v0.0.22/LICENSE
+License: https://github.com/mattn/go-isatty/blob/v0.0.23/LICENSE
 Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.47/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.48/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
@@ -269,12 +269,12 @@ Source: Apache-2.0
 
 ### github.com/pelletier/go-toml/v2
 
-License: https://github.com/pelletier/go-toml/blob/v2.4.1/LICENSE
+License: https://github.com/pelletier/go-toml/blob/v2.4.3/LICENSE
 Source: MIT
 
 ### github.com/pkg/sftp
 
-License: https://github.com/pkg/sftp/blob/v1.13.10/LICENSE
+License: https://github.com/pkg/sftp/blob/v1.13.11/LICENSE
 Source: BSD-2-Clause
 
 ### github.com/pmezard/go-difflib/difflib
@@ -294,22 +294,22 @@ Source: Apache-2.0
 
 ### github.com/prometheus/common
 
-License: https://github.com/prometheus/common/blob/v0.69.0/LICENSE
+License: https://github.com/prometheus/common/blob/v0.70.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/procfs
 
-License: https://github.com/prometheus/procfs/blob/v0.21.0/LICENSE
+License: https://github.com/prometheus/procfs/blob/v0.21.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/ringsaturn/tzf
 
-License: https://github.com/ringsaturn/tzf/blob/v1.2.1/LICENSE
+License: https://github.com/ringsaturn/tzf/blob/v1.2.3/LICENSE
 Source: MIT
 
 ### github.com/ringsaturn/tzf-dist
 
-License: https://github.com/ringsaturn/tzf-dist/blob/v0.0.2026-b-fix1/LICENSE
+License: https://github.com/ringsaturn/tzf-dist/blob/v0.0.2026-c-fix1/LICENSE
 Source: MIT
 
 ### github.com/sagikazarmark/locafero
@@ -494,8 +494,8 @@ Source: MIT
 
 ### go.yaml.in/yaml/v4
 
-License: https://github.com/yaml/go-yaml/blob/v4.0.0-rc.2/LICENSE
-Source: MIT
+License: https://github.com/yaml/go-yaml/blob/v4.0.0-rc.6/LICENSE
+Source: Apache-2.0
 
 ### golang.org/x/crypto
 
@@ -544,12 +544,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/925bb5da69e7/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/e75dac1f907d/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.82.0/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.82.1/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
