@@ -2,16 +2,31 @@ name: BirdNET-Go Release Build
 
 on:
   release:
-    types: [created, edited]
+    # Only 'created' triggers a build. 'edited' is deliberately excluded: the
+    # build is what attaches the assets, so it never needs a body edit to run,
+    # and listening on 'edited' meant any later change to the release (fixing
+    # the notes, toggling latest) re-ran the entire multi-platform build. To
+    # rebuild on demand, use the workflow_dispatch entry below or re-run the
+    # failed run; do not re-add 'edited'.
+    types: [created]
   workflow_dispatch:
 
 permissions:
   contents: write
   packages: write
 
+# Serialize release builds per tag. If a second trigger for the same release
+# ever fires (for example a manual dispatch overlapping the created build), it
+# queues behind the running one instead of racing it on asset uploads and
+# container image pushes. cancel-in-progress is false so an in-flight build,
+# which may be mid-push, is never killed.
+concurrency:
+  group: release-build-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   build:
-    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'created')) }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -80,7 +95,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
   checksums:
-    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'created')) }}
     needs: build
     runs-on: ubuntu-24.04
     steps:
@@ -123,7 +138,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   get-version:
-    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'created')) }}
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get_version.outputs.version }}
@@ -153,11 +168,11 @@ jobs:
             # images with the identical clean tag rather than a describe suffix.
             VERSION=$(git describe --tags --abbrev=0 --match 'v*')
           fi
-          echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
   docker:
-    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'created')) }}
     needs: get-version
     uses: ./.github/workflows/docker-build-push.yml
     with:
@@ -176,7 +191,7 @@ jobs:
   # races the asset uploads or advertises image tags before they are pushed.
   # The if-guard mirrors the other jobs and must stay in sync with them.
   manifest:
-    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'created')) }}
     needs: [build, checksums, docker]
     uses: ./.github/workflows/release-manifest.yml
     permissions:
@@ -187,7 +202,7 @@ jobs:
   # release:published trigger on virustotal.yml, which fired before the build
   # attached any assets and always failed with "No Assets Found".
   virustotal:
-    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'created')) }}
     needs: [build, checksums]
     uses: ./.github/workflows/virustotal.yml
     secrets: inherit
