@@ -754,10 +754,19 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 	}
 
 	// A COMPLETED marker alone is NOT sufficient evidence of a usable fresh v2 schema:
-	// If a legacy table exists (e.g., 'results'), it's a contaminated legacy db.
+	// if a legacy data table ('results' or 'notes') exists, this is a PR #2165-contaminated
+	// legacy database, not a real v2 database.
+	//
+	// Fail closed: this function gates destructive startup actions (deleting/renaming the
+	// migrated sidecar in CheckAndConsolidateAtStartup). If the probe itself errors we cannot
+	// prove the database is a clean v2 schema, so return false rather than risk misclassifying
+	// a contaminated or corrupt database as v2 (matches the migration_states probe above).
 	var legacyTableCount int64
 	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('results', 'notes')").Scan(&legacyTableCount).Error
-	if err == nil && legacyTableCount > 0 {
+	if err != nil {
+		return false
+	}
+	if legacyTableCount > 0 {
 		return false
 	}
 
