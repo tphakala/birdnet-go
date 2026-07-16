@@ -3878,54 +3878,98 @@ get_ip_location() {
     return 1
 }
 
+# Validate a candidate IANA zone name against the zoneinfo database. Rejects an empty
+# value, path traversal ("..", which would let the existence check escape the zoneinfo
+# tree) and any name with no matching zoneinfo file (e.g. timedatectl's "n/a" on an
+# unconfigured host, or an absolute path left by a non-standard /etc/localtime symlink).
+# On success echoes the zone and returns 0; otherwise echoes nothing and returns 1.
+# $2 overrides the zoneinfo directory (test seam).
+_valid_iana_tz() {
+    local tz="$1"
+    local zoneinfo_dir="${2:-/usr/share/zoneinfo}"
+    [ -n "$tz" ] || return 1
+    case "$tz" in
+        *..*) return 1 ;;
+    esac
+    [ -f "$zoneinfo_dir/$tz" ] || return 1
+    printf '%s' "$tz"
+}
+
 # Resolve the host timezone using a single, validated detection chain.
 # Shared by configure_timezone() and generate_systemd_service_content() so the two
 # cannot drift apart (Forgejo #877). Tries, in order: an optional preferred candidate
-# (e.g. a previously configured zone), /etc/timezone, timedatectl, and the
-# /etc/localtime symlink. The result is validated against the zoneinfo database and
-# rejected if it contains path traversal. Echoes a valid IANA zone name, or an empty
-# string if none could be resolved (callers decide the UTC fallback so they can warn).
+# (e.g. a previously configured zone), timedatectl, the /etc/localtime symlink, and
+# finally /etc/timezone. Each source is validated against the zoneinfo database
+# independently and skipped on failure, so a stale or invalid earlier source no longer
+# defeats a valid later one. Echoes a valid IANA zone name, or an empty string if none
+# could be resolved (callers decide the UTC fallback so they can warn).
+#
+# timedatectl is preferred over /etc/timezone (GitHub #3950): /etc/timezone is a
+# Debian-ism updated only by tzdata tooling and can go stale (e.g. `timedatectl
+# set-timezone` on some setups only rewrites /etc/localtime), whereas timedatectl and
+# /etc/localtime reflect the zone the kernel and Go's time.Local actually use. On systemd
+# hosts without /etc/timezone (Debian 13, #3351) detection still succeeds at timedatectl
+# or /etc/localtime; /etc/timezone stays in the chain only as a last resort for
+# pre-systemd hosts with no working timedatectl.
 resolve_host_timezone() {
     local candidate="${1:-}"
-    local tz="$candidate"
+    # Test seams: default to the real system paths.
+    local tz_etc="${BNG_TZ_ETC_TIMEZONE:-/etc/timezone}"
+    local localtime_link="${BNG_TZ_LOCALTIME:-/etc/localtime}"
+    local zoneinfo_dir="${BNG_TZ_ZONEINFO_DIR:-/usr/share/zoneinfo}"
+    zoneinfo_dir="${zoneinfo_dir%/}"   # tolerate a trailing slash so the symlink prefix-strip matches
+    local tz
 
-    if [ -z "$tz" ] && [ -f /etc/timezone ]; then
-        tz=$(cat /etc/timezone 2>/dev/null | tr -d '\n' | tr -d ' ')
+    # 1. Explicit prior configuration (preservation above all else).
+    if [ -n "$candidate" ] && tz=$(_valid_iana_tz "$candidate" "$zoneinfo_dir"); then
+        printf '%s' "$tz"; return 0
     fi
 
-    if [ -z "$tz" ] && command_exists timedatectl; then
-        tz=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '\n' | tr -d ' ')
+    # 2. timedatectl: systemd's authoritative view of the host zone.
+    if command_exists timedatectl; then
+        local td
+        td=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '[:space:]')
+        if tz=$(_valid_iana_tz "$td" "$zoneinfo_dir"); then
+            printf '%s' "$tz"; return 0
+        fi
     fi
 
-    if [ -z "$tz" ] && [ -L /etc/localtime ]; then
+    # 3. /etc/localtime symlink into the zoneinfo tree (the file Go's time.Local reads).
+    if [ -L "$localtime_link" ]; then
         local tz_path
-        tz_path=$(readlink -f /etc/localtime)
-        tz=${tz_path#/usr/share/zoneinfo/}
+        tz_path=$(readlink -f "$localtime_link" 2>/dev/null)
+        if tz=$(_valid_iana_tz "${tz_path#"$zoneinfo_dir"/}" "$zoneinfo_dir"); then
+            printf '%s' "$tz"; return 0
+        fi
     fi
 
-    # Validate against the zoneinfo database before trusting it. timedatectl can report
-    # "n/a" on unconfigured images and a non-standard /etc/localtime symlink can leave an
-    # absolute path; neither is a valid zone identifier. A value containing ".." would let
-    # the existence check escape /usr/share/zoneinfo, so reject those outright.
-    if [ -n "$tz" ] && { [[ "$tz" == *..* ]] || [ ! -f "/usr/share/zoneinfo/$tz" ]; }; then
-        tz=""
+    # 4. /etc/timezone: Debian-ism, last resort (can be stale, see header).
+    if [ -f "$tz_etc" ]; then
+        local ft
+        ft=$(tr -d '[:space:]' < "$tz_etc" 2>/dev/null)
+        if tz=$(_valid_iana_tz "$ft" "$zoneinfo_dir"); then
+            printf '%s' "$tz"; return 0
+        fi
     fi
 
-    printf '%s' "$tz"
+    printf ''
 }
 
 # Function to configure timezone
 configure_timezone() {
-    # Silent mode: use system timezone
+    # Silent mode: preserve any zone already chosen this run (e.g. one restored from an
+    # existing unit during an update/migration), otherwise detect the host zone via the
+    # shared resolver so silent installs use the same validated, timedatectl-first chain as
+    # interactive ones. The old inline chain preferred a stale /etc/timezone, skipped
+    # zoneinfo validation, and unconditionally clobbered a restored zone (GitHub #3950).
     if [ "$SILENT_MODE" = "true" ]; then
-        if [ -f /etc/timezone ]; then
-            CONFIGURED_TZ=$(cat /etc/timezone 2>/dev/null | tr -d '\n')
-        elif command -v timedatectl &>/dev/null; then
-            CONFIGURED_TZ=$(timedatectl show --property=Timezone --value 2>/dev/null)
-        else
+        CONFIGURED_TZ=$(resolve_host_timezone "$CONFIGURED_TZ")
+        if [ -z "$CONFIGURED_TZ" ]; then
             CONFIGURED_TZ="UTC"
+            print_message "🔇 Silent mode: could not detect timezone, defaulting to UTC" "$YELLOW"
+        else
+            print_message "🔇 Silent mode: timezone set to $CONFIGURED_TZ" "$YELLOW"
         fi
-        print_message "🔇 Silent mode: timezone set to $CONFIGURED_TZ" "$YELLOW"
         return
     fi
 
@@ -4848,6 +4892,8 @@ generate_systemd_service_content() {
     TZ=$(resolve_host_timezone "$CONFIGURED_TZ")
     if [ -z "$TZ" ]; then
         TZ="UTC"
+        # stdout is the unit file here, so warn to the log only, never via print_message.
+        log_message "WARN" "Could not resolve host timezone; systemd unit will use TZ=UTC"
     fi
 
     # Determine host UID/GID even when executed with sudo
@@ -4985,6 +5031,30 @@ _extract_bind_addr() {
 # It must be called before check_systemd_service / add_systemd_config on the
 # update and reconfigure paths. Sets globals WEB_PORT, BIND_TLS_PORTS, BIND_METRICS_PORT,
 # and CONFIGURED_TZ.
+
+# Read a systemd unit file, falling back to sudo when the file exists but is not readable
+# by the invoking user (root-owned mode 600 units, GitHub #3950 - a silent read failure
+# there left CONFIGURED_TZ empty and reset the container TZ to UTC on update). Echoes the
+# file content, or nothing if it cannot be read. `sudo -n` (non-interactive) is tried first
+# so unattended/cron updates never hang on a password prompt; an interactive `sudo` is used
+# only when a TTY is attached.
+_read_unit_file() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    if [ -r "$f" ]; then
+        cat "$f" 2>/dev/null
+        return 0
+    fi
+    if command_exists sudo; then
+        if sudo -n cat "$f" 2>/dev/null; then
+            return 0
+        fi
+        if [ -t 0 ]; then
+            sudo cat "$f" 2>/dev/null
+        fi
+    fi
+}
+
 # shellcheck disable=SC2120  # optional $1 (unit path) is intentional, used by tests
 load_existing_service_config() {
     # Optional explicit unit path (used by tests); defaults to the installed locations.
@@ -4998,13 +5068,19 @@ load_existing_service_config() {
     fi
     [ -z "$service_file" ] && return 0
 
+    # Read the unit once (with a sudo fallback for a root-only-readable unit, GitHub #3950)
+    # and parse the captured content below, so a unit the invoking user cannot read no
+    # longer silently loses the web port / TLS / metrics bindings and timezone.
+    local unit_content
+    unit_content=$(_read_unit_file "$service_file")
+
     # Web interface mapping: the one whose container side is 8080 (-p <host>:8080). The host
     # side may carry an optional bind address (e.g. 127.0.0.1:9000:8080 when a user manually
     # bound to localhost behind a same-host reverse proxy). Preserve the bind address as well
     # as the port so an update does not silently re-expose a localhost-only binding to all
     # interfaces. Each -p is on its own continuation line, so a per-line match is sufficient.
     local web_map
-    web_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?[0-9]+:8080' "$service_file" 2>/dev/null | head -1)
+    web_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?[0-9]+:8080' <<<"$unit_content" | head -1)
     if [ -n "$web_map" ]; then
         # Strip the leading "-p " and trailing ":8080", leaving "<addr>:<port>" or "<port>".
         local host_spec
@@ -5037,7 +5113,7 @@ load_existing_service_config() {
     # them as AutoTLS-enabled so a regenerate produces the corrected 443:8443 mapping
     # instead of silently dropping AutoTLS. The trailing \b avoids a false match
     # inside e.g. 443:4433.
-    tls_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:(8443|443)\b' "$service_file" 2>/dev/null | head -1)
+    tls_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:(8443|443)\b' <<<"$unit_content" | head -1)
     if [ -n "$tls_map" ]; then
         BIND_TLS_PORTS="true"
         # Strip whichever container-port suffix matched to recover any bind address.
@@ -5048,7 +5124,7 @@ load_existing_service_config() {
         TLS_BIND_ADDR=$(_extract_bind_addr "$tls_map" "$tls_portpair")
     fi
     local metrics_map
-    metrics_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?8090:8090' "$service_file" 2>/dev/null | head -1)
+    metrics_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?8090:8090' <<<"$unit_content" | head -1)
     if [ -n "$metrics_map" ]; then
         BIND_METRICS_PORT="true"
         METRICS_BIND_ADDR=$(_extract_bind_addr "$metrics_map" "8090:8090")
@@ -5057,7 +5133,13 @@ load_existing_service_config() {
     # Timezone, only if not already chosen this run.
     if [ -z "$CONFIGURED_TZ" ]; then
         local existing_tz
-        existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$service_file" 2>/dev/null | head -1)
+        existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' <<<"$unit_content" | head -1)
+        # If the unit could not be read or carried no TZ, fall back to the still-running
+        # container's env: the update path calls this before stopping the service, so the
+        # --rm container is up and its TZ reflects the zone actually in use (GitHub #3950).
+        if [ -z "$existing_tz" ]; then
+            existing_tz=$(safe_docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' birdnet-go | sed -n 's/^TZ=//p' | head -1)
+        fi
         if [ -n "$existing_tz" ]; then
             CONFIGURED_TZ="$existing_tz"
             log_message "INFO" "Restored timezone from existing service: $CONFIGURED_TZ"
@@ -5553,6 +5635,11 @@ handle_container_update() {
     load_existing_service_config
     if [ -n "$CONFIGURED_TZ" ]; then
         print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+    elif [ -f "/etc/systemd/system/birdnet-go.service" ] || [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+        # An existing unit is present but no timezone could be recovered from it (e.g. a
+        # root-only-readable unit this run could not read). The regenerated unit will fall
+        # back to host detection; warn so a silent TZ reset to UTC is visible (GitHub #3950).
+        print_message "⚠️  Could not read the timezone from the existing unit; the regenerated unit will use host timezone detection. If detection is wrong (e.g. a stale /etc/timezone), re-run the update with sudo or set the zone from the reconfigure menu." "$YELLOW"
     fi
 
     local service_needs_update
@@ -6602,7 +6689,7 @@ reconfigure_menu() {
     # unit is usually world-readable); if it cannot be copied, rollback restores config only.
     local service_backup="${CONFIG_FILE}.service.reconfigure.bak"
     local has_service_backup="false"
-    if [ -f "/etc/systemd/system/birdnet-go.service" ] && cp "/etc/systemd/system/birdnet-go.service" "$service_backup" 2>/dev/null; then
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] && _read_unit_file "/etc/systemd/system/birdnet-go.service" > "$service_backup" 2>/dev/null && [ -s "$service_backup" ]; then
         has_service_backup="true"
     fi
     stop_birdnet_service
