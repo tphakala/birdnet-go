@@ -55,7 +55,7 @@ jobs:
             tflite_asset: linux_arm64.tar.gz
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -139,7 +139,7 @@ jobs:
             apt_packages: build-essential pkg-config gcc-aarch64-linux-gnu
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true

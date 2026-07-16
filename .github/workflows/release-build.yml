@@ -70,7 +70,7 @@ jobs:
           sentry-auth-token: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
       - name: Add Artifacts to GitHub Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ steps.ver.outputs.version }}.tar.gz
           # Release event: attach to the triggering release (empty tag_name).
@@ -113,7 +113,7 @@ jobs:
           echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
 
       - name: Add checksums to GitHub Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           files: checksums.txt
           # For release events, attach to the triggering release; for
