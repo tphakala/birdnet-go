@@ -71,9 +71,18 @@
     },
   });
 
-  // Spectrogram retry
-  const MAX_RETRIES = 3;
-  const RETRY_DELAYS = [500, 1000, 2000];
+  // Spectrogram retry. When a detection's audio clip is still being produced (Extended
+  // Capture defers the clip write until the capture tail is recorded, which the server
+  // reports as 503 + Retry-After), the <img> onerror keeps retrying so the spectrogram
+  // resolves without a manual reload. The short leading delays keep recovery snappy for
+  // the common fast case (a normal encode race resolving in ~1s), while the tail caps at
+  // 15s, strictly under useDelayedLoading's 30s timeoutMs, so a retry never lands after
+  // the loading timeout has flipped the view to the error state and back (which would
+  // flash the error icon mid-wait). The budget sums to ~2.5 min, which covers a typical
+  // pending window; a maximum-length extended-capture clip can still outlast it, after
+  // which the error state shows and a reload retries. The last delay repeats past the array.
+  const MAX_RETRIES = 14;
+  const RETRY_DELAYS = [500, 1000, 2000, 4000, 8000, 15000];
   let retryCount = $state(0);
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let cacheKey = $state(0);

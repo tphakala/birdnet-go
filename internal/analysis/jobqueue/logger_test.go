@@ -1,13 +1,18 @@
 package jobqueue
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TestGetLog tests the getLog function returns a valid logger
@@ -110,6 +115,66 @@ func TestLogJobRetryScheduled(t *testing.T) {
 	assert.NotPanics(t, func() {
 		LogJobRetryScheduled(t.Context(), "job-retry-sched-1", "HTTP POST request", 2, 5, delay, nextRetryAt, testErr)
 	})
+
+	// A deferred action wraps ErrJobDeferred and must take the Debug branch instead of
+	// the Warn branch; exercise it so the classification code path is covered.
+	deferredErr := fmt.Errorf("audio export deferred: %w", ErrJobDeferred)
+	require.ErrorIs(t, deferredErr, ErrJobDeferred, "wrapped deferral must satisfy errors.Is")
+	assert.NotPanics(t, func() {
+		LogJobRetryScheduled(t.Context(), "job-retry-sched-2", "Save audio clip to file", 2, 10, delay, nextRetryAt, deferredErr)
+	})
+}
+
+// TestLogJobRetryScheduled_Level asserts the classification OUTCOME (not just that the
+// branch runs): an intentional deferral (wrapping ErrJobDeferred) logs at Debug, a
+// genuine failure at Warn. A condition inversion in LogJobRetryScheduled would pass the
+// NotPanics test above but is caught here by capturing the emitted level.
+func TestLogJobRetryScheduled_Level(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		wantLevel string
+		wantMsg   string
+	}{
+		{
+			name:      "deferral logs at debug",
+			err:       fmt.Errorf("audio export deferred: %w", ErrJobDeferred),
+			wantLevel: "level=DEBUG",
+			wantMsg:   "Job deferred, retry scheduled",
+		},
+		{
+			name:      "genuine failure logs at warn",
+			err:       errors.New("connection refused"),
+			wantLevel: "level=WARN",
+			wantMsg:   "Job scheduled for retry after failure",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Not parallel: swaps the process-global logger for the duration.
+			var buf bytes.Buffer
+			handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+			cfg := &logger.LoggingConfig{
+				DefaultLevel: "debug",
+				Console:      &logger.ConsoleOutput{Enabled: false},
+				FileOutput:   &logger.FileOutput{Enabled: false},
+			}
+			cl, err := logger.NewCentralLogger(cfg, handler)
+			require.NoError(t, err)
+
+			oldGlobal := logger.Global()
+			logger.SetGlobal(cl)
+			t.Cleanup(func() { logger.SetGlobal(oldGlobal) })
+
+			LogJobRetryScheduled(t.Context(), "job-lvl", "Save audio clip to file", 2, 10,
+				3*time.Second, time.Now().Add(3*time.Second), tt.err)
+
+			output := buf.String()
+			assert.Contains(t, output, tt.wantLevel, "wrong log level for %s", tt.name)
+			assert.Contains(t, output, tt.wantMsg, "wrong log message for %s", tt.name)
+		})
+	}
 }
 
 // TestLogJobSuccess tests job success logging doesn't panic

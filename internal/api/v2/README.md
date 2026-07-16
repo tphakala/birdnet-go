@@ -177,6 +177,17 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
 
+**Pending clip handling (`503 + Retry-After`).** A detection's DB record and SSE
+broadcast are emitted before its audio clip is written, and with Extended Capture the
+clip write is deferred until the capture tail is recorded (up to the capture-buffer
+size). While a clip is still legitimately pending, the by-ID audio and spectrogram
+endpoints (`GET /audio/:id`, `GET /spectrogram/:id`) return `503 Service Unavailable`
+with a `Retry-After` header sized to the remaining time, instead of `404`. Clients
+should honor `Retry-After` and retry; the clip appears once the capture completes. A
+`404` from these endpoints means the clip is genuinely absent (never produced, or purged
+by retention). These pending 503s are intentionally not logged as errors and are not
+reported to telemetry, since they are expected, self-resolving backpressure.
+
 ### Notifications (`notifications/notifications.go`)
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                         |

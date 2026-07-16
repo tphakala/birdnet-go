@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -159,7 +160,16 @@ func LogJobRetryScheduled(ctx context.Context, jobID, actionDesc string, attempt
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	getLog().WithContext(ctx).Warn("Job scheduled for retry after failure", fields...)
+	// A deferred action (errors.Is(lastErr, ErrJobDeferred)) is rescheduling itself on
+	// purpose (e.g. Extended Capture waiting for the capture tail), not failing. Log it
+	// at Debug so expected backpressure does not flood the warning stream; genuine
+	// failures still log at Warn.
+	log := getLog().WithContext(ctx)
+	if errors.Is(lastErr, ErrJobDeferred) {
+		log.Debug("Job deferred, retry scheduled", fields...)
+		return
+	}
+	log.Warn("Job scheduled for retry after failure", fields...)
 }
 
 // LogJobSuccess logs when a job completes successfully

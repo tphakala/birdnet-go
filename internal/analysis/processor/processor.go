@@ -2199,34 +2199,28 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext) *SaveAudioAction {
 	settings := p.currentSettings()
 
-	captureLength := settings.Realtime.Audio.Export.Length
-	if !det.Result.EndTime.IsZero() && !det.Result.BeginTime.IsZero() {
-		preCapture := settings.Realtime.Audio.Export.PreCapture
-		derivedLength := int(det.Result.EndTime.Sub(det.Result.BeginTime).Seconds()) + preCapture
-		if derivedLength > captureLength {
-			captureLength = derivedLength
-			GetLogger().Info("Using derived capture duration from detection time span",
-				logger.String("detection_id", det.CorrelationID),
-				logger.String("species", det.Result.Species.CommonName),
-				logger.Int("duration_seconds", captureLength),
-				logger.Int("configured_length", settings.Realtime.Audio.Export.Length),
-				logger.String("operation", "extended_capture_audio_export"))
-		}
+	// Derive the capture length and readiness time from the shared conf helper so this
+	// scheduler and the media API (which decides whether a not-yet-written clip is still
+	// legitimately pending) never compute the window differently. The two log lines are
+	// preserved verbatim, driven off the returned Derived/Capped flags.
+	win, _ := settings.DetectionCaptureWindow(det.Result.BeginTime, det.Result.EndTime)
+	if win.Derived {
+		GetLogger().Info("Using derived capture duration from detection time span",
+			logger.String("detection_id", det.CorrelationID),
+			logger.String("species", det.Result.Species.CommonName),
+			logger.Int("duration_seconds", win.RequestedLength),
+			logger.Int("configured_length", settings.Realtime.Audio.Export.Length),
+			logger.String("operation", "extended_capture_audio_export"))
 	}
-
-	// Cap at capture buffer size to prevent reading beyond buffer bounds.
-	bufferCap := conf.DefaultCaptureBufferSeconds
-	if settings.Realtime.ExtendedCapture.Enabled && settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
-		bufferCap = settings.Realtime.ExtendedCapture.CaptureBufferSeconds
-	}
-	if captureLength > bufferCap {
+	if win.Capped {
+		// Cap at capture buffer size to prevent reading beyond buffer bounds.
 		GetLogger().Warn("Capping capture length at buffer size",
 			logger.String("detection_id", det.CorrelationID),
-			logger.Int("requested_seconds", captureLength),
-			logger.Int("buffer_seconds", bufferCap),
+			logger.Int("requested_seconds", win.RequestedLength),
+			logger.Int("buffer_seconds", win.BufferCap),
 			logger.String("operation", "capture_buffer_cap"))
-		captureLength = bufferCap
 	}
+	captureLength := win.Length
 
 	// Extended Capture may request a segment whose tail has not yet been
 	// written to the ring buffer (e.g. BeginTime was a few seconds ago but
@@ -2236,7 +2230,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	// mechanism picks it up once the buffer has caught up to captureEndTime.
 	// Only take this path when BufferMgr is available; if it is nil the
 	// eager read below will produce a proper error log and no-op action.
-	captureEndTime := det.Result.BeginTime.Add(time.Duration(captureLength) * time.Second)
+	captureEndTime := win.ReadyAt
 	if p.BufferMgr != nil && captureEndTime.After(time.Now()) {
 		return &SaveAudioAction{
 			Settings:         settings,

@@ -28,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
@@ -192,6 +193,11 @@ func TestGenerateSpectrogramByID_PanicUpdatesQueueStatus(t *testing.T) {
 	// Mock DS to return a valid clip path so we get past validateNoteIDAndGetClipPath
 	mockDS.On("GetNoteClipPath", "42").Return("test_panic.wav", nil)
 	mockDS.On("GetNoteModelType", "42").Return("bird", nil)
+	// The worker looks up capture times when the clip is missing (it is, in this empty
+	// tmp dir), so require the Get call: a zero-time note makes the pending-export window
+	// not-ok and the goroutine proceeds to the nil-context panic this test exercises.
+	// Mandatory (no .Maybe()) so the test fails if noteCaptureTimes stops looking up.
+	mockDS.On("Get", "42").Return(datastore.Note{}, nil)
 
 	controllerCore := &apicore.Core{SFS: sfs, DS: mockDS}
 	// By setting a nil context, the goroutine will panic when calling context.WithTimeout(nil, ...)
