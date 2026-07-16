@@ -84,13 +84,13 @@ func ReadCPUTemperature(basePath string) (celsius float64, details string, err e
 		}
 
 		tempStr := strings.TrimSpace(string(tempData))
-		tempMillCelsius, err := strconv.Atoi(tempStr)
+		tempMilliCelsius, err := strconv.Atoi(tempStr)
 		if err != nil {
 			lastAttemptDetails = fmt.Sprintf("Error parsing temp from %s (type: %s, value: '%s')", zoneName, sensorType, tempStr)
 			continue
 		}
 
-		zoneCelsius := float64(tempMillCelsius) / milliCelsiusPerCelsius
+		zoneCelsius := float64(tempMilliCelsius) / milliCelsiusPerCelsius
 		if zoneCelsius < minValidCPUTempCelsius || zoneCelsius > maxValidCPUTempCelsius {
 			lastAttemptDetails = fmt.Sprintf("Invalid temp from %s (type: %s, value: %.1f°C, expected %.0f-%.0f°C)", zoneName, sensorType, zoneCelsius, minValidCPUTempCelsius, maxValidCPUTempCelsius)
 			continue
