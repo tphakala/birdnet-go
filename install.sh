@@ -2371,7 +2371,10 @@ check_existing_installation_owner() {
 
         if [ -n "$service_file" ]; then
             local service_config_path
-            service_config_path=$(sed -n 's/.*-v \([^ ]*\):\/config.*/\1/p' "$service_file" 2>/dev/null | head -1)
+            # Read via _read_unit_file so a root-only-readable unit (mode 600) is still
+            # parsed (sudo fallback), consistent with load_existing_service_config; a silent
+            # read failure here would blank the cross-user detection path (GitHub #3950).
+            service_config_path=$(_read_unit_file "$service_file" | sed -n 's/.*-v \([^ ]*\):\/config.*/\1/p' | head -1)
 
             if [ -n "$service_config_path" ]; then
                 _check_install_home "${service_config_path%/birdnet-go-app/config}"
