@@ -749,8 +749,28 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 		return false
 	}
 
-	// Only return true if the database is fully initialized (COMPLETED)
-	return state.State == entities.MigrationStatusCompleted
+	if state.State != entities.MigrationStatusCompleted {
+		return false
+	}
+
+	// A COMPLETED marker alone is NOT sufficient evidence of a usable fresh v2 schema:
+	// if a legacy data table ('results' or 'notes') exists, this is a PR #2165-contaminated
+	// legacy database, not a real v2 database.
+	//
+	// Fail closed: this function gates destructive startup actions (deleting/renaming the
+	// migrated sidecar in CheckAndConsolidateAtStartup). If the probe itself errors we cannot
+	// prove the database is a clean v2 schema, so return false rather than risk misclassifying
+	// a contaminated or corrupt database as v2 (matches the migration_states probe above).
+	var legacyTableCount int64
+	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('results', 'notes')").Scan(&legacyTableCount).Error
+	if err != nil {
+		return false
+	}
+	if legacyTableCount > 0 {
+		return false
+	}
+
+	return true
 }
 
 // CheckMySQLHasFreshV2Schema reports whether a MySQL database holds a complete,
@@ -823,6 +843,14 @@ func hasCompleteFreshV2Schema(db *gorm.DB) bool {
 	// wedging the app in enhanced mode (GitHub #3575). Returning false makes
 	// initializeV2OnlyMode fall back to the v2_ prefixed schema, whose tables are
 	// (re)created by the subsequent Initialize()/AutoMigrate.
+	//
+	// A COMPLETED marker alongside a legacy data table ('results' or 'notes') means
+	// this is a PR #2165-contaminated legacy database, not a fresh no-prefix v2 schema.
+	// Mirror the same legacy-table guard used by CheckSQLiteHasV2Schema so both the
+	// SQLite and MySQL/dialect-agnostic paths reject contamination identically.
+	if db.Migrator().HasTable("results") || db.Migrator().HasTable("notes") {
+		return false
+	}
 	return db.Migrator().HasTable("detections")
 }
 

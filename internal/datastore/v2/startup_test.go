@@ -297,6 +297,41 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 
 		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for empty file")
 	})
+
+	// Both 'results' and 'notes' are legacy data tables; a COMPLETED marker alongside
+	// either one is PR #2165 contamination, so each must independently force a false result.
+	for _, lt := range []struct{ name, ddl string }{
+		{"results", "CREATE TABLE results (id INTEGER PRIMARY KEY)"},
+		{"notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY)"},
+	} {
+		t.Run("contaminated legacy database (PR #2165 bug) - "+lt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			dbPath := filepath.Join(tmpDir, "contaminated.db")
+
+			// Create a v2 database
+			manager, err := NewSQLiteManager(Config{DirectPath: dbPath})
+			require.NoError(t, err)
+			require.NoError(t, manager.Initialize())
+
+			// Set migration state to COMPLETED
+			now := time.Now()
+			state := entities.MigrationState{
+				ID:          1,
+				State:       entities.MigrationStatusCompleted,
+				StartedAt:   &now,
+				CompletedAt: &now,
+			}
+			require.NoError(t, manager.DB().Save(&state).Error)
+
+			// Simulate PR #2165 contamination: a legacy data table alongside the COMPLETED marker.
+			require.NoError(t, manager.DB().Exec(lt.ddl).Error)
+
+			require.NoError(t, manager.Close())
+
+			assert.False(t, CheckSQLiteHasV2Schema(dbPath),
+				"should return false when legacy %s table exists", lt.name)
+		})
+	}
 }
 
 // newSchemaCheckDB opens a fresh temp-file SQLite GORM DB for hasCompleteFreshV2Schema
@@ -398,6 +433,25 @@ func TestHasCompleteFreshV2Schema(t *testing.T) {
 		assert.True(t, hasCompleteFreshV2Schema(db),
 			"legacy singular table name must still resolve")
 	})
+
+	// The MySQL/dialect-agnostic path must reject either legacy data table ('results' or
+	// 'notes') coexisting with a COMPLETED marker and a bare detections table.
+	for _, lt := range []struct{ name, ddl string }{
+		{"results", "CREATE TABLE results (id INTEGER PRIMARY KEY)"},
+		{"notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY)"},
+	} {
+		t.Run("contaminated legacy database (PR #2165 bug) - "+lt.name, func(t *testing.T) {
+			db := newSchemaCheckDB(t)
+			seedMigrationStatesTable(t, db, entities.MigrationStatusCompleted)
+			createBareDetectionsTable(t, db)
+
+			// Simulate PR #2165 contamination: a legacy data table alongside the COMPLETED marker.
+			require.NoError(t, db.Exec(lt.ddl).Error)
+
+			assert.False(t, hasCompleteFreshV2Schema(db),
+				"should return false when legacy %s table exists", lt.name)
+		})
+	}
 }
 
 // createLegacySQLite creates a minimal legacy SQLite database with a notes table
