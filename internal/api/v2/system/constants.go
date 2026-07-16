@@ -26,19 +26,6 @@ const (
 	millisecondsPerSecond = 1000 // Milliseconds in a second
 )
 
-// CPU temperature constants.
-const (
-	// milliCelsiusPerCelsius converts sysfs thermal readings, which are exposed
-	// in milli-degrees Celsius, to degrees Celsius.
-	milliCelsiusPerCelsius = 1000.0
-	// minValidCPUTempCelsius and maxValidCPUTempCelsius bound plausible CPU
-	// readings used to reject bogus sensor values. The upper bound is
-	// deliberately generous: high-performance x86 CPUs can legitimately report
-	// above 100°C under load before thermal throttling.
-	minValidCPUTempCelsius = 0.0
-	maxValidCPUTempCelsius = 120.0
-)
-
 // errResponseHandled signals that an HTTP error response has already been sent to
 // the client, so the caller should return it without sending another. It mirrors
 // the package-api sentinel of the same purpose; the value never escapes this

@@ -243,14 +243,46 @@ func (c *CPULoadCheck) Run(_ context.Context) health.Result {
 	}
 }
 
+// Temperature display units. These mirror the dashboard "temperatureunit"
+// setting in internal/conf (kept as local constants so this package does not
+// depend on conf just to compare a string).
+const (
+	tempUnitCelsius    = "celsius"
+	tempUnitFahrenheit = "fahrenheit"
+)
+
+// Celsius-to-Fahrenheit conversion factors.
+const (
+	fahrenheitScale  = 9.0 / 5.0
+	fahrenheitOffset = 32.0
+)
+
 // TemperatureCheck verifies that the system temperature is within safe bounds.
 type TemperatureCheck struct {
 	getTemp func() (float64, error)
+	getUnit func() string
 }
 
-// NewTemperatureCheck creates a TemperatureCheck that uses getTemp to obtain the current temperature in Celsius.
-func NewTemperatureCheck(getTemp func() (float64, error)) *TemperatureCheck {
-	return &TemperatureCheck{getTemp: getTemp}
+// NewTemperatureCheck creates a TemperatureCheck that uses getTemp to obtain the
+// current temperature in Celsius. getUnit returns the configured display unit
+// ("celsius" or "fahrenheit") and is read per Run so a live settings change is
+// reflected without a restart; a nil getUnit displays Celsius.
+func NewTemperatureCheck(getTemp func() (float64, error), getUnit func() string) *TemperatureCheck {
+	return &TemperatureCheck{getTemp: getTemp, getUnit: getUnit}
+}
+
+// displayTemperature converts a Celsius reading to the configured display unit,
+// returning the converted value and its symbol. Warn/critical thresholds are
+// always compared in Celsius; only the displayed value is converted.
+func (c *TemperatureCheck) displayTemperature(celsius float64) (value float64, symbol string) {
+	unit := tempUnitCelsius
+	if c.getUnit != nil {
+		unit = c.getUnit()
+	}
+	if unit == tempUnitFahrenheit {
+		return celsius*fahrenheitScale + fahrenheitOffset, "F"
+	}
+	return celsius, "C"
 }
 
 // Name returns the check identifier.
@@ -282,16 +314,21 @@ func (c *TemperatureCheck) Run(_ context.Context) health.Result {
 	const warnTemp = 75.0
 	const critTemp = 85.0
 
+	// Thresholds are physical constants compared in Celsius; only the displayed
+	// value is converted to the configured unit (matching how other checks embed
+	// a display value in the message while keeping raw values in Details).
+	displayTemp, unitSymbol := c.displayTemperature(tempC)
+
 	status := health.StatusHealthy
-	msg := fmt.Sprintf("Temperature OK (%.1f C)", tempC)
+	msg := fmt.Sprintf("Temperature OK (%.1f %s)", displayTemp, unitSymbol)
 
 	switch {
 	case tempC >= critTemp:
 		status = health.StatusCritical
-		msg = fmt.Sprintf("Temperature critical: %.1f C", tempC)
+		msg = fmt.Sprintf("Temperature critical: %.1f %s", displayTemp, unitSymbol)
 	case tempC >= warnTemp:
 		status = health.StatusWarning
-		msg = fmt.Sprintf("Temperature high: %.1f C", tempC)
+		msg = fmt.Sprintf("Temperature high: %.1f %s", displayTemp, unitSymbol)
 	}
 
 	return health.Result{
@@ -300,7 +337,12 @@ func (c *TemperatureCheck) Run(_ context.Context) health.Result {
 		Status:   status,
 		Message:  msg,
 		Details: map[string]any{
-			"temperature_c": tempC,
+			// temperature_c is the raw Celsius reading (source of truth for
+			// machine consumers); the *_display/*_unit pair mirrors what the
+			// message shows.
+			"temperature_c":       tempC,
+			"temperature_display": displayTemp,
+			"temperature_unit":    unitSymbol,
 		},
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
