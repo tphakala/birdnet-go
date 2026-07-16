@@ -872,19 +872,32 @@ var legacyDataTables = []string{"results", "notes"}
 // tables behind. The bool is meaningful only when the returned error is nil; because this decision
 // gates destructive startup actions, callers should fail closed (treat as not-clean-v2) on error.
 func legacyDataPresent(db *gorm.DB) (bool, error) {
+	// Resolve which tables exist with an error-returning probe. db.Migrator().HasTable swallows
+	// the underlying metadata-query error and just reports false, which would let a probe failure
+	// be misread as "no legacy data" (fail open) on a database this function is meant to fail
+	// closed for. GetTables surfaces the error so the caller can reject the database instead.
+	tables, err := db.Migrator().GetTables()
+	if err != nil {
+		return false, err
+	}
+	existing := make(map[string]struct{}, len(tables))
+	for _, t := range tables {
+		existing[t] = struct{}{}
+	}
+
 	for _, name := range legacyDataTables {
-		if !db.Migrator().HasTable(name) {
+		if _, ok := existing[name]; !ok {
 			continue
 		}
-		// Existence probe, not a full COUNT(*): a contaminated legacy table can hold
-		// hundreds of thousands of unmigrated rows (GitHub #3924), and counting all of
-		// them on every startup just to learn "is it non-empty" would scan the whole table
-		// and could approach the DB startup timeout. SELECT 1 ... LIMIT 1 stops at the first row.
-		var found []int
-		if err := db.Table(name).Select("1").Limit(1).Find(&found).Error; err != nil {
-			return false, err
+		// Existence probe, not a full COUNT(*): a contaminated legacy table can hold hundreds of
+		// thousands of unmigrated rows (GitHub #3924), and counting all of them on every startup
+		// just to learn "is it non-empty" would scan the whole table and could approach the DB
+		// startup timeout. SELECT 1 ... LIMIT 1 stops at the first row; RowsAffected reports it.
+		res := db.Table(name).Select("1").Limit(1).Scan(new(int))
+		if res.Error != nil {
+			return false, res.Error
 		}
-		if len(found) > 0 {
+		if res.RowsAffected > 0 {
 			return true, nil
 		}
 	}

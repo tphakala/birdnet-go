@@ -599,6 +599,20 @@ func TestLegacyDataPresent(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, present, "contamination in the second legacy table must still be detected")
 	})
+
+	t.Run("metadata probe error fails closed", func(t *testing.T) {
+		// A failure to enumerate tables must propagate as an error (fail closed), never be
+		// reported as (false, nil) which callers would read as "clean v2". Close the underlying
+		// connection to force the GetTables metadata query to fail.
+		db := newSchemaCheckDB(t)
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+
+		present, err := legacyDataPresent(db)
+		require.Error(t, err, "a metadata-probe failure must propagate")
+		assert.False(t, present, "the bool must be the safe zero value on error")
+	})
 }
 
 // createLegacySQLite creates a minimal legacy SQLite database with a notes table
