@@ -889,15 +889,18 @@ func legacyDataPresent(db *gorm.DB) (bool, error) {
 		if _, ok := existing[name]; !ok {
 			continue
 		}
-		// Existence probe, not a full COUNT(*): a contaminated legacy table can hold hundreds of
-		// thousands of unmigrated rows (GitHub #3924), and counting all of them on every startup
-		// just to learn "is it non-empty" would scan the whole table and could approach the DB
-		// startup timeout. SELECT 1 ... LIMIT 1 stops at the first row; RowsAffected reports it.
-		res := db.Table(name).Select("1").Limit(1).Scan(new(int))
-		if res.Error != nil {
-			return false, res.Error
+		// Existence probe via SELECT EXISTS, not a full COUNT(*): a contaminated legacy table can
+		// hold hundreds of thousands of unmigrated rows (GitHub #3924), and counting all of them on
+		// every startup would scan the whole table and could approach the DB startup timeout. EXISTS
+		// short-circuits at the first row and yields an explicit 0/1, so it does not depend on GORM
+		// populating RowsAffected after Scan (which can vary by version/driver). The table name comes
+		// from the fixed legacyDataTables allowlist, so the interpolation is safe. Backtick quoting
+		// works on both SQLite and MySQL (mirrors cleanupLegacySchemaContamination in this package).
+		var hasRow int
+		if err := db.Raw("SELECT EXISTS(SELECT 1 FROM `" + name + "`)").Scan(&hasRow).Error; err != nil {
+			return false, err
 		}
-		if res.RowsAffected > 0 {
+		if hasRow != 0 {
 			return true, nil
 		}
 	}
