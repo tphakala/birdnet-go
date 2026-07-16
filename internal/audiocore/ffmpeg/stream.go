@@ -771,8 +771,10 @@ func (s *Stream) Run(parentCtx context.Context) {
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
 
 				// Publish stream event for alerting rules.
-				// EOF returns nil from handleReadError and never reaches here,
-				// so only silence timeouts are classified as disconnections.
+				// A normal EOF (audio already seen) or a canceled context returns
+				// nil from handleReadError and never reaches here; a data-less EOF
+				// timeout surfaces as a generic stream error. Only silence timeouts
+				// are classified as disconnections.
 				eventName := alerting.EventStreamError
 				if isSilenceTimeout {
 					eventName = alerting.EventStreamDisconnected
@@ -1157,6 +1159,25 @@ func (s *Stream) handleReadError(readErr error, startTime time.Time) error {
 	}
 
 	if errors.Is(readErr, io.EOF) || errors.Is(readErr, context.Canceled) {
+		// A data-less EOF while the context is still live means FFmpeg exited
+		// without ever delivering audio (e.g. an RTSP connection timeout past the
+		// quick-exit window). Surface it as an error so Run records the failure
+		// and can engage the audio-only fallback (issues #3902/#3936); a normal
+		// EOF (audio already seen) or a canceled context stays a clean stop.
+		if errors.Is(readErr, io.EOF) && s.ctx.Err() == nil {
+			s.bytesReceivedMu.RLock()
+			totalBytes := s.totalBytesReceived
+			s.bytesReceivedMu.RUnlock()
+			if totalBytes == 0 {
+				return errors.Newf("error reading from FFmpeg: stream ended without producing data").
+					Category(errors.CategoryRTSP).
+					Component("ffmpeg-stream").
+					Context("operation", "process_audio").
+					Context("url", s.config.safeURL()).
+					Context("runtime_seconds", time.Since(startTime).Seconds()).
+					Build()
+			}
+		}
 		return nil
 	}
 
