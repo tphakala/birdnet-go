@@ -5052,7 +5052,9 @@ _read_unit_file() {
         if sudo -n cat "$f" 2>/dev/null; then
             return 0
         fi
-        if [ -t 0 ]; then
+        # Interactive sudo only outside silent mode and with a TTY, so an unattended
+        # or --silent run never blocks on a password prompt (GitHub #3950 review).
+        if [ "${SILENT_MODE:-false}" != "true" ] && [ -t 0 ]; then
             sudo cat "$f" 2>/dev/null
         fi
     fi
