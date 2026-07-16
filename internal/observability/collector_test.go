@@ -2,8 +2,6 @@ package observability
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -144,38 +142,8 @@ func TestSkipCollectorFS(t *testing.T) {
 	assert.False(t, skipCollectorFS("ntfs"))
 }
 
-func TestReadThermalZone_InvalidPath(t *testing.T) {
-	t.Parallel()
-
-	_, ok := readThermalZone("/nonexistent/path")
-	assert.False(t, ok)
-}
-
-func TestReadThermalZone_ValidSyntheticZone(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-
-	// Create a synthetic thermal zone
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "type"), []byte("cpu-thermal\n"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "temp"), []byte("45000\n"), 0o600))
-
-	temp, ok := readThermalZone(tmpDir)
-	require.True(t, ok)
-	assert.InDelta(t, 45.0, temp, 0.01)
-}
-
-func TestReadThermalZone_NonCPUSensor(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "type"), []byte("gpu-thermal\n"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "temp"), []byte("50000\n"), 0o600))
-
-	_, ok := readThermalZone(tmpDir)
-	assert.False(t, ok, "non-CPU sensor should be skipped")
-}
+// CPU thermal-zone reading tests moved to thermal_test.go alongside the shared
+// ReadCPUTemperature reader.
 
 func TestCollector_CollectsInferenceMetrics(t *testing.T) {
 	t.Parallel()
@@ -264,19 +232,6 @@ func TestCollector_EmitsRTFKeyAndGauge(t *testing.T) {
 
 	assert.Equal(t, "M", gotRTFModel, "rtf gauge model should be M")
 	assert.InDelta(t, 0.01, gotRTF, 0.001, "rtf should be approx 0.01")
-}
-
-func TestReadThermalZone_OutOfRangeTemperature(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "type"), []byte("cpu-thermal\n"), 0o600))
-	// 150°C is out of valid range
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "temp"), []byte("150000\n"), 0o600))
-
-	_, ok := readThermalZone(tmpDir)
-	assert.False(t, ok, "out-of-range temperature should be rejected")
 }
 
 // TestCollector_AudioQueueDepth verifies that collectAudio records the aggregate

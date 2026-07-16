@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"golang.org/x/text/cases"
@@ -827,25 +827,18 @@ func (c *Handler) isRelevantProcess(p *process.Process, currentPID int32) bool {
 	return p.Pid == currentPID || parentPID == currentPID
 }
 
-// GetSystemCPUTemperature handles GET /api/v2/system/temperature/cpu
-// It attempts to read the CPU temperature by scanning /sys/class/thermal/thermal_zone*
-// for specific types like 'cpu-thermal' or 'x86_pkg_temp'.
-// It validates the temperature to be within a reasonable range (0-120°C).
-// thermalBasePath is the base directory for thermal zones on Linux
-const thermalBasePath = "/sys/class/thermal/"
+// thermalBasePath is the base directory for thermal zones on Linux. It aliases
+// observability.DefaultThermalBasePath so the path has a single source of truth
+// shared with the metrics collector and the temperature health check.
+const thermalBasePath = observability.DefaultThermalBasePath
 
 // defaultNoSensorMessage is the default message when no suitable CPU temperature sensor is found
 const defaultNoSensorMessage = "No suitable CPU temperature sensor found or temperature out of valid range."
 
-// cpuThermalTypes contains sensor types for CPU temperature
-var cpuThermalTypes = map[string]bool{
-	"cpu-thermal":     true, // Common on Raspberry Pi
-	"x86_pkg_temp":    true, // Common on Intel x86 systems (like NUC)
-	"soc_thermal":     true, // Common on some ARM SoCs
-	"cpu_thermal":     true, // Alternative name
-	"thermal-fan-est": true, // Seen on some systems
-}
-
+// GetSystemCPUTemperature handles GET /api/v2/system/temperature/cpu. It reads
+// the CPU temperature via observability.ReadCPUTemperature, which scans
+// /sys/class/thermal/thermal_zone* for CPU sensor types (e.g. 'cpu-thermal',
+// 'x86_pkg_temp') and validates the reading against the shared valid range.
 func (c *Handler) GetSystemCPUTemperature(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Getting system CPU temperature", logger.String("path", path), logger.String("ip", ip))
@@ -864,7 +857,7 @@ func (c *Handler) GetSystemCPUTemperature(ctx echo.Context) error {
 		return ctx.JSON(http.StatusOK, response)
 	}
 
-	celsius, details, err := readCPUTemperature(thermalBasePath)
+	celsius, details, err := observability.ReadCPUTemperature(thermalBasePath)
 	if err == nil {
 		response.Celsius = celsius
 		response.IsAvailable = true
@@ -907,77 +900,6 @@ func (c *Handler) setTemperatureNotFoundResponse(response *SystemTemperature, la
 	}
 
 	c.LogInfoIfEnabled("Could not retrieve a valid CPU temperature after checking all zones.", logger.String("final_message", response.Message), logger.String("sensor_details_attempted", response.SensorDetails), logger.String("request_path", path), logger.String("ip", ip))
-}
-
-// readCPUTemperature attempts to read the CPU temperature by scanning thermal zones in the base path.
-// It returns the temperature in Celsius, details about the sensor, and any error.
-func readCPUTemperature(basePath string) (celsius float64, details string, err error) {
-	zones, err := filepath.Glob(filepath.Join(basePath, "thermal_zone*"))
-	if err != nil {
-		return 0, "", fmt.Errorf("failed to scan for thermal zones: %w", err)
-	}
-
-	var (
-		lastAttemptDetails string
-		hottestCelsius     float64
-		hottestDetails     string
-		found              bool
-	)
-	for _, zonePath := range zones {
-		zoneName := filepath.Base(zonePath)
-		typePath := filepath.Join(zonePath, "type")
-
-		//nolint:gosec // G304: typePath is from filepath.Glob
-		typeData, err := os.ReadFile(typePath)
-		if err != nil {
-			continue
-		}
-
-		sensorType := strings.ToLower(strings.TrimSpace(string(typeData)))
-		if !cpuThermalTypes[sensorType] {
-			continue
-		}
-
-		tempFilePath := filepath.Join(zonePath, "temp")
-		//nolint:gosec // G304: tempFilePath is from filepath.Glob
-		tempData, err := os.ReadFile(tempFilePath)
-		if err != nil {
-			lastAttemptDetails = fmt.Sprintf("Error reading temp from %s (type: %s)", zoneName, sensorType)
-			continue
-		}
-
-		tempStr := strings.TrimSpace(string(tempData))
-		tempMillCelsius, err := strconv.Atoi(tempStr)
-		if err != nil {
-			lastAttemptDetails = fmt.Sprintf("Error parsing temp from %s (type: %s, value: '%s')", zoneName, sensorType, tempStr)
-			continue
-		}
-
-		zoneCelsius := float64(tempMillCelsius) / milliCelsiusPerCelsius
-		if zoneCelsius < minValidCPUTempCelsius || zoneCelsius > maxValidCPUTempCelsius {
-			lastAttemptDetails = fmt.Sprintf("Invalid temp from %s (type: %s, value: %.1f°C, expected %.0f-%.0f°C)", zoneName, sensorType, zoneCelsius, minValidCPUTempCelsius, maxValidCPUTempCelsius)
-			continue
-		}
-
-		// Track the hottest valid CPU zone rather than returning the first, so
-		// multi-zone systems (dual-socket, multi-die) still surface an
-		// overheating package and selection does not depend on glob ordering.
-		if !found || zoneCelsius > hottestCelsius {
-			hottestCelsius = zoneCelsius
-			hottestDetails = fmt.Sprintf("Source: %s, Type: %s", zoneName, sensorType)
-			found = true
-		}
-	}
-
-	if found {
-		return hottestCelsius, hottestDetails, nil
-	}
-
-	if lastAttemptDetails != "" {
-		return 0, lastAttemptDetails, fmt.Errorf("a targeted CPU sensor was found but could not be read successfully or value was invalid")
-	}
-
-	return 0, "", fmt.Errorf("no valid CPU temperature sensor found")
 }
 
 // Helper functions

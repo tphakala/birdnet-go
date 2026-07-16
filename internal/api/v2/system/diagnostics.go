@@ -90,15 +90,27 @@ func (c *Handler) registerHealthChecks() {
 		checks.NewDiskSpaceCheck(c.getDataPaths()),
 		checks.NewMemoryCheck(),
 		checks.NewCPULoadCheck(apicore.GetCachedCPUUsage),
-		checks.NewTemperatureCheck(func() (float64, error) {
-			celsius, _, err := readCPUTemperature(thermalBasePath)
-			if err != nil {
-				// Surface the real reason (no sensor, unreadable, or out of
-				// range) so the health check reports an accurate cause.
-				return 0, err
-			}
-			return celsius, nil
-		}),
+		checks.NewTemperatureCheck(
+			func() (float64, error) {
+				celsius, _, err := observability.ReadCPUTemperature(thermalBasePath)
+				if err != nil {
+					// Surface the real reason (no sensor, unreadable, or out of
+					// range) so the health check reports an accurate cause.
+					return 0, err
+				}
+				return celsius, nil
+			},
+			// Read the configured display unit per Run so a live settings
+			// change is reflected without a restart. Guard against a nil
+			// settings snapshot (possible only on a controller that never
+			// stored settings, e.g. standalone tests); "" displays Celsius.
+			func() string {
+				if s := c.CurrentSettings(); s != nil {
+					return s.Realtime.Dashboard.TemperatureUnit
+				}
+				return ""
+			},
+		),
 		checks.NewUptimeCheck(c.startTime),
 
 		// Audio checks

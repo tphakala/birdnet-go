@@ -1,4 +1,4 @@
-package system
+package observability
 
 import (
 	"os"
@@ -154,7 +154,7 @@ func TestReadCPUTemperature(t *testing.T) {
 			t.Parallel()
 
 			base := writeThermalZones(t, tt.zones)
-			celsius, details, err := readCPUTemperature(base)
+			celsius, details, err := ReadCPUTemperature(base)
 
 			if tt.wantErr {
 				require.Error(t, err)
