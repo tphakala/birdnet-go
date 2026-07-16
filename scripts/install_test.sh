@@ -100,6 +100,9 @@ resolve_host_timezone() { printf '%s' "${1:-UTC}"; }
 check_directory_exists() { return 1; }
 is_raspberry_pi() { return 1; }
 has_intel_gpu() { return 1; }
+# No docker on the CI runner path we exercise; the container-TZ fallback degrades to empty.
+# The load_existing_service_config container-fallback test overrides this stub.
+safe_docker() { return 1; }
 
 # Globals the extracted functions reference (install.sh defines these at the top; the harness
 # only pulls function bodies, so under set -u they must exist here).
@@ -116,6 +119,7 @@ for fn in \
     set_yaml_value \
     set_first_audio_source \
     _extract_bind_addr \
+    _read_unit_file \
     load_existing_service_config \
     generate_systemd_service_content \
     apply_tls_settings \
@@ -650,6 +654,131 @@ remote_path_safe "/data'; rm -rf ~"; assert_nonzero "rejects embedded single quo
 it "remote_default_app_path"
 assert_eq "default app path from home" "/home/pi/birdnet-go-app" "$(remote_default_app_path /home/pi)"
 assert_eq "root home" "/root/birdnet-go-app" "$(remote_default_app_path /root)"
+
+# ===========================================================================
+# resolve_host_timezone / _valid_iana_tz  (GitHub #3950)
+# timedatectl must win over a stale /etc/timezone; each source is validated
+# independently so an invalid early source no longer defeats a valid later one.
+# These load the REAL functions, replacing the deterministic stub used by the
+# generation tests above, so this section MUST stay after them.
+# ===========================================================================
+it "resolve_host_timezone"
+load_fn _valid_iana_tz
+load_fn resolve_host_timezone
+
+# Hermetic zoneinfo fixture: these tests never depend on the runner's tzdata and can
+# validate Etc/UTC deterministically. BNG_TZ_ZONEINFO_DIR points _valid_iana_tz at it and
+# stays exported for the container-fallback and silent-mode blocks below (unset at the end).
+ZI="${WORK}/zoneinfo"
+mkdir -p "$ZI/America" "$ZI/Europe" "$ZI/Asia" "$ZI/Etc"
+touch "$ZI/America/Chicago" "$ZI/Europe/Helsinki" "$ZI/Europe/Berlin" \
+      "$ZI/Asia/Tokyo" "$ZI/Etc/UTC"
+ZI="$(cd "$ZI" && pwd -P)"   # canonical, so the /etc/localtime symlink test prefix-strips cleanly
+export BNG_TZ_ZONEINFO_DIR="$ZI"
+
+tzdir="${WORK}/tz"; mkdir -p "$tzdir"
+printf 'Etc/UTC\n' > "${tzdir}/etc_stale"
+printf 'Europe/Helsinki\n' > "${tzdir}/etc_valid"
+ln -sf "$ZI/Asia/Tokyo" "${tzdir}/localtime_tokyo"
+
+# 1. Regression repro: stale /etc/timezone=Etc/UTC must NOT override a correct
+#    timedatectl=America/Chicago when no candidate is supplied. Pre-fix this returned
+#    Etc/UTC (the container-TZ reset). BNG_TZ_LOCALTIME points at a nonexistent path.
+timedatectl() { echo "America/Chicago"; }
+got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/etc_stale" BNG_TZ_LOCALTIME="${tzdir}/none" resolve_host_timezone "")
+assert_eq "timedatectl beats stale /etc/timezone" "America/Chicago" "$got"
+
+# 2. Debian 13 / Forgejo #877 guard: no /etc/timezone, timedatectl still resolves.
+timedatectl() { echo "Europe/Helsinki"; }
+got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/absent" BNG_TZ_LOCALTIME="${tzdir}/none" resolve_host_timezone "")
+assert_eq "no /etc/timezone: timedatectl resolves (Debian 13)" "Europe/Helsinki" "$got"
+
+# 3. Candidate preservation: an explicit prior zone wins over host detection.
+timedatectl() { echo "America/Chicago"; }
+got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/etc_stale" BNG_TZ_LOCALTIME="${tzdir}/none" resolve_host_timezone "Europe/Helsinki")
+assert_eq "candidate preserved over detection" "Europe/Helsinki" "$got"
+
+# 4. timedatectl 'n/a' rejected by validation; /etc/localtime symlink resolves.
+timedatectl() { echo "n/a"; }
+got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/absent" BNG_TZ_LOCALTIME="${tzdir}/localtime_tokyo" resolve_host_timezone "")
+assert_eq "timedatectl n/a: falls through to /etc/localtime symlink" "Asia/Tokyo" "$got"
+
+# 5. timedatectl absent: /etc/timezone used as last resort.
+command_exists() { case "$1" in timedatectl) return 1 ;; *) command -v "$1" >/dev/null 2>&1 ;; esac; }
+got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/etc_valid" BNG_TZ_LOCALTIME="${tzdir}/none" resolve_host_timezone "")
+assert_eq "no timedatectl: /etc/timezone last resort" "Europe/Helsinki" "$got"
+command_exists() { command -v "$1" >/dev/null 2>&1; }   # restore
+
+# 6. Path-traversal candidate rejected; empty when nothing else valid.
+timedatectl() { echo ""; }
+got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/absent" BNG_TZ_LOCALTIME="${tzdir}/none" resolve_host_timezone "../../etc/passwd")
+assert_eq "traversal candidate rejected, nothing else -> empty" "" "$got"
+
+# 7. Invalid candidate falls through to a valid timedatectl.
+timedatectl() { echo "Europe/Berlin"; }
+got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/absent" BNG_TZ_LOCALTIME="${tzdir}/none" resolve_host_timezone "Not/AZone")
+assert_eq "invalid candidate falls through to detection" "Europe/Berlin" "$got"
+
+unset -f timedatectl
+
+# ===========================================================================
+# load_existing_service_config: running-container TZ fallback (GitHub #3950)
+# ===========================================================================
+it "load_existing_service_config container-TZ fallback"
+unit_notz="${WORK}/notz.service"
+cat > "$unit_notz" <<'UNIT'
+[Service]
+ExecStart=/usr/bin/docker run --rm --name birdnet-go \
+    -p 8080:8080 \
+    --env BIRDNET_UID=1000 \
+    -v /x:/config
+UNIT
+# Unit carries no --env TZ=; the running container reports it via safe_docker inspect.
+safe_docker() { printf 'PATH=/usr/bin\nTZ=Europe/Oslo\nLANG=C\n'; }
+WEB_PORT=""; WEB_PORT_BIND_ADDR=""; BIND_TLS_PORTS="false"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""; CONFIGURED_TZ=""
+load_existing_service_config "$unit_notz"
+assert_eq "container TZ fallback used when unit has no TZ" "Europe/Oslo" "$CONFIGURED_TZ"
+
+# A unit that DOES carry TZ wins over the container fallback.
+unit_withtz="${WORK}/withtz.service"
+cat > "$unit_withtz" <<'UNIT'
+[Service]
+ExecStart=/usr/bin/docker run --rm --name birdnet-go \
+    -p 8080:8080 \
+    --env TZ="America/Chicago" \
+    -v /x:/config
+UNIT
+safe_docker() { printf 'TZ=Europe/Oslo\n'; }
+WEB_PORT=""; WEB_PORT_BIND_ADDR=""; BIND_TLS_PORTS="false"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""; CONFIGURED_TZ=""
+load_existing_service_config "$unit_withtz"
+assert_eq "unit TZ wins over container fallback" "America/Chicago" "$CONFIGURED_TZ"
+safe_docker() { return 1; }   # restore default stub
+
+# ===========================================================================
+# configure_timezone silent mode: preserve a restored zone; UTC only when nothing
+# resolves (GitHub #3950 - the old inline chain clobbered a restored zone).
+# ===========================================================================
+it "configure_timezone silent mode"
+load_fn configure_timezone
+SILENT_MODE="true"
+
+# (a) a zone already restored this run is preserved (candidate wins in the resolver).
+timedatectl() { echo "America/Chicago"; }
+CONFIGURED_TZ="Europe/Helsinki"
+BNG_TZ_ETC_TIMEZONE="${WORK}/no_such_tz" BNG_TZ_LOCALTIME="${WORK}/no_such_localtime" configure_timezone
+assert_eq "silent: restored zone preserved" "Europe/Helsinki" "$CONFIGURED_TZ"
+
+# (b) nothing detectable -> UTC.
+command_exists() { case "$1" in timedatectl) return 1 ;; *) command -v "$1" >/dev/null 2>&1 ;; esac; }
+CONFIGURED_TZ=""
+BNG_TZ_ETC_TIMEZONE="${WORK}/no_such_tz" BNG_TZ_LOCALTIME="${WORK}/no_such_localtime" configure_timezone
+assert_eq "silent: no detection -> UTC" "UTC" "$CONFIGURED_TZ"
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+unset -f timedatectl
+SILENT_MODE=""
+unset BNG_TZ_ZONEINFO_DIR
 
 # ===========================================================================
 # Result
