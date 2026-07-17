@@ -62,6 +62,29 @@ type Handler struct {
 	// requests may run concurrently.
 	selfProc   *process.Process
 	selfProcMu sync.Mutex
+
+	// procSamples caches one *process.Process per PID for the process table, for the
+	// same reason selfProc exists: process.Processes() hands back a freshly built
+	// instance on every request, and a fresh instance's CPUPercent() is the lifetime
+	// average since the process started, not what it is using now. Holding an instance
+	// across requests is what lets Percent(0) report interval usage, so the table can
+	// agree with the system CPU gauge instead of reporting a long-run average beside a
+	// live reading.
+	//
+	// Entries are validated against the process create time because the OS reuses PIDs:
+	// a recycled PID would otherwise be diffed against the dead process's CPU history.
+	// pruneProcSamples drops dead PIDs so the map stays bounded by the live process
+	// count. procSamplesMu guards both because Percent(0) mutates the instance's stored
+	// sample and requests may run concurrently.
+	procSamples   map[int32]*procSample
+	procSamplesMu sync.Mutex
+}
+
+// procSample is a retained per-PID CPU sampler plus the create time that identifies
+// which process the sampler's history belongs to.
+type procSample struct {
+	proc       *process.Process
+	createTime int64
 }
 
 // New constructs the system handler from the shared core, the facade controller

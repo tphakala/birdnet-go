@@ -566,6 +566,53 @@ func normalizeProcessCPU(cpuPercent float64) float64 {
 	}
 }
 
+// processCPUPercent returns p's CPU usage since the previous request, in gopsutil's
+// per-single-core units (so still normalizeProcessCPU's input).
+//
+// It samples through a retained per-PID instance (see the procSamples field) rather
+// than the caller's freshly listed p, because Percent(0) measures against the sample
+// the instance itself stored last time. createTimeMillis identifies the process
+// behind the PID; a mismatch means the PID was recycled and the retained history
+// belongs to a dead process, so the entry is replaced.
+//
+// The first sample for a PID has nothing to diff against and returns 0. That costs
+// one poll per process per server run — the cache lives as long as the handler — not
+// one per page load.
+func (c *Handler) processCPUPercent(p *process.Process, createTimeMillis int64) (float64, error) {
+	c.procSamplesMu.Lock()
+	defer c.procSamplesMu.Unlock()
+
+	if c.procSamples == nil {
+		c.procSamples = make(map[int32]*procSample)
+	}
+
+	if sample, ok := c.procSamples[p.Pid]; ok && sample.createTime == createTimeMillis {
+		return sample.proc.Percent(0)
+	}
+
+	c.procSamples[p.Pid] = &procSample{proc: p, createTime: createTimeMillis}
+	return p.Percent(0)
+}
+
+// pruneProcSamples drops retained samplers whose PID is no longer running, keeping
+// procSamples bounded by the live process count on a long-lived host. live is the
+// full process list, not the filtered table, so a process the table hides is not
+// evicted and re-primed on every request.
+func (c *Handler) pruneProcSamples(live []*process.Process) {
+	liveSet := make(map[int32]struct{}, len(live))
+	for _, p := range live {
+		liveSet[p.Pid] = struct{}{}
+	}
+
+	c.procSamplesMu.Lock()
+	defer c.procSamplesMu.Unlock()
+	for pid := range c.procSamples {
+		if _, ok := liveSet[pid]; !ok {
+			delete(c.procSamples, pid)
+		}
+	}
+}
+
 // selfProcessLocked returns the cached *process.Process for the current PID,
 // creating it on first use. Reusing a single instance is what lets Percent(0)
 // report interval CPU usage (see the selfProc field). Callers must hold
@@ -758,7 +805,29 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 		status = valueUnknown
 	}
 
-	cpuPercent, err := p.CPUPercent()
+	// Read the create time before CPU: it doubles as the identity check that keeps a
+	// retained CPU sampler from being diffed against a recycled PID's history.
+	createTimeMillis, createErr := p.CreateTime()
+	var uptimeSeconds int64
+	if createErr != nil {
+		// Log error but default to 0
+		c.LogWarnIfEnabled("Failed to get process create time", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(createErr))
+		uptimeSeconds = 0
+	} else {
+		// Calculate uptime relative to now
+		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/millisecondsPerSecond),
+			// Sanity check for clock skew
+			0)
+	}
+
+	var cpuPercent float64
+	if createErr != nil {
+		// Without a create time a recycled PID is indistinguishable from the original, so
+		// the retained sampler cannot be trusted; fall back to the lifetime average.
+		cpuPercent, err = p.CPUPercent()
+	} else {
+		cpuPercent, err = c.processCPUPercent(p, createTimeMillis)
+	}
 	if err != nil {
 		// Log error but default to 0
 		c.LogWarnIfEnabled("Failed to get process CPU percent", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
@@ -779,19 +848,6 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 		memRSS = 0
 	} else {
 		memRSS = memInfo.RSS // Resident Set Size
-	}
-
-	createTimeMillis, err := p.CreateTime()
-	var uptimeSeconds int64
-	if err != nil {
-		// Log error but default to 0
-		c.LogWarnIfEnabled("Failed to get process create time", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
-		uptimeSeconds = 0
-	} else {
-		// Calculate uptime relative to now
-		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/millisecondsPerSecond),
-			// Sanity check for clock skew
-			0)
 	}
 
 	return ProcessInfo{
@@ -841,6 +897,8 @@ func (c *Handler) GetProcessInfo(ctx echo.Context) error {
 		c.LogErrorIfEnabled("Failed to list processes", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to list processes", http.StatusInternalServerError)
 	}
+
+	c.pruneProcSamples(procs)
 
 	processInfos := c.collectProcessInfos(procs, showAll)
 
