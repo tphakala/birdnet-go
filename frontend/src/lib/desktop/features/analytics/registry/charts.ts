@@ -322,7 +322,10 @@ async function fetchSpeciesDistribution(
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
-    limit: String(SPECIES_RIDGELINE_LIMIT),
+    // With a selection, request one row per selected species so the server's volume-ordered LIMIT
+    // returns all of them (a fixed top-N would push the lowest-volume picks off the bottom); with no
+    // selection, the top-N default. The server clamps to its own max, matching the control bar's cap.
+    limit: String(params.species.length > 0 ? params.species.length : SPECIES_RIDGELINE_LIMIT),
   });
   // A non-empty selection narrows the ridgeline to those species; empty keeps the top-N default.
   params.species.forEach(name => search.append('species', name));
@@ -385,7 +388,10 @@ async function fetchAcousticSuccession(
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
-    limit: String(SUCCESSION_LIMIT),
+    // With a selection, request one band per selected species so the server's volume-ordered LIMIT
+    // returns all of them (a fixed top-N would push the lowest-volume picks off the bottom); with no
+    // selection, the top-N default. The server clamps to its own max, matching the control bar's cap.
+    limit: String(params.species.length > 0 ? params.species.length : SUCCESSION_LIMIT),
   });
   // A non-empty selection narrows the streamgraph to those species; empty keeps the top-N default.
   params.species.forEach(name => search.append('species', name));

@@ -855,25 +855,39 @@ func (r *detectionRepository) countByHalfOpenRange(ctx context.Context, start, e
 // scientific-name filter: when non-empty the ranking is restricted to those species (parameterized
 // IN, applied before the volume ORDER BY / LIMIT so the result stays volume-ordered and capped);
 // when nil/empty every species is ranked.
+//
+// False positives are excluded from the count, matching GetSpeciesSummary (which powers the species
+// selector's ranking) and the hourly/confidence data queries this feeds (GetBatchHourlyOccurrences,
+// GetBatchConfidences). Without this, "top species" ranked here would count detections the user
+// flagged as false, so the ranking population disagreed with both the selector and the very buckets
+// these species are then charted from.
 func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int64, minConfidence float64, modelID *uint, species []string, limit int) ([]SpeciesCount, error) {
 	var results []SpeciesCount
 
-	query := r.db.WithContext(ctx).Table(r.tableName()).
+	detTable := r.tableName()
+	labTable := r.labelsTable()
+	revTable := r.reviewsTable()
+
+	query := r.db.WithContext(ctx).Table(detTable).
 		Select(fmt.Sprintf("%s.label_id, %s.scientific_name, COUNT(*) as count",
-			r.tableName(), r.labelsTable())).
+			detTable, labTable)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id",
-			r.labelsTable(), r.labelsTable(), r.tableName())).
-		Where(fmt.Sprintf("%s.detected_at >= ? AND %s.detected_at <= ?", r.tableName(), r.tableName()), start, end).
-		Where(fmt.Sprintf("%s.confidence >= ?", r.tableName()), minConfidence)
+			labTable, labTable, detTable)).
+		Joins(fmt.Sprintf("LEFT JOIN %s ON %s.id = %s.detection_id",
+			revTable, detTable, revTable)).
+		Where(fmt.Sprintf("%s.detected_at >= ? AND %s.detected_at <= ?", detTable, detTable), start, end).
+		Where(fmt.Sprintf("%s.confidence >= ?", detTable), minConfidence).
+		Where(fmt.Sprintf("(%s.verified IS NULL OR %s.verified != ?)", revTable, revTable),
+			string(entities.VerificationFalsePositive))
 
 	if modelID != nil {
-		query = query.Where(fmt.Sprintf("%s.model_id = ?", r.tableName()), *modelID)
+		query = query.Where(fmt.Sprintf("%s.model_id = ?", detTable), *modelID)
 	}
 
 	// Optional species filter: parameterized IN over the joined labels table, applied before the
 	// ORDER BY count / LIMIT so the ranking is narrowed to the selection while staying volume-ordered.
 	if len(species) > 0 {
-		query = query.Where(fmt.Sprintf("%s.scientific_name IN ?", r.labelsTable()), species)
+		query = query.Where(fmt.Sprintf("%s.scientific_name IN ?", labTable), species)
 	}
 
 	err := query.Group("label_id").

@@ -40,10 +40,12 @@ const (
 	minConfidenceBins     = 5
 	maxConfidenceBins     = 50
 
-	// Species ridgeline (who-sings-when) top-N bounds. The default matches the chart's maxSpecies
-	// cap; the max keeps the ridgeline readable (more than ~8 overlapping ridges are unreadable).
+	// Species ridgeline (who-sings-when) top-N bounds. The default is the readable top-N shown with no
+	// selection; the max matches the control bar's species cap (MAX_SPECIES) so an explicit selection
+	// of up to that many species is honored in full rather than silently truncated (a selection larger
+	// than the default is the user's deliberate choice, crowding and all). Mirrors the succession max.
 	defaultSpeciesRidgelineLimit = 5
-	maxSpeciesRidgelineLimit     = 8
+	maxSpeciesRidgelineLimit     = 10
 
 	// Arrival/departure phenology top-N bounds. The default matches the chart's maxSpecies cap; the
 	// max keeps the Gantt's residency bars legible within the card's fixed height (one bar per species,
@@ -1583,6 +1585,19 @@ func serveTopNHourlyChart[T any](
 			logger.String("end_date", endDate),
 			logger.Int("limit", limit),
 			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
+		)
+	}
+
+	// Diagnostic: with an explicit selection the client sends limit == len(selection), so fewer rows
+	// than selected means some selected species produced no chart data (no in-range detections, all
+	// false positives, or a scientific-name mismatch between the selector and this ranking). Surfaces
+	// the "N selected, fewer drawn" ridgeline symptom in logs with the exact names.
+	if len(speciesFilter) > 0 && len(data) < len(speciesFilter) {
+		c.LogInfoIfEnabled(operation+": some selected species returned no data",
+			logger.Int("selected", len(speciesFilter)),
+			logger.Int("returned", len(data)),
+			logger.String("selected_species", strings.Join(speciesFilter, ", ")),
 			logger.String("path", ctx.Request().URL.Path),
 		)
 	}

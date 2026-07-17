@@ -75,12 +75,14 @@ describe('acoustic-succession chart def', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    // Selection present: each selected scientific name is sent as a repeated species param.
+    // Selection present: each selected scientific name is sent as a repeated species param, and the
+    // limit equals the selection size so every selected band is returned rather than the lowest-volume
+    // picks being pushed off a fixed top-N.
     await chartDef.fetch(makeParams(['Turdus merula', 'Apus apus']));
     const withSel = fetchMock.mock.calls[0][0] as string;
     expect(withSel).toContain('species=Turdus+merula');
     expect(withSel).toContain('species=Apus+apus');
-    expect(withSel).toContain('limit=6');
+    expect(withSel).toContain('limit=2');
 
     // Empty selection: no species param, so the endpoint keeps its top-N default.
     await chartDef.fetch(makeParams([]));
@@ -114,9 +116,10 @@ describe('acoustic-succession chart def', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('/api/v2/analytics/time/succession');
-    // The selection in makeParams() is forwarded as a species filter, alongside the limit.
+    // The selection in makeParams() is forwarded as a species filter; the limit equals the one-species
+    // selection so exactly that species is returned.
     expect(url).toContain('species=Turdus+merula');
-    expect(url).toContain('limit=6');
+    expect(url).toContain('limit=1');
 
     expect(result).toHaveLength(3);
     // Every row's counts are coerced to exactly 24 finite, non-negative buckets.

@@ -124,7 +124,7 @@ func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
 
 	tests := []LimitClampTestCase{
 		{"valid in range passes through", "3", 3},
-		{"max allowed passes through", "8", 8},
+		{"max allowed passes through", "10", 10},
 		{"over max falls back to default", "99", defaultSpeciesRidgelineLimit},
 		{"zero falls back to default", "0", defaultSpeciesRidgelineLimit},
 		{"non-numeric falls back to default", "abc", defaultSpeciesRidgelineLimit},

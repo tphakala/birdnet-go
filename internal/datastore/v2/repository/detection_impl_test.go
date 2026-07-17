@@ -810,3 +810,57 @@ func TestGetTopSpecies_SpeciesFilter(t *testing.T) {
 		require.Len(t, results, 3)
 	})
 }
+
+// TestGetTopSpecies_ExcludesFalsePositives verifies the ranking counts only non-false-positive
+// detections, matching GetSpeciesSummary (the species selector's ranking) and the hourly/confidence
+// data these species are then charted from. A species whose detections are all false positives must
+// drop out of the ranking entirely -- the mechanism behind the who-sings-when "N selected, fewer
+// drawn" symptom when the selector (false-positive-excluded) and this ranking disagreed.
+func TestGetTopSpecies_ExcludesFalsePositives(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	labelA := createTestLabel(t, db, "Species A", 1)
+	labelB := createTestLabel(t, db, "Species B", 1)
+	labelC := createTestLabel(t, db, "Species C", 1)
+
+	markFalsePositive := func(detectionID uint) {
+		t.Helper()
+		require.NoError(t, repo.SaveReview(ctx, &entities.DetectionReview{
+			DetectionID: detectionID,
+			Verified:    entities.VerificationFalsePositive,
+		}))
+	}
+
+	// A: 5 clean detections -> counts 5.
+	// B: 5 detections, 3 flagged false positive -> counts 2.
+	// C: 5 detections, all flagged false positive -> counts 0, so it must not appear at all.
+	for i := range 5 {
+		createDetectionForLabel(t, db, labelA.ID, int64(1000+i))
+
+		detB := createDetectionForLabel(t, db, labelB.ID, int64(1000+i))
+		if i < 3 {
+			markFalsePositive(detB.ID)
+		}
+
+		detC := createDetectionForLabel(t, db, labelC.ID, int64(1000+i))
+		markFalsePositive(detC.ID)
+	}
+
+	results, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, nil, 10)
+	require.NoError(t, err)
+
+	// C is gone (all false positives); A outranks B on non-false-positive volume.
+	require.Len(t, results, 2)
+	assert.Equal(t, labelA.ID, results[0].LabelID)
+	assert.Equal(t, int64(5), results[0].Count)
+	assert.Equal(t, labelB.ID, results[1].LabelID)
+	assert.Equal(t, int64(2), results[1].Count)
+
+	// Even named explicitly, an all-false-positive species yields no row -- so a species the selector
+	// picked can be absent here, which is exactly what the client-side diagnostic surfaces.
+	filtered, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, []string{"Species C"}, 10)
+	require.NoError(t, err)
+	assert.Empty(t, filtered)
+}
