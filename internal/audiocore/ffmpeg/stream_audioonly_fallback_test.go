@@ -3,6 +3,7 @@ package ffmpeg
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,4 +109,24 @@ func TestStream_AudioOnlyFallback_ClearsFailureCounters(t *testing.T) {
 	restart := stream.restartCount
 	stream.restartCountMu.Unlock()
 	assert.Equal(t, 0, restart, "restart count should reset when fallback engages")
+}
+
+func TestStream_AudioOnlyFallback_ReceivedAudioLatch(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+
+	// Below threshold: should not latch.
+	stream.cmdMu.Lock()
+	stream.processStartTime = time.Now().Add(-10 * time.Second)
+	stream.cmdMu.Unlock()
+	stream.conditionalFailureReset(50 * 1024)
+	assert.False(t, stream.receivedAudio.Load(), "should not latch below threshold")
+
+	// Above threshold: should latch.
+	stream.cmdMu.Lock()
+	stream.processStartTime = time.Now().Add(-40 * time.Second)
+	stream.cmdMu.Unlock()
+	stream.conditionalFailureReset(200 * 1024)
+	assert.True(t, stream.receivedAudio.Load(), "should latch above threshold")
 }

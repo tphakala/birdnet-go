@@ -1209,15 +1209,6 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 
 	s.updateLastDataTime()
 
-	// Record that audio has flowed at least once. This confirms the current
-	// RTSP media-type request works for this camera, so the audio-only fallback
-	// never engages on a later transient failure (issue #3902). This is a
-	// set-once latch: the Load guard keeps the steady state a barrier-free read
-	// rather than a locked store on every audio chunk.
-	if !s.receivedAudio.Load() {
-		s.receivedAudio.Store(true)
-	}
-
 	n := len(data)
 	s.bytesReceivedMu.Lock()
 	s.totalBytesReceived += int64(n)
@@ -2019,6 +2010,15 @@ func (s *Stream) conditionalFailureReset(totalBytesReceived int64) {
 	s.cmdMu.Unlock()
 
 	if timeSinceStart >= circuitBreakerMinStabilityTime && totalBytesReceived >= circuitBreakerMinStabilityBytes {
+		// Record that audio has flowed at least once. This confirms the current
+		// RTSP media-type request works for this camera, so the audio-only fallback
+		// never engages on a later transient failure (issue #3902). This is a
+		// set-once latch: the Load guard keeps the steady state a barrier-free read
+		// rather than a locked store on every audio chunk.
+		if !s.receivedAudio.Load() {
+			s.receivedAudio.Store(true)
+		}
+
 		s.circuitMu.Lock()
 		if s.consecutiveFailures > 0 {
 			previousFailures := s.consecutiveFailures
