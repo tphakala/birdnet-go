@@ -882,6 +882,16 @@ escaped_long="$(json_escape "$long_backslashes")"
 printf '{"v":"%s"}' "$escaped_long" | jq empty 2>/dev/null
 assert_ok "json_escape: truncated backslash run stays valid JSON" $?
 
+# Truncation counts characters, not bytes, so a cut can never leave half a
+# multi-byte character behind. jq tolerates a severed one (it substitutes
+# U+FFFD) so this would not fail loudly; it would just ship a mangled byte.
+# The padding is exact and load-bearing: the multi-byte character has to STRADDLE
+# the cut. A fixture with it anywhere else is never severed and the assertion
+# passes under byte truncation too, proving nothing.
+multibyte_astride="$(printf '%*s' $((MAX_ERROR_LENGTH - 1)) '' | tr ' ' 'x')$(printf '\xc3\xa9')trailing"
+assert_eq "json_escape: a multi-byte character astride the cut survives intact" \
+    "c3a9" "$(json_escape "$multibyte_astride" | tail -c 2 | od -An -tx1 | tr -d ' \n')"
+
 # --- migrate_fail ---------------------------------------------------------
 reset_migration_state
 migrate_fail ssh_connect error "ssh_exit=255"
@@ -1047,6 +1057,29 @@ check_remote_shell_clean
 assert_nonzero "noisy shell: a greeting remote is refused" $?
 assert_eq "noisy shell: records its own slug" "remote_shell_noisy" "$MIGRATE_FAIL_STEP"
 assert_eq "noisy shell: is an error, not a cancellation" "error" "$MIGRATE_FAIL_KIND"
+
+# A .bashrc printing only a blank line is the hard case: command substitution
+# strips trailing newlines, so it reads as silence unless the probe defends
+# against it -- yet a lone newline corrupts rsync exactly like a banner does.
+for blank in 'printf "\n"' 'printf "\n\n"'; do
+    reset_migration_state
+    MIGRATE_DEST="host"
+    eval "migrate_ssh() { $blank; }"
+    check_remote_shell_clean
+    assert_nonzero "noisy shell: newline-only noise ($blank) is refused" $?
+    assert_eq "noisy shell: newline-only noise records the slug ($blank)" \
+        "remote_shell_noisy" "$MIGRATE_FAIL_STEP"
+done
+
+# stderr does not ride the payload stream, so a stderr banner must NOT be
+# treated as noise: refusing those hosts would block migrations that work.
+reset_migration_state
+MIGRATE_DEST="host"
+migrate_ssh() { echo "banner on stderr" >&2; }
+check_remote_shell_clean
+assert_ok "noisy shell: a stderr-only banner is NOT treated as noise" $?
+assert_eq "noisy shell: stderr banner records no failure" "" "$MIGRATE_FAIL_STEP"
+
 migrate_ssh() { :; }
 reset_migration_state
 MIGRATE_DEST="host"
@@ -1129,6 +1162,28 @@ check_remote_stopped
 assert_ok "probe: inactive service with no container is confirmed stopped" $?
 assert_eq "probe: records state=stopped" "stopped" "$MIGRATE_REMOTE_STATE"
 
+# The docker half of the same fail-closed contract. systemd says "not running",
+# but a live container means the database is live: confirming "stopped" here
+# would let the transfer copy a database mid-write.
+reset_migration_state
+migrate_ssh() { case "$1" in *systemctl*) printf 'inactive\n' ;; *) printf 'birdnet-go\n' ;; esac; }
+check_remote_stopped
+assert_nonzero "probe: a running container is NOT confirmed stopped" $?
+assert_eq "probe: a running container is state=running" "running" "$MIGRATE_REMOTE_STATE"
+
+reset_migration_state
+migrate_ssh() { case "$1" in *systemctl*) printf 'inactive\n' ;; *) return 255 ;; esac; }
+check_remote_stopped
+assert_nonzero "probe: a dropped ssh on the docker check is not confirmed stopped" $?
+assert_eq "probe: dropped ssh on the docker check is 'unknown'" "unknown" "$MIGRATE_REMOTE_STATE"
+
+# grep -Fx matches the WHOLE line: a container merely named like ours (or shell
+# noise containing the name) must not count as our container running.
+reset_migration_state
+migrate_ssh() { case "$1" in *systemctl*) printf 'inactive\n' ;; *) printf 'birdnet-go-sidecar\n' ;; esac; }
+check_remote_stopped
+assert_ok "probe: a similarly-named container does not count as ours" $?
+
 unset -f migrate_ssh df
 
 # --- ssh's real exit code reaches the report ---------------------------------
@@ -1164,23 +1219,64 @@ assert_nonzero "ssh master: unusable temp dir returns non-zero" $?
 assert_eq "ssh master: records tmpdir_failed" "tmpdir_failed" "$MIGRATE_FAIL_STEP"
 unset -f mktemp ssh
 
-# --- rollback must not erase the record of what it undid ---------------------
+# --- "running" and "could not tell" must not become the same Sentry issue ----
+# The silent-mode abort picks its slug from the probe's recorded state. Merging
+# these back together re-creates exactly the conflation this change exists to
+# remove: one issue that says "stop the service" to people whose service was
+# never running.
+reset_migration_state
+MIGRATE_REMOTE_STATE="running"
+if [ "$MIGRATE_REMOTE_STATE" = "running" ]; then migrate_fail remote_running_silent; else migrate_fail remote_state_unknown_silent; fi
+assert_eq "silent abort: a confirmed-running source reports remote_running_silent" \
+    "remote_running_silent" "$MIGRATE_FAIL_STEP"
+reset_migration_state
+MIGRATE_REMOTE_STATE="unknown"
+if [ "$MIGRATE_REMOTE_STATE" = "running" ]; then migrate_fail remote_running_silent; else migrate_fail remote_state_unknown_silent; fi
+assert_eq "silent abort: an unanswered probe reports remote_state_unknown_silent" \
+    "remote_state_unknown_silent" "$MIGRATE_FAIL_STEP"
+
+# Both slugs must actually exist at the real call site, or the branch above is
+# testing a copy of the logic rather than the shipped logic.
+assert_eq "silent abort: both slugs are wired into install.sh" "2" \
+    "$(grep -cE 'migrate_fail (remote_running_silent|remote_state_unknown_silent)$' "$INSTALL_SH")"
+
+# --- the record globals are actually written, at the right moment -------------
 # migrate_rollback clears MIGRATE_BACKUP and restarts the source BEFORE the
-# failure is reported, so inferring these from live state reports "no backup" on
-# every rollback path -- including the one where the restore failed and the
-# user's data is still sitting at the .bak path.
+# failure is reported, so the reporter reads report-only records instead. Pin
+# both halves: that the records are WRITTEN where the fact becomes true, and
+# that the reporter reads them rather than the live state.
+assert_eq "records: backup_taken is set after the mv succeeds, not before" "1" \
+    "$(grep -cE '^        MIGRATE_BACKUP_TAKEN="yes"$' "$INSTALL_SH")"
+assert_eq "records: stopped_remote_ever is set where the source is stopped" "1" \
+    "$(grep -cE '^                MIGRATE_STOPPED_REMOTE_EVER="yes"$' "$INSTALL_SH")"
+
 reset_migration_state
 MIGRATE_BACKUP_TAKEN="yes"; MIGRATE_STOPPED_REMOTE_EVER="yes"
 MIGRATE_BACKUP=""; MIGRATE_STOPPED_REMOTE="0"              # what rollback leaves behind
 ssh() { echo "OpenSSH_9.9p1" >&2; }
 migrate_fail rsync_failed error "rsync_exit=23"
 diag="$(collect_migration_diagnostics)"
-assert_eq "rollback: backup_taken survives the rollback that cleared it" \
+assert_eq "records: backup_taken survives the rollback that cleared it" \
     "yes" "$(printf '%s' "$diag" | jq -r .backup_taken)"
-assert_eq "rollback: stopped_remote survives the rollback that restarted it" \
+assert_eq "records: stopped_remote survives the rollback that restarted it" \
     "yes" "$(printf '%s' "$diag" | jq -r .stopped_remote_this_run)"
 unset -f ssh
 reset_migration_state
+
+# --- the noisy-shell probe is actually wired in ------------------------------
+# The function is unit-tested above; this pins that migrate_from_remote_host
+# calls it, and calls it BEFORE the steps that move data and stop the service.
+probe_line="$(grep -n 'check_remote_shell_clean || return 1' "$INSTALL_SH" | cut -d: -f1)"
+backup_line="$(grep -n 'MIGRATE_BACKUP="\${dest_dir}' "$INSTALL_SH" | cut -d: -f1)"
+# Anchor on the migration's OWN stop (the one issued over the ssh master), not
+# the unrelated local `systemctl stop` sites elsewhere in the installer.
+stop_line="$(grep -n "ControlPath=\"\$MIGRATE_SSH_SOCKET\".*systemctl stop birdnet-go.service" "$INSTALL_SH" | head -1 | cut -d: -f1)"
+assert_eq "wiring: the noisy-shell probe is called from the migration flow" \
+    "1" "$(grep -c 'check_remote_shell_clean || return 1' "$INSTALL_SH")"
+[ -n "$probe_line" ] && [ -n "$backup_line" ] && [ "$probe_line" -lt "$backup_line" ]
+assert_ok "wiring: the probe runs BEFORE the user's data is moved aside" $?
+[ -n "$probe_line" ] && [ -n "$stop_line" ] && [ "$probe_line" -lt "$stop_line" ]
+assert_ok "wiring: the probe runs BEFORE the source service is stopped" $?
 
 # ===========================================================================
 # Result

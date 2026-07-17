@@ -1932,7 +1932,14 @@ open_ssh_master() {
 # costs the user nothing.
 check_remote_shell_clean() {
     local noise
-    noise="$(migrate_ssh 'exit 0' 2>/dev/null)"
+    # The trailing X is load-bearing: command substitution strips trailing
+    # newlines, so a .bashrc whose only output is a blank line would look
+    # identical to silence -- and a lone newline corrupts the transfer just as
+    # thoroughly as a banner does. Only stdout is probed: stderr does not ride
+    # the payload stream, so treating a stderr banner as noise would refuse
+    # hosts that migrate perfectly well.
+    noise="$(migrate_ssh 'exit 0' 2>/dev/null; printf X)"
+    noise="${noise%X}"
     [ -z "$noise" ] && return 0
     print_message "❌ The shell on $MIGRATE_DEST prints text on login (a banner, fortune, or echo)." "$RED"
     print_message "   That output corrupts the file transfer, so migration cannot proceed." "$YELLOW"
@@ -2125,12 +2132,15 @@ migrate_rollback() {
 # Escape a value for embedding in a JSON string literal. Truncate first, then
 # fold newlines and drop control characters, then escape backslashes BEFORE
 # quotes (the reverse order would double the backslashes we add). Truncating
-# before escaping keeps head -c from cutting an escape sequence in half.
+# before escaping keeps the cut from splitting an escape sequence in half.
 # Without this, one stray quote makes the payload invalid JSON and
 # validate_diagnostic_json discards EVERY diagnostic for the event.
+#
+# ${1:0:N} rather than `head -c N`: parameter expansion counts characters in a
+# UTF-8 locale, so it cannot leave a half-written character at the cut, and it
+# costs no extra process.
 json_escape() {
-    printf '%s' "$1" \
-        | head -c "$MAX_ERROR_LENGTH" \
+    printf '%s' "${1:0:MAX_ERROR_LENGTH}" \
         | LC_ALL=C tr '\n\r\t' '   ' \
         | LC_ALL=C tr -d '[:cntrl:]' \
         | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
