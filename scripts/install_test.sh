@@ -1080,6 +1080,19 @@ check_remote_shell_clean
 assert_ok "noisy shell: a stderr-only banner is NOT treated as noise" $?
 assert_eq "noisy shell: stderr banner records no failure" "" "$MIGRATE_FAIL_STEP"
 
+# A dead connection produces no stdout, which is indistinguishable from a clean
+# shell unless the probe carries its own exit status back. Reporting "clean"
+# here would blame whatever step failed next for an SSH drop.
+reset_migration_state
+MIGRATE_DEST="host"
+migrate_ssh() { return 255; }
+check_remote_shell_clean
+assert_nonzero "noisy shell: a dropped connection is not mistaken for silence" $?
+assert_eq "noisy shell: a dropped probe records its own slug" \
+    "remote_probe_failed" "$MIGRATE_FAIL_STEP"
+assert_eq "noisy shell: a dropped probe records ssh's exit code" \
+    "ssh_exit=255" "$MIGRATE_FAIL_DETAIL"
+
 migrate_ssh() { :; }
 reset_migration_state
 MIGRATE_DEST="host"
@@ -1177,6 +1190,17 @@ check_remote_stopped
 assert_nonzero "probe: a dropped ssh on the docker check is not confirmed stopped" $?
 assert_eq "probe: dropped ssh on the docker check is 'unknown'" "unknown" "$MIGRATE_REMOTE_STATE"
 
+# `docker ps` exits non-zero only when it could not answer (daemon down, user
+# not in the docker group). Swallowing that with `|| true` on the remote turns
+# "could not check" into empty output and then into "confirmed stopped", and the
+# transfer copies a live database. The remote command must carry the failure.
+assert_eq "probe: the docker check does not swallow its own failure with '|| true'" "0" \
+    "$(grep -c 'docker ps --filter name=birdnet-go --format "{{.Names}}" 2>/dev/null || true' "$INSTALL_SH")"
+# ...while the systemctl probe MUST keep its `|| true`: is-active exits non-zero
+# to answer "inactive", which is a normal answer, not a failure.
+assert_eq "probe: the systemctl check keeps its '|| true' (non-zero is an answer)" "1" \
+    "$(grep -c 'systemctl is-active birdnet-go.service 2>/dev/null || true' "$INSTALL_SH")"
+
 # grep -Fx matches the WHOLE line: a container merely named like ours (or shell
 # noise containing the name) must not count as our container running.
 reset_migration_state
@@ -1249,6 +1273,14 @@ assert_eq "records: backup_taken is set after the mv succeeds, not before" "1" \
     "$(grep -cE '^        MIGRATE_BACKUP_TAKEN="yes"$' "$INSTALL_SH")"
 assert_eq "records: stopped_remote_ever is set where the source is stopped" "1" \
     "$(grep -cE '^                MIGRATE_STOPPED_REMOTE_EVER="yes"$' "$INSTALL_SH")"
+
+# The rollback restart flag must be armed BEFORE the stop is issued. Armed only
+# after a confirmed stop, a dropped verification round trip leaves the flag at
+# "0" and rollback walks away with the user's source service still down.
+arm_line="$(grep -n '^            MIGRATE_STOPPED_REMOTE="1"$' "$INSTALL_SH" | head -1 | cut -d: -f1)"
+issue_line="$(grep -n "ControlPath=\"\$MIGRATE_SSH_SOCKET\".*systemctl stop birdnet-go.service" "$INSTALL_SH" | head -1 | cut -d: -f1)"
+[ -n "$arm_line" ] && [ -n "$issue_line" ] && [ "$arm_line" -lt "$issue_line" ]
+assert_ok "records: the rollback restart flag is armed BEFORE the stop is issued" $?
 
 reset_migration_state
 MIGRATE_BACKUP_TAKEN="yes"; MIGRATE_STOPPED_REMOTE_EVER="yes"

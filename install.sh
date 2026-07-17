@@ -1931,15 +1931,24 @@ open_ssh_master() {
 # only then fail the transfer and lean on best-effort rollback. Failing here
 # costs the user nothing.
 check_remote_shell_clean() {
-    local noise
-    # The trailing X is load-bearing: command substitution strips trailing
-    # newlines, so a .bashrc whose only output is a blank line would look
-    # identical to silence -- and a lone newline corrupts the transfer just as
-    # thoroughly as a banner does. Only stdout is probed: stderr does not ride
-    # the payload stream, so treating a stderr banner as noise would refuse
-    # hosts that migrate perfectly well.
-    noise="$(migrate_ssh 'exit 0' 2>/dev/null; printf X)"
-    noise="${noise%X}"
+    local probe rc noise
+    # Two facts have to survive the round trip, and each needs its own trick.
+    # The X sentinel keeps newline-only output visible: command substitution
+    # strips trailing newlines, so a .bashrc printing a blank line would look
+    # exactly like silence, and a lone newline corrupts the transfer as
+    # thoroughly as a banner. The trailing status is carried in the output
+    # because the substitution's own status belongs to printf, not to ssh, so a
+    # dropped connection would otherwise also read as silence and be reported
+    # later as some unrelated step failing.
+    # Only stdout is probed: stderr does not ride the payload stream, so
+    # treating a stderr banner as noise would refuse hosts that migrate fine.
+    probe="$(migrate_ssh 'exit 0' 2>/dev/null; printf 'X%s' "$?")"
+    rc="${probe##*X}"
+    noise="${probe%X*}"
+    if [ "$rc" != "0" ]; then
+        print_message "❌ Lost the SSH connection to $MIGRATE_DEST while checking it." "$RED"
+        migrate_fail remote_probe_failed error "ssh_exit=$rc"; return 1
+    fi
     [ -z "$noise" ] && return 0
     print_message "❌ The shell on $MIGRATE_DEST prints text on login (a banner, fortune, or echo)." "$RED"
     print_message "   That output corrupts the file transfer, so migration cannot proceed." "$YELLOW"
@@ -2014,7 +2023,15 @@ check_remote_stopped() {
         *) MIGRATE_REMOTE_STATE="unknown"; return 1 ;;  # empty/unrecognized -> no answer
     esac
     local ctr raw
-    if ! raw="$(migrate_ssh 'if command -v docker >/dev/null 2>&1; then docker ps --filter name=birdnet-go --format "{{.Names}}" 2>/dev/null || true; fi')"; then
+    # No `|| true` here, unlike the systemctl probe above: `docker ps` exits
+    # non-zero only when it could not answer (daemon down, user not in the docker
+    # group), and swallowing that would turn "could not check" into empty output
+    # and then into "confirmed stopped" -- a fail-OPEN hole in a fail-closed
+    # probe, ending in a live database being copied. Docker being absent still
+    # exits 0 via the enclosing `if`, which is correct: no docker, no container.
+    # (The systemctl probe genuinely needs its `|| true`: `is-active` exits
+    # non-zero to *answer* "inactive", which is not a failure.)
+    if ! raw="$(migrate_ssh 'if command -v docker >/dev/null 2>&1; then docker ps --filter name=birdnet-go --format "{{.Names}}" 2>/dev/null; fi')"; then
         MIGRATE_REMOTE_STATE="unknown"; return 1
     fi
     ctr="$(printf '%s' "$raw" | grep -Fx 'birdnet-go' | tr -d '[:space:]')"
@@ -2312,12 +2329,16 @@ migrate_from_remote_host() {
         print_message "❓ Stop it now over SSH (sudo)? (y/n): " "$YELLOW" "nonewline"
         local s; read -r s
         if [[ "$s" =~ ^[Yy]$ ]]; then
+            # Arm the rollback restart BEFORE the stop, not after confirming it.
+            # If the stop lands but the verification round trip then drops, a flag
+            # set only on the confirmed path stays "0" and rollback walks away
+            # leaving the user's source service down. Starting a service that was
+            # never stopped is a no-op, so arming early only ever costs nothing.
+            MIGRATE_STOPPED_REMOTE="1"
             ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl stop birdnet-go.service' || true
             # Trust the observed state, not ssh's exit code: ssh -t can report
-            # failure even when the remote command stopped the service. If it is now
-            # stopped, this run stopped it, so rollback must be able to restart it.
+            # failure even when the remote command stopped the service.
             if check_remote_stopped; then
-                MIGRATE_STOPPED_REMOTE="1"
                 MIGRATE_STOPPED_REMOTE_EVER="yes"
             else
                 print_message "❌ Still running; stop it manually and re-run" "$RED"; migrate_rollback
