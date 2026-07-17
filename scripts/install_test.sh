@@ -1279,8 +1279,9 @@ assert_eq "records: stopped_remote_ever is set where the source is stopped" "1" 
 # "0" and rollback walks away with the user's source service still down.
 arm_line="$(grep -n '^            MIGRATE_STOPPED_REMOTE="1"$' "$INSTALL_SH" | head -1 | cut -d: -f1)"
 issue_line="$(grep -n "ControlPath=\"\$MIGRATE_SSH_SOCKET\".*systemctl stop birdnet-go.service" "$INSTALL_SH" | head -1 | cut -d: -f1)"
-[ -n "$arm_line" ] && [ -n "$issue_line" ] && [ "$arm_line" -lt "$issue_line" ]
-assert_ok "records: the rollback restart flag is armed BEFORE the stop is issued" $?
+arm_rc=0
+{ [ -n "$arm_line" ] && [ -n "$issue_line" ] && [ "$arm_line" -lt "$issue_line" ]; } || arm_rc=1
+assert_ok "records: the rollback restart flag is armed BEFORE the stop is issued" "$arm_rc"
 
 reset_migration_state
 MIGRATE_BACKUP_TAKEN="yes"; MIGRATE_STOPPED_REMOTE_EVER="yes"
