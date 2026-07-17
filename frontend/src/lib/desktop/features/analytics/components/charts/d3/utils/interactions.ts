@@ -1,6 +1,11 @@
 // D3 interaction utilities for analytics charts
 import * as d3 from 'd3';
 
+import { fitTextNode } from './labels';
+
+/** Where a legend label starts, clearing the 12px color swatch at x = 0 plus a 6px gap. */
+const LEGEND_LABEL_X = 18;
+
 /**
  * Escape a string for safe interpolation into tooltip HTML.
  * The ampersand must be replaced first so the entities produced by the other
@@ -329,6 +334,11 @@ export function createLegend(
     position: { x: number; y: number };
     itemHeight: number;
     onToggle?: (id: string, visible: boolean) => void;
+    /**
+     * Total width reserved for the legend, measured from `position.x`. Labels wider than the room
+     * left after the swatch are ellipsized to fit. Omit to let labels run at full width.
+     */
+    maxLabelWidth?: number;
   }
 ): void {
   const legend = container
@@ -371,9 +381,9 @@ export function createLegend(
     .style('opacity', d => (d.visible ? 1 : 0.3));
 
   // Labels
-  legendItems
+  const labels = legendItems
     .append('text')
-    .attr('x', 18)
+    .attr('x', LEGEND_LABEL_X)
     .attr('y', 0)
     .attr('dy', '0.32em')
     .style('font-size', '12px')
@@ -381,4 +391,15 @@ export function createLegend(
     .style('fill', 'currentColor')
     .style('opacity', d => (d.visible ? 1 : 0.5))
     .text(d => d.label);
+
+  // Labels are start-anchored and grow right, so a long one runs past the chart's right edge and is
+  // clipped by the viewport. Fit each to the caller's reserved width, keeping the full label in a
+  // <title> on the item group so an ellipsized name stays recoverable.
+  if (config.maxLabelWidth !== undefined) {
+    const budget = config.maxLabelWidth - LEGEND_LABEL_X;
+    labels.each(function (d) {
+      fitTextNode(this, d.label, budget);
+    });
+    legendItems.append('title').text(d => d.label);
+  }
 }

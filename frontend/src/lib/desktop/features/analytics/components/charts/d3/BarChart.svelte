@@ -10,6 +10,7 @@
   import { createAxis, styleAxis, addAxisLabel, createGridLines } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
   import { generateSpeciesColors, type ChartRenderContext } from './utils/theme';
+  import { fitTextNode } from './utils/labels';
 
   export interface BarChartDatum {
     label: string;
@@ -59,6 +60,9 @@
   // rotated title's ~13px glyph thickness: 9 + 60 + 4 + ~3 = 76. VERTICAL_MARGIN.left (90) adds
   // the title's remaining outer half-thickness and edge buffer on top of this offset.
   const VERTICAL_VALUE_AXIS_LABEL_OFFSET = 76;
+  // D3's default axisLeft tick gap (tickSizeInner 6 + tickPadding 3): where an end-anchored tick
+  // label's right edge sits, so margin.left minus this is the room a category name actually has.
+  const AXIS_TICK_GAP = 9;
 
   // Margins per orientation. Horizontal bars put long category names on the
   // left axis, so widen the left margin to avoid clipping. Vertical bars rotate
@@ -125,6 +129,19 @@
 
       styleAxis(xAxisGroup, theme.axis);
       styleAxis(yAxisGroup, theme.axis);
+
+      // Category names are end-anchored at the tick gap and grow left into the margin, so a name
+      // wider than the margin is clipped by the viewport. Fit each to the margin by measured width.
+      // Must run after styleAxis, which applies the font the measurement depends on.
+      yAxisGroup.selectAll<globalThis.SVGTextElement, AxisDomain>('.tick text').each(function (d) {
+        fitTextNode(this, String(d), HORIZONTAL_MARGIN.left - AXIS_TICK_GAP);
+      });
+      // Full name on the tick group (not the <text>, whose textContent must stay the visible label)
+      // so an ellipsized name is still recoverable via hover, touch long-press, and assistive tech.
+      yAxisGroup
+        .selectAll<globalThis.SVGGElement, AxisDomain>('.tick')
+        .append('title')
+        .text(d => String(d));
 
       if (valueAxisLabel) {
         addAxisLabel(
