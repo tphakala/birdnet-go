@@ -275,9 +275,10 @@
     // Re-anchor the whole group so the "More" label's measured right edge lands within
     // innerWidth instead of the hard-coded `innerWidth - legendWidth`. getComputedTextLength()
     // returns a real width in browsers; jsdom (unit tests) does not implement the method, so the
-    // optional call short-circuits and we fall back to 0, reproducing the original flush-right
-    // placement (tests unaffected). The "Less" label (end-anchored at x = -6) stays inside because
-    // the group only ever moves further left, never right.
+    // optional call short-circuits to 0. With moreWidth = 0 the formula parks the label's
+    // (zero-width) right edge exactly at innerWidth -- 6px left of the original swatch-flush
+    // placement, which is harmless and keeps tests stable. The "Less" label (end-anchored at
+    // x = -6) stays inside because the group only ever moves further left, never right.
     const moreNode = moreLabel.node();
     const moreWidth = moreNode?.getComputedTextLength?.() ?? 0;
     const groupX = Math.max(0, innerWidth - legendWidth - 6 - moreWidth);

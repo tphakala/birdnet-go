@@ -52,11 +52,12 @@
   const TRANSITION_MS = 120;
   const CATEGORY_LABEL_ROTATION = -30;
   const ROTATED_CATEGORY_LABEL_OFFSET = 70;
-  // Clearance for the vertical chart's rotated value-axis title so it does not overlap the
-  // y-axis tick numbers. Worked from the widest realistic tick label ("300,000"-scale detection
-  // counts, ~60px at the 12px axis font) plus D3's default axisLeft tick gap
-  // (tickSizeInner 6 + tickPadding 3 = 9px) plus the rotated title's own ~13px glyph thickness
-  // (ascent + descent), each with a few px of buffer: 9 + 60 + 4 + 13 + 4 = 90.
+  // How far left of the value axis the rotated title's baseline sits (addAxisLabel places it at
+  // x = -offset, centered vertically). It must clear the widest realistic tick label
+  // ("300,000"-scale detection counts, ~60px at the 12px axis font) plus D3's default axisLeft
+  // tick gap (tickSizeInner 6 + tickPadding 3 = 9px), plus a few px of buffer and half the
+  // rotated title's ~13px glyph thickness: 9 + 60 + 4 + ~3 = 76. VERTICAL_MARGIN.left (90) adds
+  // the title's remaining outer half-thickness and edge buffer on top of this offset.
   const VERTICAL_VALUE_AXIS_LABEL_OFFSET = 76;
 
   // Margins per orientation. Horizontal bars put long category names on the
