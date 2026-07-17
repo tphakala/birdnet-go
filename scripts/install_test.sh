@@ -882,15 +882,24 @@ escaped_long="$(json_escape "$long_backslashes")"
 printf '{"v":"%s"}' "$escaped_long" | jq empty 2>/dev/null
 assert_ok "json_escape: truncated backslash run stays valid JSON" $?
 
-# Truncation counts characters, not bytes, so a cut can never leave half a
-# multi-byte character behind. jq tolerates a severed one (it substitutes
-# U+FFFD) so this would not fail loudly; it would just ship a mangled byte.
-# The padding is exact and load-bearing: the multi-byte character has to STRADDLE
-# the cut. A fixture with it anywhere else is never severed and the assertion
-# passes under byte truncation too, proving nothing.
+# Under a UTF-8 locale the cut counts characters, so it cannot leave half a
+# multi-byte character behind. jq tolerates a severed one (it substitutes U+FFFD)
+# so this would never fail loudly; it would just ship a mangled byte.
+#
+# Two things here are load-bearing. The padding is exact, so the character
+# STRADDLES the cut: with it anywhere else it is never severed and the assertion
+# passes under byte truncation too, proving nothing. And the locale is set
+# explicitly, because bash's ${x:0:n} is locale-dependent: inheriting the
+# runner's locale would make this pass on a UTF-8 CI box by luck and fail for
+# anyone running the suite under LC_ALL=C.
 multibyte_astride="$(printf '%*s' $((MAX_ERROR_LENGTH - 1)) '' | tr ' ' 'x')$(printf '\xc3\xa9')trailing"
-assert_eq "json_escape: a multi-byte character astride the cut survives intact" \
-    "c3a9" "$(json_escape "$multibyte_astride" | tail -c 2 | od -An -tx1 | tr -d ' \n')"
+assert_eq "json_escape: a multi-byte character astride the cut survives intact (UTF-8 locale)" \
+    "c3a9" "$(LC_ALL=C.UTF-8 json_escape "$multibyte_astride" | tail -c 2 | od -An -tx1 | tr -d ' \n')"
+# The invariant that holds in EVERY locale is the one that actually matters: the
+# payload stays valid JSON either way. Under LC_ALL=C the cut is byte-wise, just
+# as it was with head -c, and must still not emit a dangling escape.
+printf '{"v":"%s"}' "$(LC_ALL=C json_escape "$multibyte_astride")" | jq empty 2>/dev/null
+assert_ok "json_escape: stays valid JSON even where the cut is byte-wise (C locale)" $?
 
 # --- migrate_fail ---------------------------------------------------------
 reset_migration_state

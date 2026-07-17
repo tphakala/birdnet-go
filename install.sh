@@ -2153,9 +2153,12 @@ migrate_rollback() {
 # Without this, one stray quote makes the payload invalid JSON and
 # validate_diagnostic_json discards EVERY diagnostic for the event.
 #
-# ${1:0:N} rather than `head -c N`: parameter expansion counts characters in a
-# UTF-8 locale, so it cannot leave a half-written character at the cut, and it
-# costs no extra process.
+# ${1:0:N} rather than `head -c N`, for one fewer process and a better cut:
+# parameter expansion counts CHARACTERS under a UTF-8 locale, so it cannot leave
+# half a character behind. That is not a guarantee, and the script does not force
+# a locale: under LC_ALL=C it counts bytes and can split one, exactly as head -c
+# did. Never worse, better where the locale is UTF-8, and moot today since every
+# value reaching here (exit codes, fixed slugs, `ssh -V`) is ASCII.
 json_escape() {
     printf '%s' "${1:0:MAX_ERROR_LENGTH}" \
         | LC_ALL=C tr '\n\r\t' '   ' \
