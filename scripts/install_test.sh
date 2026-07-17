@@ -11,8 +11,10 @@
 # untouched.
 #
 # Run: scripts/install_test.sh   (exit 0 = all pass). Needs awk/sed, plus jq for the
-# migration-diagnostics tests (they assert the telemetry payload is valid JSON, and
-# install.sh already requires jq to send any telemetry at all).
+# migration-diagnostics tests, which assert the telemetry payload is valid JSON.
+# jq is a test-harness dependency, not an install.sh one: install.sh lists jq in
+# REQUIRED_PACKAGES and installs it, and validate_diagnostic_json deliberately
+# degrades when jq is absent rather than requiring it.
 
 # Many globals here (colors, CONFIG_FILE, SILENT_MODE, the load_existing_service_config output
 # vars, BIRDNET_AUDIO_FORMAT) are consumed only inside the eval'd functions extracted from
@@ -1252,45 +1254,102 @@ assert_nonzero "ssh master: unusable temp dir returns non-zero" $?
 assert_eq "ssh master: records tmpdir_failed" "tmpdir_failed" "$MIGRATE_FAIL_STEP"
 unset -f mktemp ssh
 
-# --- "running" and "could not tell" must not become the same Sentry issue ----
-# The silent-mode abort picks its slug from the probe's recorded state. Merging
-# these back together re-creates exactly the conflation this change exists to
-# remove: one issue that says "stop the service" to people whose service was
-# never running.
-reset_migration_state
-MIGRATE_REMOTE_STATE="running"
-if [ "$MIGRATE_REMOTE_STATE" = "running" ]; then migrate_fail remote_running_silent; else migrate_fail remote_state_unknown_silent; fi
-assert_eq "silent abort: a confirmed-running source reports remote_running_silent" \
+# --- drive the REAL orchestrator, not a re-implementation of its branches -----
+# Asserting against a copy of a condition only proves the copy works: reversing
+# the shipped condition leaves such a test green, and grepping for a slug proves
+# the string exists, not that the right branch reaches it. So load the real
+# migrate_from_remote_host and stub its collaborators, and let the shipped
+# branches decide the outcome.
+load_fn migrate_from_remote_host
+
+STUB_REMOTE_STATE="running"
+SAVED_HOME="$HOME"
+migrate_flow_setup() {
+    reset_migration_state
+    MIGRATE_DEST="oldhost"
+    SILENT_MODE="true"
+    HOME="${WORK}/flow"; rm -rf "$HOME"; mkdir -p "$HOME"
+    open_ssh_master() { return 0; }
+    check_remote_shell_clean() { return 0; }
+    resolve_remote_app() { MIGRATE_REMOTE_APP="/home/pi/birdnet-go-app"; MIGRATE_REMOTE_APP_DEFAULT="yes"; return 0; }
+    check_remote_disk() { return 0; }
+    check_remote_stopped() { MIGRATE_REMOTE_STATE="$STUB_REMOTE_STATE"; [ "$STUB_REMOTE_STATE" = "stopped" ]; }
+    migrate_rollback() { :; }
+    adopt_migrated_installation() { MIGRATION_DONE="true"; return 0; }
+    command_exists() { return 0; }   # rsync/sqlite3 already present
+}
+
+# "running" and "could not tell" must not collapse into one Sentry issue: one
+# says "go stop your service", the other says "we never got an answer".
+migrate_flow_setup; STUB_REMOTE_STATE="running"
+migrate_from_remote_host
+assert_eq "flow: a confirmed-running source reports remote_running_silent" \
     "remote_running_silent" "$MIGRATE_FAIL_STEP"
-reset_migration_state
-MIGRATE_REMOTE_STATE="unknown"
-if [ "$MIGRATE_REMOTE_STATE" = "running" ]; then migrate_fail remote_running_silent; else migrate_fail remote_state_unknown_silent; fi
-assert_eq "silent abort: an unanswered probe reports remote_state_unknown_silent" \
+
+migrate_flow_setup; STUB_REMOTE_STATE="unknown"
+migrate_from_remote_host
+assert_eq "flow: an unanswered probe reports remote_state_unknown_silent" \
     "remote_state_unknown_silent" "$MIGRATE_FAIL_STEP"
 
-# Both slugs must actually exist at the real call site, or the branch above is
-# testing a copy of the logic rather than the shipped logic.
-assert_eq "silent abort: both slugs are wired into install.sh" "2" \
-    "$(grep -cE 'migrate_fail (remote_running_silent|remote_state_unknown_silent)$' "$INSTALL_SH")"
+# The backup evidence must be written only AFTER the mv actually succeeds.
+# Hoisting it above the mv would claim a backup that was never taken, on the one
+# path where the user most needs to know the truth.
+migrate_flow_setup; STUB_REMOTE_STATE="stopped"
+SILENT_MODE="false"
+mkdir -p "$HOME/birdnet-go-app/config"; printf 'x\n' > "$HOME/birdnet-go-app/config/config.yaml"
+mv() { return 1; }
+migrate_from_remote_host <<< "y"
+assert_eq "flow: a failed backup move records backup_move_failed" \
+    "backup_move_failed" "$MIGRATE_FAIL_STEP"
+assert_eq "flow: a failed backup move claims NO backup evidence" \
+    "no" "$MIGRATE_BACKUP_TAKEN"
+unset -f mv
 
-# --- the record globals are actually written, at the right moment -------------
-# migrate_rollback clears MIGRATE_BACKUP and restarts the source BEFORE the
-# failure is reported, so the reporter reads report-only records instead. Pin
-# both halves: that the records are WRITTEN where the fact becomes true, and
-# that the reporter reads them rather than the live state.
-assert_eq "records: backup_taken is set after the mv succeeds, not before" "1" \
-    "$(grep -cE '^        MIGRATE_BACKUP_TAKEN="yes"$' "$INSTALL_SH")"
-assert_eq "records: stopped_remote_ever is set where the source is stopped" "1" \
-    "$(grep -cE '^                MIGRATE_STOPPED_REMOTE_EVER="yes"$' "$INSTALL_SH")"
+# ...and once the mv succeeds the evidence must survive whatever fails later,
+# because migrate_rollback wipes the live state before the report is built.
+migrate_flow_setup; STUB_REMOTE_STATE="stopped"
+SILENT_MODE="false"
+mkdir -p "$HOME/birdnet-go-app/config"; printf 'x\n' > "$HOME/birdnet-go-app/config/config.yaml"
+migrate_ssh() { return 0; }          # remote has rsync
+rsync() { return 23; }               # ...and the transfer dies
+migrate_from_remote_host <<< "y"
+assert_eq "flow: a dead transfer reports rsync_failed" "rsync_failed" "$MIGRATE_FAIL_STEP"
+assert_eq "flow: with rsync's real exit code" "rsync_exit=23" "$MIGRATE_FAIL_DETAIL"
+assert_eq "flow: the transfer method is recorded" "rsync" "$MIGRATE_TRANSFER_METHOD"
+assert_eq "flow: backup evidence survives a later failure" "yes" "$MIGRATE_BACKUP_TAKEN"
+unset -f migrate_ssh rsync
 
-# The rollback restart flag must be armed BEFORE the stop is issued. Armed only
-# after a confirmed stop, a dropped verification round trip leaves the flag at
-# "0" and rollback walks away with the user's source service still down.
-arm_line="$(grep -n '^            MIGRATE_STOPPED_REMOTE="1"$' "$INSTALL_SH" | head -1 | cut -d: -f1)"
-issue_line="$(grep -n "ControlPath=\"\$MIGRATE_SSH_SOCKET\".*systemctl stop birdnet-go.service" "$INSTALL_SH" | head -1 | cut -d: -f1)"
-arm_rc=0
-{ [ -n "$arm_line" ] && [ -n "$issue_line" ] && [ "$arm_line" -lt "$issue_line" ]; } || arm_rc=1
-assert_ok "records: the rollback restart flag is armed BEFORE the stop is issued" "$arm_rc"
+# The rollback restart flag is a safety switch, so its two failure modes are not
+# symmetric. Armed too late, a stop that lands but whose verification then drops
+# leaves the user's source service down on the host they still depend on. Armed
+# too eagerly, we ssh -t a sudo restart at a service that never stopped, which
+# buys nothing and can sit on a password prompt. Capture what rollback actually
+# sees rather than trusting the assignment order by inspection.
+ROLLBACK_SAW_FLAG=""
+migrate_flow_setup; STUB_REMOTE_STATE="running"
+SILENT_MODE="false"
+migrate_rollback() { ROLLBACK_SAW_FLAG="$MIGRATE_STOPPED_REMOTE"; }
+ssh() { return 0; }
+migrate_from_remote_host <<< "y"
+assert_eq "flow: a confirmed-running source disarms the rollback restart" "0" "$ROLLBACK_SAW_FLAG"
+assert_eq "flow: ...and still reports remote_still_running" "remote_still_running" "$MIGRATE_FAIL_STEP"
+
+migrate_flow_setup; STUB_REMOTE_STATE="unknown"
+SILENT_MODE="false"
+migrate_rollback() { ROLLBACK_SAW_FLAG="$MIGRATE_STOPPED_REMOTE"; }
+ssh() { return 0; }
+migrate_from_remote_host <<< "y"
+assert_eq "flow: an unverifiable stop stays armed so rollback restarts it" "1" "$ROLLBACK_SAW_FLAG"
+unset -f ssh
+
+HOME="$SAVED_HOME"
+unset -f open_ssh_master check_remote_shell_clean resolve_remote_app check_remote_disk \
+         check_remote_stopped migrate_rollback adopt_migrated_installation migrate_flow_setup
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+# Reload the real implementations the later assertions depend on.
+for fn in check_remote_shell_clean resolve_remote_app check_remote_disk check_remote_stopped; do
+    load_fn "$fn"
+done
 
 reset_migration_state
 MIGRATE_BACKUP_TAKEN="yes"; MIGRATE_STOPPED_REMOTE_EVER="yes"

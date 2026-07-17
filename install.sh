@@ -2344,6 +2344,11 @@ migrate_from_remote_host() {
             if check_remote_stopped; then
                 MIGRATE_STOPPED_REMOTE_EVER="yes"
             else
+                # Disarm only when the probe CONFIRMED it is still running: we
+                # stopped nothing, so an `ssh -t sudo systemctl start` would buy
+                # nothing and can sit on a sudo prompt. Stay armed when the probe
+                # could not tell, because then the stop may well have landed.
+                [ "$MIGRATE_REMOTE_STATE" = "running" ] && MIGRATE_STOPPED_REMOTE="0"
                 print_message "❌ Still running; stop it manually and re-run" "$RED"; migrate_rollback
                 migrate_fail remote_still_running error "state=$MIGRATE_REMOTE_STATE"; return 1
             fi
