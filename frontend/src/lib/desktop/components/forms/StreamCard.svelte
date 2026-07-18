@@ -590,14 +590,12 @@
             <SelectDropdown
               value={editMediaMode}
               label={t('settings.audio.streams.mediaModeLabel')}
+              helpText={t('settings.audio.streams.mediaModeHelp')}
               options={getMediaModeOptions()}
               onChange={value => (editMediaMode = value as MediaMode)}
               groupBy={false}
               menuSize="sm"
             />
-            <p class="text-xs text-[var(--color-base-content)]/70 mt-1">
-              {t('settings.audio.streams.mediaModeHelp')}
-            </p>
           </div>
         {/if}
 
@@ -814,13 +812,13 @@
                 >R</span
               >
             {/if}
-            {#if showTransport && stream.mediaMode === 'auto'}
+            {#if stream.type === 'rtsp' && stream.mediaMode === 'auto'}
               <span
                 class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-secondary)]/15 text-[var(--color-secondary)]"
               >
                 {t('settings.audio.streams.mediaMode.auto')}
               </span>
-            {:else if showTransport && stream.mediaMode === 'audio-only'}
+            {:else if stream.type === 'rtsp' && stream.mediaMode === 'audio-only'}
               <span
                 class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-secondary)]/15 text-[var(--color-secondary)]"
               >

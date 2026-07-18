@@ -107,6 +107,34 @@ func TestBuildFFmpegArgs_MediaModes(t *testing.T) {
 	}
 }
 
+// TestResolveAudioOnly covers the media-mode decision helpers directly, including
+// the default branch for an invalid/unknown mode (which validation rejects but
+// which must still resolve to the safe full-stream default).
+func TestResolveAudioOnly(t *testing.T) {
+	t.Parallel()
+
+	cfg := func(mode string) *StreamConfig { return &StreamConfig{MediaMode: mode} }
+
+	// resolveAudioOnly: (mode, fallbackEngaged) -> audioOnly
+	assert.False(t, resolveAudioOnly(cfg(""), false), "empty defaults to full-stream")
+	assert.False(t, resolveAudioOnly(cfg("full-stream"), false))
+	assert.True(t, resolveAudioOnly(cfg("audio-only"), false))
+	assert.True(t, resolveAudioOnly(cfg("audio-only"), true), "audio-only ignores the latch")
+	assert.True(t, resolveAudioOnly(cfg("auto"), false), "auto requests audio-only before fallback")
+	assert.False(t, resolveAudioOnly(cfg("auto"), true), "auto drops audio-only after fallback")
+	assert.False(t, resolveAudioOnly(cfg("video-only"), false), "invalid mode falls through to full-stream default")
+
+	// mediaModeAllowsFallback: only auto allows the reactive fallback.
+	assert.True(t, mediaModeAllowsFallback(cfg("auto")))
+	assert.False(t, mediaModeAllowsFallback(cfg("audio-only")))
+	assert.False(t, mediaModeAllowsFallback(cfg("full-stream")))
+	assert.False(t, mediaModeAllowsFallback(cfg("")), "empty (full-stream default) does not allow fallback")
+
+	// effectiveMediaMode: canonical string for logging.
+	assert.Equal(t, "full-stream", effectiveMediaMode(cfg("")))
+	assert.Equal(t, "auto", effectiveMediaMode(cfg("auto")))
+}
+
 // TestBuildFFmpegArgs_HTTP verifies that BuildFFmpegArgs produces the correct
 // argument sequence for an HTTP stream source and does NOT include RTSP flags.
 func TestBuildFFmpegArgs_HTTP(t *testing.T) {

@@ -515,8 +515,9 @@ func BuildFFmpegArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 // unit-tested mirror (BuildFFmpegArgs), so the two cannot diverge.
 //
 // fallbackEngaged is consulted only in auto mode; audio-only and full-stream are
-// deterministic and ignore it. Empty/unknown modes canonicalize to the default
-// (full-stream).
+// deterministic and ignore it. An empty mode canonicalizes to the default
+// (full-stream); any other unrecognized value (rejected at config validation)
+// falls through to the default branch and is also treated as full-stream.
 func resolveAudioOnly(cfg *StreamConfig, fallbackEngaged bool) bool {
 	switch conf.MediaMode(cfg.MediaMode).Canonical() {
 	case conf.MediaModeAudioOnly:
