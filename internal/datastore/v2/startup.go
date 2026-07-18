@@ -1084,6 +1084,11 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 	resumed, newPath, err := ResumeConsolidation(dataDir, log)
 	if err != nil {
 		reportConsolidationError("resumeConsolidation", err, configuredPath)
+		// Journal the failed resume of an interrupted consolidation: it is
+		// exactly the kind of event the boot journal exists to capture. The
+		// v2 sidecar/backup paths are not resolved yet at this point, so the
+		// record carries only the configured path.
+		diagnostics.RecordConsolidation(j, "", configuredPath, "", "failed")
 		return false, fmt.Errorf("failed to check/resume consolidation: %w", err)
 	}
 	if resumed {

@@ -13,7 +13,7 @@ func bootWith(mod func(*BootRecord)) *BootRecord {
 		RecordHeader: NewRecordHeader(RecordTypeBoot),
 		App:          AppInfo{Version: "20260716"},
 		Datastore: DatastoreSnapshot{
-			Dialect:          "sqlite",
+			Dialect:          dialectSQLite,
 			ConfiguredPath:   "/data/birdnet.db",
 			ResolvedAbsPath:  "/data/birdnet.db",
 			ConfiguredExists: true,
@@ -52,7 +52,7 @@ func TestDetectAnomaliesDBLost(t *testing.T) {
 	cur := bootWith(func(r *BootRecord) {
 		r.Datastore.ConfiguredExists = false
 		r.Datastore.ConfiguredSize = 0
-		r.Datastore.StartupDecision = "fresh_install"
+		r.Datastore.StartupDecision = decisionFreshInstall
 	})
 	anomalies := detectAnomalies(prev, cur)
 	require.Contains(t, kinds(anomalies), AnomalyDBLost)
@@ -72,7 +72,7 @@ func TestDetectAnomaliesDBLostNotTriggeredForTrivialSize(t *testing.T) {
 	cur := bootWith(func(r *BootRecord) {
 		r.Datastore.ConfiguredExists = false
 		r.Datastore.ConfiguredSize = 0
-		r.Datastore.StartupDecision = "fresh_install"
+		r.Datastore.StartupDecision = decisionFreshInstall
 	})
 	assert.NotContains(t, kinds(detectAnomalies(prev, cur)), AnomalyDBLost,
 		"a schema-only or near-empty previous DB must not raise db_lost")
@@ -84,7 +84,7 @@ func TestDetectAnomaliesDBLostNotTriggeredForMySQL(t *testing.T) {
 	cur := bootWith(func(r *BootRecord) {
 		r.Datastore.Dialect = "mysql"
 		r.Datastore.ConfiguredExists = false
-		r.Datastore.StartupDecision = "fresh_install"
+		r.Datastore.StartupDecision = decisionFreshInstall
 	})
 	assert.NotContains(t, kinds(detectAnomalies(prev, cur)), AnomalyDBLost,
 		"db_lost is a file-level signal, sqlite only")
@@ -155,4 +155,33 @@ func TestCompareVersionDates(t *testing.T) {
 			assert.Equal(t, tt.want, compareVersionDates(tt.a, tt.b))
 		})
 	}
+}
+
+func TestDetectAnomaliesDBLostAtExactThreshold(t *testing.T) {
+	t.Parallel()
+	// Pins the >= boundary: mutating the gate to > would let this survive.
+	prev := bootWith(func(r *BootRecord) {
+		r.Datastore.ConfiguredSize = dbLostMinSizeBytes
+	})
+	cur := bootWith(func(r *BootRecord) {
+		r.Datastore.ConfiguredExists = false
+		r.Datastore.ConfiguredSize = 0
+		r.Datastore.StartupDecision = decisionFreshInstall
+	})
+	assert.Contains(t, kinds(detectAnomalies(prev, cur)), AnomalyDBLost,
+		"db_lost fires at exactly dbLostMinSizeBytes (>= boundary)")
+}
+
+func TestDetectAnomaliesDBLostSuppressedWhenPathChanged(t *testing.T) {
+	t.Parallel()
+	// A deliberate path change is reported by db_path_changed, not db_lost.
+	prev := bootWith(nil)
+	cur := bootWith(func(r *BootRecord) {
+		r.Datastore.ResolvedAbsPath = "/newlocation/birdnet.db"
+		r.Datastore.ConfiguredExists = false
+		r.Datastore.StartupDecision = decisionFreshInstall
+	})
+	got := kinds(detectAnomalies(prev, cur))
+	assert.NotContains(t, got, AnomalyDBLost, "path change must not raise db_lost")
+	assert.Contains(t, got, AnomalyDBPathChanged)
 }

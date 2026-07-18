@@ -102,13 +102,18 @@ func newAnomaly(kind, previous, current, message string) AnomalyRecord {
 func detectAnomalies(prev, cur *BootRecord) []AnomalyRecord {
 	var anomalies []AnomalyRecord
 
-	// db_lost (sqlite only: a file-level signal).
+	// db_lost (sqlite only: a file-level signal). Requires the resolved path
+	// to be UNCHANGED between boots: "lost" means the database that was present
+	// at this exact location is now gone. A deliberate path change (user edited
+	// the configured path) is reported by db_path_changed instead, so this
+	// guard prevents a misleading db_lost alarm firing alongside it.
 	if prev.Datastore.Dialect == dialectSQLite &&
 		cur.Datastore.Dialect == dialectSQLite &&
 		prev.Datastore.ConfiguredExists &&
 		prev.Datastore.ConfiguredSize >= dbLostMinSizeBytes &&
 		!cur.Datastore.ConfiguredExists &&
-		cur.Datastore.StartupDecision == decisionFreshInstall {
+		cur.Datastore.StartupDecision == decisionFreshInstall &&
+		prev.Datastore.ResolvedAbsPath == cur.Datastore.ResolvedAbsPath {
 		anomalies = append(anomalies, newAnomaly(
 			AnomalyDBLost,
 			fmt.Sprintf("db present at %s (%d bytes)", prev.Datastore.ResolvedAbsPath, prev.Datastore.ConfiguredSize),

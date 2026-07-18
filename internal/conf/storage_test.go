@@ -49,8 +49,8 @@ func TestDefaultConfigCreatedMarker(t *testing.T) {
 	// Not parallel: mutates package-level marker state. Reset at entry and
 	// exit so the test is order-independent regardless of what other tests
 	// in the package did with the marker.
-	defaultConfigCreatedPath.Store("")
-	t.Cleanup(func() { defaultConfigCreatedPath.Store("") })
+	defaultConfigCreatedPath.Store(nil)
+	t.Cleanup(func() { defaultConfigCreatedPath.Store(nil) })
 
 	created, path := DefaultConfigCreated()
 	assert.False(t, created, "marker starts unset")

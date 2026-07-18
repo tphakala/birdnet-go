@@ -37,21 +37,20 @@ var (
 // during this process's Load(). internal/conf must NOT import
 // internal/diagnostics (import cycle), so the journal event is emitted by
 // diagnostics.RecordBoot reading this marker via its caller.
-var defaultConfigCreatedPath atomic.Value // string
+var defaultConfigCreatedPath atomic.Pointer[string]
 
 // markDefaultConfigCreated records that a default config was generated.
 func markDefaultConfigCreated(path string) {
-	defaultConfigCreatedPath.Store(path)
+	defaultConfigCreatedPath.Store(&path)
 }
 
 // DefaultConfigCreated reports whether this process generated a default
 // config file during Load, and at which path.
 func DefaultConfigCreated() (created bool, path string) {
-	v, ok := defaultConfigCreatedPath.Load().(string)
-	if !ok || v == "" {
-		return false, ""
+	if p := defaultConfigCreatedPath.Load(); p != nil && *p != "" {
+		return true, *p
 	}
-	return true, v
+	return false, ""
 }
 
 // Load reads the configuration file and environment variables into GlobalConfig.

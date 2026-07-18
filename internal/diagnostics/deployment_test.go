@@ -53,12 +53,12 @@ func TestListDirectory(t *testing.T) {
 func TestListDirectoryTruncatesAtCap(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	for i := range MaxDirEntries + 10 {
+	for i := range maxDirEntries + 10 {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%04d", i)), nil, 0o600))
 	}
 	entries, err := ListDirectory(dir)
 	require.NoError(t, err)
-	assert.Len(t, entries, MaxDirEntries)
+	assert.Len(t, entries, maxDirEntries)
 }
 
 func TestListDirectoryMissingDir(t *testing.T) {
@@ -109,4 +109,20 @@ func TestCollectRawDeploymentSkipsEmptyDirs(t *testing.T) {
 		assert.NotContains(t, e, "data directory")
 		assert.NotContains(t, e, "config directory")
 	}
+}
+
+func FuzzParseMountInfo(f *testing.F) {
+	f.Add("")
+	f.Add("too few fields")
+	f.Add("22 1 8:1 / / rw,relatime - ext4 /dev/sda1 rw")
+	f.Add("615 22 8:2 /home/user/data /data rw,relatime - ext4 /dev/sda2 rw")
+	f.Add("36 35 98:0 /a /b rw shared:1 - ext3 /dev/root rw")
+	f.Fuzz(func(t *testing.T, content string) {
+		// Must never panic on any input.
+		mounts := ParseMountInfo(content)
+		for _, m := range mounts {
+			// Root and system-prefixed destinations are always filtered out.
+			assert.NotEqual(t, "/", m.Destination)
+		}
+	})
 }

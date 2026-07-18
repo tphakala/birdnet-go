@@ -325,12 +325,6 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	return nil
 }
 
-// dialectSQLiteLabel / dialectMySQLLabel are the diagnostics dialect labels.
-const (
-	dialectSQLiteLabel = "sqlite"
-	dialectMySQLLabel  = "mysql"
-)
-
 // bootParamsFromStartup maps settings and the datastore startup state into
 // plain-typed diagnostics boot parameters. Kept as a pure function for
 // testability; RecordBoot itself is best-effort.
@@ -362,10 +356,10 @@ func bootParamsFromStartup(settings *conf.Settings, st datastoreV2.StartupState)
 	}
 
 	if settings.Output.MySQL.Enabled {
-		p.Dialect = dialectMySQLLabel
+		p.Dialect = datastore.DialectMySQL
 		return p
 	}
-	p.Dialect = dialectSQLiteLabel
+	p.Dialect = datastore.DialectSQLite
 	p.ConfiguredDBPath = settings.Output.SQLite.Path
 	p.V2SidecarPath = datastoreV2.V2MigrationPathFromConfigured(settings.Output.SQLite.Path)
 	if abs, err := filepath.Abs(settings.Output.SQLite.Path); err == nil {

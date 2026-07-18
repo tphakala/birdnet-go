@@ -220,6 +220,12 @@ func (j *Journal) LastBoot() (*BootRecord, bool) {
 
 	data, err := os.ReadFile(j.path)
 	if err != nil {
+		// A missing journal is the normal first-boot case; anything else
+		// (e.g. a permission error) would silently suppress anomaly
+		// detection, so surface it at Debug for diagnosability.
+		if !os.IsNotExist(err) {
+			getLogger().Debug("failed to read journal for last boot", logger.Error(err))
+		}
 		return nil, false
 	}
 	lines := splitNonEmptyLines(string(data))

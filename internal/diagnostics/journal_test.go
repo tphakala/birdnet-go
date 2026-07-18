@@ -85,7 +85,7 @@ func TestJournalTrimByRecordCount(t *testing.T) {
 
 	data, err := os.ReadFile(j.Path())
 	require.NoError(t, err)
-	lines := nonEmptyLines(string(data))
+	lines := splitNonEmptyLines(string(data))
 	assert.Len(t, lines, maxJournalRecords, "trim keeps exactly the newest cap of records")
 }
 
@@ -109,7 +109,7 @@ func TestJournalTrimByByteSize(t *testing.T) {
 	assert.LessOrEqual(t, fi.Size(), int64(maxJournalBytes), "trim enforces the byte cap")
 	data, err := os.ReadFile(j.Path())
 	require.NoError(t, err)
-	assert.NotEmpty(t, nonEmptyLines(string(data)), "trim must keep the newest records")
+	assert.NotEmpty(t, splitNonEmptyLines(string(data)), "trim must keep the newest records")
 }
 
 func TestJournalConcurrentAppendSafe(t *testing.T) {
@@ -130,7 +130,7 @@ func TestJournalConcurrentAppendSafe(t *testing.T) {
 
 	data, err := os.ReadFile(j.Path())
 	require.NoError(t, err)
-	lines := nonEmptyLines(string(data))
+	lines := splitNonEmptyLines(string(data))
 	assert.Len(t, lines, goroutines*perGoroutine)
 	for _, line := range lines {
 		var probe map[string]any
@@ -149,7 +149,7 @@ func TestLifecycleEmitHelpersWriteTypedRecords(t *testing.T) {
 
 	data, err := os.ReadFile(j.Path())
 	require.NoError(t, err)
-	lines := nonEmptyLines(string(data))
+	lines := splitNonEmptyLines(string(data))
 	require.Len(t, lines, 5)
 
 	wantTypes := []string{
@@ -188,16 +188,4 @@ func TestJournalAppendUnwritablePathReturnsError(t *testing.T) {
 	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o600))
 	j := NewJournal(filepath.Join(blocker, "sub", "journal.jsonl"))
 	assert.Error(t, j.Append(makeBoot("20260716")), "append must fail, not panic")
-}
-
-// nonEmptyLines splits s on newlines and drops empty entries.
-func nonEmptyLines(s string) []string {
-	raw := strings.Split(s, "\n")
-	out := make([]string, 0, len(raw))
-	for _, l := range raw {
-		if strings.TrimSpace(l) != "" {
-			out = append(out, l)
-		}
-	}
-	return out
 }

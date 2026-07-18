@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	// MaxDirEntries caps directory listing size (matches the former
+	// maxDirEntries caps directory listing size (matches the former
 	// support-side maxDataDirEntries).
-	MaxDirEntries = 500
+	maxDirEntries = 500
 	// mountInfoPath is the container-init mount table.
 	mountInfoPath = "/proc/1/mountinfo"
 	// mountInfoMinFields is the minimum field count of a mountinfo line.
@@ -80,7 +80,7 @@ func CollectRawDeployment(dataDir, configDir string) *RawDeployment {
 }
 
 // ListDirectory lists a directory's immediate entries with metadata,
-// truncated at MaxDirEntries. Names are returned RAW.
+// truncated at maxDirEntries. Names are returned RAW.
 func ListDirectory(dir string) ([]DirEntryInfo, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -90,12 +90,12 @@ func ListDirectory(dir string) ([]DirEntryInfo, error) {
 			Context("operation", "list_directory").
 			Build()
 	}
-	allocSize := min(len(entries), MaxDirEntries)
+	allocSize := min(len(entries), maxDirEntries)
 	files := make([]DirEntryInfo, 0, allocSize)
 	for i, e := range entries {
-		if i >= MaxDirEntries {
+		if i >= maxDirEntries {
 			getLogger().Warn("directory listing truncated",
-				logger.Int("limit", MaxDirEntries),
+				logger.Int("limit", maxDirEntries),
 				logger.Int("total", len(entries)))
 			break
 		}
@@ -147,6 +147,13 @@ func ParseMountInfo(content string) []Mount {
 		if len(fields) < mountInfoMinFields {
 			continue
 		}
+		// fields[3] is the mountinfo "root": the subtree of the filesystem
+		// that is mounted. For a container bind mount (-v /host/dir:/data)
+		// this is the HOST directory behind the mount point, which is exactly
+		// the diagnostic signal we want ("which host dir is /data?") and what
+		// drives the mount_changed anomaly. Do NOT change this to the backing
+		// device after the "-" separator; that would report /dev/sdaN and
+		// destroy the diagnostic value.
 		source := fields[3]
 		destination := fields[mountInfoDestIdx]
 		options := fields[5]

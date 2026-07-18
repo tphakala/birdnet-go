@@ -164,3 +164,35 @@ func TestScanDBFilesSkipsMediaDirsAndHonorsCap(t *testing.T) {
 	}
 	assert.Len(t, scanDBFiles([]string{capDir}), maxDBScanEntries)
 }
+
+func TestScanDBFilesHonorsDepthCap(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	// A .db within the depth budget IS found.
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "shallow.db"), []byte("x"), 0o600))
+	// A .db below a directory at maxDBScanDepth is NOT found (dir not descended).
+	deep := filepath.Join(dataDir, "a", "b", "c", "d")
+	require.NoError(t, os.MkdirAll(deep, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(deep, "toodeep.db"), []byte("x"), 0o600))
+
+	files := scanDBFiles([]string{dataDir})
+	names := make([]string, 0, len(files))
+	for _, f := range files {
+		names = append(names, filepath.Base(f.Path))
+	}
+	assert.Contains(t, names, "shallow.db")
+	assert.NotContains(t, names, "toodeep.db", "files below maxDBScanDepth dirs are skipped")
+}
+
+func TestRecordBootPopulatesV2SidecarWhenPresent(t *testing.T) {
+	t.Parallel()
+	dataDir, configDir := setupBootEnv(t)
+	// Create the v2 sidecar so the "exists" branch is exercised.
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "birdnet_v2.db"), make([]byte, 8192), 0o600))
+	j := newTestJournal(t)
+
+	rec, _ := RecordBoot(j, testBootParams(dataDir, configDir))
+	require.NotNil(t, rec)
+	assert.True(t, rec.Datastore.V2SidecarExists)
+	assert.Equal(t, int64(8192), rec.Datastore.V2SidecarSize)
+}

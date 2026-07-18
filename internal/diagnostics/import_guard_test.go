@@ -1,9 +1,11 @@
 package diagnostics
 
 import (
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,7 +50,9 @@ var allowedInternalDeps = map[string]struct{}{
 // (b) its internal closure stays exactly the allowlisted set, so nothing
 // capable of importing diagnostics can ever enter that closure.
 func TestDiagnosticsImportGuard(t *testing.T) {
-	out, err := exec.Command("go", "list", "-deps", diagnosticsPkg).Output()
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "go", "list", "-deps", diagnosticsPkg).Output()
 	require.NoError(t, err, "go list -deps must succeed")
 
 	deps := strings.Split(strings.TrimSpace(string(out)), "\n")

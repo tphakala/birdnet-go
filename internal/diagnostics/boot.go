@@ -64,6 +64,12 @@ type BootParams struct {
 // I/O failure. The journal records are always written regardless of what
 // the caller does with the return values.
 func RecordBoot(j *Journal, p *BootParams) (*BootRecord, []AnomalyRecord) {
+	// Defense-in-depth: honor the "never panics" contract even if a caller
+	// passes a nil journal (the emit helpers already nil-check via
+	// appendBestEffort; this guards the direct TrimIfNeeded/LastBoot calls).
+	if j == nil {
+		return nil, nil
+	}
 	log := getLogger()
 
 	if err := j.TrimIfNeeded(); err != nil {
@@ -138,7 +144,8 @@ func buildBootRecord(p *BootParams) *BootRecord {
 		}
 	}
 
-	rec.Datastore.DBFilesFound = scanDBFiles(dedupeDirs(p.DataDir, p.ConfigDir))
+	dirs := dedupeDirs(p.DataDir, p.ConfigDir)
+	rec.Datastore.DBFilesFound = scanDBFiles(dirs)
 
 	raw := CollectRawDeployment(p.DataDir, p.ConfigDir)
 	rec.Cwd = raw.WorkingDirectory
@@ -147,7 +154,7 @@ func buildBootRecord(p *BootParams) *BootRecord {
 	rec.ConfigDirFiles = raw.ConfigDirFiles
 	rec.Errors = raw.CollectionErrors
 
-	for _, dir := range dedupeDirs(p.DataDir, p.ConfigDir) {
+	for _, dir := range dirs {
 		if usage, err := disk.Usage(dir); err == nil {
 			rec.Disk = append(rec.Disk, DiskUsage{
 				Path:       dir,

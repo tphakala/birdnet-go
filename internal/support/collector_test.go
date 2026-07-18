@@ -1948,7 +1948,7 @@ func TestCreateArchiveIncludesJournal(t *testing.T) {
 	// pipeline as log files: the user path must not survive verbatim.
 	rc, err := journalEntry.Open()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = rc.Close() })
+	t.Cleanup(func() { assert.NoError(t, rc.Close()) })
 	shipped, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	assert.Contains(t, string(shipped), `"type":"boot"`)
