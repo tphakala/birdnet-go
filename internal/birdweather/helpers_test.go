@@ -63,6 +63,7 @@ func flacBlockSizes(t *testing.T, data []byte) (minBlock, maxBlock uint16) {
 	t.Helper()
 	require.GreaterOrEqual(t, len(data), flacStreamInfoMinLen, "FLAC data too short for STREAMINFO")
 	require.Equal(t, flacMagic, string(data[:flacMagicLen]), "FLAC signature not found")
+	require.Equal(t, byte(flacStreamInfoBlockType), data[flacMagicLen]&flacMetadataBlockTypeMask, "first FLAC metadata block must be STREAMINFO")
 	minBlock = binary.BigEndian.Uint16(data[flacMinBlockSizeOffset:])
 	maxBlock = binary.BigEndian.Uint16(data[flacMaxBlockSizeOffset:])
 	return minBlock, maxBlock
