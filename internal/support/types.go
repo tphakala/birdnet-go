@@ -247,7 +247,11 @@ type DeploymentInfo struct {
 	WorkingDirectory   string              `json:"working_directory"`
 	SystemdServiceFile string              `json:"systemd_service_file,omitempty"`
 	DataDirectoryFiles []DataDirectoryFile `json:"data_directory_files,omitempty"`
-	DockerMounts       []DockerMount       `json:"docker_mounts,omitempty"`
+	// ConfigDirectoryFiles lists the config directory contents, the
+	// counterpart of DataDirectoryFiles (additive; introduced with the
+	// diagnostics boot journal).
+	ConfigDirectoryFiles []DataDirectoryFile `json:"config_directory_files,omitempty"`
+	DockerMounts         []DockerMount       `json:"docker_mounts,omitempty"`
 	CollectionErrors   []string            `json:"collection_errors,omitempty"`
 }
 

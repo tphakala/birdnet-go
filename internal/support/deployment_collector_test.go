@@ -60,80 +60,56 @@ func TestCollectSystemdServiceFile_ScrubsQuotedEnvVars(t *testing.T) {
 	assert.Contains(t, content, `Environment='BIRDWEATHER_ID=[REDACTED]'`)
 }
 
-// --- Data directory listing tests ---
+// --- Deployment info + anonymization tests ---
+// Raw mount-parsing and directory-listing tests moved to internal/diagnostics
+// (the raw gatherer). These cover the support-side anonymization policy only.
 
-func TestCollectDataDirectoryListing_EmptyDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	c := &Collector{dataPath: tmpDir}
-
-	files, err := c.collectDataDirectoryListing(false)
-	require.NoError(t, err)
-	assert.Empty(t, files)
-}
-
-func TestCollectDataDirectoryListing_WithFiles(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "birdnet.db"), make([]byte, 1024), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "birdnet.db-wal"), make([]byte, 512), 0o644))
-	require.NoError(t, os.Mkdir(filepath.Join(tmpDir, "logs"), 0o755))
-
-	c := &Collector{dataPath: tmpDir}
-	files, err := c.collectDataDirectoryListing(false)
-	require.NoError(t, err)
-	assert.Len(t, files, 3)
-
-	var dbFile *DataDirectoryFile
-	for i := range files {
-		if files[i].Name == "birdnet.db" {
-			dbFile = &files[i]
-			break
-		}
+func namesOf(files []DataDirectoryFile) []string {
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		out = append(out, f.Name)
 	}
-	require.NotNil(t, dbFile)
-	assert.Equal(t, int64(1024), dbFile.Size)
-	assert.False(t, dbFile.IsDir)
+	return out
 }
 
-func TestCollectDataDirectoryListing_NonexistentDir(t *testing.T) {
-	c := &Collector{dataPath: "/nonexistent/path"}
-	files, err := c.collectDataDirectoryListing(false)
-	require.Error(t, err)
-	assert.Nil(t, files)
+func TestCollectDeploymentInfoConfigListingAndAllowlist(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	// Standard dirs must survive anonymization; a user-specific dir must not.
+	for _, d := range []string{"clips", "models", "logs", "hls", "my-private-recordings"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dataDir, d), 0o750))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "birdnet.db"), []byte("x"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "diagnostics"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("y"), 0o600))
+
+	c := NewCollector(configDir, dataDir, "sys-id", "20260716")
+	info := c.collectDeploymentInfo(t.Context(), true)
+	require.NotNil(t, info)
+
+	dataNames := namesOf(info.DataDirectoryFiles)
+	assert.Contains(t, dataNames, "clips")
+	assert.Contains(t, dataNames, "models")
+	assert.Contains(t, dataNames, "logs")
+	assert.Contains(t, dataNames, "hls")
+	assert.Contains(t, dataNames, "birdnet.db", "plain files keep raw names, as before")
+	assert.NotContains(t, dataNames, "my-private-recordings", "user dirs are anonymized")
+
+	require.NotEmpty(t, info.ConfigDirectoryFiles, "config listing is new and populated")
+	cfgNames := namesOf(info.ConfigDirectoryFiles)
+	assert.Contains(t, cfgNames, "config.yaml")
+	assert.Contains(t, cfgNames, "diagnostics", "diagnostics is a standard dir name")
 }
 
-// --- Docker mount tests ---
-
-func TestParseMountInfo_BasicMounts(t *testing.T) {
-	mountInfo := "22 1 8:1 / / rw,relatime - ext4 /dev/sda1 rw\n29 22 0:26 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw\n35 22 0:27 / /sys rw,nosuid,nodev,noexec,relatime - sysfs sysfs rw\n45 22 8:1 /home/user/data /data rw,relatime - ext4 /dev/sda1 rw\n50 22 8:1 /home/user/config /config rw,relatime - ext4 /dev/sda1 rw\n"
-
-	mounts := parseMountInfo(mountInfo, false)
-
-	assert.Len(t, mounts, 2)
-	assert.Equal(t, "/home/user/data", mounts[0].Source)
-	assert.Equal(t, "/data", mounts[0].Destination)
-	assert.Equal(t, "ext4", mounts[0].Type)
-}
-
-func TestParseMountInfo_AnonymizesPII(t *testing.T) {
-	mountInfo := "45 22 8:1 /home/user/data /data rw,relatime - ext4 /dev/sda1 rw\n"
-	mounts := parseMountInfo(mountInfo, true)
-
-	require.Len(t, mounts, 1)
-	assert.NotEqual(t, "/home/user/data", mounts[0].Source)
-	assert.Equal(t, "/data", mounts[0].Destination)
-}
-
-func TestParseMountInfo_EmptyInput(t *testing.T) {
-	mounts := parseMountInfo("", false)
-	assert.Empty(t, mounts)
-}
-
-func TestCollectDockerMounts_NotInContainer(t *testing.T) {
-	c := &Collector{}
-	mounts, err := c.collectDockerMounts(t.Context(), false)
-	require.NoError(t, err)
-	assert.Nil(t, mounts)
+func TestCollectDeploymentInfoNoAnonymization(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "my-private-recordings"), 0o750))
+	c := NewCollector(t.TempDir(), dataDir, "sys-id", "20260716")
+	info := c.collectDeploymentInfo(t.Context(), false)
+	assert.Contains(t, namesOf(info.DataDirectoryFiles), "my-private-recordings",
+		"anonymizePII=false keeps raw names")
 }
 
 // --- Orchestration test ---

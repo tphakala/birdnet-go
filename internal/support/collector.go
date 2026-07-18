@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
+	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -696,6 +697,19 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 				Build()
 		}
 		getLogger().Debug("support: deployment info added successfully")
+	}
+
+	// Ship the diagnostics journal (anonymized line by line, same pipeline as
+	// log files). The collector already knows its config directory, so locate
+	// the journal there; no environment lookup. Best-effort: an absent journal
+	// is skipped silently.
+	if opts.IncludeDeploymentInfo {
+		journalPath := diagpkg.JournalPathIn(c.configPath)
+		if _, statErr := os.Stat(journalPath); statErr == nil {
+			if err := c.addLogFileToArchive(ctx, w, journalPath, "diagnostics/journal.jsonl", opts.AnonymizePII, 0); err != nil {
+				getLogger().Warn("support: failed to add diagnostics journal to archive", logger.Error(err))
+			}
+		}
 	}
 
 	// Add app events if collected
