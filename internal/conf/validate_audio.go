@@ -145,6 +145,12 @@ func (s *StreamConfig) Validate() error {
 		return fmt.Errorf("invalid channel mode '%s' for '%s': must be downmix, left, or right", s.ChannelMode, s.Name)
 	}
 
+	// Validate media mode (empty defaults to full-stream, explicit values must be
+	// valid). Accepted on any stream type but only applied at runtime for RTSP.
+	if s.MediaMode != "" && !ValidMediaModes[s.MediaMode] {
+		return fmt.Errorf("invalid media mode '%s' for '%s': must be auto, audio-only, or full-stream", s.MediaMode, s.Name)
+	}
+
 	// Validate gain range (NaN/Inf bypass < and > comparisons). Mirrors the
 	// AudioSourceConfig.Validate check so a hand-edited config.yaml or a non-UI
 	// API client cannot push an out-of-range gain past the frontend clamp.

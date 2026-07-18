@@ -24,6 +24,9 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 		Channels:   1,
 		Transport:  "tcp",
 		LogLevel:   "error",
+		// Auto mode requests audio-only on the initial handshake (the default is
+		// now full-stream); see TestBuildFFmpegArgs_MediaModes for the full matrix.
+		MediaMode: "auto",
 	}
 
 	args := BuildFFmpegArgs(cfg, nil)
@@ -34,7 +37,7 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	require.Less(t, rtspIdx+1, len(args), "-rtsp_transport must have a value")
 	assert.Equal(t, "tcp", args[rtspIdx+1])
 
-	// Only audio streams should be requested during RTSP handshake.
+	// Only audio streams should be requested during RTSP handshake in auto mode.
 	allowedMediaIdx := slices.Index(args, "-allowed_media_types")
 	require.NotEqual(t, -1, allowedMediaIdx, "expected -allowed_media_types flag for RTSP")
 	require.Less(t, allowedMediaIdx+1, len(args), "-allowed_media_types must have a value")
@@ -59,6 +62,77 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	assert.Contains(t, args, "-ac")
 	assert.Contains(t, args, "-f")
 	assert.Contains(t, args, "-vn")
+}
+
+// TestBuildFFmpegArgs_MediaModes verifies the audio-only request tracks the
+// configured media mode: audio-only and auto request -allowed_media_types audio
+// on the initial handshake, full-stream never does, and an unset mode defaults to
+// full-stream (#3953). -vn is present in every mode so video is dropped after
+// decode regardless.
+func TestBuildFFmpegArgs_MediaModes(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := func(mode string) *StreamConfig {
+		return &StreamConfig{
+			URL:        "rtsp://camera.example.com/live",
+			Type:       "rtsp",
+			SampleRate: 48000,
+			BitDepth:   16,
+			Channels:   1,
+			Transport:  "tcp",
+			LogLevel:   "error",
+			MediaMode:  mode,
+		}
+	}
+
+	tests := []struct {
+		name          string
+		mode          string
+		wantAudioOnly bool
+	}{
+		{"empty defaults to full-stream", "", false},
+		{"auto requests audio-only first", "auto", true},
+		{"audio-only requests audio-only", "audio-only", true},
+		{"full-stream never requests audio-only", "full-stream", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			args := BuildFFmpegArgs(baseCfg(tt.mode), nil)
+			assert.Equalf(t, tt.wantAudioOnly, hasAudioOnlyFlag(args),
+				"audio-only flag mismatch for media mode %q", tt.mode)
+			assert.Contains(t, args, "-vn", "video must be dropped after decode in every mode")
+		})
+	}
+}
+
+// TestResolveAudioOnly covers the media-mode decision helpers directly, including
+// the default branch for an invalid/unknown mode (which validation rejects but
+// which must still resolve to the safe full-stream default).
+func TestResolveAudioOnly(t *testing.T) {
+	t.Parallel()
+
+	cfg := func(mode string) *StreamConfig { return &StreamConfig{MediaMode: mode} }
+
+	// resolveAudioOnly: (mode, fallbackEngaged) -> audioOnly
+	assert.False(t, resolveAudioOnly(cfg(""), false), "empty defaults to full-stream")
+	assert.False(t, resolveAudioOnly(cfg("full-stream"), false))
+	assert.True(t, resolveAudioOnly(cfg("audio-only"), false))
+	assert.True(t, resolveAudioOnly(cfg("audio-only"), true), "audio-only ignores the latch")
+	assert.True(t, resolveAudioOnly(cfg("auto"), false), "auto requests audio-only before fallback")
+	assert.False(t, resolveAudioOnly(cfg("auto"), true), "auto drops audio-only after fallback")
+	assert.False(t, resolveAudioOnly(cfg("video-only"), false), "invalid mode falls through to full-stream default")
+
+	// mediaModeAllowsFallback: only auto allows the reactive fallback.
+	assert.True(t, mediaModeAllowsFallback(cfg("auto")))
+	assert.False(t, mediaModeAllowsFallback(cfg("audio-only")))
+	assert.False(t, mediaModeAllowsFallback(cfg("full-stream")))
+	assert.False(t, mediaModeAllowsFallback(cfg("")), "empty (full-stream default) does not allow fallback")
+
+	// effectiveMediaMode: canonical string for logging.
+	assert.Equal(t, "full-stream", effectiveMediaMode(cfg("")))
+	assert.Equal(t, "auto", effectiveMediaMode(cfg("auto")))
 }
 
 // TestBuildFFmpegArgs_HTTP verifies that BuildFFmpegArgs produces the correct

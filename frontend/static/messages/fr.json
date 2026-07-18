@@ -3464,6 +3464,13 @@
         "typeLabel": "Type de Flux",
         "typeHelp": "Protocole du flux - détecté automatiquement depuis l'URL",
         "transportLabel": "Protocole",
+        "mediaModeLabel": "Mode multimédia",
+        "mediaModeHelp": "Le flux complet demande l'audio et la vidéo (la vidéo est ignorée après décodage) et fonctionne avec la plupart des caméras. Auto essaie d'abord l'audio seul et bascule vers le flux complet si la caméra ne peut pas fournir l'audio seul. Audio uniquement n'ouvre jamais d'emplacement vidéo sur la caméra mais échoue si la caméra ne peut pas fournir la piste audio par elle-même.",
+        "mediaMode": {
+          "auto": "Auto",
+          "audioOnly": "Audio uniquement",
+          "fullStream": "Flux complet"
+        },
         "summary": "{count} flux configuré(s)",
         "healthy": "sain",
         "unhealthy": "défaillant",

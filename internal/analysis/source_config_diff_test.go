@@ -110,6 +110,38 @@ func TestSourceNeedsReconfigure(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			// Unset and explicit "full-stream" produce identical FFmpeg args (the
+			// default is full-stream), so the transition must not restart the stream.
+			name: "media mode unset to full-stream is a no-op",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, MediaMode: "",
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, MediaMode: string(conf.MediaModeFullStream),
+			},
+			expected: false,
+		},
+		{
+			name: "media mode full-stream to auto changes",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, MediaMode: string(conf.MediaModeFullStream),
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, MediaMode: string(conf.MediaModeAuto),
+			},
+			expected: true,
+		},
+		{
+			name: "media mode unset to audio-only changes",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, MediaMode: "",
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, MediaMode: string(conf.MediaModeAudioOnly),
+			},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {

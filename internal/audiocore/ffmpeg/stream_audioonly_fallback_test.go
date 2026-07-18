@@ -109,3 +109,70 @@ func TestStream_AudioOnlyFallback_ClearsFailureCounters(t *testing.T) {
 	stream.restartCountMu.Unlock()
 	assert.Equal(t, 0, restart, "restart count should reset when fallback engages")
 }
+
+// TestStream_BuildFFmpegInputArgs_MediaModeWinsOverLatch verifies the runtime arg
+// path honors the configured media mode over the reactive fallback latch:
+// full-stream never requests audio-only, audio-only always does (even if the latch
+// is set), and auto follows the latch. An unset mode defaults to full-stream.
+func TestStream_BuildFFmpegInputArgs_MediaModeWinsOverLatch(t *testing.T) {
+	t.Parallel()
+
+	newStream := func(mode string) *Stream {
+		cfg := newTestConfig()
+		cfg.MediaMode = mode
+		return newTestStreamWithConfig(t, &cfg)
+	}
+
+	t.Run("full-stream ignores latch", func(t *testing.T) {
+		t.Parallel()
+		s := newStream("full-stream")
+		assert.False(t, hasAudioOnlyFlag(s.buildFFmpegInputArgs(nil)), "full-stream must not request audio-only")
+		s.audioOnlyFallback.Store(true)
+		assert.False(t, hasAudioOnlyFlag(s.buildFFmpegInputArgs(nil)), "full-stream must stay full-stream even if latched")
+	})
+
+	t.Run("audio-only ignores latch", func(t *testing.T) {
+		t.Parallel()
+		s := newStream("audio-only")
+		assert.True(t, hasAudioOnlyFlag(s.buildFFmpegInputArgs(nil)), "audio-only must request audio-only")
+		s.audioOnlyFallback.Store(true)
+		assert.True(t, hasAudioOnlyFlag(s.buildFFmpegInputArgs(nil)), "audio-only must not drop the restriction when latched")
+	})
+
+	t.Run("auto follows latch", func(t *testing.T) {
+		t.Parallel()
+		s := newStream("auto")
+		assert.True(t, hasAudioOnlyFlag(s.buildFFmpegInputArgs(nil)), "auto requests audio-only before fallback")
+		s.audioOnlyFallback.Store(true)
+		assert.False(t, hasAudioOnlyFlag(s.buildFFmpegInputArgs(nil)), "auto drops audio-only after fallback engages")
+	})
+
+	t.Run("empty defaults to full-stream", func(t *testing.T) {
+		t.Parallel()
+		s := newStream("")
+		assert.False(t, hasAudioOnlyFlag(s.buildFFmpegInputArgs(nil)), "empty media mode defaults to full-stream")
+	})
+}
+
+// TestStream_MaybeEngageAudioOnlyFallback_ForcedModes verifies the reactive
+// fallback only engages in auto mode. A stream forced to audio-only or full-stream
+// must never latch the fallback, even after the failure threshold is exceeded.
+func TestStream_MaybeEngageAudioOnlyFallback_ForcedModes(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"audio-only", "full-stream"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			cfg := newTestConfig()
+			cfg.MediaMode = mode
+			s := newTestStreamWithConfig(t, &cfg)
+
+			for range audioOnlyFallbackThreshold + 2 {
+				assert.Falsef(t, s.maybeEngageAudioOnlyFallback(),
+					"forced %s mode must never engage the reactive fallback", mode)
+			}
+			assert.Falsef(t, s.audioOnlyFallback.Load(),
+				"forced %s mode must not latch the fallback", mode)
+		})
+	}
+}

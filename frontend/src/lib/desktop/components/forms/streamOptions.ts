@@ -23,6 +23,14 @@ export function getChannelModeOptions() {
   ];
 }
 
+export function getMediaModeOptions() {
+  return [
+    { value: 'full-stream', label: t('settings.audio.streams.mediaMode.fullStream') },
+    { value: 'auto', label: t('settings.audio.streams.mediaMode.auto') },
+    { value: 'audio-only', label: t('settings.audio.streams.mediaMode.audioOnly') },
+  ];
+}
+
 export async function analyzeStreamChannels(url: string): Promise<ChannelAnalysis> {
   return api.post<ChannelAnalysis>('/api/v2/streams/analyze-channels', {
     url: url.trim(),

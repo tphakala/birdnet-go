@@ -2506,6 +2506,11 @@ export type TranslationKey =
   | 'settings.audio.streams.typeLabel'
   | 'settings.audio.streams.typeHelp'
   | 'settings.audio.streams.transportLabel'
+  | 'settings.audio.streams.mediaModeLabel'
+  | 'settings.audio.streams.mediaModeHelp'
+  | 'settings.audio.streams.mediaMode.auto'
+  | 'settings.audio.streams.mediaMode.audioOnly'
+  | 'settings.audio.streams.mediaMode.fullStream'
   | 'settings.audio.streams.summary' // params: count
   | 'settings.audio.streams.healthy'
   | 'settings.audio.streams.unhealthy'

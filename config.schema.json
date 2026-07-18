@@ -2468,6 +2468,10 @@
           "type": "string",
           "description": "Channel handling: downmix, left, or right"
         },
+        "mediaMode": {
+          "type": "string",
+          "description": "RTSP media request: auto, audio-only, or full-stream (ignored for non-RTSP)"
+        },
         "gain": {
           "type": "number",
           "description": "Input gain in dB (0 = no adjustment)"

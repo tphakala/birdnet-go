@@ -3464,6 +3464,13 @@
         "typeLabel": "Typ streamu",
         "typeHelp": "Protokol streamu - automaticky zistený z URL",
         "transportLabel": "Protokol",
+        "mediaModeLabel": "Režim média",
+        "mediaModeHelp": "Úplný stream požaduje zvuk aj video (video sa po dekódovaní zahodí) a funguje s väčšinou kamier. Auto najprv skúsi iba zvuk a prepne sa na úplný stream, ak kamera nedokáže poskytnúť samotný zvuk. Iba zvuk nikdy neobsadí video slot kamery, ale zlyhá, ak kamera nedokáže poskytnúť zvukovú stopu samostatne.",
+        "mediaMode": {
+          "auto": "Auto",
+          "audioOnly": "Iba zvuk",
+          "fullStream": "Úplný stream"
+        },
         "summary": "{count} nakonfigurovaných streamov",
         "healthy": "zdravý",
         "unhealthy": "nezdravý",

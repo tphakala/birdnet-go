@@ -301,6 +301,7 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 		Channels:         channels,
 		SourceChannels:   src.SourceChannels,
 		ChannelMode:      src.ChannelMode,
+		MediaMode:        src.MediaMode,
 		FFmpegPath:       e.ffmpegPath,
 		Transport:        transport,
 		FFmpegParameters: e.ffmpegParameters,
@@ -438,6 +439,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			Channels:         channels,
 			SourceChannels:   cfg.SourceChannels,
 			ChannelMode:      cfg.ChannelMode,
+			MediaMode:        cfg.MediaMode,
 			FFmpegPath:       e.ffmpegPath,
 			Transport:        e.transport,
 			FFmpegParameters: e.ffmpegParameters,
@@ -643,6 +645,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Channels:         channels,
 			SourceChannels:   newCfg.SourceChannels,
 			ChannelMode:      newCfg.ChannelMode,
+			MediaMode:        newCfg.MediaMode,
 			FFmpegPath:       e.ffmpegPath,
 			Transport:        e.transport,
 			FFmpegParameters: e.ffmpegParameters,
@@ -677,8 +680,26 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		}
 	}
 
-	// 6. Update registry so downstream consumers see the new audio params.
-	e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
+	// 6. Update registry so downstream consumers see the new audio params. Sync the
+	// mode and source-shape fields first (ReconfigureSource does not re-register, so
+	// the registry otherwise keeps the values from add time), then UpdateAudioParams
+	// snapshots and emits the SourceReconfigured event with the fully updated entry.
+	// Without the sync, a channel/media-mode-only change re-triggers on every later
+	// reconfigure and restarts the stream indefinitely.
+	syncedModes := e.registry.SyncReconfiguredParams(sourceID, newCfg.ChannelMode, newCfg.MediaMode, newCfg.SourceSampleRate, newCfg.SourceChannels)
+	syncedParams := e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
+	if !syncedModes || !syncedParams {
+		// The source was fetched at the top of this function and the reconfigure
+		// path is serialized, so a false here means the entry was unregistered
+		// concurrently: the registry keeps no updated config and no
+		// SourceReconfigured event fires, leaving downstream consumers with stale
+		// data. The stream itself already restarted above, so warn rather than fail.
+		e.logger.Warn("source missing from registry during reconfigure write-back; downstream config may be stale",
+			logger.String("source_id", sourceID),
+			logger.Bool("synced_modes", syncedModes),
+			logger.Bool("synced_params", syncedParams),
+			logger.String("operation", "reconfigure_source"))
+	}
 
 	e.logger.Info("source reconfigured",
 		logger.String("source_id", sourceID),

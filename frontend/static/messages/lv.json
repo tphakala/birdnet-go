@@ -3464,6 +3464,13 @@
         "typeLabel": "Straumes tips",
         "typeHelp": "Straumes protokols — automātiski noteikts no URL",
         "transportLabel": "Protokols",
+        "mediaModeLabel": "Multivides režīms",
+        "mediaModeHelp": "Pilnā straume pieprasa gan audio, gan video (video pēc dekodēšanas tiek atmests) un darbojas ar lielāko daļu kameru. Auto vispirms mēģina tikai audio un pārslēdzas uz pilno straumi, ja kamera nevar nodrošināt tikai audio. Tikai audio nekad neaizņem kameras video slotu, bet neizdodas, ja kamera nevar patstāvīgi nodrošināt audio celiņu.",
+        "mediaMode": {
+          "auto": "Auto",
+          "audioOnly": "Tikai audio",
+          "fullStream": "Pilna straume"
+        },
         "summary": "{count} straume(-es) konfigurēta(-as)",
         "healthy": "veselīga",
         "unhealthy": "neveselīga",

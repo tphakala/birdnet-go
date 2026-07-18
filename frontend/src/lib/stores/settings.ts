@@ -191,6 +191,8 @@ export type StreamType = (typeof StreamTypes)[keyof typeof StreamTypes];
 
 export type ChannelMode = 'downmix' | 'left' | 'right';
 
+export type MediaMode = 'auto' | 'audio-only' | 'full-stream';
+
 // QuietHoursConfig represents quiet hours configuration for a stream or sound card
 export interface QuietHoursConfig {
   enabled: boolean;
@@ -223,6 +225,7 @@ export interface StreamConfig {
   type: StreamType; // Stream type: rtsp, http, hls, rtmp, udp
   transport?: 'tcp' | 'udp'; // Transport protocol (for RTSP/RTMP only)
   channelMode?: ChannelMode; // Channel selection mode: downmix, left, or right
+  mediaMode?: MediaMode; // RTSP media request: auto, audio-only, or full-stream (empty = full-stream)
   models?: string[]; // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
   equalizer?: EqualizerSettings; // Per-stream EQ (undefined = use global)
   quietHours?: QuietHoursConfig; // Quiet hours configuration

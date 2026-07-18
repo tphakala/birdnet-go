@@ -3464,6 +3464,13 @@
         "typeLabel": "Tipo de Stream",
         "typeHelp": "Protocolo do stream - detectado automaticamente da URL",
         "transportLabel": "Protocolo",
+        "mediaModeLabel": "Modo de mídia",
+        "mediaModeHelp": "O fluxo completo solicita áudio e vídeo (o vídeo é descartado após a decodificação) e funciona com a maioria das câmeras. Auto tenta primeiro apenas áudio e recorre ao fluxo completo se a câmera não conseguir fornecer áudio sozinha. Apenas áudio nunca ocupa um slot de vídeo da câmera, mas falha se a câmera não conseguir fornecer a faixa de áudio por conta própria.",
+        "mediaMode": {
+          "auto": "Auto",
+          "audioOnly": "Apenas áudio",
+          "fullStream": "Fluxo completo"
+        },
         "summary": "{count} stream(s) configurado(s)",
         "healthy": "saudável",
         "unhealthy": "com falha",

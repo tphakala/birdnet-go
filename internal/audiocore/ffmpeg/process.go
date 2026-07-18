@@ -502,10 +502,47 @@ func ProcessAudioToFile(ctx context.Context, filePath, ffmpegPath string, filter
 // RTSP-specific flags like -rtsp_transport are only added for RTSP sources.
 // A default -timeout is added unless the caller supplies one via ffmpegParameters.
 func BuildFFmpegArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
-	// Audio-only restriction is on by default; the runtime path drops it per
-	// Stream via buildFFmpegInputArgs once a camera proves it cannot honor it.
-	args := buildInputArgs(cfg, ffmpegParameters, true)
+	// Represent the initial request (no reactive fallback engaged yet). The audio
+	// mode is decided by resolveAudioOnly so this mirror matches the runtime path
+	// (buildFFmpegInputArgs) under every media mode.
+	args := buildInputArgs(cfg, ffmpegParameters, resolveAudioOnly(cfg, false))
 	return buildOutputArgs(args, cfg)
+}
+
+// resolveAudioOnly reports whether the stream should request audio-only RTSP
+// media (-allowed_media_types audio). It is the single source of truth for that
+// decision, shared by the runtime path (Stream.buildFFmpegInputArgs) and the
+// unit-tested mirror (BuildFFmpegArgs), so the two cannot diverge.
+//
+// fallbackEngaged is consulted only in auto mode; audio-only and full-stream are
+// deterministic and ignore it. An empty mode canonicalizes to the default
+// (full-stream); any other unrecognized value (rejected at config validation)
+// falls through to the default branch and is also treated as full-stream.
+func resolveAudioOnly(cfg *StreamConfig, fallbackEngaged bool) bool {
+	switch conf.MediaMode(cfg.MediaMode).Canonical() {
+	case conf.MediaModeAudioOnly:
+		return true
+	case conf.MediaModeFullStream:
+		return false
+	case conf.MediaModeAuto:
+		// Audio-only first, dropping the restriction once the reactive fallback
+		// latches because the camera cannot deliver audio alone (issue #3902).
+		return !fallbackEngaged
+	default:
+		return false
+	}
+}
+
+// mediaModeAllowsFallback reports whether the reactive audio-only fallback may
+// engage for this stream. Only auto mode allows it; audio-only fails visibly
+// rather than falling back, and full-stream never requested audio-only at all.
+func mediaModeAllowsFallback(cfg *StreamConfig) bool {
+	return conf.MediaMode(cfg.MediaMode).Canonical() == conf.MediaModeAuto
+}
+
+// effectiveMediaMode returns the canonical media mode as a string, for logging.
+func effectiveMediaMode(cfg *StreamConfig) string {
+	return string(conf.MediaMode(cfg.MediaMode).Canonical())
 }
 
 // buildOutputArgs appends the post-input FFmpeg flags: the input URL, decode
