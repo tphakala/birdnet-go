@@ -513,8 +513,20 @@ func TestApplyStreamDefaults(t *testing.T) {
 	}
 }
 
-func TestStreamConfig_ChannelModeValidation(t *testing.T) {
-	t.Parallel()
+// streamModeCase is one enum-mode validation case: the raw value to set and
+// whether StreamConfig.Validate must reject it.
+type streamModeCase struct {
+	name    string
+	value   string
+	wantErr bool
+}
+
+// runStreamModeValidation applies each case's value to a base RTSP StreamConfig
+// via apply, runs Validate, and asserts errSubstr appears in any rejection. The
+// channel-mode and media-mode validation tests share this scaffolding since they
+// are otherwise identical over different enum fields.
+func runStreamModeValidation(t *testing.T, apply func(*StreamConfig, string), errSubstr string, cases []streamModeCase) {
+	t.Helper()
 
 	base := func() StreamConfig {
 		return StreamConfig{
@@ -525,28 +537,15 @@ func TestStreamConfig_ChannelModeValidation(t *testing.T) {
 		}
 	}
 
-	tests := []struct {
-		name        string
-		channelMode ChannelMode
-		wantErr     bool
-	}{
-		{"empty defaults to downmix", "", false},
-		{"explicit downmix", ChannelModeDownmix, false},
-		{"left channel", ChannelModeLeft, false},
-		{"right channel", ChannelModeRight, false},
-		{"invalid mode rejected", ChannelMode("stereo"), true},
-		{"invalid mode center", ChannelMode("center"), true},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			s := base()
-			s.ChannelMode = tt.channelMode
+			apply(&s, tt.value)
 			err := s.Validate()
 			if tt.wantErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), "invalid channel mode")
+				assert.Contains(t, err.Error(), errSubstr)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -554,45 +553,34 @@ func TestStreamConfig_ChannelModeValidation(t *testing.T) {
 	}
 }
 
+func TestStreamConfig_ChannelModeValidation(t *testing.T) {
+	t.Parallel()
+	runStreamModeValidation(t,
+		func(s *StreamConfig, v string) { s.ChannelMode = ChannelMode(v) },
+		"invalid channel mode",
+		[]streamModeCase{
+			{"empty defaults to downmix", "", false},
+			{"explicit downmix", string(ChannelModeDownmix), false},
+			{"left channel", string(ChannelModeLeft), false},
+			{"right channel", string(ChannelModeRight), false},
+			{"invalid mode rejected", "stereo", true},
+			{"invalid mode center", "center", true},
+		})
+}
+
 func TestStreamConfig_MediaModeValidation(t *testing.T) {
 	t.Parallel()
-
-	base := func() StreamConfig {
-		return StreamConfig{
-			Name:    "Test Stream",
-			URL:     "rtsp://192.168.1.10/stream",
-			Enabled: true,
-			Type:    StreamTypeRTSP,
-		}
-	}
-
-	tests := []struct {
-		name      string
-		mediaMode MediaMode
-		wantErr   bool
-	}{
-		{"empty defaults to full-stream", "", false},
-		{"explicit auto", MediaModeAuto, false},
-		{"explicit audio-only", MediaModeAudioOnly, false},
-		{"explicit full-stream", MediaModeFullStream, false},
-		{"invalid mode rejected", MediaMode("video-only"), true},
-		{"invalid mode garbage", MediaMode("both"), true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			s := base()
-			s.MediaMode = tt.mediaMode
-			err := s.Validate()
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "invalid media mode")
-			} else {
-				assert.NoError(t, err)
-			}
+	runStreamModeValidation(t,
+		func(s *StreamConfig, v string) { s.MediaMode = MediaMode(v) },
+		"invalid media mode",
+		[]streamModeCase{
+			{"empty defaults to full-stream", "", false},
+			{"explicit auto", string(MediaModeAuto), false},
+			{"explicit audio-only", string(MediaModeAudioOnly), false},
+			{"explicit full-stream", string(MediaModeFullStream), false},
+			{"invalid mode rejected", "video-only", true},
+			{"invalid mode garbage", "both", true},
 		})
-	}
 }
 
 // TestMediaMode_Canonical verifies an unset media mode resolves to the default
