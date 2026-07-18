@@ -154,9 +154,13 @@
     const xTickNodes = xAxisGroup.selectAll<globalThis.SVGGElement, Date>('.tick').nodes();
     if (xTickNodes.length > 0) {
       select(xTickNodes[0]).select('text').style('text-anchor', 'start');
-      select(xTickNodes[xTickNodes.length - 1])
-        .select('text')
-        .style('text-anchor', 'end');
+      // Only anchor the last tick to 'end' when it's a distinct node — a lone tick
+      // (zero-width domain) must stay 'start' or it shifts left off the origin.
+      if (xTickNodes.length > 1) {
+        select(xTickNodes[xTickNodes.length - 1])
+          .select('text')
+          .style('text-anchor', 'end');
+      }
     }
 
     if (dateAxisLabel) {
