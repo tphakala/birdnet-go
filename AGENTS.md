@@ -85,7 +85,7 @@ persistently flaky, raise it rather than patching around it.
 - Build system: Task (taskfile.dev)
 - Linting: golangci-lint (Go), npm run check:all (Frontend)
 - Testing: go test -race (Go), npm test (Frontend)
-- All PRs receive automated CodeRabbit and Gemini reviews
+- All PRs receive automated CodeRabbit reviews
 - API v1 is frozen; all new endpoints go in `internal/api/v2/`
 
 For detailed guidelines, see `CLAUDE.md` and the `CLAUDE.md` files in
