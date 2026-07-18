@@ -869,3 +869,16 @@ func TestCheckMySQLHasFreshV2Schema_RequiresDetectionsTable(t *testing.T) {
 	assert.False(t, CheckMySQLHasFreshV2Schema(settings),
 		"a stale completed marker without a detections table must not be treated as fresh v2")
 }
+
+func TestCheckSQLiteMigrationStateSetsDecision(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(dir, "birdnet.db")
+
+	// Neither configured DB nor sidecar exists: fresh install.
+	state := CheckMigrationStateBeforeStartup(settings)
+	assert.True(t, state.FreshInstall)
+	assert.Equal(t, DecisionFreshInstall, state.Decision)
+}

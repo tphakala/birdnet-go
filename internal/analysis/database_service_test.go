@@ -9,7 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -104,4 +107,89 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	// Fresh install goes to v2-only mode.
 	assert.True(t, svc.IsV2OnlyMode(), "should be in v2-only mode for fresh install")
 	assert.NotNil(t, svc.V2Manager(), "V2Manager() should be set for fresh install")
+}
+
+func TestBootParamsFromStartupSQLite(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	settings := &conf.Settings{}
+	settings.Version = "20260716"
+	settings.BuildDate = "2026-07-16"
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(dir, "birdnet.db")
+
+	st := datastoreV2.StartupState{
+		MigrationStatus: entities.MigrationStatusCompleted,
+		Decision:        datastoreV2.DecisionV2Restart,
+	}
+
+	p := bootParamsFromStartup(settings, st)
+	assert.Equal(t, "20260716", p.Version)
+	assert.Equal(t, "sqlite", p.Dialect)
+	assert.Equal(t, settings.Output.SQLite.Path, p.ConfiguredDBPath)
+	assert.Equal(t, datastoreV2.V2MigrationPathFromConfigured(settings.Output.SQLite.Path), p.V2SidecarPath)
+	assert.Equal(t, datastoreV2.DecisionV2Restart, p.StartupDecision)
+	assert.Equal(t, string(entities.MigrationStatusCompleted), p.MigrationState)
+	assert.Equal(t, dir, p.DataDir)
+	assert.NotEmpty(t, p.ConfigDir)
+}
+
+func TestBootParamsFromStartupMySQL(t *testing.T) {
+	t.Parallel()
+	settings := &conf.Settings{}
+	settings.Version = "20260716"
+	settings.Output.MySQL.Enabled = true
+
+	p := bootParamsFromStartup(settings, datastoreV2.StartupState{Decision: datastoreV2.DecisionLegacyMode})
+	assert.Equal(t, "mysql", p.Dialect)
+	assert.Empty(t, p.ConfiguredDBPath, "MySQL has no file path facts")
+	assert.Empty(t, p.V2SidecarPath)
+}
+
+// TestBootParamsDBLostUsesDatastoreConstants is a cross-package value-sync
+// guard. diagnostics keeps PRIVATE copies of the dialect ("sqlite") and
+// decision ("fresh_install") strings because it must not import datastore
+// (import cycle). This test drives the REAL flow: datastore.DialectSQLite and
+// datastoreV2.DecisionFreshInstall map through bootParamsFromStartup into the
+// BootParams that diagnostics.detectAnomalies compares against its private
+// copies. If either upstream constant ever drifts from the diagnostics copy,
+// db_lost silently stops firing (the exact #3956-class silent failure this
+// feature exists to catch) and this test fails.
+func TestBootParamsDBLostUsesDatastoreConstants(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "birdnet.db") // never created: absent this boot
+	j := diagnostics.NewJournal(filepath.Join(t.TempDir(), "journal.jsonl"))
+
+	// Previous boot: a large sqlite DB present at the same resolved path,
+	// labelled with the datastore constants the real startup flow produces.
+	prev := &diagnostics.BootRecord{
+		RecordHeader: diagnostics.NewRecordHeader(diagnostics.RecordTypeBoot),
+		Datastore: diagnostics.DatastoreSnapshot{
+			Dialect:          datastore.DialectSQLite,
+			ResolvedAbsPath:  dbPath,
+			ConfiguredExists: true,
+			ConfiguredSize:   64 * 1024 * 1024,
+			StartupDecision:  datastoreV2.DecisionV2Restart,
+		},
+	}
+	require.NoError(t, j.Append(prev))
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = dbPath
+	p := bootParamsFromStartup(settings, datastoreV2.StartupState{
+		Decision:        datastoreV2.DecisionFreshInstall,
+		MigrationStatus: entities.MigrationStatusIdle,
+	})
+	_, anomalies := diagnostics.RecordBoot(j, p)
+
+	found := false
+	for _, a := range anomalies {
+		if a.Kind == diagnostics.AnomalyDBLost {
+			found = true
+		}
+	}
+	assert.True(t, found,
+		"db_lost must fire for the real datastore dialect+decision constants; a drift from diagnostics' private copies would break #3956 detection")
 }

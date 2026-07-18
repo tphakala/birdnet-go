@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"gopkg.in/yaml.v3"
 )
@@ -1913,4 +1914,60 @@ func TestComprehensivePrivacyScrubbing_Integration(t *testing.T) {
 	t.Run("url_structural_redaction", func(t *testing.T) {
 		assertURLStructuralRedaction(t, got)
 	})
+}
+
+func TestCreateArchiveIncludesJournal(t *testing.T) {
+	t.Parallel()
+	// Fully hermetic: the collector locates the journal via
+	// diagnostics.JournalPathIn(c.configPath), so a journal written into
+	// the test's temp config dir is picked up with no environment coupling.
+	configDir := t.TempDir()
+	jp := diagpkg.JournalPathIn(configDir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(jp), 0o750))
+	journalLine := `{"schema_version":1,"type":"boot","timestamp":"2026-07-18T10:00:00Z","cwd":"/home/someuser/birdnet"}` + "\n"
+	require.NoError(t, os.WriteFile(jp, []byte(journalLine), 0o600))
+
+	c := NewCollector(configDir, t.TempDir(), "sys-id", "20260716")
+	opts := CollectorOptions{IncludeDeploymentInfo: true, AnonymizePII: true}
+	dump, err := c.Collect(t.Context(), opts)
+	require.NoError(t, err)
+	archive, err := c.CreateArchive(t.Context(), dump, opts)
+	require.NoError(t, err)
+
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	require.NoError(t, err)
+	var journalEntry *zip.File
+	for _, f := range zr.File {
+		if f.Name == "diagnostics/journal.jsonl" {
+			journalEntry = f
+		}
+	}
+	require.NotNil(t, journalEntry, "journal must ship in the archive")
+
+	// The journal goes through the same line-by-line anonymization
+	// pipeline as log files: the user path must not survive verbatim.
+	rc, err := journalEntry.Open()
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, rc.Close()) })
+	shipped, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Contains(t, string(shipped), `"type":"boot"`)
+	assert.NotContains(t, string(shipped), "/home/someuser/birdnet",
+		"journal lines are scrubbed on the way out")
+}
+
+func TestCreateArchiveSkipsMissingJournal(t *testing.T) {
+	t.Parallel()
+	c := NewCollector(t.TempDir(), t.TempDir(), "sys-id", "20260716")
+	opts := CollectorOptions{IncludeDeploymentInfo: true, AnonymizePII: true}
+	dump, err := c.Collect(t.Context(), opts)
+	require.NoError(t, err)
+	archive, err := c.CreateArchive(t.Context(), dump, opts)
+	require.NoError(t, err, "absent journal must not fail archive creation")
+
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	require.NoError(t, err)
+	for _, f := range zr.File {
+		assert.NotEqual(t, "diagnostics/journal.jsonl", f.Name)
+	}
 }

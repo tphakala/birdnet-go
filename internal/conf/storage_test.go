@@ -44,3 +44,20 @@ func TestFinalizeValidation_NonValidationErrorIsFatal(t *testing.T) {
 	err := finalizeValidation(errors.Newf("some unrelated error").Build())
 	require.Error(t, err)
 }
+
+func TestDefaultConfigCreatedMarker(t *testing.T) {
+	// Not parallel: mutates package-level marker state. Reset at entry and
+	// exit so the test is order-independent regardless of what other tests
+	// in the package did with the marker.
+	defaultConfigCreatedPath.Store(nil)
+	t.Cleanup(func() { defaultConfigCreatedPath.Store(nil) })
+
+	created, path := DefaultConfigCreated()
+	assert.False(t, created, "marker starts unset")
+	assert.Empty(t, path)
+
+	markDefaultConfigCreated("/tmp/config.yaml")
+	created, path = DefaultConfigCreated()
+	assert.True(t, created)
+	assert.Equal(t, "/tmp/config.yaml", path)
+}
