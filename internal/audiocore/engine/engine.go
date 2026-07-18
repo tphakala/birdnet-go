@@ -686,8 +686,20 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	// snapshots and emits the SourceReconfigured event with the fully updated entry.
 	// Without the sync, a channel/media-mode-only change re-triggers on every later
 	// reconfigure and restarts the stream indefinitely.
-	e.registry.SyncReconfiguredParams(sourceID, newCfg.ChannelMode, newCfg.MediaMode, newCfg.SourceSampleRate, newCfg.SourceChannels)
-	e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
+	syncedModes := e.registry.SyncReconfiguredParams(sourceID, newCfg.ChannelMode, newCfg.MediaMode, newCfg.SourceSampleRate, newCfg.SourceChannels)
+	syncedParams := e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
+	if !syncedModes || !syncedParams {
+		// The source was fetched at the top of this function and the reconfigure
+		// path is serialized, so a false here means the entry was unregistered
+		// concurrently: the registry keeps no updated config and no
+		// SourceReconfigured event fires, leaving downstream consumers with stale
+		// data. The stream itself already restarted above, so warn rather than fail.
+		e.logger.Warn("source missing from registry during reconfigure write-back; downstream config may be stale",
+			logger.String("source_id", sourceID),
+			logger.Bool("synced_modes", syncedModes),
+			logger.Bool("synced_params", syncedParams),
+			logger.String("operation", "reconfigure_source"))
+	}
 
 	e.logger.Info("source reconfigured",
 		logger.String("source_id", sourceID),
