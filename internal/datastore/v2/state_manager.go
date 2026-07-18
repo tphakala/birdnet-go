@@ -8,6 +8,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -523,7 +524,26 @@ func (m *StateManager) transitionState(from, to entities.MigrationStatus) error 
 		return transitionErr
 	}
 
+	// Journal the transition (best-effort, DB-independent trail).
+	diagnostics.RecordMigration(diagnostics.Default(),
+		migrationPhaseForTransition(to), string(from), string(to), 0)
+
 	return nil
+}
+
+// migrationPhaseForTransition maps a target migration state to the journal
+// phase label: started / completed / failed / transition.
+func migrationPhaseForTransition(to entities.MigrationStatus) string {
+	switch to {
+	case entities.MigrationStatusDualWrite:
+		return "started"
+	case entities.MigrationStatusCompleted:
+		return "completed"
+	case entities.MigrationStatusFailed:
+		return "failed"
+	default:
+		return "transition"
+	}
 }
 
 // IsInDualWriteMode returns true if dual-write is active.

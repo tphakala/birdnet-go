@@ -33,6 +33,27 @@ var (
 	loadMu           sync.Mutex
 )
 
+// defaultConfigCreatedPath records the path of a default config generated
+// during this process's Load(). internal/conf must NOT import
+// internal/diagnostics (import cycle), so the journal event is emitted by
+// diagnostics.RecordBoot reading this marker via its caller.
+var defaultConfigCreatedPath atomic.Value // string
+
+// markDefaultConfigCreated records that a default config was generated.
+func markDefaultConfigCreated(path string) {
+	defaultConfigCreatedPath.Store(path)
+}
+
+// DefaultConfigCreated reports whether this process generated a default
+// config file during Load, and at which path.
+func DefaultConfigCreated() (created bool, path string) {
+	v, ok := defaultConfigCreatedPath.Load().(string)
+	if !ok || v == "" {
+		return false, ""
+	}
+	return true, v
+}
+
 // Load reads the configuration file and environment variables into GlobalConfig.
 //
 //nolint:gocognit // Config loading is inherently complex; splitting adds indirection without clarity.
@@ -337,6 +358,10 @@ func createDefaultConfig() error {
 			Context("path", configPath).
 			Build()
 	}
+	// Record that this process generated a default config so the diagnostics
+	// boot journal can emit a config_defaulted event (conf must not import
+	// diagnostics, so the marker is read by the caller of RecordBoot).
+	markDefaultConfigCreated(configPath)
 
 	fmt.Println("Created default config file at:", configPath)
 	return viper.ReadInConfig()

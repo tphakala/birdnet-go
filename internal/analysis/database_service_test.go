@@ -10,6 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -104,4 +105,41 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	// Fresh install goes to v2-only mode.
 	assert.True(t, svc.IsV2OnlyMode(), "should be in v2-only mode for fresh install")
 	assert.NotNil(t, svc.V2Manager(), "V2Manager() should be set for fresh install")
+}
+
+func TestBootParamsFromStartupSQLite(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	settings := &conf.Settings{}
+	settings.Version = "20260716"
+	settings.BuildDate = "2026-07-16"
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(dir, "birdnet.db")
+
+	st := datastoreV2.StartupState{
+		MigrationStatus: entities.MigrationStatusCompleted,
+		Decision:        datastoreV2.DecisionV2Restart,
+	}
+
+	p := bootParamsFromStartup(settings, st)
+	assert.Equal(t, "20260716", p.Version)
+	assert.Equal(t, "sqlite", p.Dialect)
+	assert.Equal(t, settings.Output.SQLite.Path, p.ConfiguredDBPath)
+	assert.Equal(t, datastoreV2.V2MigrationPathFromConfigured(settings.Output.SQLite.Path), p.V2SidecarPath)
+	assert.Equal(t, datastoreV2.DecisionV2Restart, p.StartupDecision)
+	assert.Equal(t, string(entities.MigrationStatusCompleted), p.MigrationState)
+	assert.Equal(t, dir, p.DataDir)
+	assert.NotEmpty(t, p.ConfigDir)
+}
+
+func TestBootParamsFromStartupMySQL(t *testing.T) {
+	t.Parallel()
+	settings := &conf.Settings{}
+	settings.Version = "20260716"
+	settings.Output.MySQL.Enabled = true
+
+	p := bootParamsFromStartup(settings, datastoreV2.StartupState{Decision: datastoreV2.DecisionLegacyMode})
+	assert.Equal(t, "mysql", p.Dialect)
+	assert.Empty(t, p.ConfiguredDBPath, "MySQL has no file path facts")
+	assert.Empty(t, p.V2SidecarPath)
 }
