@@ -1166,14 +1166,37 @@ tasks:
       TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR}}'
       TFLITE_LIB_ARCH: linux_amd64.tar.gz
       TARGET: linux_amd64
+      # Linux release binaries ship with the OpenVINO backend compiled in so
+      # native tarball installs match the OpenVINO wiki (issue #3958). The
+      # backend is dlopen'd at runtime and self-gates to the ONNX Runtime when
+      # libopenvino_c is absent, so a tagged binary runs unchanged on hosts
+      # without the OpenVINO runtime installed. Pass OPENVINO=false to opt out.
+      OPENVINO: '{{.OPENVINO | default "true"}}'
     cmds:
       - task: download-tflite
         vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
+      # Fetch the OpenVINO C API headers when this is an openvino build; the task
+      # no-ops for standard builds (OPENVINO unset or "false").
+      - task: check-openvino
+        vars: {OPENVINO: '{{.OPENVINO}}'}
       - |
         mkdir -p {{.TFLITE_LIB_DIR}}
+        # openvino adds the OpenVINO inference backend (dlopen'd at runtime, ORT
+        # fallback); headers are provided by the check-openvino task above.
+        BUILD_TAGS=""
+        if [ "{{.OPENVINO}}" = "true" ]; then
+          BUILD_TAGS="openvino"
+        fi
+        # go-task exposes EXTRA_BUILD_TAGS as a template var, not a shell env var,
+        # so read it via templating (works for both `task ... EXTRA_BUILD_TAGS=x`
+        # and a real env var); a bare shell `${EXTRA_BUILD_TAGS}` would be empty.
+        EXTRA_TAGS="{{.EXTRA_BUILD_TAGS}}"
+        if [ -n "${EXTRA_TAGS}" ]; then
+          BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}${EXTRA_TAGS}"
+        fi
         GOOS=linux GOARCH=amd64 {{.CGO_FLAGS}} \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build -trimpath {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        go build -trimpath ${BUILD_TAGS:+-tags "${BUILD_TAGS}"} {{.LDFLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   linux_arm64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
@@ -1181,17 +1204,41 @@ tasks:
       TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .CROSS_LIB_DIR_ARM64}}'
       TFLITE_LIB_ARCH: linux_arm64.tar.gz
       TARGET: linux_arm64
+      # Linux release binaries ship with the OpenVINO backend compiled in so
+      # native tarball installs match the OpenVINO wiki (issue #3958). The
+      # backend is dlopen'd at runtime and self-gates to the ONNX Runtime when
+      # libopenvino_c is absent, so a tagged binary runs unchanged on hosts
+      # without the OpenVINO runtime installed. Pass OPENVINO=false to opt out.
+      OPENVINO: '{{.OPENVINO | default "true"}}'
     cmds:
       - task: download-tflite
         vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
+      # Fetch the OpenVINO C API headers when this is an openvino build; the task
+      # no-ops for standard builds (OPENVINO unset or "false"). The C API headers
+      # are architecture-independent, so the amd64-host cache serves arm64 too.
+      - task: check-openvino
+        vars: {OPENVINO: '{{.OPENVINO}}'}
       - |
         mkdir -p {{.TFLITE_LIB_DIR}}
         if [ "$(uname -m)" != "aarch64" ]; then
           export CC=aarch64-linux-gnu-gcc
         fi
+        # openvino adds the OpenVINO inference backend (dlopen'd at runtime, ORT
+        # fallback); headers are provided by the check-openvino task above.
+        BUILD_TAGS=""
+        if [ "{{.OPENVINO}}" = "true" ]; then
+          BUILD_TAGS="openvino"
+        fi
+        # go-task exposes EXTRA_BUILD_TAGS as a template var, not a shell env var,
+        # so read it via templating (works for both `task ... EXTRA_BUILD_TAGS=x`
+        # and a real env var); a bare shell `${EXTRA_BUILD_TAGS}` would be empty.
+        EXTRA_TAGS="{{.EXTRA_BUILD_TAGS}}"
+        if [ -n "${EXTRA_TAGS}" ]; then
+          BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}${EXTRA_TAGS}"
+        fi
         GOOS=linux GOARCH=arm64 {{.CGO_FLAGS}} \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build -trimpath {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        go build -trimpath ${BUILD_TAGS:+-tags "${BUILD_TAGS}"} {{.LDFLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   windows_amd64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
@@ -1321,8 +1368,12 @@ tasks:
         if [ "{{.OPENVINO}}" = "true" ]; then
           BUILD_TAGS="${BUILD_TAGS},openvino"
         fi
-        if [ -n "${EXTRA_BUILD_TAGS:-}" ]; then
-          BUILD_TAGS="${BUILD_TAGS},${EXTRA_BUILD_TAGS}"
+        # go-task exposes EXTRA_BUILD_TAGS as a template var, not a shell env var,
+        # so read it via templating (works for both `task ... EXTRA_BUILD_TAGS=x`
+        # and a real env var); a bare shell `${EXTRA_BUILD_TAGS}` would be empty.
+        EXTRA_TAGS="{{.EXTRA_BUILD_TAGS}}"
+        if [ -n "${EXTRA_TAGS}" ]; then
+          BUILD_TAGS="${BUILD_TAGS},${EXTRA_TAGS}"
         fi
         TFLITE_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c"
         if [ "{{.NOTFLITE}}" = "true" ]; then
