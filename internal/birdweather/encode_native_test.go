@@ -64,6 +64,14 @@ func TestEncodeWithNativeFLAC(t *testing.T) {
 	assert.Equal(t, uint64(conf.SampleRate), sampleRate, "FLAC STREAMINFO sample rate mismatch")
 	assert.Equal(t, uint64(sampleCount), totalSamples, "FLAC STREAMINFO total samples should be finalized")
 
+	// STREAMINFO must carry a finalized, non-zero block size on this non-seekable
+	// upload path (#3965). A zero max_blocksize makes browsers and CoreAudio reject
+	// the soundscape; go-flac >= v0.4.1 writes the fixed 4096 block size up front.
+	const flacBlockSize = 4096 // go-flac's fixed encoder block size
+	minBlock, maxBlock := flacBlockSizes(t, flacBytes)
+	assert.Equal(t, uint16(flacBlockSize), minBlock, "FLAC STREAMINFO min block size must be finalized, not the 0 sentinel")
+	assert.Equal(t, uint16(flacBlockSize), maxBlock, "FLAC STREAMINFO max block size must be finalized, not the 0 sentinel")
+
 	// Re-measure the decoded output: it should sit near the target loudness.
 	out := decodeToInt16(t, flacBytes)
 	meas, err := audionorm.MeasureInt16(out, conf.SampleRate, conf.NumChannels)

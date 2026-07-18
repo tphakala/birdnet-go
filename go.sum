@@ -289,8 +289,8 @@ github.com/tklauser/numcpus v0.12.0 h1:NR85qdvHA9pFse3x3weVZ0r0ST8R6l5RHbZrlRaqo
 github.com/tklauser/numcpus v0.12.0/go.mod h1:ABHeXzJnr/qqwguhClkZKT1/8VABcYrsyUiUGobwWJg=
 github.com/tphakala/go-audio-resampler v1.4.0 h1:Iv71vuUVzH2apR9tw4TrWDRvjNOc1e8Qr58TKl6IaLo=
 github.com/tphakala/go-audio-resampler v1.4.0/go.mod h1:mDVvtgIkzupYeqTcxRIJeEED53yrCTu2BP3mAYpiYj0=
-github.com/tphakala/go-flac v0.4.0 h1:aze0YFqJOPRRWEaDH5ek2yquDfPW/qxmMkLZFrx12S8=
-github.com/tphakala/go-flac v0.4.0/go.mod h1:d6cu4zAcEOyHq1mHJHvKH92v8i7/MmreUtcPsx7FhNs=
+github.com/tphakala/go-flac v0.4.1 h1:c8nGxcTEQwwqzUAWeHONWBbpM+D7O++bcul19XBoIrU=
+github.com/tphakala/go-flac v0.4.1/go.mod h1:d6cu4zAcEOyHq1mHJHvKH92v8i7/MmreUtcPsx7FhNs=
 github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7 h1:fJtEs8rODoFDk8HDRwvNxIYEgsUUrEAvqPdllxF0cmg=
 github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7/go.mod h1:xCgggryHiQ3nD0Sy0oCZESPWmzThLKKB28Vky5m6HCo=
 github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a h1:BBvsu7Mes8McH6ikyagnU9y2N8hjoDxvDNCl162hwdA=
