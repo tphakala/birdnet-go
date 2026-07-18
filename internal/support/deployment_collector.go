@@ -132,6 +132,8 @@ func (c *Collector) scrubEnvironmentLine(line string) string {
 }
 
 // collectDataDirectoryListing lists files in the data directory with metadata.
+//
+//nolint:dupl // temporary duplicate of internal/diagnostics.ListDirectory, removed in Task 6
 func (c *Collector) collectDataDirectoryListing(anonymizePII bool) ([]DataDirectoryFile, error) {
 	entries, err := os.ReadDir(c.dataPath)
 	if err != nil {
@@ -185,6 +187,8 @@ func (c *Collector) collectDockerMounts(_ context.Context, anonymizePII bool) ([
 
 // parseMountInfo parses /proc/1/mountinfo format and extracts bind mounts.
 // Format: id parent major:minor root mount-point mount-options ... - fs-type mount-source super-options
+//
+//nolint:dupl // temporary duplicate of internal/diagnostics.ParseMountInfo, removed in Task 6
 func parseMountInfo(content string, anonymizePII bool) []DockerMount {
 	if content == "" {
 		return nil
