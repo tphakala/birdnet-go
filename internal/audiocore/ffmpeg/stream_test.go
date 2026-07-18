@@ -45,6 +45,10 @@ func newTestConfig() StreamConfig {
 		FFmpegPath: "/usr/bin/ffmpeg",
 		Transport:  "tcp",
 		LogLevel:   "error",
+		// Auto mode exercises the historical audio-only-first request plus the
+		// reactive fallback. The default (empty) is now full-stream, so tests that
+		// assert audio-only behavior set auto explicitly here.
+		MediaMode: "auto",
 	}
 }
 

@@ -554,6 +554,59 @@ func TestStreamConfig_ChannelModeValidation(t *testing.T) {
 	}
 }
 
+func TestStreamConfig_MediaModeValidation(t *testing.T) {
+	t.Parallel()
+
+	base := func() StreamConfig {
+		return StreamConfig{
+			Name:    "Test Stream",
+			URL:     "rtsp://192.168.1.10/stream",
+			Enabled: true,
+			Type:    StreamTypeRTSP,
+		}
+	}
+
+	tests := []struct {
+		name      string
+		mediaMode MediaMode
+		wantErr   bool
+	}{
+		{"empty defaults to full-stream", "", false},
+		{"explicit auto", MediaModeAuto, false},
+		{"explicit audio-only", MediaModeAudioOnly, false},
+		{"explicit full-stream", MediaModeFullStream, false},
+		{"invalid mode rejected", MediaMode("video-only"), true},
+		{"invalid mode garbage", MediaMode("both"), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := base()
+			s.MediaMode = tt.mediaMode
+			err := s.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid media mode")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestMediaMode_Canonical verifies an unset media mode resolves to the default
+// (full-stream) while explicit values are returned unchanged.
+func TestMediaMode_Canonical(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, MediaModeFullStream, MediaMode("").Canonical(), "empty must canonicalize to full-stream")
+	assert.Equal(t, DefaultMediaMode, MediaMode("").Canonical(), "empty must equal DefaultMediaMode")
+	assert.Equal(t, MediaModeAuto, MediaModeAuto.Canonical())
+	assert.Equal(t, MediaModeAudioOnly, MediaModeAudioOnly.Canonical())
+	assert.Equal(t, MediaModeFullStream, MediaModeFullStream.Canonical())
+}
+
 // TestStreamConfig_Validate_GainRange mirrors TestAudioSourceConfig_Validate_GainRange:
 // StreamConfig.Validate must reject NaN, +/-Inf, and out-of-range gain so a
 // hand-edited config.yaml or a non-UI API client cannot push an out-of-range

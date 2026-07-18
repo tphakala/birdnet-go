@@ -301,6 +301,7 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 		Channels:         channels,
 		SourceChannels:   src.SourceChannels,
 		ChannelMode:      src.ChannelMode,
+		MediaMode:        src.MediaMode,
 		FFmpegPath:       e.ffmpegPath,
 		Transport:        transport,
 		FFmpegParameters: e.ffmpegParameters,
@@ -438,6 +439,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			Channels:         channels,
 			SourceChannels:   cfg.SourceChannels,
 			ChannelMode:      cfg.ChannelMode,
+			MediaMode:        cfg.MediaMode,
 			FFmpegPath:       e.ffmpegPath,
 			Transport:        e.transport,
 			FFmpegParameters: e.ffmpegParameters,
@@ -643,6 +645,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Channels:         channels,
 			SourceChannels:   newCfg.SourceChannels,
 			ChannelMode:      newCfg.ChannelMode,
+			MediaMode:        newCfg.MediaMode,
 			FFmpegPath:       e.ffmpegPath,
 			Transport:        e.transport,
 			FFmpegParameters: e.ffmpegParameters,
@@ -677,7 +680,13 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		}
 	}
 
-	// 6. Update registry so downstream consumers see the new audio params.
+	// 6. Update registry so downstream consumers see the new audio params. Sync the
+	// mode and source-shape fields first (ReconfigureSource does not re-register, so
+	// the registry otherwise keeps the values from add time), then UpdateAudioParams
+	// snapshots and emits the SourceReconfigured event with the fully updated entry.
+	// Without the sync, a channel/media-mode-only change re-triggers on every later
+	// reconfigure and restarts the stream indefinitely.
+	e.registry.SyncReconfiguredParams(sourceID, newCfg.ChannelMode, newCfg.MediaMode, newCfg.SourceSampleRate, newCfg.SourceChannels)
 	e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
 
 	e.logger.Info("source reconfigured",

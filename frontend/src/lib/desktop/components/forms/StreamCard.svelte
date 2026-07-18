@@ -50,6 +50,7 @@
     EqualizerFilterType,
     QuietHoursConfig,
     ChannelMode,
+    MediaMode,
     ChannelAnalysis,
   } from '$lib/stores/settings';
   import {
@@ -61,7 +62,12 @@
   import StreamTestButton from './StreamTestButton.svelte';
   import StreamTimeline from './StreamTimeline.svelte';
   import StreamChannelControls from './StreamChannelControls.svelte';
-  import { streamTypeOptions, transportOptions, analyzeStreamChannels } from './streamOptions';
+  import {
+    streamTypeOptions,
+    transportOptions,
+    getMediaModeOptions,
+    analyzeStreamChannels,
+  } from './streamOptions';
   import { normalizeChannelMode } from './streamChannel';
 
   interface LocalEqualizerSettings {
@@ -199,6 +205,8 @@
   let showDeleteConfirm = $state(false);
   let showEqualizer = $state(false);
   let editChannelMode = $state<ChannelMode>('downmix');
+  // Default matches the backend default (empty = full-stream).
+  let editMediaMode = $state<MediaMode>('full-stream');
   let isAnalyzing = $state(false);
   let analysisResult = $state<ChannelAnalysis | null>(null);
   let analysisError = $state<string | null>(null);
@@ -315,11 +323,16 @@
   let showTransport = $derived(stream.type === 'rtsp' || stream.type === 'rtmp');
   let showTransportInEdit = $derived(editStreamType === 'rtsp' || editStreamType === 'rtmp');
 
+  // Media mode only affects the RTSP handshake, so it is RTSP-only.
+  let showMediaModeInEdit = $derived(editStreamType === 'rtsp');
+
   function startEdit() {
     editName = stream.name;
     editUrl = stream.url;
     editTransport = stream.transport ?? 'tcp';
     editChannelMode = normalizeChannelMode(stream.channelMode);
+    // Empty/unset media mode is the full-stream default.
+    editMediaMode = stream.mediaMode ?? 'full-stream';
     editStreamType = stream.type;
     editEnabled = stream.enabled;
     editGain = stream.gain ?? 0;
@@ -372,6 +385,8 @@
         channelMode: editChannelMode,
         // Use selected transport for RTSP/RTMP, omit for others
         ...(showTransportInEdit ? { transport: editTransport } : {}),
+        // Media mode is RTSP-only; omit for other stream types so it is not persisted where it has no effect.
+        ...(showMediaModeInEdit ? { mediaMode: editMediaMode } : {}),
         gain: editGain,
         equalizer: transformedEqualizer,
         quietHours: editQuietHours,
@@ -568,6 +583,23 @@
             </div>
           {/if}
         </div>
+
+        <!-- RTSP media mode: audio-only handshake, full stream, or auto fallback -->
+        {#if showMediaModeInEdit}
+          <div>
+            <SelectDropdown
+              value={editMediaMode}
+              label={t('settings.audio.streams.mediaModeLabel')}
+              options={getMediaModeOptions()}
+              onChange={value => (editMediaMode = value as MediaMode)}
+              groupBy={false}
+              menuSize="sm"
+            />
+            <p class="text-xs text-[var(--color-base-content)]/70 mt-1">
+              {t('settings.audio.streams.mediaModeHelp')}
+            </p>
+          </div>
+        {/if}
 
         <!-- Channel handling: format display, selector, and stereo analysis -->
         <StreamChannelControls
@@ -781,6 +813,19 @@
                 class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
                 >R</span
               >
+            {/if}
+            {#if showTransport && stream.mediaMode === 'auto'}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-secondary)]/15 text-[var(--color-secondary)]"
+              >
+                {t('settings.audio.streams.mediaMode.auto')}
+              </span>
+            {:else if showTransport && stream.mediaMode === 'audio-only'}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-secondary)]/15 text-[var(--color-secondary)]"
+              >
+                {t('settings.audio.streams.mediaMode.audioOnly')}
+              </span>
             {/if}
           </div>
 

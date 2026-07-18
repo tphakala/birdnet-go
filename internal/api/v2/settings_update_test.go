@@ -787,3 +787,49 @@ func TestStreamsSettingsChanged_ChannelMode(t *testing.T) {
 		})
 	}
 }
+
+// TestStreamsSettingsChanged_MediaMode verifies that a real media-mode edit
+// triggers reconfiguration while the no-op transition between the empty default
+// and its canonical form ("" <-> "full-stream") does NOT. Without canonical
+// comparison the first save after the frontend starts sending an explicit
+// "full-stream" would needlessly restart the stream.
+func TestStreamsSettingsChanged_MediaMode(t *testing.T) {
+	t.Parallel()
+
+	makeSettings := func(mode conf.MediaMode) *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.RTSP.Streams = []conf.StreamConfig{{
+			Name:      "Front Yard",
+			URL:       "rtsp://192.168.1.10/stream",
+			Type:      conf.StreamTypeRTSP,
+			Transport: "tcp",
+			Enabled:   true,
+			MediaMode: mode,
+			Models:    []string{"birdnet"},
+		}}
+		return s
+	}
+
+	tests := []struct {
+		name string
+		old  conf.MediaMode
+		new  conf.MediaMode
+		want bool
+	}{
+		{"unset to explicit full-stream is a no-op", "", conf.MediaModeFullStream, false},
+		{"explicit full-stream to unset is a no-op", conf.MediaModeFullStream, "", false},
+		{"identical auto", conf.MediaModeAuto, conf.MediaModeAuto, false},
+		{"unset to auto changes", "", conf.MediaModeAuto, true},
+		{"full-stream to auto changes", conf.MediaModeFullStream, conf.MediaModeAuto, true},
+		{"auto to audio-only changes", conf.MediaModeAuto, conf.MediaModeAudioOnly, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			old := makeSettings(tc.old)
+			cur := makeSettings(tc.new)
+			assert.Equal(t, tc.want, streamsSettingsChanged(old, cur))
+		})
+	}
+}

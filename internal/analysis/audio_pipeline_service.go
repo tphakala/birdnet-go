@@ -1045,11 +1045,18 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 	// needlessly restart the stream.
 	channelModeChanged := conf.ChannelMode(running.ChannelMode).Canonical() !=
 		conf.ChannelMode(desired.ChannelMode).Canonical()
+	// Compare canonical media modes so an unset value and an explicit default
+	// (which build identical FFmpeg args) are not treated as a change. Without
+	// this, a mediaMode-only edit would persist to disk but never restart the
+	// running FFmpeg, silently breaking hot-reload.
+	mediaModeChanged := conf.MediaMode(running.MediaMode).Canonical() !=
+		conf.MediaMode(desired.MediaMode).Canonical()
 	return running.SampleRate != desired.SampleRate ||
 		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels ||
 		channelModeChanged ||
+		mediaModeChanged ||
 		sourceChannelsChanged
 }
 
@@ -1379,6 +1386,7 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 				Channels:         1,
 				SourceChannels:   probe.channels,
 				ChannelMode:      string(stream.ChannelMode),
+				MediaMode:        string(stream.MediaMode),
 				Gain:             stream.Gain,
 			},
 			modelIDs: stream.Models,

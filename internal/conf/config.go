@@ -582,6 +582,51 @@ var ValidChannelModes = map[ChannelMode]bool{
 	ChannelModeRight:   true,
 }
 
+// MediaMode controls which RTSP media a stream requests from the camera. It
+// only affects RTSP sources; other stream types ignore it.
+type MediaMode string
+
+const (
+	// MediaModeAuto requests audio-only first and falls back to the full stream
+	// (video decoded then discarded via -vn) only after repeated failures with no
+	// audio ever received. This is the bandwidth-conserving mode that avoids
+	// opening a camera video slot when the camera can deliver audio alone (#3798).
+	MediaModeAuto MediaMode = "auto"
+	// MediaModeAudioOnly forces the audio-only request and never falls back, so a
+	// camera that cannot deliver the audio track alone fails visibly instead of
+	// silently opening a video slot.
+	MediaModeAudioOnly MediaMode = "audio-only"
+	// MediaModeFullStream requests the full stream from the start (video decoded
+	// then discarded via -vn). It never sends -allowed_media_types audio, so it
+	// works with cameras that cannot SETUP the audio track in isolation.
+	MediaModeFullStream MediaMode = "full-stream"
+)
+
+// DefaultMediaMode is used when a stream does not specify a media mode. Full
+// stream is the most compatible request (every RTSP camera can deliver it) and
+// avoids the fragile audio-only handshake that some cameras (e.g. Unifi) complete
+// just long enough to mislead the audio-only fallback (#3953). Users who want to
+// conserve a camera video slot can select "auto" or "audio-only".
+const DefaultMediaMode = MediaModeFullStream
+
+// Canonical returns the effective media mode, treating an empty value as the
+// default. Callers comparing modes (e.g. hot-reload change detection) should
+// compare canonical values so an unset field and an explicit default are not
+// treated as a real change that would needlessly restart the stream.
+func (m MediaMode) Canonical() MediaMode {
+	if m == "" {
+		return DefaultMediaMode
+	}
+	return m
+}
+
+// ValidMediaModes is the set of accepted media mode values.
+var ValidMediaModes = map[MediaMode]bool{
+	MediaModeAuto:       true,
+	MediaModeAudioOnly:  true,
+	MediaModeFullStream: true,
+}
+
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
 	Name        string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard"
@@ -590,6 +635,7 @@ type StreamConfig struct {
 	Type        string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
 	Transport   string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
 	ChannelMode ChannelMode        `yaml:"channelMode,omitempty" json:"channelMode" mapstructure:"channelMode"`     // Channel handling: downmix, left, or right
+	MediaMode   MediaMode          `yaml:"mediaMode,omitempty" json:"mediaMode" mapstructure:"mediaMode"`            // RTSP media request: auto, audio-only, or full-stream (ignored for non-RTSP)
 	Gain        float64            `yaml:"gain" json:"gain" mapstructure:"gain"`                                    // Input gain in dB (0 = no adjustment)
 	Equalizer   *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
 	QuietHours  QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration

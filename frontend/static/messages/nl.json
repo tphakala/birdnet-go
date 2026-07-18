@@ -3464,6 +3464,13 @@
         "typeLabel": "Streamtype",
         "typeHelp": "Streamprotocol - automatisch gedetecteerd uit URL",
         "transportLabel": "Protocol",
+        "mediaModeLabel": "Media Mode",
+        "mediaModeHelp": "Full stream requests audio and video (video is discarded after decode) and works with the widest range of cameras. Auto tries audio-only first and falls back to the full stream if the camera cannot deliver audio alone. Audio-only never opens a camera video slot but fails if the camera cannot deliver the audio track by itself.",
+        "mediaMode": {
+          "auto": "Auto",
+          "audioOnly": "Audio only",
+          "fullStream": "Full stream"
+        },
         "summary": "{count} stream(s) geconfigureerd",
         "healthy": "gezond",
         "unhealthy": "ongezond",

@@ -139,6 +139,7 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 		Channels:         cfg.Channels,
 		SourceChannels:   cfg.SourceChannels,
 		ChannelMode:      cfg.ChannelMode,
+		MediaMode:        cfg.MediaMode,
 		Gain:             cfg.Gain,
 		State:            SourceInactive,
 		RegisteredAt:     time.Now(),
@@ -311,6 +312,36 @@ func (r *SourceRegistry) UpdateAudioParams(sourceID string, sampleRate, bitDepth
 	r.mu.Unlock()
 
 	r.notify(SourceEvent{Type: SourceReconfigured, SourceID: sourceID, Source: snapshot})
+	return true
+}
+
+// SyncReconfiguredParams updates the registry entry's mode and probed source-shape
+// fields after an in-place reconfigure. Register writes these once at add time and
+// ReconfigureSource does not re-register, so without this the registry keeps the
+// values captured when the source was first added. Because sourceNeedsReconfigure
+// diffs the desired config against the registry entry, a stale entry makes a
+// change to only these fields re-trigger on every subsequent reconfigure and
+// restart the stream indefinitely; quiet-hours resume (which rebuilds the stream
+// config from the registry) would also use the old values. Source-shape fields are
+// only overwritten when the new value is known (non-zero), matching the "desired
+// != 0" guard in sourceNeedsReconfigure. It does not notify; the caller's
+// following UpdateAudioParams emits the SourceReconfigured event with the fully
+// updated snapshot.
+func (r *SourceRegistry) SyncReconfiguredParams(sourceID, channelMode, mediaMode string, sourceSampleRate, sourceChannels int) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	src, ok := r.sources[sourceID]
+	if !ok {
+		return false
+	}
+	src.ChannelMode = channelMode
+	src.MediaMode = mediaMode
+	if sourceSampleRate != 0 {
+		src.SourceSampleRate = sourceSampleRate
+	}
+	if sourceChannels != 0 {
+		src.SourceChannels = sourceChannels
+	}
 	return true
 }
 
