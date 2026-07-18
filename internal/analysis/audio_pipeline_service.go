@@ -275,7 +275,29 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	p.quietHoursScheduler.Start()
 
 	// Start audio liveness watchdog for detecting silent capture deaths.
-	notifSvc := notification.GetService()
+	// Coalesce transient silence/recovery notifications so a source that
+	// repeatedly drops and self-recovers (e.g. a flaky RTSP camera) does not spam
+	// one high-priority notification per cycle. Critical escalated/failed states
+	// bypass coalescing. This affects only notifications; source restart and
+	// recovery are unchanged.
+	livenessNotif := newLivenessNotifier(func(priority notification.Priority, title, body string) {
+		// Resolve the notification service at send time rather than capturing it
+		// once at Start, matching the error-hook pattern, so notifications are not
+		// permanently dropped if the service initializes after the pipeline starts.
+		notifSvc := notification.GetService()
+		if notifSvc == nil {
+			return
+		}
+		if _, err := notifSvc.CreateWithComponent(
+			notification.TypeSystem, priority,
+			title, body, livenessComponent,
+		); err != nil {
+			audiocore.GetLogger().Warn("failed to send liveness notification",
+				logger.Error(err),
+				logger.String("operation", "liveness_notify"),
+				logger.String("title", title))
+		}
+	})
 	watchdogCallbacks := audiocore.LivenessCallbacks{
 		RestartSource: p.RestartSource,
 		Escalate: func(_ string) {
@@ -285,23 +307,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			}
 		},
 		Notify: func(sourceID string, state audiocore.LivenessState, msg string) {
-			if notifSvc == nil {
-				return
-			}
-			priority := notification.PriorityHigh
-			title := "Audio source " + msg
-			body := "Source " + sourceID + ": " + msg
-			if state == audiocore.StateFailed || state == audiocore.StateEscalated {
-				priority = notification.PriorityCritical
-			}
-			if _, err := notifSvc.CreateWithComponent(
-				notification.TypeSystem, priority,
-				title, body, "audiocore.liveness",
-			); err != nil {
-				audiocore.GetLogger().Warn("failed to send liveness notification",
-					logger.Error(err),
-					logger.String("operation", "liveness_notify"))
-			}
+			livenessNotif.notify(sourceID, state, msg)
 		},
 		IsQuietHours: func(sourceID string) bool {
 			if p.quietHoursScheduler == nil {
