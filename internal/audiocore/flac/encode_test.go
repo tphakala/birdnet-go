@@ -3,6 +3,7 @@ package flac
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -462,6 +463,37 @@ func TestEncodePCMToBuffer_FinalizesTotalSamples(t *testing.T) {
 	assert.NotZero(t, info.TotalSamples, "total_samples must be finalized, not the unknown sentinel")
 	assert.Equal(t, uint64(sampleCount), info.TotalSamples,
 		"total_samples must equal the input frame count")
+}
+
+// TestEncodePCMToBuffer_FinalizesBlockSize is the birdnet-go-side regression guard
+// for GitHub #3965: the in-memory BirdWeather upload path (a non-seekable
+// bytes.Buffer sink) must emit a STREAMINFO with a finalized, non-zero min/max block
+// size. A zero max_blocksize makes strict decoders (browser Web Audio decodeAudioData,
+// Apple CoreAudio) reject the soundscape, because they derive each fixed-blocksize
+// frame's running sample number as frame_number * max_blocksize and a zero collapses
+// every frame to sample 0. Requires go-flac >= v0.4.1.
+func TestEncodePCMToBuffer_FinalizesBlockSize(t *testing.T) {
+	t.Parallel()
+	const flacBlockSize = 4096 // go-flac's fixed encoder block size
+	// Several full 4096-sample frames plus a short final frame, matching a real clip.
+	pcm := makeTestPCM(5*flacBlockSize + 777)
+	buf, err := EncodePCMToBuffer(t.Context(), bufferBaseOpts(pcm))
+	require.NoError(t, err)
+
+	minBlk, maxBlk := streamInfoBlockSizes(t, buf.Bytes())
+	assert.Equal(t, flacBlockSize, minBlk, "min_blocksize must be finalized, not the 0 unknown sentinel")
+	assert.Equal(t, flacBlockSize, maxBlk, "max_blocksize must be finalized, not the 0 unknown sentinel")
+}
+
+// streamInfoBlockSizes parses the STREAMINFO min/max block size (in samples) from an
+// in-memory FLAC stream. STREAMINFO is always the first metadata block, so its body
+// starts at byte 8 ("fLaC" marker + 4-byte block header), with min_blocksize and
+// max_blocksize as the first two big-endian uint16 fields (bytes 8..9 and 10..11).
+func streamInfoBlockSizes(t *testing.T, flacBytes []byte) (minBlock, maxBlock int) {
+	t.Helper()
+	require.GreaterOrEqual(t, len(flacBytes), 12, "FLAC stream too short to hold STREAMINFO block sizes")
+	require.Equal(t, "fLaC", string(flacBytes[:4]), "missing fLaC stream marker")
+	return int(binary.BigEndian.Uint16(flacBytes[8:10])), int(binary.BigEndian.Uint16(flacBytes[10:12]))
 }
 
 func TestEncodePCMToBuffer_Validation(t *testing.T) {

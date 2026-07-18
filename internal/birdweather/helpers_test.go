@@ -31,6 +31,11 @@ const (
 	flacSampleRateShift        = 44
 	flacSampleRateMask         = 0xfffff
 	flacTotalSamplesBitCount   = 36
+	// The STREAMINFO body starts right after the "fLaC" marker and the 4-byte
+	// metadata block header; its first two 16-bit big-endian fields are the minimum
+	// and maximum block size (in samples).
+	flacMinBlockSizeOffset = flacMagicLen + flacMetadataBlockHeaderLen // body byte 0 (file byte 8)
+	flacMaxBlockSizeOffset = flacMinBlockSizeOffset + 2                // body byte 2 (file byte 10)
 )
 
 func flacStreamInfo(t *testing.T, data []byte) (sampleRate, totalSamples uint64) {
@@ -48,6 +53,19 @@ func flacStreamInfo(t *testing.T, data []byte) (sampleRate, totalSamples uint64)
 	sampleRate = (fields >> flacSampleRateShift) & flacSampleRateMask
 	totalSamples = fields & ((1 << flacTotalSamplesBitCount) - 1)
 	return sampleRate, totalSamples
+}
+
+// flacBlockSizes returns the STREAMINFO minimum and maximum block sizes (in
+// samples). Both must be non-zero and spec-legal (RFC 9639 requires 16..65535); a
+// zero max_blocksize makes strict decoders (browser Web Audio, Apple CoreAudio)
+// reject the stream, which is the BirdWeather soundscape failure in GitHub #3965.
+func flacBlockSizes(t *testing.T, data []byte) (minBlock, maxBlock uint16) {
+	t.Helper()
+	require.GreaterOrEqual(t, len(data), flacStreamInfoMinLen, "FLAC data too short for STREAMINFO")
+	require.Equal(t, flacMagic, string(data[:flacMagicLen]), "FLAC signature not found")
+	minBlock = binary.BigEndian.Uint16(data[flacMinBlockSizeOffset:])
+	maxBlock = binary.BigEndian.Uint16(data[flacMaxBlockSizeOffset:])
+	return minBlock, maxBlock
 }
 
 // TestParseSoundscapeResponse tests the JSON response parsing helper
