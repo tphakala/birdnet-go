@@ -72,3 +72,26 @@ func TestBurstTracker_DifferentKeysIndependent(t *testing.T) {
 	action, _ := bt.Record("mqtt", "connection", "broker unreachable")
 	assert.Equal(t, BurstActionAllow, action)
 }
+
+func TestBurstTracker_ResetClearsBucket(t *testing.T) {
+	bt := NewErrorBurstTracker(3, 5*time.Minute)
+	for range 4 {
+		bt.Record("securefs", "file-io", "error")
+	}
+	// Now in the suppress phase; Reset must clear the window so the next event
+	// starts fresh and is allowed individually again.
+	bt.Reset("securefs", "file-io")
+
+	action, summary := bt.Record("securefs", "file-io", "error after reset")
+	assert.Equal(t, BurstActionAllow, action)
+	assert.Nil(t, summary)
+}
+
+func TestBurstTracker_ResetUnknownKeyIsNoop(t *testing.T) {
+	bt := NewErrorBurstTracker(3, 5*time.Minute)
+	// Resetting a key that was never recorded must not panic or disturb other keys.
+	bt.Reset("never", "seen")
+
+	action, _ := bt.Record("securefs", "file-io", "error")
+	assert.Equal(t, BurstActionAllow, action)
+}
