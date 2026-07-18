@@ -3464,12 +3464,12 @@
         "typeLabel": "Striimin tyyppi",
         "typeHelp": "Striimin protokolla - tunnistetaan automaattisesti URL:sta",
         "transportLabel": "Protokolla",
-        "mediaModeLabel": "Media Mode",
-        "mediaModeHelp": "Full stream requests audio and video (video is discarded after decode) and works with the widest range of cameras. Auto tries audio-only first and falls back to the full stream if the camera cannot deliver audio alone. Audio-only never opens a camera video slot but fails if the camera cannot deliver the audio track by itself.",
+        "mediaModeLabel": "Mediatila",
+        "mediaModeHelp": "Täysi striimi pyytää sekä ääntä että videota (video hylätään dekoodauksen jälkeen) ja toimii useimpien kameroiden kanssa. Automaattinen yrittää ensin pelkkää ääntä ja siirtyy täyteen striimiin, jos kamera ei pysty toimittamaan pelkkää ääntä. Vain ääni ei koskaan varaa kameran videopaikkaa, mutta epäonnistuu, jos kamera ei pysty toimittamaan ääniraitaa itsenäisesti.",
         "mediaMode": {
-          "auto": "Auto",
-          "audioOnly": "Audio only",
-          "fullStream": "Full stream"
+          "auto": "Automaattinen",
+          "audioOnly": "Vain ääni",
+          "fullStream": "Täysi striimi"
         },
         "summary": "{count} striimi(ä) määritetty",
         "healthy": "kunnossa",

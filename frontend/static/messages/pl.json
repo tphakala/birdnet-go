@@ -3464,12 +3464,12 @@
         "typeLabel": "Typ Strumienia",
         "typeHelp": "Protokół strumienia - wykrywany automatycznie z URL",
         "transportLabel": "Protokół",
-        "mediaModeLabel": "Media Mode",
-        "mediaModeHelp": "Full stream requests audio and video (video is discarded after decode) and works with the widest range of cameras. Auto tries audio-only first and falls back to the full stream if the camera cannot deliver audio alone. Audio-only never opens a camera video slot but fails if the camera cannot deliver the audio track by itself.",
+        "mediaModeLabel": "Tryb multimediów",
+        "mediaModeHelp": "Pełny strumień żąda audio i wideo (wideo jest odrzucane po dekodowaniu) i działa z większością kamer. Auto najpierw próbuje tylko audio, a jeśli kamera nie może dostarczyć samego audio, przełącza się na pełny strumień. Tylko audio nigdy nie zajmuje gniazda wideo kamery, ale kończy się niepowodzeniem, jeśli kamera nie może samodzielnie dostarczyć ścieżki audio.",
         "mediaMode": {
           "auto": "Auto",
-          "audioOnly": "Audio only",
-          "fullStream": "Full stream"
+          "audioOnly": "Tylko audio",
+          "fullStream": "Pełny strumień"
         },
         "summary": "{count} strumień(i) skonfigurowany(ch)",
         "healthy": "sprawny",

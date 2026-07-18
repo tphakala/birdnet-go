@@ -3464,12 +3464,12 @@
         "typeLabel": "Strömtyp",
         "typeHelp": "Strömprotokoll - identifieras automatiskt från URL",
         "transportLabel": "Protokoll",
-        "mediaModeLabel": "Media Mode",
-        "mediaModeHelp": "Full stream requests audio and video (video is discarded after decode) and works with the widest range of cameras. Auto tries audio-only first and falls back to the full stream if the camera cannot deliver audio alone. Audio-only never opens a camera video slot but fails if the camera cannot deliver the audio track by itself.",
+        "mediaModeLabel": "Medieläge",
+        "mediaModeHelp": "Full ström begär både ljud och video (videon kasseras efter avkodning) och fungerar med de flesta kameror. Auto försöker med endast ljud först och växlar till full ström om kameran inte kan leverera ljud ensamt. Endast ljud öppnar aldrig en videoplats på kameran men misslyckas om kameran inte kan leverera ljudspåret på egen hand.",
         "mediaMode": {
           "auto": "Auto",
-          "audioOnly": "Audio only",
-          "fullStream": "Full stream"
+          "audioOnly": "Endast ljud",
+          "fullStream": "Full ström"
         },
         "summary": "{count} ström(mar) konfigurerade",
         "healthy": "frisk",

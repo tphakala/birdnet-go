@@ -3464,12 +3464,12 @@
         "typeLabel": "Typ streamu",
         "typeHelp": "Protokol streamu – automaticky zjištěn z URL",
         "transportLabel": "Protokol",
-        "mediaModeLabel": "Media Mode",
-        "mediaModeHelp": "Full stream requests audio and video (video is discarded after decode) and works with the widest range of cameras. Auto tries audio-only first and falls back to the full stream if the camera cannot deliver audio alone. Audio-only never opens a camera video slot but fails if the camera cannot deliver the audio track by itself.",
+        "mediaModeLabel": "Režim média",
+        "mediaModeHelp": "Úplný stream požaduje zvuk i video (video se po dekódování zahodí) a funguje s většinou kamer. Auto nejprve zkusí pouze zvuk a přepne se na úplný stream, pokud kamera nedokáže poskytnout samotný zvuk. Pouze zvuk nikdy neobsadí video slot kamery, ale selže, pokud kamera nedokáže poskytnout zvukovou stopu samostatně.",
         "mediaMode": {
           "auto": "Auto",
-          "audioOnly": "Audio only",
-          "fullStream": "Full stream"
+          "audioOnly": "Pouze zvuk",
+          "fullStream": "Úplný stream"
         },
         "summary": "Nakonfigurováno {count} streamů",
         "healthy": "v pořádku",

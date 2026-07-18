@@ -3464,12 +3464,12 @@
         "typeLabel": "Tipo Flusso",
         "typeHelp": "Protocollo flusso - rilevato automaticamente da URL",
         "transportLabel": "Protocollo",
-        "mediaModeLabel": "Media Mode",
-        "mediaModeHelp": "Full stream requests audio and video (video is discarded after decode) and works with the widest range of cameras. Auto tries audio-only first and falls back to the full stream if the camera cannot deliver audio alone. Audio-only never opens a camera video slot but fails if the camera cannot deliver the audio track by itself.",
+        "mediaModeLabel": "Modalità multimediale",
+        "mediaModeHelp": "Il flusso completo richiede audio e video (il video viene scartato dopo la decodifica) e funziona con la maggior parte delle telecamere. Auto prova prima solo l'audio e passa al flusso completo se la telecamera non è in grado di fornire solo l'audio. Solo audio non occupa mai uno slot video della telecamera, ma fallisce se la telecamera non è in grado di fornire la traccia audio da sola.",
         "mediaMode": {
           "auto": "Auto",
-          "audioOnly": "Audio only",
-          "fullStream": "Full stream"
+          "audioOnly": "Solo audio",
+          "fullStream": "Flusso completo"
         },
         "summary": "{count} flusso/i configurato/i",
         "healthy": "sano",

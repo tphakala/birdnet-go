@@ -3464,12 +3464,12 @@
         "typeLabel": "Stream típus",
         "typeHelp": "Stream protokoll - automatikusan észlelve az URL-ből",
         "transportLabel": "Protokoll",
-        "mediaModeLabel": "Media Mode",
-        "mediaModeHelp": "Full stream requests audio and video (video is discarded after decode) and works with the widest range of cameras. Auto tries audio-only first and falls back to the full stream if the camera cannot deliver audio alone. Audio-only never opens a camera video slot but fails if the camera cannot deliver the audio track by itself.",
+        "mediaModeLabel": "Médiamód",
+        "mediaModeHelp": "A teljes adatfolyam hangot és videót is kér (a videót dekódolás után eldobja), és a legtöbb kamerával működik. Az Auto először csak hanggal próbálkozik, és a teljes adatfolyamra vált, ha a kamera nem tud önmagában hangot szolgáltatni. A csak hang soha nem foglal le videohelyet a kamerán, de sikertelen, ha a kamera nem tudja önállóan szolgáltatni a hangsávot.",
         "mediaMode": {
           "auto": "Auto",
-          "audioOnly": "Audio only",
-          "fullStream": "Full stream"
+          "audioOnly": "Csak hang",
+          "fullStream": "Teljes adatfolyam"
         },
         "summary": "{count} stream konfigurálva",
         "healthy": "egészséges",
