@@ -122,6 +122,15 @@ func WriteFile(ctx context.Context, component, finalPath string, encode func(f *
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if finalPath == "" {
+		// Without this, filepath.Dir("") is "." and the temp file lands in the
+		// working directory, turning a caller bug into a confusing I/O error.
+		return errors.Newf("audiotemp: empty output path").
+			Component(component).
+			Category(errors.CategoryValidation).
+			Context("operation", "audiotemp_validate").
+			Build()
+	}
 	if err := os.MkdirAll(filepath.Dir(finalPath), dirPerm); err != nil {
 		return fileIOErr(component, "audiotemp_mkdir", err)
 	}

@@ -6,7 +6,7 @@
 // and the same
 // enhanced-error conventions. Gain is applied in Go before encoding.
 //
-// This path is gated at the call site by internal/audiocore/nativeenc; Opus
+// This path is gated at the call site (see internal/conf/native_encoders.go); Opus
 // clip export still defaults to FFmpeg.
 package opus
 

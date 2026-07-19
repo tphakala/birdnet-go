@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/nativeenc"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -423,15 +422,15 @@ func (s *AudioSettings) applyFfmpegFormatFallback() {
 // the operator only sees WAV files appear where they asked for .m4a or .opus.
 //
 // REMOVAL: when the native AAC and Opus encoders become the default, the two
-// nativeenc calls go away and this collapses to "only MP3 needs FFmpeg".
+// gate calls go away and this collapses to "only MP3 needs FFmpeg".
 func exportFormatNeedsFFmpeg(exportType string) bool {
 	switch exportType {
 	case AudioExportTypeWAV, AudioExportTypeFLAC:
 		return false
 	case AudioExportTypeAAC:
-		return !nativeenc.AACEnabled()
+		return !NativeAACEncoderEnabled()
 	case AudioExportTypeOPUS:
-		return !nativeenc.OpusEnabled()
+		return !NativeOpusEncoderEnabled()
 	default:
 		return true
 	}

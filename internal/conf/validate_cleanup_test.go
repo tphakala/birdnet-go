@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/audiocore/nativeenc"
 )
 
 // Tests for issue #493: validation code quality improvements.
@@ -207,7 +206,7 @@ func TestApplyFfmpegFormatFallback_NativeGate(t *testing.T) {
 			input: AudioExportTypeAAC, want: AudioExportTypeWAV,
 		},
 		{
-			name: "aac with the gate keeps aac", envVar: nativeenc.EnvAACEncoder, envValue: "native",
+			name: "aac with the gate keeps aac", envVar: EnvNativeAACEncoder, envValue: "native",
 			input: AudioExportTypeAAC, want: AudioExportTypeAAC,
 		},
 		{
@@ -215,17 +214,21 @@ func TestApplyFfmpegFormatFallback_NativeGate(t *testing.T) {
 			input: AudioExportTypeOPUS, want: AudioExportTypeWAV,
 		},
 		{
-			name: "opus with the gate keeps opus", envVar: nativeenc.EnvOpusEncoder, envValue: "native",
+			name: "opus with the gate keeps opus", envVar: EnvNativeOpusEncoder, envValue: "native",
 			input: AudioExportTypeOPUS, want: AudioExportTypeOPUS,
 		},
 		{
 			// The gates are per codec: the AAC gate must not rescue Opus.
-			name: "the aac gate does not keep opus", envVar: nativeenc.EnvAACEncoder, envValue: "native",
+			name: "the aac gate does not keep opus", envVar: EnvNativeAACEncoder, envValue: "native",
 			input: AudioExportTypeOPUS, want: AudioExportTypeWAV,
 		},
 		{
-			// MP3 has no native encoder, so it is downgraded whatever is set.
-			name: "mp3 falls back even with both gates set", envVar: nativeenc.EnvAACEncoder, envValue: "native",
+			// MP3 has no native encoder, so it is downgraded even when a gate is set.
+			name: "mp3 falls back with the aac gate set", envVar: EnvNativeAACEncoder, envValue: "native",
+			input: AudioExportTypeMP3, want: AudioExportTypeWAV,
+		},
+		{
+			name: "mp3 falls back with the opus gate set", envVar: EnvNativeOpusEncoder, envValue: "native",
 			input: AudioExportTypeMP3, want: AudioExportTypeWAV,
 		},
 	}
@@ -233,8 +236,8 @@ func TestApplyFfmpegFormatFallback_NativeGate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear both gates, then set only the one under test, so a leaked
 			// value from the environment cannot make a case pass.
-			t.Setenv(nativeenc.EnvAACEncoder, "")
-			t.Setenv(nativeenc.EnvOpusEncoder, "")
+			t.Setenv(EnvNativeAACEncoder, "")
+			t.Setenv(EnvNativeOpusEncoder, "")
 			if tt.envVar != "" {
 				t.Setenv(tt.envVar, tt.envValue)
 			}

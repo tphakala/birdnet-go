@@ -7,7 +7,7 @@
 // and the same
 // enhanced-error conventions. Gain is applied in Go before encoding.
 //
-// This path is gated at the call site by internal/audiocore/nativeenc; AAC clip
+// This path is gated at the call site (see internal/conf/native_encoders.go); AAC clip
 // export still defaults to FFmpeg.
 package aac
 

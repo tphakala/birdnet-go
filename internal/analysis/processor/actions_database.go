@@ -19,7 +19,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
-	"github.com/tphakala/birdnet-go/internal/audiocore/nativeenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -556,14 +555,14 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 		return encoderNativeFLAC, nil
 
 	case ffmpeg.FormatAAC:
-		// Opt-in; see internal/audiocore/nativeenc for the gate and its removal.
+		// Opt-in; see internal/conf/native_encoders.go for the gate and its removal.
 		if nativeAACSelected(exportRate) {
 			return a.encodeClipNativeAAC(ctx, exportRate, outputPath)
 		}
 		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
 
 	case ffmpeg.FormatOpus:
-		// Opt-in; see internal/audiocore/nativeenc for the gate and its removal.
+		// Opt-in; see internal/conf/native_encoders.go for the gate and its removal.
 		if nativeOpusSelected(exportRate) {
 			return a.encodeClipNativeOpus(ctx, exportRate, outputPath)
 		}
@@ -662,14 +661,12 @@ func (a *SaveAudioAction) encodeClipNativeOpus(ctx context.Context, exportRate i
 // warning rather than failing outright. This whole check goes away when the gate
 // is removed.
 //
-// One caveat on that fallback: because opting in now stops config validation
-// from downgrading the format to WAV when FFmpeg is missing, an install with no
-// FFmpeg that hits an unsupported clip shape has nothing left to fall back to
-// and loses the clip. Reaching it needs a resample failure, since bird audio
-// above 48 kHz is resampled down and bat audio is switched to WAV before this
-// point, but it is a real narrowing of the old guarantee.
+// On an install with no FFmpeg at all, opting in stops config validation from
+// downgrading the format to WAV, so there would be nothing left to fall back to
+// here. resolveExportParams catches that case earlier and resolves the clip to
+// WAV, so the recording survives either way.
 func nativeAACSelected(exportRate int) bool {
-	if !nativeenc.AACEnabled() {
+	if !conf.NativeAACEncoderEnabled() {
 		return false
 	}
 	if err := aac.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
@@ -681,7 +678,7 @@ func nativeAACSelected(exportRate int) bool {
 
 // nativeOpusSelected is the Opus counterpart of nativeAACSelected.
 func nativeOpusSelected(exportRate int) bool {
-	if !nativeenc.OpusEnabled() {
+	if !conf.NativeOpusEncoderEnabled() {
 		return false
 	}
 	if err := opus.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
@@ -856,7 +853,48 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 		}
 	}
 
+	if a.strandedWithoutEncoder(rate, format) {
+		GetLogger().Warn("No encoder can carry this clip; exporting as WAV",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("requested_format", format),
+			logger.Int("sample_rate", rate),
+			logger.String("operation", "audio_export_no_encoder_fallback"))
+		format = "wav"
+		path = replaceExtension(path, ".wav")
+	}
+
 	return rate, format, path
+}
+
+// strandedWithoutEncoder reports whether this clip has no encoder left: the
+// operator opted a lossy format into its native encoder, so config validation
+// did not downgrade the format to WAV despite FFmpeg being absent, but the
+// native encoder turns out not to accept this clip's shape.
+//
+// Without this the export would call FFmpeg with an empty binary path and the
+// recording would be lost. Resolving it here rather than at the encode step
+// matters because the clip path still gets its extension corrected, so the file
+// on disk and the name recorded in the database cannot disagree.
+//
+// REMOVAL: this goes away with the gate. Once the native encoders are the
+// default, config validation stops downgrading these formats at all and the
+// question becomes a plain "can the native encoder carry it".
+func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
+	if a.Settings.Realtime.Audio.FfmpegPath != "" {
+		return false // FFmpeg can still take it
+	}
+	switch format {
+	case ffmpeg.FormatAAC:
+		return conf.NativeAACEncoderEnabled() && !nativeAACSelected(rate)
+	case ffmpeg.FormatOpus:
+		return conf.NativeOpusEncoderEnabled() && !nativeOpusSelected(rate)
+	default:
+		// Every other format either has an unconditional native encoder (WAV,
+		// FLAC) or was already downgraded to WAV by config validation when
+		// FFmpeg went missing (MP3).
+		return false
+	}
 }
 
 // replaceExtension swaps the file extension on path (e.g. ".mp3" -> ".wav").

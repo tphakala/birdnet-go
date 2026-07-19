@@ -1,4 +1,4 @@
-package nativeenc
+package conf
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAACEnabled(t *testing.T) {
+func TestNativeAACEncoderEnabled(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string
@@ -23,13 +23,13 @@ func TestAACEnabled(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(EnvAACEncoder, tt.value)
-			assert.Equal(t, tt.want, AACEnabled())
+			t.Setenv(EnvNativeAACEncoder, tt.value)
+			assert.Equal(t, tt.want, NativeAACEncoderEnabled())
 		})
 	}
 }
 
-func TestOpusEnabled(t *testing.T) {
+func TestNativeOpusEncoderEnabled(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string
@@ -42,8 +42,8 @@ func TestOpusEnabled(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(EnvOpusEncoder, tt.value)
-			assert.Equal(t, tt.want, OpusEnabled())
+			t.Setenv(EnvNativeOpusEncoder, tt.value)
+			assert.Equal(t, tt.want, NativeOpusEncoderEnabled())
 		})
 	}
 }
@@ -51,13 +51,13 @@ func TestOpusEnabled(t *testing.T) {
 // The two gates are independent so one codec can be promoted to native while
 // the other stays on FFmpeg.
 func TestGatesAreIndependent(t *testing.T) {
-	t.Setenv(EnvAACEncoder, "native")
-	t.Setenv(EnvOpusEncoder, "")
-	assert.True(t, AACEnabled())
-	assert.False(t, OpusEnabled())
+	t.Setenv(EnvNativeAACEncoder, "native")
+	t.Setenv(EnvNativeOpusEncoder, "")
+	assert.True(t, NativeAACEncoderEnabled())
+	assert.False(t, NativeOpusEncoderEnabled())
 
-	t.Setenv(EnvAACEncoder, "")
-	t.Setenv(EnvOpusEncoder, "native")
-	assert.False(t, AACEnabled())
-	assert.True(t, OpusEnabled())
+	t.Setenv(EnvNativeAACEncoder, "")
+	t.Setenv(EnvNativeOpusEncoder, "native")
+	assert.False(t, NativeAACEncoderEnabled())
+	assert.True(t, NativeOpusEncoderEnabled())
 }
