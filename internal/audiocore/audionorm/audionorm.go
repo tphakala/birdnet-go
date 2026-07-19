@@ -201,12 +201,16 @@ func PlanGain(meas Measurement, opts Options) Result {
 	return res
 }
 
-// DefaultMaxGainDB bounds the loudness gain the FLAC export paths apply: 30 dB,
-// the same clamp the BirdWeather FFmpeg FLAC path uses, so a clip's loudness is
-// corrected no more aggressively under one encoder than the other. It stops a
-// near-silent clip from being over-amplified into loud static, and a hot clip
-// from being driven toward digital silence. (Distinct from ffmpeg.MaxGainDB,
-// which is a wider loudnorm-offset validation range, not this export clamp.)
+// DefaultMaxGainDB bounds the loudness gain the BirdWeather soundscape upload
+// applies: 30 dB, the same clamp the BirdWeather FFmpeg FLAC path used, so a
+// soundscape's loudness is corrected no more aggressively under one encoder
+// than the other. It stops a near-silent clip from being over-amplified into
+// loud static, and a hot clip from being driven toward digital silence.
+//
+// The detection-clip export path deliberately does NOT use this: it bounds gain
+// with its own nativeExportMaxGainDB (internal/analysis/processor), derived from
+// the widest lift a valid loudness target can ask for. (Distinct again from
+// ffmpeg.MaxGainDB, which is a loudnorm-offset validation range, not a clamp.)
 const DefaultMaxGainDB = 30.0
 
 // ClampGainDB constrains a planned gain (dB) to [-maxAbsDB, +maxAbsDB] and reports
@@ -228,8 +232,8 @@ func ClampGainDB(gainDB, maxAbsDB float64) (clamped float64, limited bool) {
 	}
 }
 
-// PlanClampedGainInt16Bytes runs the measure -> plan -> clamp sequence the native
-// FLAC export paths share: it measures the integrated loudness and true peak of
+// PlanClampedGainInt16Bytes runs the measure -> plan -> clamp sequence the
+// BirdWeather native FLAC upload uses: it measures the integrated loudness and true peak of
 // interleaved little-endian int16 PCM bytes (via MeasureInt16Bytes, which decodes
 // inline without mutating pcm), plans the single gain that brings the clip to
 // opts.TargetLUFS without its true peak exceeding opts.TruePeakDBTP (via PlanGain),
@@ -246,8 +250,9 @@ func ClampGainDB(gainDB, maxAbsDB float64) (clamped float64, limited bool) {
 // Like PlanGain, opts.TargetLUFS and opts.TruePeakDBTP are NOT range-checked
 // here, so callers must pass a target in (-70, 0) and a ceiling <= 0; a
 // non-finite or out-of-range target otherwise flows through as a NaN or garbage
-// gain. Both current callers gate their targets before calling (the detection
-// path via audionormSupportsTargets, the BirdWeather path with fixed constants).
+// gain. The sole current caller, the BirdWeather upload path, passes fixed
+// constants. (The detection export path plans its gain step by step instead, so
+// it can apply a gate fallback for clips R128 cannot measure.)
 func PlanClampedGainInt16Bytes(pcm []byte, opts Options, maxAbsGainDB float64) (gainDB float64, meas Measurement, res Result, limited bool, err error) {
 	meas, err = MeasureInt16Bytes(pcm, opts.SampleRate, opts.Channels)
 	if err != nil {

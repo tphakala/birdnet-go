@@ -1,0 +1,402 @@
+//go:build normcompare
+
+package normbench
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"os"
+	"path/filepath"
+	"strconv"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
+)
+
+// The BirdNET-Go export defaults (conf.AudioSettings.Export.Normalization).
+const (
+	targetLUFS     = -23.0
+	targetTruePeak = -2.0
+	targetLRA      = 7.0
+
+	// absoluteGateLUFS is the EBU R128 absolute gate, mirroring
+	// audionormMinTargetLUFS in internal/analysis/processor.
+	absoluteGateLUFS = -70.0
+
+	// productionMaxGainDB mirrors nativeExportMaxGainDB in
+	// internal/analysis/processor. preFixMaxGainDB is what it was before this
+	// work (audionorm.DefaultMaxGainDB), kept so the change stays measurable.
+	productionMaxGainDB = 60.0
+	preFixMaxGainDB     = 30.0
+)
+
+// loudness is a parsed measurement of one audio file.
+type loudness struct {
+	integrated float64 // LUFS
+	truePeak   float64 // dBTP
+	rangeLU    float64 // LU
+}
+
+// subGateLoudness reports whether R128 gating left the clip with no integrated
+// loudness at all, which audionorm signals as -Inf. It is the case the native
+// path currently has no answer for.
+func subGateLoudness(meas audionorm.Measurement) bool {
+	return math.IsInf(meas.IntegratedLUFS, -1)
+}
+
+// bound names what stopped a planned gain from reaching the loudness target.
+// Reading this per row is the whole point of the harness: a divergence caused by
+// the 30 dB clamp is a policy choice, one caused by R128 gating is a defect.
+type bound string
+
+const (
+	boundNone    bound = "-"        // reached the target
+	boundPeak    bound = "peak"     // true-peak ceiling reduced the gain
+	boundClamp   bound = "clamp"    // the 30 dB ceiling reduced the gain
+	boundSubGate bound = "sub-gate" // integrated loudness is -Inf, so no gain was planned
+	boundSilent  bound = "silent"   // no signal at all
+)
+
+// plan is one implementation's gain decision for a clip.
+type plan struct {
+	wantDB     float64 // gain needed to hit the target, before any limiting
+	headroomDB float64 // gain the true-peak ceiling allows
+	gainDB     float64 // gain actually applied
+	bound      bound
+}
+
+// outcome is one case run through every implementation under comparison.
+type outcome struct {
+	tc    testCase
+	input loudness
+
+	preFixPlan plan
+	preFix     loudness // the native path before the sub-gate fix and ceiling raise
+
+	nativePlan plan
+	native     loudness // the native path as it now ships
+
+	ffm loudness // the FFmpeg loudnorm export path
+}
+
+// TestCompareNormalization runs every corpus case through the native Go
+// normalization as it stood before the sub-gate fix and ceiling raise, through
+// the native path as it now ships, and through the FFmpeg loudnorm export path.
+// All three outputs are measured with the same analyser so the numbers are
+// directly comparable.
+//
+// It is a report, not a gate: it asserts only that each path produces a
+// measurable file. Read the table it prints.
+func TestCompareNormalization(t *testing.T) {
+	ffmpegBin := ffmpegPath(t)
+	cases := loadCorpus(t, ffmpegBin)
+	dir := t.TempDir()
+	ctx := t.Context()
+
+	outcomes := make([]outcome, 0, len(cases))
+	for i, tc := range cases {
+		stem := filepath.Join(dir, "case"+itoa(i))
+		o := outcome{tc: tc}
+
+		o.input = measure(t, ctx, ffmpegBin, writeWAV(t, stem+"-in.wav", tc.pcm))
+
+		meas := measureNative(t, tc.pcm)
+		o.preFixPlan = planPreFix(meas)
+		o.nativePlan = planNative(meas, tc.pcm)
+
+		o.preFix = measure(t, ctx, ffmpegBin,
+			writeWAV(t, stem+"-prefix.wav", pcmgain.Applied(tc.pcm, o.preFixPlan.gainDB)))
+		o.native = measure(t, ctx, ffmpegBin,
+			writeWAV(t, stem+"-native.wav", pcmgain.Applied(tc.pcm, o.nativePlan.gainDB)))
+		o.ffm = runFFmpeg(t, ctx, ffmpegBin, stem, tc.pcm)
+
+		outcomes = append(outcomes, o)
+	}
+
+	report(t, outcomes)
+}
+
+// measureNative runs audionorm's pass one, the same measurement the production
+// native path performs inside PlanClampedGainInt16Bytes.
+func measureNative(t *testing.T, pcm []byte) audionorm.Measurement {
+	t.Helper()
+	meas, err := audionorm.MeasureInt16Bytes(pcm, sampleRate, channels)
+	require.NoError(t, err)
+	return meas
+}
+
+// planPreFix reproduces the native decision as it stood before this work: plan
+// target-minus-measured, reduce it to the true-peak headroom, clamp to +/-30 dB,
+// and give a clip whose gated integrated loudness is -Inf no gain at all, so it
+// is exported untouched. Kept as the baseline the fix is measured against.
+func planPreFix(meas audionorm.Measurement) plan {
+	res := audionorm.PlanGain(meas, audionorm.Options{
+		SampleRate:   sampleRate,
+		Channels:     channels,
+		TargetLUFS:   targetLUFS,
+		TruePeakDBTP: targetTruePeak,
+	})
+	gain, clamped := audionorm.ClampGainDB(res.GainDB, preFixMaxGainDB)
+
+	p := plan{
+		wantDB:     res.TargetGainDB,
+		headroomDB: targetTruePeak - meas.TruePeakDBTP,
+		gainDB:     gain,
+	}
+	switch {
+	case subGateLoudness(meas):
+		p.bound = boundSubGate
+		if math.IsInf(meas.TruePeakDBTP, -1) {
+			p.bound = boundSilent
+		}
+	case clamped:
+		p.bound = boundClamp
+	case res.PeakLimited:
+		p.bound = boundPeak
+	default:
+		p.bound = boundNone
+	}
+	return p
+}
+
+// nativeMaxGainDB is the gain ceiling the native path applies. It defaults to
+// the production value and is overridable because the ceiling turned out to be
+// the dominant cause of divergence from FFmpeg, so the harness has to be able to
+// price a different policy without editing production constants.
+func nativeMaxGainDB() float64 {
+	if v := os.Getenv("BIRDNET_NORMCOMPARE_MAXGAIN"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return productionMaxGainDB
+}
+
+// planNative mirrors planNativeNormalizationGain and gateFallbackGainDB in
+// internal/analysis/processor: when R128 gating leaves the integrated loudness at
+// -Inf but the clip still has a finite true peak, the gain is derived from the
+// true-peak ceiling instead of being abandoned.
+//
+// This is a reimplementation, not a call into production code, because the
+// production planner is an unexported method on SaveAudioAction. Keep the two in
+// step; if they drift, this harness stops measuring what actually ships.
+func planNative(meas audionorm.Measurement, pcmForRefine []byte) plan {
+	maxGain := nativeMaxGainDB()
+
+	if !subGateLoudness(meas) || math.IsInf(meas.TruePeakDBTP, -1) {
+		res := audionorm.PlanGain(meas, audionorm.Options{
+			SampleRate:   sampleRate,
+			Channels:     channels,
+			TargetLUFS:   targetLUFS,
+			TruePeakDBTP: targetTruePeak,
+		})
+		gain, clamped := audionorm.ClampGainDB(res.GainDB, maxGain)
+		p := plan{
+			wantDB:     res.TargetGainDB,
+			headroomDB: targetTruePeak - meas.TruePeakDBTP,
+			gainDB:     gain,
+		}
+		switch {
+		case subGateLoudness(meas):
+			p.bound = boundSilent
+		case clamped:
+			p.bound = boundClamp
+		case res.PeakLimited:
+			p.bound = boundPeak
+		default:
+			p.bound = boundNone
+		}
+		return p
+	}
+
+	// Both bounds from gateFallbackGainDB: the true-peak anchor, and the bound
+	// that keeps a flat sub-gate signal from being lifted past the loudness
+	// target (its loudness is unmeasurable only because it is under the gate,
+	// so it cannot exceed the target after a lift of target-minus-gate).
+	peakBound := targetTruePeak - meas.TruePeakDBTP
+	loudnessBound := targetLUFS - absoluteGateLUFS
+	want := math.Min(peakBound, loudnessBound)
+
+	// Mirrors refineLiftedGainDB: the lift usually raises the clip above the
+	// gate, so re-measuring the lifted signal lets a normal plan finish the job
+	// instead of stopping at the deliberately conservative bound.
+	if lifted, err := audionorm.MeasureInt16Bytes(pcmgain.Applied(pcmForRefine, want), sampleRate, channels); err == nil &&
+		!math.IsInf(lifted.IntegratedLUFS, -1) {
+		want += audionorm.PlanGain(lifted, audionorm.Options{
+			SampleRate:   sampleRate,
+			Channels:     channels,
+			TargetLUFS:   targetLUFS,
+			TruePeakDBTP: targetTruePeak,
+		}).GainDB
+	}
+
+	gain, clamped := audionorm.ClampGainDB(want, maxGain)
+
+	p := plan{wantDB: want, headroomDB: peakBound, gainDB: gain, bound: boundNone}
+	if clamped {
+		p.bound = boundClamp
+	}
+	return p
+}
+
+// runFFmpeg drives the production FFmpeg export path with normalization on, so
+// the comparison exercises the real filter construction (two-pass linear
+// loudnorm, the gate fallback, and the single-pass fallback) rather than a
+// hand-built filter string.
+//
+// The output format is FLAC rather than WAV for two reasons: it is lossless, so
+// what is measured is the filter's output and not codec loss; and WAV is not
+// actually reachable through this path in production (it maps to "-c:a wav",
+// which is not an FFmpeg encoder) because WAV export is always native.
+func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string, pcm []byte) loudness {
+	t.Helper()
+
+	out := stem + "-ffmpeg.flac"
+	err := ffmpeg.ExportAudio(ctx, &ffmpeg.ExportOptions{
+		PCMData:    pcm,
+		OutputPath: out,
+		Format:     ffmpeg.FormatFLAC,
+		SampleRate: sampleRate,
+		Channels:   channels,
+		BitDepth:   bitDepth,
+		Normalization: ffmpeg.ExportNormalization{
+			Enabled:       true,
+			TargetLUFS:    targetLUFS,
+			TruePeak:      targetTruePeak,
+			LoudnessRange: targetLRA,
+		},
+		FFmpegPath: ffmpegBin,
+	})
+	require.NoError(t, err, "ffmpeg export")
+
+	return measure(t, ctx, ffmpegBin, out)
+}
+
+func writeWAV(t *testing.T, path string, pcm []byte) string {
+	t.Helper()
+	require.NoError(t, convert.SavePCMDataToWAV(path, pcm, sampleRate, bitDepth))
+	return path
+}
+
+// measure reads a file's loudness through the same production analyser all
+// paths are judged by. Its own targets do not affect the input_* fields it
+// reports, which is all this harness reads.
+func measure(t *testing.T, ctx context.Context, ffmpegBin, path string) loudness {
+	t.Helper()
+	stats, err := ffmpeg.AnalyzeFileLoudness(ctx, path, ffmpegBin, ffmpeg.AudioFilters{}, nil)
+	require.NoError(t, err, "measuring %s", path)
+
+	return loudness{
+		integrated: parseLoudnessField(stats.InputI),
+		truePeak:   parseLoudnessField(stats.InputTP),
+		rangeLU:    parseLoudnessField(stats.InputLRA),
+	}
+}
+
+// parseLoudnessField accepts the "-inf" FFmpeg emits for silence and for clips
+// that fall entirely under the R128 gate, which is a real outcome here rather
+// than a parse failure.
+func parseLoudnessField(v string) float64 {
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return math.Inf(-1)
+	}
+	return f
+}
+
+func report(t *testing.T, outcomes []outcome) {
+	t.Helper()
+
+	t.Logf("\nTargets: I=%.1f LUFS  TP=%.1f dBTP  LRA=%.1f LU   pre-fix clamp %.0f dB, native clamp %.0f dB, ffmpeg clamp %.0f dB\n",
+		targetLUFS, targetTruePeak, targetLRA, preFixMaxGainDB, nativeMaxGainDB(), ffmpeg.MaxGainDB)
+
+	header := fmt.Sprintf("%-38s | %14s | %6s | %6s | %15s | %7s | %7s | %7s | %14s",
+		"case", "input I/TP", "want", "hdroom", "applied (bound)",
+		"pre-fix I", "native I", "ffmpeg I", "LRA p/n/f")
+	t.Log(header)
+	t.Log(dashes(len(header)))
+
+	var worstPreFix, worstNative float64
+	var worstPreFixName, worstNativeName string
+	subGate, clampBound := 0, 0
+
+	for i := range outcomes {
+		o := &outcomes[i]
+
+		dPreFix := delta(o.ffm.integrated, o.preFix.integrated)
+		dNative := delta(o.ffm.integrated, o.native.integrated)
+		if math.Abs(dPreFix) > math.Abs(worstPreFix) && !math.IsInf(dPreFix, 0) {
+			worstPreFix, worstPreFixName = dPreFix, o.tc.name
+		}
+		if math.Abs(dNative) > math.Abs(worstNative) && !math.IsInf(dNative, 0) {
+			worstNative, worstNativeName = dNative, o.tc.name
+		}
+		switch o.preFixPlan.bound {
+		case boundSubGate:
+			subGate++
+		case boundClamp:
+			clampBound++
+		case boundNone, boundPeak, boundSilent:
+			// Not a divergence worth counting: the gain either reached target or
+			// was stopped by the true-peak ceiling, which both paths respect.
+		}
+
+		t.Logf("%-38s | %14s | %6s | %6s | %15s | %7s | %7s | %7s | %14s",
+			o.tc.name,
+			fmt.Sprintf("%6.2f/%6.2f", o.input.integrated, o.input.truePeak),
+			db(o.preFixPlan.wantDB),
+			db(o.preFixPlan.headroomDB),
+			fmt.Sprintf("%6s (%s)", db(o.preFixPlan.gainDB), o.preFixPlan.bound),
+			lufs(o.preFix.integrated),
+			lufs(o.native.integrated),
+			lufs(o.ffm.integrated),
+			fmt.Sprintf("%4.1f/%4.1f/%4.1f", o.preFix.rangeLU, o.native.rangeLU, o.ffm.rangeLU),
+		)
+	}
+
+	t.Log("")
+	t.Log("want    = gain needed to reach the loudness target, before any limiting")
+	t.Log("hdroom  = gain the true-peak ceiling allows")
+	t.Log("bound   = what actually stopped the gain: clamp, peak, sub-gate, or - for none")
+	t.Log("LRA p/n/f = loudness range of the pre-fix / native / ffmpeg output")
+	t.Log("")
+	t.Logf("cases where the pre-fix 30 dB clamp was the binding constraint: %d of %d", clampBound, len(outcomes))
+	t.Logf("cases where R128 gating left the native path with no gain at all: %d of %d", subGate, len(outcomes))
+	t.Logf("largest finite loudness gap, ffmpeg vs pre-fix native: %+.2f LU on %s", worstPreFix, worstPreFixName)
+	t.Logf("largest finite loudness gap, ffmpeg vs native now:      %+.2f LU on %s", worstNative, worstNativeName)
+}
+
+func delta(a, b float64) float64 {
+	if math.IsInf(a, 0) || math.IsInf(b, 0) {
+		return math.Inf(1)
+	}
+	return a - b
+}
+
+func db(v float64) string {
+	if math.IsInf(v, 0) {
+		return "  -Inf"
+	}
+	return fmt.Sprintf("%+6.1f", v)
+}
+
+func lufs(v float64) string {
+	if math.IsInf(v, 0) {
+		return "   -Inf"
+	}
+	return fmt.Sprintf("%7.2f", v)
+}
+
+func dashes(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = '-'
+	}
+	return string(b)
+}

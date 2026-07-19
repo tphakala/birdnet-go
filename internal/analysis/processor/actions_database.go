@@ -6,6 +6,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
+	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -776,27 +778,92 @@ func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
 	return targetLUFS < 0 && targetLUFS > audionormMinTargetLUFS && truePeakDBTP <= 0
 }
 
+// nativeExportMaxGainDB is the absolute backstop on the loudness gain a native
+// export applies. It is not an arbitrary round number: the widest lift any
+// in-range configuration can legitimately ask for is the most aggressive
+// permitted target (conf.MaxTargetLUFS, -10) minus the EBU R128 absolute gate
+// (audionormMinTargetLUFS, -70), which is exactly 60 dB. It also coincides with
+// the ceiling the FFmpeg loudnorm path allows (ffmpeg.MaxGainDB), so a quiet
+// clip is corrected no less on a native encoder than it was on FFmpeg.
+//
+// Deliberately not audionorm.DefaultMaxGainDB (30 dB). That is the BirdWeather
+// soundscape-upload ceiling and stays where it is: those uploads go to a public
+// platform and are not this path's to change. At the default -23 LUFS target
+// the per-clip bounds below always bind first, so this constant only backstops
+// the most aggressive targets.
+const nativeExportMaxGainDB = 60.0
+
+// gateFallbackGainDB handles the clip EBU R128 gating cannot measure. A clip
+// whose gated integrated loudness falls below the -70 LUFS absolute gate yields
+// -Inf, and PlanGain plans no gain at all for it, so the clip would be exported
+// untouched and inaudible. When such a clip still has a finite true peak there
+// is enough signal to work with, so the gain is anchored to the true-peak
+// ceiling, as the FFmpeg path does in loudnormGateFallbackOffset.
+//
+// That anchor alone is not enough. Lifting purely by true-peak headroom leaves
+// the resulting loudness at (ceiling - crest factor), so a FLAT signal (steady
+// hiss from a dead or muted microphone, whose crest factor is only a few dB)
+// lands far LOUDER than the loudness target: measured, a sub-gate noise floor
+// came out at -13.8 LUFS against a -23 target. The second bound closes that.
+// Gating failing is itself information: the clip's true loudness must be below
+// audionormMinTargetLUFS, so lifting by no more than (target - gate) cannot
+// overshoot the target however peaky or flat the clip turns out to be.
+//
+// That premise is worth stating precisely, since the bound rests on it.
+// audionorm's meter reports -Inf on exactly three paths: every 400 ms block sat
+// under the absolute gate (the premise holds by construction); the relative gate
+// eliminated every block (unreachable, because the loudest gated block always
+// exceeds a gate set 10 LU below their mean); or the clip is shorter than one
+// 400 ms block, where loudness is undefined at ANY level. Only that third path
+// breaks the premise, and it cannot arise here because exported clips are whole
+// detection segments, orders of magnitude longer. Even if it did, the true-peak
+// anchor is the tighter bound for a short LOUD clip, so it would still attenuate
+// rather than amplify.
+//
+// Genuine silence (a true peak of -Inf too) reports false and is left alone;
+// there is nothing to lift.
+func gateFallbackGainDB(meas audionorm.Measurement, targetLUFS, truePeakDBTP float64) (gainDB float64, ok bool) {
+	if !math.IsInf(meas.IntegratedLUFS, -1) || math.IsInf(meas.TruePeakDBTP, -1) {
+		return 0, false
+	}
+	peakBound := truePeakDBTP - meas.TruePeakDBTP
+	loudnessBound := targetLUFS - audionormMinTargetLUFS
+	return math.Min(peakBound, loudnessBound), true
+}
+
+// refineLiftedGainDB returns the extra gain to add on top of a gate-fallback
+// lift. Loudness gating is not linear in gain, so the loudness of the lifted
+// signal cannot be derived arithmetically: blocks that sat under the absolute
+// gate before the lift pass it afterwards. The only way to know is to measure
+// the lifted signal, which is what this does, on a copy so pcm is untouched.
+//
+// Once the clip is measurable a normal PlanGain finishes the job, landing it on
+// the target and respecting the true-peak ceiling. A clip still under the gate
+// after the lift (or a measurement error) yields 0, leaving the conservative
+// fallback as the final answer rather than guessing.
+//
+// This runs only for sub-gate clips, so the extra measurement pass is off the
+// common path entirely.
+func refineLiftedGainDB(pcm []byte, liftDB float64, opts audionorm.Options) float64 {
+	lifted, err := audionorm.MeasureInt16Bytes(pcmgain.Applied(pcm, liftDB), opts.SampleRate, opts.Channels)
+	if err != nil || math.IsInf(lifted.IntegratedLUFS, -1) {
+		return 0
+	}
+	return audionorm.PlanGain(lifted, opts).GainDB
+}
+
 // planNativeNormalizationGain measures the clip's EBU R128 integrated loudness and
 // true peak with audionorm and returns the single linear gain (dB) that brings it
 // to targetLUFS without its true peak exceeding truePeakDBTP, clamped to
-// +/-audionorm.DefaultMaxGainDB. Silent or sub-400 ms input yields 0 (the clip is
-// left unchanged rather than boosted into noise), matching the BirdWeather native
-// path. The gain is applied by flac.EncodePCM during encoding; a.pcmData is not
-// modified here.
+// +/-nativeExportMaxGainDB. A clip under the R128 absolute gate is lifted by its
+// true-peak headroom instead (see gateFallbackGainDB); genuine silence yields 0.
+// The gain is applied by the encoder; a.pcmData is not modified here.
 func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampleRate int, format string, targetLUFS, truePeakDBTP float64) (float64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	// audionorm decodes the PCM bytes inline; a.pcmData is not mutated. Silence
-	// yields GainDB == 0 (audionorm returns -Inf LUFS); the clamp is the secondary
-	// guard for low-peak clips and for attenuation, applied silently on this path
-	// (the BirdWeather path logs its own limiting, hence the discarded flag).
-	gainDB, meas, res, _, err := audionorm.PlanClampedGainInt16Bytes(a.pcmData, audionorm.Options{
-		SampleRate:   sampleRate,
-		Channels:     conf.NumChannels,
-		TargetLUFS:   targetLUFS,
-		TruePeakDBTP: truePeakDBTP,
-	}, audionorm.DefaultMaxGainDB)
+	// audionorm decodes the PCM bytes inline; a.pcmData is not mutated.
+	meas, err := audionorm.MeasureInt16Bytes(a.pcmData, sampleRate, conf.NumChannels)
 	if err != nil {
 		return 0, errors.New(err).
 			Component("analysis.processor").
@@ -807,6 +874,28 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 			Build()
 	}
 
+	opts := audionorm.Options{
+		SampleRate:   sampleRate,
+		Channels:     conf.NumChannels,
+		TargetLUFS:   targetLUFS,
+		TruePeakDBTP: truePeakDBTP,
+	}
+	res := audionorm.PlanGain(meas, opts)
+
+	planned := res.GainDB
+	gateLifted := false
+	if fallback, ok := gateFallbackGainDB(meas, targetLUFS, truePeakDBTP); ok {
+		// The fallback is deliberately conservative, because a sub-gate clip's
+		// real loudness is unknown and the bound has to assume the worst case.
+		// Lifting it, however, usually raises it above the gate, at which point
+		// it CAN be measured: refine from that real measurement so a very quiet
+		// clip still lands on target instead of merely somewhere audible.
+		planned = fallback + refineLiftedGainDB(a.pcmData, fallback, opts)
+		gateLifted = true
+	}
+
+	gainDB, clamped := audionorm.ClampGainDB(planned, nativeExportMaxGainDB)
+
 	GetLogger().Debug("Native loudness analysis (detection save)",
 		logger.String("format", format),
 		logger.Float64("measured_lufs", meas.IntegratedLUFS),
@@ -814,6 +903,8 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 		logger.Float64("target_lufs", targetLUFS),
 		logger.Float64("gain_db", gainDB),
 		logger.Bool("peak_limited", res.PeakLimited),
+		logger.Bool("gate_lifted", gateLifted),
+		logger.Bool("gain_clamped", clamped),
 		logger.String("detection_id", a.CorrelationID))
 	return gainDB, nil
 }
