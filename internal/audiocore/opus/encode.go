@@ -2,7 +2,8 @@
 // pure-Go go-opus encoder, with no FFmpeg process involved.
 //
 // It mirrors the native FLAC encoder in internal/audiocore/flac: the same
-// Options shape, the same atomic temp-file-then-rename write, and the same
+// Options shape, the same atomic temp-file-then-rename write (via audiotemp),
+// and the same
 // enhanced-error conventions. Gain is applied in Go before encoding.
 //
 // This path is gated at the call site by internal/audiocore/nativeenc; Opus
@@ -126,20 +127,21 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 
 	// oggopus draws its encoder from an internal pool and streams Ogg pages as
 	// it goes, so the encoded stream is never held in memory whole.
-	err := audiotemp.WriteFile(ctx, opts.OutputPath, func(f *os.File) error {
-		return oggopus.EncodeInterleaved(f, cfg, pcm)
+	// WriteFile classifies its own filesystem failures and passes a cancelled
+	// context through raw; only the codec failure is tagged here.
+	return audiotemp.WriteFile(ctx, component, opts.OutputPath, func(f *os.File) error {
+		if encErr := oggopus.EncodeInterleaved(f, cfg, pcm); encErr != nil {
+			return errors.New(encErr).
+				Component(component).
+				Category(errors.CategoryAudio).
+				Context("operation", "opus_encode_stream").
+				Context("sample_rate", opts.SampleRate).
+				Context("channels", opts.Channels).
+				Context("bitrate_kbps", opts.BitrateKbps).
+				Build()
+		}
+		return nil
 	})
-	if err != nil {
-		return errors.New(err).
-			Component(component).
-			Category(errors.CategoryAudio).
-			Context("operation", "opus_encode").
-			Context("sample_rate", opts.SampleRate).
-			Context("channels", opts.Channels).
-			Context("bitrate_kbps", opts.BitrateKbps).
-			Build()
-	}
-	return nil
 }
 
 // validateEncodeInput rejects options the encoder cannot honour, with a clear

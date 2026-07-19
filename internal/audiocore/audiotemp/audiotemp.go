@@ -7,10 +7,12 @@
 // file mid-write.
 //
 // WriteFile packages that whole sequence for encoders that can write to an
-// *os.File; the FLAC encoder drives UniquePath and Finalize itself because it
-// also has a bytes.Buffer entry point. The spectrogram generator reuses the same
-// naming (UniquePath) and finalize retry via FinalizeWith, injecting a SecureFS
-// rename so its writes stay inside the os.Root sandbox.
+// *os.File. It is not yet used everywhere: the FLAC encoder, the WAV writer, the
+// FFmpeg exporter, the importer and the spectrogram generator still drive
+// UniquePath and Finalize themselves, so migrating them is worthwhile but out of
+// scope for the change that introduced this. The spectrogram generator in
+// particular needs FinalizeWith rather than WriteFile, since it injects a
+// SecureFS rename to keep its writes inside the os.Root sandbox.
 package audiotemp
 
 import (
@@ -23,6 +25,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Ext is the suffix of an in-progress export's temp file. A clip is finalized by
@@ -103,20 +107,29 @@ const dirPerm = 0o750
 // (the MP4 muxer behind AAC). ctx is checked before any file is created; encode
 // is responsible for honouring it thereafter.
 //
-// Errors are returned unwrapped so each caller can tag them with its own
-// component and category.
-func WriteFile(ctx context.Context, finalPath string, encode func(f *os.File) error) (err error) {
+// Error handling is deliberately three-way, because these failures mean very
+// different things to whoever reads the telemetry:
+//
+//   - A cancelled context is returned raw and never wrapped, so a shutdown
+//     mid-export does not manufacture an error report.
+//   - WriteFile's own failures are filesystem failures (a full disk, a
+//     read-only mount, a permissions problem), and are tagged here as file I/O
+//     against the caller's component with the specific stage that failed. They
+//     must not surface as codec failures.
+//   - Whatever encode returns is passed through untouched, so the caller tags
+//     its own codec errors.
+func WriteFile(ctx context.Context, component, finalPath string, encode func(f *os.File) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(finalPath), dirPerm); err != nil {
-		return err
+		return fileIOErr(component, "audiotemp_mkdir", err)
 	}
 
 	tempPath := UniquePath(finalPath)
-	f, err := os.Create(tempPath) //nolint:gosec // path derived from a validated clip path
-	if err != nil {
-		return err
+	f, createErr := os.Create(tempPath) //nolint:gosec // path derived from a validated clip path
+	if createErr != nil {
+		return fileIOErr(component, "audiotemp_create_temp", createErr)
 	}
 
 	// closeFile is idempotent so the deferred cleanup cannot double-close after
@@ -137,20 +150,33 @@ func WriteFile(ctx context.Context, finalPath string, encode func(f *os.File) er
 		}
 	}()
 
+	// encode's error is the caller's to classify, so it passes through untouched.
 	if err := encode(f); err != nil {
 		return err
 	}
 	if err := f.Sync(); err != nil {
-		return err
+		return fileIOErr(component, "audiotemp_sync", err)
 	}
 	if err := closeFile(); err != nil {
-		return err
+		return fileIOErr(component, "audiotemp_close_temp", err)
 	}
 	if err := Finalize(tempPath, finalPath); err != nil {
-		return err
+		return fileIOErr(component, "audiotemp_rename", err)
 	}
 	committed = true
 	return nil
+}
+
+// fileIOErr tags a filesystem failure against the caller's component. Keeping
+// the stage in the operation field preserves the granularity the encoders had
+// when each of them open-coded this sequence, so a full disk still reports as a
+// distinct file I/O failure rather than as a generic encode error.
+func fileIOErr(component, operation string, err error) error {
+	return errors.New(err).
+		Component(component).
+		Category(errors.CategoryFileIO).
+		Context("operation", operation).
+		Build()
 }
 
 // Finalize atomically renames the unique temp file onto the final clip path. On

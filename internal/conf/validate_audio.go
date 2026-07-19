@@ -423,7 +423,7 @@ func (s *AudioSettings) applyFfmpegFormatFallback() {
 // the operator only sees WAV files appear where they asked for .m4a or .opus.
 //
 // REMOVAL: when the native AAC and Opus encoders become the default, the two
-// nativeenc calls go away and this collapses to "MP3 and ALAC need FFmpeg".
+// nativeenc calls go away and this collapses to "only MP3 needs FFmpeg".
 func exportFormatNeedsFFmpeg(exportType string) bool {
 	switch exportType {
 	case AudioExportTypeWAV, AudioExportTypeFLAC:

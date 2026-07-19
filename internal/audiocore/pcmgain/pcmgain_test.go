@@ -139,7 +139,10 @@ func TestApplied(t *testing.T) {
 		t.Parallel()
 		src := pcm16(100, -100, 1000)
 		got := Applied(src, 0)
-		assert.Equal(t, &src[0], &got[0], "0 dB must not copy")
+		// assert.Same compares addresses. assert.Equal would not: on two *byte it
+		// falls through to reflect.DeepEqual, which compares the pointed-to bytes,
+		// so it passes even when Applied copies.
+		assert.Same(t, &src[0], &got[0], "0 dB must not copy")
 	})
 
 	t.Run("non-zero dB copies and leaves the source intact", func(t *testing.T) {
@@ -147,7 +150,7 @@ func TestApplied(t *testing.T) {
 		src := pcm16(100, -100, 1000)
 		srcCopy := bytes.Clone(src)
 		got := Applied(src, -6)
-		assert.NotEqual(t, &src[0], &got[0], "a gained result must be a new buffer")
+		assert.NotSame(t, &src[0], &got[0], "a gained result must be a new buffer")
 		assert.Equal(t, srcCopy, src, "source must be unchanged")
 		assert.Equal(t, []int16{50, -50, 501}, samples16(got))
 	})

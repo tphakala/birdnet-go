@@ -325,7 +325,7 @@ func TestEncodePCM_HonoursCancelledContext(t *testing.T) {
 	assert.Empty(t, entries)
 }
 
-func TestSupportedSampleRate(t *testing.T) {
+func TestSupports_SampleRate(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, Supports(48000, 16, 1))
 	require.NoError(t, Supports(16000, 16, 1))
@@ -335,7 +335,7 @@ func TestSupportedSampleRate(t *testing.T) {
 	require.Error(t, Supports(0, 16, 1))
 }
 
-func TestSupportedBitDepthAndChannels(t *testing.T) {
+func TestSupports_BitDepthAndChannels(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, Supports(48000, 16, 1))
 	require.Error(t, Supports(48000, 24, 1))
@@ -377,8 +377,8 @@ func TestEncodePCM_FFprobeAcceptsOutput(t *testing.T) {
 	// its own internal order, not the order requested, so positions are not a
 	// contract.
 	got := map[string]string{}
-	for line := range strings.FieldsSeq(string(probe)) {
-		if k, v, ok := strings.Cut(line, "="); ok {
+	for field := range strings.FieldsSeq(string(probe)) {
+		if k, v, ok := strings.Cut(field, "="); ok {
 			got[k] = v
 		}
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/nativeenc"
 )
 
 // Tests for issue #493: validation code quality improvements.
@@ -148,8 +149,10 @@ func TestValidateAudioSettings_ClearsFFmpegMetadataOnFailure(t *testing.T) {
 }
 
 // TestApplyFfmpegFormatFallback covers the FFmpeg-missing export-format fallback:
-// the lossy FFmpeg-only formats (MP3/AAC/Opus) are forced to WAV, but only while
-// export is enabled, and the native formats (WAV, FLAC) are never downgraded.
+// a format with no native encoder available is forced to WAV, but only while
+// export is enabled, and a format that can be encoded natively is never
+// downgraded. For AAC and Opus "natively" depends on the runtime gate, so those
+// are covered separately in TestApplyFfmpegFormatFallback_NativeGate.
 func TestApplyFfmpegFormatFallback(t *testing.T) {
 	t.Parallel()
 
@@ -176,6 +179,69 @@ func TestApplyFfmpegFormatFallback(t *testing.T) {
 			settings := &AudioSettings{
 				FfmpegPath: "", // FFmpeg unavailable
 				Export:     ExportSettings{Enabled: tt.enabled, Type: tt.input},
+			}
+			settings.applyFfmpegFormatFallback()
+
+			assert.Equal(t, tt.want, settings.Export.Type)
+		})
+	}
+}
+
+// An install without FFmpeg that opts into a native lossy encoder must keep the
+// format it asked for. Getting this wrong is silent and total: validation
+// rewrites the type before export ever runs, so the encoder is never consulted
+// and the operator just sees WAV files, on precisely the FFmpeg-less systems the
+// native encoders exist to serve. Every developer machine has FFmpeg, so nothing
+// else in the suite would catch a regression here.
+func TestApplyFfmpegFormatFallback_NativeGate(t *testing.T) {
+	// Not parallel: t.Setenv.
+	tests := []struct {
+		name     string
+		envVar   string
+		envValue string
+		input    string
+		want     string
+	}{
+		{
+			name:  "aac without the gate falls back to WAV",
+			input: AudioExportTypeAAC, want: AudioExportTypeWAV,
+		},
+		{
+			name: "aac with the gate keeps aac", envVar: nativeenc.EnvAACEncoder, envValue: "native",
+			input: AudioExportTypeAAC, want: AudioExportTypeAAC,
+		},
+		{
+			name:  "opus without the gate falls back to WAV",
+			input: AudioExportTypeOPUS, want: AudioExportTypeWAV,
+		},
+		{
+			name: "opus with the gate keeps opus", envVar: nativeenc.EnvOpusEncoder, envValue: "native",
+			input: AudioExportTypeOPUS, want: AudioExportTypeOPUS,
+		},
+		{
+			// The gates are per codec: the AAC gate must not rescue Opus.
+			name: "the aac gate does not keep opus", envVar: nativeenc.EnvAACEncoder, envValue: "native",
+			input: AudioExportTypeOPUS, want: AudioExportTypeWAV,
+		},
+		{
+			// MP3 has no native encoder, so it is downgraded whatever is set.
+			name: "mp3 falls back even with both gates set", envVar: nativeenc.EnvAACEncoder, envValue: "native",
+			input: AudioExportTypeMP3, want: AudioExportTypeWAV,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear both gates, then set only the one under test, so a leaked
+			// value from the environment cannot make a case pass.
+			t.Setenv(nativeenc.EnvAACEncoder, "")
+			t.Setenv(nativeenc.EnvOpusEncoder, "")
+			if tt.envVar != "" {
+				t.Setenv(tt.envVar, tt.envValue)
+			}
+
+			settings := &AudioSettings{
+				FfmpegPath: "", // FFmpeg unavailable
+				Export:     ExportSettings{Enabled: true, Type: tt.input},
 			}
 			settings.applyFfmpegFormatFallback()
 

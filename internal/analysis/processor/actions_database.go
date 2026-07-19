@@ -557,21 +557,21 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 
 	case ffmpeg.FormatAAC:
 		// Opt-in; see internal/audiocore/nativeenc for the gate and its removal.
-		if a.nativeAACSelected(exportRate) {
+		if nativeAACSelected(exportRate) {
 			return a.encodeClipNativeAAC(ctx, exportRate, outputPath)
 		}
 		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
 
 	case ffmpeg.FormatOpus:
 		// Opt-in; see internal/audiocore/nativeenc for the gate and its removal.
-		if a.nativeOpusSelected(exportRate) {
+		if nativeOpusSelected(exportRate) {
 			return a.encodeClipNativeOpus(ctx, exportRate, outputPath)
 		}
 		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
 
 	default:
-		// FFmpeg for the remaining formats (MP3, ALAC), including their EBU R128
-		// loudnorm normalization. FLAC and WAV never reach this branch.
+		// MP3 is the only remaining format, and FFmpeg owns its EBU R128 loudnorm
+		// normalization too. WAV, FLAC, AAC and Opus never reach this branch.
 		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
 	}
 }
@@ -659,9 +659,16 @@ func (a *SaveAudioAction) encodeClipNativeOpus(ctx context.Context, exportRate i
 // nativeAACSelected reports whether this clip should take the native AAC path:
 // the operator opted in AND go-aac accepts the clip's rate, depth and channel
 // count. A gated-on clip the encoder cannot carry falls back to FFmpeg with a
-// warning rather than failing, so an unusual capture rate never costs a
-// recording. This whole check goes away when the gate is removed.
-func (a *SaveAudioAction) nativeAACSelected(exportRate int) bool {
+// warning rather than failing outright. This whole check goes away when the gate
+// is removed.
+//
+// One caveat on that fallback: because opting in now stops config validation
+// from downgrading the format to WAV when FFmpeg is missing, an install with no
+// FFmpeg that hits an unsupported clip shape has nothing left to fall back to
+// and loses the clip. Reaching it needs a resample failure, since bird audio
+// above 48 kHz is resampled down and bat audio is switched to WAV before this
+// point, but it is a real narrowing of the old guarantee.
+func nativeAACSelected(exportRate int) bool {
 	if !nativeenc.AACEnabled() {
 		return false
 	}
@@ -673,7 +680,7 @@ func (a *SaveAudioAction) nativeAACSelected(exportRate int) bool {
 }
 
 // nativeOpusSelected is the Opus counterpart of nativeAACSelected.
-func (a *SaveAudioAction) nativeOpusSelected(exportRate int) bool {
+func nativeOpusSelected(exportRate int) bool {
 	if !nativeenc.OpusEnabled() {
 		return false
 	}

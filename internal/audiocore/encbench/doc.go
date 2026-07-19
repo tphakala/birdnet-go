@@ -8,6 +8,9 @@
 //
 //	go test -tags enccompare -v ./internal/audiocore/encbench/
 //
+// The harness reads resource usage through getrusage, so it is unix-only; on
+// Windows the tag selects nothing and the package reports no tests to run.
+//
 // It reports wall time, CPU time (including the FFmpeg child process), Go heap
 // per encode, the FFmpeg child's peak RSS, and output size per format.
 package encbench

@@ -3,7 +3,8 @@
 // process involved.
 //
 // It mirrors the native FLAC encoder in internal/audiocore/flac: the same
-// Options shape, the same atomic temp-file-then-rename write, and the same
+// Options shape, the same atomic temp-file-then-rename write (via audiotemp),
+// and the same
 // enhanced-error conventions. Gain is applied in Go before encoding.
 //
 // This path is gated at the call site by internal/audiocore/nativeenc; AAC clip
@@ -132,20 +133,21 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	// staying constant as it does on the FLAC path.
 	pcm := pcmgain.Applied(opts.PCMData, opts.GainDB)
 
-	err := audiotemp.WriteFile(ctx, opts.OutputPath, func(f *os.File) error {
-		return aacm4a.EncodeInterleaved(f, cfg, pcm)
+	// WriteFile classifies its own filesystem failures and passes a cancelled
+	// context through raw; only the codec failure is tagged here.
+	return audiotemp.WriteFile(ctx, component, opts.OutputPath, func(f *os.File) error {
+		if encErr := aacm4a.EncodeInterleaved(f, cfg, pcm); encErr != nil {
+			return errors.New(encErr).
+				Component(component).
+				Category(errors.CategoryAudio).
+				Context("operation", "aac_encode_stream").
+				Context("sample_rate", opts.SampleRate).
+				Context("channels", opts.Channels).
+				Context("bitrate_kbps", opts.BitrateKbps).
+				Build()
+		}
+		return nil
 	})
-	if err != nil {
-		return errors.New(err).
-			Component(component).
-			Category(errors.CategoryAudio).
-			Context("operation", "aac_encode").
-			Context("sample_rate", opts.SampleRate).
-			Context("channels", opts.Channels).
-			Context("bitrate_kbps", opts.BitrateKbps).
-			Build()
-	}
-	return nil
 }
 
 // validateEncodeInput rejects options the encoder cannot honour, with a clear

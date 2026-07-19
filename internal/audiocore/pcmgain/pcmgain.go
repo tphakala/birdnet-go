@@ -38,10 +38,11 @@ func FactorFromDB(gainDB float64) float64 {
 // unchanged so dst is always fully written.
 //
 // This is a pure-Go single pass rather than a SIMD path, but NOT because SIMD
-// would be slower: routing through github.com/tphakala/simd's float32 scale
-// primitives (Int16ToFloat32Scale / Float32ToInt16Scale, both with amd64 and
-// arm64 assembly) measures roughly 13x faster on a 720k-sample clip. It is
-// rejected on correctness and scale instead. simd exposes no int16 sample API,
+// would be slower: github.com/tphakala/simd's f32 subpackage does offer a route
+// (Int16ToFloat32Scale then Float32ToInt16Scale, both with amd64 and arm64
+// assembly, each reported by that library as roughly an order of magnitude
+// faster than its own Go fallback). It is rejected on correctness and scale
+// instead. simd exposes no int16 sample API,
 // so the route needs an unsafe reinterpretation of []byte as []int16 that only
 // holds on little-endian hosts; the float32 round trip is not bit-exact with
 // math.Round, differing by 1 LSB on a fraction of samples; and gain runs once

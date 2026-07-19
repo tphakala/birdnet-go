@@ -286,7 +286,9 @@ func TestEncodePCM_RejectsInvalidOptions(t *testing.T) {
 		{name: "empty pcm", mutate: func(o *Options) { o.PCMData = nil }},
 		{name: "empty output path", mutate: func(o *Options) { o.OutputPath = "" }},
 		{name: "unsupported sample rate", mutate: func(o *Options) { o.SampleRate = 32000 }},
-		{name: "unsupported bit depth", mutate: func(o *Options) { o.BitDepth = 8 }},
+		{name: "unsupported bit depth 8", mutate: func(o *Options) { o.BitDepth = 8 }},
+		{name: "unsupported bit depth 24", mutate: func(o *Options) { o.BitDepth = 24 }},
+		{name: "unsupported bit depth 32", mutate: func(o *Options) { o.BitDepth = 32 }},
 		{name: "unsupported channel count", mutate: func(o *Options) { o.Channels = 3 }},
 		{name: "negative bitrate", mutate: func(o *Options) { o.BitrateKbps = -1 }},
 		{name: "partial trailing frame", mutate: func(o *Options) { o.PCMData = append(o.PCMData, 0) }},
@@ -327,7 +329,7 @@ func TestEncodePCM_HonoursCancelledContext(t *testing.T) {
 	assert.Empty(t, entries)
 }
 
-func TestSupportedSampleRate(t *testing.T) {
+func TestSupports_SampleRate(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, Supports(48000, 16, 1))
 	require.NoError(t, Supports(44100, 16, 1))
@@ -337,10 +339,15 @@ func TestSupportedSampleRate(t *testing.T) {
 	require.Error(t, Supports(0, 16, 1))
 }
 
-func TestSupportedBitDepthAndChannels(t *testing.T) {
+func TestSupports_BitDepthAndChannels(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, Supports(48000, 16, 1))
 	require.Error(t, Supports(48000, 8, 1))
+	// go-aac itself codes 24- and 32-bit, but the shared gain and loudness path
+	// is int16-only, so this encoder must reject them rather than silently
+	// reinterpret the samples.
+	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: pcmgain is int16-only")
+	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: pcmgain is int16-only")
 	require.NoError(t, Supports(48000, 16, 1))
 	require.NoError(t, Supports(48000, 16, 2))
 	require.Error(t, Supports(48000, 16, 0))
@@ -379,8 +386,8 @@ func TestEncodePCM_FFprobeAcceptsOutput(t *testing.T) {
 	// its own internal order, not the order requested, so positions are not a
 	// contract.
 	got := map[string]string{}
-	for line := range strings.FieldsSeq(string(probe)) {
-		if k, v, ok := strings.Cut(line, "="); ok {
+	for field := range strings.FieldsSeq(string(probe)) {
+		if k, v, ok := strings.Cut(field, "="); ok {
 			got[k] = v
 		}
 	}
