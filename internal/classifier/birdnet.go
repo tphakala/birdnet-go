@@ -857,6 +857,9 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	}
 	scores := make(map[string]float64, len(speciesScores))
 	for _, s := range speciesScores {
+		if s.Synthetic {
+			continue
+		}
 		scores[strings.ToLower(detection.ExtractScientificName(s.Label))] = s.Score
 	}
 
@@ -1488,6 +1491,9 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Look for the species in the scores
 	targetSci := detection.ExtractScientificName(species)
 	for _, score := range speciesScores {
+		if score.Synthetic {
+			continue
+		}
 		if strings.EqualFold(detection.ExtractScientificName(score.Label), targetSci) {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {

@@ -22,8 +22,9 @@ import (
 
 // SpeciesScore holds a species label and its associated score.
 type SpeciesScore struct {
-	Score float64
-	Label string
+	Score     float64
+	Label     string
+	Synthetic bool
 }
 
 // ByScore implements sort.Interface for []SpeciesScore based on the Score field.
@@ -355,7 +356,7 @@ func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, se
 	for _, label := range resolveOverrideLabels(settings, geoLabels) {
 		if !seen[label] {
 			bn.Debug("Adding override species with max score: %s", label)
-			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
+			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label, Synthetic: true})
 			seen[label] = true
 		}
 	}

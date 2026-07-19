@@ -496,3 +496,39 @@ func TestRangeFilterStatus_NoGeomodel(t *testing.T) {
 	assert.Zero(t, resp.Classifiers[0].WithoutRangeData)
 	assert.InDelta(t, 0.05, resp.Threshold, 0.001)
 }
+
+func TestGetSpeciesOccurrenceAtTime_OverrideScoreExcluded(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.05
+	settings.BirdNET.Labels = []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+	}
+	settings.Realtime.Species.Include = []string{"Parus major_Great Tit"}
+
+	// Use fakeUniversalRangeFilter. It simulates predicting Turdus merula at 0.9,
+	// while Parus major is only included via the user override.
+	rf := &fakeUniversalRangeFilter{
+		geoLabels: []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"},
+		scores:    []SpeciesScore{{Score: 0.9, Label: "Turdus merula_Common Blackbird"}},
+		rawScores: []float32{0.9, 0.0},
+	}
+
+	bn := &BirdNET{
+		Settings:     settings,
+		rangeFilter:  rf,
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+
+	// For Parus major, the occurrence should be 0.0 despite the force-include,
+	// because synthetic scores are excluded from the occurrence lookup.
+	occurrence := bn.GetSpeciesOccurrenceAtTime("Parus major_Great Tit", time.Now())
+	assert.Zero(t, occurrence, "Synthetic override score should be excluded from occurrence lookup")
+
+	// For Turdus merula, the native score should be returned.
+	nativeOccurrence := bn.GetSpeciesOccurrenceAtTime("Turdus merula_Common Blackbird", time.Now())
+	assert.InDelta(t, 0.9, nativeOccurrence, 0.001, "Native geomodel score should be returned")
+}
