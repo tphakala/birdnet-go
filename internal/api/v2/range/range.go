@@ -229,11 +229,27 @@ func dedupeSpeciesForDisplay(species []dto.RangeFilterSpecies) []dto.RangeFilter
 			continue
 		}
 		if idx, ok := indexByKey[key]; ok {
+			var hasCustomConfig *bool
+			if (sp.HasCustomConfig != nil && *sp.HasCustomConfig) || (deduped[idx].HasCustomConfig != nil && *deduped[idx].HasCustomConfig) {
+				t := true
+				hasCustomConfig = &t
+			}
+			var isManuallyIncluded *bool
+			if (sp.IsManuallyIncluded != nil && *sp.IsManuallyIncluded) || (deduped[idx].IsManuallyIncluded != nil && *deduped[idx].IsManuallyIncluded) {
+				t := true
+				isManuallyIncluded = &t
+			}
+
 			if speciesScoreHigher(sp, deduped[idx]) {
 				// Preserve the first occurrence's position, but surface the
 				// higher-scored variant (defensive: the input is already sorted
 				// score-descending, so this rarely triggers).
+				sp.HasCustomConfig = hasCustomConfig
+				sp.IsManuallyIncluded = isManuallyIncluded
 				deduped[idx] = sp
+			} else {
+				deduped[idx].HasCustomConfig = hasCustomConfig
+				deduped[idx].IsManuallyIncluded = isManuallyIncluded
 			}
 			continue
 		}

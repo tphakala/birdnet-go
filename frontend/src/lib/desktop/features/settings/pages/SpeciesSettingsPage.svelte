@@ -660,6 +660,8 @@
           scientificName: string;
           commonName: string;
           score: number;
+          isManuallyIncluded?: boolean;
+          hasCustomConfig?: boolean;
         }>;
         count: number;
         threshold: number;
