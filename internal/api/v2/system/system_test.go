@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"runtime"
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
@@ -399,6 +402,39 @@ func TestGetResourceInfo(t *testing.T) {
 
 	// Process memory should be positive
 	assert.GreaterOrEqual(t, response.ProcessMem, float64(0), "ProcessMem should be >= 0")
+}
+
+// TestNormalizeProcessCPU verifies per-process CPU is normalized to a share of
+// total system capacity and clamped to [0, 100].
+func TestNormalizeProcessCPU(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "process-info")
+
+	numCPU := float64(runtime.NumCPU())
+
+	tests := []struct {
+		name string
+		in   float64
+		want float64
+	}{
+		{name: "zero stays zero", in: 0, want: 0},
+		{name: "negative clamps to zero", in: -10, want: 0},
+		{name: "single core share", in: numCPU * 25, want: 25},
+		{name: "full machine", in: numCPU * 100, want: 100},
+		{name: "over-full clamps to 100", in: numCPU * 250, want: 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := normalizeProcessCPU(tt.in)
+			assert.InDelta(t, tt.want, got, 0.001)
+			assert.GreaterOrEqual(t, got, float64(0), "result must be >= 0")
+			assert.LessOrEqual(t, got, float64(maxPercentage), "result must be <= 100")
+		})
+	}
 }
 
 // TestGetDiskInfo tests the GetDiskInfo endpoint
@@ -885,4 +921,116 @@ func TestGetRestartStatusWithPendingRestart(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
 	assert.True(t, result.RestartRequired)
 	assert.Equal(t, []string{"Port changed"}, result.RestartReasons)
+}
+
+// selfProcessForTest returns a real *process.Process for the running test binary.
+// The CPU sampler needs a live PID whose create time the OS will actually report.
+func selfProcessForTest(t *testing.T) (proc *process.Process, createTime int64) {
+	t.Helper()
+	proc, err := process.NewProcess(int32(os.Getpid()))
+	require.NoError(t, err)
+	createTime, err = proc.CreateTime()
+	require.NoError(t, err)
+	return proc, createTime
+}
+
+// The process table lists processes afresh on every request, and a freshly listed
+// instance's CPUPercent() is the lifetime average since the process started. Interval
+// usage requires diffing against a sample the *same* instance stored earlier, so the
+// handler must retain its own instance and ignore the caller's.
+func TestProcessCPUPercent_RetainsSamplerAcrossRequests(t *testing.T) {
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "process-info")
+
+	c := &Handler{}
+	first, createTime := selfProcessForTest(t)
+
+	// First sight of the PID has nothing to diff against, so it primes and reports 0.
+	got, err := c.processCPUPercent(first, createTime)
+	require.NoError(t, err)
+	assert.InDelta(t, 0.0, got, 0.001, "first sample should prime rather than report a value")
+	require.Contains(t, c.procSamples, first.Pid)
+	assert.Same(t, first, c.procSamples[first.Pid].proc)
+
+	// A later request hands over a different instance for the same process; the retained
+	// sampler must survive, or every request would re-prime and report 0 forever.
+	second, _ := selfProcessForTest(t)
+	require.NotSame(t, first, second, "each listing builds a new instance")
+
+	_, err = c.processCPUPercent(second, createTime)
+	require.NoError(t, err)
+	assert.Same(t, first, c.procSamples[first.Pid].proc, "retained sampler must not be replaced")
+}
+
+// PIDs are recycled. A retained sampler's history belongs to the dead process, so
+// diffing a new process against it would report nonsense; the create time is what
+// distinguishes them.
+func TestProcessCPUPercent_ReplacesRecycledPID(t *testing.T) {
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "process-info")
+
+	c := &Handler{}
+	p, createTime := selfProcessForTest(t)
+
+	stale := &process.Process{Pid: p.Pid}
+	c.procSamples = map[int32]*procSample{
+		p.Pid: {proc: stale, createTime: createTime - 1000},
+	}
+
+	got, err := c.processCPUPercent(p, createTime)
+	require.NoError(t, err)
+
+	assert.NotSame(t, stale, c.procSamples[p.Pid].proc, "stale sampler must be discarded")
+	assert.Same(t, p, c.procSamples[p.Pid].proc)
+	assert.Equal(t, createTime, c.procSamples[p.Pid].createTime)
+	assert.InDelta(t, 0.0, got, 0.001, "a replaced entry re-primes")
+}
+
+// Without pruning the map would retain an entry for every process that ever ran.
+func TestPruneProcSamples_DropsDeadPIDs(t *testing.T) {
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "process-info")
+
+	live, createTime := selfProcessForTest(t)
+	const deadPID int32 = 999999
+
+	c := &Handler{
+		procSamples: map[int32]*procSample{
+			live.Pid: {proc: live, createTime: createTime},
+			deadPID:  {proc: &process.Process{Pid: deadPID}, createTime: 1},
+		},
+	}
+
+	c.pruneProcSamples([]*process.Process{live})
+
+	assert.Contains(t, c.procSamples, live.Pid, "a running process keeps its sampler")
+	assert.NotContains(t, c.procSamples, deadPID, "a dead PID must not be retained")
+}
+
+// A process hidden by the table's relevance filter is still running, so pruning against
+// the full listing must not evict it — otherwise it would re-prime and report 0 on
+// every request that later shows it.
+func TestPruneProcSamples_KeepsFilteredButLiveProcesses(t *testing.T) {
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "process-info")
+
+	live, createTime := selfProcessForTest(t)
+	other := &process.Process{Pid: live.Pid + 1}
+
+	c := &Handler{
+		procSamples: map[int32]*procSample{
+			live.Pid:  {proc: live, createTime: createTime},
+			other.Pid: {proc: other, createTime: 1},
+		},
+	}
+
+	// Both are in the full listing, even though the table may only render one.
+	c.pruneProcSamples([]*process.Process{live, other})
+
+	assert.Contains(t, c.procSamples, live.Pid)
+	assert.Contains(t, c.procSamples, other.Pid)
 }

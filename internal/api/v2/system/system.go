@@ -458,9 +458,16 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 	// Get CPU usage from cache instead of blocking
 	cpuPercent := apicore.GetCachedCPUUsage()
 
-	// Get process information (current process)
-	proc, err := process.NewProcess(int32(os.Getpid())) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
+	// Get process information for the current process. Reuse the cached
+	// *process.Process (see the selfProc field) and sample CPU via Percent(0) so
+	// the value reflects usage since the previous request — interval usage —
+	// rather than the lifetime average a freshly created instance's CPUPercent()
+	// returns and which grows steadily more dampened as the process ages. The
+	// instance access is serialized because Percent(0) mutates its stored sample.
+	c.selfProcMu.Lock()
+	proc, err := c.selfProcessLocked()
 	if err != nil {
+		c.selfProcMu.Unlock()
 		c.LogErrorIfEnabled("Failed to get process information",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
@@ -468,29 +475,35 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 		)
 		return c.HandleError(ctx, err, "Failed to get process information", http.StatusInternalServerError)
 	}
+	procMem, memErr := proc.MemoryInfo()
+	// Percent(0) returns the CPU used since the previous call; the first call
+	// after startup primes the sample and returns 0.
+	procCPU, cpuErr := proc.Percent(0)
+	c.selfProcMu.Unlock()
 
-	procMem, err := proc.MemoryInfo()
-	if err != nil {
-		c.Debug("Failed to get process memory info: %v", err)
+	if memErr != nil {
+		c.Debug("Failed to get process memory info: %v", memErr)
 		c.LogWarnIfEnabled("Failed to get process memory info",
-			logger.Error(err),
+			logger.Error(memErr),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
 		// Continue with nil procMem, handled below
 	}
 
-	procCPU, err := proc.CPUPercent()
-	if err != nil {
-		c.Debug("Failed to get process CPU info: %v", err)
+	if cpuErr != nil {
+		c.Debug("Failed to get process CPU info: %v", cpuErr)
 		c.LogWarnIfEnabled("Failed to get process CPU info",
-			logger.Error(err),
+			logger.Error(cpuErr),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
 		// Will use 0 as default value
 		procCPU = 0
 	}
+	// Normalize to a share of total system capacity (0-100%) so it matches the
+	// system CPU gauge and cannot exceed 100% on multi-core hosts.
+	procCPU = normalizeProcessCPU(procCPU)
 
 	// Convert process memory to MB for readability
 	var procMemMB float64
@@ -531,6 +544,88 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, resourceInfo)
+}
+
+// normalizeProcessCPU converts a gopsutil per-process CPU percentage (reported
+// relative to a single core, so potentially >100% for a multi-threaded process)
+// into the process's share of total system capacity in the range
+// [0, maxPercentage]. Dividing by the logical core count matches the semantics of
+// the system CPU gauge; the clamp is a defensive guard against transient sampling
+// overshoot so the value never exceeds 100%.
+func normalizeProcessCPU(cpuPercent float64) float64 {
+	if numCPU := runtime.NumCPU(); numCPU > 0 {
+		cpuPercent /= float64(numCPU)
+	}
+	switch {
+	case cpuPercent > maxPercentage:
+		return maxPercentage
+	case cpuPercent < 0:
+		return 0
+	default:
+		return cpuPercent
+	}
+}
+
+// processCPUPercent returns p's CPU usage since the previous request, in gopsutil's
+// per-single-core units (so still normalizeProcessCPU's input).
+//
+// It samples through a retained per-PID instance (see the procSamples field) rather
+// than the caller's freshly listed p, because Percent(0) measures against the sample
+// the instance itself stored last time. createTimeMillis identifies the process
+// behind the PID; a mismatch means the PID was recycled and the retained history
+// belongs to a dead process, so the entry is replaced.
+//
+// The first sample for a PID has nothing to diff against and returns 0. That costs
+// one poll per process per server run — the cache lives as long as the handler — not
+// one per page load.
+func (c *Handler) processCPUPercent(p *process.Process, createTimeMillis int64) (float64, error) {
+	c.procSamplesMu.Lock()
+	defer c.procSamplesMu.Unlock()
+
+	if c.procSamples == nil {
+		c.procSamples = make(map[int32]*procSample)
+	}
+
+	if sample, ok := c.procSamples[p.Pid]; ok && sample.createTime == createTimeMillis {
+		return sample.proc.Percent(0)
+	}
+
+	c.procSamples[p.Pid] = &procSample{proc: p, createTime: createTimeMillis}
+	return p.Percent(0)
+}
+
+// pruneProcSamples drops retained samplers whose PID is no longer running, keeping
+// procSamples bounded by the live process count on a long-lived host. live is the
+// full process list, not the filtered table, so a process the table hides is not
+// evicted and re-primed on every request.
+func (c *Handler) pruneProcSamples(live []*process.Process) {
+	liveSet := make(map[int32]struct{}, len(live))
+	for _, p := range live {
+		liveSet[p.Pid] = struct{}{}
+	}
+
+	c.procSamplesMu.Lock()
+	defer c.procSamplesMu.Unlock()
+	for pid := range c.procSamples {
+		if _, ok := liveSet[pid]; !ok {
+			delete(c.procSamples, pid)
+		}
+	}
+}
+
+// selfProcessLocked returns the cached *process.Process for the current PID,
+// creating it on first use. Reusing a single instance is what lets Percent(0)
+// report interval CPU usage (see the selfProc field). Callers must hold
+// c.selfProcMu.
+func (c *Handler) selfProcessLocked() (*process.Process, error) {
+	if c.selfProc == nil {
+		p, err := process.NewProcess(int32(os.Getpid())) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
+		if err != nil {
+			return nil, err
+		}
+		c.selfProc = p
+	}
+	return c.selfProc, nil
 }
 
 // GetDiskInfo handles GET /api/v2/system/disks
@@ -710,12 +805,40 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 		status = valueUnknown
 	}
 
-	cpuPercent, err := p.CPUPercent()
+	// Read the create time before CPU: it doubles as the identity check that keeps a
+	// retained CPU sampler from being diffed against a recycled PID's history.
+	createTimeMillis, createErr := p.CreateTime()
+	var uptimeSeconds int64
+	if createErr != nil {
+		// Log error but default to 0
+		c.LogWarnIfEnabled("Failed to get process create time", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(createErr))
+		uptimeSeconds = 0
+	} else {
+		// Calculate uptime relative to now
+		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/millisecondsPerSecond),
+			// Sanity check for clock skew
+			0)
+	}
+
+	var cpuPercent float64
+	if createErr != nil {
+		// Without a create time a recycled PID is indistinguishable from the original, so
+		// the retained sampler cannot be trusted; fall back to the lifetime average.
+		cpuPercent, err = p.CPUPercent()
+	} else {
+		cpuPercent, err = c.processCPUPercent(p, createTimeMillis)
+	}
 	if err != nil {
 		// Log error but default to 0
 		c.LogWarnIfEnabled("Failed to get process CPU percent", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
 		cpuPercent = 0.0
 	}
+	// gopsutil reports per-process CPU relative to a single core, so a process
+	// spread across multiple cores can exceed 100% (e.g. 200% for two full cores).
+	// Normalize by the logical core count so the value is the process's share of
+	// total system capacity (0-100%), consistent with the system CPU gauge and
+	// never exceeding 100%.
+	cpuPercent = normalizeProcessCPU(cpuPercent)
 
 	memInfo, err := p.MemoryInfo()
 	var memRSS uint64
@@ -725,19 +848,6 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 		memRSS = 0
 	} else {
 		memRSS = memInfo.RSS // Resident Set Size
-	}
-
-	createTimeMillis, err := p.CreateTime()
-	var uptimeSeconds int64
-	if err != nil {
-		// Log error but default to 0
-		c.LogWarnIfEnabled("Failed to get process create time", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
-		uptimeSeconds = 0
-	} else {
-		// Calculate uptime relative to now
-		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/millisecondsPerSecond),
-			// Sanity check for clock skew
-			0)
 	}
 
 	return ProcessInfo{
@@ -787,6 +897,8 @@ func (c *Handler) GetProcessInfo(ctx echo.Context) error {
 		c.LogErrorIfEnabled("Failed to list processes", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to list processes", http.StatusInternalServerError)
 	}
+
+	c.pruneProcSamples(procs)
 
 	processInfos := c.collectProcessInfos(procs, showAll)
 
