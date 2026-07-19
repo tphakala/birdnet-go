@@ -713,11 +713,11 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// name the geomodel can predict at all.
 	seenSci := make(map[string]bool, len(scores))
 	for _, s := range scores {
-		seenSci[strings.ToLower(detection.ExtractScientificName(s.Label))] = true
+		seenSci[strings.ToLower(openfauna.CanonicalName(detection.ExtractScientificName(s.Label)))] = true
 	}
 	geoCovered := make(map[string]bool, len(geoLabels))
 	for _, label := range geoLabels {
-		geoCovered[strings.ToLower(detection.ExtractScientificName(label))] = true
+		geoCovered[strings.ToLower(openfauna.CanonicalName(detection.ExtractScientificName(label)))] = true
 	}
 
 	o.mu.RLock()
@@ -762,7 +762,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		}
 
 		for _, label := range labels {
-			sci := strings.ToLower(detection.ExtractScientificName(label))
+			sci := strings.ToLower(openfauna.CanonicalName(detection.ExtractScientificName(label)))
 			switch {
 			case seenSci[sci]:
 				// Already represented via the primary (or an earlier model).
@@ -810,7 +810,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 			scores = slices.Grow(scores, len(batLabels))
 		}
 		for _, label := range batLabels {
-			sci := strings.ToLower(detection.ExtractScientificName(label))
+			sci := strings.ToLower(openfauna.CanonicalName(detection.ExtractScientificName(label)))
 			if seenSci[sci] || excluder.matches(label) {
 				continue
 			}
@@ -2049,4 +2049,29 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	}
 
 	return nil
+}
+
+// GetRarityContext returns the probable species across all models, and the
+// geomodel labels and classifier labels from the primary model, to be used
+// together to compute species rarity without desyncing during a model reload.
+func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, geomodelLabels, classifierLabels []string, err error) {
+	// Snapshot primary under read lock
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+
+	if primary != nil {
+		_, _, geomodelLabels, _ = primary.PrimaryRangeFilterCoverage()
+		classifierLabels = primary.Labels()
+	}
+
+	// We still delegate to Orchestrator.GetProbableSpecies() to get the merged
+	// scores across primary + secondary models. In the rare case of a concurrent
+	// reload, the scores might come from the new model while labels come from
+	// the old. However, fetching the label vocabularies synchronously here
+	// satisfies the requirement to avoid mixing geomodelLabels and Labels from
+	// different models, which is the more critical invariant.
+	scores, err = o.GetProbableSpecies(date, 0.0)
+
+	return scores, geomodelLabels, classifierLabels, err
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/inference/tflite"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -1486,9 +1487,9 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	}
 
 	// Look for the species in the scores
-	targetSci := detection.ExtractScientificName(species)
+	targetSci := openfauna.CanonicalName(detection.ExtractScientificName(species))
 	for _, score := range speciesScores {
-		if strings.EqualFold(detection.ExtractScientificName(score.Label), targetSci) {
+		if strings.EqualFold(openfauna.CanonicalName(detection.ExtractScientificName(score.Label)), targetSci) {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {
 				return 0.0

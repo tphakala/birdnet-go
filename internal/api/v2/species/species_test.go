@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -257,7 +258,7 @@ func TestSpeciesInfoJSONSerialization(t *testing.T) {
 	info := SpeciesInfo{
 		ScientificName: "Turdus migratorius",
 		CommonName:     "American Robin",
-		Rarity: &SpeciesRarityInfo{
+		Rarity: SpeciesRarityInfo{
 			Status:           RarityCommon,
 			Score:            0.65,
 			LocationBased:    true,
@@ -392,7 +393,7 @@ func TestTaxonomyInfoJSONSerialization(t *testing.T) {
 	info := TaxonomyInfo{
 		ScientificName: "Turdus migratorius",
 		SpeciesCode:    "amero",
-		Taxonomy: &TaxonomyHierarchy{
+		Taxonomy: TaxonomyHierarchy{
 			Kingdom: "Animalia",
 			Phylum:  "Chordata",
 			Class:   "Aves",
@@ -548,7 +549,7 @@ func TestGetAllSpecies(t *testing.T) {
 			var response AllSpeciesResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 			assert.Equal(t, tt.expectedCount, response.Count)
-			assert.Len(t, response.Species, tt.expectedCount)
+			require.Len(t, response.Species, tt.expectedCount)
 
 			if tt.expectedCount > 0 {
 				// Verify first species is parsed correctly
@@ -563,4 +564,150 @@ func TestGetAllSpecies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveSpeciesLabel(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testSciName      = "Turdus migratorius"
+		testCommonName   = "American Robin"
+		testAliasName    = "Streptopelia senegalensis"
+		testCanonName    = "Spilopelia senegalensis"
+		testCanonCommon  = "Laughing Dove"
+	)
+
+	allLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+	}
+
+	tests := []struct {
+		name       string
+		targetSci  string
+		wantLabel  string
+		wantCommon string
+	}{
+		{
+			name:       "exact match",
+			targetSci:  testSciName,
+			wantLabel:  testSciName + "_" + testCommonName,
+			wantCommon: testCommonName,
+		},
+		{
+			name:       "taxonomic alias",
+			targetSci:  testAliasName,
+			wantLabel:  testCanonName + "_" + testCanonCommon,
+			wantCommon: testCanonCommon,
+		},
+		{
+			name:       "case mismatch match",
+			targetSci:  " tURdus MIgratoRIUS ",
+			wantLabel:  testSciName + "_" + testCommonName,
+			wantCommon: testCommonName,
+		},
+		{
+			name:       "not found",
+			targetSci:  "Unknown species",
+			wantLabel:  "",
+			wantCommon: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotLabel, gotCommon := resolveSpeciesLabel(tt.targetSci, allLabels)
+			assert.Equal(t, tt.wantLabel, gotLabel)
+			assert.Equal(t, tt.wantCommon, gotCommon)
+		})
+	}
+}
+
+func TestResolveSpeciesLabel_Empty(t *testing.T) {
+	t.Parallel()
+	gotLabel, gotCommon := resolveSpeciesLabel("Turdus migratorius", nil)
+	assert.Empty(t, gotLabel)
+	assert.Empty(t, gotCommon)
+}
+
+func TestComputeRarity(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testSciName      = "Turdus migratorius"
+		testCommonName   = "American Robin"
+		testAliasName    = "Streptopelia senegalensis"
+		testCanonName    = "Spilopelia senegalensis"
+		testCanonCommon  = "Laughing Dove"
+	)
+
+	geomodelLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+		"Universal GeomodelOnly_Species",
+	}
+	classifierLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+	}
+
+	scores := []classifier.SpeciesScore{
+		{Label: testSciName + "_" + testCommonName, Score: 0.9},
+		{Label: testCanonName + "_" + testCanonCommon, Score: 0.1},
+	}
+
+	tests := []struct {
+		name       string
+		targetSci  string
+		wantScore  float64
+		wantStatus RarityStatus
+	}{
+		{
+			name:       "found in scores (very common)",
+			targetSci:  testSciName,
+			wantScore:  0.9,
+			wantStatus: RarityVeryCommon,
+		},
+		{
+			name:       "found in scores via alias",
+			targetSci:  testAliasName,
+			wantScore:  0.1,
+			wantStatus: RarityRare,
+		},
+		{
+			name:       "case mismatch in alias",
+			targetSci:  " STreptoPeliA SenEgaLenSiS ",
+			wantScore:  0.1,
+			wantStatus: RarityRare,
+		},
+		{
+			name:       "universal geomodel only (very rare)",
+			targetSci:  "Universal GeomodelOnly",
+			wantScore:  0.0,
+			wantStatus: RarityVeryRare,
+		},
+		{
+			name:       "unknown species (no coverage)",
+			targetSci:  "Completely Unknown",
+			wantScore:  0.0,
+			wantStatus: RarityUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotScore, gotStatus := computeRarity(tt.targetSci, scores, geomodelLabels, classifierLabels)
+			assert.InDelta(t, tt.wantScore, gotScore, 0.001)
+			assert.Equal(t, tt.wantStatus, gotStatus)
+		})
+	}
+}
+
+func TestComputeRarity_Empty(t *testing.T) {
+	t.Parallel()
+	gotScore, gotStatus := computeRarity("Turdus migratorius", nil, nil, nil)
+	assert.InDelta(t, 0.0, gotScore, 0.001)
+	assert.Equal(t, RarityUnknown, gotStatus)
 }
