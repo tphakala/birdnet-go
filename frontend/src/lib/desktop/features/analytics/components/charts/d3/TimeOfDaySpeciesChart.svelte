@@ -41,6 +41,9 @@
   // all-zero range keeps zero at the bottom) plus a fixed headroom above the max.
   const MIN_Y_DOMAIN_MAX = 1;
   const Y_AXIS_HEADROOM = 1.1;
+  // Width reserved for the legend, inset from the plot's right edge. Doubles as the label budget:
+  // anything wider would overflow the plot rather than wrap.
+  const LEGEND_WIDTH = 150;
 
   // Component state
   let tooltip: ChartTooltip | null = null;
@@ -331,8 +334,11 @@
     if (legendItems.length > 0) {
       createLegend(chartGroup, {
         items: legendItems,
-        position: { x: innerWidth - 150, y: 20 },
+        position: { x: innerWidth - LEGEND_WIDTH, y: 20 },
         itemHeight: 20,
+        // The legend is inset from the right edge by exactly its own width, so this is also the room
+        // a label has before it would overflow the plot; long species names are ellipsized to fit.
+        maxLabelWidth: LEGEND_WIDTH,
         onToggle: (id, visible) => {
           // Toggle visibility of the corresponding line and points
           chartGroup

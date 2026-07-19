@@ -25,6 +25,7 @@
   import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
   import { generateSpeciesColors, type ChartTheme } from './utils/theme';
+  import { fitTextNode } from './utils/labels';
   import {
     ridgelineLayout,
     peakIndex,
@@ -75,8 +76,10 @@
   const RIDGE_FILL_OPACITY = 0.55; // translucent so overlapping ridges blend
   const RIDGE_STROKE_WIDTH = 1.5;
   const RIDGE_STROKE_WIDTH_HOVER = 2.5;
-  const LABEL_MAX_CHARS = 18;
   const LABEL_GAP = 10; // px between the left edge and a row label
+  // Labels are end-anchored at x = -LABEL_GAP, so they grow left into the margin; this is all the
+  // room they have before the SVG viewport clips them.
+  const LABEL_BUDGET_PX = MARGIN.left - LABEL_GAP;
   const X_AXIS_LABEL_OFFSET = 34;
   const MIN_DENSITY_DOMAIN = 1e-6; // floor so an all-zero set never yields a degenerate amp domain
 
@@ -120,10 +123,6 @@
     innerHeight: number;
     theme: ChartTheme;
   } | null>(null);
-
-  function truncateLabel(label: string): string {
-    return label.length > LABEL_MAX_CHARS ? `${label.slice(0, LABEL_MAX_CHARS - 1)}…` : label;
-  }
 
   // Force a palette color to full opacity for the crisp ridge top line; the fill keeps the
   // translucent original so overlaps blend. d3-color robustly parses the rgba palette strings and
@@ -229,7 +228,8 @@
           tooltip?.hide();
         });
 
-      // Row label in the left margin, anchored at the baseline; full name in a native <title>.
+      // Row label in the left margin, anchored at the baseline; fitted to the margin by measured
+      // width, with the full name in a native <title> (appended after fitting, which sets the text).
       const labelText = group
         .append('text')
         .attr('class', 'ridge-label')
@@ -239,8 +239,8 @@
         .attr('dominant-baseline', 'middle')
         .style('fill', theme.text)
         .style('font-size', theme.axis.fontSize)
-        .style('font-family', theme.axis.fontFamily)
-        .text(truncateLabel(row.label));
+        .style('font-family', theme.axis.fontFamily);
+      fitTextNode(labelText.node(), row.label, LABEL_BUDGET_PX);
       labelText.append('title').text(row.label);
     }
   }

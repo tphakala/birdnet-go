@@ -226,6 +226,34 @@ export function createDateAxisFormatter(
 }
 
 /**
+ * Tick values for a time axis that always include the domain endpoints.
+ *
+ * d3's "nice" time ticks land on calendar boundaries, and any boundary outside
+ * the domain is dropped — so the most recent day (the domain max) is often left
+ * unlabeled at the right edge, and a boundary that falls just inside the edge
+ * renders a label that clips against the plot's narrow side margin. This returns
+ * d3's nice ticks with the exact domain start/end appended, dropping any nice
+ * tick within `minEdgeGapPx` of an endpoint so the forced boundary labels don't
+ * overlap their neighbour.
+ */
+export function boundaryDateTicks(
+  scale: ScaleTime<number, number>,
+  tickCount: number,
+  minEdgeGapPx = 48
+): Date[] {
+  const [start, end] = scale.domain();
+  if (start.getTime() === end.getTime()) return [start];
+
+  const xStart = scale(start);
+  const xEnd = scale(end);
+  const inner = scale.ticks(tickCount).filter(t => {
+    const x = scale(t);
+    return x - xStart >= minEdgeGapPx && xEnd - x >= minEdgeGapPx;
+  });
+  return [start, ...inner, end];
+}
+
+/**
  * Create grid lines for a chart
  */
 export function createGridLines(

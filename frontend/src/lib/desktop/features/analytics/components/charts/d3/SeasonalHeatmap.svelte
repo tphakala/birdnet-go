@@ -225,6 +225,11 @@
   }
 
   // Compact gradient legend in the top margin: faint -> solid swatches with min/max labels.
+  //
+  // The group is provisionally placed at `innerWidth - legendWidth` (flush with the inner-right
+  // edge), then shifted further left once the "More {max}" label's real width is known -- that
+  // label sits past the swatches at `legendWidth + 6`, so left-aligning the group alone left its
+  // right edge running past `innerWidth` and into the 16px right margin, clipping. See PR brief.
   function drawLegend(context: NonNullable<typeof chartContext>, colorMax: number): void {
     const { chartGroup, innerWidth, theme } = context;
     const legendWidth = LEGEND_STEPS * LEGEND_SWATCH;
@@ -258,7 +263,7 @@
       .style('fill', theme.axis.color)
       .style('font-size', theme.axis.fontSize)
       .text(t('analytics.advanced.charts.heatmap.legendLess'));
-    legend
+    const moreLabel = legend
       .append('text')
       .attr('x', legendWidth + 6)
       .attr('y', LEGEND_SWATCH - 3)
@@ -266,6 +271,18 @@
       .style('fill', theme.axis.color)
       .style('font-size', theme.axis.fontSize)
       .text(t('analytics.advanced.charts.heatmap.legendMore', { max: colorMax }));
+
+    // Re-anchor the whole group so the "More" label's measured right edge lands within
+    // innerWidth instead of the hard-coded `innerWidth - legendWidth`. getComputedTextLength()
+    // returns a real width in browsers; jsdom (unit tests) does not implement the method, so the
+    // optional call short-circuits to 0. With moreWidth = 0 the formula parks the label's
+    // (zero-width) right edge exactly at innerWidth -- 6px left of the original swatch-flush
+    // placement, which is harmless and keeps tests stable. The "Less" label (end-anchored at
+    // x = -6) stays inside because the group only ever moves further left, never right.
+    const moreNode = moreLabel.node();
+    const moreWidth = moreNode?.getComputedTextLength?.() ?? 0;
+    const groupX = Math.max(0, innerWidth - legendWidth - 6 - moreWidth);
+    legend.attr('transform', `translate(${groupX},${-LEGEND_SWATCH - 6})`);
   }
 
   $effect(() => {
