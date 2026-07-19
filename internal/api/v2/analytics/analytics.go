@@ -1565,6 +1565,16 @@ func serveTopNHourlyChart[T any](
 	// volume-ordered, capped at limit). Mirrors how the batch time-of-day endpoint reads species.
 	speciesFilter := parseSpeciesParams(ctx.QueryParams()["species"])
 
+	// Bound the selection the same way the batch time-of-day endpoints do. The datastore drops the
+	// row limit entirely once a species filter is present (a species can own several model labels,
+	// so limiting by label row would truncate selected species), which means `limit` no longer caps
+	// the result on this path. Without this guard the repeated ?species param is an unbounded input:
+	// the IN list, the row count and the response all grow with whatever the client sends. The cap
+	// matches the control bar's MAX_SPECIES, so a legitimate UI selection always fits.
+	if err := c.validateBatchSize(ctx, len(speciesFilter), maxSpeciesBatch, operation); err != nil {
+		return err
+	}
+
 	c.LogInfoIfEnabled("Retrieving "+operation,
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),

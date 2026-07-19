@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -82,6 +83,53 @@ func TestGetSpeciesHourlyDistribution_ForwardsSpeciesFilter(t *testing.T) {
 	c, rec := newSpeciesDistributionContext(e,
 		"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"+
 			"&species=Turdus+migratorius&species=+Turdus+merula+&species=&species=turdus+migratorius")
+	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	mockDS.AssertExpectations(t)
+}
+
+// TestGetSpeciesHourlyDistribution_RejectsOversizedSpeciesFilter verifies the repeated ?species
+// param is bounded. The datastore drops its row limit once a species filter is present, so `limit`
+// no longer caps this path and the selection itself is the only bound; an unbounded filter would let
+// a client dictate the IN-list size, the row count and the response size. The cap matches the batch
+// time-of-day endpoints (maxSpeciesBatch) and the control bar's MAX_SPECIES, so a legitimate UI
+// selection always fits. The datastore must not be reached at all when the guard trips.
+func TestGetSpeciesHourlyDistribution_RejectsOversizedSpeciesFilter(t *testing.T) {
+	t.Parallel()
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	query := "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"
+	for i := range maxSpeciesBatch + 1 {
+		query += fmt.Sprintf("&species=Species+%d", i)
+	}
+
+	c, rec := newSpeciesDistributionContext(e, query)
+	// The guard writes the 400 itself and reports it with the package's ErrResponseHandled sentinel,
+	// matching every other validation helper in this handler.
+	err := controller.GetSpeciesHourlyDistribution(c)
+	require.ErrorIs(t, err, ErrResponseHandled)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	mockDS.AssertNotCalled(t, "GetHourlyDistributionBySpecies")
+}
+
+// TestGetSpeciesHourlyDistribution_AllowsMaxSpeciesFilter pins the boundary: exactly maxSpeciesBatch
+// species is accepted and forwarded, so the guard above cannot drift into rejecting a full selection.
+func TestGetSpeciesHourlyDistribution_AllowsMaxSpeciesFilter(t *testing.T) {
+	t.Parallel()
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	query := "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"
+	want := make([]string, 0, maxSpeciesBatch)
+	for i := range maxSpeciesBatch {
+		query += fmt.Sprintf("&species=Species+%d", i)
+		want = append(want, fmt.Sprintf("Species %d", i))
+	}
+
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02",
+		want, defaultSpeciesRidgelineLimit).
+		Return(sampleSpeciesDistribution(), nil)
+
+	c, rec := newSpeciesDistributionContext(e, query)
 	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
 	require.Equal(t, http.StatusOK, rec.Code)
 	mockDS.AssertExpectations(t)

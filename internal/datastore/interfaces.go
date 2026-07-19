@@ -200,8 +200,9 @@ type Interface interface {
 	// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for
 	// species over the inclusive date range (false positives excluded), ordered by descending
 	// detection volume. species is an optional scientific-name filter: when non-empty the result is
-	// restricted to those species (still volume-ordered, capped at `limit`); when nil/empty it covers
-	// the top `limit` species by volume. Powers the who-sings-when ridgeline.
+	// restricted to those species and `limit` does NOT apply (every selected species is returned, so
+	// the caller must bound the selection itself); when nil/empty it covers the top `limit` species by
+	// volume. Powers the who-sings-when ridgeline.
 	GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, species []string, limit int) ([]SpeciesHourlyDistribution, error)
 	// GetDailyActivityOnset returns, per calendar day in the inclusive date range, the dawn-chorus
 	// onset relative to civil dawn (false positives excluded). species is an optional scientific-name
@@ -229,8 +230,9 @@ type Interface interface {
 	GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesPhenologyPoint, error)
 	// GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded)
 	// for species over the inclusive date range, ordered by descending detection volume. species is an
-	// optional scientific-name filter: when non-empty the result is restricted to those species (still
-	// volume-ordered, capped at `limit`); when nil/empty it covers the top `limit` species by volume.
+	// optional scientific-name filter: when non-empty the result is restricted to those species and
+	// `limit` does NOT apply (every selected species is returned, so the caller must bound the
+	// selection itself); when nil/empty it covers the top `limit` species by volume.
 	// Powers the acoustic succession streamgraph in the Activity Patterns tab.
 	GetAcousticSuccession(ctx context.Context, startDate, endDate string, species []string, limit int) ([]SpeciesHourlyCounts, error)
 	// GetAudioSources returns each audio source that has at least one (false-positive-excluded)

@@ -2095,7 +2095,7 @@
           "description": "How your selected species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
           "noData": "No acoustic succession data available",
           "noDataHint": "Select species and a date range to see how they hand off through the day",
-          "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
+          "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the selected species",
           "axisTime": "Time of Day",
           "note": "Combined hourly activity of the top {count} species by detection volume",
           "tooltipDetections": "Detections",

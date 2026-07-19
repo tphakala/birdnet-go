@@ -25,10 +25,10 @@ const hoursPerDay = 24
 // buckets are then normalized to sum to 1.0 so timing shape is comparable across species regardless
 // of raw volume; Total carries the unnormalized count for the tooltip.
 //
-// A species whose merged FP-excluded total is zero is dropped: GetTopSpecies ranks by raw volume
-// without excluding false positives, so an all-false-positive species can rank into the top-N yet
-// contribute no real detections; rendering it as an empty "0 detections" ridge would be misleading.
-// The result is always non-nil.
+// A species whose merged FP-excluded total is zero is dropped. GetTopSpecies now excludes false
+// positives from its own ranking, so this is a defensive guard rather than the common case: it still
+// catches a species whose ranked labels carry no hourly rows in this window, and rendering it as an
+// empty "0 detections" ridge would be misleading. The result is always non-nil.
 func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int) []datastore.SpeciesHourlyDistribution {
 	// Merge label rows that share a scientific name, preserving first-seen (descending-volume)
 	// order. Each distinct species accumulates the hourly counts of all its label IDs.
@@ -77,10 +77,10 @@ func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel
 // buildSpeciesHourlyDistribution the counts are NOT normalized: the streamgraph stacks raw volume,
 // so band width is detection count; Total carries the per-species sum for the tooltip.
 //
-// A species whose merged FP-excluded total is zero is dropped: GetTopSpecies ranks by raw volume
-// without excluding false positives, so an all-false-positive species can rank into the top-N yet
-// contribute no real detections; stacking an empty band would add a flat, meaningless layer. The
-// result is always non-nil.
+// A species whose merged FP-excluded total is zero is dropped. GetTopSpecies now excludes false
+// positives from its own ranking, so this is a defensive guard rather than the common case: it still
+// catches a species whose ranked labels carry no hourly rows in this window, and stacking an empty
+// band would add a flat, meaningless layer. The result is always non-nil.
 func buildAcousticSuccession(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int) []datastore.SpeciesHourlyCounts {
 	// Merge label rows that share a scientific name, preserving first-seen (descending-volume)
 	// order. Each distinct species accumulates the hourly counts of all its label IDs.
