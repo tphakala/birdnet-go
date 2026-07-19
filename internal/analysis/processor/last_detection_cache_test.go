@@ -169,8 +169,8 @@ func TestLastDetectionCache_ThrottleScansAllEntries(t *testing.T) {
 
 	p := minimalProcessor()
 	base := time.Unix(10000, 0)
-	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base)                       // t=10000
-	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base.Add(-15*time.Second))  // t=9985, gap 15 -> recorded, becomes front
+	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base)                      // t=10000
+	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base.Add(-15*time.Second)) // t=9985, gap 15 -> recorded, becomes front
 	// t=9994: 9s from the front (9985) but only 6s from the older 10000 entry.
 	// Must be dropped because it is within the throttle of the older entry.
 	feed(p, "m", "European Robin", "Erithacus rubecula", 0.7, base.Add(-6*time.Second))

@@ -98,7 +98,7 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
 - **TensorFlow Lite C library**: Required for the core audio analysis functionality
-- **FFmpeg**: Required for RTSP stream capture, audio export to MP3, AAC, and Opus (WAV and FLAC are encoded natively and do not need FFmpeg), and for the HLS live stream feature in the web interface
+- **FFmpeg**: Required for RTSP stream capture, the HLS live stream feature in the web interface, and audio export to MP3. WAV and FLAC are encoded natively and do not need FFmpeg. AAC and Opus export uses FFmpeg by default, but native encoders for both are available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` and `BIRDNET_OPUS_ENCODER=native` environment variables.
 - **SoX**: Required for rendering spectrograms in the web interface
 
 > **Note**: When using the Docker installation method, all these dependencies are already included in the Docker image, so you don't need to install them separately. This is one of the major advantages of using the Docker-based installation.

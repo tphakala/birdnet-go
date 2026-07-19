@@ -1,23 +1,32 @@
 // Package audiotemp centralizes the temp-file naming and atomic-finalize
 // contract shared by BirdNET-Go's audio clip writers: the FFmpeg exporter, the
-// native FLAC encoder, and the WAV writer. Each writes a clip to a process-
-// unique temp file and atomically renames it into place, so two simultaneous
-// detections that resolve to the same clip path (see GitHub #3323) dedup safely
-// instead of colliding on a shared temp or corrupting the final file mid-write.
+// native FLAC, AAC and Opus encoders, and the WAV writer. Each writes a clip to
+// a process-unique temp file and atomically renames it into place, so two
+// simultaneous detections that resolve to the same clip path (see GitHub #3323)
+// dedup safely instead of colliding on a shared temp or corrupting the final
+// file mid-write.
 //
-// The spectrogram generator reuses the same naming (UniquePath) and finalize
-// retry via FinalizeWith, injecting a SecureFS rename so its writes stay inside
-// the os.Root sandbox.
+// WriteFile packages that whole sequence for encoders that can write to an
+// *os.File. It is not yet used everywhere: the FLAC encoder, the WAV writer, the
+// FFmpeg exporter, the importer and the spectrogram generator still drive
+// UniquePath and Finalize themselves, so migrating them is worthwhile but out of
+// scope for the change that introduced this. The spectrogram generator in
+// particular needs FinalizeWith rather than WriteFile, since it injects a
+// SecureFS rename to keep its writes inside the os.Root sandbox.
 package audiotemp
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Ext is the suffix of an in-progress export's temp file. A clip is finalized by
@@ -81,6 +90,118 @@ func IsTempFor(name, base string) bool {
 	}
 	_, err := strconv.Atoi(seqStr)
 	return err == nil
+}
+
+// dirPerm is the mode for a created clip directory. Clips can carry location
+// data, so the directory is not world-readable.
+const dirPerm = 0o750
+
+// WriteFile runs encode against a process-unique temp file next to finalPath and
+// atomically renames the result into place. It creates the parent directory,
+// creates and fsyncs the temp file, closes it, and finalizes; encode only has to
+// write. On any failure the temp file is removed and finalPath is left as it was,
+// so a consumer never observes a partially written clip.
+//
+// encode receives a real *os.File, so it works for an encoder wanting a plain
+// io.Writer (Ogg Opus) and for one that must seek to patch a header on close
+// (the MP4 muxer behind AAC). ctx is checked before any file is created; encode
+// is responsible for honouring it thereafter.
+//
+// Error handling is deliberately three-way, because these failures mean very
+// different things to whoever reads the telemetry:
+//
+//   - A cancelled context is returned raw and never wrapped, so a shutdown
+//     mid-export does not manufacture an error report.
+//   - WriteFile's own failures are filesystem failures (a full disk, a
+//     read-only mount, a permissions problem), and are tagged here as file I/O
+//     against the caller's component with the specific stage that failed. They
+//     must not surface as codec failures.
+//   - Whatever encode returns is passed through untouched, so the caller tags
+//     its own codec errors. Note that the payload write happens inside encode,
+//     so a disk that fills up mid-clip surfaces there rather than here; callers
+//     should run that error through IsWriteFault before calling it a codec
+//     failure.
+func WriteFile(ctx context.Context, component, finalPath string, encode func(f *os.File) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if finalPath == "" {
+		// Without this, filepath.Dir("") is "." and the temp file lands in the
+		// working directory, turning a caller bug into a confusing I/O error.
+		return errors.Newf("audiotemp: empty output path").
+			Component(component).
+			Category(errors.CategoryValidation).
+			Context("operation", "audiotemp_validate").
+			Build()
+	}
+	if err := os.MkdirAll(filepath.Dir(finalPath), dirPerm); err != nil {
+		return fileIOErr(component, "audiotemp_mkdir", err)
+	}
+
+	tempPath := UniquePath(finalPath)
+	f, createErr := os.Create(tempPath) //nolint:gosec // path derived from a validated clip path
+	if createErr != nil {
+		return fileIOErr(component, "audiotemp_create_temp", createErr)
+	}
+
+	// closeFile is idempotent so the deferred cleanup cannot double-close after
+	// the success path has already closed and checked the file.
+	committed := false
+	fileOpen := true
+	closeFile := func() error {
+		if !fileOpen {
+			return nil
+		}
+		fileOpen = false
+		return f.Close()
+	}
+	defer func() {
+		_ = closeFile()
+		if !committed {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	// encode's error is the caller's to classify, so it passes through untouched.
+	if err := encode(f); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return fileIOErr(component, "audiotemp_sync", err)
+	}
+	if err := closeFile(); err != nil {
+		return fileIOErr(component, "audiotemp_close_temp", err)
+	}
+	if err := Finalize(tempPath, finalPath); err != nil {
+		return fileIOErr(component, "audiotemp_rename", err)
+	}
+	committed = true
+	return nil
+}
+
+// IsWriteFault reports whether an error returned by a WriteFile encode callback
+// actually came from the file underneath rather than from the codec.
+//
+// The encoders are handed one *os.File and touch no other path, so any
+// *os.PathError surfacing through them is a write fault: a full disk, an
+// exceeded quota, a read-only remount, an I/O error. Those must be reported as
+// filesystem failures, not as codec failures, or a full disk shows up in
+// telemetry as an audio bug carrying a sample rate and a bitrate.
+func IsWriteFault(err error) bool {
+	var pathErr *os.PathError
+	return errors.As(err, &pathErr)
+}
+
+// fileIOErr tags a filesystem failure against the caller's component. Keeping
+// the stage in the operation field preserves the granularity the encoders had
+// when each of them open-coded this sequence, so a full disk still reports as a
+// distinct file I/O failure rather than as a generic encode error.
+func fileIOErr(component, operation string, err error) error {
+	return errors.New(err).
+		Component(component).
+		Category(errors.CategoryFileIO).
+		Context("operation", operation).
+		Build()
 }
 
 // Finalize atomically renames the unique temp file onto the final clip path. On

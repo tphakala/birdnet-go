@@ -413,8 +413,9 @@ func parseRawParameter(rawParam string) bool {
 // findEncodingTempPath looks for an in-progress export temp file for relClipPath
 // and, if a recent one exists, returns its path (relative to the SecureFS root)
 // and true. Exports write to a per-export unique temp file named
-// "<clip>.<pid>.<seq>.temp" (see ffmpeg.ExportAudio / flac.EncodePCM) that is
-// atomically renamed to the final clip on completion, so the clip's directory is
+// "<clip>.<pid>.<seq>.temp" (see ffmpeg.ExportAudio and the native flac, aac and
+// opus EncodePCM) that is atomically renamed to the final clip on completion,
+// so the clip's directory is
 // scanned for any matching temp. The pre-fix "<clip>.temp" name is matched too,
 // so a temp written by an older build mid-upgrade is handled. Returning the
 // concrete path lets a waiting caller poll that fixed name with StatRel instead
@@ -1864,6 +1865,7 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 //   - 404 Not Found: Audio file not found
 //   - 408 Request Timeout: Generation timed out
 //   - 500 Internal Server Error: Generation failed
+//
 // runAsyncSpectrogramGeneration is the background worker spawned by
 // GenerateSpectrogramByID. It waits out any pending Extended Capture clip export before
 // generating, then records the outcome in the queue status and logs. Extracted from the

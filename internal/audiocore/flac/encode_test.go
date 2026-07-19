@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	goflac "github.com/tphakala/go-flac/pcm"
 )
 
@@ -124,7 +125,7 @@ func TestEncodePCM_GainRoundTrip(t *testing.T) {
 	require.NoError(t, EncodePCM(t.Context(), opts))
 
 	want := make([]byte, len(pcm))
-	applyGainInt16(want, pcm, math.Pow(10, opts.GainDB/20))
+	pcmgain.ApplyInt16(want, pcm, math.Pow(10, opts.GainDB/20))
 	assert.Equal(t, want, decodeFLAC(t, opts.OutputPath),
 		"decoded PCM must equal the gained input (gain applied, stored losslessly)")
 }
@@ -141,7 +142,7 @@ func TestEncodePCM_GainRoundTripMultiChunk(t *testing.T) {
 	require.NoError(t, EncodePCM(t.Context(), opts))
 
 	want := make([]byte, len(pcm))
-	applyGainInt16(want, pcm, math.Pow(10, opts.GainDB/20))
+	pcmgain.ApplyInt16(want, pcm, math.Pow(10, opts.GainDB/20))
 	assert.Equal(t, want, decodeFLAC(t, opts.OutputPath))
 }
 
@@ -419,7 +420,7 @@ func TestEncodePCMToBuffer_GainRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	want := make([]byte, len(pcm))
-	applyGainInt16(want, pcm, math.Pow(10, opts.GainDB/20))
+	pcmgain.ApplyInt16(want, pcm, math.Pow(10, opts.GainDB/20))
 	assert.Equal(t, want, decodeFLACBytes(t, buf.Bytes()),
 		"decoded PCM must equal the gained input (gain applied, stored losslessly)")
 }

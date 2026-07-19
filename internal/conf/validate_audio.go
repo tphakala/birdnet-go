@@ -400,16 +400,39 @@ func (s *AudioSettings) clearFfmpegMetadata() {
 	s.FfprobePath = ""
 }
 
-// applyFfmpegFormatFallback forces WAV export when FFmpeg is unavailable and an
-// FFmpeg-only format is configured. WAV and FLAC are encoded natively (no FFmpeg
-// dependency), so they are left as-is; only the lossy formats (MP3/AAC/Opus) need
-// FFmpeg. Does nothing when export is disabled.
+// applyFfmpegFormatFallback forces WAV export when FFmpeg is unavailable and the
+// configured format has no encoder that can run without it. Does nothing when
+// export is disabled.
 func (s *AudioSettings) applyFfmpegFormatFallback() {
-	if s.Export.Enabled && s.FfmpegPath == "" &&
-		s.Export.Type != AudioExportTypeWAV && s.Export.Type != AudioExportTypeFLAC {
+	if s.Export.Enabled && s.FfmpegPath == "" && exportFormatNeedsFFmpeg(s.Export.Type) {
 		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
 			logger.String("previous_type", s.Export.Type))
 		s.Export.Type = AudioExportTypeWAV
+	}
+}
+
+// exportFormatNeedsFFmpeg reports whether a clip export format can only be
+// produced by shelling out to FFmpeg.
+//
+// WAV and FLAC always have a native encoder. AAC and Opus have one too, but it
+// is opt-in while it earns field confidence, so for them the answer depends on
+// the runtime gate: without the gate the export really does need FFmpeg, and
+// with it the format is native and must NOT be downgraded to WAV. Getting this
+// wrong is silent, because the downgrade happens during config validation and
+// the operator only sees WAV files appear where they asked for .m4a or .opus.
+//
+// REMOVAL: when the native AAC and Opus encoders become the default, the two
+// gate calls go away and this collapses to "only MP3 needs FFmpeg".
+func exportFormatNeedsFFmpeg(exportType string) bool {
+	switch exportType {
+	case AudioExportTypeWAV, AudioExportTypeFLAC:
+		return false
+	case AudioExportTypeAAC:
+		return !NativeAACEncoderEnabled()
+	case AudioExportTypeOPUS:
+		return !NativeOpusEncoderEnabled()
+	default:
+		return true
 	}
 }
 
