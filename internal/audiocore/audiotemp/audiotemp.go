@@ -117,7 +117,10 @@ const dirPerm = 0o750
 //     against the caller's component with the specific stage that failed. They
 //     must not surface as codec failures.
 //   - Whatever encode returns is passed through untouched, so the caller tags
-//     its own codec errors.
+//     its own codec errors. Note that the payload write happens inside encode,
+//     so a disk that fills up mid-clip surfaces there rather than here; callers
+//     should run that error through IsWriteFault before calling it a codec
+//     failure.
 func WriteFile(ctx context.Context, component, finalPath string, encode func(f *os.File) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -174,6 +177,19 @@ func WriteFile(ctx context.Context, component, finalPath string, encode func(f *
 	}
 	committed = true
 	return nil
+}
+
+// IsWriteFault reports whether an error returned by a WriteFile encode callback
+// actually came from the file underneath rather than from the codec.
+//
+// The encoders are handed one *os.File and touch no other path, so any
+// *os.PathError surfacing through them is a write fault: a full disk, an
+// exceeded quota, a read-only remount, an I/O error. Those must be reported as
+// filesystem failures, not as codec failures, or a full disk shows up in
+// telemetry as an audio bug carrying a sample rate and a bitrate.
+func IsWriteFault(err error) bool {
+	var pathErr *os.PathError
+	return errors.As(err, &pathErr)
 }
 
 // fileIOErr tags a filesystem failure against the caller's component. Keeping

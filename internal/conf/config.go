@@ -635,7 +635,7 @@ type StreamConfig struct {
 	Type        string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
 	Transport   string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
 	ChannelMode ChannelMode        `yaml:"channelMode,omitempty" json:"channelMode" mapstructure:"channelMode"`     // Channel handling: downmix, left, or right
-	MediaMode   MediaMode          `yaml:"mediaMode,omitempty" json:"mediaMode" mapstructure:"mediaMode"`            // RTSP media request: auto, audio-only, or full-stream (ignored for non-RTSP)
+	MediaMode   MediaMode          `yaml:"mediaMode,omitempty" json:"mediaMode" mapstructure:"mediaMode"`           // RTSP media request: auto, audio-only, or full-stream (ignored for non-RTSP)
 	Gain        float64            `yaml:"gain" json:"gain" mapstructure:"gain"`                                    // Input gain in dB (0 = no adjustment)
 	Equalizer   *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
 	QuietHours  QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration

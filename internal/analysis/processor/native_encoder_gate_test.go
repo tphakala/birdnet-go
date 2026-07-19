@@ -324,11 +324,29 @@ func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
 				"normalization must produce a real gain at %d Hz, not the no-op zero "+
 					"a sub-gate-length clip would yield", rate)
 
-			out := filepath.Join(t.TempDir(), "clip.flac")
+			dir := t.TempDir()
+			out := filepath.Join(dir, "clip.flac")
 			encoder, err := a.encodeClip(t.Context(), rate, ffmpeg.FormatFLAC, out)
 			require.NoError(t, err, "normalized FLAC export must work at %d Hz", rate)
 			assert.Equal(t, encoderNativeFLAC, encoder)
 			assert.Equal(t, rate, flacSampleRate(t, out))
+
+			// Asserting the planned gain is not enough: a typo passing GainDB 0
+			// to the encoder would leave that assertion green. Encode the same
+			// PCM with normalization off and require the bytes to differ, which
+			// only holds if the gain actually reached the encoder.
+			plain := newGateTestAction(t, "96k")
+			plain.pcmData = sinePCMAtRate(rate, 0.5, 1000, 8000)
+			plainOut := filepath.Join(dir, "plain.flac")
+			_, err = plain.encodeClip(t.Context(), rate, ffmpeg.FormatFLAC, plainOut)
+			require.NoError(t, err)
+
+			normalized, err := os.ReadFile(out) //nolint:gosec // test-controlled path
+			require.NoError(t, err)
+			unnormalized, err := os.ReadFile(plainOut) //nolint:gosec // test-controlled path
+			require.NoError(t, err)
+			assert.NotEqual(t, unnormalized, normalized,
+				"the normalization gain must reach the encoder, not just be computed")
 		})
 	}
 }

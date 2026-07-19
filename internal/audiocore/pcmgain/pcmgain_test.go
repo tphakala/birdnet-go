@@ -138,11 +138,15 @@ func TestApplied(t *testing.T) {
 	t.Run("zero dB aliases the source", func(t *testing.T) {
 		t.Parallel()
 		src := pcm16(100, -100, 1000)
+		want := bytes.Clone(src)
 		got := Applied(src, 0)
 		// assert.Same compares addresses. assert.Equal would not: on two *byte it
 		// falls through to reflect.DeepEqual, which compares the pointed-to bytes,
 		// so it passes even when Applied copies.
 		assert.Same(t, &src[0], &got[0], "0 dB must not copy")
+		// Aliasing alone is not enough: returning the source but having scribbled
+		// on it would still satisfy the pointer check.
+		assert.Equal(t, want, got, "0 dB must leave the samples untouched")
 	})
 
 	t.Run("non-zero dB copies and leaves the source intact", func(t *testing.T) {

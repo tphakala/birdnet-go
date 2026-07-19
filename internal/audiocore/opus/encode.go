@@ -128,19 +128,29 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	// oggopus draws its encoder from an internal pool and streams Ogg pages as
 	// it goes, so the encoded stream is never held in memory whole.
 	// WriteFile classifies its own filesystem failures and passes a cancelled
-	// context through raw; only the codec failure is tagged here.
+	// context through raw. The payload write happens in here though, so a write
+	// fault surfacing through the codec is classified as file I/O rather than
+	// blamed on the encoder.
 	return audiotemp.WriteFile(ctx, component, opts.OutputPath, func(f *os.File) error {
-		if encErr := oggopus.EncodeInterleaved(f, cfg, pcm); encErr != nil {
+		encErr := oggopus.EncodeInterleaved(f, cfg, pcm)
+		if encErr == nil {
+			return nil
+		}
+		if audiotemp.IsWriteFault(encErr) {
 			return errors.New(encErr).
 				Component(component).
-				Category(errors.CategoryAudio).
-				Context("operation", "opus_encode_stream").
-				Context("sample_rate", opts.SampleRate).
-				Context("channels", opts.Channels).
-				Context("bitrate_kbps", opts.BitrateKbps).
+				Category(errors.CategoryFileIO).
+				Context("operation", "opus_encode_write").
 				Build()
 		}
-		return nil
+		return errors.New(encErr).
+			Component(component).
+			Category(errors.CategoryAudio).
+			Context("operation", "opus_encode_stream").
+			Context("sample_rate", opts.SampleRate).
+			Context("channels", opts.Channels).
+			Context("bitrate_kbps", opts.BitrateKbps).
+			Build()
 	})
 }
 

@@ -198,9 +198,15 @@ func TestApplyFfmpegFormatFallback_NativeGate(t *testing.T) {
 		name     string
 		envVar   string
 		envValue string
+		disabled bool
 		input    string
 		want     string
 	}{
+		{
+			// Disabled export is never rewritten, gate or no gate.
+			name: "disabled aac is kept without the gate", disabled: true,
+			input: AudioExportTypeAAC, want: AudioExportTypeAAC,
+		},
 		{
 			name:  "aac without the gate falls back to WAV",
 			input: AudioExportTypeAAC, want: AudioExportTypeWAV,
@@ -244,7 +250,7 @@ func TestApplyFfmpegFormatFallback_NativeGate(t *testing.T) {
 
 			settings := &AudioSettings{
 				FfmpegPath: "", // FFmpeg unavailable
-				Export:     ExportSettings{Enabled: true, Type: tt.input},
+				Export:     ExportSettings{Enabled: !tt.disabled, Type: tt.input},
 			}
 			settings.applyFfmpegFormatFallback()
 
