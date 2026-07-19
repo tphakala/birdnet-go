@@ -1336,6 +1336,20 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 			Build()
 	}
 
+	// Reject an inverted range explicitly. It would otherwise yield no zone segments below, and the
+	// method would return all-zero counts for every species with a nil error - a silent wrong answer
+	// that is painful to debug. The API layer validates the order too, but this is an exported
+	// interface method that other callers can reach without that guard.
+	if lastDate.Before(firstDate) {
+		return nil, errors.Newf("end_date %q precedes start_date %q", endDate, startDate).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_batch_hourly_occurrences").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
 	// Calculate the Unix timestamp range. endDate is inclusive, so the exclusive upper bound is
 	// the start of the day *after* it. Calendar-based arithmetic handles DST transitions correctly.
 	startOfDay := firstDate.Unix()

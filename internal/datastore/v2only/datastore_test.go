@@ -1771,6 +1771,20 @@ func TestV2OnlyDatastore_GetBatchHourlyOccurrences_DateRange(t *testing.T) {
 	assert.Equal(t, 1, hourlyTotal(&single), "start == end covers that single day only")
 }
 
+// TestV2OnlyDatastore_GetBatchHourlyOccurrences_InvertedRange verifies an end date before the start
+// date is rejected. Such a range produces no zone segments, so without the guard the query would
+// return all-zero counts for every species with a nil error - a silent wrong answer.
+func TestV2OnlyDatastore_GetBatchHourlyOccurrences_InvertedRange(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Turdus merula_Common Blackbird"})
+	defer cleanup()
+	saveTestNote(t, ds, "2024-01-15", "08:20:00", "Turdus merula", 0.8)
+
+	_, err := ds.GetBatchHourlyOccurrences(t.Context(), "2024-01-17", "2024-01-15",
+		[]string{"Turdus merula"}, 0.0)
+	require.Error(t, err, "an inverted range must not silently return zeroes")
+	assert.Contains(t, err.Error(), "precedes")
+}
+
 // TestV2OnlyDatastore_GetBatchHourlyOccurrences_CancelledContext verifies that a cancelled
 // request context surfaces as an error rather than silently returning zeroed counts. Before
 // the #984 fix the per-species label lookup logged a warning and continued on error, so a

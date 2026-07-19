@@ -31,6 +31,7 @@ func TestV2OnlyDatastore_SplitByZoneOffset(t *testing.T) {
 	)
 
 	t.Run("range inside one zone period yields a single segment", func(t *testing.T) {
+		t.Parallel()
 		start := time.Date(2026, 1, 10, 0, 0, 0, 0, newYork).Unix()
 		end := time.Date(2026, 1, 20, 0, 0, 0, 0, newYork).Unix()
 
@@ -42,6 +43,7 @@ func TestV2OnlyDatastore_SplitByZoneOffset(t *testing.T) {
 	})
 
 	t.Run("range crossing spring-forward splits at the transition", func(t *testing.T) {
+		t.Parallel()
 		// US DST begins 2026-03-08 02:00 local.
 		start := time.Date(2026, 3, 1, 0, 0, 0, 0, newYork).Unix()
 		end := time.Date(2026, 3, 15, 0, 0, 0, 0, newYork).Unix()
@@ -65,6 +67,7 @@ func TestV2OnlyDatastore_SplitByZoneOffset(t *testing.T) {
 	})
 
 	t.Run("a year covers both transitions", func(t *testing.T) {
+		t.Parallel()
 		start := time.Date(2026, 1, 1, 0, 0, 0, 0, newYork).Unix()
 		end := time.Date(2026, 12, 31, 0, 0, 0, 0, newYork).Unix()
 
