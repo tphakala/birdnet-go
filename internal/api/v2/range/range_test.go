@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -472,4 +473,60 @@ func TestCalculateWeek_MonthEndClamp(t *testing.T) {
 			assert.InDelta(t, tt.expected, week, 0.0001)
 		})
 	}
+}
+
+// TestTestRangeFilterCustomConfigAlias tests that custom config boolean flags map correctly.
+func TestTestRangeFilterCustomConfigAlias(t *testing.T) {
+	e, mockDS, controller := setupRangeTestEnvironment(t)
+
+	// Create real processor if possible
+	o, err := classifier.NewOrchestrator(controller.CurrentSettings())
+	if err != nil {
+		t.Skipf("Skipping because Orchestrator could not be created: %v", err)
+	}
+
+	p := processor.New(controller.CurrentSettings(), mockDS, o, nil, nil, controller.APILogger)
+	controller.Processor = p
+
+	settings := controller.CurrentSettings()
+	if settings.Realtime.Species.Config == nil {
+		settings.Realtime.Species.Config = make(map[string]conf.SpeciesConfig)
+	}
+	settings.Realtime.Species.Config["Great Tit"] = conf.SpeciesConfig{Threshold: 0.5}
+	controller.Settings.Store(settings)
+
+	testRequest := RangeFilterTestRequest{
+		Latitude:  60.1699,
+		Longitude: 24.9384,
+		Threshold: 0.01,
+		Date:      "2024-06-15",
+	}
+
+	requestBody, _ := json.Marshal(testRequest)
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/range/species/test", bytes.NewReader(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/range/species/test")
+
+	err = controller.TestRangeFilter(c)
+	require.NoError(t, err)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	var response RangeFilterTestResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	found := false
+	for _, s := range response.Species {
+		if s.CommonName == "Great Tit" {
+			found = true
+			assert.NotNil(t, s.HasCustomConfig)
+			assert.True(t, *s.HasCustomConfig)
+		}
+	}
+	assert.True(t, found, "Great Tit should be present and marked with custom config")
 }

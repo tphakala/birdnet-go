@@ -693,18 +693,16 @@
       const includeSet = new Set((currentInclude ?? []).map(s => normalizeForLookup(s)));
       const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => normalizeForLookup(s)));
 
-      // Filter species that pass the threshold OR are manually included
-      // Go serializes a nil slice as JSON null, so guard before iterating.
       const mappedSpecies: ActiveSpecies[] = (response.species ?? [])
         .filter(
-          s => s.score >= threshold || isInNameSet(includeSet, s.commonName, s.scientificName)
+          s => s.score >= threshold || (s.isManuallyIncluded ?? isInNameSet(includeSet, s.commonName, s.scientificName))
         )
         .map(s => ({
           commonName: s.commonName,
           scientificName: s.scientificName,
           score: s.score,
-          isManuallyIncluded: isInNameSet(includeSet, s.commonName, s.scientificName),
-          hasCustomConfig: isInNameSet(configKeys, s.commonName, s.scientificName),
+          isManuallyIncluded: s.isManuallyIncluded ?? isInNameSet(includeSet, s.commonName, s.scientificName),
+          hasCustomConfig: s.hasCustomConfig ?? isInNameSet(configKeys, s.commonName, s.scientificName),
         }));
 
       // Sort by score descending

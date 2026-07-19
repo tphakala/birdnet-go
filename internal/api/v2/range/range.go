@@ -150,6 +150,14 @@ func buildRangeFilterSpecies(scores []classifier.SpeciesScore, resolveName func(
 			ScientificName: detection.ExtractScientificName(s.Label),
 			Score:          &score,
 		}
+		if s.HasCustomConfig {
+			b := true
+			entry.HasCustomConfig = &b
+		}
+		if s.IsManuallyIncluded {
+			b := true
+			entry.IsManuallyIncluded = &b
+		}
 		if resolveName != nil {
 			entry.CommonName = resolveName(s.Label)
 		}

@@ -22,8 +22,10 @@ import (
 
 // SpeciesScore holds a species label and its associated score.
 type SpeciesScore struct {
-	Score float64
-	Label string
+	Score              float64
+	Label              string
+	HasCustomConfig    bool
+	IsManuallyIncluded bool
 }
 
 // ByScore implements sort.Interface for []SpeciesScore based on the Score field.
@@ -348,14 +350,68 @@ func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string
 // the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range/range.go),
 // not here, so the functional inclusion set keeps every scientific name.
 func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
-	seen := make(map[string]bool, len(*speciesScores))
-	for _, ss := range *speciesScores {
-		seen[ss.Label] = true
+	includeNames := settings.Realtime.Species.Include
+	configKeys := slices.Collect(maps.Keys(settings.Realtime.Species.Config))
+	slices.Sort(configKeys)
+
+	resolveLabels := func(names []string) []string {
+		out := make([]string, 0, len(names))
+		var unresolved []string
+		for _, name := range names {
+			if labels := canonicalOverrideLabels(name, geoLabels, settings.BirdNET.Labels); len(labels) > 0 {
+				out = append(out, labels...)
+			} else {
+				unresolved = append(unresolved, name)
+			}
+		}
+		if len(unresolved) > 0 {
+			reverse := openfauna.LookupScientificNames(unresolved, settings.BirdNET.Locale)
+			for _, name := range unresolved {
+				if sci := reverse[name]; len(sci) > 0 {
+					out = append(out, sci...)
+				} else {
+					out = append(out, name)
+				}
+			}
+		}
+		return out
 	}
-	for _, label := range resolveOverrideLabels(settings, geoLabels) {
+
+	includeResolved := resolveLabels(includeNames)
+	configResolved := resolveLabels(configKeys)
+
+	includeSet := make(map[string]bool, len(includeResolved))
+	for _, label := range includeResolved {
+		includeSet[label] = true
+	}
+	configSet := make(map[string]bool, len(configResolved))
+	for _, label := range configResolved {
+		configSet[label] = true
+	}
+
+	seen := make(map[string]bool, len(*speciesScores))
+	for i := range *speciesScores {
+		label := (*speciesScores)[i].Label
+		seen[label] = true
+		if configSet[label] {
+			(*speciesScores)[i].HasCustomConfig = true
+		}
+		if includeSet[label] {
+			(*speciesScores)[i].IsManuallyIncluded = true
+		}
+	}
+
+	for _, label := range includeResolved {
 		if !seen[label] {
 			bn.Debug("Adding override species with max score: %s", label)
-			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
+			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label, IsManuallyIncluded: true, HasCustomConfig: configSet[label]})
+			seen[label] = true
+		}
+	}
+	for _, label := range configResolved {
+		if !seen[label] {
+			bn.Debug("Adding override species with max score: %s", label)
+			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label, IsManuallyIncluded: includeSet[label], HasCustomConfig: true})
 			seen[label] = true
 		}
 	}
