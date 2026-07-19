@@ -34,10 +34,30 @@ func TestGetNewSpecies_ExcludesFalsePositives(t *testing.T) {
 	assert.Equal(t, int64(1800), got[0].FirstDetected)
 }
 
-// TestGetNewSpecies_FalsePositiveDoesNotHideEarlierLifetimeFirst checks the exclusion is applied
-// when computing the lifetime first-seen, not only inside the window: a species whose only real
-// detection predates the window must still not be reported as new.
-func TestGetNewSpecies_FalsePositiveDoesNotHideEarlierLifetimeFirst(t *testing.T) {
+// TestGetNewSpecies_FalsePositiveBeforeWindowDoesNotHideNewSpecies checks the exclusion is applied
+// when computing the lifetime first-seen, not only within the window. A false positive predating the
+// window must not count as prior history: the species is genuinely new and must still be reported.
+// This is the inverse failure of the reported bug — the old query hid real new species this way.
+func TestGetNewSpecies_FalsePositiveBeforeWindowDoesNotHideNewSpecies(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewDetectionRepository(db, nil, false, false)
+	ctx := t.Context()
+
+	label := seedLabel(t, db, "Parus major")
+	fpID := seedDetection(t, db, label, 100, 0.6) // false positive before the window
+	seedFalsePositiveReview(t, db, fpID)
+	seedDetection(t, db, label, 1000, 0.8) // first real detection, inside the window
+
+	got, err := repo.GetNewSpecies(ctx, 500, 5000, 100, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 1, "a species whose only prior detection was a false positive is still new")
+	assert.Equal(t, "Parus major", got[0].ScientificName)
+	assert.Equal(t, int64(1000), got[0].FirstDetected)
+}
+
+// TestGetNewSpecies_RealDetectionBeforeWindowIsNotNew guards the window bound itself while the
+// false-positive filter moves around it: genuine prior history still disqualifies a species.
+func TestGetNewSpecies_RealDetectionBeforeWindowIsNotNew(t *testing.T) {
 	db := setupInsightsTestDB(t)
 	repo := NewDetectionRepository(db, nil, false, false)
 	ctx := t.Context()

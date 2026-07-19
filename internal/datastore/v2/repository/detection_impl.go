@@ -1751,7 +1751,7 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 		JOIN %s d ON d.label_id = l.id AND d.detected_at = species_first.lifetime_first
 		LEFT JOIN %s dr ON dr.detection_id = d.id
 		WHERE (dr.verified IS NULL OR dr.verified != ?)
-		GROUP BY species_first.scientific_name, species_first.lifetime_first
+		GROUP BY species_first.scientific_name, species_first.lifetime_first, species_first.lifetime_last
 		ORDER BY first_detected DESC
 		LIMIT ? OFFSET ?
 	`, r.tableName(), r.labelsTable(), r.reviewsTable(), r.labelsTable(), r.tableName(), r.reviewsTable())
