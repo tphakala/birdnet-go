@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -167,6 +168,22 @@ func TestRarityStatusConstants(t *testing.T) {
 	assert.InDelta(t, 0.5, RarityThresholdCommon, 0.001)
 	assert.InDelta(t, 0.2, RarityThresholdUncommon, 0.001)
 	assert.InDelta(t, 0.05, RarityThresholdRare, 0.001)
+}
+
+func TestFindNativeSpeciesScore(t *testing.T) {
+	t.Parallel()
+
+	scores := []classifier.SpeciesScore{
+		{Label: "Amazona viridigenalis_Red-crowned Parrot", Score: 1, IsSyntheticOverride: true},
+		{Label: "Amazona viridigenalis_Red-crowned Amazon", Score: 0.95},
+	}
+
+	score, found := findNativeSpeciesScore(scores, "amazona VIRIDIGENALIS")
+	require.True(t, found)
+	assert.InDelta(t, 0.95, score, 1e-9)
+
+	_, found = findNativeSpeciesScore(scores[:1], "Amazona viridigenalis")
+	assert.False(t, found, "synthetic override scores must not drive rarity")
 }
 
 // TestSpeciesAPIValidation tests validation for all species endpoints in a single table-driven test.

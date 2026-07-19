@@ -20,10 +20,18 @@ import (
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
-// SpeciesScore holds a species label and its associated score.
+// SpeciesScore holds a species label, its associated score, and override
+// provenance. Explicit Always Include provenance is carried to API consumers so
+// they do not have to re-resolve user-entered common-name aliases against the
+// displayed taxonomy. Synthetic provenance distinguishes the score-1.0 rows
+// appended solely to admit user overrides from native geomodel scores. Species
+// added only by custom config remain distinguishable because the UI presents
+// Configured separately from Included.
 type SpeciesScore struct {
-	Score float64
-	Label string
+	Score               float64
+	Label               string
+	IsManuallyIncluded  bool
+	IsSyntheticOverride bool
 }
 
 // ByScore implements sort.Interface for []SpeciesScore based on the Score field.
@@ -297,7 +305,13 @@ func overrideSpeciesNames(settings *conf.Settings) []string {
 	return names
 }
 
-// resolveOverrideLabels canonicalizes the user's force-include overrides (the
+// resolvedOverrideLabel pairs a canonical model label with its source list.
+type resolvedOverrideLabel struct {
+	label              string
+	isManuallyIncluded bool
+}
+
+// resolveOverrideLabelEntries canonicalizes the user's force-include overrides (the
 // realtime.species.include entries and .config keys) into concrete model labels,
 // shared by both inclusion-set appenders. Each entry resolves, in order, to its
 // matching geomodel labels, the active classifier's localized labels, or - for a
@@ -309,61 +323,88 @@ func overrideSpeciesNames(settings *conf.Settings) []string {
 // name resolver legitimately reports a genuinely unresolvable entry. Reverse
 // resolution for every otherwise-unresolved entry is batched into one dataset scan,
 // keeping the cost off the per-entry path on the (cold) range-filter rebuild.
-func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string {
+func resolveOverrideLabelEntries(settings *conf.Settings, geoLabels []string) []resolvedOverrideLabel {
 	names := overrideSpeciesNames(settings)
-	out := make([]string, 0, len(names))
-	var unresolved []string
-	for _, name := range names {
+	includeCount := len(settings.Realtime.Species.Include)
+	out := make([]resolvedOverrideLabel, 0, len(names))
+	var unresolved []resolvedOverrideLabel
+	for i, name := range names {
+		isManuallyIncluded := i < includeCount
 		if labels := canonicalOverrideLabels(name, geoLabels, settings.BirdNET.Labels); len(labels) > 0 {
-			out = append(out, labels...)
+			for _, label := range labels {
+				out = append(out, resolvedOverrideLabel{
+					label:              label,
+					isManuallyIncluded: isManuallyIncluded,
+				})
+			}
 		} else {
-			unresolved = append(unresolved, name)
+			unresolved = append(unresolved, resolvedOverrideLabel{
+				label:              name,
+				isManuallyIncluded: isManuallyIncluded,
+			})
 		}
 	}
 	if len(unresolved) > 0 {
-		reverse := openfauna.LookupScientificNames(unresolved, settings.BirdNET.Locale)
-		for _, name := range unresolved {
-			if sci := reverse[name]; len(sci) > 0 {
-				out = append(out, sci...)
+		unresolvedNames := make([]string, 0, len(unresolved))
+		for _, entry := range unresolved {
+			unresolvedNames = append(unresolvedNames, entry.label)
+		}
+		reverse := openfauna.LookupScientificNames(unresolvedNames, settings.BirdNET.Locale)
+		for _, entry := range unresolved {
+			if scientificNames := reverse[entry.label]; len(scientificNames) > 0 {
+				for _, scientificName := range scientificNames {
+					out = append(out, resolvedOverrideLabel{
+						label:              scientificName,
+						isManuallyIncluded: entry.isManuallyIncluded,
+					})
+				}
 			} else {
-				out = append(out, name)
+				out = append(out, entry)
 			}
 		}
 	}
 	return out
 }
 
-// addUserOverrideSpeciesScores appends species from the explicit include list
-// and species with configured actions to a SpeciesScore slice with score 1.0.
-// Used by the universal geomodel path in getProbableSpecies. Each entry is
-// canonicalized via resolveOverrideLabels so localized common names enter the
-// set as their canonical model labels rather than the raw user string.
+// addUserOverrideSpeciesScores applies the explicit include list and species
+// with configured actions to a SpeciesScore slice. Used by both range-filter
+// paths in getProbableSpecies. Each entry is canonicalized via
+// resolveOverrideLabelEntries so localized common names enter the set as their
+// canonical model labels rather than the raw user string.
 //
 // Dedup here is by exact label and intentionally narrow: it only avoids
-// re-appending a label already present verbatim. A force-included species that
-// the geomodel also scored can therefore appear twice (its range-filter score
-// plus this score-1.0 entry) when the two carry different label strings; that is
-// expected. The score-1.0 entry must be kept so the species reads as
-// always-active, and same-taxon near-duplicates are collapsed for the user at
-// the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range/range.go),
-// not here, so the functional inclusion set keeps every scientific name.
+// re-appending a label already present verbatim. An exact match keeps its native
+// score and gains manual-inclusion provenance. A force-included species that the
+// geomodel also scored under a different label can therefore appear twice: its
+// native range-filter row plus a synthetic score-1.0 row. Same-taxon
+// near-duplicates are collapsed for the user at the display boundary
+// (dedupeSpeciesForDisplay in internal/api/v2/range/range.go), not here, so the
+// functional inclusion set keeps every scientific name.
 func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
-	seen := make(map[string]bool, len(*speciesScores))
-	for _, ss := range *speciesScores {
-		seen[ss.Label] = true
+	seen := make(map[string]int, len(*speciesScores))
+	for i, ss := range *speciesScores {
+		seen[ss.Label] = i
 	}
-	for _, label := range resolveOverrideLabels(settings, geoLabels) {
-		if !seen[label] {
-			bn.Debug("Adding override species with max score: %s", label)
-			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
-			seen[label] = true
+	for _, entry := range resolveOverrideLabelEntries(settings, geoLabels) {
+		if i, ok := seen[entry.label]; ok {
+			(*speciesScores)[i].IsManuallyIncluded =
+				(*speciesScores)[i].IsManuallyIncluded || entry.isManuallyIncluded
+			continue
 		}
+		bn.Debug("Adding override species with max score: %s", entry.label)
+		*speciesScores = append(*speciesScores, SpeciesScore{
+			Score:               1.0,
+			Label:               entry.label,
+			IsManuallyIncluded:  entry.isManuallyIncluded,
+			IsSyntheticOverride: true,
+		})
+		seen[entry.label] = len(*speciesScores) - 1
 	}
 }
 
 // addUserOverrideSpecies appends species from the explicit include list and
 // species with configured actions to the inclusion set. Each entry is
-// canonicalized via resolveOverrideLabels (geomodel labels, then the active
+// canonicalized via resolveOverrideLabelEntries (geomodel labels, then the active
 // classifier's localized labels, then an OpenFauna reverse lookup for
 // scientific-only non-primary-model species). A resolved entry is appended in its
 // canonical label form so the scientific name map keys it correctly; an entry that
@@ -373,10 +414,10 @@ func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, 
 	for _, s := range *includedSpecies {
 		seen[s] = true
 	}
-	for _, label := range resolveOverrideLabels(settings, geoLabels) {
-		if !seen[label] {
-			*includedSpecies = append(*includedSpecies, label)
-			seen[label] = true
+	for _, entry := range resolveOverrideLabelEntries(settings, geoLabels) {
+		if !seen[entry.label] {
+			*includedSpecies = append(*includedSpecies, entry.label)
+			seen[entry.label] = true
 		}
 	}
 }
@@ -429,13 +470,13 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 	bn.mu.Unlock()
 	if !hasRangeFilter {
 		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, nil
+		return zeroScoresWithUserOverrides(bn, settings, excluder), nil, nil
 	}
 
 	// Skip filtering if location is not configured
 	if !settings.BirdNET.LocationConfigured {
 		bn.Debug("Location not configured, not using location based prediction filter")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, nil
+		return zeroScoresWithUserOverrides(bn, settings, excluder), nil, nil
 	}
 
 	threshold := settings.BirdNET.RangeFilter.Threshold
@@ -546,6 +587,17 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 	return speciesScores, nil, nil
 }
 
+// zeroScoresWithUserOverrides builds the range-filter-inactive fallback while
+// preserving the same override semantics as the prediction paths. Existing
+// classifier labels retain their zero score and gain provenance; overrides that
+// resolve outside that label set are appended as synthetic always-active rows.
+func zeroScoresWithUserOverrides(bn *BirdNET, settings *conf.Settings, excl excludeMatcher) []SpeciesScore {
+	speciesScores := zeroScoresForAllLabels(settings.BirdNET.Labels, excl)
+	addUserOverrideSpeciesScores(bn, &speciesScores, settings, nil)
+	sort.Sort(ByScore(speciesScores))
+	return speciesScores
+}
+
 // zeroScoresForAllLabels creates a slice of SpeciesScore with zero scores for all provided labels,
 // excluding any species the matcher rejects. This ensures that excluded species are
 // filtered even when the range filter model is not active or location is not configured.
@@ -569,7 +621,7 @@ func zeroScoresForAllLabels(labels []string, excl excludeMatcher) []SpeciesScore
 // OpenFauna. The reverse resolution is batched once at construction (one dataset scan),
 // keeping the per-label match off OpenFauna so it stays safe on the hot paths the
 // matcher runs on (per geomodel score during rebuild, zeroScoresForAllLabels). This
-// mirrors the include-side reverse lookup in resolveOverrideLabels.
+// mirrors the include-side reverse lookup in resolveOverrideLabelEntries.
 type excludeMatcher struct {
 	entries    []string            // raw exclude entries, forward-matched per label
 	reverseSci map[string]struct{} // lower-cased scientific names of localized entries

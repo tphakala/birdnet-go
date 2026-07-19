@@ -377,6 +377,21 @@ func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName stri
 	return false
 }
 
+// findNativeSpeciesScore finds a real geomodel probability for a scientific
+// name. Force-added include/config rows use synthetic score 1.0 and must not
+// influence rarity classification.
+func findNativeSpeciesScore(speciesScores []classifier.SpeciesScore, scientificName string) (float64, bool) {
+	for _, score := range speciesScores {
+		if score.IsSyntheticOverride {
+			continue
+		}
+		if strings.EqualFold(detection.ExtractScientificName(score.Label), scientificName) {
+			return score.Score, true
+		}
+	}
+	return 0, false
+}
+
 func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
 	// Get current local date
 	today := conf.LocalNoon(time.Now())
@@ -409,16 +424,8 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 	}
 
 	// Find the species score
-	var score float64
-	found := false
 	targetSci := detection.ExtractScientificName(speciesLabel)
-	for _, ss := range speciesScores {
-		if strings.EqualFold(detection.ExtractScientificName(ss.Label), targetSci) {
-			score = ss.Score
-			found = true
-			break
-		}
-	}
+	score, found := findNativeSpeciesScore(speciesScores, targetSci)
 
 	// Not in today's probable list. A species the geomodel can classify but that is
 	// below threshold today is genuinely very rare; a species with no geomodel

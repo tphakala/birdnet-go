@@ -136,6 +136,22 @@ func convertSpeciesScoresNoNames(scores []classifier.SpeciesScore) []dto.RangeFi
 	return buildRangeFilterSpecies(scores, nil)
 }
 
+// nativeSpeciesScores removes force-added override rows from consumers that
+// promise raw geomodel probabilities. It returns a new slice so callers do not
+// mutate the classifier-owned result while filtering it.
+func nativeSpeciesScores(scores []classifier.SpeciesScore) []classifier.SpeciesScore {
+	if scores == nil {
+		return nil
+	}
+	native := make([]classifier.SpeciesScore, 0, len(scores))
+	for _, score := range scores {
+		if !score.IsSyntheticOverride {
+			native = append(native, score)
+		}
+	}
+	return native
+}
+
 // buildRangeFilterSpecies converts geomodel scores into API species entries. When
 // resolveName is non-nil it supplies the localized common name for each label;
 // passing nil skips common-name resolution entirely (the expensive step for large
@@ -146,9 +162,11 @@ func buildRangeFilterSpecies(scores []classifier.SpeciesScore, resolveName func(
 	for _, s := range scores {
 		score := s.Score
 		entry := dto.RangeFilterSpecies{
-			Label:          s.Label,
-			ScientificName: detection.ExtractScientificName(s.Label),
-			Score:          &score,
+			Label:               s.Label,
+			ScientificName:      detection.ExtractScientificName(s.Label),
+			Score:               &score,
+			IsManuallyIncluded:  s.IsManuallyIncluded,
+			IsSyntheticOverride: s.IsSyntheticOverride,
 		}
 		if resolveName != nil {
 			entry.CommonName = resolveName(s.Label)
@@ -199,10 +217,11 @@ func convertLabels(labels []string, resolver *classifier.Orchestrator, locale st
 // the effect is display-only, and both scientific names remain in the inclusion
 // set so detection of the hidden species is unaffected.
 //
-// On collision the higher score wins, so a force-included species at the
-// always-active 1.0 sentinel survives over its lower range-filter probability.
-// The first occurrence's position is preserved (the input arrives sorted by
-// score descending), keeping the output order stable and deterministic.
+// On collision between a native geomodel row and its explicit override copy,
+// the synthetic row retains the established score-1.0 API/CSV sentinel while
+// RangeScore carries the native value for clients that want to display it. The
+// manual-inclusion flag is ORed onto the survivor. Other collisions retain the
+// higher-score behavior and original ordering.
 func dedupeSpeciesForDisplay(species []dto.RangeFilterSpecies) []dto.RangeFilterSpecies {
 	if len(species) < 2 {
 		return species
@@ -221,18 +240,46 @@ func dedupeSpeciesForDisplay(species []dto.RangeFilterSpecies) []dto.RangeFilter
 			continue
 		}
 		if idx, ok := indexByKey[key]; ok {
-			if speciesScoreHigher(sp, deduped[idx]) {
-				// Preserve the first occurrence's position, but surface the
-				// higher-scored variant (defensive: the input is already sorted
-				// score-descending, so this rarely triggers).
-				deduped[idx] = sp
-			}
+			deduped[idx] = mergeDisplaySpecies(deduped[idx], sp)
 			continue
 		}
 		indexByKey[key] = len(deduped)
 		deduped = append(deduped, sp)
 	}
 	return deduped
+}
+
+// mergeDisplaySpecies merges two rows that resolve to the same displayed
+// species. The synthetic override remains the survivor for API compatibility,
+// while its RangeScore records the highest colliding native geomodel score. For
+// rows with the same provenance, the existing higher-score rule remains in
+// effect.
+func mergeDisplaySpecies(existing, candidate dto.RangeFilterSpecies) dto.RangeFilterSpecies {
+	manuallyIncluded := existing.IsManuallyIncluded || candidate.IsManuallyIncluded
+
+	var merged dto.RangeFilterSpecies
+	switch {
+	case existing.IsSyntheticOverride && !candidate.IsSyntheticOverride:
+		merged = withHigherRangeScore(existing, candidate)
+	case !existing.IsSyntheticOverride && candidate.IsSyntheticOverride:
+		merged = withHigherRangeScore(candidate, existing)
+	case speciesScoreHigher(candidate, existing):
+		merged = candidate
+	default:
+		merged = existing
+	}
+	merged.IsManuallyIncluded = manuallyIncluded
+	return merged
+}
+
+// withHigherRangeScore attaches a native geomodel score to its synthetic
+// override row, retaining the highest value if multiple native labels collapse
+// to the same displayed species.
+func withHigherRangeScore(override, native dto.RangeFilterSpecies) dto.RangeFilterSpecies {
+	if override.RangeScore == nil || speciesScoreHigher(native, dto.RangeFilterSpecies{Score: override.RangeScore}) {
+		override.RangeScore = native.Score
+	}
+	return override
 }
 
 // speciesScoreHigher reports whether a has a strictly higher score than b. A nil
@@ -413,6 +460,7 @@ func (c *Handler) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get species scores", http.StatusInternalServerError)
 	}
+	speciesScores = nativeSpeciesScores(speciesScores)
 
 	// Resolving localized common names is O(species) and dominates latency when
 	// all geomodel species are requested (threshold 0). Callers that only need
