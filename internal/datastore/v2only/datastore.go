@@ -1377,14 +1377,29 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 		return resultMap, nil
 	}
 
-	// Fetch per-label hourly counts in one batched query (chunked internally).
-	hourlyByLabel, err := ds.detection.GetBatchHourlyOccurrences(ctx, flatLabelIDs, startOfDay, endOfDay, ds.zoneOffsetSeconds(startOfDay), minConfidence)
-	if err != nil {
-		return nil, errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "get_batch_hourly_occurrences").
-			Build()
+	// Fetch per-label hourly counts (each query is chunked internally). The hour bucket is computed
+	// from a single fixed UTC offset, so the range is split at every zone transition and each part
+	// queried with its own offset: a range spanning a DST change would otherwise bucket everything
+	// after the transition an hour out. Most ranges yield exactly one segment.
+	hourlyByLabel := make(map[uint][24]int, len(flatLabelIDs))
+	for _, segment := range ds.splitByZoneOffset(startOfDay, endOfDay) {
+		part, err := ds.detection.GetBatchHourlyOccurrences(ctx, flatLabelIDs, segment.start, segment.end, segment.offset, minConfidence)
+		if err != nil {
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_batch_hourly_occurrences").
+				Build()
+		}
+		// Range over keys only to avoid copying the 192-byte [24]int value on every iteration.
+		for labelID := range part {
+			hours := part[labelID]
+			acc := hourlyByLabel[labelID]
+			for h := range hoursPerDay {
+				acc[h] += hours[h]
+			}
+			hourlyByLabel[labelID] = acc
+		}
 	}
 
 	// Aggregate per-label counts into per-species counts, keyed by the input scientific
@@ -2582,6 +2597,46 @@ func (ds *Datastore) zoneOffsetSeconds(epoch int64) int {
 		ref = time.Now()
 	}
 	return repository.GetTimezoneOffsetAt(ds.timezone, ref)
+}
+
+// zoneOffsetSegment is a half-open [start, end) slice of a query range over which the configured
+// timezone's UTC offset is constant, so the whole slice can be hour-bucketed with `offset`.
+type zoneOffsetSegment struct {
+	start, end int64 // Unix seconds
+	offset     int   // seconds east of UTC, constant across the segment
+}
+
+// maxZoneSegments caps the segment slice's initial capacity: a year crosses at most a couple of
+// DST transitions, so a handful of segments covers any realistic analytics range.
+const maxZoneSegments = 4
+
+// splitByZoneOffset divides [start, end) into segments whose UTC offset is constant.
+//
+// SQL hour bucketing applies one fixed offset to the whole query (see zoneOffsetSeconds), which is
+// exact for a single day but wrong for a range spanning a DST change: every detection after the
+// transition lands an hour off. Splitting at the transitions lets each part be bucketed with the
+// offset actually in effect. A range with no transition returns a single segment, so the common
+// case still issues exactly one query.
+func (ds *Datastore) splitByZoneOffset(start, end int64) []zoneOffsetSegment {
+	segments := make([]zoneOffsetSegment, 0, maxZoneSegments)
+	for cur := start; cur < end; {
+		at := time.Unix(cur, 0).In(ds.timezone)
+		_, offset := at.Zone()
+
+		// ZoneBounds reports when the current zone period ends; zero means it never does.
+		segmentEnd := end
+		if _, zoneEnd := at.ZoneBounds(); !zoneEnd.IsZero() && zoneEnd.Unix() < end {
+			segmentEnd = zoneEnd.Unix()
+		}
+		// Defensive: a non-advancing bound would loop forever.
+		if segmentEnd <= cur {
+			segmentEnd = end
+		}
+
+		segments = append(segments, zoneOffsetSegment{start: cur, end: segmentEnd, offset: offset})
+		cur = segmentEnd
+	}
+	return segments
 }
 
 // dateRangeOffsetAnchor returns the epoch to anchor the timezone offset to for a date-bucketed

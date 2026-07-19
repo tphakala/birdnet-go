@@ -10,6 +10,71 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
 
+// TestV2OnlyDatastore_SplitByZoneOffset verifies the hourly range is divided at DST transitions.
+//
+// SQL hour bucketing applies one fixed UTC offset per query. That is exact for a single day, but
+// once the time-of-day chart began requesting a whole range, a span crossing a DST change bucketed
+// every detection after the transition an hour out. Splitting lets each part use the offset that
+// was actually in effect.
+func TestV2OnlyDatastore_SplitByZoneOffset(t *testing.T) {
+	t.Parallel()
+	ds, cleanup := setupTestDatastore(t)
+	t.Cleanup(cleanup)
+
+	newYork, err := time.LoadLocation("America/New_York")
+	require.NoError(t, err)
+	ds.timezone = newYork
+
+	const (
+		estOffset = -5 * 60 * 60 // winter
+		edtOffset = -4 * 60 * 60 // summer
+	)
+
+	t.Run("range inside one zone period yields a single segment", func(t *testing.T) {
+		start := time.Date(2026, 1, 10, 0, 0, 0, 0, newYork).Unix()
+		end := time.Date(2026, 1, 20, 0, 0, 0, 0, newYork).Unix()
+
+		segments := ds.splitByZoneOffset(start, end)
+		require.Len(t, segments, 1, "no transition in range, so one query")
+		assert.Equal(t, estOffset, segments[0].offset)
+		assert.Equal(t, start, segments[0].start)
+		assert.Equal(t, end, segments[0].end)
+	})
+
+	t.Run("range crossing spring-forward splits at the transition", func(t *testing.T) {
+		// US DST begins 2026-03-08 02:00 local.
+		start := time.Date(2026, 3, 1, 0, 0, 0, 0, newYork).Unix()
+		end := time.Date(2026, 3, 15, 0, 0, 0, 0, newYork).Unix()
+
+		segments := ds.splitByZoneOffset(start, end)
+		require.Len(t, segments, 2, "one transition splits the range in two")
+
+		assert.Equal(t, estOffset, segments[0].offset, "before the change it is still EST")
+		assert.Equal(t, edtOffset, segments[1].offset, "after the change it is EDT")
+
+		// The segments tile the range exactly: no gap, no overlap, no lost detections.
+		assert.Equal(t, start, segments[0].start)
+		assert.Equal(t, segments[0].end, segments[1].start)
+		assert.Equal(t, end, segments[1].end)
+
+		// The split lands on the real transition instant, not a day boundary. Expressed in UTC on
+		// purpose: 02:00 local does not exist on this date (clocks jump 02:00 -> 03:00), so building
+		// it in New York time normalizes to the wrong side of the transition.
+		transition := time.Date(2026, 3, 8, 7, 0, 0, 0, time.UTC).Unix() // 02:00 EST -> 03:00 EDT
+		assert.Equal(t, transition, segments[0].end)
+	})
+
+	t.Run("a year covers both transitions", func(t *testing.T) {
+		start := time.Date(2026, 1, 1, 0, 0, 0, 0, newYork).Unix()
+		end := time.Date(2026, 12, 31, 0, 0, 0, 0, newYork).Unix()
+
+		segments := ds.splitByZoneOffset(start, end)
+		require.Len(t, segments, 3, "EST -> EDT -> EST")
+		assert.Equal(t, []int{estOffset, edtOffset, estOffset},
+			[]int{segments[0].offset, segments[1].offset, segments[2].offset})
+	})
+}
+
 // TestV2OnlyDatastore_HourlyChartsMultiLabelSelection reproduces the "N species selected, fewer
 // drawn" bug. A species can own several model labels, and GetTopSpecies groups/limits by label ROW.
 // When the caller limits to the selection size, a high-volume species' extra label rows exhaust the
