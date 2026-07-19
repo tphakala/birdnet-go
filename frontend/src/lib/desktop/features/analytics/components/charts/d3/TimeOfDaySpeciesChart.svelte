@@ -10,7 +10,13 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import BaseChart from './BaseChart.svelte';
   import { createLinearScale } from './utils/scales';
-  import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
+  import {
+    createAxis,
+    styleAxis,
+    addAxisLabel,
+    createHourAxisFormatter,
+    hourAxisTickValues,
+  } from './utils/axes';
   import { ChartTooltip, addCrosshair, createLegend } from './utils/interactions';
   import { getCurrentTheme, type ChartTheme } from './utils/theme';
   import { getSpeciesColor, registerChart } from './utils/speciesColor';
@@ -127,6 +133,9 @@
     const xScale = createLinearScale({
       domain: [0, 23],
       range: [0, innerWidth],
+      // 0..23 is the exact hour domain; nice() would stretch it to 0..24 and leave 23:00 short of
+      // the right edge.
+      nice: false,
     });
 
     const yScale = createLinearScale({
@@ -145,8 +154,9 @@
       scale: xScale,
       orientation: 'bottom',
       tickFormat: (d: AxisDomain) => hourFormatter(d as number),
-      tickCount: 12,
     });
+    // Explicit hour ticks so the axis ends with a real 23:00 label at the edge.
+    xAxis.tickValues(hourAxisTickValues());
 
     const yAxis = createAxis({
       scale: yScale,
