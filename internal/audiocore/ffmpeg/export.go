@@ -481,6 +481,18 @@ func getMaxBitrate(format, requestedBitrate string) string {
 	return requestedBitrate
 }
 
+// EffectiveBitrateKbps returns the bitrate in kbit/s that a clip export of
+// format actually uses: the configured string parsed numerically and clamped to
+// the format's ceiling, exactly as the FFmpeg command line resolves it. It
+// returns 0 when the configured string cannot be parsed, which every encoder
+// reads as "use the codec default".
+//
+// The native AAC and Opus encoders take a numeric bitrate rather than a command
+// line, and call this so a clip codes at the same rate whichever encoder runs.
+func EffectiveBitrateKbps(format, bitrate string) int {
+	return parseBitrateKbps(getMaxBitrate(format, bitrate))
+}
+
 // ExportAudioToBuffer encodes PCM data using custom FFmpeg arguments and returns
 // the result as an in-memory buffer. Useful for streaming responses.
 func ExportAudioToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string, sampleRate, channels, bitDepth int, customArgs []string) (*bytes.Buffer, error) {

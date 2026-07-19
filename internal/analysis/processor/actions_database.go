@@ -13,10 +13,13 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
+	"github.com/tphakala/birdnet-go/internal/audiocore/nativeenc"
+	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -42,6 +45,11 @@ const (
 	encoderFFmpeg     = "ffmpeg"
 	encoderNativeWAV  = "native-wav"
 	encoderNativeFLAC = "native-flac"
+	// encoderNativeAAC and encoderNativeOpus mark the gated native lossy paths.
+	// Which encoder ran is the field evidence the rollout is judged on, so the
+	// label has to distinguish them from FFmpeg in logs and telemetry.
+	encoderNativeAAC  = "native-aac"
+	encoderNativeOpus = "native-opus"
 )
 
 // Execute logs the note to the log file.
@@ -510,16 +518,20 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	return nil
 }
 
-// encodeClip writes the captured PCM to outputPath in the resolved format,
-// dispatching to the native WAV writer, the native go-flac encoder, or the FFmpeg
-// exporter (non-FLAC formats only). It returns the encoder tag for the success log.
+// encodeClip writes the captured PCM to outputPath in the resolved format and
+// returns the encoder tag for the success log.
 //
-// FLAC is always encoded natively (go-flac); FFmpeg is never used for FLAC. Gain is
-// applied in Go. When normalization is enabled, EBU R128 loudness is measured and
-// applied via audionorm, with no FFmpeg loudnorm dependency.
+// WAV and FLAC are always native (the WAV writer and go-flac); FFmpeg is never
+// used for them. AAC and Opus have native encoders too, but they are opt-in
+// while they earn field confidence, so they reach go-aac/go-m4a and go-opus only
+// when the matching gate in internal/audiocore/nativeenc is set and the encoder
+// accepts the clip's shape. Everything else, and every non-gated AAC or Opus
+// clip, goes to FFmpeg.
+//
+// On a native path gain is applied in Go, and when normalization is enabled the
+// EBU R128 loudness is measured and applied via audionorm with no FFmpeg
+// loudnorm dependency. On the FFmpeg path FFmpeg still owns both.
 func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, exportFormat, outputPath string) (string, error) {
-	exportSettings := &a.Settings.Realtime.Audio.Export
-
 	switch exportFormat {
 	case ffmpeg.FormatWAV:
 		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, exportRate, conf.BitDepth); err != nil {
@@ -529,39 +541,9 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 
 	case ffmpeg.FormatFLAC:
 		// FLAC always encodes natively via go-flac; FFmpeg is never used for FLAC.
-		gainDB := exportSettings.Gain
-		if exportSettings.Normalization.Enabled {
-			switch {
-			case flac.SupportedBitDepth(conf.BitDepth) &&
-				audionormSupportsTargets(exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak):
-				// Native FLAC + EBU R128 normalization via audionorm, no FFmpeg. The
-				// static Export.Gain is intentionally NOT applied on top: normalization
-				// takes precedence over gain (mirroring the old FFmpeg loudnorm path),
-				// so only the loudness gain is used. audionorm normalizes to the target
-				// integrated loudness under the true-peak ceiling; LoudnessRange is not
-				// consumed (no LRA/dynamic compression on this path).
-				var err error
-				gainDB, err = a.planNativeNormalizationGain(ctx, exportRate,
-					exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak)
-				if err != nil {
-					return "", err
-				}
-			default:
-				// Unreachable for a validated config: capture is 16-bit (conf.BitDepth)
-				// and settings validation clamps the loudness targets into audionorm's
-				// range. Defense-in-depth for unvalidated/legacy settings only. With
-				// FFmpeg FLAC removed there is no loudnorm fallback, so encode natively
-				// with the static gain and surface the skipped normalization at WARN.
-				reason := "normalization_targets_out_of_native_range"
-				if !flac.SupportedBitDepth(conf.BitDepth) {
-					reason = "unsupported_bit_depth"
-				}
-				GetLogger().Warn("Native FLAC normalization skipped; encoding without normalization",
-					logger.String("component", "analysis.processor.actions"),
-					logger.String("detection_id", a.CorrelationID),
-					logger.String("reason", reason),
-					logger.String("operation", "audio_export_flac_normalize_skip"))
-			}
+		gainDB, err := a.resolveNativeGainDB(ctx, exportRate, exportFormat, flac.SupportedBitDepth(conf.BitDepth))
+		if err != nil {
+			return "", err
 		}
 		if err := flac.EncodePCM(ctx, &flac.Options{
 			PCMData:    a.pcmData,
@@ -575,31 +557,188 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 		}
 		return encoderNativeFLAC, nil
 
+	case ffmpeg.FormatAAC:
+		// GATED: native AAC is opt-in via BIRDNET_AAC_ENCODER=native while it
+		// earns field confidence. Drop the condition (and the FFmpeg call below)
+		// to make it unconditional. See internal/audiocore/nativeenc.
+		if a.nativeAACSelected(exportRate) {
+			return a.encodeClipNativeAAC(ctx, exportRate, outputPath)
+		}
+		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
+
+	case ffmpeg.FormatOpus:
+		// GATED: native Opus is opt-in via BIRDNET_OPUS_ENCODER=native. Same
+		// removal path as AAC above.
+		if a.nativeOpusSelected(exportRate) {
+			return a.encodeClipNativeOpus(ctx, exportRate, outputPath)
+		}
+		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
+
 	default:
-		// FFmpeg for the remaining formats (MP3, AAC, Opus), including their
-		// EBU R128 loudnorm normalization. FLAC and WAV never reach this branch.
-		opts := &ffmpeg.ExportOptions{
-			PCMData:    a.pcmData,
-			OutputPath: outputPath,
-			Format:     exportFormat,
-			Bitrate:    exportSettings.Bitrate,
-			SampleRate: exportRate,
-			Channels:   conf.NumChannels,
-			BitDepth:   conf.BitDepth,
-			FFmpegPath: a.Settings.Realtime.Audio.FfmpegPath,
-			GainDB:     exportSettings.Gain,
-			Normalization: ffmpeg.ExportNormalization{
-				Enabled:       exportSettings.Normalization.Enabled,
-				TargetLUFS:    exportSettings.Normalization.TargetLUFS,
-				TruePeak:      exportSettings.Normalization.TruePeak,
-				LoudnessRange: exportSettings.Normalization.LoudnessRange,
-			},
-		}
-		if err := ffmpeg.ExportAudio(ctx, opts); err != nil {
-			return "", err
-		}
-		return encoderFFmpeg, nil
+		// FFmpeg for the remaining formats (MP3, ALAC), including their EBU R128
+		// loudnorm normalization. FLAC and WAV never reach this branch.
+		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
 	}
+}
+
+// encodeClipFFmpeg encodes the clip with FFmpeg, which owns both the codec and
+// its EBU R128 loudnorm normalization.
+func (a *SaveAudioAction) encodeClipFFmpeg(ctx context.Context, exportRate int, exportFormat, outputPath string) (string, error) {
+	exportSettings := &a.Settings.Realtime.Audio.Export
+	opts := &ffmpeg.ExportOptions{
+		PCMData:    a.pcmData,
+		OutputPath: outputPath,
+		Format:     exportFormat,
+		Bitrate:    exportSettings.Bitrate,
+		SampleRate: exportRate,
+		Channels:   conf.NumChannels,
+		BitDepth:   conf.BitDepth,
+		FFmpegPath: a.Settings.Realtime.Audio.FfmpegPath,
+		GainDB:     exportSettings.Gain,
+		Normalization: ffmpeg.ExportNormalization{
+			Enabled:       exportSettings.Normalization.Enabled,
+			TargetLUFS:    exportSettings.Normalization.TargetLUFS,
+			TruePeak:      exportSettings.Normalization.TruePeak,
+			LoudnessRange: exportSettings.Normalization.LoudnessRange,
+		},
+	}
+	if err := ffmpeg.ExportAudio(ctx, opts); err != nil {
+		return "", err
+	}
+	return encoderFFmpeg, nil
+}
+
+// encodeClipNativeAAC encodes the clip to AAC-LC in an MP4 (.m4a) container with
+// go-aac and go-m4a. A failure is returned rather than retried through FFmpeg:
+// the operator opted this clip into the native encoder, and a silent fallback
+// would hide exactly the failures this rollout exists to surface.
+func (a *SaveAudioAction) encodeClipNativeAAC(ctx context.Context, exportRate int, outputPath string) (string, error) {
+	exportSettings := &a.Settings.Realtime.Audio.Export
+	gainDB, err := a.resolveNativeGainDB(ctx, exportRate, ffmpeg.FormatAAC, true)
+	if err != nil {
+		return "", err
+	}
+	if err := aac.EncodePCM(ctx, &aac.Options{
+		PCMData:     a.pcmData,
+		OutputPath:  outputPath,
+		SampleRate:  exportRate,
+		Channels:    conf.NumChannels,
+		BitDepth:    conf.BitDepth,
+		BitrateKbps: ffmpeg.EffectiveBitrateKbps(ffmpeg.FormatAAC, exportSettings.Bitrate),
+		GainDB:      gainDB,
+	}); err != nil {
+		return "", err
+	}
+	return encoderNativeAAC, nil
+}
+
+// encodeClipNativeOpus encodes the clip to Ogg Opus (.opus) with go-opus. As
+// with AAC, a failure is surfaced rather than falling back to FFmpeg.
+func (a *SaveAudioAction) encodeClipNativeOpus(ctx context.Context, exportRate int, outputPath string) (string, error) {
+	exportSettings := &a.Settings.Realtime.Audio.Export
+	gainDB, err := a.resolveNativeGainDB(ctx, exportRate, ffmpeg.FormatOpus, true)
+	if err != nil {
+		return "", err
+	}
+	if err := opus.EncodePCM(ctx, &opus.Options{
+		PCMData:     a.pcmData,
+		OutputPath:  outputPath,
+		SampleRate:  exportRate,
+		Channels:    conf.NumChannels,
+		BitDepth:    conf.BitDepth,
+		BitrateKbps: ffmpeg.EffectiveBitrateKbps(ffmpeg.FormatOpus, exportSettings.Bitrate),
+		GainDB:      gainDB,
+	}); err != nil {
+		return "", err
+	}
+	return encoderNativeOpus, nil
+}
+
+// nativeAACSelected reports whether this clip should take the native AAC path:
+// the operator opted in AND go-aac accepts the clip's rate, depth and channel
+// count. A gated-on clip the encoder cannot carry falls back to FFmpeg with a
+// warning rather than failing, so an unusual capture rate never costs a
+// recording. This whole check goes away when the gate is removed.
+func (a *SaveAudioAction) nativeAACSelected(exportRate int) bool {
+	if !nativeenc.AACEnabled() {
+		return false
+	}
+	if aac.SupportedSampleRate(exportRate) &&
+		aac.SupportedBitDepth(conf.BitDepth) &&
+		aac.SupportedChannels(conf.NumChannels) {
+		return true
+	}
+	a.logNativeEncoderSkipped(ffmpeg.FormatAAC, exportRate)
+	return false
+}
+
+// nativeOpusSelected is the Opus counterpart of nativeAACSelected.
+func (a *SaveAudioAction) nativeOpusSelected(exportRate int) bool {
+	if !nativeenc.OpusEnabled() {
+		return false
+	}
+	if opus.SupportedSampleRate(exportRate) &&
+		opus.SupportedBitDepth(conf.BitDepth) &&
+		opus.SupportedChannels(conf.NumChannels) {
+		return true
+	}
+	a.logNativeEncoderSkipped(ffmpeg.FormatOpus, exportRate)
+	return false
+}
+
+// logNativeEncoderSkipped records that an opted-in native encoder could not
+// carry this clip, so an operator who set the env flag and sees FFmpeg in the
+// encoder field has a reason rather than a mystery.
+func (a *SaveAudioAction) logNativeEncoderSkipped(format string, exportRate int) {
+	GetLogger().Warn("Native encoder requested but the clip format is unsupported; using FFmpeg",
+		logger.String("component", "analysis.processor.actions"),
+		logger.String("detection_id", a.CorrelationID),
+		logger.String("format", format),
+		logger.Int("sample_rate", exportRate),
+		logger.Int("bit_depth", conf.BitDepth),
+		logger.Int("channels", conf.NumChannels),
+		logger.String("operation", "audio_export_native_unsupported"))
+}
+
+// resolveNativeGainDB returns the gain in dB a native encoder should apply to
+// this clip. With normalization enabled and supported it is the measured EBU
+// R128 gain, which intentionally replaces rather than compounds the static
+// Export.Gain (mirroring the old FFmpeg loudnorm path, where loudnorm also
+// superseded the volume filter). Otherwise it is the static Export.Gain.
+//
+// depthSupported lets a caller declare that its encoder cannot handle the
+// capture bit depth; such a clip is encoded without normalization rather than
+// fed values audionorm would mishandle.
+func (a *SaveAudioAction) resolveNativeGainDB(ctx context.Context, exportRate int, format string, depthSupported bool) (float64, error) {
+	exportSettings := &a.Settings.Realtime.Audio.Export
+	if !exportSettings.Normalization.Enabled {
+		return exportSettings.Gain, nil
+	}
+
+	if depthSupported && audionormSupportsTargets(exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak) {
+		// audionorm normalizes to the target integrated loudness under the
+		// true-peak ceiling; LoudnessRange is not consumed (no LRA/dynamic
+		// compression on this path).
+		return a.planNativeNormalizationGain(ctx, exportRate, format,
+			exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak)
+	}
+
+	// Unreachable for a validated config: capture is 16-bit (conf.BitDepth) and
+	// settings validation clamps the loudness targets into audionorm's range.
+	// Defense-in-depth for unvalidated/legacy settings only. There is no FFmpeg
+	// loudnorm fallback on a native path, so encode with the static gain and
+	// surface the skipped normalization at WARN.
+	reason := "normalization_targets_out_of_native_range"
+	if !depthSupported {
+		reason = "unsupported_bit_depth"
+	}
+	GetLogger().Warn("Native normalization skipped; encoding without normalization",
+		logger.String("component", "analysis.processor.actions"),
+		logger.String("detection_id", a.CorrelationID),
+		logger.String("format", format),
+		logger.String("reason", reason),
+		logger.String("operation", "audio_export_normalize_skip"))
+	return exportSettings.Gain, nil
 }
 
 // audionormMinTargetLUFS is the exclusive lower bound of audionorm's valid target
@@ -623,7 +762,7 @@ func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
 // left unchanged rather than boosted into noise), matching the BirdWeather native
 // path. The gain is applied by flac.EncodePCM during encoding; a.pcmData is not
 // modified here.
-func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampleRate int, targetLUFS, truePeakDBTP float64) (float64, error) {
+func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampleRate int, format string, targetLUFS, truePeakDBTP float64) (float64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -641,12 +780,14 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 		return 0, errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryAudio).
-			Context("operation", "native_flac_normalize_measure").
+			Context("operation", "native_normalize_measure").
+			Context("format", format).
 			Context("detection_id", a.CorrelationID).
 			Build()
 	}
 
-	GetLogger().Debug("Native FLAC loudness analysis (detection save)",
+	GetLogger().Debug("Native loudness analysis (detection save)",
+		logger.String("format", format),
 		logger.Float64("measured_lufs", meas.IntegratedLUFS),
 		logger.Float64("true_peak_dbtp", meas.TruePeakDBTP),
 		logger.Float64("target_lufs", targetLUFS),

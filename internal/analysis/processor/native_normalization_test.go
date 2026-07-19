@@ -58,7 +58,7 @@ func TestPlanNativeNormalizationGain_QuietClipReachesTarget(t *testing.T) {
 	require.Less(t, measured, testTargetLUFS-5, "sanity: clip needs a real boost")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 
 	assert.Positive(t, gainDB, "quiet clip must be boosted")
@@ -73,7 +73,7 @@ func TestPlanNativeNormalizationGain_Silence(t *testing.T) {
 	t.Parallel()
 	pcm := make([]byte, conf.SampleRate*2) // 1 s of digital silence
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 	assert.Zero(t, gainDB, "silence must not be amplified")
 }
@@ -92,7 +92,7 @@ func TestPlanNativeNormalizationGain_ClampsExtremeBoost(t *testing.T) {
 	require.Greater(t, measured, audionormMinTargetLUFS+3, "sanity: still above the absolute gate")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 	assert.InDelta(t, audionorm.DefaultMaxGainDB, gainDB, 1e-9, "extreme boost must clamp to +DefaultMaxGainDB")
 }
@@ -106,7 +106,7 @@ func TestPlanNativeNormalizationGain_Attenuates(t *testing.T) {
 	require.Greater(t, measured, testTargetLUFS, "sanity: clip is louder than target")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 	assert.Negative(t, gainDB, "loud clip must be attenuated")
 	assert.InDelta(t, testTargetLUFS, measured+gainDB, 0.1, "attenuation must land on target")
@@ -119,7 +119,7 @@ func TestPlanNativeNormalizationGain_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	a := &SaveAudioAction{pcmData: sinePCMBytes(800, 1.0, 1000), CorrelationID: "test"}
-	_, err := a.planNativeNormalizationGain(ctx, conf.SampleRate, testTargetLUFS, testTruePeakDBTP)
+	_, err := a.planNativeNormalizationGain(ctx, conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -132,7 +132,7 @@ func TestNativeNormalizationEndToEnd(t *testing.T) {
 	pcm := sinePCMBytes(800, 1.0, 1000)
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
 
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 
 	out := filepath.Join(t.TempDir(), "clip.flac")

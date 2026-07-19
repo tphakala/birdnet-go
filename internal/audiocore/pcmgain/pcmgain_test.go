@@ -1,4 +1,4 @@
-package flac
+package pcmgain
 
 import (
 	"bytes"
@@ -26,66 +26,66 @@ func samples16(b []byte) []int16 {
 	return out
 }
 
-func TestApplyGainInt16_IdentityAtFactorOne(t *testing.T) {
+func TestApplyInt16_IdentityAtFactorOne(t *testing.T) {
 	t.Parallel()
 	src := pcm16(0, 1, -1, 100, -100, 32767, -32768)
 	dst := make([]byte, len(src))
-	applyGainInt16(dst, src, 1.0)
+	ApplyInt16(dst, src, 1.0)
 	assert.Equal(t, src, dst)
 }
 
-func TestApplyGainInt16_ScalesUp(t *testing.T) {
+func TestApplyInt16_ScalesUp(t *testing.T) {
 	t.Parallel()
 	src := pcm16(100, -100, 1000)
 	dst := make([]byte, len(src))
-	applyGainInt16(dst, src, 2.0)
+	ApplyInt16(dst, src, 2.0)
 	assert.Equal(t, []int16{200, -200, 2000}, samples16(dst))
 }
 
-func TestApplyGainInt16_ScalesDown(t *testing.T) {
+func TestApplyInt16_ScalesDown(t *testing.T) {
 	t.Parallel()
 	src := pcm16(100, -100, 1000)
 	dst := make([]byte, len(src))
-	applyGainInt16(dst, src, 0.5)
+	ApplyInt16(dst, src, 0.5)
 	assert.Equal(t, []int16{50, -50, 500}, samples16(dst))
 }
 
-func TestApplyGainInt16_SaturatesPositive(t *testing.T) {
+func TestApplyInt16_SaturatesPositive(t *testing.T) {
 	t.Parallel()
 	src := pcm16(20000, 32767)
 	dst := make([]byte, len(src))
-	applyGainInt16(dst, src, 4.0)
+	ApplyInt16(dst, src, 4.0)
 	assert.Equal(t, []int16{32767, 32767}, samples16(dst))
 }
 
-func TestApplyGainInt16_SaturatesNegative(t *testing.T) {
+func TestApplyInt16_SaturatesNegative(t *testing.T) {
 	t.Parallel()
 	src := pcm16(-20000, -32768)
 	dst := make([]byte, len(src))
-	applyGainInt16(dst, src, 4.0)
+	ApplyInt16(dst, src, 4.0)
 	assert.Equal(t, []int16{-32768, -32768}, samples16(dst))
 }
 
-func TestApplyGainInt16_DoesNotMutateSource(t *testing.T) {
+func TestApplyInt16_DoesNotMutateSource(t *testing.T) {
 	t.Parallel()
 	src := pcm16(100, -100, 1000)
 	srcCopy := bytes.Clone(src)
 	dst := make([]byte, len(src))
-	applyGainInt16(dst, src, 2.0)
+	ApplyInt16(dst, src, 2.0)
 	assert.Equal(t, srcCopy, src, "source buffer must be unchanged")
 }
 
 // A trailing odd byte (never produced by real int16 PCM, but defensive) is
 // copied through unchanged so dst is always fully written.
-func TestApplyGainInt16_CopiesOddTrailingByte(t *testing.T) {
+func TestApplyInt16_CopiesOddTrailingByte(t *testing.T) {
 	t.Parallel()
 	src := []byte{0x10, 0x00, 0x20, 0x00, 0xAB}
 	dst := make([]byte, len(src))
-	applyGainInt16(dst, src, 1.0)
+	ApplyInt16(dst, src, 1.0)
 	assert.Equal(t, src, dst)
 }
 
-func TestApplyGainInt16_ZeroAlloc(t *testing.T) {
+func TestApplyInt16_ZeroAlloc(t *testing.T) {
 	// No t.Parallel(): testing.AllocsPerRun panics if called from a parallel test.
 	// 4096 samples (8192 bytes) of arbitrary content: a realistic span for the
 	// loop; the byte values are irrelevant to allocation behavior.
@@ -95,7 +95,7 @@ func TestApplyGainInt16_ZeroAlloc(t *testing.T) {
 	}
 	dst := make([]byte, len(src))
 	allocs := testing.AllocsPerRun(100, func() {
-		applyGainInt16(dst, src, 1.5)
+		ApplyInt16(dst, src, 1.5)
 	})
-	assert.Zero(t, allocs, "applyGainInt16 must not allocate")
+	assert.Zero(t, allocs, "ApplyInt16 must not allocate")
 }
