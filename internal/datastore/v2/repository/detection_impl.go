@@ -890,10 +890,16 @@ func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int6
 		query = query.Where(fmt.Sprintf("%s.scientific_name IN ?", labTable), species)
 	}
 
-	err := query.Group("label_id").
-		Order("count DESC, label_id ASC").
-		Limit(limit).
-		Scan(&results).Error
+	query = query.Group("label_id").Order("count DESC, label_id ASC")
+
+	// limit <= 0 means "no limit". Callers with an explicit species filter pass 0 so a species that
+	// owns several model labels is not truncated to fewer rows than the number of selected species
+	// (the label rows are merged back into one series per species downstream).
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	err := query.Scan(&results).Error
 
 	return results, err
 }

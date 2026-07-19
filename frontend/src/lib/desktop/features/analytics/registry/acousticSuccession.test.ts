@@ -54,7 +54,7 @@ describe('acoustic-succession chart def', () => {
   it('is registered in the patterns group as a species-aware streamgraph', () => {
     expect(chartDef.group).toBe('patterns');
     // Like the sibling ridgeline, supports.species lets the patterns tab's auto-select run; the chart
-    // honors a non-empty selection and falls back to the top-N when nothing is selected.
+    // only ever shows the user's selection (empty selection renders the card's empty state).
     expect(chartDef.supports.species).toBe(true);
     expect(chartDef.supports.source).toBe(false);
     // A streamgraph needs a few bands to read as a handover, not just two.
@@ -66,7 +66,7 @@ describe('acoustic-succession chart def', () => {
     expect(chartDef.countDataPoints).toBeUndefined();
   });
 
-  it('forwards a non-empty species selection and falls back to top-N when empty', async () => {
+  it('forwards a non-empty species selection and skips the request when empty', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -84,11 +84,11 @@ describe('acoustic-succession chart def', () => {
     expect(withSel).toContain('species=Apus+apus');
     expect(withSel).toContain('limit=2');
 
-    // Empty selection: no species param, so the endpoint keeps its top-N default.
-    await chartDef.fetch(makeParams([]));
-    const noSel = fetchMock.mock.calls[1][0] as string;
-    expect(noSel).not.toContain('species=');
-    expect(noSel).toContain('limit=6');
+    // Empty selection: the chart honors the selection at all times, so it returns [] without a request
+    // (the card then shows its "pick species" empty state) rather than falling back to a top-N default.
+    const empty = await chartDef.fetch(makeParams([]));
+    expect(empty).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('fetches the succession payload, coercing counts and dropping nameless rows', async () => {
@@ -170,17 +170,11 @@ describe('acoustic-succession chart def', () => {
       },
     ];
     const ctx = makeCtx({ 'Turdus merula': 'Eurasian Blackbird' });
-    // With a selection active the chart is no longer a top-N view, so the "top N" note is suppressed.
     const props = chartDef.mapProps?.(raw, makeParams(['Turdus merula']), ctx) ?? {};
     const series = props.series as SuccessionRow[];
     expect(series).toHaveLength(2);
     expect(series[0].commonName).toBe('Eurasian Blackbird');
     // No mapping -> falls back to the scientific name.
     expect(series[1].commonName).toBe('Apus apus');
-    expect(props.noteKey).toBeUndefined();
-
-    // With no selection the chart is the top-N default, so the note is shown.
-    const propsNoSel = chartDef.mapProps?.(raw, makeParams([]), ctx) ?? {};
-    expect(propsNoSel.noteKey).toBe('analytics.advanced.charts.succession.note');
   });
 });

@@ -864,3 +864,37 @@ func TestGetTopSpecies_ExcludesFalsePositives(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, filtered)
 }
+
+// TestGetTopSpecies_NoLimitWhenNonPositive verifies limit <= 0 disables the LIMIT clause so every
+// matching label row is returned. Callers with an explicit species selection pass 0 to avoid
+// truncating a species that owns several model labels to fewer rows than selected species.
+func TestGetTopSpecies_NoLimitWhenNonPositive(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	labelA := createTestLabel(t, db, "Species A", 1)
+	labelB := createTestLabel(t, db, "Species B", 1)
+	labelC := createTestLabel(t, db, "Species C", 1)
+
+	// Distinct volumes so ordering is unambiguous: A(3) > B(2) > C(1).
+	for i := range 3 {
+		createDetectionForLabel(t, db, labelA.ID, int64(1000+i))
+	}
+	for i := range 2 {
+		createDetectionForLabel(t, db, labelB.ID, int64(1000+i))
+	}
+	createDetectionForLabel(t, db, labelC.ID, 1000)
+
+	// A positive limit still truncates (existing behavior).
+	limited, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, nil, 2)
+	require.NoError(t, err)
+	require.Len(t, limited, 2)
+
+	// limit == 0 returns every row, volume-ordered.
+	all, err := repo.GetTopSpecies(ctx, 900, 1100, 0.0, nil, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, all, 3)
+	assert.Equal(t, labelA.ID, all[0].LabelID)
+	assert.Equal(t, labelC.ID, all[2].LabelID)
+}

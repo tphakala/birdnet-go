@@ -264,12 +264,22 @@ function coerceCells(cells: { dateIndex?: unknown; slot?: unknown; count?: unkno
  * Returns the server's columnar sparse payload, defensively coerced.
  */
 async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Promise<HeatmapData> {
+  // Every patterns chart honors the species selection: with none selected, return an empty heatmap so
+  // the card shows its "pick species" empty state instead of aggregating every species.
+  if (params.species.length === 0) {
+    return {
+      dates: [],
+      slotResolutionMinutes: DEFAULT_SLOT_RESOLUTION_MINUTES,
+      cells: coerceCells({}),
+    };
+  }
+
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
   });
-  // The endpoint filters by a single species; use the first selected (none = all species).
-  if (params.species.length > 0) search.append('species', params.species[0]);
+  // The endpoint filters by a single species; use the first selected.
+  search.append('species', params.species[0]);
 
   const response = await fetch(buildAppUrl(`/api/v2/analytics/time/heatmap?${search}`), { signal });
   ensureOk(response);
@@ -319,15 +329,17 @@ async function fetchSpeciesDistribution(
   params: AnalyticsParams,
   signal?: AbortSignal
 ): Promise<SpeciesDistributionDatum[]> {
+  // Every patterns chart honors the species selection: with none selected, return empty so the card
+  // shows its "pick species" empty state instead of a top-N default (matches fetchTimeOfDay).
+  if (params.species.length === 0) return [];
+
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
-    // With a selection, request one row per selected species so the server's volume-ordered LIMIT
-    // returns all of them (a fixed top-N would push the lowest-volume picks off the bottom); with no
-    // selection, the top-N default. The server clamps to its own max, matching the control bar's cap.
-    limit: String(params.species.length > 0 ? params.species.length : SPECIES_RIDGELINE_LIMIT),
+    // Request one row per selected species so the server's volume-ordered LIMIT returns all of them
+    // (a species owning several model labels would otherwise push the lowest-volume picks off).
+    limit: String(params.species.length),
   });
-  // A non-empty selection narrows the ridgeline to those species; empty keeps the top-N default.
   params.species.forEach(name => search.append('species', name));
 
   const response = await fetch(
@@ -385,15 +397,17 @@ async function fetchAcousticSuccession(
   params: AnalyticsParams,
   signal?: AbortSignal
 ): Promise<SuccessionDatum[]> {
+  // Every patterns chart honors the species selection: with none selected, return empty so the card
+  // shows its "pick species" empty state instead of a top-N default (matches fetchTimeOfDay).
+  if (params.species.length === 0) return [];
+
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
-    // With a selection, request one band per selected species so the server's volume-ordered LIMIT
-    // returns all of them (a fixed top-N would push the lowest-volume picks off the bottom); with no
-    // selection, the top-N default. The server clamps to its own max, matching the control bar's cap.
-    limit: String(params.species.length > 0 ? params.species.length : SUCCESSION_LIMIT),
+    // Request one band per selected species so the server's volume-ordered LIMIT returns all of them
+    // (a species owning several model labels would otherwise push the lowest-volume picks off).
+    limit: String(params.species.length),
   });
-  // A non-empty selection narrows the streamgraph to those species; empty keeps the top-N default.
   params.species.forEach(name => search.append('species', name));
 
   const response = await fetch(buildAppUrl(`/api/v2/analytics/time/succession?${search}`), {
@@ -443,12 +457,16 @@ async function fetchDawnOnset(
   params: AnalyticsParams,
   signal?: AbortSignal
 ): Promise<DawnOnsetData> {
+  // Every patterns chart honors the species selection: with none selected, return empty so the card
+  // shows its "pick species" empty state instead of aggregating every species.
+  if (params.species.length === 0) return { points: [] };
+
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
   });
-  // The endpoint filters by a single species; use the first selected (none = all species).
-  if (params.species.length > 0) search.append('species', params.species[0]);
+  // The endpoint filters by a single species; use the first selected.
+  search.append('species', params.species[0]);
 
   const response = await fetch(buildAppUrl(`/api/v2/analytics/time/dawn-onset?${search}`), {
     signal,
@@ -831,23 +849,16 @@ export const CHART_REGISTRY: ChartDef[] = [
     emptyHintKey: 'analytics.advanced.charts.ridgeline.noDataHint',
     component: SpeciesRidgeline,
     fetch: fetchSpeciesDistribution,
-    // Honors the species selection: a non-empty selection filters to those species, empty falls back
-    // to top-N by volume. The "top N" note is shown only when nothing is selected, since with a
-    // selection the chart is no longer a top-N view.
-    mapProps: (data, params, ctx) => {
-      // The "top N" note is shown only when nothing is selected (a selection isn't a top-N view).
-      const noteKey =
-        params.species.length === 0 ? 'analytics.advanced.charts.ridgeline.note' : undefined;
-      return {
-        series: (data as SpeciesDistributionDatum[]).map(d => ({
-          scientificName: d.scientificName,
-          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-          density: d.density,
-          total: d.total,
-        })),
-        noteKey,
-      };
-    },
+    // Always a view of the user's species selection (empty selection shows the card's empty state, so
+    // this only ever renders selected species).
+    mapProps: (data, _params, ctx) => ({
+      series: (data as SpeciesDistributionDatum[]).map(d => ({
+        scientificName: d.scientificName,
+        commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+        density: d.density,
+        total: d.total,
+      })),
+    }),
     size: 'full',
     supports: { species: true, source: false },
     // A ridgeline needs at least a couple of species to read as one; one lonely ridge is not useful.
@@ -863,24 +874,17 @@ export const CHART_REGISTRY: ChartDef[] = [
     emptyHintKey: 'analytics.advanced.charts.succession.noDataHint',
     component: AcousticSuccessionChart,
     fetch: fetchAcousticSuccession,
-    // Honors the species selection like the sibling ridgeline: a non-empty selection filters to those
-    // species, empty falls back to top-N by volume. The "top N" note is shown only when nothing is
-    // selected. The fetch result is the raw row array, so the default array-length count (the band
-    // count) drives the not-enough-data gate.
-    mapProps: (data, params, ctx) => {
-      // The "top N" note is shown only when nothing is selected (a selection isn't a top-N view).
-      const noteKey =
-        params.species.length === 0 ? 'analytics.advanced.charts.succession.note' : undefined;
-      return {
-        series: (data as SuccessionDatum[]).map(d => ({
-          scientificName: d.scientificName,
-          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-          counts: d.counts,
-          total: d.total,
-        })),
-        noteKey,
-      };
-    },
+    // Always a view of the user's species selection (empty selection shows the card's empty state, so
+    // this only ever renders selected species). The fetch result is the raw row array, so the default
+    // array-length count (the band count) drives the not-enough-data gate.
+    mapProps: (data, _params, ctx) => ({
+      series: (data as SuccessionDatum[]).map(d => ({
+        scientificName: d.scientificName,
+        commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
+        counts: d.counts,
+        total: d.total,
+      })),
+    }),
     size: 'full',
     supports: { species: true, source: false },
     // A streamgraph needs at least a few bands to weave into a visible handover; one or two bands is

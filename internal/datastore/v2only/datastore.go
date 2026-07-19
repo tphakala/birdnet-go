@@ -3107,7 +3107,16 @@ func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endD
 	if end != math.MaxInt64 {
 		topEnd--
 	}
-	top, err := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, species, limit)
+	// A species can own several model labels (one per model). Limiting GetTopSpecies by label ROW
+	// would drop the lowest-volume SELECTED species before those rows are merged back into one series
+	// per species. An explicit selection is already bounded by the scientific-name filter, so fetch
+	// all of its label rows (limit 0 = no limit) and let the merge pick the distinct species. The
+	// unfiltered top-N default still honors `limit`.
+	topLimit := limit
+	if len(species) > 0 {
+		topLimit = 0
+	}
+	top, err := ds.detection.GetTopSpecies(ctx, start, topEnd, noConfidenceFloor, nil, species, topLimit)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("datastore").
