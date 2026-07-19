@@ -270,20 +270,21 @@ function getColorLuminance(color: string): number {
 }
 
 /**
- * Generate species color palette based on theme
- * Using a curated palette for better visual distinction
+ * The ordered base species palette for the current theme (12 distinct hues).
+ * Extracted from generateSpeciesColors so callers that need a stable, indexable
+ * palette (e.g. a species->color identity map) can build on the same base
+ * colors rather than duplicating them.
  */
-export function generateSpeciesColors(count: number, theme: ChartTheme): string[] {
+export function speciesPalette(theme: ChartTheme): string[] {
   // Check if we're in dark mode using luminance calculation
-  const backgroundLuminance = getColorLuminance(theme.background);
-  const isDark = backgroundLuminance < 0.5;
+  const isDark = getColorLuminance(theme.background) < 0.5;
 
   // Adjust base opacity based on theme
   const baseOpacity = isDark ? 0.8 : 0.7;
 
   // Use a more diverse color palette for better distinction between species
   // These colors are carefully chosen to be distinguishable in both light and dark themes
-  const baseColors = [
+  return [
     `rgba(59, 130, 246, ${baseOpacity})`, // Blue
     `rgba(16, 185, 129, ${baseOpacity})`, // Green
     `rgba(245, 158, 11, ${baseOpacity})`, // Orange
@@ -297,6 +298,17 @@ export function generateSpeciesColors(count: number, theme: ChartTheme): string[
     `rgba(168, 85, 247, ${baseOpacity})`, // Purple-pink
     `rgba(34, 197, 94, ${baseOpacity})`, // Emerald
   ];
+}
+
+/**
+ * Generate species color palette based on theme
+ * Using a curated palette for better visual distinction
+ */
+export function generateSpeciesColors(count: number, theme: ChartTheme): string[] {
+  // Check if we're in dark mode using luminance calculation (needed below for
+  // the overflow opacity variations, kept in sync with speciesPalette's own).
+  const isDark = getColorLuminance(theme.background) < 0.5;
+  const baseColors = speciesPalette(theme);
 
   if (count <= baseColors.length) {
     return baseColors.slice(0, count);

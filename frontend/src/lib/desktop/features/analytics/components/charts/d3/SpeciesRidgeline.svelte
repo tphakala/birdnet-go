@@ -6,8 +6,9 @@
 
   Each ridge is a d3-shape area with curveBasis; a shared amplitude scale maps the global-max
   density to a fixed pixel height, so a species with concentrated activity rises taller than an
-  all-day one. Species color comes from theme.ts generateSpeciesColors (rgba, so it is never fed to
-  a d3 color interpolator). The scientific name is the stable D3 key; the localized common name is
+  all-day one. Species color comes from utils/speciesColor.ts getSpeciesColor (rgba, so it is never
+  fed to a d3 color interpolator), a shared page-scoped map so a species keeps the same color across
+  the sibling charts. The scientific name is the stable D3 key; the localized common name is
   the row label (re-localized here so it tracks the visitor's locale, matching the sibling charts).
 -->
 <script lang="ts">
@@ -24,8 +25,9 @@
   import { createLinearScale } from './utils/scales';
   import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
-  import { generateSpeciesColors, type ChartTheme } from './utils/theme';
+  import type { ChartTheme } from './utils/theme';
   import { fitTextNode } from './utils/labels';
+  import { getSpeciesColor, registerChart } from './utils/speciesColor';
   import {
     ridgelineLayout,
     peakIndex,
@@ -151,9 +153,8 @@
     if (innerWidth <= 0 || innerHeight <= 0 || rows.length === 0) return;
 
     // layout.rows[i] aligns with rows[i]: both derive from `series` in order (rows is a 1:1
-    // localized map of series), so layoutRow.index indexes `rows`, `colors`, and `series` alike.
+    // localized map of series), so layoutRow.index indexes `rows` and `series` alike.
     const layout = ridgelineLayout(series, innerHeight, RIDGE_OVERLAP);
-    const colors = generateSpeciesColors(rows.length, theme);
 
     // x: density index -> px. All series share the same length (24 hours / N bins); use the widest.
     const xLen = Math.max(1, ...rows.map(r => r.density.length));
@@ -194,7 +195,7 @@
     // Ridges, drawn top row first so lower (front) ridges overlap onto the ones above them.
     for (const layoutRow of layout.rows) {
       const row = rows[layoutRow.index];
-      const color = colors[layoutRow.index] ?? theme.primary;
+      const color = getSpeciesColor(row.scientificName, theme);
       const baseline = layoutRow.baseline;
 
       const gen = d3Area<number>()
@@ -256,6 +257,10 @@
       tooltip = new ChartTooltip(chartContainer);
     }
   });
+
+  // Reference-count this chart so the shared species→color map clears when the
+  // last patterns chart unmounts (fresh colors per page view; no session growth).
+  onMount(() => registerChart());
 
   onDestroy(() => {
     tooltip?.destroy();
