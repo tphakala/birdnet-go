@@ -563,7 +563,7 @@ func TestGetBatchHourlyOccurrences_ScientificNameKey(t *testing.T) {
 		require.NoError(t, ds.DB.Create(&notes[i]).Error)
 	}
 
-	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), "2024-01-15",
+	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), "2024-01-15", "2024-01-15",
 		[]string{"Barbastella barbastellus", "Turdus merula"}, 0.0)
 	require.NoError(t, err)
 

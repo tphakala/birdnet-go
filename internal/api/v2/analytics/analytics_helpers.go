@@ -206,12 +206,6 @@ type hourlyDistributionAdapter struct {
 func (a hourlyDistributionAdapter) GetHour() int  { return a.d.Hour }
 func (a hourlyDistributionAdapter) GetCount() int { return a.d.Count }
 
-// hourlyAnalyticsAdapter adapts HourlyAnalyticsData to hourlyDataItem.
-type hourlyAnalyticsAdapter struct{ d datastore.HourlyAnalyticsData }
-
-func (a hourlyAnalyticsAdapter) GetHour() int  { return a.d.Hour }
-func (a hourlyAnalyticsAdapter) GetCount() int { return a.d.Count }
-
 // fillHourlyFromItems fills in actual counts from hourly data items and returns the total count.
 func fillHourlyFromItems(dest []HourlyDistribution, items []hourlyDataItem) int {
 	totalCount := 0
@@ -230,15 +224,6 @@ func fillHourlyDistribution(dest []HourlyDistribution, source []datastore.Hourly
 	items := make([]hourlyDataItem, len(source))
 	for i, d := range source {
 		items[i] = hourlyDistributionAdapter{d}
-	}
-	return fillHourlyFromItems(dest, items)
-}
-
-// fillHourlyDistributionFromAnalytics fills in actual counts from analytics data and returns the total count.
-func fillHourlyDistributionFromAnalytics(dest []HourlyDistribution, source []datastore.HourlyAnalyticsData) int {
-	items := make([]hourlyDataItem, len(source))
-	for i, d := range source {
-		items[i] = hourlyAnalyticsAdapter{d}
 	}
 	return fillHourlyFromItems(dest, items)
 }

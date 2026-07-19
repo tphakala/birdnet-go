@@ -1311,26 +1311,35 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 // of the number of species. A failure in either query is returned to the caller rather
 // than silently zeroing a species, so a cancelled context aborts the request instead of
 // producing partial counts.
-func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error) {
+func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, endDate string, species []string, minConfidence float64) (map[string][24]int, error) {
 	if len(species) == 0 {
 		return make(map[string][24]int), nil
 	}
 
-	// Parse date
-	targetDate, err := time.ParseInLocation(time.DateOnly, date, ds.timezone)
+	// Parse the inclusive range bounds.
+	firstDate, err := time.ParseInLocation(time.DateOnly, startDate, ds.timezone)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "get_batch_hourly_occurrences").
-			Context("date", date).
+			Context("start_date", startDate).
+			Build()
+	}
+	lastDate, err := time.ParseInLocation(time.DateOnly, endDate, ds.timezone)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_batch_hourly_occurrences").
+			Context("end_date", endDate).
 			Build()
 	}
 
-	// Calculate Unix timestamp range for the date
-	// Use calendar-based arithmetic to handle DST transitions correctly
-	startOfDay := targetDate.Unix()
-	endOfDay := targetDate.AddDate(0, 0, 1).Unix()
+	// Calculate the Unix timestamp range. endDate is inclusive, so the exclusive upper bound is
+	// the start of the day *after* it. Calendar-based arithmetic handles DST transitions correctly.
+	startOfDay := firstDate.Unix()
+	endOfDay := lastDate.AddDate(0, 0, 1).Unix()
 
 	// Resolve all scientific names to label IDs in one batched query (avoids the
 	// per-species N+1 round-trip). The returned map is keyed by the stored scientific

@@ -93,9 +93,27 @@ function ensureOk(response: Response): void {
 
 // --- Fetchers (verbatim endpoints/params from the legacy page) -------------
 
+// Milliseconds per day, for the inclusive day count used to average the range.
+const MS_PER_DAY = 86_400_000;
+
 /**
- * Hourly detection counts for the range's start date, per selected species.
- * Endpoint and the single-date semantics match the legacy page exactly.
+ * Inclusive number of calendar days spanned by [start, end].
+ *
+ * Compared on local calendar dates (not raw timestamps) so a DST shift inside the range cannot
+ * round the count up or down by a day. Always at least 1 so the average never divides by zero.
+ */
+function daysInRange(start: Date, end: Date): number {
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
+  return Math.max(1, Math.round((endDay - startDay) / MS_PER_DAY) + 1);
+}
+
+/**
+ * Hour-of-day detection pattern for the selected date range, per selected species.
+ *
+ * The endpoint returns each hour's total summed across the whole range; dividing by the number of
+ * days yields the average detections per day for that hour, which is what the chart plots. Averaging
+ * (rather than plotting the raw total) keeps the Y axis comparable when the range length changes.
  */
 async function fetchTimeOfDay(
   params: AnalyticsParams,
@@ -104,7 +122,8 @@ async function fetchTimeOfDay(
   if (params.species.length === 0) return [];
 
   const search = new URLSearchParams({
-    date: formatDateForAPI(params.startDate),
+    start_date: formatDateForAPI(params.startDate),
+    end_date: formatDateForAPI(params.endDate),
     min_confidence: '0',
   });
   params.species.forEach(name => search.append('species', name));
@@ -119,12 +138,15 @@ async function fetchTimeOfDay(
     throw new Error('Invalid hourly batch response: expected an object');
   }
 
+  const days = daysInRange(params.startDate, params.endDate);
+
   return Object.entries(data as Record<string, unknown>).map(([species, hourlyData]) => ({
     species,
     data: Array.isArray(hourlyData)
       ? (hourlyData as TimeOfDayDatum[]).map(item => ({
           hour: typeof item.hour === 'number' ? item.hour : 0,
-          count: typeof item.count === 'number' ? item.count : 0,
+          // Range total -> average per day, rounded to 2dp so tooltips stay readable.
+          count: typeof item.count === 'number' ? Math.round((item.count / days) * 100) / 100 : 0,
         }))
       : [],
   }));
