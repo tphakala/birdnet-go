@@ -4,7 +4,7 @@
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { generateId } from '$lib/utils/uuid';
-  import { X, Trash2, Plus, Search, TriangleAlert } from '@lucide/svelte';
+  import { X, Trash2, Plus, Search, TriangleAlert, Check } from '@lucide/svelte';
   import type { Species } from '$lib/types/species';
 
   interface Props {
@@ -435,15 +435,19 @@
                 onclick={() => canSelect && toggleSpecies(species)}
               >
                 <div class="flex items-center gap-4 flex-1 min-w-0">
-                  <!-- Visual checkbox indicator -->
+                  <!-- Visual checkbox indicator (button row is non-interactive content-wise) -->
                   <span
                     class={cn(
-                      'checkbox checkbox-primary checkbox-sm shrink-0',
-                      isSelected && 'checkbox-checked',
-                      !canSelect && 'checkbox-disabled'
+                      'inline-flex items-center justify-center size-4 rounded border shrink-0 transition-colors',
+                      isSelected
+                        ? 'bg-primary border-primary text-primary-content'
+                        : 'border-base-content/30'
                     )}
+                    data-checked={isSelected ? 'true' : 'false'}
                     aria-hidden="true"
-                  ></span>
+                  >
+                    {#if isSelected}<Check class="size-3" />{/if}
+                  </span>
 
                   <!-- Species Info -->
                   <div class="text-left flex-1 min-w-0">
