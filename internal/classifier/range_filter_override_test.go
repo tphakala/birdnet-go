@@ -127,6 +127,12 @@ func TestGetProbableSpecies_BareLocalizedCommonNameOverride_CanonicalizesLabel(t
 	labels := make([]string, 0, len(scores))
 	for _, ss := range scores {
 		labels = append(labels, ss.Label)
+		if ss.Label == "Parus major_Talitiainen" {
+			assert.True(t, ss.IsManuallyIncluded,
+				"canonicalized override score must retain its user-override provenance")
+			assert.True(t, ss.IsSyntheticOverride,
+				"out-of-range override must remain identifiable as a synthetic score")
+		}
 	}
 	assert.Contains(t, labels, "Parus major_Talitiainen",
 		"override must be canonicalized to the classifier's Scientific_Common label")
@@ -341,6 +347,7 @@ func TestAddUserOverrideSpeciesScores_Provenance(t *testing.T) {
 		label             string
 		wantCustomConfig  bool
 		wantManualInclude bool
+		wantSynthetic     bool
 		wantScore         float64
 	}{
 		{
@@ -353,6 +360,7 @@ func TestAddUserOverrideSpeciesScores_Provenance(t *testing.T) {
 			config:           map[string]conf.SpeciesConfig{"Great Tit": {Threshold: 0.5}},
 			label:            "Parus major_Great Tit",
 			wantCustomConfig: true,
+			wantSynthetic:    true,
 			wantScore:        1.0,
 		},
 		{
@@ -371,7 +379,18 @@ func TestAddUserOverrideSpeciesScores_Provenance(t *testing.T) {
 			include:           []string{"Great Tit"},
 			label:             "Parus major_Great Tit",
 			wantManualInclude: true,
+			wantSynthetic:     true,
 			wantScore:         1.0,
+		},
+		{
+			// An include matching an existing geomodel row must add provenance
+			// without replacing the native probability with the 1.0 sentinel.
+			name:              "include on an already-scored species flags in place",
+			include:           []string{"Common Blackbird"},
+			label:             "Turdus merula_Common Blackbird",
+			wantManualInclude: true,
+			wantSynthetic:     false,
+			wantScore:         0.9,
 		},
 		{
 			name:              "include and config union onto one entry",
@@ -380,6 +399,7 @@ func TestAddUserOverrideSpeciesScores_Provenance(t *testing.T) {
 			label:             "Parus major_Great Tit",
 			wantCustomConfig:  true,
 			wantManualInclude: true,
+			wantSynthetic:     true,
 			wantScore:         1.0,
 		},
 		{
@@ -412,6 +432,7 @@ func TestAddUserOverrideSpeciesScores_Provenance(t *testing.T) {
 			got := requireScoreForLabel(t, scores, tt.label)
 			assert.Equal(t, tt.wantCustomConfig, got.HasCustomConfig, "HasCustomConfig")
 			assert.Equal(t, tt.wantManualInclude, got.IsManuallyIncluded, "IsManuallyIncluded")
+			assert.Equal(t, tt.wantSynthetic, got.IsSyntheticOverride, "IsSyntheticOverride")
 			assert.InDelta(t, tt.wantScore, got.Score, 1e-9, "score")
 		})
 	}
