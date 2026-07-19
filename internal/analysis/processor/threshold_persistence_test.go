@@ -167,7 +167,7 @@ func (m *MockDatastore) GetSpeciesDiversityData(context.Context, string, string)
 func (m *MockDatastore) GetActivityHeatmap(context.Context, string, string, string) (datastore.ActivityHeatmapData, error) {
 	return datastore.ActivityHeatmapData{}, nil
 }
-func (m *MockDatastore) GetHourlyDistributionBySpecies(context.Context, string, string, int) ([]datastore.SpeciesHourlyDistribution, error) {
+func (m *MockDatastore) GetHourlyDistributionBySpecies(context.Context, string, string, []string, int) ([]datastore.SpeciesHourlyDistribution, error) {
 	return []datastore.SpeciesHourlyDistribution{}, nil
 }
 func (m *MockDatastore) GetDailyActivityOnset(context.Context, string, string, string) ([]datastore.DailyActivityOnset, error) {
@@ -189,7 +189,7 @@ func (m *MockDatastore) GetYearOverYear(_ context.Context, _ string) (datastore.
 func (m *MockDatastore) GetSpeciesPhenology(context.Context, string, string, int) ([]datastore.SpeciesPhenologyPoint, error) {
 	return []datastore.SpeciesPhenologyPoint{}, nil
 }
-func (m *MockDatastore) GetAcousticSuccession(context.Context, string, string, int) ([]datastore.SpeciesHourlyCounts, error) {
+func (m *MockDatastore) GetAcousticSuccession(context.Context, string, string, []string, int) ([]datastore.SpeciesHourlyCounts, error) {
 	return []datastore.SpeciesHourlyCounts{}, nil
 }
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {

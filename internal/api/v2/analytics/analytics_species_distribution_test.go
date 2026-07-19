@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,7 +47,7 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Default limit (no ?limit) is the ridgeline's top-5.
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", 5).
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
 		Return(sampleSpeciesDistribution(), nil)
 
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
@@ -65,11 +66,80 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetSpeciesHourlyDistribution_ForwardsSpeciesFilter verifies the ridgeline endpoint parses the
+// repeated ?species query param (trimming, dropping empties, and collapsing case-insensitive
+// duplicates) and forwards the resulting scientific-name filter to the datastore.
+func TestGetSpeciesHourlyDistribution_ForwardsSpeciesFilter(t *testing.T) {
+	t.Parallel()
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	// A repeated ?species filter is trimmed, empty-filtered, case-insensitively de-duplicated, and
+	// forwarded to the datastore so the ridgeline narrows to the selection instead of the top-N
+	// default. The trailing "turdus migratorius" is a case-variant duplicate that must collapse.
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02",
+		[]string{"Turdus migratorius", "Turdus merula"}, 5).
+		Return(sampleSpeciesDistribution(), nil)
+
+	c, rec := newSpeciesDistributionContext(e,
+		"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"+
+			"&species=Turdus+migratorius&species=+Turdus+merula+&species=&species=turdus+migratorius")
+	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	mockDS.AssertExpectations(t)
+}
+
+// TestGetSpeciesHourlyDistribution_RejectsOversizedSpeciesFilter verifies the repeated ?species
+// param is bounded. The datastore drops its row limit once a species filter is present, so `limit`
+// no longer caps this path and the selection itself is the only bound; an unbounded filter would let
+// a client dictate the IN-list size, the row count and the response size. The cap matches the batch
+// time-of-day endpoints (maxSpeciesBatch) and the control bar's MAX_SPECIES, so a legitimate UI
+// selection always fits. The datastore must not be reached at all when the guard trips.
+func TestGetSpeciesHourlyDistribution_RejectsOversizedSpeciesFilter(t *testing.T) {
+	t.Parallel()
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	query := "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"
+	for i := range maxSpeciesBatch + 1 {
+		query += fmt.Sprintf("&species=Species+%d", i)
+	}
+
+	c, rec := newSpeciesDistributionContext(e, query)
+	// The guard writes the 400 itself and reports it with the package's ErrResponseHandled sentinel,
+	// matching every other validation helper in this handler.
+	err := controller.GetSpeciesHourlyDistribution(c)
+	require.ErrorIs(t, err, ErrResponseHandled)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	mockDS.AssertNotCalled(t, "GetHourlyDistributionBySpecies")
+}
+
+// TestGetSpeciesHourlyDistribution_AllowsMaxSpeciesFilter pins the boundary: exactly maxSpeciesBatch
+// species is accepted and forwarded, so the guard above cannot drift into rejecting a full selection.
+func TestGetSpeciesHourlyDistribution_AllowsMaxSpeciesFilter(t *testing.T) {
+	t.Parallel()
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	query := "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02"
+	want := make([]string, 0, maxSpeciesBatch)
+	for i := range maxSpeciesBatch {
+		query += fmt.Sprintf("&species=Species+%d", i)
+		want = append(want, fmt.Sprintf("Species %d", i))
+	}
+
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02",
+		want, defaultSpeciesRidgelineLimit).
+		Return(sampleSpeciesDistribution(), nil)
+
+	c, rec := newSpeciesDistributionContext(e, query)
+	require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	mockDS.AssertExpectations(t)
+}
+
 func TestGetSpeciesHourlyDistribution_EmptyArrayNotNull(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", 5).
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
 		Return([]datastore.SpeciesHourlyDistribution{}, nil)
 
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")
@@ -88,7 +158,7 @@ func TestGetSpeciesHourlyDistribution_DefaultsEndDate(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// With end_date omitted the handler defaults it to a 30-day window: 2026-03-01 + 30d = 2026-03-31.
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-31", 5).
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-31", []string(nil), 5).
 		Return(sampleSpeciesDistribution(), nil)
 
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01")
@@ -100,33 +170,36 @@ func TestGetSpeciesHourlyDistribution_DefaultsEndDate(t *testing.T) {
 func TestGetSpeciesHourlyDistribution_ClampsLimit(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name      string
-		limitParm string
-		wantLimit int
-	}{
+	tests := []LimitClampTestCase{
 		{"valid in range passes through", "3", 3},
-		{"max allowed passes through", "8", 8},
+		{"max allowed passes through", "10", 10},
 		{"over max falls back to default", "99", defaultSpeciesRidgelineLimit},
 		{"zero falls back to default", "0", defaultSpeciesRidgelineLimit},
 		{"non-numeric falls back to default", "abc", defaultSpeciesRidgelineLimit},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+	runLimitClampTests(t, tests, func(t *testing.T, tc LimitClampTestCase) {
+		t.Helper()
 
-			mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", tt.wantLimit).
-				Return(sampleSpeciesDistribution(), nil)
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-			c, rec := newSpeciesDistributionContext(e,
-				"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02&limit="+tt.limitParm)
-			require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
-			require.Equal(t, http.StatusOK, rec.Code)
-			mockDS.AssertExpectations(t)
-		})
-	}
+		mockDS.On("GetHourlyDistributionBySpecies",
+			mock.Anything,
+			"2026-03-01",
+			"2026-03-02",
+			[]string(nil),
+			tc.WantLimit,
+		).Return(sampleSpeciesDistribution(), nil)
+
+		c, rec := newSpeciesDistributionContext(
+			e,
+			"/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
+		)
+
+		require.NoError(t, controller.GetSpeciesHourlyDistribution(c))
+		require.Equal(t, http.StatusOK, rec.Code)
+		mockDS.AssertExpectations(t)
+	})
 }
 
 func TestGetSpeciesHourlyDistribution_MissingStartDate(t *testing.T) {
@@ -153,7 +226,7 @@ func TestGetSpeciesHourlyDistribution_QueryTimeout(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", 5).
+	mockDS.On("GetHourlyDistributionBySpecies", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 5).
 		Return([]datastore.SpeciesHourlyDistribution(nil), context.DeadlineExceeded)
 
 	c, rec := newSpeciesDistributionContext(e, "/api/v2/analytics/time/distribution/species?start_date=2026-03-01&end_date=2026-03-02")

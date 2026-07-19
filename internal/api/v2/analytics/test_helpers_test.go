@@ -115,3 +115,24 @@ func assertSpeciesDailySummary(t *testing.T, species *SpeciesDailySummary, expec
 	assert.Equal(t, expected.HighConfidence, species.HighConfidence, "%s high confidence mismatch", expected.CommonName)
 	assert.Contains(t, species.ThumbnailURL, expected.ThumbnailURLContain, "%s thumbnail URL mismatch", expected.CommonName)
 }
+
+type LimitClampTestCase struct {
+	Name      string
+	LimitParm string
+	WantLimit int
+}
+
+func runLimitClampTests(
+	t *testing.T,
+	tests []LimitClampTestCase,
+	run func(t *testing.T, tc LimitClampTestCase),
+) {
+	t.Helper()
+
+	for _, tc := range tests {
+		t.Run(tc.Name, func(t *testing.T) {
+			t.Parallel()
+			run(t, tc)
+		})
+	}
+}

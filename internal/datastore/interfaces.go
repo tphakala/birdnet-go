@@ -198,9 +198,12 @@ type Interface interface {
 	// over the inclusive date range, as a columnar sparse payload. species is an optional filter.
 	GetActivityHeatmap(ctx context.Context, startDate, endDate, species string) (ActivityHeatmapData, error)
 	// GetHourlyDistributionBySpecies returns the normalized hour-of-day activity distribution for
-	// the top `limit` species by detection volume over the inclusive date range (false positives
-	// excluded), ordered by descending volume. Powers the who-sings-when ridgeline.
-	GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyDistribution, error)
+	// species over the inclusive date range (false positives excluded), ordered by descending
+	// detection volume. species is an optional scientific-name filter: when non-empty the result is
+	// restricted to those species and `limit` does NOT apply (every selected species is returned, so
+	// the caller must bound the selection itself); when nil/empty it covers the top `limit` species by
+	// volume. Powers the who-sings-when ridgeline.
+	GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, species []string, limit int) ([]SpeciesHourlyDistribution, error)
 	// GetDailyActivityOnset returns, per calendar day in the inclusive date range, the dawn-chorus
 	// onset relative to civil dawn (false positives excluded). species is an optional scientific-name
 	// filter. Powers the dawn-chorus onset tracker.
@@ -226,9 +229,12 @@ type Interface interface {
 	// tab; spans are bounded to the selected window, not lifetime.
 	GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesPhenologyPoint, error)
 	// GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded)
-	// for the top `limit` species by detection volume over the inclusive date range, ordered by
-	// descending volume. Powers the acoustic succession streamgraph in the Activity Patterns tab.
-	GetAcousticSuccession(ctx context.Context, startDate, endDate string, limit int) ([]SpeciesHourlyCounts, error)
+	// for species over the inclusive date range, ordered by descending detection volume. species is an
+	// optional scientific-name filter: when non-empty the result is restricted to those species and
+	// `limit` does NOT apply (every selected species is returned, so the caller must bound the
+	// selection itself); when nil/empty it covers the top `limit` species by volume.
+	// Powers the acoustic succession streamgraph in the Activity Patterns tab.
+	GetAcousticSuccession(ctx context.Context, startDate, endDate string, species []string, limit int) ([]SpeciesHourlyCounts, error)
 	// GetAudioSources returns each audio source that has at least one (false-positive-excluded)
 	// detection in the date range, with its in-range detection count, ordered by count descending. When
 	// both dates are empty it covers all history. Powers the analytics source/mic filter's option list;

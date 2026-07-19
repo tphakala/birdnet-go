@@ -22,12 +22,12 @@ interface SuccessionRow {
   total: number;
 }
 
-function makeParams(): AnalyticsParams {
+function makeParams(species: string[] = ['Turdus merula']): AnalyticsParams {
   return {
     range: 'month',
     start: '2026-03-01',
     end: '2026-03-31',
-    species: ['Turdus merula'],
+    species,
     source: '',
     startDate: new Date('2026-03-01T00:00:00'),
     endDate: new Date('2026-03-31T00:00:00'),
@@ -51,10 +51,10 @@ describe('acoustic-succession chart def', () => {
     vi.unstubAllGlobals();
   });
 
-  it('is registered in the patterns group as a top-N streamgraph', () => {
+  it('is registered in the patterns group as a species-aware streamgraph', () => {
     expect(chartDef.group).toBe('patterns');
     // Like the sibling ridgeline, supports.species lets the patterns tab's auto-select run; the chart
-    // ignores the selection and shows the top N (its note says so).
+    // only ever shows the user's selection (empty selection renders the card's empty state).
     expect(chartDef.supports.species).toBe(true);
     expect(chartDef.supports.source).toBe(false);
     // A streamgraph needs a few bands to read as a handover, not just two.
@@ -66,7 +66,32 @@ describe('acoustic-succession chart def', () => {
     expect(chartDef.countDataPoints).toBeUndefined();
   });
 
-  it('fetches the top-N succession payload, coercing counts and dropping nameless rows', async () => {
+  it('forwards a non-empty species selection and skips the request when empty', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Selection present: each selected scientific name is sent as a repeated species param, and the
+    // limit equals the selection size so every selected band is returned rather than the lowest-volume
+    // picks being pushed off a fixed top-N.
+    await chartDef.fetch(makeParams(['Turdus merula', 'Apus apus']));
+    const withSel = fetchMock.mock.calls[0][0] as string;
+    expect(withSel).toContain('species=Turdus+merula');
+    expect(withSel).toContain('species=Apus+apus');
+    expect(withSel).toContain('limit=2');
+
+    // Empty selection: the chart honors the selection at all times, so it returns [] without a request
+    // (the card then shows its "pick species" empty state) rather than falling back to a top-N default.
+    const empty = await chartDef.fetch(makeParams([]));
+    expect(empty).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('fetches the succession payload, coercing counts and dropping nameless rows', async () => {
     const overlong = Array.from({ length: 30 }, (_, i) => i); // 30 buckets -> truncated to 24
     const payload = [
       {
@@ -91,9 +116,10 @@ describe('acoustic-succession chart def', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('/api/v2/analytics/time/succession');
-    // Top-N chart: the species filter is never sent even though params has a selection. The limit is.
-    expect(url).not.toContain('species=');
-    expect(url).toContain('limit=6');
+    // The selection in makeParams() is forwarded as a species filter; the limit equals the one-species
+    // selection so exactly that species is returned.
+    expect(url).toContain('species=Turdus+merula');
+    expect(url).toContain('limit=1');
 
     expect(result).toHaveLength(3);
     // Every row's counts are coerced to exactly 24 finite, non-negative buckets.
@@ -144,12 +170,11 @@ describe('acoustic-succession chart def', () => {
       },
     ];
     const ctx = makeCtx({ 'Turdus merula': 'Eurasian Blackbird' });
-    const props = chartDef.mapProps?.(raw, makeParams(), ctx) ?? {};
+    const props = chartDef.mapProps?.(raw, makeParams(['Turdus merula']), ctx) ?? {};
     const series = props.series as SuccessionRow[];
     expect(series).toHaveLength(2);
     expect(series[0].commonName).toBe('Eurasian Blackbird');
     // No mapping -> falls back to the scientific name.
     expect(series[1].commonName).toBe('Apus apus');
-    expect(props.noteKey).toBe('analytics.advanced.charts.succession.note');
   });
 });

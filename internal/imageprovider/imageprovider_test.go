@@ -300,7 +300,7 @@ func (m *mockStore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]d
 func (m *mockStore) GetActivityHeatmap(_ context.Context, _, _, _ string) (datastore.ActivityHeatmapData, error) {
 	return datastore.ActivityHeatmapData{}, nil
 }
-func (m *mockStore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesHourlyDistribution, error) {
+func (m *mockStore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ []string, _ int) ([]datastore.SpeciesHourlyDistribution, error) {
 	return []datastore.SpeciesHourlyDistribution{}, nil
 }
 func (m *mockStore) GetDailyActivityOnset(_ context.Context, _, _, _ string) ([]datastore.DailyActivityOnset, error) {
@@ -322,7 +322,7 @@ func (m *mockStore) GetYearOverYear(_ context.Context, _ string) (datastore.Year
 func (m *mockStore) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesPhenologyPoint, error) {
 	return []datastore.SpeciesPhenologyPoint{}, nil
 }
-func (m *mockStore) GetAcousticSuccession(_ context.Context, _, _ string, _ int) ([]datastore.SpeciesHourlyCounts, error) {
+func (m *mockStore) GetAcousticSuccession(_ context.Context, _, _ string, _ []string, _ int) ([]datastore.SpeciesHourlyCounts, error) {
 	return []datastore.SpeciesHourlyCounts{}, nil
 }
 

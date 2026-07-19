@@ -264,12 +264,22 @@ function coerceCells(cells: { dateIndex?: unknown; slot?: unknown; count?: unkno
  * Returns the server's columnar sparse payload, defensively coerced.
  */
 async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Promise<HeatmapData> {
+  // Every patterns chart honors the species selection: with none selected, return an empty heatmap so
+  // the card shows its "pick species" empty state instead of aggregating every species.
+  if (params.species.length === 0) {
+    return {
+      dates: [],
+      slotResolutionMinutes: DEFAULT_SLOT_RESOLUTION_MINUTES,
+      cells: coerceCells({}),
+    };
+  }
+
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
   });
-  // The endpoint filters by a single species; use the first selected (none = all species).
-  if (params.species.length > 0) search.append('species', params.species[0]);
+  // The endpoint filters by a single species; use the first selected.
+  search.append('species', params.species[0]);
 
   const response = await fetch(buildAppUrl(`/api/v2/analytics/time/heatmap?${search}`), { signal });
   ensureOk(response);
@@ -309,19 +319,28 @@ interface SpeciesDistributionDatum {
 }
 
 /**
- * Who-sings-when ridgeline: the top-N species by detection volume in range, each with a normalized
- * 24-bucket hour-of-day distribution. Server-ranked and server-normalized; this defensively coerces
- * the array payload. Common names are resolved later (registry mapProps) from the hub's species map.
+ * Who-sings-when ridgeline: per-species normalized 24-bucket hour-of-day distributions. With no
+ * species selected it is the top-N by detection volume in range; with a selection it is those species
+ * (still volume-ordered, capped at the limit), so Clear reverts to the top-N. Server-ranked and
+ * server-normalized; this defensively coerces the array payload. Common names are resolved later
+ * (registry mapProps) from the hub's species map.
  */
 async function fetchSpeciesDistribution(
   params: AnalyticsParams,
   signal?: AbortSignal
 ): Promise<SpeciesDistributionDatum[]> {
+  // Every patterns chart honors the species selection: with none selected, return empty so the card
+  // shows its "pick species" empty state instead of a top-N default (matches fetchTimeOfDay).
+  if (params.species.length === 0) return [];
+
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
-    limit: String(SPECIES_RIDGELINE_LIMIT),
+    // Request one row per selected species so the server's volume-ordered LIMIT returns all of them
+    // (a species owning several model labels would otherwise push the lowest-volume picks off).
+    limit: String(params.species.length),
   });
+  params.species.forEach(name => search.append('species', name));
 
   const response = await fetch(
     buildAppUrl(`/api/v2/analytics/time/distribution/species?${search}`),
@@ -367,22 +386,29 @@ interface SuccessionDatum {
 }
 
 /**
- * Acoustic succession streamgraph: the top-N species by detection volume in range, each with their
- * raw 24-bucket hour-of-day detection counts. Like the who-sings-when ridgeline (#1159) it always
- * requests the top-N and does not honor the species filter, so the chart shows the diel acoustic
- * handover among the dominant species rather than a single species; the server ranks. Defensively
- * coerces the array payload, padding/truncating counts to 24 so the chart's hour axis stays
- * well-defined even on a malformed payload.
+ * Acoustic succession streamgraph: per-species raw 24-bucket hour-of-day detection counts. With no
+ * species selected it is the top-N by detection volume in range (the diel acoustic handover among the
+ * dominant species); with a selection it is those species (still volume-ordered, capped at the
+ * limit), so Clear reverts to the top-N. The server ranks. Defensively coerces the array payload,
+ * padding/truncating counts to 24 so the chart's hour axis stays well-defined even on a malformed
+ * payload.
  */
 async function fetchAcousticSuccession(
   params: AnalyticsParams,
   signal?: AbortSignal
 ): Promise<SuccessionDatum[]> {
+  // Every patterns chart honors the species selection: with none selected, return empty so the card
+  // shows its "pick species" empty state instead of a top-N default (matches fetchTimeOfDay).
+  if (params.species.length === 0) return [];
+
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
-    limit: String(SUCCESSION_LIMIT),
+    // Request one band per selected species so the server's volume-ordered LIMIT returns all of them
+    // (a species owning several model labels would otherwise push the lowest-volume picks off).
+    limit: String(params.species.length),
   });
+  params.species.forEach(name => search.append('species', name));
 
   const response = await fetch(buildAppUrl(`/api/v2/analytics/time/succession?${search}`), {
     signal,
@@ -431,12 +457,16 @@ async function fetchDawnOnset(
   params: AnalyticsParams,
   signal?: AbortSignal
 ): Promise<DawnOnsetData> {
+  // Every patterns chart honors the species selection: with none selected, return empty so the card
+  // shows its "pick species" empty state instead of aggregating every species.
+  if (params.species.length === 0) return { points: [] };
+
   const search = new URLSearchParams({
     start_date: formatDateForAPI(params.startDate),
     end_date: formatDateForAPI(params.endDate),
   });
-  // The endpoint filters by a single species; use the first selected (none = all species).
-  if (params.species.length > 0) search.append('species', params.species[0]);
+  // The endpoint filters by a single species; use the first selected.
+  search.append('species', params.species[0]);
 
   const response = await fetch(buildAppUrl(`/api/v2/analytics/time/dawn-onset?${search}`), {
     signal,
@@ -819,8 +849,8 @@ export const CHART_REGISTRY: ChartDef[] = [
     emptyHintKey: 'analytics.advanced.charts.ridgeline.noDataHint',
     component: SpeciesRidgeline,
     fetch: fetchSpeciesDistribution,
-    // The endpoint is always top-N by volume; supports.species lets the patterns tab's species
-    // auto-select run, and the chart notes that it shows the top N regardless of selection.
+    // Always a view of the user's species selection (empty selection shows the card's empty state, so
+    // this only ever renders selected species).
     mapProps: (data, _params, ctx) => ({
       series: (data as SpeciesDistributionDatum[]).map(d => ({
         scientificName: d.scientificName,
@@ -828,7 +858,6 @@ export const CHART_REGISTRY: ChartDef[] = [
         density: d.density,
         total: d.total,
       })),
-      noteKey: 'analytics.advanced.charts.ridgeline.note',
     }),
     size: 'full',
     supports: { species: true, source: false },
@@ -845,10 +874,9 @@ export const CHART_REGISTRY: ChartDef[] = [
     emptyHintKey: 'analytics.advanced.charts.succession.noDataHint',
     component: AcousticSuccessionChart,
     fetch: fetchAcousticSuccession,
-    // The endpoint is always top-N by volume; like the sibling ridgeline, supports.species lets the
-    // patterns tab's species auto-select run, and the chart's note states it shows the top N
-    // regardless of selection. The fetch result is the raw row array, so the default array-length
-    // count (the band count) drives the not-enough-data gate.
+    // Always a view of the user's species selection (empty selection shows the card's empty state, so
+    // this only ever renders selected species). The fetch result is the raw row array, so the default
+    // array-length count (the band count) drives the not-enough-data gate.
     mapProps: (data, _params, ctx) => ({
       series: (data as SuccessionDatum[]).map(d => ({
         scientificName: d.scientificName,
@@ -856,7 +884,6 @@ export const CHART_REGISTRY: ChartDef[] = [
         counts: d.counts,
         total: d.total,
       })),
-      noteKey: 'analytics.advanced.charts.succession.note',
     }),
     size: 'full',
     supports: { species: true, source: false },
