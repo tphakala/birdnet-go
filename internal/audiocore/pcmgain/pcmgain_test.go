@@ -99,3 +99,56 @@ func TestApplyInt16_ZeroAlloc(t *testing.T) {
 	})
 	assert.Zero(t, allocs, "ApplyInt16 must not allocate")
 }
+
+// FactorFromDB is the dB law every native encoder's gain goes through, so it is
+// pinned against independently computed literals rather than against another
+// call to the production code. An earlier version of the FLAC test derived its
+// expected buffer by calling FactorFromDB itself, which made the assertion
+// f(x) == f(x): swapping the exponent to gainDB/10 left the whole codec suite
+// green. These literals are 10^(dB/20) computed by hand.
+func TestFactorFromDB(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		gainDB float64
+		want   float64
+	}{
+		{name: "unity at zero", gainDB: 0, want: 1},
+		{name: "minus 6 dB halves amplitude", gainDB: -6, want: 0.5011872336272722},
+		{name: "plus 6 dB doubles amplitude", gainDB: 6, want: 1.9952623149688795},
+		{name: "minus 20 dB is one tenth", gainDB: -20, want: 0.1},
+		{name: "plus 20 dB is ten times", gainDB: 20, want: 10},
+		{name: "minus 3 dB", gainDB: -3, want: 0.7079457843841379},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.InDelta(t, tt.want, FactorFromDB(tt.gainDB), 1e-12)
+		})
+	}
+}
+
+// Applied returns the source itself at 0 dB so the common no-gain export stays
+// zero-copy, and a fresh buffer otherwise. Callers rely on both halves: the
+// aliasing one because the same PCM is handed to the spectrogram pre-renderer
+// afterwards, the copying one because the source must not be mutated.
+func TestApplied(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero dB aliases the source", func(t *testing.T) {
+		t.Parallel()
+		src := pcm16(100, -100, 1000)
+		got := Applied(src, 0)
+		assert.Equal(t, &src[0], &got[0], "0 dB must not copy")
+	})
+
+	t.Run("non-zero dB copies and leaves the source intact", func(t *testing.T) {
+		t.Parallel()
+		src := pcm16(100, -100, 1000)
+		srcCopy := bytes.Clone(src)
+		got := Applied(src, -6)
+		assert.NotEqual(t, &src[0], &got[0], "a gained result must be a new buffer")
+		assert.Equal(t, srcCopy, src, "source must be unchanged")
+		assert.Equal(t, []int16{50, -50, 501}, samples16(got))
+	})
+}

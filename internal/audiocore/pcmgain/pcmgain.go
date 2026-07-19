@@ -37,10 +37,16 @@ func FactorFromDB(gainDB float64) float64 {
 // float. A trailing odd byte (not produced by real int16 PCM) is copied through
 // unchanged so dst is always fully written.
 //
-// This is a pure-Go single pass rather than a SIMD path: github.com/tphakala/simd
-// exposes no int16 scale primitive, and routing through its f64 scale would need
-// two full-width buffers and two passes, which is slower for this
-// memory-bandwidth-bound 16-bit operation.
+// This is a pure-Go single pass rather than a SIMD path, but NOT because SIMD
+// would be slower: routing through github.com/tphakala/simd's float32 scale
+// primitives (Int16ToFloat32Scale / Float32ToInt16Scale, both with amd64 and
+// arm64 assembly) measures roughly 13x faster on a 720k-sample clip. It is
+// rejected on correctness and scale instead. simd exposes no int16 sample API,
+// so the route needs an unsafe reinterpretation of []byte as []int16 that only
+// holds on little-endian hosts; the float32 round trip is not bit-exact with
+// math.Round, differing by 1 LSB on a fraction of samples; and gain runs once
+// per detection, where the whole kernel is about 1% of an encode, so the
+// absolute saving is ~2 ms. Revisit only if this moves to a per-frame path.
 func ApplyInt16(dst, src []byte, factor float64) {
 	n := len(src) &^ 1 // largest even length <= len(src)
 	for i := 0; i < n; i += 2 {

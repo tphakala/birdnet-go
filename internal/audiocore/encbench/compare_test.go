@@ -1,9 +1,8 @@
-//go:build enccompare
+//go:build enccompare && unix
 
 package encbench
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"os"
@@ -40,7 +39,9 @@ const (
 // deliberately different measurements, because the two paths spend memory in
 // different places: a native encoder allocates on this process's Go heap, while
 // FFmpeg pays for a whole separate process image. heapPerOp captures the
-// former, childRSSKB the latter, and for any given encoder one of them is zero.
+// former and childRSSKB the latter. childRSSKB reads zero only until the first
+// FFmpeg row; after that every row inherits that peak, because the underlying
+// counter is a high-water mark (see the closing note the report prints).
 type usage struct {
 	wall       time.Duration
 	cpu        time.Duration
@@ -77,8 +78,7 @@ func measure(t *testing.T, encode func() error) usage {
 	var heapBefore, heapAfter runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&heapBefore)
-	_, childBefore := snapshot(t)
-	selfBefore, _ := snapshot(t)
+	selfBefore, childBefore := snapshot(t)
 
 	start := time.Now()
 	for range iterations {
@@ -108,8 +108,9 @@ func pcmClip() []byte {
 		v := 0.35*math.Sin(2*math.Pi*1200*tt) +
 			0.25*math.Sin(2*math.Pi*3400*tt) +
 			0.15*math.Sin(2*math.Pi*7100*tt)
-		b[i*2] = byte(int16(v * 24000))
-		b[i*2+1] = byte(int16(v*24000) >> 8)
+		s := int16(v * 24000)
+		b[i*2] = byte(s)
+		b[i*2+1] = byte(s >> 8)
 	}
 	return b
 }
@@ -132,7 +133,7 @@ func TestCompareEncoders(t *testing.T) {
 
 	pcm := pcmClip()
 	dir := t.TempDir()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	ffmpegEncode := func(format, out string, bitrate string) func() error {
 		return func() error {
@@ -203,26 +204,29 @@ func TestCompareEncoders(t *testing.T) {
 	}
 
 	out := t.Output()
-	fmt.Fprintf(out, "\n%.0fs mono %d Hz clip, %d iterations each\n\n", clipSeconds, sampleRate, iterations)
-	fmt.Fprintf(out, "%-20s %-8s %10s %10s %10s %12s %12s %12s\n",
+	// t.Output() is a plain io.Writer; its writes cannot meaningfully fail here,
+	// and threading an error through a report printer would only add noise.
+	printf := func(format string, a ...any) { _, _ = fmt.Fprintf(out, format, a...) }
+	printf("\n%.0fs mono %d Hz clip, %d iterations each\n\n", clipSeconds, sampleRate, iterations)
+	printf("%-20s %-8s %10s %10s %10s %12s %12s %12s\n",
 		"format", "encoder", "wall", "cpu", "xrealtime", "size", "heap/op", "child rss")
-	fmt.Fprintf(out, "%s\n", "-------------------------------------------------------------------------------------------------------")
+	printf("%s\n", "-------------------------------------------------------------------------------------------------------")
 
 	for _, r := range rows {
 		for _, c := range []contender{r.native, r.ff} {
 			u := measure(t, c.encode)
 			realtime := clipSeconds * float64(time.Second) / float64(u.wall)
-			fmt.Fprintf(out, "%-20s %-8s %10s %10s %9.0fx %10d B %9d KB %9d KB\n",
+			printf("%-20s %-8s %10s %10s %9.0fx %10d B %9d KB %9d KB\n",
 				r.format, c.label,
 				u.wall.Round(time.Millisecond/10), u.cpu.Round(time.Millisecond/10),
 				realtime, fileSize(t, c.out), u.heapPerOp/1024, u.childRSSKB)
 		}
-		fmt.Fprintln(out)
+		printf("\n")
 	}
 
-	fmt.Fprintf(out, "heap/op is Go heap allocated per encode inside this process.\n")
-	fmt.Fprintf(out, "child rss is RUSAGE_CHILDREN.Maxrss, a monotonic high-water mark over every\n")
-	fmt.Fprintf(out, "child reaped so far: it is the FFmpeg process image, and once FFmpeg has run\n")
-	fmt.Fprintf(out, "once every later row inherits that peak. Read it as the cost FFmpeg imposes,\n")
-	fmt.Fprintf(out, "not as a per-row figure; a native encoder spawns no child at all.\n")
+	printf("heap/op is Go heap allocated per encode inside this process.\n")
+	printf("child rss is RUSAGE_CHILDREN.Maxrss, a monotonic high-water mark over every\n")
+	printf("child reaped so far: it is the FFmpeg process image, and once FFmpeg has run\n")
+	printf("once every later row inherits that peak. Read it as the cost FFmpeg imposes,\n")
+	printf("not as a per-row figure; a native encoder spawns no child at all.\n")
 }

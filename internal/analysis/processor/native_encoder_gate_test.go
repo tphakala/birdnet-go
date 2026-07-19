@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -121,7 +122,7 @@ func TestEncodeClip_NativeLossyAppliesStaticGain(t *testing.T) {
 	a := newGateTestAction(t, "96k")
 	a.Settings.Realtime.Audio.Export.Gain = -6
 
-	gainDB, err := a.resolveNativeGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC, true)
+	gainDB, err := a.resolveNativeGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
 	require.NoError(t, err)
 	assert.InDelta(t, -6.0, gainDB, 0.001, "static gain must pass through when normalization is off")
 }
@@ -142,26 +143,67 @@ func TestResolveNativeGainDB_NormalizationReplacesStaticGain(t *testing.T) {
 	// ceiling nor the +/-30 dB clamp binds and the gain is exactly the distance
 	// from measured to target loudness. That value is not the static -6 dB.
 	measured := measureLUFS(t, a.pcmData)
-	gainDB, err := a.resolveNativeGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC, true)
+	gainDB, err := a.resolveNativeGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
 	require.NoError(t, err)
 	assert.InDelta(t, testTargetLUFS-measured, gainDB, 0.5,
 		"the measured loudness gain must supersede the static gain")
 }
 
-// An encoder that cannot handle the capture bit depth encodes with the static
-// gain instead of being fed a measurement it would mishandle.
-func TestResolveNativeGainDB_UnsupportedDepthFallsBackToStaticGain(t *testing.T) {
+// When normalization is enabled but its targets fall outside the range audionorm
+// can honour, the clip is encoded with the static gain rather than being fed
+// values audionorm would mishandle. The bit-depth half of that guard is not
+// reachable from a test (conf.BitDepth is a build constant), but the
+// out-of-range-targets half is.
+func TestResolveNativeGainDB_OutOfRangeTargetsFallBackToStaticGain(t *testing.T) {
+	t.Parallel()
 	a := newGateTestAction(t, "96k")
 	a.Settings.Realtime.Audio.Export.Gain = -4
 	a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
-		Enabled:    true,
-		TargetLUFS: testTargetLUFS,
+		Enabled: true,
+		// Below audionorm's absolute gate, so it cannot produce a usable measurement.
+		TargetLUFS: -80,
 		TruePeak:   testTruePeakDBTP,
 	}
 
-	gainDB, err := a.resolveNativeGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC, false)
+	gainDB, err := a.resolveNativeGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
 	require.NoError(t, err)
-	assert.InDelta(t, -4.0, gainDB, 0.001)
+	assert.InDelta(t, -4.0, gainDB, 0.001, "static gain must survive an unusable normalization config")
+}
+
+// The promise this whole change rests on is that an install with no environment
+// variables set behaves exactly as it did before. Asserting only that the gate
+// predicates return false does not pin that: the FFmpeg options are rebuilt in a
+// new helper, and a dropped field there would be invisible. This pins every
+// field, so the default path keeps a guard after the gate is eventually removed.
+func TestEncodeClipFFmpeg_BuildsCompleteExportOptions(t *testing.T) {
+	t.Parallel()
+	a := newGateTestAction(t, "96k")
+	exportSettings := &a.Settings.Realtime.Audio.Export
+	exportSettings.Gain = -2.5
+	exportSettings.Normalization = conf.NormalizationSettings{
+		Enabled:       true,
+		TargetLUFS:    -23,
+		TruePeak:      -2,
+		LoudnessRange: 7,
+	}
+	a.Settings.Realtime.Audio.FfmpegPath = "/usr/bin/ffmpeg"
+
+	opts := a.buildFFmpegExportOptions(conf.SampleRate, ffmpeg.FormatMP3, "/clips/x.mp3")
+
+	assert.Equal(t, a.pcmData, opts.PCMData)
+	assert.Equal(t, "/clips/x.mp3", opts.OutputPath)
+	assert.Equal(t, ffmpeg.FormatMP3, opts.Format)
+	assert.Equal(t, "96k", opts.Bitrate)
+	assert.Equal(t, conf.SampleRate, opts.SampleRate)
+	assert.Equal(t, conf.NumChannels, opts.Channels)
+	assert.Equal(t, conf.BitDepth, opts.BitDepth)
+	assert.Equal(t, "/usr/bin/ffmpeg", opts.FFmpegPath)
+	assert.InDelta(t, -2.5, opts.GainDB, 0.001)
+	assert.True(t, opts.Normalization.Enabled)
+	assert.InDelta(t, -23.0, opts.Normalization.TargetLUFS, 0.001)
+	assert.InDelta(t, -2.0, opts.Normalization.TruePeak, 0.001)
+	// LoudnessRange is the field most easily lost, since the native path ignores it.
+	assert.InDelta(t, 7.0, opts.Normalization.LoudnessRange, 0.001)
 }
 
 func assertNonEmptyFileWithMagic(t *testing.T, path string, offset int, magic string) {
@@ -178,4 +220,63 @@ func assertNonEmptyFileWithMagic(t *testing.T, path string, offset int, magic st
 	_, err = io.ReadFull(f, head)
 	require.NoError(t, err)
 	assert.Equal(t, magic, string(head[offset:]), "unexpected container magic in %s", path)
+}
+
+// Ultrasonic capture for bat detection runs at 96 kHz, 192 kHz and above. Those
+// clips are exported as WAV or FLAC (needsBatFormatFallback forces WAV for the
+// lossy formats, which cannot carry the rate), so the lossy-format gates must
+// not disturb them at any capture rate. This guards the refactor of the shared
+// gain/normalization helper against regressing high-rate export.
+func TestEncodeClip_UltrasonicRatesUnaffectedByLossyGates(t *testing.T) {
+	// Not parallel: t.Setenv.
+	t.Setenv(nativeenc.EnvAACEncoder, "native")
+	t.Setenv(nativeenc.EnvOpusEncoder, "native")
+
+	for _, rate := range []int{48000, 96000, 192000, 256000, 384000} {
+		for _, tc := range []struct {
+			format      string
+			ext         string
+			wantEncoder string
+		}{
+			{format: ffmpeg.FormatWAV, ext: "wav", wantEncoder: encoderNativeWAV},
+			{format: ffmpeg.FormatFLAC, ext: "flac", wantEncoder: encoderNativeFLAC},
+		} {
+			t.Run(fmt.Sprintf("%s_%dHz", tc.format, rate), func(t *testing.T) {
+				a := newGateTestAction(t, "96k")
+				out := filepath.Join(t.TempDir(), "clip."+tc.ext)
+
+				encoder, err := a.encodeClip(t.Context(), rate, tc.format, out)
+				require.NoError(t, err, "%s export must work at %d Hz", tc.format, rate)
+				assert.Equal(t, tc.wantEncoder, encoder, "must stay on the native encoder")
+
+				st, err := os.Stat(out)
+				require.NoError(t, err)
+				assert.Positive(t, st.Size(), "encoded clip must not be empty")
+			})
+		}
+	}
+}
+
+// The same high capture rates with normalization enabled, which is the path the
+// resolveNativeGainDB refactor actually changed.
+func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
+	// Not parallel: t.Setenv.
+	t.Setenv(nativeenc.EnvAACEncoder, "native")
+	t.Setenv(nativeenc.EnvOpusEncoder, "native")
+
+	for _, rate := range []int{96000, 192000, 384000} {
+		t.Run(fmt.Sprintf("flac_%dHz", rate), func(t *testing.T) {
+			a := newGateTestAction(t, "96k")
+			a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
+				Enabled:    true,
+				TargetLUFS: testTargetLUFS,
+				TruePeak:   testTruePeakDBTP,
+			}
+
+			out := filepath.Join(t.TempDir(), "clip.flac")
+			encoder, err := a.encodeClip(t.Context(), rate, ffmpeg.FormatFLAC, out)
+			require.NoError(t, err, "normalized FLAC export must work at %d Hz", rate)
+			assert.Equal(t, encoderNativeFLAC, encoder)
+		})
+	}
 }

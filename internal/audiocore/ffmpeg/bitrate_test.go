@@ -20,7 +20,11 @@ func TestEffectiveBitrateKbps(t *testing.T) {
 	}{
 		{name: "opus default", format: FormatOpus, bitrate: "64k", want: 64},
 		{name: "aac default", format: FormatAAC, bitrate: "96k", want: 96},
-		{name: "plain digits without suffix", format: FormatAAC, bitrate: "128000", want: 128000},
+		// A bare integer is out of contract (conf requires the "NNNk" form). The
+		// helper reads it as kbit/s while FFmpeg's -b:a would read bit/s; this
+		// pins the current behaviour so the divergence is visible if the
+		// validator is ever relaxed. See EffectiveBitrateKbps's precondition.
+		{name: "bare integer is read as kbps, outside the validated contract", format: FormatAAC, bitrate: "128000", want: 128000},
 		{name: "uppercase suffix", format: FormatAAC, bitrate: "128K", want: 128},
 		{name: "opus clamped to its ceiling", format: FormatOpus, bitrate: "320k", want: maxBitrateOpusKbps},
 		{name: "opus at its ceiling is unchanged", format: FormatOpus, bitrate: "256k", want: maxBitrateOpusKbps},
@@ -40,17 +44,34 @@ func TestEffectiveBitrateKbps(t *testing.T) {
 	}
 }
 
-// The numeric helper must agree with the string the FFmpeg argument builder
-// uses, otherwise a clip would code at a different rate depending on which
-// encoder ran.
-func TestEffectiveBitrateKbps_MatchesFFmpegArgument(t *testing.T) {
+// The numeric helper and the FFmpeg argument builder must resolve the same
+// configured string to the same rate, or a clip would code differently depending
+// on which encoder ran. Asserting against getMaxBitrate would be circular (it is
+// EffectiveBitrateKbps's own body), so this pins the FFmpeg-side string and the
+// native-side integer independently.
+func TestEffectiveBitrateKbps_AgreesWithFFmpegArgument(t *testing.T) {
 	t.Parallel()
 
-	for _, format := range []string{FormatAAC, FormatOpus, FormatMP3} {
-		for _, bitrate := range []string{"32k", "64k", "96k", "192k", "320k", "512k"} {
-			assert.Equal(t, parseBitrateKbps(getMaxBitrate(format, bitrate)),
-				EffectiveBitrateKbps(format, bitrate),
-				"format %s bitrate %s", format, bitrate)
-		}
+	tests := []struct {
+		format      string
+		bitrate     string
+		wantArg     string // what the FFmpeg command line receives
+		wantNumeric int    // what the native encoders receive
+	}{
+		{format: FormatAAC, bitrate: "96k", wantArg: "96k", wantNumeric: 96},
+		{format: FormatOpus, bitrate: "64k", wantArg: "64k", wantNumeric: 64},
+		{format: FormatOpus, bitrate: "320k", wantArg: "256k", wantNumeric: 256},
+		{format: FormatMP3, bitrate: "512k", wantArg: "320k", wantNumeric: 320},
+		{format: FormatMP3, bitrate: "128k", wantArg: "128k", wantNumeric: 128},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.format+"_"+tt.bitrate, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.wantArg, getMaxBitrate(tt.format, tt.bitrate),
+				"FFmpeg argument")
+			assert.Equal(t, tt.wantNumeric, EffectiveBitrateKbps(tt.format, tt.bitrate),
+				"native encoder bitrate")
+		})
 	}
 }

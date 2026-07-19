@@ -169,16 +169,22 @@ func TestEncodePCM_DoesNotMutateSource(t *testing.T) {
 	original := make([]byte, len(pcm))
 	copy(original, pcm)
 
-	require.NoError(t, EncodePCM(t.Context(), &Options{
-		PCMData:     pcm,
-		OutputPath:  filepath.Join(t.TempDir(), "clip.opus"),
-		SampleRate:  testSampleRate,
-		Channels:    1,
-		BitDepth:    16,
-		BitrateKbps: testBitrate,
-		GainDB:      -3,
-	}))
-	assert.Equal(t, original, pcm, "source PCM must not be modified")
+	// Both gain paths: -3 dB copies the buffer, 0 dB hands the caller's slice
+	// straight to the library (pcmgain.Applied is zero-copy there), which is the
+	// case that would corrupt the spectrogram pre-render if a library ever wrote
+	// into its input.
+	for _, gainDB := range []float64{-3, 0} {
+		require.NoError(t, EncodePCM(t.Context(), &Options{
+			PCMData:     pcm,
+			OutputPath:  filepath.Join(t.TempDir(), "clip.opus"),
+			SampleRate:  testSampleRate,
+			Channels:    1,
+			BitDepth:    16,
+			BitrateKbps: testBitrate,
+			GainDB:      gainDB,
+		}))
+		assert.Equal(t, original, pcm, "source PCM must not be modified at %g dB", gainDB)
+	}
 }
 
 // A successful encode leaves only the final file: the temp file is renamed, not
@@ -221,6 +227,41 @@ func TestEncodePCM_CleansUpOnFailure(t *testing.T) {
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "a rejected encode must leave the directory untouched")
+}
+
+// The cleanup test above is rejected during validation, before any file is
+// created, so on its own it would pass even if the temp file were never removed.
+// This one forces a failure AFTER the temp file exists and has been written:
+// a directory sitting at the output path makes the final rename fail. It is the
+// only test that actually exercises the remove-temp-unless-committed contract.
+func TestEncodePCM_RemovesTempFileWhenFinalizeFails(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	out := filepath.Join(dir, "clip.opus")
+	// A directory cannot be replaced by a file rename, so Finalize fails.
+	require.NoError(t, os.Mkdir(out, 0o750))
+
+	err := EncodePCM(t.Context(), &Options{
+		PCMData:     tonePCM(t, testSampleRate, 0.25, testToneHz),
+		OutputPath:  out,
+		SampleRate:  testSampleRate,
+		Channels:    1,
+		BitDepth:    16,
+		BitrateKbps: testBitrate,
+	})
+	require.Error(t, err, "rename onto a directory must fail")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "only the blocking directory should remain")
+	assert.Equal(t, "clip.opus", entries[0].Name())
+	assert.True(t, entries[0].IsDir(), "the encoder must not have replaced the directory")
+
+	// Nothing ending in the temp suffix may survive a failed encode.
+	for _, e := range entries {
+		assert.False(t, strings.HasSuffix(e.Name(), audiotemp.Ext),
+			"temp file %s leaked after a failed encode", e.Name())
+	}
 }
 
 func TestEncodePCM_RejectsInvalidOptions(t *testing.T) {
@@ -286,23 +327,23 @@ func TestEncodePCM_HonoursCancelledContext(t *testing.T) {
 
 func TestSupportedSampleRate(t *testing.T) {
 	t.Parallel()
-	assert.True(t, SupportedSampleRate(48000))
-	assert.True(t, SupportedSampleRate(16000))
-	assert.True(t, SupportedSampleRate(8000))
+	require.NoError(t, Supports(48000, 16, 1))
+	require.NoError(t, Supports(16000, 16, 1))
+	require.NoError(t, Supports(8000, 16, 1))
 	// 44100 is not an Opus input rate; FFmpeg resamples, go-opus rejects.
-	assert.False(t, SupportedSampleRate(44100))
-	assert.False(t, SupportedSampleRate(0))
+	require.Error(t, Supports(44100, 16, 1))
+	require.Error(t, Supports(0, 16, 1))
 }
 
 func TestSupportedBitDepthAndChannels(t *testing.T) {
 	t.Parallel()
-	assert.True(t, SupportedBitDepth(16))
-	assert.False(t, SupportedBitDepth(24))
-	assert.False(t, SupportedBitDepth(8))
-	assert.True(t, SupportedChannels(1))
-	assert.True(t, SupportedChannels(2))
-	assert.False(t, SupportedChannels(0))
-	assert.False(t, SupportedChannels(3))
+	require.NoError(t, Supports(48000, 16, 1))
+	require.Error(t, Supports(48000, 24, 1))
+	require.Error(t, Supports(48000, 8, 1))
+	require.NoError(t, Supports(48000, 16, 1))
+	require.NoError(t, Supports(48000, 16, 2))
+	require.Error(t, Supports(48000, 16, 0))
+	require.Error(t, Supports(48000, 16, 3))
 }
 
 // Cross-validate the stream against an external demuxer, so a malformed header
@@ -328,15 +369,22 @@ func TestEncodePCM_FFprobeAcceptsOutput(t *testing.T) {
 		"-v", "error",
 		"-select_streams", "a:0",
 		"-show_entries", "stream=codec_name,sample_rate,channels",
-		"-of", "default=noprint_wrappers=1:nokey=1",
+		"-of", "default=noprint_wrappers=1",
 		out).Output()
 	require.NoError(t, err, "ffprobe must parse the written stream")
 
-	fields := strings.Fields(string(probe))
-	require.Len(t, fields, 3, "expected codec, rate and channel count")
-	assert.Equal(t, "opus", fields[0])
-	assert.Equal(t, "48000", fields[1])
-	assert.Equal(t, "1", fields[2])
+	// Parse key=value rather than indexing positionally: ffprobe emits fields in
+	// its own internal order, not the order requested, so positions are not a
+	// contract.
+	got := map[string]string{}
+	for line := range strings.FieldsSeq(string(probe)) {
+		if k, v, ok := strings.Cut(line, "="); ok {
+			got[k] = v
+		}
+	}
+	assert.Equal(t, "opus", got["codec_name"])
+	assert.Equal(t, "48000", got["sample_rate"])
+	assert.Equal(t, "1", got["channels"])
 }
 
 // rms returns the root mean square amplitude of the samples.

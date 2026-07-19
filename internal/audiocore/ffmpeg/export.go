@@ -482,13 +482,20 @@ func getMaxBitrate(format, requestedBitrate string) string {
 }
 
 // EffectiveBitrateKbps returns the bitrate in kbit/s that a clip export of
-// format actually uses: the configured string parsed numerically and clamped to
-// the format's ceiling, exactly as the FFmpeg command line resolves it. It
-// returns 0 when the configured string cannot be parsed, which every encoder
-// reads as "use the codec default".
+// format actually uses: the configured string parsed numerically and, where the
+// format defines a ceiling (Opus and MP3 do; AAC does not), clamped to it. It
+// returns 0 when the string cannot be parsed, which every encoder reads as "use
+// the codec default".
 //
 // The native AAC and Opus encoders take a numeric bitrate rather than a command
 // line, and call this so a clip codes at the same rate whichever encoder runs.
+//
+// Precondition: bitrate is the "NNNk" form that conf.validateExportBitrate
+// enforces (32k..320k, suffix required, startup fails otherwise). A bare integer
+// is read here as kbit/s, whereas FFmpeg's -b:a reads it as bit/s, so the two
+// paths would diverge by 1000x on such a value. That form cannot reach either
+// path from a validated config; do not relax the validator without reconciling
+// the two interpretations.
 func EffectiveBitrateKbps(format, bitrate string) int {
 	return parseBitrateKbps(getMaxBitrate(format, bitrate))
 }

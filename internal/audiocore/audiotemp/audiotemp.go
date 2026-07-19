@@ -1,18 +1,23 @@
 // Package audiotemp centralizes the temp-file naming and atomic-finalize
 // contract shared by BirdNET-Go's audio clip writers: the FFmpeg exporter, the
-// native FLAC encoder, and the WAV writer. Each writes a clip to a process-
-// unique temp file and atomically renames it into place, so two simultaneous
-// detections that resolve to the same clip path (see GitHub #3323) dedup safely
-// instead of colliding on a shared temp or corrupting the final file mid-write.
+// native FLAC, AAC and Opus encoders, and the WAV writer. Each writes a clip to
+// a process-unique temp file and atomically renames it into place, so two
+// simultaneous detections that resolve to the same clip path (see GitHub #3323)
+// dedup safely instead of colliding on a shared temp or corrupting the final
+// file mid-write.
 //
-// The spectrogram generator reuses the same naming (UniquePath) and finalize
-// retry via FinalizeWith, injecting a SecureFS rename so its writes stay inside
-// the os.Root sandbox.
+// WriteFile packages that whole sequence for encoders that can write to an
+// *os.File; the FLAC encoder drives UniquePath and Finalize itself because it
+// also has a bytes.Buffer entry point. The spectrogram generator reuses the same
+// naming (UniquePath) and finalize retry via FinalizeWith, injecting a SecureFS
+// rename so its writes stay inside the os.Root sandbox.
 package audiotemp
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -81,6 +86,71 @@ func IsTempFor(name, base string) bool {
 	}
 	_, err := strconv.Atoi(seqStr)
 	return err == nil
+}
+
+// dirPerm is the mode for a created clip directory. Clips can carry location
+// data, so the directory is not world-readable.
+const dirPerm = 0o750
+
+// WriteFile runs encode against a process-unique temp file next to finalPath and
+// atomically renames the result into place. It creates the parent directory,
+// creates and fsyncs the temp file, closes it, and finalizes; encode only has to
+// write. On any failure the temp file is removed and finalPath is left as it was,
+// so a consumer never observes a partially written clip.
+//
+// encode receives a real *os.File, so it works for an encoder wanting a plain
+// io.Writer (Ogg Opus) and for one that must seek to patch a header on close
+// (the MP4 muxer behind AAC). ctx is checked before any file is created; encode
+// is responsible for honouring it thereafter.
+//
+// Errors are returned unwrapped so each caller can tag them with its own
+// component and category.
+func WriteFile(ctx context.Context, finalPath string, encode func(f *os.File) error) (err error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(finalPath), dirPerm); err != nil {
+		return err
+	}
+
+	tempPath := UniquePath(finalPath)
+	f, err := os.Create(tempPath) //nolint:gosec // path derived from a validated clip path
+	if err != nil {
+		return err
+	}
+
+	// closeFile is idempotent so the deferred cleanup cannot double-close after
+	// the success path has already closed and checked the file.
+	committed := false
+	fileOpen := true
+	closeFile := func() error {
+		if !fileOpen {
+			return nil
+		}
+		fileOpen = false
+		return f.Close()
+	}
+	defer func() {
+		_ = closeFile()
+		if !committed {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	if err := encode(f); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := closeFile(); err != nil {
+		return err
+	}
+	if err := Finalize(tempPath, finalPath); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 // Finalize atomically renames the unique temp file onto the final clip path. On

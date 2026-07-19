@@ -8,7 +8,6 @@
 //
 //	go test -tags enccompare -v ./internal/audiocore/encbench/
 //
-// It reports wall time, CPU time (including the FFmpeg child process), peak
-// RSS and output size per format, which is the evidence the native-encoder
-// rollout in internal/audiocore/nativeenc is judged on.
+// It reports wall time, CPU time (including the FFmpeg child process), Go heap
+// per encode, the FFmpeg child's peak RSS, and output size per format.
 package encbench
