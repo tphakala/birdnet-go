@@ -34,6 +34,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -116,7 +117,7 @@ const (
 // or rendering fails. Logs errors if logError is provided.
 func renderTemplateWithDefault(name, template, defaultVal string, data *notification.TemplateData, logError func(string, ...any)) string {
 	if template == "" {
-		return "" // Empty template = user wants empty value
+		return defaultVal
 	}
 	result, err := notification.RenderTemplate(name, template, data)
 	if err != nil {
@@ -1018,15 +1019,20 @@ func (c *Handler) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		DaysSinceFirstSeen: 0,
 	}
 
-	// Render notification using templates with defaults
+	// Render notification using templates with defaults. The fallback values
+	// (used only when no custom template is configured) match what a real,
+	// uncustomized detection would actually produce — the seeded rule's own
+	// name for the title, and the same DefaultDetectionMessage the alerting
+	// dispatcher falls back to for the message — so this preview isn't showing
+	// text no real notification would ever contain.
 	title := renderTemplateWithDefault("title",
 		settings.Notification.Templates.NewSpecies.Title,
-		"New Species: Test Bird Species",
+		alerting.RuleNameNewSpecies,
 		testTemplateData, nil)
 
 	message := renderTemplateWithDefault("message",
 		settings.Notification.Templates.NewSpecies.Message,
-		"First detection of Test Bird Species (Testus birdicus) at Fake Test Location",
+		alerting.DefaultDetectionMessage(testTemplateData.CommonName, testNotificationConfidence),
 		testTemplateData, nil)
 
 	testNotification := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, title, message).

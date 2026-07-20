@@ -94,6 +94,14 @@ const (
 	TargetPush = "push"
 )
 
+// Built-in rule English display names. Exported as the single source of truth
+// so seeding (DefaultRules) and anything previewing "what a real, uncustomized
+// notification looks like" (the notifications API's test-fire endpoints) can't
+// drift apart into two different names for the same rule.
+const (
+	RuleNameNewSpecies = "New species detected"
+)
+
 // Built-in rule i18n key constants.
 // These correspond to entries in the frontend i18n files under
 // "settings.alerts.builtInRules.*".

@@ -9,7 +9,7 @@ import (
 func DefaultRules() []entities.AlertRule {
 	return []entities.AlertRule{
 		{
-			Name:           "New species detected",
+			Name:           RuleNameNewSpecies,
 			Description:    "Notifies when a species is detected for the first time",
 			NameKey:        RuleKeyNewSpeciesName,
 			DescriptionKey: RuleKeyNewSpeciesDesc,

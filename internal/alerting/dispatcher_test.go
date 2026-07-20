@@ -463,6 +463,13 @@ func TestRenderTemplate_WithVariables(t *testing.T) {
 	assert.Equal(t, "Rule My Rule fired on stream.disconnected", result)
 }
 
+func TestDefaultDetectionMessage(t *testing.T) {
+	assert.Equal(t, "American Woodcock detected with 32% confidence",
+		DefaultDetectionMessage("American Woodcock", 0.32))
+	assert.Equal(t, "Eurasian Blue Tit detected with 92% confidence",
+		DefaultDetectionMessage("Eurasian Blue Tit", 0.923))
+}
+
 func TestRenderTemplate_WithProperties(t *testing.T) {
 	rule := &entities.AlertRule{Name: "Stream Alert"}
 	event := &AlertEvent{

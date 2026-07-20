@@ -301,12 +301,6 @@
     }))
   );
 
-  const defaultTemplate = {
-    title: 'New Species: {{.CommonName}}',
-    message:
-      '{{.ImageURL}}\n\nFirst detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}.\n\n{{.DetectionURL}}',
-  };
-
   let isServiceFormValid = $derived.by(() => {
     switch (selectedService) {
       case 'discord':
@@ -546,13 +540,13 @@
 
       if (data.templates?.newSpecies) {
         templateConfig = {
-          title: data.templates.newSpecies.title ?? defaultTemplate.title,
-          message: data.templates.newSpecies.message ?? defaultTemplate.message,
+          title: data.templates.newSpecies.title ?? '',
+          message: data.templates.newSpecies.message ?? '',
         };
         editedTitle = templateConfig.title;
         editedMessage = templateConfig.message;
       } else {
-        templateConfig = { ...defaultTemplate };
+        templateConfig = { title: '', message: '' };
         editedTitle = templateConfig.title;
         editedMessage = templateConfig.message;
       }
@@ -567,7 +561,7 @@
         originalPushSettings = JSON.parse(JSON.stringify(pushSettings));
       }
     } catch {
-      templateConfig = { ...defaultTemplate };
+      templateConfig = { title: '', message: '' };
       editedTitle = templateConfig.title;
       editedMessage = templateConfig.message;
     } finally {
@@ -620,8 +614,12 @@
   function resetTemplates() {
     const confirmReset = window.confirm(t('settings.notifications.templates.resetConfirm'));
     if (!confirmReset) return;
-    editedTitle = defaultTemplate.title;
-    editedMessage = defaultTemplate.message;
+    // Clear the template so the real backend default applies (the seeded rule
+    // name for the title and the dispatcher's DefaultDetectionMessage for the
+    // body), rather than pre-filling invented example text that no real
+    // notification produces. The inputs' placeholders show the example format.
+    editedTitle = '';
+    editedMessage = '';
   }
 
   async function sendTestNewSpeciesNotification() {

@@ -268,8 +268,20 @@ func detectionMessage(event *AlertEvent) (key string, params map[string]any, fal
 		"species_name": species,
 		"confidence":   confStr,
 	}
-	fallback = fmt.Sprintf("%s detected with %s%% confidence", species, confStr)
+	fallback = DefaultDetectionMessage(species, confFloat)
 	return MsgAlertDetectionOccurred, params, fallback
+}
+
+// DefaultDetectionMessage returns the default English fallback message for a
+// detection notification when no per-rule custom template applies: "<species>
+// detected with <confidence>% confidence". confidence is in the range 0.0-1.0.
+//
+// Exported so callers outside this package (the notifications API's test-fire
+// endpoints) can preview the same default text a real detection would produce,
+// instead of maintaining their own separate fallback string that silently
+// drifts out of sync with this one.
+func DefaultDetectionMessage(species string, confidence float64) string {
+	return fmt.Sprintf("%s detected with %.0f%% confidence", species, confidence*100)
 }
 
 func errorMessage(event *AlertEvent) (key string, params map[string]any, fallback string) {
