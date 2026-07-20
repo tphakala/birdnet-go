@@ -58,10 +58,9 @@
   // Generate unique ID for dropdown (client-only to avoid SSR hydration mismatch)
   let dropdownId = $state('');
 
-  // Size configurations.
-  // ponytail: container height is a floor, not a fixed height — the chip variant wraps to
-  // multiple rows (chips + "max selected" warning) and a fixed h-* made it overflow onto the
-  // content below instead of pushing it down.
+  // Size configurations. Container height is a floor (min-h-*), not a fixed height: the chip
+  // and list variants wrap to multiple rows, and a fixed h-* made the extra rows overflow onto
+  // the content below instead of pushing it down.
   const sizeConfig = {
     xs: {
       container: 'min-h-6 text-xs',
