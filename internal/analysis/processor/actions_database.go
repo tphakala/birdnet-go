@@ -255,6 +255,31 @@ func (a *DatabaseAction) shouldSuppressNewSpeciesNotification() (suppress bool, 
 	return false, notificationTime
 }
 
+// shouldNotifyLifer reports whether this detection should raise a lifer
+// notification: the species is not on the user's imported real-world life
+// list, and a lifer notification for it hasn't already fired within the
+// suppression window. Independent of isNewSpecies (a species can be new to
+// this install but not a lifer, or vice versa once a life list is uploaded)
+// — see SpeciesTracker's liferNotificationLastSent doc comment.
+func (a *DatabaseAction) shouldNotifyLifer() bool {
+	if a.NewSpeciesTracker == nil || a.Settings == nil || !a.Settings.HasLifeList() {
+		return false
+	}
+	if a.Settings.IsOnLifeList(a.Result.Species.ScientificName) {
+		return false
+	}
+	return !a.NewSpeciesTracker.ShouldSuppressLiferNotification(a.Result.Species.ScientificName, a.Result.BeginTime)
+}
+
+// recordLiferNotificationIfNeeded records that a lifer notification was sent,
+// mirroring recordNotificationSent's suppression bookkeeping. Called only
+// after a successful event bus publish.
+func (a *DatabaseAction) recordLiferNotificationIfNeeded(isLifer bool) {
+	if isLifer && a.NewSpeciesTracker != nil {
+		a.NewSpeciesTracker.RecordLiferNotificationSent(a.Result.Species.ScientificName, a.Result.BeginTime)
+	}
+}
+
 // createDetectionEvent creates a new species detection event with metadata.
 // Returns nil if event creation fails.
 func (a *DatabaseAction) createDetectionEvent(isNewSpecies bool, daysSinceFirstSeen int) events.DetectionEvent {
@@ -285,8 +310,9 @@ func (a *DatabaseAction) createDetectionEvent(isNewSpecies bool, daysSinceFirstS
 	return detectionEvent
 }
 
-// populateEventMetadata adds location, time, note ID, and image URL to event metadata.
-func (a *DatabaseAction) populateEventMetadata(detectionEvent events.DetectionEvent, novelty species.NoveltyStatus) {
+// populateEventMetadata adds location, time, note ID, image URL, and lifer
+// status to event metadata.
+func (a *DatabaseAction) populateEventMetadata(detectionEvent events.DetectionEvent, novelty species.NoveltyStatus, isLifer bool) {
 	metadata := detectionEvent.GetMetadata()
 	if metadata == nil {
 		GetLogger().Error("Detection event metadata is nil",
@@ -302,6 +328,9 @@ func (a *DatabaseAction) populateEventMetadata(detectionEvent events.DetectionEv
 	metadata["latitude"] = a.Result.Latitude
 	metadata["longitude"] = a.Result.Longitude
 	metadata["begin_time"] = a.Result.BeginTime
+	if isLifer {
+		metadata[events.DetectionMetadataIsLifer] = true
+	}
 	if hasNoveltyStatus(novelty) {
 		if novelty.DaysSinceLastSeen >= 0 {
 			metadata[events.DetectionMetadataDaysSinceLastSeen] = novelty.DaysSinceLastSeen
@@ -358,14 +387,19 @@ func (a *DatabaseAction) publishDetectionEvent(isNewSpecies bool, daysSinceFirst
 		return
 	}
 
+	// Computed once: applies identically regardless of which branch below
+	// publishes the event (isLifer is independent of isNewSpecies).
+	isLifer := a.shouldNotifyLifer()
+
 	if isNewSpecies {
 		suppress, notificationTime := a.shouldSuppressNewSpeciesNotification()
 		if !suppress {
 			detectionEvent := a.createDetectionEvent(true, daysSinceFirstSeen)
 			if detectionEvent != nil {
-				a.populateEventMetadata(detectionEvent, novelty)
+				a.populateEventMetadata(detectionEvent, novelty, isLifer)
 				if published := eventBus.TryPublishDetection(detectionEvent); published {
 					a.recordNotificationSent(notificationTime)
+					a.recordLiferNotificationIfNeeded(isLifer)
 				}
 			}
 			return
@@ -379,8 +413,10 @@ func (a *DatabaseAction) publishDetectionEvent(isNewSpecies bool, daysSinceFirst
 		return
 	}
 
-	a.populateEventMetadata(detectionEvent, novelty)
-	eventBus.TryPublishDetection(detectionEvent)
+	a.populateEventMetadata(detectionEvent, novelty, isLifer)
+	if published := eventBus.TryPublishDetection(detectionEvent); published {
+		a.recordLiferNotificationIfNeeded(isLifer)
+	}
 }
 
 // Execute saves the audio clip to a file

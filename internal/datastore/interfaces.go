@@ -263,6 +263,7 @@ type Interface interface {
 	SaveNotificationHistory(ctx context.Context, history *NotificationHistory) error
 	GetNotificationHistory(ctx context.Context, scientificName string, notificationType string) (*NotificationHistory, error)
 	GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]NotificationHistory, error)
+	GetActiveNotificationHistoryByType(ctx context.Context, notificationType string, after time.Time) ([]NotificationHistory, error)
 	DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) // Returns count deleted
 	// Database stats method for runtime statistics
 	GetDatabaseStats(ctx context.Context) (*DatabaseStats, error)

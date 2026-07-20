@@ -331,6 +331,10 @@ func (m *mockStore) GetActiveNotificationHistory(_ context.Context, after time.T
 	return []datastore.NotificationHistory{}, nil
 }
 
+func (m *mockStore) GetActiveNotificationHistoryByType(_ context.Context, _ string, _ time.Time) ([]datastore.NotificationHistory, error) {
+	return []datastore.NotificationHistory{}, nil
+}
+
 func (m *mockStore) GetNotificationHistory(_ context.Context, scientificName, notificationType string) (*datastore.NotificationHistory, error) {
 	return nil, datastore.ErrNotificationHistoryNotFound
 }

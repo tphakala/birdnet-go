@@ -3120,6 +3120,27 @@ export type TranslationKey =
   | 'settings.species.tracking.units.days'
   | 'settings.species.tracking.units.min'
   | 'settings.species.tracking.units.hours'
+  | 'settings.species.lifeList.tabLabel'
+  | 'settings.species.lifeList.title'
+  | 'settings.species.lifeList.description'
+  | 'settings.species.lifeList.enableLabel'
+  | 'settings.species.lifeList.enableHelp'
+  | 'settings.species.lifeList.uploadCsv'
+  | 'settings.species.lifeList.clearList'
+  | 'settings.species.lifeList.clearConfirmTitle'
+  | 'settings.species.lifeList.clearConfirmMessage'
+  | 'settings.species.lifeList.uploadHelp'
+  | 'settings.species.lifeList.getFromEbird'
+  | 'settings.species.lifeList.emptyMessage'
+  | 'settings.species.lifeList.emptyMessageHint'
+  | 'settings.species.lifeList.speciesCount' // params: count
+  | 'settings.species.lifeList.emptyFile'
+  | 'settings.species.lifeList.fileReadError'
+  | 'settings.species.lifeList.importSummary' // params: accepted, total
+  | 'settings.species.lifeList.showRejectedRows' // params: count
+  | 'settings.species.lifeList.hideRejectedRows'
+  | 'settings.species.lifeList.rejectedRow' // params: row
+  | 'settings.species.lifeList.learnAboutTaxonomy'
   | 'settings.species.dynamicThreshold.tabLabel'
   | 'settings.species.dynamicThreshold.title'
   | 'settings.species.dynamicThreshold.description'
@@ -3302,6 +3323,8 @@ export type TranslationKey =
   | 'settings.alerts.v2RequiredLink'
   | 'settings.alerts.builtInRules.newSpecies.name'
   | 'settings.alerts.builtInRules.newSpecies.description'
+  | 'settings.alerts.builtInRules.lifer.name'
+  | 'settings.alerts.builtInRules.lifer.description'
   | 'settings.alerts.builtInRules.streamDisconnected.name'
   | 'settings.alerts.builtInRules.streamDisconnected.description'
   | 'settings.alerts.builtInRules.streamError.name'
@@ -4301,6 +4324,10 @@ export type TranslationParams = {
   'settings.species.customConfiguration.editing': { species: string | number };
   'settings.species.customConfiguration.configuredCount': { count: string | number };
   'settings.species.actionsModal.title': { species: string | number };
+  'settings.species.lifeList.speciesCount': { count: string | number };
+  'settings.species.lifeList.importSummary': { accepted: string | number; total: string | number };
+  'settings.species.lifeList.showRejectedRows': { count: string | number };
+  'settings.species.lifeList.rejectedRow': { row: string | number };
   'settings.species.dynamicThreshold.resetAllConfirm.message': { count: string | number };
   'settings.species.dynamicThreshold.resetSuccess': { species: string | number };
   'settings.species.dynamicThreshold.resetAllSuccess': { count: string | number };

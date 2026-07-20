@@ -24,6 +24,21 @@ func DefaultRules() []entities.AlertRule {
 			},
 		},
 		{
+			Name:           "Lifer detected",
+			Description:    "Notifies when a species not on your imported life list is detected",
+			NameKey:        RuleKeyLiferName,
+			DescriptionKey: RuleKeyLiferDesc,
+			Enabled:        true,
+			BuiltIn:        true,
+			ObjectType:     ObjectTypeDetection,
+			TriggerType:    TriggerTypeEvent,
+			EventName:      EventDetectionLifer,
+			CooldownSec:    60,
+			Actions: []entities.AlertAction{
+				{Target: TargetBell, SortOrder: 0},
+			},
+		},
+		{
 			Name:           "Audio stream disconnected",
 			Description:    "Notifies when an RTSP or audio stream loses connection",
 			NameKey:        RuleKeyStreamDiscName,

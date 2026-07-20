@@ -4051,6 +4051,32 @@ func (ds *Datastore) GetActiveNotificationHistory(ctx context.Context, after tim
 	return result, nil
 }
 
+// GetActiveNotificationHistoryByType retrieves active notification history
+// entries of a single notification type.
+func (ds *Datastore) GetActiveNotificationHistoryByType(ctx context.Context, notificationType string, after time.Time) ([]datastore.NotificationHistory, error) {
+	if ds.notification == nil {
+		return []datastore.NotificationHistory{}, nil
+	}
+	v2Histories, err := ds.notification.GetActiveNotificationHistoryByType(ctx, notificationType, after)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]datastore.NotificationHistory, 0, len(v2Histories))
+	for i := range v2Histories {
+		h := &v2Histories[i]
+		result = append(result, datastore.NotificationHistory{
+			ID:               h.ID,
+			ScientificName:   notificationScientificName(h),
+			NotificationType: h.NotificationType,
+			LastSent:         h.LastSent,
+			ExpiresAt:        h.ExpiresAt,
+			CreatedAt:        h.CreatedAt,
+			UpdatedAt:        h.UpdatedAt,
+		})
+	}
+	return result, nil
+}
+
 // DeleteExpiredNotificationHistory deletes expired notification history entries.
 func (ds *Datastore) DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) {
 	if ds.notification == nil {
