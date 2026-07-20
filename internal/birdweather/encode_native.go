@@ -103,17 +103,21 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	// much gain it applied ("my BirdWeather uploads are too quiet"). The Debug
 	// line keeps the full measurement detail.
 	//
-	// operation is what lets the system-events feed treat this line the way it
-	// already treats its sibling. An untagged entry is not unclassifiable, it
-	// simply falls through isNoiseEntry (internal/api/v2/system/events.go) as
-	// "not noise" and is emitted; so before this tag existed, every soundscape
-	// upload showed up in /api/v2/system/events/operational as an INFO event,
-	// once per detection. With the tag, the operation is listed in
-	// noiseOperations alongside audio_export_success, so routine success chatter
-	// is filtered out while birdweather_soundscape_encode_failed (emitted by
-	// logFLACEncodingError in birdweather_client.go) still surfaces. The match is
-	// exact, so listing this tag does not also suppress that one despite the
-	// prefix relationship.
+	// operation names the line for grep and for the system-events classifier,
+	// and pairs with birdweather_soundscape_encode_failed (emitted by
+	// logFLACEncodingError in birdweather_client.go) so success and failure are
+	// distinguishable without parsing the message.
+	//
+	// It does NOT currently affect GET /api/v2/system/events/operational, and an
+	// earlier version of this comment wrongly said it did. That endpoint reads
+	// exactly two files, GetDefaultOutputPath() and GetOutputPath("audio"), so
+	// it only ever sees application.log and audio.log. This package logs through
+	// a module logger, and CentralLogger.Module falls back to the shared base
+	// handler only for a module with NO dedicated output; birdweather has one
+	// (logs/birdweather.log via ensureModuleOutput), so these lines never reach
+	// that endpoint at all. The matching noiseOperations entry is therefore inert
+	// today, kept so the feed does not start carrying per-upload success chatter
+	// if it is ever widened to read the per-module logs.
 	log.Info("Encoded audio to FLAC format (native go-flac)",
 		logger.String("timestamp", timestamp),
 		logger.String("encoder", clipenc.NativeFLAC),
