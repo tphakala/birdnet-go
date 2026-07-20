@@ -572,8 +572,15 @@ func clipDurationMs(pcmBytes, sampleRate int) int64 {
 //
 // A cancelled context is shutdown rather than a defect, so it is recorded at
 // Debug: exports in flight when the process stops must not look like errors.
+//
+// Everything else is WARN, not ERROR, even though it is a genuine failure. The
+// error is returned unchanged, so the job queue logs the same failure as ERROR
+// immediately afterwards; raising this line to ERROR too would report one root
+// cause as two, inflating error counts and alerting twice. This line exists to
+// carry the context the queue's generic line cannot, not to raise the alarm.
 func (a *SaveAudioAction) logExportFailure(ctx context.Context, enc *clipEncoding, exportFormat string, exportRate int, outputPath string, err error) {
-	fields := []logger.Field{
+	fields := make([]logger.Field, 0, 11)
+	fields = append(fields,
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
 		logger.String("clip_path", filepath.Base(outputPath)),
@@ -582,14 +589,21 @@ func (a *SaveAudioAction) logExportFailure(ctx context.Context, enc *clipEncodin
 		logger.Int("sample_rate", exportRate),
 		logger.Float64("gain_db", enc.GainDB),
 		logger.Int64("duration_ms", clipDurationMs(len(a.pcmData), exportRate)),
-		logger.Error(err),
-		logger.String("operation", "audio_export_failed"),
+	)
+	// A rejected bitrate is one of the ways a lossy encode fails, so report the
+	// value that was going to be used rather than making it a second question.
+	if enc.BitrateKbps > 0 {
+		fields = append(fields, logger.Int("bitrate_kbps", enc.BitrateKbps))
 	}
+	fields = append(fields,
+		logger.Error(err),
+		logger.String("operation", "audio_export_failed"))
+
 	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
 		GetLogger().Debug("Audio clip export cancelled", fields...)
 		return
 	}
-	GetLogger().Error("Audio clip export failed", fields...)
+	GetLogger().Warn("Audio clip export failed", fields...)
 }
 
 // selectEncoder names the encoder that will write a clip of this format at this

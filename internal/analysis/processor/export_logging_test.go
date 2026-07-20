@@ -163,6 +163,30 @@ func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 	assert.Contains(t, out, "format="+ffmpeg.FormatAAC)
 	assert.Contains(t, out, "operation=audio_export_failed")
 	assert.Contains(t, out, "detection_id=export-log-test")
+	// A rejected bitrate is one of the ways a lossy encode fails, so the value
+	// that was going to be used must not be a second question.
+	assert.Contains(t, out, "bitrate_kbps=96")
+}
+
+// The failure line is WARN, not ERROR: the error is returned unchanged, so the
+// job queue logs the same root cause as ERROR right afterwards. Two ERROR lines
+// for one failure would double-count and double-alert.
+func TestExecute_FailureLogIsWarnNotError(t *testing.T) {
+	logs := captureExportLogs(t)
+	dir := t.TempDir()
+	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
+	a.Settings.Realtime.Audio.FfmpegPath = ""
+
+	require.Error(t, a.Execute(t.Context(), nil))
+
+	out := logs.String()
+	require.Contains(t, out, "Audio clip export failed")
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
+		if strings.Contains(line, "Audio clip export failed") {
+			assert.Contains(t, line, "level=WARN",
+				"the job queue owns the ERROR for this failure; this line only adds context")
+		}
+	}
 }
 
 // The other half of the pair: the same failure on the FFmpeg path is attributed
