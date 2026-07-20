@@ -496,7 +496,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
 			logger.Error(err),
-			logger.String("path", outputPath),
+			logger.String("clip_path", a.relativeClipPath(outputPath)),
 			logger.String("operation", "audio_export_stat"))
 	}
 
@@ -561,7 +561,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
 				logger.Any("note_id", a.NoteID),
-				logger.String("clip_path", outputPath),
+				logger.String("clip_path", a.relativeClipPath(outputPath)),
 				logger.Error(err),
 				logger.String("operation", "prerender_submit"))
 		}
@@ -571,8 +571,13 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 }
 
 // relativeClipPath is the clip's name relative to the export directory, which is
-// how the rest of the system identifies a clip: it is the value stored on the
-// detection and the one the media endpoint resolves (/api/v2/media/audio/{name}).
+// how the rest of the system identifies a clip: it is normally the value stored
+// on the detection, and the shape the media endpoint resolves
+// (/api/v2/media/audio/{name}). "Normally" because resolveExportParams can
+// rewrite the extension to .wav; the bat downgrade mirrors that into the stored
+// ClipName, but the stranded-without-encoder fallback does not, so on that path
+// the logged name ends .wav while the database row still names the configured
+// format.
 //
 // The export directory is deliberately stripped. Support logs and uploaded
 // support dumps are read by someone other than the operator, and the absolute
@@ -636,19 +641,20 @@ func clipDurationMs(pcmBytes, sampleRate int) int64 {
 //
 // Every path that CONTEXT cancellation can interrupt reports it in the error, so
 // nothing about a normal shutdown is lost: FFmpeg wraps ctx.Err() at each of its
-// exits, FLAC checks the context per chunk inside its write loop, AAC and Opus
-// check it before the file is created (audiotemp.WriteFile), and
-// resolveExportGainDB joins it onto a measurement that cancellation turned
-// terminal. The stretches that take no context at all (the WAV writer, and the
-// one-shot encode calls inside go-aac/go-opus once audiotemp has let them start)
+// exits, every native encoder checks the context before it writes anything (FLAC
+// additionally re-checks per chunk while applying gain, AAC and Opus via
+// audiotemp.WriteFile), and resolveExportGainDB joins it onto a measurement that
+// cancellation turned terminal. The stretches that take no context at all (the
+// WAV writer, and the one-shot encode calls once audiotemp has let them start)
 // cannot be interrupted by cancellation either, so any error they return is a
 // genuine defect and belongs at WARN.
 //
 // Not covered, deliberately: a signal delivered to the whole process group can
 // kill the FFmpeg child directly, and cmd.Wait() then reports "signal:
 // terminated" while ctx.Err() is still nil. That lands at WARN. It is a narrow
-// native-install case (in Docker, birdnet-go is PID 1 and the signal is not
-// forwarded), and the alternative is the misclassification above.
+// native-install case (the container image runs tini as PID 1 without -g, so it
+// forwards to its direct child rather than the group), and the alternative is
+// the misclassification above.
 //
 // A context that EXPIRED is not shutdown either. The job queue wraps every
 // execution in context.WithTimeout, so an encode slow enough to blow
@@ -663,12 +669,14 @@ func clipDurationMs(pcmBytes, sampleRate int) int64 {
 // Attempts >= MaxAttempts). Raising this line to ERROR too would report one root
 // cause as two, inflating error counts and alerting twice. This line exists to
 // carry the context the queue's generic line cannot, not to raise the alarm.
-// On the deferred path (an Extended Capture tail, the only SaveAudioAction that
-// getJobQueueRetryConfig enables retries for) LogJobRetryScheduled already
-// records every intermediate attempt at WARN with its error, so what this line
-// uniquely preserves for those attempts is the ENCODER context, not the attempt
-// itself. The ordinary eager-read action gets RetryConfig{Enabled: false}, so it
-// has no intermediate attempts and the queue logs it once, permanently failed.
+// Retries exist only on the deferred path (an Extended Capture tail is the only
+// SaveAudioAction getJobQueueRetryConfig enables them for); the ordinary
+// eager-read action gets RetryConfig{Enabled: false}, so the queue logs it once,
+// permanently failed. On the deferred path most intermediate attempts are the
+// action rescheduling itself while it waits for the tail, and those carry
+// errAudioExportDeferred, which LogJobRetryScheduled deliberately drops to Debug.
+// A genuine encode failure there is logged by the queue at WARN, but without the
+// encoder context, which is what this line adds.
 func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat string, exportRate int, outputPath string, err error) {
 	// 14 = the 9 unconditional fields below, plus gain_db and encode_ms when the
 	// export got far enough to have them, plus bitrate_kbps on the lossy formats,
@@ -683,8 +691,10 @@ func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat strin
 		logger.String("encoder", enc.Encoder),
 		logger.Int("sample_rate", exportRate),
 		logger.Int64("duration_ms", clipDurationMs(len(a.pcmData), exportRate)),
-		// Measurement always ran, so its duration is always meaningful, even when
-		// it is what failed.
+		// Gain resolution is always attempted, so this is reportable even on a
+		// pre-gain failure. It is 0 both when normalization is off (nothing to
+		// measure) and when a measurement was instant; the gain_db field
+		// disambiguates, since it is absent only when resolution did not finish.
 		logger.Int64("measure_ms", enc.MeasureMs),
 	)
 	// Both gated on the same fact: the encoder runs only once the gain resolves,

@@ -158,6 +158,26 @@ func TestExecute_SuccessLogNamesSpeciesForClipPathAggregation(t *testing.T) {
 	assert.Contains(t, line, "clip_path=clip.flac")
 }
 
+// The wiring test for the relative clip path. Every other Execute-level test
+// uses a bare-basename ClipName, so for them Rel and Base return the same string
+// and the assertions pass either way. Production ClipName is
+// filepath.Join(year, month, filename), so only a nested name distinguishes the
+// two, and only this test would fail if the field regressed to a basename and
+// left SpeciesEntry.ClipPaths unresolvable.
+func TestExecute_SuccessLogClipPathKeepsDateSegments(t *testing.T) {
+	logs := captureExportLogs(t)
+	dir := t.TempDir()
+	a := newExportLogAction(t, dir, "2026/07/wren.flac", ffmpeg.FormatFLAC)
+
+	require.NoError(t, a.Execute(t.Context(), nil))
+
+	line := logLineContaining(t, logs.String(), "operation=audio_export_success")
+	assert.Contains(t, line, "clip_path=2026/07/wren.flac",
+		"the date segments are what let a consumer resolve the clip back to a file")
+	assert.NotContains(t, line, dir,
+		"the export directory must never reach a support log")
+}
+
 // The half of the species contract the log assertion above cannot reach:
 // buildSaveAudioAction must actually POPULATE the field, on every branch, in the
 // casing the aggregator keys on.
@@ -194,8 +214,9 @@ func TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch(t *testing
 	}
 
 	tests := []struct {
-		name  string
-		build func(t *testing.T) (*Processor, *Detections)
+		name      string
+		build     func(t *testing.T) (*Processor, *Detections)
+		wantEager bool
 	}{
 		{
 			// Extended Capture: the tail is still being written, so the action
@@ -228,22 +249,39 @@ func TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch(t *testing
 			},
 		},
 		{
-			// The ordinary path: PCM is read eagerly at build time.
+			// The ordinary path, and the one most exports take: PCM is read
+			// eagerly at build time.
+			//
+			// Reaching it needs the requested window to be entirely in the PAST
+			// (otherwise buildSaveAudioAction defers) while still being readable
+			// from the ring. A freshly written buffer cannot satisfy both: its
+			// startTime is the moment of the first Write, so any window inside it
+			// ends in the future. Overfilling the ring forces a wrap, and on wrap
+			// the buffer re-anchors startTime to now-bufferDuration
+			// (buffer/capture.go), which puts the whole readable window behind the
+			// clock.
 			name: "eager read",
 			build: func(t *testing.T) (*Processor, *Detections) {
 				t.Helper()
+				const bufferSeconds = 3
 				mgr := audioBuffer.NewManager(GetLogger())
-				require.NoError(t, mgr.AllocateCapture(sourceID, 10, conf.SampleRate, conf.BitDepth/8))
+				require.NoError(t, mgr.AllocateCapture(sourceID, bufferSeconds, conf.SampleRate, conf.BitDepth/8))
 				cb, err := mgr.CaptureBuffer(sourceID)
 				require.NoError(t, err)
-				require.NoError(t, cb.Write(make([]byte, 3*conf.SampleRate*(conf.BitDepth/8))))
+				// Twice the ring, so it wraps and re-anchors startTime.
+				require.NoError(t, cb.Write(make([]byte, 2*bufferSeconds*conf.SampleRate*(conf.BitDepth/8))))
 				start := cb.StartTime()
+				require.False(t, start.Add(2*time.Second).After(time.Now()),
+					"the requested window must be in the past or this row silently retests the deferred branch")
 				return &Processor{
 						Settings:  buildSpeciesTestSettings(t),
 						BufferMgr: mgr,
 					},
 					newDetection(start, start.Add(2*time.Second))
 			},
+			// Distinguishes this branch from the other two: only the eager path
+			// pre-reads PCM and leaves bufferMgr unset.
+			wantEager: true,
 		},
 	}
 
@@ -254,6 +292,15 @@ func TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch(t *testing
 			action := p.buildSaveAudioAction(det, &DetectionContext{})
 
 			require.NotNil(t, action)
+			// Pin WHICH branch ran. Without this the eager row silently fell back
+			// to the deferred branch and the eager return site, the one most
+			// production exports take, was never executed at all.
+			if tt.wantEager {
+				require.NotEmpty(t, action.pcmData, "the eager branch pre-reads the PCM")
+				require.Nil(t, action.bufferMgr, "the eager branch does not defer")
+			} else {
+				require.Empty(t, action.pcmData, "only the eager branch pre-reads the PCM")
+			}
 			assert.Equal(t, wantSpecies, action.species,
 				"every construction branch must carry the species, lowercased to match approve_detection")
 		})
@@ -620,9 +667,10 @@ func TestResolveExportParams_BatDowngradeIsLogged(t *testing.T) {
 	assert.Contains(t, logs.String(), "requested_format="+ffmpeg.FormatMP3)
 }
 
-// The downgrade fires on every single detection of a bat install, so it is
-// logged once per process rather than once per clip.
-func TestResolveExportParams_BatDowngradeLoggedOncePerProcess(t *testing.T) {
+// The downgrade fires on every single detection of a bat install, so repeating
+// the SAME condition must not repeat the log. (The companion test below covers
+// the other half: a DIFFERENT condition still gets its own line.)
+func TestResolveExportParams_BatDowngradeLoggedOncePerCondition(t *testing.T) {
 	resetBatFormatDowngradeOnce()
 	logs := captureExportLogs(t)
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
@@ -728,9 +776,10 @@ func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testin
 	assert.Equal(t, 2, strings.Count(out, "audio_export_no_encoder_fallback"),
 		"each distinct format/rate combination must explain itself exactly once")
 	// The two native-encoder skip warnings share one guard now that the format is
-	// part of the key; both formats must still get their own line.
-	assert.Contains(t, out, "format="+ffmpeg.FormatOpus)
-	assert.Contains(t, out, "format="+ffmpeg.FormatAAC)
+	// part of the key; both formats must still get their own line. Asserted by
+	// counting the operation, not by Contains("format=aac"), which is also a
+	// substring of the stranded line's own requested_format=aac and would pass
+	// even if these warnings were never emitted.
 	assert.Equal(t, 2, strings.Count(out, "audio_export_native_unsupported"),
 		"one shared guard must not let the first format silence the second")
 }
