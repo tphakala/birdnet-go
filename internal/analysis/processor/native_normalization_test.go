@@ -411,7 +411,7 @@ func TestEncodeClipSelectsNativeNormalization(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "clip.flac")
 	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeFLAC, enc, "must select the native FLAC encoder, not FFmpeg")
+	assert.Equal(t, encoderNativeFLAC, enc.Encoder, "must select the native FLAC encoder, not FFmpeg")
 
 	data, err := os.ReadFile(out) //nolint:gosec // test-controlled temp path
 	require.NoError(t, err)
@@ -445,7 +445,7 @@ func TestEncodeClipFLACWithoutNormalization(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "clip.flac")
 	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeFLAC, enc, "FLAC must encode natively with no env gate and no FFmpeg")
+	assert.Equal(t, encoderNativeFLAC, enc.Encoder, "FLAC must encode natively with no env gate and no FFmpeg")
 
 	data, err := os.ReadFile(out) //nolint:gosec // test-controlled temp path
 	require.NoError(t, err)
@@ -485,7 +485,7 @@ func TestEncodeClipFLACNormalizationSkipped(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "clip.flac")
 	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeFLAC, enc, "out-of-range normalization must still encode natively, never FFmpeg")
+	assert.Equal(t, encoderNativeFLAC, enc.Encoder, "out-of-range normalization must still encode natively, never FFmpeg")
 
 	data, err := os.ReadFile(out) //nolint:gosec // test-controlled temp path
 	require.NoError(t, err)
