@@ -623,11 +623,22 @@ func TestExportAudio_GainBoostsQuietAudio(t *testing.T) {
 	require.NoError(t, err)
 	assert.FileExists(t, outPath)
 
-	// Minimum RMS level (dBFS) a lifted quiet clip must reach to be considered audible.
-	const minAudibleRMSdBFS = -35.0
+	// Assert the gain that actually landed, not merely that the result is audible.
+	// An audibility floor passes for any gain large enough to clear it, so a
+	// substantially under- or over-applied gain would slip through; the delta
+	// between input and output RMS pins the exact value instead. The clip is a
+	// pure tone with no clipping headroom problem at this level, so the two RMS
+	// figures differ by the applied gain and nothing else.
+	//
+	// Measured margin is under 0.01 dB (FLAC is lossless and the volume filter
+	// works in float), so this bound is roughly 5x the observed error: tight
+	// enough that a wrong gain cannot hide, loose enough to survive int16
+	// requantisation on a different FFmpeg build.
+	const gainToleranceDB = 0.05
 	decoded := decodePCM16(t, ffmpegPath, outPath)
 	rmsDB := rmsDBFS(decoded)
-	assert.Greater(t, rmsDB, minAudibleRMSdBFS, "a clip carrying its resolved loudness gain must be audible")
+	assert.InDelta(t, resolvedGainDB, rmsDB-rmsDBFS(pcm), gainToleranceDB,
+		"the decoded clip must carry exactly the resolved gain")
 
 	if sampleRateOut, ok := probeSampleRate(t, outPath); ok {
 		assert.Equal(t, sampleRate, sampleRateOut, "the encoded file must keep its source sample rate")

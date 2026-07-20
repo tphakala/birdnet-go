@@ -20,7 +20,7 @@ import (
 // path runs, decoding is how the loudness is read back.
 func requireFFmpegTools(t *testing.T) string {
 	t.Helper()
-	bin, err := exec.LookPath("ffmpeg")
+	bin, err := exec.LookPath(conf.GetFfmpegBinaryName())
 	if err != nil {
 		t.Skip("ffmpeg not on PATH:", err)
 	}

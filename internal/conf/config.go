@@ -64,12 +64,6 @@ type NormalizationSettings struct {
 	Enabled    bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`          // true to enable loudness normalization
 	TargetLUFS float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"` // target integrated loudness in LUFS (default: -23)
 	// Deprecated: no longer applied; retained so existing configs keep loading.
-	//
-	// This has to be a doc comment rather than a trailing one: go/doc and
-	// staticcheck only read Deprecated markers from Field.Doc, so a trailing
-	// //nolint-style note would document nothing to any tool. Keep it to one
-	// line, because the schema generator copies this verbatim into
-	// config.schema.json and doc/wiki/configuration-reference.md.
 	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"`
 	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"` // true peak limit in dBTP (default: -2)
 }

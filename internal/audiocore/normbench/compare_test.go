@@ -118,7 +118,7 @@ func TestCompareNormalization(t *testing.T) {
 			writeWAV(t, stem+"-prefix.wav", pcmgain.Applied(tc.pcm, o.preFixPlan.gainDB)))
 		o.native = measure(t, ctx, ffmpegBin,
 			writeWAV(t, stem+"-native.wav", pcmgain.Applied(tc.pcm, o.nativePlan.gainDB)))
-		o.ffm = runFFmpeg(t, ctx, ffmpegBin, stem, tc.pcm)
+		o.ffm = runFFmpeg(t, ctx, ffmpegBin, stem)
 
 		outcomes = append(outcomes, o)
 	}
@@ -263,7 +263,7 @@ func planNative(meas audionorm.Measurement, pcmForRefine []byte) plan {
 // what is measured is the filter's output and not codec loss; and WAV is not
 // actually reachable through this path in production (it maps to "-c:a wav",
 // which is not an FFmpeg encoder) because WAV export is always native.
-func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string, pcm []byte) loudness {
+func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string) loudness {
 	t.Helper()
 
 	// The caller already wrote this exact PCM to stem+"-in.wav" to measure the
@@ -310,6 +310,12 @@ func loudnormFilter(ctx context.Context, t *testing.T, ffmpegBin, wavPath string
 	// context error for the same reason.
 	require.NoError(t, ctx.Err(), "loudness analysis cancelled for %s", wavPath)
 	if err != nil {
+		// Not cancellation, so the analysis genuinely failed (malformed ffmpeg
+		// output, unreadable temp file). The single-pass fallback below is the
+		// right behaviour, but say so: an unannounced fallback is indistinguishable
+		// in the table from a real gated clip, which is the same class of silent
+		// misclassification the guard above exists to prevent.
+		t.Logf("loudness analysis failed for %s, falling back to single-pass: %v", wavPath, err)
 		return loudnormFilterFromStats(nil)
 	}
 	return loudnormFilterFromStats(stats)

@@ -1344,7 +1344,7 @@
         },
         "loudnessrange": {
           "type": "number",
-          "description": "Deprecated: no longer applied; retained so existing configs keep loading.\n\nThis has to be a doc comment rather than a trailing one: go/doc and\nstaticcheck only read Deprecated markers from Field.Doc, so a trailing\n//nolint-style note would document nothing to any tool. Keep it to one\nline, because the schema generator copies this verbatim into\nconfig.schema.json and doc/wiki/configuration-reference.md."
+          "description": "Deprecated: no longer applied; retained so existing configs keep loading."
         },
         "truepeak": {
           "type": "number",
