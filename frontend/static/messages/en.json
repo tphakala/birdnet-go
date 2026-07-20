@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Audio normalization is disabled",
         "targetLUFSLabel": "Target Loudness (LUFS)",
         "targetLUFSHelp": "Integrated loudness target in LUFS (Loudness Units relative to Full Scale). -23 LUFS is the EBU R128 broadcast standard. Range: -40 to -10 LUFS.",
-        "loudnessRangeLabel": "Loudness Range (LU)",
-        "loudnessRangeHelp": "Maximum variation in loudness within the clip (0-20 LU). Lower values create more consistent volume but may reduce dynamics.",
         "truePeakLabel": "True Peak Limit (dBTP)",
         "truePeakHelp": "Maximum true peak level to prevent digital clipping (-10 to 0 dBTP). -2 dBTP provides safe headroom for most playback systems.",
         "normalizationNote": "EBU R128 Standard",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Lossless formats preserve original audio quality without compression artifacts."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Enable clip recording in the Recording tab to use audio normalization.",
         "targetLUFSLabel": "Target Loudness (LUFS)",
         "targetLUFSHelp": "Integrated loudness target in LUFS (Loudness Units relative to Full Scale). -23 LUFS is the EBU R128 broadcast standard. Range: -40 to -10 LUFS.",
-        "loudnessRangeLabel": "Loudness Range (LU)",
-        "loudnessRangeHelp": "Maximum variation in loudness within the clip (0-20 LU). Lower values create more consistent volume but may reduce dynamics.",
         "truePeakLabel": "True Peak Limit (dBTP)",
         "truePeakHelp": "Maximum true peak level to prevent digital clipping (-10 to 0 dBTP). -2 dBTP provides safe headroom for most playback systems.",
         "noteTitle": "EBU R128 Standard",

@@ -564,61 +564,42 @@ func TestExportAudioToBuffer(t *testing.T) {
 	assert.Positive(t, buf.Len())
 }
 
-// TestBuildExportFFmpegArgs_Filter verifies filter construction via exported helpers.
-// Since buildExportFFmpegArgs is unexported, we exercise it indirectly through ExportAudio.
-func TestExportAudio_Normalization(t *testing.T) {
+// A very quiet clip carrying the large gain that audionorm plans for it must come
+// out audible, and must keep its source sample rate.
+//
+// This replaces a pair of loudnorm tests. The rate assertion is what they were
+// really guarding: FFmpeg's loudnorm filter upsampled internally to 192 kHz for
+// true-peak detection, so the export args carried an -ar re-pin to stop the saved
+// file inheriting that rate. Both the filter and the re-pin are gone, and this
+// keeps the guard that the encoded file still records the rate it was given.
+func TestExportAudio_GainBoostsQuietAudio(t *testing.T) {
 	t.Parallel()
 
 	ffmpegPath, err := findFFmpegBinary()
 	if err != nil {
 		t.Skip("FFmpeg not available:", err)
 	}
-
-	// Build a non-silent tone file for loudnorm to analyze.
-	const sampleRate = 48000
-	const amplitude = 16000.0
-	const freqHz = 440.0
-	numSamples := sampleRate * 2 // 2 seconds
-	pcm := make([]byte, numSamples*2)
-	for i := range numSamples {
-		sample := amplitude * math.Sin(2.0*math.Pi*freqHz*float64(i)/float64(sampleRate))
-		binary.LittleEndian.PutUint16(pcm[i*2:], uint16(int16(sample))) //nolint:gosec // G115: amplitude*sin always in int16 range
+	// The sample-rate assertion below is the entire reason this test replaced the
+	// deleted loudnorm pair, so it must not silently evaporate: probeSampleRate
+	// returns ok=false when ffprobe is missing, which would leave the test passing
+	// while checking nothing about the rate.
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not available, cannot verify the output sample rate:", err)
 	}
 
-	outDir := t.TempDir()
-	outPath := filepath.Join(outDir, "output_norm.mp3")
-
-	err = ffmpeg.ExportAudio(t.Context(), &ffmpeg.ExportOptions{
-		PCMData:    pcm,
-		OutputPath: outPath,
-		Format:     ffmpeg.FormatMP3,
-		Bitrate:    "128k",
-		SampleRate: sampleRate,
-		Channels:   1,
-		BitDepth:   16,
-		Normalization: ffmpeg.ExportNormalization{
-			Enabled:       true,
-			TargetLUFS:    -23.0,
-			TruePeak:      -2.0,
-			LoudnessRange: 7.0,
-		},
-		FFmpegPath: ffmpegPath,
-	})
-	require.NoError(t, err)
-	assert.FileExists(t, outPath)
-}
-
-func TestExportAudio_NormalizationBoostsGatedQuietAudio(t *testing.T) {
-	t.Parallel()
-
-	ffmpegPath, err := findFFmpegBinary()
-	if err != nil {
-		t.Skip("FFmpeg not available:", err)
-	}
-
+	// Amplitude 3 of 32767 is roughly -80 dBFS, well below the EBU R128 absolute
+	// gate. On the export path audionorm measures this in Go and plans the lift;
+	// here the resolved gain is supplied directly, which is exactly what
+	// buildFFmpegExportOptions now passes.
+	//
+	// 57.5 dB is what the production planner would arrive at for this clip: the
+	// gate fallback anchors to true-peak headroom, and -80 dBFS + 57.5 lands at
+	// about -22.5 LUFS, just under the -23 target and inside the 60 dB clamp
+	// (nativeExportMaxGainDB).
 	const sampleRate = 48000
 	const amplitude = 3.0
 	const freqHz = 3000.0
+	const resolvedGainDB = 57.5
 	numSamples := sampleRate * 2
 	pcm := make([]byte, numSamples*2)
 	for i := range numSamples {
@@ -627,7 +608,7 @@ func TestExportAudio_NormalizationBoostsGatedQuietAudio(t *testing.T) {
 	}
 
 	outDir := t.TempDir()
-	outPath := filepath.Join(outDir, "quiet_norm.flac")
+	outPath := filepath.Join(outDir, "quiet_gain.flac")
 
 	err = ffmpeg.ExportAudio(t.Context(), &ffmpeg.ExportOptions{
 		PCMData:    pcm,
@@ -636,25 +617,31 @@ func TestExportAudio_NormalizationBoostsGatedQuietAudio(t *testing.T) {
 		SampleRate: sampleRate,
 		Channels:   1,
 		BitDepth:   16,
-		Normalization: ffmpeg.ExportNormalization{
-			Enabled:       true,
-			TargetLUFS:    -23.0,
-			TruePeak:      -2.0,
-			LoudnessRange: 7.0,
-		},
+		GainDB:     resolvedGainDB,
 		FFmpegPath: ffmpegPath,
 	})
 	require.NoError(t, err)
 	assert.FileExists(t, outPath)
 
-	// Minimum RMS level (dBFS) a gated quiet clip must reach to be considered audible.
-	const minAudibleRMSdBFS = -35.0
+	// Assert the gain that actually landed, not merely that the result is audible.
+	// An audibility floor passes for any gain large enough to clear it, so a
+	// substantially under- or over-applied gain would slip through; the delta
+	// between input and output RMS pins the exact value instead. The clip is a
+	// pure tone with no clipping headroom problem at this level, so the two RMS
+	// figures differ by the applied gain and nothing else.
+	//
+	// Measured margin is under 0.01 dB (FLAC is lossless and the volume filter
+	// works in float), so this bound is roughly 5x the observed error: tight
+	// enough that a wrong gain cannot hide, loose enough to survive int16
+	// requantisation on a different FFmpeg build.
+	const gainToleranceDB = 0.05
 	decoded := decodePCM16(t, ffmpegPath, outPath)
 	rmsDB := rmsDBFS(decoded)
-	assert.Greater(t, rmsDB, minAudibleRMSdBFS, "quiet clips below loudnorm's gate should still be made audible")
+	assert.InDelta(t, resolvedGainDB, rmsDB-rmsDBFS(pcm), gainToleranceDB,
+		"the decoded clip must carry exactly the resolved gain")
 
 	if sampleRateOut, ok := probeSampleRate(t, outPath); ok {
-		assert.Equal(t, sampleRate, sampleRateOut)
+		assert.Equal(t, sampleRate, sampleRateOut, "the encoded file must keep its source sample rate")
 	}
 }
 

@@ -167,7 +167,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.export.gain` | number | gain in dB for audio capture |
 | `realtime.audio.export.normalization.enabled` | boolean | true to enable loudness normalization |
 | `realtime.audio.export.normalization.targetlufs` | number | target integrated loudness in LUFS (default: -23) |
-| `realtime.audio.export.normalization.loudnessrange` | number | loudness range in LU (default: 7) |
+| `realtime.audio.export.normalization.loudnessrange` | number | Deprecated: no longer applied; retained so existing configs keep loading. |
 | `realtime.audio.export.normalization.truepeak` | number | true peak limit in dBTP (default: -2) |
 | `realtime.audio.soundlevel.enabled` | boolean | true to enable sound level monitoring |
 | `realtime.audio.soundlevel.interval` | integer | measurement interval in seconds (default: 10) |

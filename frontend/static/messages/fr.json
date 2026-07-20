@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "La normalisation audio est désactivée",
         "targetLUFSLabel": "Volume cible (LUFS)",
         "targetLUFSHelp": "Cible de volume intégré en LUFS (Loudness Units relative to Full Scale). -23 LUFS est la norme de diffusion EBU R128. Plage : -40 à -10 LUFS.",
-        "loudnessRangeLabel": "Plage de volume (LU)",
-        "loudnessRangeHelp": "Variation maximale de volume dans le clip (0-20 LU). Des valeurs plus faibles créent un volume plus cohérent mais peuvent réduire la dynamique.",
         "truePeakLabel": "Limite de pic réel (dBTP)",
         "truePeakHelp": "Niveau de pic réel maximal pour éviter l'écrêtage numérique (-10 à 0 dBTP). -2 dBTP fournit une marge de sécurité pour la plupart des systèmes de lecture.",
         "normalizationNote": "Norme EBU R128",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Format audio pour les clips enregistrés. WAV et FLAC sont sans perte (meilleure qualité, fichiers plus volumineux). MP3, AAC et Opus sont avec perte (fichiers plus petits, légère perte de qualité).",
         "bitrateLabel": "Débit",
         "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Les formats sans perte préservent la qualité audio originale sans artefacts de compression."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Activez l'enregistrement des clips dans l'onglet Enregistrement pour utiliser la normalisation audio.",
         "targetLUFSLabel": "Volume cible (LUFS)",
         "targetLUFSHelp": "Cible de volume intégré en LUFS (Loudness Units relative to Full Scale). -23 LUFS est la norme de diffusion EBU R128. Plage : -40 à -10 LUFS.",
-        "loudnessRangeLabel": "Plage de volume (LU)",
-        "loudnessRangeHelp": "Variation maximale de volume dans le clip (0-20 LU). Des valeurs plus faibles créent un volume plus cohérent mais peuvent réduire la dynamique.",
         "truePeakLabel": "Limite de pic réel (dBTP)",
         "truePeakHelp": "Niveau de pic réel maximal pour éviter l'écrêtage numérique (-10 à 0 dBTP). -2 dBTP fournit une marge de sécurité pour la plupart des systèmes de lecture.",
         "noteTitle": "Norme EBU R128",

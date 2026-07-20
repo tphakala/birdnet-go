@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Lydnormalisering er deaktivert",
         "targetLUFSLabel": "Mål-lydstyrke (LUFS)",
         "targetLUFSHelp": "Integrert lydstyrkeintensitetsmål i LUFS. -23 LUFS er EBU R128 kringkastingsstandarden. Område: -40 til -10 LUFS.",
-        "loudnessRangeLabel": "Lydstyrkevariasjonsområde (LU)",
-        "loudnessRangeHelp": "Maksimal variasjon i lydstyrke innenfor klippet (0–20 LU). Lavere verdier skaper mer konsistent volum, men kan redusere dynamikken.",
         "truePeakLabel": "Sann toppgrense (dBTP)",
         "truePeakHelp": "Maksimalt sann toppnivå for å forhindre digital klipping (-10 til 0 dBTP). -2 dBTP gir trygg hodrom for de fleste avspillingssystemer.",
         "normalizationNote": "EBU R128-standard",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Lydformat for lagrede klipp. WAV og FLAC er tapsfrie (best kvalitet, større filer). MP3, AAC og Opus er tapsbringende (mindre filer, litt kvalitetstap).",
         "bitrateLabel": "Bithastighet",
         "bitrateHelp": "Lydkompresjonsbithastighet for tapsbringende formater. Område: {min}–{max} kbps. Høyere verdier gir bedre kvalitet, men større filer.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Tapsfrie formater bevarer original lydkvalitet uten kompresjonartefakter."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Aktiver klippopptak i Opptak-fanen for å bruke lydnormalisering.",
         "targetLUFSLabel": "Mål-lydstyrke (LUFS)",
         "targetLUFSHelp": "Integrert lydstyrkeintensitetsmål i LUFS. -23 LUFS er EBU R128 kringkastingsstandarden. Område: -40 til -10 LUFS.",
-        "loudnessRangeLabel": "Lydstyrkevariasjonsområde (LU)",
-        "loudnessRangeHelp": "Maksimal variasjon i lydstyrke innenfor klippet (0–20 LU). Lavere verdier skaper mer konsistent volum, men kan redusere dynamikken.",
         "truePeakLabel": "Sann toppgrense (dBTP)",
         "truePeakHelp": "Maksimalt sann toppnivå for å forhindre digital klipping (-10 til 0 dBTP). -2 dBTP gir trygg hodrom for de fleste avspillingssystemer.",
         "noteTitle": "EBU R128-standard",

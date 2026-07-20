@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,25 +60,13 @@ type ExportOptions struct {
 	Channels int
 	// BitDepth is the PCM input bit depth (16, 24, or 32).
 	BitDepth int
-	// Normalization controls EBU R128 loudness normalisation.
-	Normalization ExportNormalization
-	// GainDB is the volume adjustment in dB (0 = no change).
+	// GainDB is the volume adjustment in dB (0 = no change). When the caller has
+	// loudness normalisation enabled this carries the measured EBU R128 gain,
+	// planned in Go by internal/audiocore/audionorm; FFmpeg no longer measures or
+	// normalises anything on this path.
 	GainDB float64
 	// FFmpegPath is the absolute path to the FFmpeg binary.
 	FFmpegPath string
-}
-
-// ExportNormalization holds the parameters for EBU R128 loudness normalisation
-// applied during audio export.
-type ExportNormalization struct {
-	// Enabled activates the loudnorm FFmpeg filter.
-	Enabled bool
-	// TargetLUFS is the integrated loudness target in LUFS (e.g., -23.0).
-	TargetLUFS float64
-	// TruePeak is the true-peak ceiling in dBTP (e.g., -2.0).
-	TruePeak float64
-	// LoudnessRange is the loudness range target in LU (e.g., 7.0).
-	LoudnessRange float64
 }
 
 // ExportAudio encodes PCM data to the specified format and writes the result
@@ -117,6 +104,22 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 			Build()
 	}
 
+	// Reject a gain FFmpeg would mishandle rather than silently corrupt the clip.
+	// This matters because the failure is not symmetric: volume=NaNdB makes FFmpeg
+	// exit with an error, but volume=+InfdB and volume=-InfdB are both ACCEPTED,
+	// producing a saturated or digitally silent file with no warning. GainDB is an
+	// exported field, so a caller that skips the export path's own planner can put
+	// anything here. IsValidGainDB bounds it to +/-MaxGainDB (60), which is wider
+	// than any value either the static setting (+/-40) or the loudness planner
+	// (clamped to +/-60) can produce.
+	if !IsValidGainDB(opts.GainDB) {
+		return errors.Newf("gain %v dB is not a finite value within +/-%.0f dB", opts.GainDB, MaxGainDB).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_validate").
+			Build()
+	}
+
 	phaseTimeout := exportPhaseTimeout(opts)
 
 	// Create the output directory if needed.
@@ -140,29 +143,8 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 		}
 	}()
 
-	filterCtx, filterCancel := context.WithTimeout(ctx, phaseTimeout)
-	audioFilter, err := buildExportAudioFilter(filterCtx, opts)
-	// Capture whether the phase deadline/cancellation fired before filterCancel()
-	// is called; otherwise filterCtx.Err() would always read as cancelled below.
-	filterTimedOut := filterCtx.Err() != nil
-	filterCancel()
-	if err != nil {
-		// Today the filter pipeline only fails when loudnorm analysis is cancelled
-		// or times out; that context error is operational, so return it untagged
-		// (mirroring the native FLAC encoder). A future non-context filter failure
-		// is tagged at the source here instead.
-		if filterTimedOut {
-			return err
-		}
-		return errors.Newf("failed to prepare audio export filter: %w", err).
-			Component("audiocore/ffmpeg").
-			Category(errors.CategoryAudio).
-			Context("operation", "export_prepare_filter").
-			Build()
-	}
-
 	exportCtx, exportCancel := context.WithTimeout(ctx, phaseTimeout)
-	err = runExportFFmpeg(exportCtx, opts, tempPath, audioFilter)
+	err := runExportFFmpeg(exportCtx, opts, tempPath, buildExportAudioFilter(opts))
 	exportCancel()
 	if err != nil {
 		// runExportFFmpeg tags its genuine FFmpeg failures at the source and
@@ -327,15 +309,9 @@ func buildExportFFmpegArgs(opts *ExportOptions, tempPath, audioFilter string) []
 		"-i", "-", // read from stdin
 	}
 
-	// Add audio filter if normalization or gain is requested.
+	// Add the audio filter if a gain adjustment is requested.
 	if audioFilter != "" {
 		args = append(args, "-af", audioFilter)
-	}
-	if opts.Normalization.Enabled {
-		// loudnorm internally upsamples to 192 kHz for true-peak detection.
-		// Pin the encoded file back to the source rate so saved clips keep
-		// their configured sample rate and avoid inflated FLAC output.
-		args = append(args, "-ar", sampleRateStr)
 	}
 
 	args = append(args, "-c:a", outputEncoder)
@@ -356,100 +332,28 @@ func buildExportFFmpegArgs(opts *ExportOptions, tempPath, audioFilter string) []
 }
 
 // buildExportAudioFilter constructs the FFmpeg -af filter string for PCM export.
-// Normalization takes precedence over gain adjustment.
-func buildExportAudioFilter(ctx context.Context, opts *ExportOptions) (string, error) {
-	if opts.Normalization.Enabled {
-		return buildNormalizationFilter(ctx, opts)
+// Gain is the only filter this path applies: loudness normalisation is planned in
+// Go by internal/audiocore/audionorm and reaches here already resolved into
+// opts.GainDB, so every export format now gets the same measured gain regardless
+// of which encoder writes the file.
+func buildExportAudioFilter(opts *ExportOptions) string {
+	if opts.GainDB == 0 {
+		return ""
 	}
-
-	if opts.GainDB != 0 {
-		return buildVolumeFilter(opts.GainDB), nil
-	}
-
-	return "", nil
+	return buildVolumeFilter(opts.GainDB)
 }
 
-func buildNormalizationFilter(ctx context.Context, opts *ExportOptions) (string, error) {
-	stats, err := AnalyzePCMLoudness(ctx, opts.PCMData, opts.FFmpegPath, opts.SampleRate, opts.BitDepth)
-	if err != nil {
-		if ctx.Err() != nil {
-			return "", err
-		}
-		// Preserve the previous single-pass behavior if FFmpeg cannot produce
-		// loudness stats for reasons other than gated near-silence.
-		return buildSinglePassLoudnormFilter(opts.Normalization), nil
-	}
-
-	if stats == nil || !stats.isValid() {
-		offsetDB, ok := loudnormGateFallbackOffset(stats, opts.Normalization)
-		if !ok {
-			return buildSinglePassLoudnormFilter(opts.Normalization), nil
-		}
-		return buildLoudnormOffsetFilter(opts.Normalization, offsetDB), nil
-	}
-
-	return buildTwoPassLoudnormFilter(opts.Normalization, stats), nil
-}
-
-func buildSinglePassLoudnormFilter(norm ExportNormalization) string {
-	return fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f",
-		norm.TargetLUFS,
-		norm.TruePeak,
-		norm.LoudnessRange,
-	)
-}
-
-func buildTwoPassLoudnormFilter(norm ExportNormalization, stats *LoudnessStats) string {
-	return fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f:measured_I=%s:measured_LRA=%s:measured_TP=%s:measured_thresh=%s:linear=true:offset=%s",
-		norm.TargetLUFS,
-		norm.TruePeak,
-		norm.LoudnessRange,
-		stats.InputI,
-		stats.InputLRA,
-		stats.InputTP,
-		stats.InputThresh,
-		stats.TargetOffset,
-	)
-}
-
-func buildLoudnormOffsetFilter(norm ExportNormalization, offsetDB float64) string {
-	return fmt.Sprintf("%s:offset=%.1f",
-		buildSinglePassLoudnormFilter(norm),
-		offsetDB,
-	)
-}
-
+// buildVolumeFilter renders a gain in dB as FFmpeg's volume filter. Six decimals,
+// not the one this used to print: the value is now a measured EBU R128 gain that
+// the native encoders apply as an exact float64, so rounding it here would leave
+// the FFmpeg formats up to 0.05 dB off every other format for no reason. Fixed
+// notation rather than %g because FFmpeg's option parser does not accept
+// exponent form.
 func buildVolumeFilter(gainDB float64) string {
 	if gainDB > 0 {
-		return fmt.Sprintf("volume=+%.1fdB", gainDB)
+		return fmt.Sprintf("volume=+%.6fdB", gainDB)
 	}
-	return fmt.Sprintf("volume=%.1fdB", gainDB) // negative sign included
-}
-
-func loudnormGateFallbackOffset(stats *LoudnessStats, norm ExportNormalization) (float64, bool) {
-	if stats == nil {
-		return 0, false
-	}
-
-	inputTP, ok := parseFiniteFloat(stats.InputTP)
-	if !ok {
-		return 0, false
-	}
-	offsetDB := norm.TruePeak - inputTP
-	offsetDB = math.Max(-MaxGainDB, math.Min(MaxGainDB, offsetDB))
-	if math.Abs(offsetDB) < 0.05 {
-		return 0, false
-	}
-
-	return offsetDB, true
-}
-
-func parseFiniteFloat(value string) (float64, bool) {
-	f, err := strconv.ParseFloat(value, 64)
-	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
-		return 0, false
-	}
-	return f, true
+	return fmt.Sprintf("volume=%.6fdB", gainDB) // negative sign included
 }
 
 // parseBitrateKbps extracts the numeric portion of a bitrate string like "192k"

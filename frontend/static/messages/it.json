@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Normalizzazione audio disabilitata",
         "targetLUFSLabel": "Volume Obiettivo (LUFS)",
         "targetLUFSHelp": "Obiettivo volume integrato in LUFS (Loudness Units relative to Full Scale). -23 LUFS è lo standard broadcast EBU R128. Intervallo: -40 a -10 LUFS.",
-        "loudnessRangeLabel": "Intervallo Volume (LU)",
-        "loudnessRangeHelp": "Variazione massima volume dentro la clip (0-20 LU). Valori più bassi creano volume più coerente ma possono ridurre dinamica.",
         "truePeakLabel": "Limite Picco Reale (dBTP)",
         "truePeakHelp": "Livello picco reale massimo per prevenire clipping digitale (-10 a 0 dBTP). -2 dBTP fornisce margine sicurezza per la maggior parte dei sistemi riproduzione.",
         "normalizationNote": "Standard EBU R128",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Formato audio per clip salvate. WAV e FLAC sono lossless (migliore qualità, file più grandi). MP3, AAC e Opus sono lossy (file più piccoli, leggera perdita qualità).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate compressione audio per formati lossy. Intervallo: {min}-{max} kbps. Valori più alti forniscono migliore qualità ma file più grandi.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Formati lossless preservano qualità audio originale senza artefatti compressione."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Abilita registrazione clip nella scheda Registrazione per usare normalizzazione audio.",
         "targetLUFSLabel": "Volume Obiettivo (LUFS)",
         "targetLUFSHelp": "Obiettivo volume integrato in LUFS (Loudness Units relative to Full Scale). -23 LUFS è lo standard broadcast EBU R128. Intervallo: -40 a -10 LUFS.",
-        "loudnessRangeLabel": "Intervallo Volume (LU)",
-        "loudnessRangeHelp": "Variazione massima volume dentro la clip (0-20 LU). Valori più bassi creano volume più coerente ma possono ridurre dinamica.",
         "truePeakLabel": "Limite Picco Reale (dBTP)",
         "truePeakHelp": "Livello picco reale massimo per prevenire clipping digitale (-10 a 0 dBTP). -2 dBTP fornisce margine sicurezza per la maggior parte dei sistemi riproduzione.",
         "noteTitle": "Standard EBU R128",

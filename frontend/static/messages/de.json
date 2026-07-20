@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Audio-Normalisierung ist deaktiviert",
         "targetLUFSLabel": "Ziellautheit (LUFS)",
         "targetLUFSHelp": "Integrierte Ziellautheit in LUFS (Loudness Units relative to Full Scale). -23 LUFS ist der EBU R128 Broadcast-Standard. Bereich: -40 bis -10 LUFS.",
-        "loudnessRangeLabel": "Lautheitsbereich (LU)",
-        "loudnessRangeHelp": "Maximale Lautheitsvariation innerhalb des Clips (0-20 LU). Niedrigere Werte erzeugen konsistentere Lautstärke, können aber die Dynamik reduzieren.",
         "truePeakLabel": "True Peak Limit (dBTP)",
         "truePeakHelp": "Maximaler True Peak-Pegel zur Vermeidung digitaler Übersteuerung (-10 bis 0 dBTP). -2 dBTP bietet sicheren Headroom für die meisten Wiedergabesysteme.",
         "normalizationNote": "EBU R128 Standard",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Audioformat für gespeicherte Clips. WAV und FLAC sind verlustfrei (beste Qualität, größere Dateien). MP3, AAC und Opus sind verlustbehaftet (kleinere Dateien, leichter Qualitätsverlust).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio-Kompressionsbitrate für verlustbehaftete Formate. Bereich: {min}-{max} kbps. Höhere Werte bieten bessere Qualität, aber größere Dateien.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Verlustfreie Formate bewahren die ursprüngliche Audioqualität ohne Kompressionsartefakte."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Aktivieren Sie die Clip-Aufnahme im Aufnahme-Tab, um die Audio-Normalisierung zu verwenden.",
         "targetLUFSLabel": "Ziel-Lautheit (LUFS)",
         "targetLUFSHelp": "Integrierte Ziellautheit in LUFS (Loudness Units relative to Full Scale). -23 LUFS ist der EBU R128 Broadcast-Standard. Bereich: -40 bis -10 LUFS.",
-        "loudnessRangeLabel": "Lautheitsbereich (LU)",
-        "loudnessRangeHelp": "Maximale Lautheitsvariation innerhalb des Clips (0-20 LU). Niedrigere Werte erzeugen konsistentere Lautstärke, können aber die Dynamik reduzieren.",
         "truePeakLabel": "True Peak Limit (dBTP)",
         "truePeakHelp": "Maximaler True Peak-Pegel zur Vermeidung digitaler Übersteuerung (-10 bis 0 dBTP). -2 dBTP bietet sicheren Headroom für die meisten Wiedergabesysteme.",
         "noteTitle": "EBU R128 Standard",

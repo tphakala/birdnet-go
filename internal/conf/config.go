@@ -54,12 +54,18 @@ type ExportSettings struct {
 	Normalization NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
 }
 
-// NormalizationSettings contains audio normalization configuration based on EBU R128 standard
+// NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
+//
+// Clip normalization applies a single linear gain to reach TargetLUFS without
+// exceeding TruePeak (internal/audiocore/audionorm). There is no dynamic-range
+// stage, so LoudnessRange is accepted and validated but never applied; it is
+// retained only so existing config.yaml files keep loading unchanged.
 type NormalizationSettings struct {
-	Enabled       bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // true to enable loudness normalization
-	TargetLUFS    float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"`          // target integrated loudness in LUFS (default: -23)
-	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
-	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"`                // true peak limit in dBTP (default: -2)
+	Enabled    bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`          // true to enable loudness normalization
+	TargetLUFS float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"` // target integrated loudness in LUFS (default: -23)
+	// Deprecated: no longer applied; retained so existing configs keep loading.
+	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"`
+	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"` // true peak limit in dBTP (default: -2)
 }
 
 type RetentionSettings struct {

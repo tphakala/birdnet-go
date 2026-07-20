@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Lydnormalisering er deaktiveret",
         "targetLUFSLabel": "Mållydstyrke (LUFS)",
         "targetLUFSHelp": "Integreret lydstyrke-mål i LUFS (Loudness Units relative to Full Scale). -23 LUFS er EBU R128-udsendelsesstandarden. Interval: -40 til -10 LUFS.",
-        "loudnessRangeLabel": "Lydstyrkeinterval (LU)",
-        "loudnessRangeHelp": "Maksimal variation i lydstyrke inden for klippet (0-20 LU). Lavere værdier giver mere ensartet volumen, men kan reducere dynamikken.",
         "truePeakLabel": "Ægte spidsværdigrænse (dBTP)",
         "truePeakHelp": "Maksimal ægte spidsværdi for at forhindre digital klipning (-10 til 0 dBTP). -2 dBTP giver sikker hovedrum for de fleste afspilningssystemer.",
         "normalizationNote": "EBU R128-standard",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Lydformat for gemte klip. WAV og FLAC er tabsfri (bedste kvalitet, større filer). MP3, AAC og Opus er tabsgivende (mindre filer, let kvalitetstab).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Lydkomprimerings-bitrate for tabsgivende formater. Interval: {min}-{max} kbps. Højere værdier giver bedre kvalitet, men større filer.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Tabsfri formater bevarer den originale lydkvalitet uden komprimeringsartefakter."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Aktiver klipoptagelse under fanen Optagelse for at bruge lydnormalisering.",
         "targetLUFSLabel": "Mållydstyrke (LUFS)",
         "targetLUFSHelp": "Integreret lydstyrke-mål i LUFS (Loudness Units relative to Full Scale). -23 LUFS er EBU R128-udsendelsesstandarden. Interval: -40 til -10 LUFS.",
-        "loudnessRangeLabel": "Lydstyrkeinterval (LU)",
-        "loudnessRangeHelp": "Maksimal variation i lydstyrke inden for klippet (0-20 LU). Lavere værdier giver mere ensartet volumen, men kan reducere dynamikken.",
         "truePeakLabel": "Ægte spidsværdigrænse (dBTP)",
         "truePeakHelp": "Maksimal ægte spidsværdi for at forhindre digital klipning (-10 til 0 dBTP). -2 dBTP giver sikker hovedrum for de fleste afspilningssystemer.",
         "noteTitle": "EBU R128-standard",

@@ -45,9 +45,14 @@ jobs:
           # the model/frontend go:embed requirement; integration,pebble_e2e additionally
           # lint the integration-tagged test files and the AutoTLS Pebble ACME e2e helpers
           # (which the default tag set never compiles, so they had accumulated lint debt).
+          # normcompare covers the loudness comparison harness in
+          # internal/audiocore/normbench, which is never run in CI (it needs an ffmpeg
+          # binary and a recording corpus) but must still COMPILE there: it mirrors
+          # production normalization internals, so it silently rots whenever those
+          # change. Linting only compiles, so the missing ffmpeg is irrelevant here.
           # No non-test file is gated on !integration, so this stays a strict superset of
           # the plain noembed,skipfrontend view and reports into the same summary below.
-          args: --build-tags=integration,pebble_e2e,noembed,skipfrontend --output.checkstyle.path=golangci-lint-report.xml
+          args: --build-tags=integration,pebble_e2e,noembed,skipfrontend,normcompare --output.checkstyle.path=golangci-lint-report.xml
 
       - name: Generate lint summary
         if: always()

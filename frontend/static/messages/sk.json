@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Normalizácia zvuku je vypnutá",
         "targetLUFSLabel": "Cieľová hlasitosť (LUFS)",
         "targetLUFSHelp": "Cieľová integrovaná hlasitosť v LUFS (Loudness Units relative to Full Scale). -23 LUFS je vysielací štandard EBU R128. Rozsah: -40 až -10 LUFS.",
-        "loudnessRangeLabel": "Rozsah hlasitosti (LU)",
-        "loudnessRangeHelp": "Maximálna variácia hlasitosti v rámci klipu (0-20 LU). Nižšie hodnoty vytvárajú konzistentnejšiu hlasitosť, ale môžu znížiť dynamiku.",
         "truePeakLabel": "Limit True Peak (dBTP)",
         "truePeakHelp": "Maximálna úroveň True Peak na zabránenie digitálnemu orezaniu (clippingu) (-10 až 0 dBTP). -2 dBTP poskytuje bezpečnú rezervu pre väčšinu systémov prehrávania.",
         "normalizationNote": "Štandard EBU R128",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Formát zvuku pre uložené klipy. WAV a FLAC sú bezstratové (najlepšia kvalita, väčšie súbory). MP3, AAC a Opus sú stratové (menšie súbory, mierna strata kvality).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate kompresie zvuku pre stratové formáty. Rozsah: {min}-{max} kbps. Vyššie hodnoty poskytujú lepšiu kvalitu, ale väčšie súbory.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Bezstratové formáty zachovávajú pôvodnú kvalitu zvuku bez artefaktov kompresie."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Pre použitie normalizácie zvuku povoľte nahrávanie klipov na karte Nahrávanie.",
         "targetLUFSLabel": "Cieľová hlasitosť (LUFS)",
         "targetLUFSHelp": "Cieľová integrovaná hlasitosť v LUFS (Loudness Units relative to Full Scale). -23 LUFS je vysielací štandard EBU R128. Rozsah: -40 až -10 LUFS.",
-        "loudnessRangeLabel": "Rozsah hlasitosti (LU)",
-        "loudnessRangeHelp": "Maximálna variácia hlasitosti v rámci klipu (0-20 LU). Nižšie hodnoty vytvárajú konzistentnejšiu hlasitosť, ale môžu znížiť dynamiku.",
         "truePeakLabel": "Limit True Peak (dBTP)",
         "truePeakHelp": "Maximálna úroveň True Peak na zabránenie digitálnemu orezaniu (clippingu) (-10 až 0 dBTP). -2 dBTP poskytuje bezpečnú rezervu pre väčšinu systémov prehrávania.",
         "noteTitle": "Štandard EBU R128",

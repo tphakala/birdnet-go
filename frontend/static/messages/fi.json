@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Äänen normalisointi on poistettu käytöstä",
         "targetLUFSLabel": "Tavoiteäänenvoimakkuus (LUFS)",
         "targetLUFSHelp": "Integroitu äänenvoimakkuustavoite LUFS:na (Loudness Units relative to Full Scale). -23 LUFS on EBU R128 -lähetysstandardi. Alue: -40 - -10 LUFS.",
-        "loudnessRangeLabel": "Äänenvoimakkuusalue (LU)",
-        "loudnessRangeHelp": "Enimmäisvaihtelu äänenvoimakkuudessa leikkeen sisällä (0-20 LU). Matalammat arvot luovat tasaisemman äänenvoimakkuuden mutta saattavat vähentää dynamiikkaa.",
         "truePeakLabel": "Todellinen huippuraja (dBTP)",
         "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
         "normalizationNote": "EBU R128 -standardi",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
         "bitrateLabel": "Bittinopeus",
         "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Ota käyttöön leikkeiden tallennus Tallennus-välilehdellä käyttääksesi äänen normalisointia.",
         "targetLUFSLabel": "Tavoiteäänenvoimakkuus (LUFS)",
         "targetLUFSHelp": "Integroitu äänenvoimakkuustavoite LUFS-yksiköissä (Loudness Units relative to Full Scale). -23 LUFS on EBU R128 -lähetysstandardi. Alue: -40 - -10 LUFS.",
-        "loudnessRangeLabel": "Äänenvoimakkuusalue (LU)",
-        "loudnessRangeHelp": "Enimmäisvaihtelu äänenvoimakkuudessa leikkeen sisällä (0-20 LU). Matalammat arvot luovat tasaisemman äänenvoimakkuuden mutta saattavat vähentää dynamiikkaa.",
         "truePeakLabel": "Todellinen huippuraja (dBTP)",
         "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
         "noteTitle": "EBU R128 -standardi",

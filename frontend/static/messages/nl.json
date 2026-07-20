@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Audionormalisatie is uitgeschakeld",
         "targetLUFSLabel": "Doel Luidheid (LUFS)",
         "targetLUFSHelp": "Geïntegreerd luidheid doel in LUFS (Loudness Units relative to Full Scale). -23 LUFS is de EBU R128 uitzend standaard. Bereik: -40 tot -10 LUFS.",
-        "loudnessRangeLabel": "Luidheid Bereik (LU)",
-        "loudnessRangeHelp": "Maximum variatie in luidheid binnen de clip (0-20 LU). Lagere waarden creëren meer consistent volume maar kunnen dynamiek verminderen.",
         "truePeakLabel": "Ware Piek Limiet (dBTP)",
         "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
         "normalizationNote": "EBU R128 Standaard",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Schakel clip opname in op het Opname tabblad om audio normalisatie te gebruiken.",
         "targetLUFSLabel": "Doel Luidheid (LUFS)",
         "targetLUFSHelp": "Geïntegreerd luidheid doel in LUFS (Loudness Units relative to Full Scale). -23 LUFS is de EBU R128 uitzend standaard. Bereik: -40 tot -10 LUFS.",
-        "loudnessRangeLabel": "Luidheid Bereik (LU)",
-        "loudnessRangeHelp": "Maximum variatie in luidheid binnen de clip (0-20 LU). Lagere waarden creëren meer consistent volume maar kunnen dynamiek verminderen.",
         "truePeakLabel": "Ware Piek Limiet (dBTP)",
         "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
         "noteTitle": "EBU R128 Standaard",

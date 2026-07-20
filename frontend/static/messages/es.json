@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "La normalización de audio está deshabilitada",
         "targetLUFSLabel": "Volumen objetivo (LUFS)",
         "targetLUFSHelp": "Objetivo de volumen integrado en LUFS (Loudness Units relative to Full Scale). -23 LUFS es el estándar de transmisión EBU R128. Rango: -40 a -10 LUFS.",
-        "loudnessRangeLabel": "Rango de volumen (LU)",
-        "loudnessRangeHelp": "Variación máxima de volumen dentro del clip (0-20 LU). Valores más bajos crean volumen más consistente pero pueden reducir la dinámica.",
         "truePeakLabel": "Límite de pico verdadero (dBTP)",
         "truePeakHelp": "Nivel máximo de pico verdadero para evitar recorte digital (-10 a 0 dBTP). -2 dBTP proporciona margen seguro para la mayoría de sistemas de reproducción.",
         "normalizationNote": "Estándar EBU R128",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Formato de audio para clips guardados. WAV y FLAC son sin pérdida (mejor calidad, archivos más grandes). MP3, AAC y Opus son con pérdida (archivos más pequeños, ligera pérdida de calidad).",
         "bitrateLabel": "Tasa de bits",
         "bitrateHelp": "Tasa de bits de compresión de audio para formatos con pérdida. Rango: {min}-{max} kbps. Valores más altos proporcionan mejor calidad pero archivos más grandes.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Los formatos sin pérdida preservan la calidad de audio original sin artefactos de compresión."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Habilite la grabación de clips en la pestaña Grabación para usar la normalización de audio.",
         "targetLUFSLabel": "Volumen objetivo (LUFS)",
         "targetLUFSHelp": "Objetivo de volumen integrado en LUFS (Unidades de volumen relativas a escala completa). -23 LUFS es el estándar de transmisión EBU R128. Rango: -40 a -10 LUFS.",
-        "loudnessRangeLabel": "Rango de volumen (LU)",
-        "loudnessRangeHelp": "Variación máxima de volumen dentro del clip (0-20 LU). Valores más bajos crean volumen más consistente pero pueden reducir la dinámica.",
         "truePeakLabel": "Límite de pico verdadero (dBTP)",
         "truePeakHelp": "Nivel máximo de pico verdadero para evitar recorte digital (-10 a 0 dBTP). -2 dBTP proporciona margen seguro para la mayoría de sistemas de reproducción.",
         "noteTitle": "Estándar EBU R128",

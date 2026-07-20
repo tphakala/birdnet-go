@@ -674,14 +674,29 @@ func validateNormalizationSettings(norm *NormalizationSettings, gain float64) er
 			Context("max_target_lufs", MaxTargetLUFS).
 			Build()
 	}
-	if math.IsNaN(norm.LoudnessRange) || math.IsInf(norm.LoudnessRange, 0) || norm.LoudnessRange < MinLoudnessRange || norm.LoudnessRange > MaxLoudnessRange {
-		return errors.Newf("normalization loudness range must be between %.0f and %.0f LU, got %.1f", MinLoudnessRange, MaxLoudnessRange, norm.LoudnessRange).
+	// LoudnessRange is deprecated and no longer applied by any export path, so the
+	// two halves of this check now deserve different answers.
+	//
+	// A non-finite value still fails: NaN/Inf anywhere in the settings tree is a
+	// corrupt-config signal this package rejects uniformly, and weakening that for
+	// one field would carve a hole in a deliberate hardening posture for no gain.
+	//
+	// A merely out-of-range finite value now warns instead. It cannot affect a
+	// single exported clip any more, so refusing to start over it would block an
+	// upgrade on a setting that does nothing.
+	switch {
+	case math.IsNaN(norm.LoudnessRange) || math.IsInf(norm.LoudnessRange, 0):
+		return errors.Newf("normalization loudness range must be a finite number, got %v", norm.LoudnessRange).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "audio-normalization-range").
 			Context("loudness_range", norm.LoudnessRange).
-			Context("min_loudness_range", MinLoudnessRange).
-			Context("max_loudness_range", MaxLoudnessRange).
 			Build()
+	case norm.LoudnessRange < MinLoudnessRange || norm.LoudnessRange > MaxLoudnessRange:
+		GetLogger().Warn("Ignoring out-of-range normalization loudness range; the setting is deprecated and no longer applied",
+			logger.Float64("loudness_range", norm.LoudnessRange),
+			logger.Float64("min_loudness_range", MinLoudnessRange),
+			logger.Float64("max_loudness_range", MaxLoudnessRange),
+			logger.String("validation_type", "audio-normalization-range"))
 	}
 	if math.IsNaN(norm.TruePeak) || math.IsInf(norm.TruePeak, 0) || norm.TruePeak < MinTruePeak || norm.TruePeak > MaxTruePeak {
 		return errors.Newf("normalization true peak must be between %.0f and %.0f dBTP, got %.1f", MinTruePeak, MaxTruePeak, norm.TruePeak).

@@ -1344,7 +1344,7 @@
         },
         "loudnessrange": {
           "type": "number",
-          "description": "loudness range in LU (default: 7)"
+          "description": "Deprecated: no longer applied; retained so existing configs keep loading."
         },
         "truepeak": {
           "type": "number",
@@ -1353,7 +1353,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "description": "NormalizationSettings contains audio normalization configuration based on EBU R128 standard"
+      "description": "NormalizationSettings contains audio normalization configuration based on EBU R128 standard."
     },
     "NotificationConfig": {
       "properties": {

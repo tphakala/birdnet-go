@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Audio normalizācija ir atspējota",
         "targetLUFSLabel": "Mērķa skaļums (LUFS)",
         "targetLUFSHelp": "Integrētais skaļuma mērķis LUFS (skaļuma vienības attiecībā pret pilnu skalu). -23 LUFS ir EBU R128 apraides standarts. Diapazons: no -40 līdz -10 LUFS.",
-        "loudnessRangeLabel": "Skaļuma diapazons (LU)",
-        "loudnessRangeHelp": "Maksimālā skaļuma variācija klipā (0-20 LU). Zemākas vērtības rada konsekventāku skaļumu, bet var samazināt dinamiku.",
         "truePeakLabel": "Patiesā maksimuma limits (dBTP)",
         "truePeakHelp": "Maksimālais patiesā maksimuma līmenis, lai novērstu digitālo apgriešanu (no -10 līdz 0 dBTP). -2 dBTP nodrošina drošu brīvo vietu lielākajai daļai atskaņošanas sistēmu.",
         "normalizationNote": "EBU R128 standarts",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Audio formāts saglabātajiem klipiem. WAV un FLAC ir bezzudumu (labākā kvalitāte, lielāki faili). MP3, AAC un Opus ir ar zudumiem (mazāki faili, neliels kvalitātes zudums).",
         "bitrateLabel": "Bitu pārraides ātrums",
         "bitrateHelp": "Audio kompresijas bitu pārraides ātrums formātiem ar zudumiem. Diapazons: {min}-{max} kbps. Augstākas vērtības nodrošina labāku kvalitāti, bet lielākus failus.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Bezzudumu formāti saglabā oriģinālo audio kvalitāti bez kompresijas artefaktiem."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Iespējojiet klipu ierakstīšanu cilnē Ierakstīšana, lai izmantotu audio normalizāciju.",
         "targetLUFSLabel": "Mērķa skaļums (LUFS)",
         "targetLUFSHelp": "Integrētais skaļuma mērķis LUFS (skaļuma vienības attiecībā pret pilnu skalu). -23 LUFS ir EBU R128 apraides standarts. Diapazons: no -40 līdz -10 LUFS.",
-        "loudnessRangeLabel": "Skaļuma diapazons (LU)",
-        "loudnessRangeHelp": "Maksimālā skaļuma variācija klipā (0-20 LU). Zemākas vērtības rada konsekventāku skaļumu, bet var samazināt dinamiku.",
         "truePeakLabel": "Patiesā maksimuma limits (dBTP)",
         "truePeakHelp": "Maksimālais patiesā maksimuma līmenis, lai novērstu digitālo apgriešanu (no -10 līdz 0 dBTP). -2 dBTP nodrošina drošu brīvo vietu lielākajai daļai atskaņošanas sistēmu.",
         "noteTitle": "EBU R128 standarts",

@@ -527,20 +527,40 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 // accepts the clip's shape. Everything else, and every non-gated AAC or Opus
 // clip, goes to FFmpeg.
 //
-// On a native path gain is applied in Go, and when normalization is enabled the
-// EBU R128 loudness is measured and applied via audionorm with no FFmpeg
-// loudnorm dependency. On the FFmpeg path FFmpeg still owns both.
+// Loudness is resolved identically for every format: when normalization is
+// enabled the EBU R128 gain is measured in Go via audionorm, otherwise the
+// static Export.Gain is used. A native encoder applies that gain itself, WAV has
+// it applied to the samples before writing, and FFmpeg receives it as a plain
+// volume filter. FFmpeg's loudnorm filter is not used on this path at all, so no
+// export format depends on FFmpeg for normalization.
 func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, exportFormat, outputPath string) (string, error) {
 	switch exportFormat {
 	case ffmpeg.FormatWAV:
-		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, exportRate, conf.BitDepth); err != nil {
+		// WAV honours the resolved gain like every other format. It used to be the
+		// one exception, writing captured samples verbatim, which meant an
+		// operator with normalization or Export.Gain configured silently got
+		// neither. That was easy to miss because WAV is not only a chosen format:
+		// resolveExportParams downgrades to it for bat/ultrasonic clips
+		// (needsBatFormatFallback) and for installs with no usable encoder
+		// (strandedWithoutEncoder), so a user could land here without asking to.
+		gainDB, err := a.resolveExportGainDB(ctx, exportRate, exportFormat)
+		if err != nil {
+			return "", err
+		}
+		pcm := a.pcmData
+		if gainDB != 0 {
+			// Applied returns a gained copy, so a.pcmData stays pristine for the
+			// spectrogram pre-render job that reads it after the export.
+			pcm = pcmgain.Applied(pcm, gainDB)
+		}
+		if err := convert.SavePCMDataToWAV(outputPath, pcm, exportRate, conf.BitDepth); err != nil {
 			return "", err
 		}
 		return encoderNativeWAV, nil
 
 	case ffmpeg.FormatFLAC:
 		// FLAC always encodes natively via go-flac; FFmpeg is never used for FLAC.
-		gainDB, err := a.resolveNativeGainDB(ctx, exportRate, exportFormat)
+		gainDB, err := a.resolveExportGainDB(ctx, exportRate, exportFormat)
 		if err != nil {
 			return "", err
 		}
@@ -571,16 +591,22 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
 
 	default:
-		// MP3 is the only remaining format, and FFmpeg owns its EBU R128 loudnorm
-		// normalization too. WAV, FLAC, AAC and Opus never reach this branch.
+		// MP3 is the only remaining format, and FFmpeg owns its codec only; the
+		// loudness gain is resolved in Go first. WAV, FLAC, AAC and Opus never
+		// reach this branch.
 		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath)
 	}
 }
 
-// encodeClipFFmpeg encodes the clip with FFmpeg, which owns both the codec and
-// its EBU R128 loudnorm normalization.
+// encodeClipFFmpeg encodes the clip with FFmpeg, which owns the codec only. The
+// loudness gain is planned in Go before FFmpeg is invoked, exactly as on the
+// native paths, and FFmpeg applies it as a plain volume filter.
 func (a *SaveAudioAction) encodeClipFFmpeg(ctx context.Context, exportRate int, exportFormat, outputPath string) (string, error) {
-	if err := ffmpeg.ExportAudio(ctx, a.buildFFmpegExportOptions(exportRate, exportFormat, outputPath)); err != nil {
+	opts, err := a.buildFFmpegExportOptions(ctx, exportRate, exportFormat, outputPath)
+	if err != nil {
+		return "", err
+	}
+	if err := ffmpeg.ExportAudio(ctx, opts); err != nil {
 		return "", err
 	}
 	return encoderFFmpeg, nil
@@ -590,8 +616,17 @@ func (a *SaveAudioAction) encodeClipFFmpeg(ctx context.Context, exportRate int, 
 // from encodeClipFFmpeg so a test can assert every field without running FFmpeg:
 // this is the default path every existing install takes, so a silently dropped
 // field here would be a regression no other test would catch.
-func (a *SaveAudioAction) buildFFmpegExportOptions(exportRate int, exportFormat, outputPath string) *ffmpeg.ExportOptions {
+//
+// GainDB carries the resolved loudness gain rather than the raw Export.Gain
+// setting, so an FFmpeg-encoded clip is normalised by the same audionorm
+// measurement as a natively encoded one. FFmpeg's loudnorm filter is no longer
+// used anywhere on this path.
+func (a *SaveAudioAction) buildFFmpegExportOptions(ctx context.Context, exportRate int, exportFormat, outputPath string) (*ffmpeg.ExportOptions, error) {
 	exportSettings := &a.Settings.Realtime.Audio.Export
+	gainDB, err := a.resolveExportGainDB(ctx, exportRate, exportFormat)
+	if err != nil {
+		return nil, err
+	}
 	return &ffmpeg.ExportOptions{
 		PCMData:    a.pcmData,
 		OutputPath: outputPath,
@@ -601,14 +636,8 @@ func (a *SaveAudioAction) buildFFmpegExportOptions(exportRate int, exportFormat,
 		Channels:   conf.NumChannels,
 		BitDepth:   conf.BitDepth,
 		FFmpegPath: a.Settings.Realtime.Audio.FfmpegPath,
-		GainDB:     exportSettings.Gain,
-		Normalization: ffmpeg.ExportNormalization{
-			Enabled:       exportSettings.Normalization.Enabled,
-			TargetLUFS:    exportSettings.Normalization.TargetLUFS,
-			TruePeak:      exportSettings.Normalization.TruePeak,
-			LoudnessRange: exportSettings.Normalization.LoudnessRange,
-		},
-	}
+		GainDB:     gainDB,
+	}, nil
 }
 
 // encodeClipNativeAAC encodes the clip to AAC-LC in an MP4 (.m4a) container with
@@ -617,7 +646,7 @@ func (a *SaveAudioAction) buildFFmpegExportOptions(exportRate int, exportFormat,
 // would hide exactly the failures this rollout exists to surface.
 func (a *SaveAudioAction) encodeClipNativeAAC(ctx context.Context, exportRate int, outputPath string) (string, error) {
 	exportSettings := &a.Settings.Realtime.Audio.Export
-	gainDB, err := a.resolveNativeGainDB(ctx, exportRate, ffmpeg.FormatAAC)
+	gainDB, err := a.resolveExportGainDB(ctx, exportRate, ffmpeg.FormatAAC)
 	if err != nil {
 		return "", err
 	}
@@ -639,7 +668,7 @@ func (a *SaveAudioAction) encodeClipNativeAAC(ctx context.Context, exportRate in
 // with AAC, a failure is surfaced rather than falling back to FFmpeg.
 func (a *SaveAudioAction) encodeClipNativeOpus(ctx context.Context, exportRate int, outputPath string) (string, error) {
 	exportSettings := &a.Settings.Realtime.Audio.Export
-	gainDB, err := a.resolveNativeGainDB(ctx, exportRate, ffmpeg.FormatOpus)
+	gainDB, err := a.resolveExportGainDB(ctx, exportRate, ffmpeg.FormatOpus)
 	if err != nil {
 		return "", err
 	}
@@ -718,17 +747,31 @@ func logNativeEncoderSkipped(once *sync.Once, format string, reason error) {
 	})
 }
 
-// resolveNativeGainDB returns the gain in dB a native encoder should apply to
-// this clip. With normalization enabled and supported it is the measured EBU
-// R128 gain, which intentionally replaces rather than compounds the static
-// Export.Gain, matching the FFmpeg path where an enabled loudnorm filter also
-// supersedes the volume filter. Otherwise it is the static Export.Gain.
+// resolveExportGainDB returns the gain in dB to apply to this clip. Every export
+// path reads it: a native encoder applies the value itself, and FFmpeg receives
+// it as a volume filter. With normalization enabled and supported it is the
+// measured EBU R128 gain, which intentionally replaces rather than compounds the
+// static Export.Gain, matching the FFmpeg loudnorm behaviour this replaced, where
+// an enabled loudnorm filter also superseded the volume filter. Otherwise it is
+// the static Export.Gain.
 //
 // Note that audionorm applies a single linear gain to reach the target
 // integrated loudness under the true-peak ceiling. It does not consume
-// Normalization.LoudnessRange, so a clip encoded on a native path has no
-// LRA/dynamic-range treatment where FFmpeg's loudnorm would have applied one.
-func (a *SaveAudioAction) resolveNativeGainDB(ctx context.Context, exportRate int, format string) (float64, error) {
+// Normalization.LoudnessRange, so no export format gets LRA/dynamic-range
+// treatment any more.
+//
+// That is deliberate. On a clip built to force FFmpeg out of linear mode
+// (measured LRA 7.40 against a 7.0 target) loudnorm's dynamic mode compressed
+// LRA only 7.4 to 7.1 while missing the loudness target by 1.1 LU, where the
+// linear gain landed within 0.02 LU. Reproduce with the normbench
+// transient-over-quiet-bed case: go test -tags normcompare
+// ./internal/audiocore/normbench/ and read the LRA p/n/f column.
+//
+// Scope that evidence honestly: it was gathered on clips around the 15 s default
+// export length. Extended capture can export far longer clips
+// (conf.MaxExtendedCaptureDuration is 1200 s), where dynamic-range treatment
+// would matter more, and the corpus does not cover that.
+func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate int, format string) (float64, error) {
 	exportSettings := &a.Settings.Realtime.Audio.Export
 	if !exportSettings.Normalization.Enabled {
 		return exportSettings.Gain, nil
@@ -736,15 +779,39 @@ func (a *SaveAudioAction) resolveNativeGainDB(ctx context.Context, exportRate in
 
 	depthSupported := conf.BitDepth == nativeNormalizationBitDepth
 	if depthSupported && audionormSupportsTargets(exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak) {
-		return a.planNativeNormalizationGain(ctx, exportRate, format,
+		gainDB, err := a.planNativeNormalizationGain(ctx, exportRate, format,
 			exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak)
+		switch {
+		case err == nil:
+			return gainDB, nil
+		case ctx.Err() != nil:
+			// The caller is going away; do not paper over that with a fallback.
+			return 0, err
+		}
+		// The clip could not be measured (audionorm rejects the dimensions, e.g. a
+		// source reporting a sample rate below the K-weighting minimum). Losing
+		// normalization is bad; losing the recording is worse, and every other
+		// unmeasurable case below already degrades to the static gain. Before this
+		// path stopped using loudnorm, FFmpeg would still have produced a clip
+		// here, so failing hard would be a new way to lose audio on the default
+		// MP3 install.
+		GetLogger().Warn("Loudness measurement failed; encoding without normalization",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("format", format),
+			logger.Int("sample_rate", exportRate),
+			logger.Error(err),
+			logger.String("reason", "measurement_failed"),
+			logger.String("operation", "audio_export_normalize_skip"))
+		return exportSettings.Gain, nil
 	}
 
 	// Unreachable for a validated config: capture is 16-bit (conf.BitDepth) and
-	// settings validation clamps the loudness targets into audionorm's range.
-	// Defense-in-depth for unvalidated/legacy settings only. There is no FFmpeg
-	// loudnorm fallback on a native path, so encode with the static gain and
-	// surface the skipped normalization at WARN.
+	// settings validation REJECTS loudness targets outside audionorm's range at
+	// startup rather than clamping them, so a running instance cannot hold one.
+	// Defense-in-depth for unvalidated/legacy settings only. There is no longer a
+	// loudnorm fallback on any path, FFmpeg included, so encode with the static
+	// gain and surface the skipped normalization at WARN.
 	reason := "normalization_targets_out_of_native_range"
 	if !depthSupported {
 		reason = "unsupported_bit_depth"
@@ -778,13 +845,17 @@ func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
 	return targetLUFS < 0 && targetLUFS > audionormMinTargetLUFS && truePeakDBTP <= 0
 }
 
-// nativeExportMaxGainDB is the absolute backstop on the loudness gain a native
-// export applies. It is not an arbitrary round number: the widest lift any
-// in-range configuration can legitimately ask for is the most aggressive
-// permitted target (conf.MaxTargetLUFS, -10) minus the EBU R128 absolute gate
-// (audionormMinTargetLUFS, -70), which is exactly 60 dB. It also coincides with
-// the ceiling the FFmpeg loudnorm path allows (ffmpeg.MaxGainDB), so a quiet
-// clip is corrected no less on a native encoder than it was on FFmpeg.
+// nativeExportMaxGainDB is the absolute backstop on the loudness gain a clip
+// export applies, whichever encoder writes the file. It is not an arbitrary round
+// number: the widest lift any in-range configuration can legitimately ask for is
+// the most aggressive permitted target (conf.MaxTargetLUFS, -10) minus the EBU
+// R128 absolute gate (audionormMinTargetLUFS, -70), which is exactly 60 dB.
+//
+// It is numerically equal to ffmpeg.MaxGainDB, but do not read that as "the
+// ceiling loudnorm allowed": ffmpeg.MaxGainDB bounded only the gate-fallback
+// OFFSET the removed export path computed, never loudnorm's own two-pass output
+// (see the note on audionorm.DefaultMaxGainDB). The equality is a coincidence of
+// two independent derivations, not a shared constraint.
 //
 // Deliberately not audionorm.DefaultMaxGainDB (30 dB). That is the BirdWeather
 // soundscape-upload ceiling and stays where it is: those uploads go to a public
@@ -798,7 +869,7 @@ const nativeExportMaxGainDB = 60.0
 // -Inf, and PlanGain plans no gain at all for it, so the clip would be exported
 // untouched and inaudible. When such a clip still has a finite true peak there
 // is enough signal to work with, so the gain is anchored to the true-peak
-// ceiling, as the FFmpeg path does in loudnormGateFallbackOffset.
+// ceiling, which is what the removed FFmpeg loudnorm path did for the same case.
 //
 // That anchor alone is not enough. Lifting purely by true-peak headroom leaves
 // the resulting loudness at (ceiling - crest factor), so a FLAT signal (steady

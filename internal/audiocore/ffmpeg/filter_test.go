@@ -27,12 +27,12 @@ func TestBuildProcessingFilterChain(t *testing.T) {
 		{
 			name:        "gain only",
 			filters:     ffmpeg.AudioFilters{GainDB: 6.0},
-			wantContain: []string{"volume=+6.0dB"},
+			wantContain: []string{"volume=+6.000000dB"},
 		},
 		{
 			name:        "negative gain",
 			filters:     ffmpeg.AudioFilters{GainDB: -3.0},
-			wantContain: []string{"volume=-3.0dB"},
+			wantContain: []string{"volume=-3.000000dB"},
 		},
 		{
 			name:        "denoise light",
@@ -74,7 +74,7 @@ func TestBuildProcessingFilterChain(t *testing.T) {
 				Denoise: "light",
 				GainDB:  3.0,
 			},
-			wantContain: []string{"afftdn=", "volume=+3.0dB"},
+			wantContain: []string{"afftdn=", "volume=+3.000000dB"},
 		},
 		{
 			name:      "unknown denoise preset is ignored",
