@@ -23,3 +23,9 @@ func resetNativeSkipOnce() {
 	nativeAACSkipOnce = sync.Once{}
 	nativeOpusSkipOnce = sync.Once{}
 }
+
+// resetBatFormatDowngradeOnce re-arms the ultrasonic WAV-downgrade log guard for
+// the same reason as resetNativeSkipOnce. Test-only.
+func resetBatFormatDowngradeOnce() {
+	batFormatDowngradeOnce = sync.Once{}
+}

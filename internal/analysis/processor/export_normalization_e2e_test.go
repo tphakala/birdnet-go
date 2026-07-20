@@ -78,7 +78,7 @@ func TestEncodeClip_FFmpegPathNormalizesToTarget(t *testing.T) {
 
 	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
 	require.NoError(t, err)
-	require.Equal(t, encoderFFmpeg, enc, "MP3 has no native encoder; it must go through FFmpeg")
+	require.Equal(t, encoderFFmpeg, enc.Encoder, "MP3 has no native encoder; it must go through FFmpeg")
 
 	got := measureLUFS(t, decodeToPCM16(t, ffmpegBin, out))
 
@@ -110,7 +110,7 @@ func TestEncodeClip_WAVAppliesResolvedGain(t *testing.T) {
 
 	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatWAV, out)
 	require.NoError(t, err)
-	require.Equal(t, encoderNativeWAV, enc)
+	require.Equal(t, encoderNativeWAV, enc.Encoder)
 
 	got := measureLUFS(t, readWAVSamples(t, out))
 	assert.InDelta(t, testTargetLUFS, got, 0.5, "WAV must honour the resolved loudness gain")
