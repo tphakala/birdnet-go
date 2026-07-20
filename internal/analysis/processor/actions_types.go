@@ -106,14 +106,21 @@ type SaveAudioAction struct {
 	beginTime        time.Time
 	duration         int
 	readyAt          time.Time
-	sourceSampleRate int               // Actual source capture rate for correct export headers
-	modelName        string            // Detection model name (e.g. "BattyBirdNET") for export strategy
-	NoteID           uint              // Note ID for correlation logging with pre-renderer
-	PreRenderer      PreRendererSubmit // Injected from processor
-	DetectionCtx     *DetectionContext // Shared context to signal ClipSaved to late consumers
-	EventTracker     *EventTracker
-	Description      string
-	CorrelationID    string // Detection correlation ID for log tracking
+	sourceSampleRate int    // Actual source capture rate for correct export headers
+	modelName        string // Detection model name (e.g. "BattyBirdNET") for export strategy
+	// species is the detection's common name, carried solely so the
+	// audio_export_success log line can name it. GET /api/v2/system/events/detections
+	// attributes recorded clip paths to a species by reading that field back out of
+	// the log (see the audio_export_success case in
+	// internal/api/v2/system/events_aggregation.go); without it every bucket the
+	// endpoint returns has an empty ClipPaths.
+	species       string
+	NoteID        uint              // Note ID for correlation logging with pre-renderer
+	PreRenderer   PreRendererSubmit // Injected from processor
+	DetectionCtx  *DetectionContext // Shared context to signal ClipSaved to late consumers
+	EventTracker  *EventTracker
+	Description   string
+	CorrelationID string // Detection correlation ID for log tracking
 }
 
 // PreRenderJob represents a spectrogram pre-rendering task.

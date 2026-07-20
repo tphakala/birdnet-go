@@ -63,6 +63,19 @@ type clipEncoding struct {
 	Encoder     string  // encoderNativeAAC, encoderFFmpeg, ...
 	GainDB      float64 // loudness gain the encoder applies to the clip
 	BitrateKbps int     // encoded bitrate for the lossy formats; 0 when lossless
+	// GainResolved distinguishes "the gain is 0 dB" from "the export failed
+	// before the gain was known". Without it a failure during gain resolution
+	// logs gain_db=0, which is also the default Export.Gain, so the field reads
+	// as a measurement when it is really an absence.
+	GainResolved bool
+	// MeasureMs and EncodeMs are timed separately because they answer different
+	// questions and have wildly different costs. Resolving the gain with
+	// normalization enabled is a full-clip EBU R128 pass, which on a Pi with a
+	// 20-minute extended capture dominates the export; folding it into a single
+	// encode_ms blames the codec for normalization cost and makes both "exports
+	// are slow" and native-vs-FFmpeg comparisons read wrong.
+	MeasureMs int64 // wall time resolving the loudness gain (0 when normalization is off)
+	EncodeMs  int64 // wall time inside the encoder itself
 }
 
 // Execute logs the note to the log file.
@@ -466,11 +479,9 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 
 	exportRate, exportFormat, outputPath := a.resolveExportParams(outputPath)
 
-	encodeStart := time.Now()
 	enc, err := a.encodeClip(ctx, exportRate, exportFormat, outputPath)
-	encodeDuration := time.Since(encodeStart)
 	if err != nil {
-		a.logExportFailure(ctx, &enc, exportFormat, exportRate, outputPath, err)
+		a.logExportFailure(&enc, exportFormat, exportRate, outputPath, err)
 		return err
 	}
 
@@ -497,18 +508,28 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// too quiet" (gain_db, against the configured normalization) and "my clips are
 	// truncated" (duration_ms next to file_size_bytes, which on its own cannot
 	// distinguish a short capture from a bad encode).
-	fields := make([]logger.Field, 0, 12)
+	//
+	// The species field is not decoration: GET /api/v2/system/events/detections
+	// attributes recorded clip paths to a species by reading species and clip_path
+	// back off this line (the audio_export_success case in
+	// internal/api/v2/system/events_aggregation.go). It consumes only this line, so
+	// dropping the field empties every ClipPaths the endpoint returns.
+	// 14 = the 12 unconditional fields below, plus bitrate_kbps on the lossy
+	// formats, plus operation.
+	fields := make([]logger.Field, 0, 14)
 	fields = append(fields,
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
-		logger.String("clip_path", filepath.Base(outputPath)),
+		logger.String("species", a.species),
+		logger.String("clip_path", a.relativeClipPath(outputPath)),
 		logger.Int64("file_size_bytes", fileSize),
 		logger.String("format", exportFormat),
 		logger.String("encoder", enc.Encoder),
 		logger.Int("sample_rate", exportRate),
 		logger.Float64("gain_db", enc.GainDB),
 		logger.Int64("duration_ms", clipDurationMs(len(a.pcmData), exportRate)),
-		logger.Int64("encode_ms", encodeDuration.Milliseconds()),
+		logger.Int64("measure_ms", enc.MeasureMs),
+		logger.Int64("encode_ms", enc.EncodeMs),
 	)
 	if enc.BitrateKbps > 0 {
 		fields = append(fields, logger.Int("bitrate_kbps", enc.BitrateKbps))
@@ -549,10 +570,39 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	return nil
 }
 
+// relativeClipPath is the clip's name relative to the export directory, which is
+// how the rest of the system identifies a clip: it is the value stored on the
+// detection and the one the media endpoint resolves (/api/v2/media/audio/{name}).
+//
+// The export directory is deliberately stripped. Support logs and uploaded
+// support dumps are read by someone other than the operator, and the absolute
+// path leaks the account name and layout of their machine. The year/month
+// segments leak nothing and are load-bearing: GET /api/v2/system/events/detections
+// reports these values as SpeciesEntry.ClipPaths, and a bare basename cannot be
+// resolved back to a file. Recomputed from outputPath rather than reusing
+// a.ClipName because resolveExportParams may have corrected the extension.
+func (a *SaveAudioAction) relativeClipPath(outputPath string) string {
+	rel, err := filepath.Rel(a.Settings.Realtime.Audio.Export.Path, outputPath)
+	// Rel reports an error only when it cannot express the relationship at all
+	// (one path absolute and the other relative, different Windows volumes). It
+	// happily walks UP with ".." when both are absolute but outputPath sits
+	// outside the export directory, and that result would defeat the whole point
+	// of the function: "../../../etc/passwd" leaks the layout above the export
+	// directory into a support dump and is not a clip name any consumer can
+	// resolve. IsLocal rejects exactly that, plus absolute results and Windows
+	// reserved names. Either way the basename is the safe answer: it still names
+	// the clip and still contains no directory.
+	if err != nil || !filepath.IsLocal(rel) {
+		return filepath.Base(outputPath)
+	}
+	return filepath.ToSlash(rel)
+}
+
 // clipDurationMs is the wall duration of the captured PCM at the export rate.
-// It is logged next to the encoded file size because size alone cannot tell a
-// short capture apart from a truncated encode, and both get reported the same
-// way ("my clips are cut off").
+// On the success line it is logged next to the encoded file size, because size
+// alone cannot tell a short capture apart from a truncated encode and both get
+// reported the same way ("my clips are cut off"). The failure line has no file
+// size to pair it with; there it says how much audio the export was carrying.
 func clipDurationMs(pcmBytes, sampleRate int) int64 {
 	bytesPerFrame := (conf.BitDepth / 8) * conf.NumChannels
 	if sampleRate <= 0 || bytesPerFrame <= 0 {
@@ -564,40 +614,94 @@ func clipDurationMs(pcmBytes, sampleRate int) int64 {
 
 // logExportFailure records a failed clip export against the encoder that failed.
 //
-// Without it the only trace of a failed export is the job queue's generic "Job
-// failed" line, which carries the action description and the error and names
-// neither the encoder nor the format. An operator who opted a format into its
-// native encoder could not tell from the logs whether go-aac or FFmpeg produced
-// the failure, which is exactly what the gated rollout needs to know.
+// Without it the only trace of a failed export is the job queue's own line
+// ("Job failed permanently" once the attempts are exhausted, "Job scheduled for
+// retry after failure" before that), which carries the action description and
+// the error and names neither the encoder nor the format. An operator who opted
+// a format into its native encoder could not tell from the logs whether go-aac
+// or FFmpeg produced the failure, which is exactly what the gated rollout needs
+// to know.
 //
-// A CANCELLED context is shutdown rather than a defect, so it is recorded at
-// Debug: exports in flight when the process stops must not look like errors. A
-// context that EXPIRED is the opposite and stays at WARN. The job queue wraps
-// every execution in context.WithTimeout (handleJob), so the export context
-// always carries a deadline, and an encode slow enough to blow it (a hung
-// FFmpeg, a long extended capture on a Pi) is precisely the failure this line
-// exists to surface. Testing ctx.Err() != nil would bury it at Debug, because
-// Err() reports DeadlineExceeded just as readily as Canceled.
+// A CANCELLED export is shutdown rather than a defect, so it is recorded at
+// Debug: exports in flight when the process stops must not look like errors.
+//
+// The classification reads the ERROR, not the context state at the moment of
+// logging. Asking the context whether it was cancelled answers a different
+// question: it says the process is shutting down, not that shutdown is why this
+// export failed. ENOSPC, corrupt PCM or a missing FFmpeg binary hit while a
+// shutdown happens to be in progress all satisfy a ctx-based test and would be
+// filed at Debug under a message asserting they were cancelled, which on a
+// container that OOM-restarts misattributes every in-flight failure in the
+// restart window.
+//
+// Every path that CONTEXT cancellation can interrupt reports it in the error, so
+// nothing about a normal shutdown is lost: FFmpeg wraps ctx.Err() at each of its
+// exits, FLAC checks the context per chunk inside its write loop, AAC and Opus
+// check it before the file is created (audiotemp.WriteFile), and
+// resolveExportGainDB joins it onto a measurement that cancellation turned
+// terminal. The stretches that take no context at all (the WAV writer, and the
+// one-shot encode calls inside go-aac/go-opus once audiotemp has let them start)
+// cannot be interrupted by cancellation either, so any error they return is a
+// genuine defect and belongs at WARN.
+//
+// Not covered, deliberately: a signal delivered to the whole process group can
+// kill the FFmpeg child directly, and cmd.Wait() then reports "signal:
+// terminated" while ctx.Err() is still nil. That lands at WARN. It is a narrow
+// native-install case (in Docker, birdnet-go is PID 1 and the signal is not
+// forwarded), and the alternative is the misclassification above.
+//
+// A context that EXPIRED is not shutdown either. The job queue wraps every
+// execution in context.WithTimeout, so an encode slow enough to blow
+// it (a hung FFmpeg, a long extended capture on a Pi) is precisely the failure
+// this line exists to surface, and it stays at WARN because DeadlineExceeded is
+// not Canceled. The wrap happens in the queue's executeJobWithTimeout, which
+// gives every execution DefaultJobExecutionTimeout.
 //
 // Everything else is WARN, not ERROR, even though it is a genuine failure. The
 // error is returned unchanged, and the job queue logs that same failure as ERROR
 // once the attempts are exhausted (handleJobFailure only calls LogJobFailed when
 // Attempts >= MaxAttempts). Raising this line to ERROR too would report one root
 // cause as two, inflating error counts and alerting twice. This line exists to
-// carry the context the queue's generic line cannot, not to raise the alarm, and
-// on the deferred path it is the only record of the attempts before the last.
-func (a *SaveAudioAction) logExportFailure(ctx context.Context, enc *clipEncoding, exportFormat string, exportRate int, outputPath string, err error) {
-	fields := make([]logger.Field, 0, 11)
+// carry the context the queue's generic line cannot, not to raise the alarm.
+// On the deferred path (an Extended Capture tail, the only SaveAudioAction that
+// getJobQueueRetryConfig enables retries for) LogJobRetryScheduled already
+// records every intermediate attempt at WARN with its error, so what this line
+// uniquely preserves for those attempts is the ENCODER context, not the attempt
+// itself. The ordinary eager-read action gets RetryConfig{Enabled: false}, so it
+// has no intermediate attempts and the queue logs it once, permanently failed.
+func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat string, exportRate int, outputPath string, err error) {
+	// 14 = the 9 unconditional fields below, plus gain_db and encode_ms when the
+	// export got far enough to have them, plus bitrate_kbps on the lossy formats,
+	// plus error and operation.
+	fields := make([]logger.Field, 0, 14)
 	fields = append(fields,
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
-		logger.String("clip_path", filepath.Base(outputPath)),
+		logger.String("species", a.species),
+		logger.String("clip_path", a.relativeClipPath(outputPath)),
 		logger.String("format", exportFormat),
 		logger.String("encoder", enc.Encoder),
 		logger.Int("sample_rate", exportRate),
-		logger.Float64("gain_db", enc.GainDB),
 		logger.Int64("duration_ms", clipDurationMs(len(a.pcmData), exportRate)),
+		// Measurement always ran, so its duration is always meaningful, even when
+		// it is what failed.
+		logger.Int64("measure_ms", enc.MeasureMs),
 	)
+	// Both gated on the same fact: the encoder runs only once the gain resolves,
+	// so on a pre-gain failure neither the gain nor the encode duration exists.
+	// Reporting encode_ms=0 there would read as "the encoder returned instantly"
+	// rather than "the encoder never ran", which is the absence-versus-zero trap
+	// GainResolved was added to close; leaving its sibling in it would be odd.
+	//
+	// How long each phase ran before failing is what separates a hung encoder
+	// that burned the whole job deadline from one that rejected its arguments
+	// instantly. Both were already measured; only the success line consumed them.
+	if enc.GainResolved {
+		fields = append(fields,
+			logger.Float64("gain_db", enc.GainDB),
+			logger.Int64("encode_ms", enc.EncodeMs),
+		)
+	}
 	// A rejected bitrate is one of the ways a lossy encode fails, so report the
 	// value that was going to be used rather than making it a second question.
 	if enc.BitrateKbps > 0 {
@@ -607,7 +711,7 @@ func (a *SaveAudioAction) logExportFailure(ctx context.Context, enc *clipEncodin
 		logger.Error(err),
 		logger.String("operation", "audio_export_failed"))
 
-	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) {
 		GetLogger().Debug("Audio clip export cancelled", fields...)
 		return
 	}
@@ -685,13 +789,28 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 		BitrateKbps: lossyBitrateKbps(exportFormat, a.Settings.Realtime.Audio.Export.Bitrate),
 	}
 
+	measureStart := time.Now()
 	gainDB, err := a.resolveExportGainDB(ctx, exportRate, exportFormat)
+	enc.MeasureMs = time.Since(measureStart).Milliseconds()
 	if err != nil {
 		return enc, err
 	}
 	enc.GainDB = gainDB
+	enc.GainResolved = true
 
-	switch enc.Encoder {
+	encodeStart := time.Now()
+	err = a.runEncoder(ctx, enc.Encoder, exportRate, enc.BitrateKbps, exportFormat, outputPath, gainDB)
+	enc.EncodeMs = time.Since(encodeStart).Milliseconds()
+	return enc, err
+}
+
+// runEncoder writes the clip with the encoder selectEncoder picked, applying the
+// already-resolved loudness gain. It is split out of encodeClip so the encoder's
+// own wall time can be measured without the loudness measurement that precedes
+// it; it deliberately takes no clipEncoding, because it only reads the routing
+// decision and must not be able to alter what the logs report.
+func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, exportRate, bitrateKbps int, exportFormat, outputPath string, gainDB float64) error {
+	switch encoder {
 	case encoderNativeWAV:
 		// WAV honours the resolved gain like every other format. It used to be the
 		// one exception, writing captured samples verbatim, which meant an
@@ -706,11 +825,11 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 			// spectrogram pre-render job that reads it after the export.
 			pcm = pcmgain.Applied(pcm, gainDB)
 		}
-		return enc, convert.SavePCMDataToWAV(outputPath, pcm, exportRate, conf.BitDepth)
+		return convert.SavePCMDataToWAV(outputPath, pcm, exportRate, conf.BitDepth)
 
 	case encoderNativeFLAC:
 		// FLAC always encodes natively via go-flac; FFmpeg is never used for FLAC.
-		return enc, flac.EncodePCM(ctx, &flac.Options{
+		return flac.EncodePCM(ctx, &flac.Options{
 			PCMData:    a.pcmData,
 			OutputPath: outputPath,
 			SampleRate: exportRate,
@@ -720,13 +839,13 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 		})
 
 	case encoderNativeAAC:
-		return enc, a.encodeClipNativeAAC(ctx, exportRate, enc.BitrateKbps, outputPath, gainDB)
+		return a.encodeClipNativeAAC(ctx, exportRate, bitrateKbps, outputPath, gainDB)
 
 	case encoderNativeOpus:
-		return enc, a.encodeClipNativeOpus(ctx, exportRate, enc.BitrateKbps, outputPath, gainDB)
+		return a.encodeClipNativeOpus(ctx, exportRate, bitrateKbps, outputPath, gainDB)
 
 	default:
-		return enc, a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath, gainDB)
+		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath, gainDB)
 	}
 }
 
@@ -805,7 +924,7 @@ func nativeAACSelected(exportRate int) bool {
 		return false
 	}
 	if err := aac.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
-		logNativeEncoderSkipped(&nativeAACSkipOnce, ffmpeg.FormatAAC, err)
+		logNativeEncoderSkipped(ffmpeg.FormatAAC, exportRate, err)
 		return false
 	}
 	return true
@@ -817,24 +936,60 @@ func nativeOpusSelected(exportRate int) bool {
 		return false
 	}
 	if err := opus.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
-		logNativeEncoderSkipped(&nativeOpusSkipOnce, ffmpeg.FormatOpus, err)
+		logNativeEncoderSkipped(ffmpeg.FormatOpus, exportRate, err)
 		return false
 	}
 	return true
 }
 
-// Guards for the native-encoder fallback warning. Whether a clip shape is
-// supported cannot change without a restart (the bit depth and channel count are
-// build constants and the source rate is fixed per source), so an operator who
-// opted into a format their capture rate cannot use would otherwise get an
-// identical WARN on every single detection, forever. Log it once per format and
-// let the per-clip encoder field carry the ongoing signal.
+// onceByKey emits a message at most once per distinct condition, where the
+// condition is described by a key rather than by "the first time we got here".
+//
+// A bare sync.Once is the wrong instrument for these logs. Each guards a
+// decision made from a format and a sample rate, and neither is fixed for the
+// process: Export.Type is hot-reloadable (settings changed in the UI take effect
+// without a restart), and the capture rate is per-source, so a multi-source
+// install runs several at once. A sync.Once lets whichever condition happens to
+// fire first silence every later, different one, leaving the operator with an
+// explanation that names a format they have since changed away from, or a rate
+// belonging to another source.
+//
+// The key space is the product of a handful of formats and the configured source
+// rates, so it is small and bounded by the configuration rather than by traffic;
+// no eviction is needed.
+type onceByKey struct {
+	seen sync.Map // string key -> struct{}
+}
+
+// do runs emit unless this key has already been emitted.
+//
+// This is NOT sync.Once semantics and must not be reused as a lazy-init guard:
+// the key is marked before emit runs, so a concurrent second caller returns
+// immediately rather than blocking until the first has finished. That is what a
+// log-flood guard wants (no caller depends on the line having been written yet)
+// and exactly what an initializer does not.
+func (o *onceByKey) do(key string, emit func()) {
+	if _, loaded := o.seen.LoadOrStore(key, struct{}{}); !loaded {
+		emit()
+	}
+}
+
+// formatRateKey identifies a downgrade or fallback decision by the two inputs
+// that vary at runtime, so each distinct combination explains itself exactly
+// once instead of the first one silencing the rest.
+func formatRateKey(format string, rate int) string {
+	return format + "@" + strconv.Itoa(rate)
+}
+
+// Guards for the export-format warnings. Each fires on every single detection of
+// an affected install, so without a guard they are a permanent log flood; the
+// per-clip encoder and format fields carry the ongoing signal instead.
 //
 //nolint:gochecknoglobals // process-lifetime log-flood guards, matching mqttNotReadyWarnOnce
 var (
-	nativeAACSkipOnce      sync.Once
-	nativeOpusSkipOnce     sync.Once
-	batFormatDowngradeOnce sync.Once
+	nativeEncoderSkipLogged  onceByKey
+	batFormatDowngradeLogged onceByKey
+	strandedFormatLogged     onceByKey
 )
 
 // logBatFormatDowngrade explains why an install configured for a lossy format is
@@ -843,12 +998,16 @@ var (
 // in strandedWithoutEncoder already logged its reason; this one did not, leaving
 // the operator with no explanation for a format they did not choose.
 //
-// Logged once per process for the same reason as the native-encoder skip
-// warning: a bat install left on a lossy export format takes this path on every
-// single detection, and the explanation only needs stating once.
+// Logged at WARN, matching the sibling downgrade in resolveExportParams: both
+// mean "you are not getting the export format you configured", which is a
+// configuration mismatch the operator should act on rather than a note.
+//
+// Guarded per (format, rate) rather than once per process: a bat install left on
+// a lossy export format takes this path on every single detection, but the two
+// inputs still vary, by hot-reloaded Export.Type and by capture source.
 func logBatFormatDowngrade(requestedFormat string, rate int) {
-	batFormatDowngradeOnce.Do(func() {
-		GetLogger().Info("Ultrasonic clip format downgraded to WAV; the configured format cannot carry this sample rate",
+	batFormatDowngradeLogged.do(formatRateKey(requestedFormat, rate), func() {
+		GetLogger().Warn("Ultrasonic clip format downgraded to WAV; the configured format cannot carry this sample rate",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("requested_format", requestedFormat),
 			logger.Int("sample_rate", rate),
@@ -856,16 +1015,53 @@ func logBatFormatDowngrade(requestedFormat string, rate int) {
 	})
 }
 
-// logNativeEncoderSkipped records, once per format, that an opted-in native
-// encoder could not carry this clip, so an operator who set the env flag and
-// sees FFmpeg in the encoder field has a reason rather than a mystery. The
-// reason comes from the encoder's own Supports error, so the log names the
-// offending value instead of dumping all three.
-func logNativeEncoderSkipped(once *sync.Once, format string, reason error) {
-	once.Do(func() {
+// logStrandedFormatFallback explains why an install with no FFmpeg is producing
+// .wav files: the operator opted a lossy format into its native encoder, which
+// kept config validation from downgrading the format, and the native encoder
+// then turned out not to accept this clip's shape.
+//
+// Same level and same guard as logBatFormatDowngrade, because it means the same
+// thing to the operator: you are not getting the format you configured. It used
+// to be the sibling's opposite on both counts, warning on every single clip
+// forever where the bat downgrade logged once.
+//
+// No detection_id, matching the sibling. Once the line is guarded the id names
+// whichever clip happened to arrive first, which can be hours stale by the time
+// anyone reads it, and correlating by it finds a single line. The condition is a
+// property of the configuration, not of a clip.
+//
+// The key covers the format and the rate, not FfmpegPath, which is also part of
+// the condition and is hot-reloadable too. An operator who sets a path and later
+// clears it again will not be warned a second time for a combination already
+// reported. That is the intended trade: the message is about a configuration
+// that was already explained once, and keying on it would re-flood on every
+// path edit.
+func logStrandedFormatFallback(requestedFormat string, rate int) {
+	strandedFormatLogged.do(formatRateKey(requestedFormat, rate), func() {
+		GetLogger().Warn("No encoder can carry this clip; exporting as WAV",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("requested_format", requestedFormat),
+			logger.Int("sample_rate", rate),
+			logger.String("operation", "audio_export_no_encoder_fallback"))
+	})
+}
+
+// logNativeEncoderSkipped records that an opted-in native encoder could not
+// carry this clip, so an operator who set the env flag and sees FFmpeg in the
+// encoder field has a reason rather than a mystery. The reason comes from the
+// encoder's own Supports error, so the log names the offending value instead of
+// dumping all three.
+//
+// Guarded per (format, rate): the rate is what the encoder usually rejects, and
+// it varies per capture source, so a once-per-format guard would report only
+// whichever source happened to export first. One guard covers both formats,
+// because the format is part of the key.
+func logNativeEncoderSkipped(format string, rate int, reason error) {
+	nativeEncoderSkipLogged.do(formatRateKey(format, rate), func() {
 		GetLogger().Warn("Native encoder requested but the clip format is unsupported; using FFmpeg for this format",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("format", format),
+			logger.Int("sample_rate", rate),
 			logger.String("reason", reason.Error()),
 			logger.String("operation", "audio_export_native_unsupported"))
 	})
@@ -910,7 +1106,16 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 			return gainDB, nil
 		case ctx.Err() != nil:
 			// The caller is going away; do not paper over that with a fallback.
-			return 0, err
+			//
+			// Joining the context error in is not the ctx-based misclassification
+			// logExportFailure warns about, it is the opposite: on THIS branch the
+			// measurement error alone is not fatal, because the code below would
+			// have degraded to the static gain and finished the export. The clip
+			// fails only because the context is done, so cancellation genuinely is
+			// the cause and the joined error says so. audionorm's own error need
+			// not wrap ctx.Err(), so without the join a normal shutdown here would
+			// be reported as a WARN failure.
+			return 0, errors.Join(err, ctx.Err())
 		}
 		// The clip could not be measured (audionorm rejects the dimensions, e.g. a
 		// source reporting a sample rate below the K-weighting minimum). Losing
@@ -1141,12 +1346,7 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	}
 
 	if a.strandedWithoutEncoder(rate, format) {
-		GetLogger().Warn("No encoder can carry this clip; exporting as WAV",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", a.CorrelationID),
-			logger.String("requested_format", format),
-			logger.Int("sample_rate", rate),
-			logger.String("operation", "audio_export_no_encoder_fallback"))
+		logStrandedFormatFallback(format, rate)
 		format = ffmpeg.FormatWAV
 		path = replaceExtension(path, ".wav")
 	}
