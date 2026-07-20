@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
@@ -40,17 +41,6 @@ import (
 // rather than Warn (this is expected backpressure, not a failure).
 var errAudioExportDeferred = fmt.Errorf("audio export deferred until capture tail is available: %w", jobqueue.ErrJobDeferred)
 
-// Encoder tags recorded in the audio-export logs so the active encoder is
-// visible per clip (native go-flac or native WAV writer, native go-aac/go-opus
-// where the gate opted the format in, or FFmpeg).
-const (
-	encoderFFmpeg     = "ffmpeg"
-	encoderNativeWAV  = "native-wav"
-	encoderNativeFLAC = "native-flac"
-	encoderNativeAAC  = "native-aac"
-	encoderNativeOpus = "native-opus"
-)
-
 // clipEncoding records how a clip was written: which encoder owned the file and
 // the parameters a support log needs to explain the result on disk.
 //
@@ -60,7 +50,7 @@ const (
 // whether go-aac or FFmpeg produced the failure, which is the one question the
 // gated rollout exists to answer.
 type clipEncoding struct {
-	Encoder     string  // encoderNativeAAC, encoderFFmpeg, ...
+	Encoder     string  // clipenc.NativeAAC, clipenc.FFmpeg, ...
 	GainDB      float64 // loudness gain the encoder applies to the clip
 	BitrateKbps int     // encoded bitrate for the lossy formats; 0 when lossless
 	// GainResolved distinguishes "the gain is 0 dB" from "the export failed
@@ -68,6 +58,15 @@ type clipEncoding struct {
 	// logs gain_db=0, which is also the default Export.Gain, so the field reads
 	// as a measurement when it is really an absence.
 	GainResolved bool
+	// Normalized reports whether the gain came from an actual loudness
+	// measurement, as opposed to falling back to the static Export.Gain. It is
+	// on the success line because the WARN explaining a fallback is emitted at
+	// most once per (reason, format, rate) for the process lifetime: on a
+	// long-running install the explanation can fall outside the window a support
+	// dump captures, leaving every clip in that dump unexplained. gain_db cannot
+	// substitute, because the default Export.Gain is 0 and so is a measured gain
+	// of 0. This makes each clip say for itself which path produced it.
+	Normalized bool
 	// MeasureMs and EncodeMs are timed separately because they answer different
 	// questions and have wildly different costs. Resolving the gain with
 	// normalization enabled is a full-clip EBU R128 pass, which on a Pi with a
@@ -440,9 +439,15 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 
 	// If PCM data was not captured (e.g., buffer read failed), skip export.
 	if len(a.pcmData) == 0 {
+		// species is carried here for the same reason it is carried on the
+		// success line, and with more force: this is the branch where the clip is
+		// lost outright, so it is the export log where naming the bird matters
+		// most. Unguarded on purpose, unlike the configuration warnings above:
+		// this reports a per-detection loss, not a standing misconfiguration.
 		GetLogger().Warn("Skipping audio export: no PCM data available",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
+			logger.String("species", a.species),
 			logger.String("clip_name", a.ClipName),
 			logger.String("operation", "audio_export_skip"))
 		return nil
@@ -514,9 +519,9 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// back off this line (the audio_export_success case in
 	// internal/api/v2/system/events_aggregation.go). It consumes only this line, so
 	// dropping the field empties every ClipPaths the endpoint returns.
-	// 14 = the 12 unconditional fields below, plus bitrate_kbps on the lossy
+	// 15 = the 13 unconditional fields below, plus bitrate_kbps on the lossy
 	// formats, plus operation.
-	fields := make([]logger.Field, 0, 14)
+	fields := make([]logger.Field, 0, 15)
 	fields = append(fields,
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
@@ -527,6 +532,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		logger.String("encoder", enc.Encoder),
 		logger.Int("sample_rate", exportRate),
 		logger.Float64("gain_db", enc.GainDB),
+		logger.Bool("normalized", enc.Normalized),
 		logger.Int64("duration_ms", clipDurationMs(len(a.pcmData), exportRate)),
 		logger.Int64("measure_ms", enc.MeasureMs),
 		logger.Int64("encode_ms", enc.EncodeMs),
@@ -744,25 +750,25 @@ func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat strin
 func selectEncoder(exportFormat string, exportRate int) string {
 	switch exportFormat {
 	case ffmpeg.FormatWAV:
-		return encoderNativeWAV
+		return clipenc.NativeWAV
 	case ffmpeg.FormatFLAC:
-		return encoderNativeFLAC
+		return clipenc.NativeFLAC
 	case ffmpeg.FormatAAC:
 		// Opt-in; see internal/conf/native_encoders.go for the gate and its removal.
 		if nativeAACSelected(exportRate) {
-			return encoderNativeAAC
+			return clipenc.NativeAAC
 		}
-		return encoderFFmpeg
+		return clipenc.FFmpeg
 	case ffmpeg.FormatOpus:
 		// Opt-in; see internal/conf/native_encoders.go for the gate and its removal.
 		if nativeOpusSelected(exportRate) {
-			return encoderNativeOpus
+			return clipenc.NativeOpus
 		}
-		return encoderFFmpeg
+		return clipenc.FFmpeg
 	default:
 		// MP3 and ALAC are the only remaining formats, and FFmpeg owns their
 		// codecs only; the loudness gain is resolved in Go first.
-		return encoderFFmpeg
+		return clipenc.FFmpeg
 	}
 }
 
@@ -800,13 +806,14 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 	}
 
 	measureStart := time.Now()
-	gainDB, err := a.resolveExportGainDB(ctx, exportRate, exportFormat)
+	gainDB, normalized, err := a.resolveExportGainDB(ctx, exportRate, exportFormat)
 	enc.MeasureMs = time.Since(measureStart).Milliseconds()
 	if err != nil {
 		return enc, err
 	}
 	enc.GainDB = gainDB
 	enc.GainResolved = true
+	enc.Normalized = normalized
 
 	encodeStart := time.Now()
 	err = a.runEncoder(ctx, enc.Encoder, exportRate, enc.BitrateKbps, exportFormat, outputPath, gainDB)
@@ -821,7 +828,7 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 // decision and must not be able to alter what the logs report.
 func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, exportRate, bitrateKbps int, exportFormat, outputPath string, gainDB float64) error {
 	switch encoder {
-	case encoderNativeWAV:
+	case clipenc.NativeWAV:
 		// WAV honours the resolved gain like every other format. It used to be the
 		// one exception, writing captured samples verbatim, which meant an
 		// operator with normalization or Export.Gain configured silently got
@@ -837,7 +844,7 @@ func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, export
 		}
 		return convert.SavePCMDataToWAV(outputPath, pcm, exportRate, conf.BitDepth)
 
-	case encoderNativeFLAC:
+	case clipenc.NativeFLAC:
 		// FLAC always encodes natively via go-flac; FFmpeg is never used for FLAC.
 		return flac.EncodePCM(ctx, &flac.Options{
 			PCMData:    a.pcmData,
@@ -848,10 +855,10 @@ func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, export
 			GainDB:     gainDB,
 		})
 
-	case encoderNativeAAC:
+	case clipenc.NativeAAC:
 		return a.encodeClipNativeAAC(ctx, exportRate, bitrateKbps, outputPath, gainDB)
 
-	case encoderNativeOpus:
+	case clipenc.NativeOpus:
 		return a.encodeClipNativeOpus(ctx, exportRate, bitrateKbps, outputPath, gainDB)
 
 	default:
@@ -991,15 +998,46 @@ func formatRateKey(format string, rate int) string {
 	return format + "@" + strconv.Itoa(rate)
 }
 
-// Guards for the export-format warnings. Each fires on every single detection of
+// reasonFormatRateKey adds the decision's reason to formatRateKey, for guards
+// whose site can fire for more than one cause. Without the reason in the key, an
+// install that trips one cause would never report the other for the same format
+// and rate, which is the exact silencing onceByKey exists to prevent.
+func reasonFormatRateKey(reason, format string, rate int) string {
+	return reason + "|" + formatRateKey(format, rate)
+}
+
+// resampleKey identifies a resampling attempt by the rate pair it converts
+// between, which is what determines whether the attempt can succeed.
+func resampleKey(srcRate, dstRate int) string {
+	return strconv.Itoa(srcRate) + "->" + strconv.Itoa(dstRate)
+}
+
+// Reasons a clip was encoded without normalization. Named rather than inlined
+// because each is now part of a log-flood guard key as well as a log field, so a
+// typo in one of the two spellings would silently split or merge the guard.
+const (
+	normalizeSkipMeasureFailed     = "measurement_failed"
+	normalizeSkipTargetsOutOfRange = "normalization_targets_out_of_native_range"
+	normalizeSkipUnsupportedDepth  = "unsupported_bit_depth"
+)
+
+// Guards for the export-path warnings. Each fires on every single detection of
 // an affected install, so without a guard they are a permanent log flood; the
 // per-clip encoder and format fields carry the ongoing signal instead.
 //
-//nolint:gochecknoglobals // process-lifetime log-flood guards, matching mqttNotReadyWarnOnce
+// None of the guarded lines carries detection_id. Under a guard the field would
+// name only the first detection to trip the condition, reading as if the
+// condition were specific to that clip when every one of these is a property of
+// the configuration or the source, not of a detection.
+//
+//nolint:gochecknoglobals // process-lifetime log-flood guards
 var (
-	nativeEncoderSkipLogged  onceByKey
-	batFormatDowngradeLogged onceByKey
-	strandedFormatLogged     onceByKey
+	nativeEncoderSkipLogged   onceByKey
+	batFormatDowngradeLogged  onceByKey
+	strandedFormatLogged      onceByKey
+	normalizeSkipLogged       onceByKey
+	resampleFailureLogged     onceByKey
+	clipPathExtFallbackLogged onceByKey
 )
 
 // logBatFormatDowngrade explains why an install configured for a lossy format is
@@ -1101,10 +1139,10 @@ func logNativeEncoderSkipped(format string, rate int, reason error) {
 // export length. Extended capture can export far longer clips
 // (conf.MaxExtendedCaptureDuration is 1200 s), where dynamic-range treatment
 // would matter more, and the corpus does not cover that.
-func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate int, format string) (float64, error) {
+func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate int, format string) (gain float64, normalized bool, err error) {
 	exportSettings := &a.Settings.Realtime.Audio.Export
 	if !exportSettings.Normalization.Enabled {
-		return exportSettings.Gain, nil
+		return exportSettings.Gain, false, nil
 	}
 
 	depthSupported := conf.BitDepth == nativeNormalizationBitDepth
@@ -1113,7 +1151,7 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 			exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak)
 		switch {
 		case err == nil:
-			return gainDB, nil
+			return gainDB, true, nil
 		case ctx.Err() != nil:
 			// The caller is going away; do not paper over that with a fallback.
 			//
@@ -1125,7 +1163,7 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 			// the cause and the joined error says so. audionorm's own error need
 			// not wrap ctx.Err(), so without the join a normal shutdown here would
 			// be reported as a WARN failure.
-			return 0, errors.Join(err, ctx.Err())
+			return 0, false, errors.Join(err, ctx.Err())
 		}
 		// The clip could not be measured (audionorm rejects the dimensions, e.g. a
 		// source reporting a sample rate below the K-weighting minimum). Losing
@@ -1134,15 +1172,20 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 		// path stopped using loudnorm, FFmpeg would still have produced a clip
 		// here, so failing hard would be a new way to lose audio on the default
 		// MP3 install.
-		GetLogger().Warn("Loudness measurement failed; encoding without normalization",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", a.CorrelationID),
-			logger.String("format", format),
-			logger.Int("sample_rate", exportRate),
-			logger.Error(err),
-			logger.String("reason", "measurement_failed"),
-			logger.String("operation", "audio_export_normalize_skip"))
-		return exportSettings.Gain, nil
+		// Guarded per (format, rate): audionorm rejects the clip's dimensions, and
+		// those come from the source, not from this detection, so the failure
+		// repeats for every clip that source produces. The error text can vary
+		// within a rate pair but the cause does not, so it is not part of the key.
+		normalizeSkipLogged.do(reasonFormatRateKey(normalizeSkipMeasureFailed, format, exportRate), func() {
+			GetLogger().Warn("Loudness measurement failed; encoding without normalization",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("format", format),
+				logger.Int("sample_rate", exportRate),
+				logger.Error(err),
+				logger.String("reason", normalizeSkipMeasureFailed),
+				logger.String("operation", "audio_export_normalize_skip"))
+		})
+		return exportSettings.Gain, false, nil
 	}
 
 	// Unreachable for a validated config: capture is 16-bit (conf.BitDepth) and
@@ -1151,17 +1194,27 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 	// Defense-in-depth for unvalidated/legacy settings only. There is no longer a
 	// loudnorm fallback on any path, FFmpeg included, so encode with the static
 	// gain and surface the skipped normalization at WARN.
-	reason := "normalization_targets_out_of_native_range"
+	reason := normalizeSkipTargetsOutOfRange
 	if !depthSupported {
-		reason = "unsupported_bit_depth"
+		reason = normalizeSkipUnsupportedDepth
 	}
-	GetLogger().Warn("Native normalization skipped; encoding without normalization",
-		logger.String("component", "analysis.processor.actions"),
-		logger.String("detection_id", a.CorrelationID),
-		logger.String("format", format),
-		logger.String("reason", reason),
-		logger.String("operation", "audio_export_normalize_skip"))
-	return exportSettings.Gain, nil
+	// The reason is part of the key, unlike the measurement-failure guard above.
+	// The bit-depth arm is decided by a build constant, but the targets arm is
+	// decided by hot-reloadable normalization settings, so a format+rate key
+	// would let whichever arm fired first silence the other for good.
+	//
+	// sample_rate is logged here as well: both sites carry the same operation
+	// tag, and emitting divergent field sets under one tag makes the tag lie
+	// about being one thing.
+	normalizeSkipLogged.do(reasonFormatRateKey(reason, format, exportRate), func() {
+		GetLogger().Warn("Native normalization skipped; encoding without normalization",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("format", format),
+			logger.Int("sample_rate", exportRate),
+			logger.String("reason", reason),
+			logger.String("operation", "audio_export_normalize_skip"))
+	})
+	return exportSettings.Gain, false, nil
 }
 
 // nativeNormalizationBitDepth is the only PCM bit depth the native gain and
@@ -1341,13 +1394,18 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	} else if rate > conf.SampleRate && !isBat {
 		resampled, err := resample.ResampleBytes(a.pcmData, rate, conf.SampleRate)
 		if err != nil {
-			GetLogger().Warn("Resampling failed, exporting at source rate",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Int("source_rate", rate),
-				logger.Int("target_rate", conf.SampleRate),
-				logger.Error(err),
-				logger.String("operation", "audio_export_resample"))
+			// Guarded per rate pair: resampling a fixed pair either works or it
+			// does not, so an affected source fails on every detection forever.
+			// The target is conf.SampleRate today, but it is keyed rather than
+			// assumed so a future variable target cannot silence the new pair.
+			resampleFailureLogged.do(resampleKey(rate, conf.SampleRate), func() {
+				GetLogger().Warn("Resampling failed, exporting at source rate",
+					logger.String("component", "analysis.processor.actions"),
+					logger.Int("source_rate", rate),
+					logger.Int("target_rate", conf.SampleRate),
+					logger.Error(err),
+					logger.String("operation", "audio_export_resample"))
+			})
 		} else {
 			a.pcmData = resampled
 			a.sourceSampleRate = conf.SampleRate

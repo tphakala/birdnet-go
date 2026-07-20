@@ -93,12 +93,18 @@ func (p *Processor) PublishMQTT(ctx context.Context, topic, payload string) erro
 	if client != nil {
 		return client.Publish(ctx, topic, payload)
 	}
-	// Emit a single warn log per process lifetime so operators learn MQTT is
-	// configured but not reachable. Subsequent attempts are silent — the
-	// sentinel is all the caller needs to decide to skip.
-	p.mqttNotReadyWarnOnce.Do(func() {
+	// Emit one warn log per topic so operators learn MQTT is configured but not
+	// reachable. Subsequent attempts on that topic are silent — the sentinel is
+	// all the caller needs to decide to skip.
+	//
+	// Keyed on the topic rather than guarded once per process, because the line
+	// names the topic and a process-wide guard would report a topic the operator
+	// may have since changed away from: the topic derives from the
+	// hot-reloadable Realtime.MQTT.Topic setting. The key space is bounded by
+	// how many distinct topics the configuration has held, not by traffic.
+	p.mqttNotReadyWarnLogged.do(topic, func() {
 		GetLogger().Warn(
-			"MQTT publish suppressed: client not ready (further suppressed publishes are silent)",
+			"MQTT publish suppressed: client not ready (further suppressed publishes on this topic are silent)",
 			logger.String("topic", topic),
 			logger.String("operation", "publish_mqtt_not_ready"))
 	})

@@ -46,6 +46,14 @@ type SystemInfo struct {
 	MemoryMB     uint64      `json:"memory_mb"`
 	DiskInfo     []DiskInfo  `json:"disk_info"`
 	DockerInfo   *DockerInfo `json:"docker_info,omitempty"`
+	// RuntimeEnv holds the environment variables on the collector's allowlist
+	// (conf.SupportEnvAllowlist in production) that are actually set, so a dump
+	// can report runtime gates that config.yaml cannot record. Only non-empty
+	// values are present, so an absent key means the variable was unset OR set
+	// to the empty string; the two are indistinguishable here and behave
+	// identically at every gate. Empty and omitted entirely when no allowlisted
+	// variable is set, which is the common case.
+	RuntimeEnv map[string]string `json:"runtime_env,omitempty"`
 }
 
 // DiskInfo represents information about a disk or filesystem mount point.
@@ -252,7 +260,7 @@ type DeploymentInfo struct {
 	// diagnostics boot journal).
 	ConfigDirectoryFiles []DataDirectoryFile `json:"config_directory_files,omitempty"`
 	DockerMounts         []DockerMount       `json:"docker_mounts,omitempty"`
-	CollectionErrors   []string            `json:"collection_errors,omitempty"`
+	CollectionErrors     []string            `json:"collection_errors,omitempty"`
 }
 
 // DataDirectoryFile describes a file in the data directory.

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -58,7 +59,7 @@ func TestEncodeClip_GateSelectsNativeAAC(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "clip.m4a")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatAAC, out)
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeAAC, encoder.Encoder, "the clip must record which encoder ran")
+	assert.Equal(t, clipenc.NativeAAC, encoder.Encoder, "the clip must record which encoder ran")
 
 	assertNonEmptyFileWithMagic(t, out, 4, "ftyp")
 }
@@ -74,7 +75,7 @@ func TestEncodeClip_GateSelectsNativeOpus(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "clip.opus")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatOpus, out)
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeOpus, encoder.Encoder)
+	assert.Equal(t, clipenc.NativeOpus, encoder.Encoder)
 
 	assertNonEmptyFileWithMagic(t, out, 0, "OggS")
 }
@@ -105,11 +106,11 @@ func TestEncodeClip_GatesDoNotAffectFLACOrWAV(t *testing.T) {
 
 	flacEncoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, filepath.Join(dir, "clip.flac"))
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeFLAC, flacEncoder.Encoder)
+	assert.Equal(t, clipenc.NativeFLAC, flacEncoder.Encoder)
 
 	wavEncoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatWAV, filepath.Join(dir, "clip.wav"))
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeWAV, wavEncoder.Encoder)
+	assert.Equal(t, clipenc.NativeWAV, wavEncoder.Encoder)
 }
 
 // Static Export.Gain must reach the native lossy encoders, not just FLAC.
@@ -120,7 +121,7 @@ func TestEncodeClip_NativeLossyAppliesStaticGain(t *testing.T) {
 	a := newGateTestAction(t, "96k")
 	a.Settings.Realtime.Audio.Export.Gain = -6
 
-	gainDB, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
+	gainDB, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
 	require.NoError(t, err)
 	assert.InDelta(t, -6.0, gainDB, 0.001, "static gain must pass through when normalization is off")
 }
@@ -141,7 +142,7 @@ func TestResolveExportGainDB_NormalizationReplacesStaticGain(t *testing.T) {
 	// ceiling nor the +/-30 dB clamp binds and the gain is exactly the distance
 	// from measured to target loudness. That value is not the static -6 dB.
 	measured := measureLUFS(t, a.pcmData)
-	gainDB, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
+	gainDB, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
 	require.NoError(t, err)
 	assert.InDelta(t, testTargetLUFS-measured, gainDB, 0.5,
 		"the measured loudness gain must supersede the static gain")
@@ -163,7 +164,7 @@ func TestResolveExportGainDB_OutOfRangeTargetsFallBackToStaticGain(t *testing.T)
 		TruePeak:   testTruePeakDBTP,
 	}
 
-	gainDB, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
+	gainDB, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
 	require.NoError(t, err)
 	assert.InDelta(t, -4.0, gainDB, 0.001, "static gain must survive an unusable normalization config")
 }
@@ -189,7 +190,7 @@ func TestEncodeClipFFmpeg_BuildsCompleteExportOptions(t *testing.T) {
 	}
 	a.Settings.Realtime.Audio.FfmpegPath = "/usr/bin/ffmpeg"
 
-	gainDB, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatMP3)
+	gainDB, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatMP3)
 	require.NoError(t, err)
 	opts := a.buildFFmpegExportOptions(conf.SampleRate, ffmpeg.FormatMP3, "/clips/x.mp3", gainDB)
 
@@ -221,7 +222,7 @@ func TestEncodeClipFFmpeg_StaticGainWithoutNormalization(t *testing.T) {
 	a.Settings.Realtime.Audio.Export.Gain = -2.5
 	a.Settings.Realtime.Audio.FfmpegPath = "/usr/bin/ffmpeg"
 
-	gainDB, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatMP3)
+	gainDB, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatMP3)
 	require.NoError(t, err)
 	opts := a.buildFFmpegExportOptions(conf.SampleRate, ffmpeg.FormatMP3, "/clips/x.mp3", gainDB)
 
@@ -302,8 +303,8 @@ func TestEncodeClip_UltrasonicRatesUnaffectedByLossyGates(t *testing.T) {
 			wantEncoder string
 			readRate    func(*testing.T, string) int
 		}{
-			{ffmpeg.FormatWAV, "wav", encoderNativeWAV, wavSampleRate},
-			{ffmpeg.FormatFLAC, "flac", encoderNativeFLAC, flacSampleRate},
+			{ffmpeg.FormatWAV, "wav", clipenc.NativeWAV, wavSampleRate},
+			{ffmpeg.FormatFLAC, "flac", clipenc.NativeFLAC, flacSampleRate},
 		} {
 			t.Run(fmt.Sprintf("%s_%dHz", tc.format, rate), func(t *testing.T) {
 				a := newGateTestAction(t, "96k")
@@ -342,7 +343,7 @@ func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
 
 			// Confirm normalization actually engages rather than silently
 			// returning a zero gain, which is what a sub-gate-length clip would do.
-			gainDB, err := a.resolveExportGainDB(t.Context(), rate, ffmpeg.FormatFLAC)
+			gainDB, _, err := a.resolveExportGainDB(t.Context(), rate, ffmpeg.FormatFLAC)
 			require.NoError(t, err)
 			assert.Greater(t, math.Abs(gainDB), 0.01,
 				"normalization must produce a real gain at %d Hz, not the no-op zero "+
@@ -352,7 +353,7 @@ func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
 			out := filepath.Join(dir, "clip.flac")
 			encoder, err := a.encodeClip(t.Context(), rate, ffmpeg.FormatFLAC, out)
 			require.NoError(t, err, "normalized FLAC export must work at %d Hz", rate)
-			assert.Equal(t, encoderNativeFLAC, encoder.Encoder)
+			assert.Equal(t, clipenc.NativeFLAC, encoder.Encoder)
 			assert.Equal(t, rate, flacSampleRate(t, out))
 
 			// Asserting the planned gain is not enough: a typo passing GainDB 0

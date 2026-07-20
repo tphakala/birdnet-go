@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -51,6 +52,7 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 			Component("birdweather").
 			Category(errors.CategoryAudio).
 			Context("operation", "native_flac_measure").
+			Context("encoder", clipenc.NativeFLAC).
 			Context("timestamp", timestamp).
 			Build()
 	}
@@ -95,8 +97,28 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 			Build()
 	}
 
+	// encoder and gain_db are on the Info line, not just the Debug one above, so
+	// that a default-level support dump answers for uploads the two questions it
+	// already answers for saved clips: which encoder produced the audio, and how
+	// much gain it applied ("my BirdWeather uploads are too quiet"). The Debug
+	// line keeps the full measurement detail.
+	//
+	// operation is what lets the system-events feed treat this line the way it
+	// already treats its sibling. An untagged entry is not unclassifiable, it
+	// simply falls through isNoiseEntry (internal/api/v2/system/events.go) as
+	// "not noise" and is emitted; so before this tag existed, every soundscape
+	// upload showed up in /api/v2/system/events/operational as an INFO event,
+	// once per detection. With the tag, the operation is listed in
+	// noiseOperations alongside audio_export_success, so routine success chatter
+	// is filtered out while birdweather_soundscape_encode_failed (emitted by
+	// logFLACEncodingError in birdweather_client.go) still surfaces. The match is
+	// exact, so listing this tag does not also suppress that one despite the
+	// prefix relationship.
 	log.Info("Encoded audio to FLAC format (native go-flac)",
 		logger.String("timestamp", timestamp),
-		logger.Int("bytes", buf.Len()))
+		logger.String("encoder", clipenc.NativeFLAC),
+		logger.Float64("gain_db", gainDB),
+		logger.Int("bytes", buf.Len()),
+		logger.String("operation", "birdweather_soundscape_encode"))
 	return &audioEncodingResult{buffer: buf, ext: "flac"}, nil
 }
