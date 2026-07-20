@@ -3,12 +3,10 @@
 package normbench
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -46,21 +44,25 @@ type loudness struct {
 }
 
 // subGateLoudness reports whether R128 gating left the clip with no integrated
-// loudness at all, which audionorm signals as -Inf. It is the case the native
-// path currently has no answer for.
+// loudness at all, which audionorm signals as -Inf. The native path answers this
+// case with gateFallbackGainDB (mirrored by planNative below); before that landed
+// it planned no gain at all and exported the clip inaudible, which is why the
+// pre-fix column still shows it.
 func subGateLoudness(meas audionorm.Measurement) bool {
 	return math.IsInf(meas.IntegratedLUFS, -1)
 }
 
 // bound names what stopped a planned gain from reaching the loudness target.
 // Reading this per row is the whole point of the harness: a divergence caused by
-// the 30 dB clamp is a policy choice, one caused by R128 gating is a defect.
+// the gain ceiling is a policy choice, one caused by R128 gating is a defect.
+// The ceiling differs per column (30 dB pre-fix, 60 dB as shipped), so the label
+// deliberately does not name a number.
 type bound string
 
 const (
 	boundNone    bound = "-"        // reached the target
 	boundPeak    bound = "peak"     // true-peak ceiling reduced the gain
-	boundClamp   bound = "clamp"    // the 30 dB ceiling reduced the gain
+	boundClamp   bound = "clamp"    // the gain ceiling reduced the gain
 	boundSubGate bound = "sub-gate" // integrated loudness is -Inf, so no gain was planned
 	boundSilent  bound = "silent"   // no signal at all
 )
@@ -249,8 +251,13 @@ func planNative(meas audionorm.Measurement, pcmForRefine []byte) plan {
 
 // runFFmpeg drives the production FFmpeg export path with normalization on, so
 // the comparison exercises the real filter construction (two-pass linear
-// loudnorm, the gate fallback, and the single-pass fallback) rather than a
-// hand-built filter string.
+// loudnorm, the gate fallback, and the single-pass fallback), reproduced here
+// because production no longer contains it.
+//
+// It used to call ffmpeg.ExportAudio and get the filter from the export path
+// itself. That path now plans its gain in Go, so the reference chain is built by
+// loudnormFilter below and maintained in this package. See its comment for why,
+// and TestLoudnormFilter for what pins it.
 //
 // The output format is FLAC rather than WAV for two reasons: it is lossless, so
 // what is measured is the filter's output and not codec loss; and WAV is not
@@ -259,8 +266,10 @@ func planNative(meas audionorm.Measurement, pcmForRefine []byte) plan {
 func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string, pcm []byte) loudness {
 	t.Helper()
 
+	// The caller already wrote this exact PCM to stem+"-in.wav" to measure the
+	// input; reuse it rather than writing a byte-identical second copy.
 	out := stem + "-ffmpeg.flac"
-	in := writeWAV(t, stem+"-ffmpeg-in.wav", pcm)
+	in := stem + "-in.wav"
 
 	args := []string{
 		"-hide_banner",
@@ -274,10 +283,7 @@ func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string, pcm []
 		"-c:a", "flac",
 		"-y", out,
 	}
-	cmd := exec.CommandContext(ctx, ffmpegBin, args...) //nolint:gosec // G204: test-controlled paths
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	require.NoError(t, cmd.Run(), "ffmpeg reference export: %s", stderr.String())
+	runFFmpegCmd(t, ctx, ffmpegBin, args)
 
 	return measure(t, ctx, ffmpegBin, out)
 }
@@ -295,10 +301,35 @@ func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string, pcm []
 func loudnormFilter(ctx context.Context, t *testing.T, ffmpegBin, wavPath string) string {
 	t.Helper()
 
-	base := fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f", targetLUFS, targetTruePeak, targetLRA)
-
 	stats, err := ffmpeg.AnalyzeFileLoudness(ctx, wavPath, ffmpegBin, ffmpeg.AudioFilters{}, nil)
-	if err != nil || stats == nil {
+	// A cancelled or timed-out analysis is not a gated clip. Folding it into the
+	// single-pass fallback would silently downgrade the reference column and the
+	// table would report the result as a real before/after comparison, which is
+	// the one failure mode that would quietly invalidate every number this
+	// harness exists to produce. The production code this copies propagated the
+	// context error for the same reason.
+	require.NoError(t, ctx.Err(), "loudness analysis cancelled for %s", wavPath)
+	if err != nil {
+		return loudnormFilterFromStats(nil)
+	}
+	return loudnormFilterFromStats(stats)
+}
+
+// loudnormSinglePass is the analysis-free filter the old export path fell back to
+// whenever it had no usable measurement.
+func loudnormSinglePass() string {
+	return fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f", targetLUFS, targetTruePeak, targetLRA)
+}
+
+// loudnormFilterFromStats is the branch-selection half of loudnormFilter, split
+// out so TestLoudnormFilter can pin all three branches without an ffmpeg binary
+// or a corpus. Keeping this pure is what makes the reference testable at all:
+// the two production tests that used to pin this logic
+// (TestBuildTwoPassLoudnormFilter, TestLoudnormGateFallbackOffset_NilStats) were
+// deleted with the production code they covered.
+func loudnormFilterFromStats(stats *ffmpeg.LoudnessStats) string {
+	base := loudnormSinglePass()
+	if stats == nil {
 		return base
 	}
 
@@ -323,20 +354,15 @@ func loudnormFilter(ctx context.Context, t *testing.T, ffmpegBin, wavPath string
 // loudnessStatsUsable reports whether every measured field loudnorm's second pass
 // consumes is a finite number.
 //
-// This is a deliberate copy of (*ffmpeg.LoudnessStats).isValid, which is
-// unexported. Checking InputI alone is not equivalent and would overstate how
-// often the two-pass branch was taken: FFmpeg reports "-inf" for input_thresh as
-// well as input_i on a gated clip, and any one unparseable field sent the old
-// export path to the fallback. If this drifts from isValid, the reference column
-// stops being the code that shipped.
+// It calls the production predicate rather than copying it. That matters: the
+// removed export path gated its two-pass branch on exactly this check, and
+// checking InputI alone would not be equivalent (FFmpeg reports "-inf" for
+// input_thresh as well as input_i on a gated clip, and any one unparseable field
+// sent the old path to the fallback). A local copy could drift from the still-live
+// original and the reference column would quietly stop being the code that
+// shipped.
 func loudnessStatsUsable(s *ffmpeg.LoudnessStats) bool {
-	for _, v := range []string{s.InputI, s.InputTP, s.InputLRA, s.InputThresh, s.TargetOffset} {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
-			return false
-		}
-	}
-	return true
+	return s.IsValid()
 }
 
 func writeWAV(t *testing.T, path string, pcm []byte) string {

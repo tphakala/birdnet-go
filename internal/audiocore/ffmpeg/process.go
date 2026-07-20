@@ -222,7 +222,7 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 
 	// 2. Normalize (loudnorm).
 	if f.Normalize {
-		if f.LoudnessStats != nil && f.LoudnessStats.isValid() {
+		if f.LoudnessStats != nil && f.LoudnessStats.IsValid() {
 			// Pass 2: apply with measured values using linear normalisation.
 			filters = append(filters, fmt.Sprintf(
 				"loudnorm=I=%.1f:LRA=%.1f:TP=%.1f:measured_I=%s:measured_LRA=%s:measured_TP=%s:measured_thresh=%s:linear=true:offset=%s",
@@ -240,13 +240,11 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 		}
 	}
 
-	// 3. Gain (volume).
-	if f.GainDB != 0 && !math.IsNaN(f.GainDB) {
-		sign := "+"
-		if f.GainDB < 0 {
-			sign = ""
-		}
-		filters = append(filters, fmt.Sprintf("volume=%s%.1fdB", sign, f.GainDB))
+	// 3. Gain (volume). Rendered by the same helper the export path uses, so the
+	// two filter builders in this package cannot drift in precision or sign
+	// handling again.
+	if f.GainDB != 0 && IsValidGainDB(f.GainDB) {
+		filters = append(filters, buildVolumeFilter(f.GainDB))
 	}
 
 	return strings.Join(filters, ",")
@@ -266,9 +264,9 @@ type LoudnessStats struct {
 	TargetOffset      string `json:"target_offset"` // Not used for 2-pass.
 }
 
-// isValid returns true if the measured loudness stats contain valid numeric values.
+// IsValid returns true if the measured loudness stats contain valid numeric values.
 // This prevents injection of malformed values into FFmpeg filter chains.
-func (s *LoudnessStats) isValid() bool {
+func (s *LoudnessStats) IsValid() bool {
 	for _, v := range []string{s.InputI, s.InputTP, s.InputLRA, s.InputThresh, s.TargetOffset} {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {

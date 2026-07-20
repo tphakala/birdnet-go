@@ -54,20 +54,24 @@ type ExportSettings struct {
 	Normalization NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
 }
 
-// NormalizationSettings contains audio normalization configuration based on EBU R128 standard
+// NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
+//
+// Clip normalization applies a single linear gain to reach TargetLUFS without
+// exceeding TruePeak (internal/audiocore/audionorm). There is no dynamic-range
+// stage, so LoudnessRange is accepted and validated but never applied; it is
+// retained only so existing config.yaml files keep loading unchanged.
 type NormalizationSettings struct {
 	Enabled    bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`          // true to enable loudness normalization
 	TargetLUFS float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"` // target integrated loudness in LUFS (default: -23)
-	// LoudnessRange is no longer applied. Clip normalization is a single linear
-	// gain to the integrated-loudness target under the true-peak ceiling
-	// (internal/audiocore/audionorm); no dynamic-range treatment happens, so
-	// there is no LRA target to honour. The field is retained so existing
-	// config.yaml files keep loading unchanged, and is still range-validated.
+	// Deprecated: no longer applied; retained so existing configs keep loading.
 	//
-	// Deprecated: unused since FFmpeg loudnorm was removed from the clip export
-	// path. Nothing reads it.
-	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
-	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"`                // true peak limit in dBTP (default: -2)
+	// This has to be a doc comment rather than a trailing one: go/doc and
+	// staticcheck only read Deprecated markers from Field.Doc, so a trailing
+	// //nolint-style note would document nothing to any tool. Keep it to one
+	// line, because the schema generator copies this verbatim into
+	// config.schema.json and doc/wiki/configuration-reference.md.
+	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"`
+	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"` // true peak limit in dBTP (default: -2)
 }
 
 type RetentionSettings struct {

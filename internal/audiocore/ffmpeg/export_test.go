@@ -579,11 +579,23 @@ func TestExportAudio_GainBoostsQuietAudio(t *testing.T) {
 	if err != nil {
 		t.Skip("FFmpeg not available:", err)
 	}
+	// The sample-rate assertion below is the entire reason this test replaced the
+	// deleted loudnorm pair, so it must not silently evaporate: probeSampleRate
+	// returns ok=false when ffprobe is missing, which would leave the test passing
+	// while checking nothing about the rate.
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not available, cannot verify the output sample rate:", err)
+	}
 
 	// Amplitude 3 of 32767 is roughly -80 dBFS, well below the EBU R128 absolute
 	// gate. On the export path audionorm measures this in Go and plans the lift;
 	// here the resolved gain is supplied directly, which is exactly what
 	// buildFFmpegExportOptions now passes.
+	//
+	// 57.5 dB is what the production planner would arrive at for this clip: the
+	// gate fallback anchors to true-peak headroom, and -80 dBFS + 57.5 lands at
+	// about -22.5 LUFS, just under the -23 target and inside the 60 dB clamp
+	// (nativeExportMaxGainDB).
 	const sampleRate = 48000
 	const amplitude = 3.0
 	const freqHz = 3000.0

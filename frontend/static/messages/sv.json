@@ -3643,8 +3643,6 @@
         "normalizationDisabled": "Ljudnormalisering är inaktiverad",
         "targetLUFSLabel": "Målhöghet (LUFS)",
         "targetLUFSHelp": "Integrerad höghetsm mål i LUFS (Loudness Units relative to Full Scale). -23 LUFS är EBU R128 sändningsstandard. Intervall: -40 till -10 LUFS.",
-        "loudnessRangeLabel": "Höghetsintervall (LU)",
-        "loudnessRangeHelp": "Maximal variation i höghet inom klippet (0–20 LU). Lägre värden ger mer konsekvent volym men kan minska dynamiken.",
         "truePeakLabel": "Sann toppnivå (dBTP)",
         "truePeakHelp": "Maximal sann toppnivå för att förhindra digital klippning (-10 till 0 dBTP). -2 dBTP ger säker marginal för de flesta uppspelningssystem.",
         "normalizationNote": "EBU R128-standard",
@@ -3682,6 +3680,7 @@
         "typeHelp": "Ljudformat för sparade klipp. WAV och FLAC är förlustfria (bästa kvalitet, större filer). MP3, AAC och Opus är förlustbehäftade (mindre filer, viss kvalitetsförlust).",
         "bitrateLabel": "Bithastighet",
         "bitrateHelp": "Ljudkomprimeringens bithastighet för förlustbehäftade format. Intervall: {min}–{max} kbps. Högre värden ger bättre kvalitet men större filer.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Förlustfria format bevarar den ursprungliga ljudkvaliteten utan komprimeringsartefakter."
       },
       "audioNormalization": {
@@ -3693,8 +3692,6 @@
         "requiresRecording": "Aktivera klippinspelning i fliken Inspelning för att använda ljudnormalisering.",
         "targetLUFSLabel": "Målhöghet (LUFS)",
         "targetLUFSHelp": "Integrerat höghetsmål i LUFS (Loudness Units relative to Full Scale). -23 LUFS är EBU R128 sändningsstandard. Intervall: -40 till -10 LUFS.",
-        "loudnessRangeLabel": "Höghetsintervall (LU)",
-        "loudnessRangeHelp": "Maximal variation i höghet inom klippet (0–20 LU). Lägre värden ger mer konsekvent volym men kan minska dynamiken.",
         "truePeakLabel": "Sann toppnivå (dBTP)",
         "truePeakHelp": "Maximal sann toppnivå för att förhindra digital klippning (-10 till 0 dBTP). -2 dBTP ger säker marginal för de flesta uppspelningssystem.",
         "noteTitle": "EBU R128-standard",

@@ -104,6 +104,22 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 			Build()
 	}
 
+	// Reject a gain FFmpeg would mishandle rather than silently corrupt the clip.
+	// This matters because the failure is not symmetric: volume=NaNdB makes FFmpeg
+	// exit with an error, but volume=+InfdB and volume=-InfdB are both ACCEPTED,
+	// producing a saturated or digitally silent file with no warning. GainDB is an
+	// exported field, so a caller that skips the export path's own planner can put
+	// anything here. IsValidGainDB bounds it to +/-MaxGainDB (60), which is wider
+	// than any value either the static setting (+/-40) or the loudness planner
+	// (clamped to +/-60) can produce.
+	if !IsValidGainDB(opts.GainDB) {
+		return errors.Newf("gain %v dB is not a finite value within +/-%.0f dB", opts.GainDB, MaxGainDB).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_validate").
+			Build()
+	}
+
 	phaseTimeout := exportPhaseTimeout(opts)
 
 	// Create the output directory if needed.
