@@ -52,19 +52,39 @@ func TestLogJobCompleted(t *testing.T) {
 	})
 }
 
-// TestLogJobFailed tests job failure logging doesn't panic
+// TestLogJobFailed pins the level and message, not just the absence of a panic.
+// The whole point of the change here is that the line is unconditionally an
+// Error reading "Job failed permanently"; a NotPanics-only assertion would stay
+// green if it regressed to Warn or to the old retryable wording.
+//
+// Only the exhausted-attempts shape is exercised, because that is the only one
+// handleJobFailure ever produces; see the doc comment on LogJobFailed.
 func TestLogJobFailed(t *testing.T) {
+	// Not parallel: swaps the process-global logger, same shape as
+	// TestLogJobRetryScheduled_Level below.
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	cl, err := logger.NewCentralLogger(&logger.LoggingConfig{
+		DefaultLevel: "debug",
+		Console:      &logger.ConsoleOutput{Enabled: false},
+		FileOutput:   &logger.FileOutput{Enabled: false},
+	}, handler)
+	require.NoError(t, err)
+	oldGlobal := logger.Global()
+	logger.SetGlobal(cl)
+	t.Cleanup(func() { logger.SetGlobal(oldGlobal) })
+
 	testErr := errors.New("connection timeout")
-
-	// Test retryable failure (attempt < maxAttempts)
-	assert.NotPanics(t, func() {
-		LogJobFailed(t.Context(), "job-999", "download", 3, 5, testErr)
-	})
-
-	// Test permanent failure (attempt >= maxAttempts)
 	assert.NotPanics(t, func() {
 		LogJobFailed(t.Context(), "job-1000", "process", 5, 5, testErr)
 	})
+
+	out := buf.String()
+	assert.Contains(t, out, "Job failed permanently")
+	assert.Contains(t, out, "level=ERROR",
+		"a permanently failed job must be an Error, not a Warn")
+	assert.NotContains(t, out, "will retry",
+		"the retryable wording is unreachable and must not come back")
 }
 
 // TestLogQueueStats tests queue statistics logging doesn't panic

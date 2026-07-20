@@ -36,6 +36,12 @@ var noiseOperations = []string{
 	"dog_bark_filter",
 	"privacy_filter",
 	"audio_export_success",
+	// Routine per-upload success chatter on a BirdWeather-enabled install, i.e.
+	// one INFO event per detection. Listed for the same reason as its sibling
+	// audio_export_success directly above: both report that a normal encode
+	// succeeded, which is not an operational event. The matching failure tags
+	// are deliberately absent, so a failed upload still surfaces.
+	"birdweather_soundscape_encode",
 	"process_detections_summary",
 }
 

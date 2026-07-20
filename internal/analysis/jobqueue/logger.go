@@ -54,7 +54,14 @@ func LogJobCompleted(ctx context.Context, jobID, actionType string, duration tim
 	getLog().WithContext(ctx).Info("Job completed", fields...)
 }
 
-// LogJobFailed logs when a job fails
+// LogJobFailed logs a job's final, permanent failure.
+//
+// It is only ever reached once a job's attempts are exhausted: the sole caller
+// is handleJobFailure (queue.go), inside its job.Attempts >= job.MaxAttempts
+// branch. A retryable failure goes to LogJobRetryScheduled instead, so this
+// function does not need, and must not have, a "will retry" level. The two
+// counters stay in the signature because they say how many attempts were spent
+// before giving up, which is the useful part of the record.
 func LogJobFailed(ctx context.Context, jobID, actionType string, attempt, maxAttempts int, err error) {
 	fields := []logger.Field{
 		logger.String("job_id", jobID),
@@ -67,13 +74,7 @@ func LogJobFailed(ctx context.Context, jobID, actionType string, attempt, maxAtt
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
 
-	contextLogger := getLog().WithContext(ctx)
-	// Use Error level for final failure, Warn for retryable failures
-	if attempt >= maxAttempts {
-		contextLogger.Error("Job failed permanently", fields...)
-	} else {
-		contextLogger.Warn("Job failed, will retry", fields...)
-	}
+	getLog().WithContext(ctx).Error("Job failed permanently", fields...)
 }
 
 // LogQueueStats logs queue statistics

@@ -16,6 +16,7 @@ import (
 	goflac "github.com/tphakala/go-flac/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
@@ -393,7 +394,7 @@ func TestAudionormSupportsTargets(t *testing.T) {
 
 // TestEncodeClipSelectsNativeNormalization drives the real encodeClip switch with
 // normalization enabled, proving FLAC routes to the native audionorm path (returns
-// encoderNativeFLAC, not FFmpeg) AND that the static Export.Gain is NOT applied on
+// clipenc.NativeFLAC, not FFmpeg) AND that the static Export.Gain is NOT applied on
 // top of the loudness gain (FFmpeg gives normalization precedence over gain, and
 // the native path must match).
 func TestEncodeClipSelectsNativeNormalization(t *testing.T) {
@@ -411,7 +412,7 @@ func TestEncodeClipSelectsNativeNormalization(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "clip.flac")
 	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeFLAC, enc.Encoder, "must select the native FLAC encoder, not FFmpeg")
+	assert.Equal(t, clipenc.NativeFLAC, enc.Encoder, "must select the native FLAC encoder, not FFmpeg")
 
 	data, err := os.ReadFile(out) //nolint:gosec // test-controlled temp path
 	require.NoError(t, err)
@@ -445,7 +446,7 @@ func TestEncodeClipFLACWithoutNormalization(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "clip.flac")
 	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeFLAC, enc.Encoder, "FLAC must encode natively with no env gate and no FFmpeg")
+	assert.Equal(t, clipenc.NativeFLAC, enc.Encoder, "FLAC must encode natively with no env gate and no FFmpeg")
 
 	data, err := os.ReadFile(out) //nolint:gosec // test-controlled temp path
 	require.NoError(t, err)
@@ -485,7 +486,7 @@ func TestEncodeClipFLACNormalizationSkipped(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "clip.flac")
 	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
 	require.NoError(t, err)
-	assert.Equal(t, encoderNativeFLAC, enc.Encoder, "out-of-range normalization must still encode natively, never FFmpeg")
+	assert.Equal(t, clipenc.NativeFLAC, enc.Encoder, "out-of-range normalization must still encode natively, never FFmpeg")
 
 	data, err := os.ReadFile(out) //nolint:gosec // test-controlled temp path
 	require.NoError(t, err)

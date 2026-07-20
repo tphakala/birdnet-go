@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -1038,10 +1039,18 @@ func (b *BwClient) encodeAudioForUpload(pcmData []byte, timestamp string) (*audi
 func logFLACEncodingError(err error) {
 	log := GetLogger()
 
+	// Both branches name the encoder and carry an operation tag, matching the
+	// success line, so a failed upload is attributable to an encoder the same way
+	// a failed clip export is.
+	fields := []logger.Field{
+		logger.Error(err),
+		logger.String("encoder", clipenc.NativeFLAC),
+		logger.String("operation", "birdweather_soundscape_encode_failed"),
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		log.Warn("FLAC encoding timed out or was cancelled", logger.Error(err))
+		log.Warn("FLAC encoding timed out or was cancelled", fields...)
 	} else {
-		log.Error("Failed to encode/normalize PCM to FLAC", logger.Error(err))
+		log.Error("Failed to encode/normalize PCM to FLAC", fields...)
 	}
 }
 

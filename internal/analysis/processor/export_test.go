@@ -1,11 +1,11 @@
 package processor
 
-import "sync"
-
-// resetBuildClipPathFallbackOnce resets the one-shot WARN guard so tests
+// resetBuildClipPathFallbackOnce resets the keyed WARN guard so tests
 // can exercise the fallback path multiple times. Test-only.
+// Cleared rather than reassigned, for the reason spelled out on
+// resetNativeSkipOnce below.
 func resetBuildClipPathFallbackOnce() {
-	buildClipPathFallbackOnce = sync.Once{}
+	clipPathExtFallbackLogged.seen.Clear()
 	buildClipPathFallbackFired.Store(false)
 }
 

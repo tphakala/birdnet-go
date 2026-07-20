@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
@@ -26,6 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"golang.org/x/sync/singleflight"
@@ -836,6 +838,59 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 	return nil
 }
 
+// processedAudioFormat is what the two ProcessAudioToFile calls hand to FFmpeg.
+// Unlike the clip-extraction endpoint, neither takes a format from the request:
+// both write a temp .wav so FFmpeg can seek back and fix the RIFF chunk sizes.
+// It is the transcode's output, which is what a transcode failure needs to
+// report, not necessarily the endpoint's own response type (the spectrogram
+// endpoint goes on to render a PNG from it; its operation tag says which is
+// which). Named rather than inlined so the log field cannot silently disagree
+// with the temp-file suffix it describes.
+const processedAudioFormat = "wav"
+
+// logTranscodeFailure records which encoder ran and the validated request
+// parameters that shaped it. HandleError cannot: handleErrorInternal logs a
+// fixed field set and does not surface an EnhancedError's Context, so without
+// this line a transcode that fails only for one format, or only with a filter
+// chain attached, is invisible in the log file.
+//
+// encoder is recorded for the same reason the clip export records it. The
+// compound case is the point: with a native encoder gate on, a clip written by
+// go-aac can later be re-encoded by FFmpeg through these endpoints, so two
+// encoders touch one file and until now only the first was ever named.
+//
+// The error is scrubbed rather than logged raw, matching what apicore does to
+// the same value a statement later. An FFmpeg failure wraps the command's
+// stderr, which names the absolute input path, so the raw string carries the
+// operator's account name and directory layout; emitting it here unscrubbed
+// would defeat the redaction HandleError performs on the identical error.
+//
+// One helper rather than three copies: all three FFmpeg entry points in this
+// file (ExtractClip plus the two ProcessAudioToFile sites) fail the same way and
+// need the same fields, and a fourth transcode path added later has an obvious
+// thing to call.
+func (c *Handler) logTranscodeFailure(noteID, operation, format string, filters *ffmpeg.AudioFilters, err error) {
+	// 5 unconditional fields plus the 3 filter fields.
+	fields := make([]logger.Field, 0, 8)
+	fields = append(fields,
+		logger.String("note_id", noteID),
+		logger.String("encoder", clipenc.FFmpeg),
+		logger.String("format", format),
+		logger.String("error", privacy.ScrubMessage(err.Error())),
+	)
+	// nil means the request asked for no processing at all, which is itself the
+	// answer to "did a filter cause this"; logging three zero values instead
+	// would read as "filters were configured and were all off".
+	if filters != nil {
+		fields = append(fields,
+			logger.Float64("gain_db", filters.GainDB),
+			logger.Bool("normalize", filters.Normalize),
+			logger.String("denoise", filters.Denoise))
+	}
+	fields = append(fields, logger.String("operation", operation))
+	c.LogErrorIfEnabled("Audio transcode failed", fields...)
+}
+
 // ExtractAudioClipByID extracts a time range from an audio clip and returns the
 // re-encoded segment. Requires authentication.
 //
@@ -946,6 +1001,7 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
 		}
+		c.logTranscodeFailure(noteID, "media_clip_transcode_failed", req.Format, filters, err)
 		return c.HandleError(ctx, err, "Failed to extract audio clip", http.StatusInternalServerError)
 	}
 
@@ -1087,6 +1143,7 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
 		}
+		c.logTranscodeFailure(noteID, "media_processed_audio_failed", processedAudioFormat, &filters, err)
 		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
 	}
 
@@ -1204,6 +1261,7 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
 		}
+		c.logTranscodeFailure(noteID, "media_processed_spectrogram_failed", processedAudioFormat, &filters, err)
 		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
 	}
 

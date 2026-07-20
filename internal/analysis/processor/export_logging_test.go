@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
@@ -122,7 +123,7 @@ func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 
 	out := logs.String()
 	assert.Contains(t, out, "Audio clip saved successfully")
-	assert.Contains(t, out, "encoder="+encoderNativeFLAC,
+	assert.Contains(t, out, "encoder="+clipenc.NativeFLAC,
 		"the success log must name the encoder that wrote the clip")
 	assert.Contains(t, out, "format="+ffmpeg.FormatFLAC)
 	assert.Contains(t, out, "operation=audio_export_success")
@@ -362,7 +363,7 @@ func TestExecute_SuccessLogCarriesBitrateForLossyFormats(t *testing.T) {
 	require.NoError(t, a.Execute(t.Context(), nil))
 
 	out := logs.String()
-	assert.Contains(t, out, "encoder="+encoderNativeAAC)
+	assert.Contains(t, out, "encoder="+clipenc.NativeAAC)
 	assert.Contains(t, out, "bitrate_kbps=96")
 }
 
@@ -381,7 +382,7 @@ func TestExecute_SuccessLogCarriesClampedBitrate(t *testing.T) {
 	require.NoError(t, a.Execute(t.Context(), nil))
 
 	out := logs.String()
-	assert.Contains(t, out, "encoder="+encoderNativeOpus)
+	assert.Contains(t, out, "encoder="+clipenc.NativeOpus)
 	assert.Contains(t, out, "bitrate_kbps=256",
 		"the clamped bitrate explains the file on disk; the configured 320k does not")
 	assert.NotContains(t, out, "bitrate_kbps=320")
@@ -404,7 +405,7 @@ func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 
 	out := logs.String()
 	assert.Contains(t, out, "Audio clip export failed")
-	assert.Contains(t, out, "encoder="+encoderNativeAAC,
+	assert.Contains(t, out, "encoder="+clipenc.NativeAAC,
 		"a failed export must be attributable to the encoder that failed")
 	assert.Contains(t, out, "format="+ffmpeg.FormatAAC)
 	assert.Contains(t, out, "operation=audio_export_failed")
@@ -448,7 +449,7 @@ func TestExecute_FailureLogNamesFFmpeg(t *testing.T) {
 
 	out := logs.String()
 	assert.Contains(t, out, "Audio clip export failed")
-	assert.Contains(t, out, "encoder="+encoderFFmpeg)
+	assert.Contains(t, out, "encoder="+clipenc.FFmpeg)
 	assert.Contains(t, out, "format="+ffmpeg.FormatMP3)
 }
 
@@ -480,7 +481,7 @@ func TestExecute_FailureBeforeGainResolutionOmitsGain(t *testing.T) {
 	// its own gain_db on a Debug line, so a buffer-wide NotContains would break
 	// for the wrong reason the moment the failure point moved past measurement.
 	line := logLineContaining(t, logs.String(), "operation=audio_export_failed")
-	assert.Contains(t, line, "encoder="+encoderNativeFLAC,
+	assert.Contains(t, line, "encoder="+clipenc.NativeFLAC,
 		"the encoder is known before the gain is, so it must still be reported")
 	assert.NotContains(t, line, "gain_db=",
 		"an export that failed before resolving the gain has none to report")
@@ -798,21 +799,21 @@ func TestSelectEncoder_RoutingTable(t *testing.T) {
 		rate       int
 		wantEncode string
 	}{
-		{"wav is always native", "", "", ffmpeg.FormatWAV, conf.SampleRate, encoderNativeWAV},
-		{"flac is always native", "", "", ffmpeg.FormatFLAC, conf.SampleRate, encoderNativeFLAC},
-		{"wav ignores the gates", "native", "native", ffmpeg.FormatWAV, conf.SampleRate, encoderNativeWAV},
-		{"flac ignores the gates", "native", "native", ffmpeg.FormatFLAC, conf.SampleRate, encoderNativeFLAC},
-		{"aac without the gate stays on ffmpeg", "", "", ffmpeg.FormatAAC, conf.SampleRate, encoderFFmpeg},
-		{"opus without the gate stays on ffmpeg", "", "", ffmpeg.FormatOpus, conf.SampleRate, encoderFFmpeg},
-		{"aac with the gate goes native", "native", "", ffmpeg.FormatAAC, conf.SampleRate, encoderNativeAAC},
-		{"opus with the gate goes native", "", "native", ffmpeg.FormatOpus, conf.SampleRate, encoderNativeOpus},
+		{"wav is always native", "", "", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
+		{"flac is always native", "", "", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
+		{"wav ignores the gates", "native", "native", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
+		{"flac ignores the gates", "native", "native", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
+		{"aac without the gate stays on ffmpeg", "", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.FFmpeg},
+		{"opus without the gate stays on ffmpeg", "", "", ffmpeg.FormatOpus, conf.SampleRate, clipenc.FFmpeg},
+		{"aac with the gate goes native", "native", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.NativeAAC},
+		{"opus with the gate goes native", "", "native", ffmpeg.FormatOpus, conf.SampleRate, clipenc.NativeOpus},
 		// Gated on, but the encoder cannot carry the clip's rate: FFmpeg takes it
 		// rather than the export failing outright.
-		{"aac falls back when the rate is unsupported", "native", "", ffmpeg.FormatAAC, 22050, encoderFFmpeg},
-		{"opus falls back when the rate is unsupported", "", "native", ffmpeg.FormatOpus, 22050, encoderFFmpeg},
+		{"aac falls back when the rate is unsupported", "native", "", ffmpeg.FormatAAC, 22050, clipenc.FFmpeg},
+		{"opus falls back when the rate is unsupported", "", "native", ffmpeg.FormatOpus, 22050, clipenc.FFmpeg},
 		// Neither gate touches the formats FFmpeg owns outright.
-		{"mp3 is always ffmpeg", "native", "native", ffmpeg.FormatMP3, conf.SampleRate, encoderFFmpeg},
-		{"alac is always ffmpeg", "native", "native", ffmpeg.FormatALAC, conf.SampleRate, encoderFFmpeg},
+		{"mp3 is always ffmpeg", "native", "native", ffmpeg.FormatMP3, conf.SampleRate, clipenc.FFmpeg},
+		{"alac is always ffmpeg", "native", "native", ffmpeg.FormatALAC, conf.SampleRate, clipenc.FFmpeg},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Not parallel: t.Setenv, and the skip warning uses a package-level Once.
