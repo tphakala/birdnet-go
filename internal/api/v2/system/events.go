@@ -42,18 +42,20 @@ var noiseOperations = []string{
 	// succeeded, which is not an operational event. The matching failure tags
 	// are deliberately absent, so a failed upload still surfaces.
 	//
-	// Inert today. This list is consumed only by isNoiseEntry, i.e. only by
-	// GetOperationalEvents, which reads GetDefaultOutputPath() and
-	// GetOutputPath("audio") and nothing else. Both this operation and
-	// audio_export_success are emitted by modules that own a dedicated log file
-	// (logs/birdweather.log, logs/actions.log), and a module with its
-	// own output does not also write to application.log, so neither entry can
-	// ever match here. Kept rather than pruned because the intent is right and
-	// widening the endpoint to read per-module logs would otherwise immediately
-	// flood the feed with per-detection success lines.
+	// Whether this entry and audio_export_success can match here depends on the
+	// logging configuration. This list is consumed only by isNoiseEntry, i.e.
+	// only by GetOperationalEvents, which reads the configured
+	// GetDefaultOutputPath() and GetOutputPath("audio") base paths. Both
+	// operations are emitted by modules that get their own output on a default
+	// install (birdweather, analysis.processor), so their lines land outside
+	// those two sources and the entries sit unused. Disable or redirect either
+	// module's output and CentralLogger.Module falls back to the shared base
+	// handler, the lines reach the default output, and these entries start doing
+	// the filtering they exist for. That conditional liveness is why they are
+	// kept rather than pruned.
 	//
-	// Note this says nothing about audio_export_success in detectionOperations
-	// above: that list IS live, because GetDetectionEvents explicitly reads
+	// None of this applies to audio_export_success in detectionOperations above:
+	// that list is always live, because GetDetectionEvents explicitly reads
 	// GetOutputPath("analysis.processor").
 	"birdweather_soundscape_encode",
 	"process_detections_summary",

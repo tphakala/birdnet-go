@@ -108,16 +108,18 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	// logFLACEncodingError in birdweather_client.go) so success and failure are
 	// distinguishable without parsing the message.
 	//
-	// It does NOT currently affect GET /api/v2/system/events/operational, and an
-	// earlier version of this comment wrongly said it did. That endpoint reads
-	// exactly two files, GetDefaultOutputPath() and GetOutputPath("audio"), so
-	// it only ever sees application.log and audio.log. This package logs through
-	// a module logger, and CentralLogger.Module falls back to the shared base
-	// handler only for a module with NO dedicated output; birdweather has one
-	// (logs/birdweather.log via ensureModuleOutput), so these lines never reach
-	// that endpoint at all. The matching noiseOperations entry is therefore inert
-	// today, kept so the feed does not start carrying per-upload success chatter
-	// if it is ever widened to read the per-module logs.
+	// Whether it reaches GET /api/v2/system/events/operational depends on the
+	// logging configuration, and an earlier version of this comment wrongly said
+	// it always does. That endpoint reads two configured base paths (plus their
+	// rotated variants): GetDefaultOutputPath() and GetOutputPath("audio").
+	// CentralLogger.Module routes to a module's own writer only when that module
+	// has an output entry AND it is enabled, otherwise it falls back to the
+	// shared base handler. On a default install birdweather gets its own file
+	// (ensureModuleOutput, DefaultBirdweatherLogPath), so these lines land
+	// outside what the endpoint reads and never appear there. Disable or
+	// redirect the birdweather module output and they land in the default output
+	// instead, at which point they DO appear, which is what the matching
+	// noiseOperations entry is for.
 	log.Info("Encoded audio to FLAC format (native go-flac)",
 		logger.String("timestamp", timestamp),
 		logger.String("encoder", clipenc.NativeFLAC),
