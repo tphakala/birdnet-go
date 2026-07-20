@@ -839,33 +839,15 @@
                     store.isSaving}
                 />
 
-                <!-- Loudness Range -->
-                <NumberField
-                  label={t('settings.audio.audioNormalization.loudnessRangeLabel')}
-                  value={settings.audio.export.normalization.loudnessRange}
-                  onUpdate={value =>
-                    settingsActions.updateSection('realtime', {
-                      audio: {
-                        ...$audioSettings!,
-                        export: {
-                          ...settings.audio.export,
-                          normalization: {
-                            ...settings.audio.export.normalization,
-                            loudnessRange: value,
-                          },
-                        },
-                      },
-                    })}
-                  min={0}
-                  max={20}
-                  step={0.5}
-                  placeholder="7"
-                  helpText={t('settings.audio.audioNormalization.loudnessRangeHelp')}
-                  disabled={!settings.audio.export.normalization.enabled ||
-                    !settings.audio.export.enabled ||
-                    store.isLoading ||
-                    store.isSaving}
-                />
+                <!--
+                  The loudness range control was removed here. Clip normalization
+                  applies a single linear gain to the integrated-loudness target
+                  under the true-peak ceiling, with no dynamic-range treatment, so
+                  there is no LRA target left to honour. The setting is still
+                  accepted in config.yaml for backward compatibility but nothing
+                  reads it; showing a knob that does nothing is worse than showing
+                  none.
+                -->
 
                 <!-- True Peak -->
                 <NumberField

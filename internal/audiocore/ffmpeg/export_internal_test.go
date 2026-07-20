@@ -34,38 +34,37 @@ func TestExportPhaseTimeout_ScalesWithPCMDuration(t *testing.T) {
 	assert.Equal(t, time.Duration(durationSeconds)*time.Second+exportPhaseTimeoutMargin, exportPhaseTimeout(opts))
 }
 
-func TestLoudnormGateFallbackOffset_NilStats(t *testing.T) {
+// The export filter chain is gain-only: loudness normalisation is planned in Go
+// and arrives as a resolved GainDB, so nothing here may emit a loudnorm filter.
+func TestBuildExportAudioFilter(t *testing.T) {
 	t.Parallel()
 
-	offsetDB, ok := loudnormGateFallbackOffset(nil, ExportNormalization{TruePeak: -2})
-
-	assert.False(t, ok)
-	assert.Zero(t, offsetDB)
-}
-
-func TestBuildTwoPassLoudnormFilter(t *testing.T) {
-	t.Parallel()
-
-	norm := ExportNormalization{
-		Enabled:       true,
-		TargetLUFS:    -23.0,
-		TruePeak:      -2.0,
-		LoudnessRange: 7.0,
+	tests := []struct {
+		name   string
+		gainDB float64
+		want   string
+	}{
+		{name: "no gain yields no filter", gainDB: 0, want: ""},
+		{name: "positive gain is signed", gainDB: 6, want: "volume=+6.000000dB"},
+		{name: "negative gain carries its own sign", gainDB: -3.5, want: "volume=-3.500000dB"},
+		{
+			// A measured EBU R128 gain is never a round number. Printing it at the
+			// old single decimal would put the FFmpeg formats up to 0.05 dB off the
+			// native encoders, which apply the exact float64.
+			name:   "measured gain keeps sub-decibel precision",
+			gainDB: 12.3456789,
+			want:   "volume=+12.345679dB",
+		},
 	}
 
-	stats := &LoudnessStats{
-		InputI:       "-15.0",
-		InputTP:      "-1.0",
-		InputLRA:     "5.0",
-		InputThresh:  "-25.0",
-		TargetOffset: "0.5",
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	filter := buildTwoPassLoudnormFilter(norm, stats)
-	assert.Contains(t, filter, "linear=true")
-	assert.Contains(t, filter, "measured_I=-15.0")
-	assert.Contains(t, filter, "measured_TP=-1.0")
-	assert.Contains(t, filter, "measured_LRA=5.0")
-	assert.Contains(t, filter, "measured_thresh=-25.0")
-	assert.Contains(t, filter, "offset=0.5")
+			filter := buildExportAudioFilter(&ExportOptions{GainDB: tt.gainDB})
+
+			assert.Equal(t, tt.want, filter)
+			assert.NotContains(t, filter, "loudnorm", "the export path must never build a loudnorm filter")
+		})
+	}
 }

@@ -3,10 +3,12 @@
 package normbench
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -258,24 +260,83 @@ func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string, pcm []
 	t.Helper()
 
 	out := stem + "-ffmpeg.flac"
-	err := ffmpeg.ExportAudio(ctx, &ffmpeg.ExportOptions{
-		PCMData:    pcm,
-		OutputPath: out,
-		Format:     ffmpeg.FormatFLAC,
-		SampleRate: sampleRate,
-		Channels:   channels,
-		BitDepth:   bitDepth,
-		Normalization: ffmpeg.ExportNormalization{
-			Enabled:       true,
-			TargetLUFS:    targetLUFS,
-			TruePeak:      targetTruePeak,
-			LoudnessRange: targetLRA,
-		},
-		FFmpegPath: ffmpegBin,
-	})
-	require.NoError(t, err, "ffmpeg export")
+	in := writeWAV(t, stem+"-ffmpeg-in.wav", pcm)
+
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-i", in,
+		"-af", loudnormFilter(ctx, t, ffmpegBin, in),
+		// loudnorm upsamples internally to 192 kHz for true-peak detection, so
+		// the output rate has to be pinned back or the FLAC inflates. Production
+		// carried this same re-pin until loudnorm was removed from it.
+		"-ar", strconv.Itoa(sampleRate),
+		"-c:a", "flac",
+		"-y", out,
+	}
+	cmd := exec.CommandContext(ctx, ffmpegBin, args...) //nolint:gosec // G204: test-controlled paths
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "ffmpeg reference export: %s", stderr.String())
 
 	return measure(t, ctx, ffmpegBin, out)
+}
+
+// loudnormFilter builds the two-pass linear loudnorm filter this harness
+// compares the native path against.
+//
+// It lives here rather than in internal/audiocore/ffmpeg because production no
+// longer normalises with FFmpeg at all: the export path plans its gain in Go via
+// audionorm. What FFmpeg's loudnorm would have done is now purely a reference
+// point, and a reference point belongs in the harness that reads it. This is a
+// faithful copy of what the export path built before the removal, including the
+// fallbacks: single-pass when analysis yields nothing usable, and a true-peak
+// anchored offset when R128 gating leaves no measurable integrated loudness.
+func loudnormFilter(ctx context.Context, t *testing.T, ffmpegBin, wavPath string) string {
+	t.Helper()
+
+	base := fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f", targetLUFS, targetTruePeak, targetLRA)
+
+	stats, err := ffmpeg.AnalyzeFileLoudness(ctx, wavPath, ffmpegBin, ffmpeg.AudioFilters{}, nil)
+	if err != nil || stats == nil {
+		return base
+	}
+
+	if !loudnessStatsUsable(stats) {
+		// Gated to nothing. Anchor the lift to the true-peak headroom instead,
+		// bounded by the same ceiling the old export path used.
+		inputTP := parseLoudnessField(stats.InputTP)
+		if math.IsInf(inputTP, 0) || math.IsNaN(inputTP) {
+			return base
+		}
+		offsetDB := math.Max(-ffmpeg.MaxGainDB, math.Min(ffmpeg.MaxGainDB, targetTruePeak-inputTP))
+		if math.Abs(offsetDB) < 0.05 {
+			return base
+		}
+		return fmt.Sprintf("%s:offset=%.1f", base, offsetDB)
+	}
+
+	return fmt.Sprintf("%s:measured_I=%s:measured_LRA=%s:measured_TP=%s:measured_thresh=%s:linear=true:offset=%s",
+		base, stats.InputI, stats.InputLRA, stats.InputTP, stats.InputThresh, stats.TargetOffset)
+}
+
+// loudnessStatsUsable reports whether every measured field loudnorm's second pass
+// consumes is a finite number.
+//
+// This is a deliberate copy of (*ffmpeg.LoudnessStats).isValid, which is
+// unexported. Checking InputI alone is not equivalent and would overstate how
+// often the two-pass branch was taken: FFmpeg reports "-inf" for input_thresh as
+// well as input_i on a gated clip, and any one unparseable field sent the old
+// export path to the fallback. If this drifts from isValid, the reference column
+// stops being the code that shipped.
+func loudnessStatsUsable(s *ffmpeg.LoudnessStats) bool {
+	for _, v := range []string{s.InputI, s.InputTP, s.InputLRA, s.InputThresh, s.TargetOffset} {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+			return false
+		}
+	}
+	return true
 }
 
 func writeWAV(t *testing.T, path string, pcm []byte) string {

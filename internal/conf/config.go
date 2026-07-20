@@ -56,8 +56,16 @@ type ExportSettings struct {
 
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard
 type NormalizationSettings struct {
-	Enabled       bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // true to enable loudness normalization
-	TargetLUFS    float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"`          // target integrated loudness in LUFS (default: -23)
+	Enabled    bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`          // true to enable loudness normalization
+	TargetLUFS float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"` // target integrated loudness in LUFS (default: -23)
+	// LoudnessRange is no longer applied. Clip normalization is a single linear
+	// gain to the integrated-loudness target under the true-peak ceiling
+	// (internal/audiocore/audionorm); no dynamic-range treatment happens, so
+	// there is no LRA target to honour. The field is retained so existing
+	// config.yaml files keep loading unchanged, and is still range-validated.
+	//
+	// Deprecated: unused since FFmpeg loudnorm was removed from the clip export
+	// path. Nothing reads it.
 	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
 	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"`                // true peak limit in dBTP (default: -2)
 }
