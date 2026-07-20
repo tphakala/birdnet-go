@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,10 +46,29 @@ type SQLiteStore struct {
 	walCheckpointOnce sync.Once
 }
 
+// defaultSQLitePath mirrors the viper default set in conf/defaults.go
+// ("output.sqlite.path"). It is used as a fallback when the configured path is
+// blank, since that default only applies at fresh config bootstrap and can be
+// overwritten with an empty string by a later settings save.
+const defaultSQLitePath = "birdnet.db"
+
 func validateSQLiteConfig() error {
 	// Add validation logic for SQLite configuration
 	// Return an error if the configuration is invalid
 	return nil
+}
+
+// resolveSQLitePath returns the configured SQLite database path, falling back to
+// defaultSQLitePath when the configured value is blank. A blank path would
+// otherwise flow into buildSQLiteDSN and produce a bare "?<pragmas>" DSN; the
+// SQLite driver treats everything before the "?" as the filename, so it would
+// create/open a file literally named after the pragma query string in the
+// working directory instead of the intended database.
+func resolveSQLitePath(configured string) string {
+	if strings.TrimSpace(configured) == "" {
+		return defaultSQLitePath
+	}
+	return configured
 }
 
 // getDiskSpace returns available disk space for the given path using diskmanager
@@ -188,8 +208,13 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 
 // Open initializes the SQLite database connection
 func (s *SQLiteStore) Open() (retErr error) {
-	// Get database path from settings
-	dbPath := s.Settings.Output.SQLite.Path
+	// Get database path from settings, guarding against a blank value that
+	// would otherwise produce a malformed DSN and open a bogus file.
+	dbPath := resolveSQLitePath(s.Settings.Output.SQLite.Path)
+	if dbPath != s.Settings.Output.SQLite.Path {
+		GetLogger().Warn("Configured SQLite path is empty; falling back to default",
+			logger.String("default_path", dbPath))
+	}
 
 	// Initialize telemetry integration
 	telemetryEnabled := s.Settings != nil && s.Settings.Sentry.Enabled
