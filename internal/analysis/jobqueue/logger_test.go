@@ -70,6 +70,9 @@ func TestLogJobFailed(t *testing.T) {
 		FileOutput:   &logger.FileOutput{Enabled: false},
 	}, handler)
 	require.NoError(t, err)
+	// assert, not require: a require inside a cleanup func calls runtime.Goexit
+	// from the cleanup goroutine.
+	t.Cleanup(func() { assert.NoError(t, cl.Close()) })
 	oldGlobal := logger.Global()
 	logger.SetGlobal(cl)
 	t.Cleanup(func() { logger.SetGlobal(oldGlobal) })

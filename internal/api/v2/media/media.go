@@ -878,8 +878,9 @@ func (c *Handler) logTranscodeFailure(noteID, operation, format string, filters 
 		logger.String("format", format),
 		logger.String("error", privacy.ScrubMessage(err.Error())),
 	)
-	// nil means the request asked for no processing at all, which is itself the
-	// answer to "did a filter cause this"; logging three zero values instead
+	// nil means the request asked for no FILTER processing; the transcode itself
+	// still ran. That distinction is the answer to "did a filter cause this",
+	// so the fields are omitted rather than logged as three zero values, which
 	// would read as "filters were configured and were all off".
 	if filters != nil {
 		fields = append(fields,

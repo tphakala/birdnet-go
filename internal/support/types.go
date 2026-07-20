@@ -48,9 +48,11 @@ type SystemInfo struct {
 	DockerInfo   *DockerInfo `json:"docker_info,omitempty"`
 	// RuntimeEnv holds the environment variables on the collector's allowlist
 	// (conf.SupportEnvAllowlist in production) that are actually set, so a dump
-	// can report runtime gates that config.yaml cannot record. Only non-empty values are present, so an absent key means
-	// the variable was unset rather than set to "". Empty and omitted entirely
-	// when no allowlisted variable is set, which is the common case.
+	// can report runtime gates that config.yaml cannot record. Only non-empty
+	// values are present, so an absent key means the variable was unset OR set
+	// to the empty string; the two are indistinguishable here and behave
+	// identically at every gate. Empty and omitted entirely when no allowlisted
+	// variable is set, which is the common case.
 	RuntimeEnv map[string]string `json:"runtime_env,omitempty"`
 }
 

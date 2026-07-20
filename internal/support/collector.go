@@ -781,9 +781,12 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 // record (see the allowlist's own comment for why the gates are invisible
 // otherwise, and why this is an allowlist rather than a prefix scan).
 //
-// Unset variables are skipped rather than recorded as empty, so the map is
-// nil-and-omitted on the overwhelmingly common install where no gate is set,
-// instead of adding a block of empty strings to every dump.
+// Variables that are unset OR set to the empty string are both skipped, so the
+// map is nil-and-omitted on the overwhelmingly common install where no gate is
+// set, instead of adding a block of empty strings to every dump. os.Getenv
+// cannot tell those two states apart, and for these gates nothing does: an
+// empty value fails nativeEncoderSelected exactly as an unset one does, so a
+// dump loses no triage signal by collapsing them.
 //
 // Values are redacted by key even though the allowlist is supposed to make that
 // unnecessary. SystemInfo is the one dump section no scrubber touches: it has
