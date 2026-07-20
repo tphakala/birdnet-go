@@ -574,10 +574,12 @@ func clipDurationMs(pcmBytes, sampleRate int) int64 {
 // Debug: exports in flight when the process stops must not look like errors.
 //
 // Everything else is WARN, not ERROR, even though it is a genuine failure. The
-// error is returned unchanged, so the job queue logs the same failure as ERROR
-// immediately afterwards; raising this line to ERROR too would report one root
+// error is returned unchanged, and the job queue logs that same failure as ERROR
+// once the attempts are exhausted (handleJobFailure only calls LogJobFailed when
+// Attempts >= MaxAttempts). Raising this line to ERROR too would report one root
 // cause as two, inflating error counts and alerting twice. This line exists to
-// carry the context the queue's generic line cannot, not to raise the alarm.
+// carry the context the queue's generic line cannot, not to raise the alarm, and
+// on the deferred path it is the only record of the attempts before the last.
 func (a *SaveAudioAction) logExportFailure(ctx context.Context, enc *clipEncoding, exportFormat string, exportRate int, outputPath string, err error) {
 	fields := make([]logger.Field, 0, 11)
 	fields = append(fields,
@@ -836,8 +838,8 @@ var (
 // the operator with no explanation for a format they did not choose.
 //
 // Logged once per process for the same reason as the native-encoder skip
-// warning: a bat install takes this path on every single detection, and neither
-// the model nor the capture rate can change without a restart.
+// warning: a bat install left on a lossy export format takes this path on every
+// single detection, and the explanation only needs stating once.
 func logBatFormatDowngrade(requestedFormat string, rate int) {
 	batFormatDowngradeOnce.Do(func() {
 		GetLogger().Info("Ultrasonic clip format downgraded to WAV; the configured format cannot carry this sample rate",
