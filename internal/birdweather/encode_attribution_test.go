@@ -69,7 +69,8 @@ func TestEncodeWithNativeFLAC_LogsEncoderAttribution(t *testing.T) {
 	// from birdweather_client.go, so a Contains on the bare name cannot tell the
 	// two apart.
 	assert.Contains(t, out, "operation=birdweather_soundscape_encode\n",
-		"the success line must carry the tag that noiseOperations filters on")
+		"the success line must carry its operation tag, so success and failure are "+
+			"distinguishable without parsing the message")
 	assert.NotContains(t, out, "birdweather_soundscape_encode_failed",
 		"a successful encode must not emit the failure tag")
 }

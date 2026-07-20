@@ -103,17 +103,23 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	// much gain it applied ("my BirdWeather uploads are too quiet"). The Debug
 	// line keeps the full measurement detail.
 	//
-	// operation is what lets the system-events feed treat this line the way it
-	// already treats its sibling. An untagged entry is not unclassifiable, it
-	// simply falls through isNoiseEntry (internal/api/v2/system/events.go) as
-	// "not noise" and is emitted; so before this tag existed, every soundscape
-	// upload showed up in /api/v2/system/events/operational as an INFO event,
-	// once per detection. With the tag, the operation is listed in
-	// noiseOperations alongside audio_export_success, so routine success chatter
-	// is filtered out while birdweather_soundscape_encode_failed (emitted by
-	// logFLACEncodingError in birdweather_client.go) still surfaces. The match is
-	// exact, so listing this tag does not also suppress that one despite the
-	// prefix relationship.
+	// operation names the line for grep and for the system-events classifier,
+	// and pairs with birdweather_soundscape_encode_failed (emitted by
+	// logFLACEncodingError in birdweather_client.go) so success and failure are
+	// distinguishable without parsing the message.
+	//
+	// Whether it reaches GET /api/v2/system/events/operational depends on the
+	// logging configuration, and an earlier version of this comment wrongly said
+	// it always does. That endpoint reads two configured base paths (plus their
+	// rotated variants): GetDefaultOutputPath() and GetOutputPath("audio").
+	// CentralLogger.Module routes to a module's own writer only when that module
+	// has an output entry AND it is enabled, otherwise it falls back to the
+	// shared base handler. On a default install birdweather gets its own file
+	// (ensureModuleOutput, DefaultBirdweatherLogPath), so these lines land
+	// outside what the endpoint reads and never appear there. Disable or
+	// redirect the birdweather module output and they land in the default output
+	// instead, at which point they DO appear, which is what the matching
+	// noiseOperations entry is for.
 	log.Info("Encoded audio to FLAC format (native go-flac)",
 		logger.String("timestamp", timestamp),
 		logger.String("encoder", clipenc.NativeFLAC),

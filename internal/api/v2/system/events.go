@@ -41,6 +41,22 @@ var noiseOperations = []string{
 	// audio_export_success directly above: both report that a normal encode
 	// succeeded, which is not an operational event. The matching failure tags
 	// are deliberately absent, so a failed upload still surfaces.
+	//
+	// Whether this entry and audio_export_success can match here depends on the
+	// logging configuration. This list is consumed only by isNoiseEntry, i.e.
+	// only by GetOperationalEvents, which reads the configured
+	// GetDefaultOutputPath() and GetOutputPath("audio") base paths. Both
+	// operations are emitted by modules that get their own output on a default
+	// install (birdweather, analysis.processor), so their lines land outside
+	// those two sources and the entries sit unused. Disable or redirect either
+	// module's output and CentralLogger.Module falls back to the shared base
+	// handler, the lines reach the default output, and these entries start doing
+	// the filtering they exist for. That conditional liveness is why they are
+	// kept rather than pruned.
+	//
+	// None of this applies to audio_export_success in detectionOperations above:
+	// that list is always live, because GetDetectionEvents explicitly reads
+	// GetOutputPath("analysis.processor").
 	"birdweather_soundscape_encode",
 	"process_detections_summary",
 }
