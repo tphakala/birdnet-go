@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -237,6 +238,30 @@ func TestExecute_CancelledExportLogsAtDebug(t *testing.T) {
 	out := logs.String()
 	assert.Contains(t, out, "Audio clip export cancelled")
 	assert.NotContains(t, out, "Audio clip export failed")
+}
+
+// The other side of that classification: an EXPIRED context is not shutdown. The
+// job queue wraps every execution in a timeout, so a hung encoder blows the
+// deadline, and that is exactly the failure this line exists to surface. It must
+// not be filed under "cancelled" at Debug.
+func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
+	logs := captureExportLogs(t)
+	dir := t.TempDir()
+	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
+	a.Settings.Realtime.Audio.FfmpegPath = ""
+
+	// An already-expired deadline, which is what the job queue's execution
+	// timeout leaves on the context when an encode runs long.
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	require.ErrorIs(t, ctx.Err(), context.DeadlineExceeded, "the test context must be expired, not cancelled")
+
+	require.Error(t, a.Execute(ctx, nil))
+
+	out := logs.String()
+	assert.Contains(t, out, "Audio clip export failed",
+		"a timeout is a real failure and must not be filed as shutdown")
+	assert.NotContains(t, out, "Audio clip export cancelled")
 }
 
 // An ultrasonic capture whose configured container cannot carry the sample rate

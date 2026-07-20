@@ -570,8 +570,14 @@ func clipDurationMs(pcmBytes, sampleRate int) int64 {
 // native encoder could not tell from the logs whether go-aac or FFmpeg produced
 // the failure, which is exactly what the gated rollout needs to know.
 //
-// A cancelled context is shutdown rather than a defect, so it is recorded at
-// Debug: exports in flight when the process stops must not look like errors.
+// A CANCELLED context is shutdown rather than a defect, so it is recorded at
+// Debug: exports in flight when the process stops must not look like errors. A
+// context that EXPIRED is the opposite and stays at WARN. The job queue wraps
+// every execution in context.WithTimeout (handleJob), so the export context
+// always carries a deadline, and an encode slow enough to blow it (a hung
+// FFmpeg, a long extended capture on a Pi) is precisely the failure this line
+// exists to surface. Testing ctx.Err() != nil would bury it at Debug, because
+// Err() reports DeadlineExceeded just as readily as Canceled.
 //
 // Everything else is WARN, not ERROR, even though it is a genuine failure. The
 // error is returned unchanged, and the job queue logs that same failure as ERROR
@@ -601,7 +607,7 @@ func (a *SaveAudioAction) logExportFailure(ctx context.Context, enc *clipEncodin
 		logger.Error(err),
 		logger.String("operation", "audio_export_failed"))
 
-	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
 		GetLogger().Debug("Audio clip export cancelled", fields...)
 		return
 	}
