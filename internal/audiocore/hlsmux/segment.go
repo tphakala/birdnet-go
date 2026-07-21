@@ -76,12 +76,20 @@ func ParseSegmentName(name string) (seq uint64, ok bool) {
 		return 0, false
 	}
 	// Reject a leading '+' or '-', which ParseUint would otherwise accept for
-	// '+', so that exactly one name maps to each sequence number.
+	// '+'.
 	if digits[0] < '0' || digits[0] > '9' {
 		return 0, false
 	}
 	seq, err := strconv.ParseUint(digits, 10, 64)
 	if err != nil {
+		return 0, false
+	}
+	// Require the canonical spelling, so exactly one name maps to each
+	// sequence number. ParseUint alone would accept any number of leading
+	// zeros, giving an unbounded family of names for one segment; since this
+	// is the only validation applied to the path element, that would let a
+	// client mint unlimited distinct cache keys for the same body.
+	if SegmentName(seq) != name {
 		return 0, false
 	}
 	return seq, true
@@ -97,8 +105,14 @@ type ring struct {
 	capacity int
 }
 
-// newRing returns a ring holding at most capacity segments.
+// newRing returns a ring holding at most capacity segments. A capacity below
+// one is raised to one: push indexes the window unconditionally once full, so
+// a zero capacity would panic on the first segment, on the audio goroutine,
+// with nothing to recover it.
 func newRing(capacity int) *ring {
+	if capacity < 1 {
+		capacity = 1
+	}
 	return &ring{
 		segments: make([]Segment, 0, capacity),
 		capacity: capacity,
@@ -140,10 +154,9 @@ func (r *ring) window() []Segment {
 	return r.segments
 }
 
-// empty reports whether the ring holds no segments, which is the state a
-// stream is in before the first segment is cut.
-func (r *ring) empty() bool {
-	return len(r.segments) == 0
+// len is how many segments the window currently holds.
+func (r *ring) len() int {
+	return len(r.segments)
 }
 
 // mediaSequence is the sequence number of the oldest retained segment, which
@@ -163,22 +176,4 @@ func (r *ring) discontinuitySequence() uint64 {
 		return 0
 	}
 	return r.segments[0].DiscontinuitySeq
-}
-
-// targetDuration is the EXT-X-TARGETDURATION value for the current window.
-//
-// RFC 8216 section 4.3.3.1 requires every segment's EXTINF, rounded to the
-// nearest integer, to be less than or equal to this value, so the maximum of
-// the rounded durations is both the smallest legal value and a correct one.
-// It never returns zero, because a playlist with a zero target duration is
-// rejected outright by players.
-func (r *ring) targetDuration() int {
-	maxRounded := 1
-	for i := range r.segments {
-		rounded := int(r.segments[i].Duration.Round(time.Second) / time.Second)
-		if rounded > maxRounded {
-			maxRounded = rounded
-		}
-	}
-	return maxRounded
 }

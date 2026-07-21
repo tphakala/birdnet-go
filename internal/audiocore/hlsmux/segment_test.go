@@ -61,31 +61,58 @@ func TestRingEvictionDropsDataReference(t *testing.T) {
 	assert.Equal(t, []byte{2}, r.window()[1].Data)
 }
 
-func TestRingTargetDuration(t *testing.T) {
+// TestCeilSeconds pins EXT-X-TARGETDURATION to a true ceiling. Rounding to
+// nearest would report a 2.4s bound as 2, which RFC 8216 tolerates on a
+// rounding reading of section 4.3.3.1 but Apple's mediastreamvalidator treats
+// as a segment overrunning its declared target.
+func TestCeilSeconds(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		durations []time.Duration
-		want      int
+		name string
+		d    time.Duration
+		want int
 	}{
-		{"empty ring floors at one", nil, 1},
-		{"sub-second segments floor at one", []time.Duration{300 * time.Millisecond}, 1},
-		{"two second segments", []time.Duration{2005 * time.Millisecond, 1994 * time.Millisecond}, 2},
-		{"rounds to nearest, not up", []time.Duration{2400 * time.Millisecond}, 2},
-		{"rounds up past the halfway point", []time.Duration{2600 * time.Millisecond}, 3},
-		{"takes the maximum", []time.Duration{time.Second, 4 * time.Second, 2 * time.Second}, 4},
+		{"zero floors at one", 0, 1},
+		{"sub-second floors at one", 300 * time.Millisecond, 1},
+		{"exactly two seconds", 2 * time.Second, 2},
+		{"just over two rounds up", 2001 * time.Millisecond, 3},
+		{"well under three still rounds up", 2400 * time.Millisecond, 3},
+		{"exactly ten", 10 * time.Second, 10},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			r := newRing(len(tt.durations) + 1)
-			for i, d := range tt.durations {
-				r.push(&Segment{Seq: uint64(i), Duration: d})
-			}
-			assert.Equal(t, tt.want, r.targetDuration())
+			assert.Equal(t, tt.want, ceilSeconds(tt.d))
 		})
+	}
+}
+
+func TestRingLen(t *testing.T) {
+	t.Parallel()
+
+	r := newRing(3)
+	assert.Zero(t, r.len())
+	for i := range uint64(5) {
+		r.push(&Segment{Seq: i})
+	}
+	assert.Equal(t, 3, r.len(), "the window never grows past its capacity")
+}
+
+// TestNewRingRaisesDegenerateCapacity guards the audio goroutine: push indexes
+// the window unconditionally once full, so a zero capacity would panic on the
+// first segment with nothing to recover it.
+func TestNewRingRaisesDegenerateCapacity(t *testing.T) {
+	t.Parallel()
+
+	for _, capacity := range []int{-1, 0} {
+		r := newRing(capacity)
+		assert.NotPanics(t, func() {
+			r.push(&Segment{Seq: 1})
+			r.push(&Segment{Seq: 2})
+		})
+		assert.Equal(t, 1, r.len())
 	}
 }
 

@@ -14,8 +14,10 @@
 // cheaper to encode, which is the escape hatch if AAC proves too expensive on
 // the smallest ARM boards.
 //
-// This path is gated at the call site (see internal/conf/native_encoders.go);
-// HLS live streaming still defaults to FFmpeg.
+// Nothing constructs a Stream yet: the concrete codec and the wiring into the
+// v2 HLS handler land together, behind the BIRDNET_HLS_ENCODER gate in
+// internal/conf/native_encoders.go. Until then HLS live streaming runs entirely
+// through FFmpeg and this package is unreachable from production code.
 package hlsmux
 
 // EmitFunc receives one coded access unit and the per-channel sample count it
@@ -26,6 +28,10 @@ package hlsmux
 // encoder reuse a single scratch buffer for the whole stream. go-m4a's
 // FragmentWriter copies on WriteFrameDuration, so the muxer in this package
 // can pass the borrowed slice straight through.
+//
+// EmitFunc runs with the stream's lock already held, so it must not call back
+// into any Stream method. Go mutexes are not reentrant and doing so would
+// deadlock the audio goroutine.
 type EmitFunc func(au []byte, samples int) error
 
 // FrameEncoder turns interleaved PCM into coded access units, reporting each

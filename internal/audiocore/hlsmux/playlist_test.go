@@ -20,6 +20,7 @@ func TestRenderPlaylistGolden(t *testing.T) {
 
 	want := `#EXTM3U
 #EXT-X-VERSION:7
+#EXT-X-INDEPENDENT-SEGMENTS
 #EXT-X-TARGETDURATION:2
 #EXT-X-MEDIA-SEQUENCE:7
 #EXT-X-MAP:URI="init.mp4"
@@ -30,7 +31,7 @@ segment7.m4s
 #EXTINF:2.005333,
 segment8.m4s
 `
-	assert.Equal(t, want, renderPlaylist(r, false))
+	assert.Equal(t, want, renderPlaylist(r, 2, false))
 }
 
 // TestRenderPlaylistWithDiscontinuityGolden covers the tags that only appear
@@ -41,16 +42,21 @@ func TestRenderPlaylistWithDiscontinuityGolden(t *testing.T) {
 	base := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
 	r := newRing(2)
 	r.push(&Segment{Seq: 40, Duration: 2 * time.Second, PDT: base, DiscontinuitySeq: 2})
+	// A segment preceded by EXT-X-DISCONTINUITY carries its predecessor's
+	// discontinuity sequence number plus one, so that the number a client
+	// computes for it does not change when segment 40 scrolls out of the
+	// window and 41 becomes the first entry.
 	r.push(&Segment{
 		Seq:              41,
 		Duration:         2 * time.Second,
 		PDT:              base.Add(9 * time.Second),
 		Discontinuity:    true,
-		DiscontinuitySeq: 2,
+		DiscontinuitySeq: 3,
 	})
 
 	want := `#EXTM3U
 #EXT-X-VERSION:7
+#EXT-X-INDEPENDENT-SEGMENTS
 #EXT-X-TARGETDURATION:2
 #EXT-X-MEDIA-SEQUENCE:40
 #EXT-X-DISCONTINUITY-SEQUENCE:2
@@ -63,7 +69,7 @@ segment40.m4s
 #EXTINF:2.000000,
 segment41.m4s
 `
-	assert.Equal(t, want, renderPlaylist(r, false))
+	assert.Equal(t, want, renderPlaylist(r, 2, false))
 }
 
 // TestRenderPlaylistEndedGolden covers the closed stream, where the trailing
@@ -77,6 +83,7 @@ func TestRenderPlaylistEndedGolden(t *testing.T) {
 
 	want := `#EXTM3U
 #EXT-X-VERSION:7
+#EXT-X-INDEPENDENT-SEGMENTS
 #EXT-X-TARGETDURATION:2
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-MAP:URI="init.mp4"
@@ -85,7 +92,7 @@ func TestRenderPlaylistEndedGolden(t *testing.T) {
 segment0.m4s
 #EXT-X-ENDLIST
 `
-	assert.Equal(t, want, renderPlaylist(r, true))
+	assert.Equal(t, want, renderPlaylist(r, 2, true))
 }
 
 // TestRenderPlaylistEmptyGolden covers the window a player sees while the very
@@ -95,11 +102,12 @@ func TestRenderPlaylistEmptyGolden(t *testing.T) {
 
 	want := `#EXTM3U
 #EXT-X-VERSION:7
-#EXT-X-TARGETDURATION:1
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-TARGETDURATION:2
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-MAP:URI="init.mp4"
 `
-	assert.Equal(t, want, renderPlaylist(newRing(6), false))
+	assert.Equal(t, want, renderPlaylist(newRing(6), 2, false))
 }
 
 func TestFormatEXTINF(t *testing.T) {

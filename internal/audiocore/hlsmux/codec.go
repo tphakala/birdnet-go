@@ -24,12 +24,6 @@ type Codec struct {
 	// "aac-lc". It never appears in the playlist or in a segment.
 	Name string
 
-	// FrameSamples is the per-channel sample count of one access unit, 1024
-	// for AAC-LC. Zero means the codec emits variable-length frames, in which
-	// case the muxer records each unit's own duration instead of declaring a
-	// default for the fragment.
-	FrameSamples int
-
 	// newEncoder builds the per-stream encoder.
 	newEncoder func(EncoderConfig) (FrameEncoder, error)
 

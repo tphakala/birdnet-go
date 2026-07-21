@@ -7,8 +7,14 @@ import (
 )
 
 const (
-	// playlistVersion is the EXT-X-VERSION this package emits. Fragmented MP4
-	// segments carried by EXT-X-MAP require version 7 (RFC 8216 section 8).
+	// playlistVersion is the EXT-X-VERSION this package emits.
+	//
+	// The format's floor is 6: RFC 8216 section 4.3.2.5 requires 6 or greater
+	// for EXT-X-MAP in a playlist without EXT-X-I-FRAMES-ONLY, which is this
+	// one. Emitting 7 is this package's choice, not the format's, because 7 is
+	// what Apple's HLS Authoring Specification pairs with fragmented MP4 and
+	// what fMP4 packagers emit in practice, so it is the value players are
+	// exercised against. Dropping to 6 would be legal.
 	playlistVersion = 7
 
 	// extinfPrecision is the number of fractional digits in an EXTINF
@@ -22,8 +28,10 @@ const (
 	pdtLayout = "2006-01-02T15:04:05.000Z07:00"
 
 	// playlistFixedLines is the number of header lines rendered before the
-	// segment list, used only to pre-size the builder.
-	playlistFixedLines = 5
+	// segment list, and playlistBytesPerHeaderLine a generous estimate of one
+	// such line. Both are used only to pre-size the builder.
+	playlistFixedLines         = 6
+	playlistBytesPerHeaderLine = 32
 
 	// playlistBytesPerSegment is a generous per-segment estimate for
 	// pre-sizing the builder: an EXTINF line, a PDT line and a filename.
@@ -37,15 +45,22 @@ const (
 // attribute appears: RFC 8216 places CODECS on EXT-X-STREAM-INF, a master
 // playlist tag. Players determine the codec by probing the init segment named
 // by EXT-X-MAP.
-func renderPlaylist(r *ring, ended bool) string {
+func renderPlaylist(r *ring, targetDuration int, ended bool) string {
+	segs := r.window()
+
 	var b strings.Builder
-	b.Grow(playlistFixedLines*32 + len(r.window())*playlistBytesPerSegment)
+	b.Grow(playlistFixedLines*playlistBytesPerHeaderLine + len(segs)*playlistBytesPerSegment)
 
 	b.WriteString("#EXTM3U\n")
 	b.WriteString("#EXT-X-VERSION:")
 	b.WriteString(strconv.Itoa(playlistVersion))
+	// Every access unit of every audio codec this package muxes is
+	// independently decodable, so each segment can be decoded without the one
+	// before it. Declaring that lets a player seek and switch without first
+	// fetching a predecessor.
+	b.WriteString("\n#EXT-X-INDEPENDENT-SEGMENTS")
 	b.WriteString("\n#EXT-X-TARGETDURATION:")
-	b.WriteString(strconv.Itoa(r.targetDuration()))
+	b.WriteString(strconv.Itoa(targetDuration))
 	b.WriteString("\n#EXT-X-MEDIA-SEQUENCE:")
 	b.WriteString(strconv.FormatUint(r.mediaSequence(), 10))
 	b.WriteString("\n")
@@ -61,8 +76,8 @@ func renderPlaylist(r *ring, ended bool) string {
 	b.WriteString(InitSegmentName)
 	b.WriteString("\"\n")
 
-	for i := range r.window() {
-		seg := &r.segments[i]
+	for i := range segs {
+		seg := &segs[i]
 		if seg.Discontinuity {
 			b.WriteString("#EXT-X-DISCONTINUITY\n")
 		}

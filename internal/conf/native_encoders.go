@@ -29,7 +29,8 @@ import (
 //
 //	AAC:  exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
 //	Opus: exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
-//	HLS:  the backend selection in internal/api/v2/audio
+//	HLS:  no reader yet; the backend selection in internal/api/v2/audio lands
+//	      with the handler wiring, and this list must name it then
 //
 // Nothing else depends on this file, and it deliberately holds no other logic
 // so that each removal stays a mechanical edit.

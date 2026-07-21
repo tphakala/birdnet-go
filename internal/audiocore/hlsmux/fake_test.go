@@ -27,7 +27,10 @@ const (
 )
 
 // errFakeEncoder is returned by a fake encoder configured to fail.
-var errFakeEncoder = errors.New("fake encoder failure")
+var (
+	errFakeEncoder = errors.New("fake encoder failure")
+	errFakeClose   = errors.New("fake encoder close failure")
+)
 
 // fakeEncoder emits deterministic access units without coding any audio.
 //
@@ -57,6 +60,16 @@ type fakeEncoder struct {
 	// that many access units.
 	failAfter int
 
+	// flushErr and closeErr make Flush and Close fail, so the stream's
+	// teardown error paths are reachable.
+	flushErr error
+	closeErr error
+
+	// stamp is the byte written into every sample of the next access unit,
+	// recorded per unit so a test can check the muxer preserved each one
+	// rather than aliasing the reused scratch buffer.
+	stamps []byte
+
 	emitted int
 	closed  bool
 	scratch []byte
@@ -74,9 +87,14 @@ func (f *fakeEncoder) emitOne(samples int, emit EmitFunc) error {
 		f.scratch = make([]byte, size)
 	}
 	f.scratch = f.scratch[:size]
+	// A stamp that is never a plausible container byte, so a test can look for
+	// it in the payload without matching box headers by accident. Cycling
+	// through the high half keeps consecutive units distinguishable.
+	stamp := byte(0x80 + f.emitted%0x7f)
 	for i := range f.scratch {
-		f.scratch[i] = byte(f.emitted)
+		f.scratch[i] = stamp
 	}
+	f.stamps = append(f.stamps, stamp)
 	f.emitted++
 	return emit(f.scratch, samples)
 }
@@ -97,6 +115,9 @@ func (f *fakeEncoder) EncodeInterleaved(pcm []byte, emit EmitFunc) error {
 }
 
 func (f *fakeEncoder) Flush(emit EmitFunc) error {
+	if f.flushErr != nil {
+		return f.flushErr
+	}
 	if f.tailSamples <= 0 {
 		return nil
 	}
@@ -110,7 +131,7 @@ func (f *fakeEncoder) Delay() int            { return f.delay }
 
 func (f *fakeEncoder) Close() error {
 	f.closed = true
-	return nil
+	return f.closeErr
 }
 
 // fakeCodecOptions configures the codec returned by newFakeCodec.
@@ -121,12 +142,18 @@ type fakeCodecOptions struct {
 	tailSamples int
 	failAfter   int
 
-	// declaredFrameSamples is what the Codec advertises. Leaving it zero
-	// models a variable-frame codec.
-	declaredFrameSamples int
+	// flushErr and closeErr make the encoder's teardown fail.
+	flushErr error
+	closeErr error
 
-	// encoderErr makes construction of the encoder fail.
+	// encoderErr makes construction of the encoder fail; writerErr makes the
+	// container configuration fail after the encoder already exists.
 	encoderErr error
+	writerErr  error
+
+	// nilEncoder makes the constructor return (nil, nil), the shape that would
+	// otherwise panic inside New.
+	nilEncoder bool
 
 	// captured receives the encoder once built, so a test can inspect it.
 	captured **fakeEncoder
@@ -142,11 +169,13 @@ func newFakeCodec(opts *fakeCodecOptions) Codec {
 		name = "fake"
 	}
 	return Codec{
-		Name:         name,
-		FrameSamples: opts.declaredFrameSamples,
+		Name: name,
 		newEncoder: func(cfg EncoderConfig) (FrameEncoder, error) {
 			if opts.encoderErr != nil {
 				return nil, opts.encoderErr
+			}
+			if opts.nilEncoder {
+				return nil, nil //nolint:nilnil // deliberately the malformed shape New must reject
 			}
 			enc := &fakeEncoder{
 				channels:    cfg.Channels,
@@ -154,6 +183,8 @@ func newFakeCodec(opts *fakeCodecOptions) Codec {
 				delay:       opts.delay,
 				tailSamples: opts.tailSamples,
 				failAfter:   opts.failAfter,
+				flushErr:    opts.flushErr,
+				closeErr:    opts.closeErr,
 			}
 			if opts.captured != nil {
 				*opts.captured = enc
@@ -161,6 +192,9 @@ func newFakeCodec(opts *fakeCodecOptions) Codec {
 			return enc, nil
 		},
 		writerConfig: func(cfg EncoderConfig, enc FrameEncoder) (m4a.WriterConfig, error) {
+			if opts.writerErr != nil {
+				return m4a.WriterConfig{}, opts.writerErr
+			}
 			return m4a.WriterConfig{
 				Codec:        m4a.CodecFLAC,
 				SampleRate:   cfg.SampleRate,
