@@ -52,9 +52,11 @@ type Segment struct {
 	// emits EXT-X-DISCONTINUITY ahead of it.
 	Discontinuity bool
 
-	// DiscontinuitySeq is the number of discontinuities that occurred before
-	// this segment, which is what EXT-X-DISCONTINUITY-SEQUENCE must report
-	// once earlier segments have scrolled out of the window.
+	// DiscontinuitySeq is this segment's own discontinuity sequence number,
+	// counting every break up to and including its own. It is not what
+	// EXT-X-DISCONTINUITY-SEQUENCE reports directly; see
+	// ring.discontinuitySequence, which subtracts this segment's own break
+	// because the renderer emits the tag for it separately.
 	DiscontinuitySeq uint64
 }
 
@@ -168,12 +170,24 @@ func (r *ring) mediaSequence() uint64 {
 	return r.segments[0].Seq
 }
 
-// discontinuitySequence is the discontinuity count applying to the oldest
-// retained segment, which is what EXT-X-DISCONTINUITY-SEQUENCE reports once
-// earlier segments have scrolled out of the window.
+// discontinuitySequence is the EXT-X-DISCONTINUITY-SEQUENCE value for the
+// current window.
+//
+// RFC 8216 section 6.2.1 defines a segment's discontinuity sequence number as
+// this tag's value plus the number of EXT-X-DISCONTINUITY tags preceding that
+// segment in the playlist. Segment.DiscontinuitySeq already counts the
+// segment's own break, so when the oldest retained segment carries one, the
+// renderer also emits its EXT-X-DISCONTINUITY and the client would add it a
+// second time. Subtracting it here is what keeps the number a client computes
+// for a given segment identical across reloads as the window scrolls, which is
+// the entire purpose of the tag.
 func (r *ring) discontinuitySequence() uint64 {
 	if len(r.segments) == 0 {
 		return 0
 	}
-	return r.segments[0].DiscontinuitySeq
+	seq := r.segments[0].DiscontinuitySeq
+	if r.segments[0].Discontinuity && seq > 0 {
+		seq--
+	}
+	return seq
 }

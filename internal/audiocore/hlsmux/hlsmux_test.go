@@ -3,6 +3,7 @@ package hlsmux
 import (
 	"bytes"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -211,7 +212,7 @@ func TestSourceStallDeclaresDiscontinuityAndReanchorsPDT(t *testing.T) {
 	assert.Equal(t, resume, segs[breakIdx].PDT,
 		"the segment after a stall must be re-anchored to the resume time, not to the sample clock")
 
-	// RFC 8216 section 6.2.2: a segment preceded by EXT-X-DISCONTINUITY has
+	// RFC 8216 section 6.2.1: a segment preceded by EXT-X-DISCONTINUITY has
 	// the predecessor's discontinuity sequence number plus one. Numbering it
 	// with the predecessor's value would make the number a client computes for
 	// this segment change once the earlier ones scroll out of the window.
@@ -741,4 +742,126 @@ func TestReadyCountsSegmentsAndStatsTrackHealth(t *testing.T) {
 	assert.Zero(t, st.Discontinuities)
 	assert.False(t, st.Failed)
 	assert.False(t, st.LastSegmentPDT.IsZero(), "a cut segment must advance the health timestamp")
+}
+
+// TestDiscontinuitySequenceIsStableAcrossReloads is the end-to-end property
+// EXT-X-DISCONTINUITY-SEQUENCE exists to provide: the number a client computes
+// for a given segment must not change as the window scrolls. RFC 8216 section
+// 6.2.1 defines it as the tag value plus the EXT-X-DISCONTINUITY tags
+// preceding the segment, so this recomputes it exactly that way from the
+// rendered playlist after every cut.
+//
+// The regression this guards is subtle: getting Segment.DiscontinuitySeq right
+// internally is not enough, because the head segment's own break is emitted as
+// a tag AND folded into the tag value, and a client adds both.
+func TestDiscontinuitySequenceIsStableAcrossReloads(t *testing.T) {
+	t.Parallel()
+
+	s, err := New(&Config{
+		Codec:       newFakeCodec(&fakeCodecOptions{frameSizes: []int{aacFrame}}),
+		SampleRate:  testRate,
+		Channels:    testChannels,
+		BitrateKbps: testBitrate,
+		WindowSize:  3,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, s.Close()) })
+
+	seen := map[string]uint64{}
+	at := testEpoch
+	// Drive several segments with two stalls, checking the whole playlist
+	// after every write so each segment is observed in many window positions.
+	for i := range 24 {
+		writeSamples(t, s, testRate, at)
+		at = at.Add(time.Second)
+		if i == 6 || i == 14 {
+			at = at.Add(10 * time.Second) // stall
+		}
+
+		for name, ds := range computeDiscontinuitySeqs(t, s.Playlist()) {
+			if prev, ok := seen[name]; ok {
+				assert.Equal(t, prev, ds,
+					"%s changed discontinuity sequence from %d to %d between reloads", name, prev, ds)
+			}
+			seen[name] = ds
+		}
+	}
+
+	require.NotEmpty(t, seen)
+	assert.Positive(t, s.Stats().Discontinuities, "the stalls must have produced breaks")
+}
+
+// computeDiscontinuitySeqs derives each segment's discontinuity sequence
+// number from a rendered playlist the way a client does.
+func computeDiscontinuitySeqs(t *testing.T, playlist string) map[string]uint64 {
+	t.Helper()
+
+	out := map[string]uint64{}
+	var current uint64
+	for line := range strings.SplitSeq(playlist, "\n") {
+		switch {
+		case strings.HasPrefix(line, "#EXT-X-DISCONTINUITY-SEQUENCE:"):
+			v, err := strconv.ParseUint(strings.TrimPrefix(line, "#EXT-X-DISCONTINUITY-SEQUENCE:"), 10, 64)
+			require.NoError(t, err)
+			current = v
+		case line == "#EXT-X-DISCONTINUITY":
+			current++
+		case strings.HasSuffix(line, segmentNameSuffix):
+			out[line] = current
+		}
+	}
+	return out
+}
+
+func TestParseSegmentNameRejectsNonCanonicalSpelling(t *testing.T) {
+	t.Parallel()
+
+	// ParseUint accepts any number of leading zeros, so without the canonical
+	// check an unbounded family of names resolves to one segment. Since this
+	// is the only validation applied to the path element, that lets a client
+	// mint unlimited distinct cache keys for the same body.
+	for _, name := range []string{"segment00.m4s", "segment007.m4s", "segment0000000001.m4s"} {
+		_, ok := ParseSegmentName(name)
+		assert.False(t, ok, "%q is not the canonical spelling and must be rejected", name)
+	}
+	// The one legitimate zero still parses.
+	seq, ok := ParseSegmentName("segment0.m4s")
+	require.True(t, ok)
+	assert.Equal(t, uint64(0), seq)
+}
+
+// TestOversizedAccessUnitIsRejected covers the bound on what an out-of-tree
+// FrameEncoder may emit. Without it the sample count reaches uint32 narrowing
+// and a value above the segment target produces a wildly wrong EXTINF.
+func TestOversizedAccessUnitIsRejected(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
+	err := s.appendAccessUnit(make([]byte, 4), s.targetSamples+1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "access unit")
+}
+
+// TestPersistentSourceSlownessIsObservable: the drift absorber deliberately
+// hides a steady clock difference, which also hides a source that keeps
+// delivering less audio than real time. Stats must expose the accumulated
+// correction so that case is diagnosable rather than silent.
+func TestPersistentSourceSlownessIsObservable(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
+
+	// 90 ms of audio per 100 ms of wall clock.
+	const chunk = testRate / 10
+	at := testEpoch
+	for range 200 {
+		writeSamples(t, s, chunk*9/10, at)
+		at = at.Add(100 * time.Millisecond)
+	}
+
+	st := s.Stats()
+	assert.Zero(t, st.Discontinuities,
+		"steady slowness is absorbed rather than reported as a stall, by design")
+	assert.Greater(t, st.DriftCorrection, time.Second,
+		"the absorbed correction must be observable, or sustained audio loss is invisible")
 }

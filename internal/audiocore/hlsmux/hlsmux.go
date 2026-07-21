@@ -124,6 +124,12 @@ type Stats struct {
 	// equivalent of the FFmpeg path's stale-segment check.
 	LastSegmentPDT time.Time
 
+	// DriftCorrection is the cumulative adjustment applied to the projected
+	// sample clock. A value that keeps growing in one direction means the
+	// source is delivering audio persistently slower or faster than real time,
+	// which is absorbed silently and would otherwise be invisible.
+	DriftCorrection time.Duration
+
 	// Failed reports that an encode error has latched the stream unusable.
 	Failed bool
 }
@@ -185,6 +191,14 @@ type Stream struct {
 	// expected to carry. Comparing it against the timestamp that actually
 	// arrives is how a source stall is detected.
 	nextSampleTime time.Time
+
+	// driftCorrection is the total the projected sample clock has been nudged
+	// toward the arriving timestamps. It only grows in one direction while a
+	// source runs persistently fast or slow, so a caller watching it can tell
+	// steady clock error (bounded, harmless) from sustained audio loss
+	// (unbounded), which the stall threshold alone cannot distinguish because
+	// the absorber is what stops the latter from ever reaching it.
+	driftCorrection time.Duration
 
 	// discontinuities counts the timeline breaks so far, and pendingBreak
 	// records that the next segment cut begins a new timeline.
@@ -407,7 +421,9 @@ func (s *Stream) Write(pcm []byte, ts time.Time) error {
 		return validationErr("hlsmux: PCM length %d is not a multiple of the %d-byte sample frame", len(pcm), s.frameBytes)
 	}
 
-	s.syncTimeline(ts)
+	if err := s.syncTimeline(ts); err != nil {
+		return err
+	}
 
 	// Project where the following frame should start before encoding, so the
 	// projection is unaffected by how the encoder buffers this input.
@@ -423,12 +439,12 @@ func (s *Stream) Write(pcm []byte, ts time.Time) error {
 // syncTimeline anchors the stream on its first write and, on later writes,
 // decides whether the incoming timestamp represents ordinary drift or a real
 // break in the source.
-func (s *Stream) syncTimeline(ts time.Time) {
+func (s *Stream) syncTimeline(ts time.Time) error {
 	if !s.started {
 		s.started = true
 		s.segPDT = ts
 		s.nextSampleTime = ts
-		return
+		return nil
 	}
 
 	// Compare against both bounds rather than taking an absolute value: a
@@ -441,7 +457,8 @@ func (s *Stream) syncTimeline(ts time.Time) {
 		// the observed time so a steady clock difference cannot accumulate
 		// into a false stall.
 		s.nextSampleTime = s.nextSampleTime.Add(gap >> driftCorrectionShift)
-		return
+		s.driftCorrection += gap >> driftCorrectionShift
+		return nil
 	}
 
 	// The timeline broke. Close out whatever belongs to the old one before
@@ -451,14 +468,19 @@ func (s *Stream) syncTimeline(ts time.Time) {
 	// container has no way to represent a break inside an access unit.
 	if s.pendingSamples > 0 {
 		if err := s.cutSegment(); err != nil {
-			// A failed cut leaves the buffered audio in place; mark the break
-			// anyway so the next successful cut still reports it.
+			// The container refused the segment, so the timeline cannot be
+			// closed out cleanly. Latch and surface it rather than reporting
+			// the write as successful: a caller that kept feeding would build
+			// every later segment on a timeline whose break was never
+			// published.
 			s.failed = true
+			return err
 		}
 	}
 	s.pendingBreak = true
 	s.segPDT = ts
 	s.nextSampleTime = ts
+	return nil
 }
 
 // appendAccessUnit buffers one coded access unit into the current segment,
@@ -508,7 +530,7 @@ func (s *Stream) cutSegment() error {
 	duration := s.segClock.advance(s.pendingSamples)
 	// Count the break before publishing: a segment preceded by
 	// EXT-X-DISCONTINUITY has the predecessor's discontinuity sequence number
-	// plus one (RFC 8216 section 6.2.2). Assigning the predecessor's value and
+	// plus one (RFC 8216 section 6.2.1). Assigning the predecessor's value and
 	// deferring the increment would make the number a client computes for a
 	// given segment change as the window scrolls, which is precisely what
 	// EXT-X-DISCONTINUITY-SEQUENCE exists to keep stable.
@@ -617,6 +639,7 @@ func (s *Stream) Stats() Stats {
 		Retained:        s.segments.len(),
 		Discontinuities: s.discontinuities,
 		LastSegmentPDT:  s.lastSegmentPDT,
+		DriftCorrection: s.driftCorrection,
 		Failed:          s.failed,
 	}
 }
