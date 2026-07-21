@@ -1,0 +1,184 @@
+package hlsmux
+
+import (
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	// InitSegmentName is the filename the playlist's EXT-X-MAP points at. It
+	// is a name rather than a path because nothing here writes to disk; the
+	// HTTP layer maps it back to Stream.InitSegment.
+	InitSegmentName = "init.mp4"
+
+	// segmentNamePrefix and segmentNameSuffix bracket a media segment's
+	// sequence number. The sequence number is written in full rather than
+	// zero padded to a fixed width, because a live stream outlives any fixed
+	// width: the FFmpeg path's segment%03d.m4s wraps after 1000 segments,
+	// which is a little over half an hour at two seconds each.
+	segmentNamePrefix = "segment"
+	segmentNameSuffix = ".m4s"
+)
+
+// Segment is one fragmented-MP4 media segment together with the timeline facts
+// the playlist needs to describe it.
+type Segment struct {
+	// Seq is the media sequence number, counting from zero for the life of
+	// the stream. It names the segment and orders the playlist.
+	Seq uint64
+
+	// Data is the complete segment: styp, moof and mdat. It is owned by the
+	// stream and must be treated as read only; the ring never writes into a
+	// published segment's backing array.
+	Data []byte
+
+	// Samples is the per-channel sample count actually contained, summed over
+	// the segment's access units. It is the ground truth from which Duration
+	// derives, never the nominal target.
+	Samples int
+
+	// Duration is the exact playback duration of Samples at the stream's
+	// sample rate. Consecutive durations sum without drift; see the carry
+	// arithmetic in Stream.
+	Duration time.Duration
+
+	// PDT is the wall-clock time of this segment's first sample, for
+	// EXT-X-PROGRAM-DATE-TIME.
+	PDT time.Time
+
+	// Discontinuity marks a break in the timeline immediately before this
+	// segment, which happens when the source stalls and resumes. The playlist
+	// emits EXT-X-DISCONTINUITY ahead of it.
+	Discontinuity bool
+
+	// DiscontinuitySeq is the number of discontinuities that occurred before
+	// this segment, which is what EXT-X-DISCONTINUITY-SEQUENCE must report
+	// once earlier segments have scrolled out of the window.
+	DiscontinuitySeq uint64
+}
+
+// SegmentName returns the playlist filename for a media sequence number.
+func SegmentName(seq uint64) string {
+	return segmentNamePrefix + strconv.FormatUint(seq, 10) + segmentNameSuffix
+}
+
+// ParseSegmentName recovers the media sequence number from a segment filename
+// produced by SegmentName. It reports false for anything else, so an HTTP
+// handler can reject a bad request without a second validation rule.
+func ParseSegmentName(name string) (seq uint64, ok bool) {
+	digits, found := strings.CutPrefix(name, segmentNamePrefix)
+	if !found {
+		return 0, false
+	}
+	digits, found = strings.CutSuffix(digits, segmentNameSuffix)
+	if !found || digits == "" {
+		return 0, false
+	}
+	// Reject a leading '+' or '-', which ParseUint would otherwise accept for
+	// '+', so that exactly one name maps to each sequence number.
+	if digits[0] < '0' || digits[0] > '9' {
+		return 0, false
+	}
+	seq, err := strconv.ParseUint(digits, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return seq, true
+}
+
+// ring is the bounded window of media segments a live playlist advertises.
+// Pushing past capacity evicts the oldest, which is what makes memory use
+// constant no matter how long a stream runs.
+//
+// ring is not safe for concurrent use; Stream serialises access to it.
+type ring struct {
+	segments []Segment
+	capacity int
+}
+
+// newRing returns a ring holding at most capacity segments.
+func newRing(capacity int) *ring {
+	return &ring{
+		segments: make([]Segment, 0, capacity),
+		capacity: capacity,
+	}
+}
+
+// push appends s, evicting the oldest segment when the window is full.
+//
+// When full it shifts the retained segments down and overwrites the last slot,
+// reusing the backing array. Overwriting drops the evicted segment's reference
+// to its Data, so the bytes become collectable; the array itself is only ever
+// reused for the Segment headers, never for segment payloads, so a segment
+// already handed out by get stays valid for as long as its caller holds it.
+func (r *ring) push(s *Segment) {
+	if len(r.segments) < r.capacity {
+		r.segments = append(r.segments, *s)
+		return
+	}
+	copy(r.segments, r.segments[1:])
+	r.segments[len(r.segments)-1] = *s
+}
+
+// get returns the retained segment with the given sequence number. It reports
+// false once the segment has been evicted, which a client that fell too far
+// behind will see as a 404.
+func (r *ring) get(seq uint64) (Segment, bool) {
+	for i := range r.segments {
+		if r.segments[i].Seq == seq {
+			return r.segments[i], true
+		}
+	}
+	return Segment{}, false
+}
+
+// window returns the retained segments, oldest first. The returned slice
+// aliases the ring's storage and is only valid while the caller holds the
+// stream lock.
+func (r *ring) window() []Segment {
+	return r.segments
+}
+
+// empty reports whether the ring holds no segments, which is the state a
+// stream is in before the first segment is cut.
+func (r *ring) empty() bool {
+	return len(r.segments) == 0
+}
+
+// mediaSequence is the sequence number of the oldest retained segment, which
+// is what EXT-X-MEDIA-SEQUENCE reports.
+func (r *ring) mediaSequence() uint64 {
+	if len(r.segments) == 0 {
+		return 0
+	}
+	return r.segments[0].Seq
+}
+
+// discontinuitySequence is the discontinuity count applying to the oldest
+// retained segment, which is what EXT-X-DISCONTINUITY-SEQUENCE reports once
+// earlier segments have scrolled out of the window.
+func (r *ring) discontinuitySequence() uint64 {
+	if len(r.segments) == 0 {
+		return 0
+	}
+	return r.segments[0].DiscontinuitySeq
+}
+
+// targetDuration is the EXT-X-TARGETDURATION value for the current window.
+//
+// RFC 8216 section 4.3.3.1 requires every segment's EXTINF, rounded to the
+// nearest integer, to be less than or equal to this value, so the maximum of
+// the rounded durations is both the smallest legal value and a correct one.
+// It never returns zero, because a playlist with a zero target duration is
+// rejected outright by players.
+func (r *ring) targetDuration() int {
+	maxRounded := 1
+	for i := range r.segments {
+		rounded := int(r.segments[i].Duration.Round(time.Second) / time.Second)
+		if rounded > maxRounded {
+			maxRounded = rounded
+		}
+	}
+	return maxRounded
+}
