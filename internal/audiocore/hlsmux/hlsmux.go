@@ -152,6 +152,13 @@ type Stream struct {
 	initSeg   []byte
 	segments  *ring
 
+	// appendSegment flushes the fragment writer into a finished segment. It is
+	// a field rather than a direct s.frag call so a test can drive the failure
+	// path: go-m4a rejects a segment only on limits a fake encoder cannot
+	// reach, which would otherwise leave the error handling in cutSegment and
+	// syncTimeline permanently unexercised.
+	appendSegment func(dst []byte) ([]byte, error)
+
 	// emit is appendAccessUnit bound to this Stream, built once. Passing the
 	// method value directly would build a fresh closure on every Write, which
 	// escapes because it crosses an interface call, so it would be one heap
@@ -315,6 +322,7 @@ func New(cfg *Config) (*Stream, error) {
 		inClock:            sampleClock{rate: rate},
 	}
 	s.emit = s.appendAccessUnit
+	s.appendSegment = frag.AppendSegment
 	return s, nil
 }
 
@@ -521,7 +529,7 @@ func (s *Stream) cutSegment() error {
 	// arena must never be reused underneath them. Sized from the previous
 	// segment, which in a constant-bitrate stream is within a few percent, so
 	// the build stops re-growing after the first cut.
-	data, err := s.frag.AppendSegment(make([]byte, 0, s.segBufHint))
+	data, err := s.appendSegment(make([]byte, 0, s.segBufHint))
 	if err != nil {
 		return s.audioErr(err)
 	}

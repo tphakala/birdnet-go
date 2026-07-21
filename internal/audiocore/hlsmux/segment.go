@@ -186,7 +186,11 @@ func (r *ring) discontinuitySequence() uint64 {
 		return 0
 	}
 	seq := r.segments[0].DiscontinuitySeq
-	if r.segments[0].Discontinuity && seq > 0 {
+	if r.segments[0].Discontinuity {
+		// cutSegment increments the counter before assigning it, so a segment
+		// carrying a break always has DiscontinuitySeq >= 1 and this cannot
+		// underflow. Guarding for zero here would paper over a broken
+		// invariant rather than report it.
 		seq--
 	}
 	return seq

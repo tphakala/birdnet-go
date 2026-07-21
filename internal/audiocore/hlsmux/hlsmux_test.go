@@ -2,6 +2,7 @@ package hlsmux
 
 import (
 	"bytes"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -768,6 +769,12 @@ func TestDiscontinuitySequenceIsStableAcrossReloads(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, s.Close()) })
 
 	seen := map[string]uint64{}
+	// The defect only manifests when a segment CARRYING a break is the oldest
+	// one retained, because that is the only position where the renderer emits
+	// its EXT-X-DISCONTINUITY and the tag value must exclude it. A run that
+	// never reaches that position would pass with the bug fully restored, so
+	// count the visits and require them.
+	headBreaks := 0
 	at := testEpoch
 	// Drive several segments with two stalls, checking the whole playlist
 	// after every write so each segment is observed in many window positions.
@@ -778,6 +785,9 @@ func TestDiscontinuitySequenceIsStableAcrossReloads(t *testing.T) {
 			at = at.Add(10 * time.Second) // stall
 		}
 
+		if w := s.segments.window(); len(w) > 0 && w[0].Discontinuity {
+			headBreaks++
+		}
 		for name, ds := range computeDiscontinuitySeqs(t, s.Playlist()) {
 			if prev, ok := seen[name]; ok {
 				assert.Equal(t, prev, ds,
@@ -789,6 +799,9 @@ func TestDiscontinuitySequenceIsStableAcrossReloads(t *testing.T) {
 
 	require.NotEmpty(t, seen)
 	assert.Positive(t, s.Stats().Discontinuities, "the stalls must have produced breaks")
+	require.Positive(t, headBreaks,
+		"this run never placed a break-carrying segment at the window head, so it "+
+			"cannot have exercised the regression it exists to catch")
 }
 
 // computeDiscontinuitySeqs derives each segment's discontinuity sequence
@@ -864,4 +877,45 @@ func TestPersistentSourceSlownessIsObservable(t *testing.T) {
 		"steady slowness is absorbed rather than reported as a stall, by design")
 	assert.Greater(t, st.DriftCorrection, time.Second,
 		"the absorbed correction must be observable, or sustained audio loss is invisible")
+}
+
+// errFakeSegment is returned by a stream whose segment flush is made to fail.
+var errFakeSegment = errors.New("fake segment flush failure")
+
+// TestCutFailureDuringStallIsReported covers the path where the container
+// refuses the segment that closes out a stalled timeline. Reporting success
+// there would be the worst outcome: the break is never published, the stream
+// is latched, and the caller has been told the write landed.
+func TestCutFailureDuringStallIsReported(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
+
+	// Accumulate a partial segment on the old timeline.
+	const before = testRate
+	writeSamples(t, s, before, testEpoch)
+	require.Positive(t, s.pendingSamples)
+
+	s.appendSegment = func([]byte) ([]byte, error) { return nil, errFakeSegment }
+
+	// A stall now forces a cut, which fails.
+	err := s.Write(silence(aacFrame, testChannels), sampleTime(before).Add(5*time.Second))
+	require.Error(t, err, "a failed cut must not be reported as a successful write")
+	require.ErrorIs(t, err, errFakeSegment)
+	assert.True(t, s.Stats().Failed)
+}
+
+// TestCutFailureDuringNormalWriteIsReported covers the same flush failure on
+// the ordinary path, where the segment is cut because it reached the target
+// rather than because the timeline broke.
+func TestCutFailureDuringNormalWriteIsReported(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
+	s.appendSegment = func([]byte) ([]byte, error) { return nil, errFakeSegment }
+
+	err := s.Write(silence(testRate*3, testChannels), testEpoch)
+	require.Error(t, err)
+	require.ErrorIs(t, err, errFakeSegment)
+	assert.True(t, s.segments.len() == 0 || s.Stats().Failed)
 }
