@@ -307,13 +307,31 @@ func New(cfg *Config) (*Stream, error) {
 	}
 
 	rate := int64(cfg.SampleRate)
+	targetSamples := int(int64(segmentDuration) * rate / int64(time.Second))
+	// A segment must be able to hold at least one access unit. Without this,
+	// a low sample rate or a short segment builds a Stream that looks fine and
+	// then rejects every frame the encoder emits, surfacing as a latched
+	// failure on the audio goroutine rather than as a configuration error the
+	// caller can act on.
+	switch {
+	case targetSamples < 1:
+		return nil, closeEncoderAndWrap(enc, fmt.Errorf(
+			"hlsmux: %s at %d Hz is less than one sample per segment",
+			segmentDuration, cfg.SampleRate), cfg.Codec.Name)
+	case cfg.Codec.MaxFrameSamples > 0 && targetSamples < cfg.Codec.MaxFrameSamples:
+		return nil, closeEncoderAndWrap(enc, fmt.Errorf(
+			"hlsmux: %s at %d Hz gives a %d-sample segment, smaller than codec %q's %d-sample access unit",
+			segmentDuration, cfg.SampleRate, targetSamples, cfg.Codec.Name, cfg.Codec.MaxFrameSamples),
+			cfg.Codec.Name)
+	}
+
 	s := &Stream{
 		codecName:          cfg.Codec.Name,
 		enc:                enc,
 		frag:               frag,
 		initSeg:            initSeg,
 		segments:           newRing(windowSize),
-		targetSamples:      int(int64(segmentDuration) * rate / int64(time.Second)),
+		targetSamples:      targetSamples,
 		maxSegmentDuration: segmentDuration,
 		targetDuration:     ceilSeconds(segmentDuration),
 		maxStallGap:        maxStallGap,

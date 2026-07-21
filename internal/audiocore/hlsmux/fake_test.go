@@ -168,8 +168,15 @@ func newFakeCodec(opts *fakeCodecOptions) Codec {
 	if name == "" {
 		name = "fake"
 	}
+	maxFrame := 0
+	for _, n := range opts.frameSizes {
+		if n > maxFrame {
+			maxFrame = n
+		}
+	}
 	return Codec{
-		Name: name,
+		Name:            name,
+		MaxFrameSamples: maxFrame,
 		newEncoder: func(cfg EncoderConfig) (FrameEncoder, error) {
 			if opts.encoderErr != nil {
 				return nil, opts.encoderErr

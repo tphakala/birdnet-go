@@ -24,6 +24,13 @@ type Codec struct {
 	// "aac-lc". It never appears in the playlist or in a segment.
 	Name string
 
+	// MaxFrameSamples is the largest per-channel sample count one access unit
+	// can carry, 1024 for AAC-LC. It exists so New can reject a segment target
+	// smaller than a single access unit, a configuration that would otherwise
+	// build successfully and then refuse every frame the encoder produced.
+	// Zero means the codec does not declare a bound, and the check is skipped.
+	MaxFrameSamples int
+
 	// newEncoder builds the per-stream encoder.
 	newEncoder func(EncoderConfig) (FrameEncoder, error)
 

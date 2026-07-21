@@ -919,3 +919,77 @@ func TestCutFailureDuringNormalWriteIsReported(t *testing.T) {
 	require.ErrorIs(t, err, errFakeSegment)
 	assert.True(t, s.segments.len() == 0 || s.Stats().Failed)
 }
+
+// TestNewRejectsSegmentTargetBelowOneAccessUnit covers the configurations that
+// previously built a Stream successfully and then rejected every frame the
+// encoder produced, surfacing as a latched failure on the audio goroutine
+// instead of an error the caller could act on at construction.
+func TestNewRejectsSegmentTargetBelowOneAccessUnit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		rate       int
+		segment    time.Duration
+		frameSizes []int
+		errMsg     string
+	}{
+		{
+			name: "8 kHz with a 100ms segment cannot hold an AAC access unit",
+			rate: 8000, segment: 100 * time.Millisecond,
+			frameSizes: []int{aacFrame}, errMsg: "smaller than codec",
+		},
+		{
+			name: "a large-frame codec needs a longer segment",
+			rate: testRate, segment: 100 * time.Millisecond,
+			frameSizes: []int{8192}, errMsg: "smaller than codec",
+		},
+		{
+			name: "a 1 Hz rate yields less than one sample per segment",
+			rate: 1, segment: MinSegmentDuration,
+			frameSizes: []int{aacFrame}, errMsg: "less than one sample",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var enc *fakeEncoder
+			s, err := New(&Config{
+				Codec:           newFakeCodec(&fakeCodecOptions{frameSizes: tt.frameSizes, captured: &enc}),
+				SampleRate:      tt.rate,
+				Channels:        testChannels,
+				BitrateKbps:     testBitrate,
+				SegmentDuration: tt.segment,
+			})
+			require.Error(t, err)
+			assert.Nil(t, s)
+			assert.Contains(t, err.Error(), tt.errMsg)
+			require.NotNil(t, enc)
+			assert.True(t, enc.closed, "a rejected configuration must still release the encoder")
+		})
+	}
+}
+
+// TestNewAcceptsASegmentThatFitsExactlyOneAccessUnit pins the boundary: the
+// check must reject a target below one access unit without also rejecting a
+// target that holds exactly one.
+func TestNewAcceptsASegmentThatFitsExactlyOneAccessUnit(t *testing.T) {
+	t.Parallel()
+
+	// 1024 samples at 48 kHz is 21.333ms, so a 200ms segment holds 9600.
+	s, err := New(&Config{
+		Codec:           newFakeCodec(&fakeCodecOptions{frameSizes: []int{aacFrame}}),
+		SampleRate:      testRate,
+		Channels:        testChannels,
+		BitrateKbps:     testBitrate,
+		SegmentDuration: 200 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, s.Close()) })
+	assert.GreaterOrEqual(t, s.targetSamples, aacFrame)
+
+	// And it must actually stream rather than merely construct.
+	writeSamples(t, s, testRate, testEpoch)
+	assert.True(t, s.Ready(1))
+}
