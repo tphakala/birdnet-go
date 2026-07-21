@@ -8,9 +8,9 @@ name: Update Release Manifest
 # checker.
 #
 # Triggers:
-#   - workflow_call:  invoked as the final job of release-build.yml and
-#     nightly-build.yml, after all release assets (tarballs + checksums) exist,
-#     so the manifest never races asset uploads.
+#   - workflow_call:  invoked as the final job of release-build.yml, after all
+#     release assets (tarballs + checksums) exist, so the manifest never races
+#     asset uploads.
 #   - workflow_dispatch:  manual regeneration.
 #   - schedule:  daily self-heal in case a release pipeline failed to update it.
 

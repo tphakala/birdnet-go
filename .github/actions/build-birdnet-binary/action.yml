@@ -2,10 +2,9 @@ name: Build BirdNET-Go binary
 description: >-
   Cross-compile the BirdNET-Go binary for one GOOS/GOARCH, package it with its
   native libraries and platform README into a tarball, and upload that as a
-  workflow artifact. Shared by nightly-build.yml and release-build.yml so the
-  build steps live in one place. The caller checks out the repo first (and picks
-  its own fetch-depth), computes the version, and handles the artifact/release
-  attachment afterwards.
+  workflow artifact. Used by release-build.yml so the build steps live in one
+  place. The caller checks out the repo first (and picks its own fetch-depth),
+  computes the version, and handles the artifact/release attachment afterwards.
 
 inputs:
   goos:
@@ -20,8 +19,8 @@ inputs:
   tarball-suffix:
     description: >-
       Suffix appended to the tarball filename before ".tar.gz" (e.g. "-v1.2.3"
-      for releases). Empty for nightly. The uploaded artifact name never
-      includes the suffix.
+      for releases). Empty for an unsuffixed tarball. The uploaded artifact name
+      never includes the suffix.
     required: false
     default: ''
   github-token:
@@ -163,7 +162,7 @@ runs:
           cp dist/README-darwin.md artifacts/README.md
         fi
 
-        # Tarball (suffix is empty for nightly, -<version> for releases)
+        # Tarball (suffix is empty when unset, -<version> for releases)
         cd artifacts
         tar czf "../${TARBALL}" *
 
