@@ -39,6 +39,7 @@ import "slices"
 var supportEnvAllowlist = []string{
 	EnvNativeAACEncoder,
 	EnvNativeOpusEncoder,
+	EnvNativeHLSEncoder,
 	// Historical: no longer read by any code path, because native FLAC is now
 	// unconditional. Captured anyway, so a dump distinguishes "the operator set
 	// nothing" from "the operator set a variable that stopped doing anything",

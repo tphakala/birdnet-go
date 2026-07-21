@@ -5,33 +5,44 @@ import (
 	"strings"
 )
 
-// Temporary runtime opt-in for the native Go clip encoders.
+// Temporary runtime opt-in for the native Go encoders.
 //
-// AAC and Opus clip export still runs through FFmpeg by default. Setting
-// BIRDNET_AAC_ENCODER=native or BIRDNET_OPUS_ENCODER=native switches the
-// matching format to the pure-Go encoder (go-aac plus go-m4a for .m4a, go-opus
-// for .opus) so it can be exercised in the field before it becomes the default.
-// The two gates are independent, so one codec can be promoted while the other is
-// still proving itself.
+// AAC and Opus clip export, and HLS live streaming, still run through FFmpeg by
+// default. Setting BIRDNET_AAC_ENCODER=native, BIRDNET_OPUS_ENCODER=native or
+// BIRDNET_HLS_ENCODER=native switches the matching path to the pure-Go encoder
+// (go-aac plus go-m4a for .m4a and for HLS, go-opus for .opus) so it can be
+// exercised in the field before it becomes the default. The gates are
+// independent, so one path can be promoted while another is still proving
+// itself.
 //
-// This lives in conf rather than in a package of its own so that both consumers
-// reach it without a new dependency edge: the export-format validation here, and
-// the encoder dispatch in the analysis processor, already depend on conf. A
-// dedicated package under audiocore would make conf import audiocore, which
-// inverts the layering and widens the deliberately exact internal closure that
-// internal/diagnostics guards.
+// This lives in conf rather than in a package of its own so that every consumer
+// reaches it without a new dependency edge: the export-format validation here,
+// the encoder dispatch in the analysis processor, and the HLS handler in the v2
+// API already depend on conf. A dedicated package under audiocore would make
+// conf import audiocore, which inverts the layering and widens the deliberately
+// exact internal closure that internal/diagnostics guards.
 //
-// REMOVAL: this file is scaffolding with a planned end of life. Once both native
-// encoders have earned field confidence, delete it along with the gate checks in
-// exportFormatNeedsFFmpeg and in SaveAudioAction.encodeClip; the native branches
-// become unconditional and the FFmpeg branches for AAC and Opus go away with
-// them. Nothing else depends on it, and it deliberately holds no other logic so
-// that removal stays a mechanical edit.
+// REMOVAL: this file is scaffolding with a planned end of life. Once a native
+// encoder has earned field confidence, delete its gate along with the branch
+// that reads it; the native path becomes unconditional and the FFmpeg branch
+// goes away with it. The call sites are, per gate:
+//
+//	AAC:  exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
+//	Opus: exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
+//	HLS:  no reader yet; the backend selection in internal/api/v2/audio lands
+//	      with the handler wiring, and this list must name it then
+//
+// Nothing else depends on this file, and it deliberately holds no other logic
+// so that each removal stays a mechanical edit.
 const (
 	// EnvNativeAACEncoder selects the native AAC encoder for .m4a clip export.
 	EnvNativeAACEncoder = "BIRDNET_AAC_ENCODER"
 	// EnvNativeOpusEncoder selects the native Opus encoder for .opus clip export.
 	EnvNativeOpusEncoder = "BIRDNET_OPUS_ENCODER"
+	// EnvNativeHLSEncoder selects the native encoder and muxer for HLS live
+	// streaming, replacing the FFmpeg process that would otherwise encode,
+	// segment and write the playlist for a live stream.
+	EnvNativeHLSEncoder = "BIRDNET_HLS_ENCODER"
 
 	// nativeEncoderValue is the only value that enables a native encoder.
 	// Anything else, including an unset variable, keeps the FFmpeg path.
@@ -45,6 +56,10 @@ func NativeAACEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeAACE
 // NativeOpusEncoderEnabled reports whether Opus clip export should use the
 // native encoder.
 func NativeOpusEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeOpusEncoder) }
+
+// NativeHLSEncoderEnabled reports whether HLS live streaming should use the
+// native encoder and muxer instead of spawning an FFmpeg process.
+func NativeHLSEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeHLSEncoder) }
 
 // nativeEncoderSelected reads env and reports whether it opts into the native
 // encoder. Matching is case-insensitive and tolerates surrounding whitespace,
