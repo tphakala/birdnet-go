@@ -18,10 +18,10 @@ require (
 	github.com/klauspost/cpuid/v2 v2.4.0
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/moby/moby/api v1.55.0
-	github.com/nicholas-fedor/shoutrrr v0.16.1
+	github.com/nicholas-fedor/shoutrrr v0.16.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.11
-	github.com/prometheus/client_golang v1.23.2
+	github.com/prometheus/client_golang v1.24.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	github.com/ringsaturn/tzf v1.2.3
@@ -35,18 +35,18 @@ require (
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.43.0
 	github.com/tphakala/go-aac v0.3.0
-	github.com/tphakala/go-audio-resampler v1.4.0
+	github.com/tphakala/go-audio-resampler v1.5.0
 	github.com/tphakala/go-flac v0.4.3
 	github.com/tphakala/go-m4a v0.3.0
 	github.com/tphakala/go-opus v0.1.2
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
-	github.com/tphakala/simd v1.5.0
+	github.com/tphakala/simd v1.6.0
 	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
 	golang.org/x/text v0.40.0
-	google.golang.org/api v0.288.0
+	google.golang.org/api v0.289.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/sqlite v1.6.0
@@ -77,7 +77,7 @@ require (
 	github.com/eclipse/paho.golang v0.23.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-chi/chi/v5 v5.3.1 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
