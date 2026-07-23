@@ -566,16 +566,19 @@ func TestGetAllSpecies(t *testing.T) {
 	}
 }
 
+// Species fixtures for the name-resolution and rarity tests. testAliasName and
+// testCanonName are a real legacy/current synonym pair from the vendored OpenFauna
+// alias map, so these tests exercise the actual alias data rather than a stub.
+const (
+	testSciName     = "Turdus migratorius"
+	testCommonName  = "American Robin"
+	testAliasName   = "Streptopelia senegalensis"
+	testCanonName   = "Spilopelia senegalensis"
+	testCanonCommon = "Laughing Dove"
+)
+
 func TestResolveSpeciesLabel(t *testing.T) {
 	t.Parallel()
-
-	const (
-		testSciName      = "Turdus migratorius"
-		testCommonName   = "American Robin"
-		testAliasName    = "Streptopelia senegalensis"
-		testCanonName    = "Spilopelia senegalensis"
-		testCanonCommon  = "Laughing Dove"
-	)
 
 	allLabels := []string{
 		testCanonName + "_" + testCanonCommon,
@@ -633,14 +636,6 @@ func TestResolveSpeciesLabel_Empty(t *testing.T) {
 
 func TestComputeRarity(t *testing.T) {
 	t.Parallel()
-
-	const (
-		testSciName      = "Turdus migratorius"
-		testCommonName   = "American Robin"
-		testAliasName    = "Streptopelia senegalensis"
-		testCanonName    = "Spilopelia senegalensis"
-		testCanonCommon  = "Laughing Dove"
-	)
 
 	geomodelLabels := []string{
 		testCanonName + "_" + testCanonCommon,
@@ -710,4 +705,71 @@ func TestComputeRarity_Empty(t *testing.T) {
 	gotScore, gotStatus := computeRarity("Turdus migratorius", nil, nil, nil)
 	assert.InDelta(t, 0.0, gotScore, 0.001)
 	assert.Equal(t, RarityUnknown, gotStatus)
+}
+
+// TestComputeRarity_GeomodelLabelsTakePrecedence pins the reported bug. Coverage is
+// decided by the geomodel's vocabulary, so a species the classifier can name but the
+// geomodel cannot score has no occurrence probability and must report unknown rather
+// than a misleading "very rare".
+func TestComputeRarity_GeomodelLabelsTakePrecedence(t *testing.T) {
+	t.Parallel()
+
+	geomodelLabels := []string{testCanonName + "_" + testCanonCommon}
+	classifierLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+	}
+
+	_, status := computeRarity(testSciName, nil, geomodelLabels, classifierLabels)
+	assert.Equal(t, RarityUnknown, status,
+		"classifier-only species has no geomodel occurrence probability")
+
+	_, status = computeRarity(testCanonName, nil, geomodelLabels, classifierLabels)
+	assert.Equal(t, RarityVeryRare, status,
+		"geomodel-covered species below threshold is very rare")
+}
+
+// TestComputeRarity_NoGeomodelLabels covers the range-filter backends whose vocabulary
+// is the classifier's own label set: the TFLite meta model, the plain ONNX range
+// filter, and an unconfigured location. GetRarityContext reports no geomodel vocabulary
+// for those, so coverage must fall back to the classifier labels instead of reporting
+// every species as unknown.
+func TestComputeRarity_NoGeomodelLabels(t *testing.T) {
+	t.Parallel()
+
+	classifierLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+	}
+
+	tests := []struct {
+		name       string
+		targetSci  string
+		wantStatus RarityStatus
+	}{
+		{
+			name:       "classifier species below threshold is very rare",
+			targetSci:  testSciName,
+			wantStatus: RarityVeryRare,
+		},
+		{
+			name:       "legacy synonym of a classifier species is still covered",
+			targetSci:  testAliasName,
+			wantStatus: RarityVeryRare,
+		},
+		{
+			name:       "species outside the classifier has no coverage",
+			targetSci:  "Myotis brandtii",
+			wantStatus: RarityUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotScore, gotStatus := computeRarity(tt.targetSci, nil, nil, classifierLabels)
+			assert.InDelta(t, 0.0, gotScore, 0.001)
+			assert.Equal(t, tt.wantStatus, gotStatus)
+		})
+	}
 }

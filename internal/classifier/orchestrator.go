@@ -2051,27 +2051,39 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	return nil
 }
 
-// GetRarityContext returns the probable species across all models, and the
-// geomodel labels and classifier labels from the primary model, to be used
-// together to compute species rarity without desyncing during a model reload.
+// GetRarityContext returns the primary model's probable-species scores together with
+// the two label vocabularies needed to interpret them, so a caller computing rarity
+// does not have to reassemble them from calls that can each observe a different model.
+//
+// Rarity is the geomodel occurrence probability, so the scores come from the primary
+// (geomodel-backed) range filter, not the multi-model union: the union assigns
+// synthetic always-active scores to secondary-model species that have no real
+// occurrence probability.
+//
+// Consistency: all three values derive from one snapshot of the primary and one
+// settings snapshot, and getProbableSpecies returns the geomodel label set captured
+// under the same range-filter lock that produced the scores. A concurrent reload
+// therefore cannot hand back scores and vocabularies that describe different models,
+// which is the skew that separate GetProbableSpecies + Labels calls would admit.
+//
+// geomodelLabels is nil unless the universal geomodel path ran. It is nil for the
+// TFLite meta model and the plain ONNX range filter, and when no range filter or
+// location is configured; in every one of those cases the scores are labeled with the
+// classifier's own vocabulary, so callers must fall back to classifierLabels.
 func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, geomodelLabels, classifierLabels []string, err error) {
-	// Snapshot primary under read lock
+	// Snapshot the primary once and drive every read below from it. Delegating to
+	// o.GetProbableSpecies would re-resolve o.primary under a fresh lock and could
+	// score against a different model than the labels describe.
 	o.mu.RLock()
 	primary := o.primary
 	o.mu.RUnlock()
-
-	if primary != nil {
-		_, _, geomodelLabels, _ = primary.PrimaryRangeFilterCoverage()
-		classifierLabels = primary.Labels()
+	if primary == nil {
+		return nil, nil, nil, nil
 	}
 
-	// We still delegate to Orchestrator.GetProbableSpecies() to get the merged
-	// scores across primary + secondary models. In the rare case of a concurrent
-	// reload, the scores might come from the new model while labels come from
-	// the old. However, fetching the label vocabularies synchronously here
-	// satisfies the requirement to avoid mixing geomodelLabels and Labels from
-	// different models, which is the more critical invariant.
-	scores, err = o.GetProbableSpecies(date, 0.0)
+	settings := primary.currentSettings()
+	scores, geomodelLabels, err = primary.getProbableSpecies(date, 0.0, settings)
+	classifierLabels = slices.Clone(settings.BirdNET.Labels)
 
 	return scores, geomodelLabels, classifierLabels, err
 }

@@ -829,6 +829,15 @@ func (bn *BirdNET) clearSpeciesCache() {
 	bn.speciesCacheMu.Unlock()
 }
 
+// canonicalScoreKey reduces a species label to the key used by the occurrence score
+// cache: the taxonomic canonical form of its scientific name, lowercased. Cache
+// writes, cache reads and the uncached fallback scan must all go through this, or a
+// caller naming a species by one synonym misses entries stored under the other and
+// silently falls back to recomputing the whole probable-species list on every call.
+func canonicalScoreKey(label string) string {
+	return strings.ToLower(openfauna.CanonicalName(detection.ExtractScientificName(label)))
+}
+
 // getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
 func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]float64, error) {
 	settings := bn.currentSettings()
@@ -858,7 +867,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	}
 	scores := make(map[string]float64, len(speciesScores))
 	for _, s := range speciesScores {
-		scores[strings.ToLower(detection.ExtractScientificName(s.Label))] = s.Score
+		scores[canonicalScoreKey(s.Label)] = s.Score
 	}
 
 	// WRITE PATH: double-check, evict old entries, and publish new results
@@ -1463,7 +1472,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Try to get cached scores first
 	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
 	if err == nil && len(cachedScores) > 0 {
-		if occurrence, found := cachedScores[strings.ToLower(detection.ExtractScientificName(species))]; found {
+		if occurrence, found := cachedScores[canonicalScoreKey(species)]; found {
 			// Clamp the score to [0.0, 1.0] range
 			if occurrence < 0.0 {
 				return 0.0
@@ -1486,10 +1495,11 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 		return 0.0
 	}
 
-	// Look for the species in the scores
-	targetSci := openfauna.CanonicalName(detection.ExtractScientificName(species))
+	// Look for the species in the scores, keyed identically to the cache above so
+	// both paths resolve a taxonomic synonym to the same entry.
+	targetKey := canonicalScoreKey(species)
 	for _, score := range speciesScores {
-		if strings.EqualFold(openfauna.CanonicalName(detection.ExtractScientificName(score.Label)), targetSci) {
+		if canonicalScoreKey(score.Label) == targetKey {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {
 				return 0.0
