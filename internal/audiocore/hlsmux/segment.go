@@ -29,7 +29,7 @@ type Segment struct {
 	Seq uint64
 
 	// Data is the complete segment: styp, moof and mdat. It is owned by the
-	// stream and must be treated as read only; the ring never writes into a
+	// stream and must be treated as read only; nothing ever writes into a
 	// published segment's backing array.
 	Data []byte
 
@@ -55,8 +55,8 @@ type Segment struct {
 	// DiscontinuitySeq is this segment's own discontinuity sequence number,
 	// counting every break up to and including its own. It is not what
 	// EXT-X-DISCONTINUITY-SEQUENCE reports directly; see
-	// ring.discontinuitySequence, which subtracts this segment's own break
-	// because the renderer emits the tag for it separately.
+	// segmentWindow.discontinuitySequence, which subtracts this segment's own
+	// break because the renderer emits the tag for it separately.
 	DiscontinuitySeq uint64
 }
 
@@ -97,25 +97,32 @@ func ParseSegmentName(name string) (seq uint64, ok bool) {
 	return seq, true
 }
 
-// ring is the bounded window of media segments a live playlist advertises.
-// Pushing past capacity evicts the oldest, which is what makes memory use
-// constant no matter how long a stream runs.
+// segmentWindow is the bounded list of media segments a live playlist
+// advertises. Pushing past capacity evicts the oldest, which is what makes
+// memory use constant no matter how long a stream runs.
 //
-// ring is not safe for concurrent use; Stream serialises access to it.
-type ring struct {
+// It is copy on write: push builds a fresh slice rather than shifting one in
+// place, so a slice already returned by retained is never written again. That
+// is what lets Stream hand the window straight to readers without a lock; see
+// the view type.
+//
+// segmentWindow is not safe for concurrent use. Stream serialises the push
+// side, and a reader only ever sees a slice that is already final.
+type segmentWindow struct {
 	segments []Segment
 	capacity int
 }
 
-// newRing returns a ring holding at most capacity segments. A capacity below
-// one is raised to one: push indexes the window unconditionally once full, so
-// a zero capacity would panic on the first segment, on the audio goroutine,
-// with nothing to recover it.
-func newRing(capacity int) *ring {
+// newSegmentWindow returns a window holding at most capacity segments. A
+// capacity below one is raised to one: push re-slices the retained segments as
+// soon as the window is full, so a zero capacity would treat an empty window as
+// full and panic on the first segment, on the audio goroutine, with nothing to
+// recover it.
+func newSegmentWindow(capacity int) *segmentWindow {
 	if capacity < 1 {
 		capacity = 1
 	}
-	return &ring{
+	return &segmentWindow{
 		segments: make([]Segment, 0, capacity),
 		capacity: capacity,
 	}
@@ -123,51 +130,66 @@ func newRing(capacity int) *ring {
 
 // push appends s, evicting the oldest segment when the window is full.
 //
-// When full it shifts the retained segments down and overwrites the last slot,
-// reusing the backing array. Overwriting drops the evicted segment's reference
-// to its Data, so the bytes become collectable; the array itself is only ever
-// reused for the Segment headers, never for segment payloads, so a segment
-// already handed out by get stays valid for as long as its caller holds it.
-func (r *ring) push(s *Segment) {
-	if len(r.segments) < r.capacity {
-		r.segments = append(r.segments, *s)
-		return
+// The retained headers are copied into a fresh slice rather than shifted down
+// in place. Shifting is one allocation cheaper, but it writes into an array a
+// reader may be walking at that moment, since the window is published to
+// playlist and segment lookups without a lock.
+//
+// The cost is that an evicted segment's Data is released strictly later than
+// the in-place overwrite released it: the overwrite dropped the reference at
+// push time, whereas the evicted header now survives in the previous slice
+// until the last reader holding it lets go. In practice that is one extra
+// segment, about 34 KB at the default 128 kbps and two-second segments, since
+// a reader holds the slice for microseconds; the hard bound is one window,
+// roughly 200 KB.
+func (w *segmentWindow) push(s *Segment) {
+	retained := w.segments
+	if len(retained) == w.capacity {
+		retained = retained[1:]
 	}
-	copy(r.segments, r.segments[1:])
-	r.segments[len(r.segments)-1] = *s
+	next := make([]Segment, 0, w.capacity)
+	next = append(next, retained...)
+	next = append(next, *s)
+	w.segments = next
 }
 
-// get returns the retained segment with the given sequence number. It reports
-// false once the segment has been evicted, which a client that fell too far
-// behind will see as a 404.
-func (r *ring) get(seq uint64) (Segment, bool) {
-	for i := range r.segments {
-		if r.segments[i].Seq == seq {
-			return r.segments[i], true
+// retained returns the window's segments, oldest first. The returned slice is
+// final: push replaces it rather than writing into it, so a caller may keep it
+// for as long as it likes.
+//
+// Capacity is clipped to the length so that "final" is true of the spare slots
+// too. Until the window first fills, w.segments has room to spare, and an
+// unclipped slice would let a caller's append write into the array a concurrent
+// reader is walking, which is the one thing the copy-on-write push exists to
+// prevent.
+func (w *segmentWindow) retained() []Segment {
+	return w.segments[:len(w.segments):len(w.segments)]
+}
+
+// findSegment returns the segment with the given sequence number from a window
+// slice. It reports false once the segment has been evicted, which a client
+// that fell too far behind will see as a 404.
+//
+// A linear scan, which is free at the default window of six and stays cheap
+// well past it: the scan compares one uint64 per retained segment, and a
+// window large enough for that to matter would already be holding megabytes of
+// audio. See BenchmarkSegmentLookup for where it stops being free.
+func findSegment(segments []Segment, seq uint64) (Segment, bool) {
+	for i := range segments {
+		if segments[i].Seq == seq {
+			return segments[i], true
 		}
 	}
 	return Segment{}, false
 }
 
-// window returns the retained segments, oldest first. The returned slice
-// aliases the ring's storage and is only valid while the caller holds the
-// stream lock.
-func (r *ring) window() []Segment {
-	return r.segments
-}
-
-// len is how many segments the window currently holds.
-func (r *ring) len() int {
-	return len(r.segments)
-}
-
 // mediaSequence is the sequence number of the oldest retained segment, which
 // is what EXT-X-MEDIA-SEQUENCE reports.
-func (r *ring) mediaSequence() uint64 {
-	if len(r.segments) == 0 {
+func (w *segmentWindow) mediaSequence() uint64 {
+	if len(w.segments) == 0 {
 		return 0
 	}
-	return r.segments[0].Seq
+	return w.segments[0].Seq
 }
 
 // discontinuitySequence is the EXT-X-DISCONTINUITY-SEQUENCE value for the
@@ -181,12 +203,12 @@ func (r *ring) mediaSequence() uint64 {
 // second time. Subtracting it here is what keeps the number a client computes
 // for a given segment identical across reloads as the window scrolls, which is
 // the entire purpose of the tag.
-func (r *ring) discontinuitySequence() uint64 {
-	if len(r.segments) == 0 {
+func (w *segmentWindow) discontinuitySequence() uint64 {
+	if len(w.segments) == 0 {
 		return 0
 	}
-	seq := r.segments[0].DiscontinuitySeq
-	if r.segments[0].Discontinuity {
+	seq := w.segments[0].DiscontinuitySeq
+	if w.segments[0].Discontinuity {
 		// cutSegment increments the counter before assigning it, so a segment
 		// carrying a break always has DiscontinuitySeq >= 1 and this cannot
 		// underflow. Guarding for zero here would paper over a broken

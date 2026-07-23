@@ -412,15 +412,17 @@ func (c *Handler) serveNativePlaylist(ctx echo.Context, sourceID string, stream 
 	ctx.Response().Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	ctx.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-	playlist := stream.mux.Playlist()
-	stats := stream.mux.Stats()
+	// One snapshot for both, rather than a Playlist call and a Stats call that
+	// could land either side of a segment cut. Retained is then exactly the
+	// segment count of the playlist being served, not a count from a
+	// neighbouring instant that the Retry-After decision below would have to
+	// treat as a bound.
+	playlist, stats := stream.mux.PlaylistAndStats()
 
 	c.checkNativeStreamFreshness(sourceID, &stats)
 
 	// Tell a client polling before the first segment how long to wait, matching
-	// what the FFmpeg path does with its placeholder playlist. Retained comes
-	// from the same Stats already sampled, so the answer is consistent with the
-	// playlist just rendered rather than read at a third instant.
+	// what the FFmpeg path does with its placeholder playlist.
 	if stats.Retained == 0 {
 		ctx.Response().Header().Set("Retry-After", strconv.Itoa(c.getEffectiveSegmentLength()))
 	}
@@ -457,6 +459,14 @@ func (c *Handler) checkNativeStreamFreshness(sourceID string, stats *hlsmux.Stat
 			logger.String("newest_segment_age", age.Round(time.Second).String()),
 			logger.String("stale_threshold", staleAfter.String()),
 			logger.Uint64("segments_cut", stats.Segments),
+			// Both of these separate a source that has genuinely stopped from
+			// one that is merely running slow. Drift grows without bound while
+			// a source delivers less audio than real time, and a rising
+			// discontinuity count means the muxer has already been re-anchoring
+			// the timeline. Without them a stall warning says only that
+			// segments stopped, not why.
+			logger.String("drift_correction", stats.DriftCorrection.Round(time.Millisecond).String()),
+			logger.Uint64("discontinuities", stats.Discontinuities),
 			logger.Bool("encode_failed", stats.Failed))
 	}
 }
@@ -465,8 +475,8 @@ func (c *Handler) checkNativeStreamFreshness(sourceID string, stats *hlsmux.Stat
 func (c *Handler) serveNativeContent(ctx echo.Context, stream *HLSStreamInfo, requestPath string) error {
 	// Traversal is unreachable here because nothing below this line touches a
 	// filesystem: the name is either matched against a literal or parsed to a
-	// sequence number and looked up in an in-memory ring. That, not the check
-	// immediately below, is what makes securefs unnecessary. The separator
+	// sequence number and looked up in an in-memory segment window. That, not
+	// the check immediately below, is what makes securefs unnecessary. The separator
 	// rejection is defence in depth, and a reminder that any future branch which
 	// did resolve a name against disk would need securefs rather than this.
 	if requestPath == "" || strings.ContainsAny(requestPath, `/\`) {
@@ -519,8 +529,8 @@ func (c *Handler) serveNativeBytes(ctx echo.Context, name string, data []byte, m
 }
 
 // waitForNativePlaylist polls until the muxer advertises enough segments for
-// immediate playback, mirroring the FFmpeg path's wait but reading the ring
-// directly instead of a file that this path never writes.
+// immediate playback, mirroring the FFmpeg path's wait but reading the muxer's
+// published snapshot instead of a file that this path never writes.
 //
 // The segment count matters: hls.js needs two fragments before it calls play(),
 // so returning after one costs the client a full playlist reload cycle, which

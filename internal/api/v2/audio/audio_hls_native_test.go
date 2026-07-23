@@ -42,7 +42,7 @@ func newNativeMux(t *testing.T) *hlsmux.Stream {
 	return mux
 }
 
-// newEmptyNativeStream is for tests that never touch the media ring, so they do
+// newEmptyNativeStream is for tests that never touch the media window, so they do
 // not pay for encoding audio they will not read.
 func newEmptyNativeStream(t *testing.T) *HLSStreamInfo {
 	t.Helper()

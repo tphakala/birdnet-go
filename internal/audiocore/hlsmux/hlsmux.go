@@ -3,6 +3,7 @@ package hlsmux
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	m4a "github.com/tphakala/go-m4a"
@@ -134,23 +135,72 @@ type Stats struct {
 	Failed bool
 }
 
+// view is the read side's snapshot of everything the segment window determines:
+// the rendered playlist, the window itself, and the counters Stats reports from
+// it. It is rebuilt once per segment cut and published behind an atomic
+// pointer, so reading any of it costs one atomic load.
+//
+// The alternative, rendering per poll under the stream mutex, is what this
+// replaces. Both halves of that were wasteful. The playlist only changes when a
+// segment is cut, so every poll in between rebuilt a byte-identical string; and
+// it did so holding the mutex Write needs, which puts an HTTP handler in the
+// way of the capture goroutine. The asymmetry that makes it worth removing is
+// that the encoder is per SOURCE: one muxer serves every viewer of a stream, so
+// encode cost is fixed however large the audience grows, while polling is the
+// one path that grows with it.
+//
+// Every field is immutable once stored. segments aliases the slice
+// segmentWindow.push has finished with and will never write into again.
+type view struct {
+	playlist        string
+	segments        []Segment
+	nextSeq         uint64
+	discontinuities uint64
+	lastSegmentPDT  time.Time
+}
+
 // Stream encodes and muxes one live audio source into HLS media segments and
 // the playlist indexing them, holding everything in memory.
 //
-// Write is called from the audio feed goroutine; Playlist, Segment, Stats and
-// InitSegment are called from HTTP handlers. All of them are safe to call
-// concurrently.
+// Write is called from the audio feed goroutine; the read side (Playlist,
+// PlaylistAndStats, Segment, Ready, Stats and InitSegment) is called from HTTP
+// handlers. All of them are safe to call concurrently, and the read side takes
+// no lock at all: it reads a snapshot
+// republished on each segment cut, so an audience of any size can never delay
+// the goroutine encoding for it. See the view type.
 type Stream struct {
+	// view is the read side's snapshot; see the type. Every reader goes through
+	// it and nothing else, which is what keeps them all off mu: it is the whole
+	// of Playlist, Segment and Ready, and every Stats field except the two
+	// below. Stored only from publishView, under mu.
+	view atomic.Pointer[view]
+
+	// driftCorrection and failed are the two Stats fields the segment window
+	// does not determine, so they cannot live in the view: one moves on every
+	// write and the other latches at an arbitrary one. They are atomics so that
+	// Stats stays lock free; both are still written only under mu, so the write
+	// side needs no compare-and-swap.
+	//
+	// driftCorrection, in nanoseconds, is the total the projected sample clock
+	// has been nudged toward the arriving timestamps. It only grows in one
+	// direction while a source runs persistently fast or slow, so a caller
+	// watching it can tell steady clock error (bounded, harmless) from
+	// sustained audio loss (unbounded), which the stall threshold alone cannot
+	// distinguish because the absorber is what stops the latter from ever
+	// reaching it.
+	driftCorrection atomic.Int64
+	failed          atomic.Bool
+
 	// mu guards everything below it. The critical sections are short: an
-	// encode plus a buffer append on the write side, a render or a lookup on
-	// the read side.
+	// encode plus a buffer append on the write side, and a render plus a
+	// pointer swap on a segment cut. Readers never take it.
 	mu sync.Mutex
 
 	codecName string
 	enc       FrameEncoder
 	frag      *m4a.FragmentWriter
 	initSeg   []byte
-	segments  *ring
+	segments  *segmentWindow
 
 	// appendSegment flushes the fragment writer into a finished segment. It is
 	// a field rather than a direct s.frag call so a test can drive the failure
@@ -199,14 +249,6 @@ type Stream struct {
 	// arrives is how a source stall is detected.
 	nextSampleTime time.Time
 
-	// driftCorrection is the total the projected sample clock has been nudged
-	// toward the arriving timestamps. It only grows in one direction while a
-	// source runs persistently fast or slow, so a caller watching it can tell
-	// steady clock error (bounded, harmless) from sustained audio loss
-	// (unbounded), which the stall threshold alone cannot distinguish because
-	// the absorber is what stops the latter from ever reaching it.
-	driftCorrection time.Duration
-
 	// discontinuities counts the timeline breaks so far, and pendingBreak
 	// records that the next segment cut begins a new timeline.
 	discontinuities uint64
@@ -217,7 +259,6 @@ type Stream struct {
 	segBufHint int
 
 	started bool
-	failed  bool
 	closed  bool
 }
 
@@ -330,7 +371,7 @@ func New(cfg *Config) (*Stream, error) {
 		enc:                enc,
 		frag:               frag,
 		initSeg:            initSeg,
-		segments:           newRing(windowSize),
+		segments:           newSegmentWindow(windowSize),
 		targetSamples:      targetSamples,
 		maxSegmentDuration: segmentDuration,
 		targetDuration:     ceilSeconds(segmentDuration),
@@ -341,6 +382,13 @@ func New(cfg *Config) (*Stream, error) {
 	}
 	s.emit = s.appendAccessUnit
 	s.appendSegment = frag.AppendSegment
+	// Publish the first snapshot before the Stream is handed to anyone, so a
+	// reader never loads a nil view and a poll arriving before the first
+	// segment is cut still learns the init segment from EXT-X-MAP. Nothing may
+	// return between the literal above and this call; the readers dereference
+	// the view unguarded, so a Stream that escaped without one would panic on
+	// the first poll.
+	s.publishView(false)
 	return s, nil
 }
 
@@ -437,7 +485,7 @@ func (s *Stream) Write(pcm []byte, ts time.Time) error {
 	switch {
 	case s.closed:
 		return validationErr("hlsmux: write to a closed stream")
-	case s.failed:
+	case s.failed.Load():
 		return validationErr("hlsmux: write to a stream that failed encoding")
 	case ts.IsZero():
 		return validationErr("hlsmux: write with a zero capture timestamp")
@@ -456,7 +504,7 @@ func (s *Stream) Write(pcm []byte, ts time.Time) error {
 	s.nextSampleTime = s.nextSampleTime.Add(s.inClock.advance(len(pcm) / s.frameBytes))
 
 	if err := s.enc.EncodeInterleaved(pcm, s.emit); err != nil {
-		s.failed = true
+		s.failed.Store(true)
 		return s.audioErr(err)
 	}
 	return nil
@@ -483,7 +531,7 @@ func (s *Stream) syncTimeline(ts time.Time) error {
 		// the observed time so a steady clock difference cannot accumulate
 		// into a false stall.
 		s.nextSampleTime = s.nextSampleTime.Add(gap >> driftCorrectionShift)
-		s.driftCorrection += gap >> driftCorrectionShift
+		s.driftCorrection.Add(int64(gap >> driftCorrectionShift))
 		return nil
 	}
 
@@ -499,7 +547,7 @@ func (s *Stream) syncTimeline(ts time.Time) error {
 			// the write as successful: a caller that kept feeding would build
 			// every later segment on a timeline whose break was never
 			// published.
-			s.failed = true
+			s.failed.Store(true)
 			return err
 		}
 	}
@@ -564,8 +612,12 @@ func (s *Stream) cutSegment() error {
 		s.discontinuities++
 	}
 	s.segments.push(&Segment{
-		Seq:              s.nextSeq,
-		Data:             data,
+		Seq: s.nextSeq,
+		// Capacity clipped to length for the same reason segmentWindow.retained
+		// clips: segBufHint deliberately over-sizes the arena, so an unclipped
+		// slice would let a handler's append write into bytes another handler
+		// is still streaming.
+		Data:             data[:len(data):len(data)],
 		Samples:          s.pendingSamples,
 		Duration:         duration,
 		PDT:              s.segPDT,
@@ -581,7 +633,46 @@ func (s *Stream) cutSegment() error {
 	s.segPDT = s.segPDT.Add(duration)
 	s.nextSeq++
 	s.pendingSamples = 0
+
+	// Last, once every field the snapshot reads is settled. A cut is the only
+	// thing that changes the window while the stream runs, so it is the only
+	// render the running stream needs; New seeds the first snapshot and Close
+	// republishes the last one.
+	s.publishView(false)
 	return nil
+}
+
+// publishView rebuilds the read-side snapshot and swaps it in.
+//
+// It must be called with s.mu held, or before the Stream has been handed to any
+// other goroutine, and after any change to the segment window or to the
+// counters the view carries. Missing one leaves every reader on a stale
+// snapshot indefinitely, with no error anywhere. DriftCorrection and Failed are
+// deliberately outside the view and so are not among them; see their fields.
+//
+// ended is passed rather than read from s.closed because the two are not the
+// same event. Close sets s.closed before flushing the encoder, so that a Write
+// racing the teardown is refused and a second Close cannot re-enter a codec
+// that has just panicked. But the flush can still cut a segment, and rendering
+// EXT-X-ENDLIST from s.closed at that moment would publish a terminated
+// playlist that is missing the very segment the flush is producing. A client
+// honouring the tag stops polling and never sees it. Only Close's own final
+// publish ends the playlist.
+//
+// The render costs the capture goroutine roughly 2.4 microseconds and 1 KB once
+// per segment, which is the one thing this design trades away: it moves work
+// off HTTP handlers onto the real-time thread. Measured against a two-second
+// segment on a goroutine that spends single-digit milliseconds per second
+// encoding, that is under a thousandth of the budget, and it replaces a render
+// per poll per viewer with one render per segment.
+func (s *Stream) publishView(ended bool) {
+	s.view.Store(&view{
+		playlist:        renderPlaylist(s.segments, s.targetDuration, ended),
+		segments:        s.segments.retained(),
+		nextSeq:         s.nextSeq,
+		discontinuities: s.discontinuities,
+		lastSegmentPDT:  s.lastSegmentPDT,
+	})
 }
 
 // Close drains the encoder, publishes whatever audio remains as a final
@@ -598,8 +689,22 @@ func (s *Stream) Close() error {
 	}
 	s.closed = true
 
+	// Deferred, and registered after the unlock so that it runs before it,
+	// still holding the mutex.
+	//
+	// Deferred rather than called inline because the flush below runs codec
+	// code that this project already assumes can panic: the HLS handler wraps
+	// this very call in a recover (see closeNativeMuxGuarded) for exactly that
+	// reason. An inline publish would be skipped by the unwind, and since
+	// s.closed is already set, the second Close returns early and nothing ever
+	// publishes again, leaving a dead stream advertising itself as live for as
+	// long as the process runs. It also covers the ordinary failure paths, so a
+	// stream that could not publish its last segment still stops clients
+	// polling.
+	defer s.publishView(true)
+
 	var flushErr error
-	if !s.failed {
+	if !s.failed.Load() {
 		flushErr = s.enc.Flush(s.emit)
 		if flushErr == nil && s.pendingSamples > 0 {
 			flushErr = s.cutSegment()
@@ -632,16 +737,16 @@ func (s *Stream) InitSegment() []byte {
 // It reports false once the segment has scrolled out of the window, which is
 // what a client that fell too far behind should see as a 404.
 func (s *Stream) Segment(seq uint64) (Segment, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.segments.get(seq)
+	return findSegment(s.view.Load().segments, seq)
 }
 
-// Playlist renders the current HLS media playlist.
+// Playlist returns the current HLS media playlist.
+//
+// It is the snapshot taken when the last segment was cut rather than a fresh
+// render, because nothing between two cuts can change a byte of it. See the
+// view type for why that matters more than the render cost alone suggests.
 func (s *Stream) Playlist() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return renderPlaylist(s.segments, s.targetDuration, s.closed)
+	return s.view.Load().playlist
 }
 
 // Ready reports whether the playlist advertises at least n media segments.
@@ -651,21 +756,47 @@ func (s *Stream) Playlist() string {
 // handed a one-segment playlist spends a full reload cycle waiting, which is
 // audible as a delayed start.
 func (s *Stream) Ready(n int) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.segments.len() >= n
+	return len(s.view.Load().segments) >= n
 }
 
 // Stats returns a point-in-time view of the stream's health.
+//
+// Segments, Retained, Discontinuities and LastSegmentPDT all come from one
+// snapshot and so agree with each other. DriftCorrection and Failed are sampled
+// separately, because neither is determined by a segment cut: one moves on
+// every write and the other latches at an arbitrary one. They can therefore be
+// a generation ahead of the other four, which is what a caller wants from them
+// anyway, since both report the liveness of the write side rather than the
+// contents of the playlist.
+//
+// Retained is the number of segments the playlist advertises, but only for the
+// playlist rendered from the SAME snapshot. A separate Playlist call may land
+// either side of a cut; use PlaylistAndStats when the two have to agree.
 func (s *Stream) Stats() Stats {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	return s.statsFrom(s.view.Load())
+}
+
+// PlaylistAndStats returns the media playlist together with the stats
+// describing that exact playlist, from a single snapshot load.
+//
+// This is what a caller reporting on the playlist it is about to serve wants:
+// Retained is then exactly the number of segments in the returned playlist,
+// rather than a count from a neighbouring instant that has to be reasoned about
+// as a bound.
+func (s *Stream) PlaylistAndStats() (playlist string, stats Stats) {
+	v := s.view.Load()
+	return v.playlist, s.statsFrom(v)
+}
+
+// statsFrom builds the Stats a given snapshot describes, plus the two fields
+// the snapshot does not determine.
+func (s *Stream) statsFrom(v *view) Stats {
 	return Stats{
-		Segments:        s.nextSeq,
-		Retained:        s.segments.len(),
-		Discontinuities: s.discontinuities,
-		LastSegmentPDT:  s.lastSegmentPDT,
-		DriftCorrection: s.driftCorrection,
-		Failed:          s.failed,
+		Segments:        v.nextSeq,
+		Retained:        len(v.segments),
+		Discontinuities: v.discontinuities,
+		LastSegmentPDT:  v.lastSegmentPDT,
+		DriftCorrection: time.Duration(s.driftCorrection.Load()),
+		Failed:          s.failed.Load(),
 	}
 }

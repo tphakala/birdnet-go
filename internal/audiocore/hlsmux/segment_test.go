@@ -2,6 +2,7 @@ package hlsmux
 
 import (
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -39,26 +40,53 @@ func TestParseSegmentNameRejectsJunk(t *testing.T) {
 	}
 }
 
-func TestRingEvictionDropsDataReference(t *testing.T) {
+func TestSegmentWindowEvictionDropsDataReference(t *testing.T) {
 	t.Parallel()
 
-	r := newRing(2)
+	w := newSegmentWindow(2)
 	for i := range uint64(3) {
-		r.push(&Segment{Seq: i, Data: []byte{byte(i)}})
+		w.push(&Segment{Seq: i, Data: []byte{byte(i)}})
 	}
 
-	require.Len(t, r.window(), 2)
-	assert.Equal(t, uint64(1), r.mediaSequence())
+	require.Len(t, w.retained(), 2)
+	assert.Equal(t, uint64(1), w.mediaSequence())
 
-	_, ok := r.get(0)
+	_, ok := findSegment(w.retained(), 0)
 	assert.False(t, ok, "the evicted segment must be gone")
 
 	// The window holds the two newest segments in order. This is the
 	// observable half of eviction; that the evicted payload also becomes
-	// collectable follows from push overwriting the slot rather than
-	// re-slicing, which cannot be asserted directly without a finalizer.
-	assert.Equal(t, []byte{1}, r.window()[0].Data)
-	assert.Equal(t, []byte{2}, r.window()[1].Data)
+	// collectable follows from push building a slice that simply omits the
+	// evicted header, which cannot be asserted directly without a finalizer.
+	assert.Equal(t, []byte{1}, w.retained()[0].Data)
+	assert.Equal(t, []byte{2}, w.retained()[1].Data)
+}
+
+// TestSegmentWindowPushLeavesPublishedSliceAlone pins the invariant the
+// lock-free read side rests on. Stream hands the slice retained returns straight
+// to playlist renders and segment lookups with no lock held, so if push ever
+// went back to shifting headers down in place, a reader walking the previous
+// slice would see segments change underneath it: a client could be served one
+// segment's bytes under another's sequence number, and no test that only reads
+// after writing would notice.
+func TestSegmentWindowPushLeavesPublishedSliceAlone(t *testing.T) {
+	t.Parallel()
+
+	const capacity = 3
+	w := newSegmentWindow(capacity)
+	for i := range uint64(capacity) {
+		w.push(&Segment{Seq: i, Data: []byte{byte(i)}})
+	}
+
+	// What a reader would be holding across the next few cuts.
+	published := w.retained()
+	before := slices.Clone(published)
+
+	for i := range uint64(capacity * 2) {
+		w.push(&Segment{Seq: uint64(capacity) + i, Data: []byte{byte(capacity) + byte(i)}})
+	}
+
+	assert.Equal(t, before, published, "a published window must be immutable once handed out")
 }
 
 // TestCeilSeconds pins EXT-X-TARGETDURATION to a true ceiling. Rounding to
@@ -89,30 +117,36 @@ func TestCeilSeconds(t *testing.T) {
 	}
 }
 
-func TestRingLen(t *testing.T) {
+func TestSegmentWindowNeverGrowsPastCapacity(t *testing.T) {
 	t.Parallel()
 
-	r := newRing(3)
-	assert.Zero(t, r.len())
+	w := newSegmentWindow(3)
+	assert.Empty(t, w.retained())
 	for i := range uint64(5) {
-		r.push(&Segment{Seq: i})
+		w.push(&Segment{Seq: i})
 	}
-	assert.Equal(t, 3, r.len(), "the window never grows past its capacity")
+	assert.Len(t, w.retained(), 3, "the window never grows past its capacity")
 }
 
-// TestNewRingRaisesDegenerateCapacity guards the audio goroutine: push indexes
-// the window unconditionally once full, so a zero capacity would panic on the
-// first segment with nothing to recover it.
-func TestNewRingRaisesDegenerateCapacity(t *testing.T) {
+// TestNewSegmentWindowRaisesDegenerateCapacity guards the audio goroutine: push
+// re-slices the retained segments once the window is full, so a zero capacity
+// would treat an empty window as full and panic on the first segment, with
+// nothing to recover it.
+func TestNewSegmentWindowRaisesDegenerateCapacity(t *testing.T) {
 	t.Parallel()
 
 	for _, capacity := range []int{-1, 0} {
-		r := newRing(capacity)
+		// The constructor is inside the closure too: without the raise, a
+		// capacity of -1 panics in make() rather than in push, and a panic out
+		// here takes the whole test binary down instead of failing this case.
+		var w *segmentWindow
 		assert.NotPanics(t, func() {
-			r.push(&Segment{Seq: 1})
-			r.push(&Segment{Seq: 2})
+			w = newSegmentWindow(capacity)
+			w.push(&Segment{Seq: 1})
+			w.push(&Segment{Seq: 2})
 		})
-		assert.Equal(t, 1, r.len())
+		require.NotNil(t, w)
+		assert.Len(t, w.retained(), 1)
 	}
 }
 
@@ -131,4 +165,30 @@ func TestSampleClockIsExactAcrossManyConversions(t *testing.T) {
 
 	want := time.Duration(frames) * aacFrame * time.Second / testRate
 	assert.Equal(t, want, total)
+}
+
+// TestRetainedExposesNoSpareCapacity pins the clip in retained.
+//
+// The guarantee is about capacity, so that is what this asserts. Until the
+// window fills, its backing array has spare slots; an unclipped slice would let
+// a caller's append write into slots the array still owns, which is the array a
+// concurrent reader is walking. Nothing in the tree appends to a retained slice
+// today, and that is the point: the first caller that does must get its own
+// storage rather than silently reach into a published window.
+func TestRetainedExposesNoSpareCapacity(t *testing.T) {
+	t.Parallel()
+
+	w := newSegmentWindow(4)
+	w.push(&Segment{Seq: 0})
+	w.push(&Segment{Seq: 1})
+
+	published := w.retained()
+	require.Len(t, published, 2, "the window is deliberately left short of capacity")
+	assert.Equal(t, len(published), cap(published),
+		"a published window must not hand out capacity into its own array")
+
+	// An append therefore reallocates, and the window is unaffected by it.
+	grown := append(published, Segment{Seq: 99}) //nolint:gocritic // the reallocation is the assertion
+	assert.Len(t, w.retained(), 2, "the window must not have grown")
+	assert.Equal(t, uint64(99), grown[2].Seq)
 }

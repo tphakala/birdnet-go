@@ -181,7 +181,7 @@ func TestAACLCStreamProducesPlayableSegments(t *testing.T) {
 	assert.Contains(t, playlist, "#EXT-X-PROGRAM-DATE-TIME")
 	assert.NotContains(t, playlist, "CODECS",
 		"CODECS belongs to a master playlist; this is a media playlist")
-	assert.Equal(t, strings.Count(playlist, "#EXTINF"), s.segments.len())
+	assert.Len(t, s.segments.retained(), strings.Count(playlist, "#EXTINF"))
 }
 
 // stubEncoder reports a fixed decoder config and priming without encoding
