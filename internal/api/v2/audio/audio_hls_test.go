@@ -599,7 +599,7 @@ func TestResolveClientID(t *testing.T) {
 func TestHLSConsumer_WriteDoesNotRetainFrameData(t *testing.T) {
 	t.Parallel()
 
-	ch := make(chan []byte, 1)
+	ch := make(chan audioChunk, 1)
 	h := &hlsConsumer{
 		id:       "test",
 		sourceID: "src",
@@ -609,6 +609,7 @@ func TestHLSConsumer_WriteDoesNotRetainFrameData(t *testing.T) {
 		channels: 1,
 	}
 
+	captured := time.Date(2026, 7, 23, 9, 0, 0, 0, time.UTC)
 	original := []byte{0x01, 0x02, 0x03, 0x04}
 	frame := audiocore.AudioFrame{
 		SourceID:   "src",
@@ -616,6 +617,7 @@ func TestHLSConsumer_WriteDoesNotRetainFrameData(t *testing.T) {
 		SampleRate: 48000,
 		BitDepth:   16,
 		Channels:   1,
+		Timestamp:  captured,
 	}
 
 	require.NoError(t, h.Write(frame))
@@ -628,8 +630,10 @@ func TestHLSConsumer_WriteDoesNotRetainFrameData(t *testing.T) {
 
 	select {
 	case received := <-ch:
-		assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, received,
+		assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, received.data,
 			"hlsConsumer must copy frame.Data, not retain the caller's slice")
+		assert.Equal(t, captured, received.timestamp,
+			"the capture time must survive the hop to the feed loop; the native muxer anchors PDT to it")
 	case <-time.After(time.Second):
 		t.Fatal("no frame delivered to channel")
 	}
