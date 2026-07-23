@@ -58,38 +58,40 @@
   // Generate unique ID for dropdown (client-only to avoid SSR hydration mismatch)
   let dropdownId = $state('');
 
-  // Size configurations
+  // Size configurations. Container height is a floor (min-h-*), not a fixed height: the chip
+  // and list variants wrap to multiple rows, and a fixed h-* made the extra rows overflow onto
+  // the content below instead of pushing it down.
   const sizeConfig = {
     xs: {
-      container: 'h-6 text-xs',
+      container: 'min-h-6 text-xs',
       chip: 'h-5 px-2 text-xs',
       button: 'h-6 w-6 text-xs',
       input: 'input-xs',
       list: 'text-xs py-1',
     },
     sm: {
-      container: 'h-8 text-sm',
+      container: 'min-h-8 text-sm',
       chip: 'h-6 px-3 text-sm',
       button: 'h-8 w-8 text-sm',
       input: 'input-sm',
       list: 'text-sm py-2',
     },
     md: {
-      container: 'h-10 text-base',
+      container: 'min-h-10 text-base',
       chip: 'h-7 px-3 text-sm',
       button: 'h-10 w-10',
       input: 'input-md',
       list: 'text-sm py-2',
     },
     lg: {
-      container: 'h-12 text-base',
+      container: 'min-h-12 text-base',
       chip: 'h-8 px-4',
       button: 'h-12 w-12',
       input: 'input-lg',
       list: 'py-3',
     },
     xl: {
-      container: 'h-14 text-lg',
+      container: 'min-h-14 text-lg',
       chip: 'h-9 px-4 text-base',
       button: 'h-14 w-14 text-lg',
       input: 'input-lg',
