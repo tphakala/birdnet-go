@@ -19,8 +19,10 @@ import (
 // left classifier.NewBirdNET to deal with a locale that config validation had
 // already resolved.
 func TestSetupFlags_KeepsNormalizedLocale(t *testing.T) {
-	original := viper.Get("birdnet.locale")
-	t.Cleanup(func() { viper.Set("birdnet.locale", original) })
+	// setupFlags calls viper.BindPFlags, so this test leaves flag bindings as well
+	// as values in the global registry. Reset the whole thing rather than restoring
+	// the one key, so nothing added to this package later inherits the state.
+	t.Cleanup(viper.Reset)
 	viper.Set("birdnet.locale", "en") // raw config value, before normalization
 
 	settings := &conf.Settings{}

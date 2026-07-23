@@ -146,6 +146,7 @@ func TestNormalizeLocale(t *testing.T) {
 		{name: "full name is case insensitive", input: "brazilian portuguese", want: "pt-br"},
 		{name: "unsupported locale falls back", input: "en", want: DefaultFallbackLocale, wantErr: true},
 		{name: "unknown locale falls back", input: "klingon", want: DefaultFallbackLocale, wantErr: true},
+		{name: "original casing survives into the error", input: "Klingon", want: DefaultFallbackLocale, wantErr: true},
 		{name: "empty locale falls back", input: "", want: DefaultFallbackLocale, wantErr: true},
 	}
 
@@ -156,6 +157,9 @@ func TestNormalizeLocale(t *testing.T) {
 			got, err := NormalizeLocale(tt.input)
 			if tt.wantErr {
 				require.Error(t, err, "unsupported locale %q should report the fallback", tt.input)
+				// Callers log this error, so it has to name the locale as the user
+				// wrote it rather than a case-folded version of it.
+				require.ErrorContains(t, err, tt.input)
 			} else {
 				require.NoError(t, err)
 			}

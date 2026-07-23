@@ -211,11 +211,15 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 	// starting on a config whose locale merely needs normalizing, which is neither
 	// what config validation (conf.ValidateBirdNETSettings) nor label loading does
 	// with the same condition.
-	inputLocale := strings.ToLower(settings.BirdNET.Locale)
-	normalizedLocale, err := conf.NormalizeLocale(inputLocale)
+	// Pass the configured value as written: NormalizeLocale lowercases internally
+	// and keeps the original for its error, so lowercasing first would report a
+	// locale the user never typed.
+	requestedLocale := settings.BirdNET.Locale
+	normalizedLocale, err := conf.NormalizeLocale(requestedLocale)
 	if err != nil {
 		GetLogger().Warn("Locale not supported, using fallback",
-			logger.String("requested_locale", inputLocale),
+			logger.Error(err),
+			logger.String("requested_locale", requestedLocale),
 			logger.String("fallback_locale", normalizedLocale))
 	}
 	settings.BirdNET.Locale = normalizedLocale
