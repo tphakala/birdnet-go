@@ -83,7 +83,12 @@ func initialize() error {
 func setupFlags(rootCmd *cobra.Command, settings *conf.Settings) error {
 	rootCmd.PersistentFlags().StringVarP(&conf.ConfigPath, "config", "c", conf.ConfigPath, "Path to config file (defaults to OS-specific config search locations)")
 	rootCmd.PersistentFlags().BoolVarP(&settings.Debug, "debug", "d", viper.GetBool("debug"), "Enable debug output")
-	rootCmd.PersistentFlags().StringVar(&settings.BirdNET.Locale, "locale", viper.GetString("birdnet.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
+	// The locale default comes from the loaded settings rather than from viper.
+	// Config load already normalized it (conf.ValidateSettings turns e.g. "en" into
+	// "en-uk"), while viper still holds the raw config value. Passing the raw value
+	// here would make cobra write it straight back over the normalized one at flag
+	// registration time, so every command would run with an unnormalized locale.
+	rootCmd.PersistentFlags().StringVar(&settings.BirdNET.Locale, "locale", settings.BirdNET.Locale, "Set the locale for labels. Accepts full name or 2-letter code.")
 	rootCmd.PersistentFlags().IntVarP(&settings.BirdNET.Threads, "threads", "j", viper.GetInt("birdnet.threads"), "Number of CPU threads to use for analysis (default 0 which is all CPUs)")
 	rootCmd.PersistentFlags().Float64VarP(&settings.BirdNET.Sensitivity, "sensitivity", "s", viper.GetFloat64("birdnet.sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
 	rootCmd.PersistentFlags().Float64VarP(&settings.BirdNET.Threshold, "threshold", "t", viper.GetFloat64("birdnet.threshold"), "Confidency threshold for detections, value between 0.1 to 1.0")
