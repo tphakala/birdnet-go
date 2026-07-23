@@ -37,9 +37,10 @@ concurrency:
 
 env:
   # Must match BASE_BUILD_TAGS in Taskfile.yml, which is what the release and
-  # container builds actually use. Declared once here so the four build/vet
-  # steps below cannot drift apart from each other; keeping it in step with the
-  # Taskfile is still manual, so change both together.
+  # container builds actually use. Declared once here so the four build/vet steps
+  # below cannot drift apart from each other; keeping it in step with the Taskfile
+  # is still manual, and several other workflows carry the tag too, so see the
+  # BASE_BUILD_TAGS comment in Taskfile.yml for the full list to change together.
   BASE_BUILD_TAGS: goaac_simd
 
 jobs:
