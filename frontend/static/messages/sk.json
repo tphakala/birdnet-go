@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Vzorce detekcií podľa dennej doby",
-          "description": "Zobrazuje priemerný počet detekcií počas dňa pre vybrané druhy",
+          "description": "Priemerný počet detekcií za deň v každú hodinu, naprieč vybraným rozsahom dátumov a druhmi",
           "noData": "Nie sú k dispozícii žiadne dáta o dennej dobe",
           "noDataHint": "Vyberte druhy a rozsah dátumov na zobrazenie vzorcov",
           "axisTime": "Čas dňa",
-          "axisCount": "Počet zistení"
+          "axisCount": "Priem. detekcie / deň"
         },
         "dailyTrend": {
           "title": "Trendy detekcií druhov",

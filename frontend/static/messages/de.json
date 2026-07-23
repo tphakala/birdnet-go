@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Erkennungsmuster nach Tageszeit",
-          "description": "Zeigt durchschnittliche Erkennungszahlen im Laufe des Tages für ausgewählte Arten",
+          "description": "Durchschnittliche Erkennungen pro Tag zu jeder Stunde, über den gewählten Zeitraum und die gewählten Arten",
           "noData": "Keine Tageszeitdaten verfügbar",
           "noDataHint": "Wählen Sie Arten und einen Datumsbereich aus, um Muster zu sehen",
           "axisTime": "Tageszeit",
-          "axisCount": "Anzahl Erkennungen"
+          "axisCount": "Ø Erkennungen / Tag"
         },
         "dailyTrend": {
           "title": "Artenerkennungstrends",

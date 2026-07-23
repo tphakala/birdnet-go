@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Detektionsmönster efter tid på dygnet",
-          "description": "Visar genomsnittligt antal detektioner under dygnet för valda arter",
+          "description": "Genomsnittligt antal detektioner per dygn för varje timme, över valt datumintervall och valda arter",
           "noData": "Ingen data för tid på dygnet tillgänglig",
           "noDataHint": "Välj arter och ett datumintervall för att visa mönster",
           "axisTime": "Tid på dygnet",
-          "axisCount": "Antal detektioner"
+          "axisCount": "Genomsn. detektioner / dag"
         },
         "dailyTrend": {
           "title": "Artdetektionstrender",

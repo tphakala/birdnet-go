@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Pattern di Rilevamento per Ora del Giorno",
-          "description": "Mostra i conteggi medi di rilevamento durante il giorno per le specie selezionate",
+          "description": "Rilevamenti medi al giorno per ogni ora, sull'intervallo di date e le specie selezionate",
           "noData": "Nessun dato sull'ora del giorno disponibile",
           "noDataHint": "Seleziona specie e un intervallo di date per visualizzare i pattern",
           "axisTime": "Ora del giorno",
-          "axisCount": "Conteggio rilevamenti"
+          "axisCount": "Rilevamenti medi / giorno"
         },
         "dailyTrend": {
           "title": "Trend Rilevamento Specie",

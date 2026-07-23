@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Havaintomallityypit vuorokaudenajan mukaan",
-          "description": "Näyttää keskimääräiset havaintomäärät päivän aikana valituille lajeille",
+          "description": "Keskimääräinen havaintomäärä vuorokaudessa kunakin tuntina, valitulla aikavälillä ja valituille lajeille",
           "noData": "Ei vuorokaudenajan tietoja saatavilla",
           "noDataHint": "Valitse lajit ja päivämääräväli nähdäksesi mallit",
           "axisTime": "Vuorokaudenaika",
-          "axisCount": "Havaintojen määrä"
+          "axisCount": "Havaintoja / vrk (ka.)"
         },
         "dailyTrend": {
           "title": "Lajien havaintotrendit",
