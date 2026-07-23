@@ -1718,7 +1718,7 @@ func TestV2OnlyDatastore_GetBatchHourlyOccurrences_ScientificName(t *testing.T) 
 	// including the scientific-only bat label. Assert the daily total per species
 	// rather than a specific hour index: the query buckets hours using SQLite's
 	// OS-local timezone, which may differ from the test datastore's configured UTC.
-	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), date,
+	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), date, date,
 		[]string{"Turdus merula", "Barbastella barbastellus"}, 0.0)
 	require.NoError(t, err)
 
@@ -1733,12 +1733,56 @@ func TestV2OnlyDatastore_GetBatchHourlyOccurrences_ScientificName(t *testing.T) 
 	// The localized common name is no longer an accepted key. Pre-fix, the batch
 	// query reverse-mapped "Common Blackbird" -> "Turdus merula" and returned the
 	// blackbird's count under the common-name key; the fixed query returns zero.
-	byCommon, err := ds.GetBatchHourlyOccurrences(t.Context(), date, []string{"Common Blackbird"}, 0.0)
+	byCommon, err := ds.GetBatchHourlyOccurrences(t.Context(), date, date, []string{"Common Blackbird"}, 0.0)
 	require.NoError(t, err)
 	common, ok := byCommon["Common Blackbird"]
 	require.True(t, ok)
 	assert.Equal(t, 0, hourlyTotal(&common),
 		"localized common name must not resolve to detections")
+}
+
+// TestV2OnlyDatastore_GetBatchHourlyOccurrences_DateRange verifies the batch hourly query sums
+// detections across every day in the inclusive [startDate, endDate] range rather than a single
+// day. The time-of-day chart requests the user's whole selected range; querying only one day made
+// species that happened to be silent that day read as zero for the entire range.
+func TestV2OnlyDatastore_GetBatchHourlyOccurrences_DateRange(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Turdus merula_Common Blackbird"})
+	defer cleanup()
+
+	// One detection on each of three consecutive days.
+	saveTestNote(t, ds, "2024-01-15", "08:20:00", "Turdus merula", 0.8)
+	saveTestNote(t, ds, "2024-01-16", "08:30:00", "Turdus merula", 0.8)
+	saveTestNote(t, ds, "2024-01-17", "08:40:00", "Turdus merula", 0.8)
+
+	// The full range sums all three days, including the end date itself.
+	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), "2024-01-15", "2024-01-17",
+		[]string{"Turdus merula"}, 0.0)
+	require.NoError(t, err)
+	blackbird, ok := counts["Turdus merula"]
+	require.True(t, ok)
+	assert.Equal(t, 3, hourlyTotal(&blackbird), "range must cover every day, end date inclusive")
+
+	// start == end still covers exactly that one day (the single-date callers' behavior).
+	oneDay, err := ds.GetBatchHourlyOccurrences(t.Context(), "2024-01-16", "2024-01-16",
+		[]string{"Turdus merula"}, 0.0)
+	require.NoError(t, err)
+	single, ok := oneDay["Turdus merula"]
+	require.True(t, ok)
+	assert.Equal(t, 1, hourlyTotal(&single), "start == end covers that single day only")
+}
+
+// TestV2OnlyDatastore_GetBatchHourlyOccurrences_InvertedRange verifies an end date before the start
+// date is rejected. Such a range produces no zone segments, so without the guard the query would
+// return all-zero counts for every species with a nil error - a silent wrong answer.
+func TestV2OnlyDatastore_GetBatchHourlyOccurrences_InvertedRange(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Turdus merula_Common Blackbird"})
+	defer cleanup()
+	saveTestNote(t, ds, "2024-01-15", "08:20:00", "Turdus merula", 0.8)
+
+	_, err := ds.GetBatchHourlyOccurrences(t.Context(), "2024-01-17", "2024-01-15",
+		[]string{"Turdus merula"}, 0.0)
+	require.Error(t, err, "an inverted range must not silently return zeroes")
+	assert.Contains(t, err.Error(), "precedes")
 }
 
 // TestV2OnlyDatastore_GetBatchHourlyOccurrences_CancelledContext verifies that a cancelled
@@ -1753,7 +1797,7 @@ func TestV2OnlyDatastore_GetBatchHourlyOccurrences_CancelledContext(t *testing.T
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err := ds.GetBatchHourlyOccurrences(ctx, "2024-01-15", []string{"Turdus merula"}, 0.0)
+	_, err := ds.GetBatchHourlyOccurrences(ctx, "2024-01-15", "2024-01-15", []string{"Turdus merula"}, 0.0)
 	require.ErrorIs(t, err, context.Canceled, "cancelled context must surface as context.Canceled, not silently zeroed counts")
 }
 

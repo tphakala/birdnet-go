@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Registreringsmønstre efter tid på dagen",
-          "description": "Viser gennemsnitligt antal registreringer i løbet af dagen for valgte arter",
+          "description": "Gennemsnitligt antal registreringer pr. dag i hver time, på tværs af det valgte datointerval og de valgte arter",
           "noData": "Ingen tidsdata tilgængelig",
           "noDataHint": "Vælg arter og et datointerval for at se mønstre",
           "axisTime": "Tid på dagen",
-          "axisCount": "Antal registreringer"
+          "axisCount": "Gns. registreringer / dag"
         },
         "dailyTrend": {
           "title": "Artsregistreringstendenser",

@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Padrões de detecção por hora do dia",
-          "description": "Mostra contagens médias de detecção ao longo do dia para as espécies selecionadas",
+          "description": "Deteções médias por dia em cada hora, ao longo do intervalo de datas e das espécies selecionadas",
           "noData": "Nenhum dado de hora do dia disponível",
           "noDataHint": "Selecione espécies e um intervalo de datas para visualizar padrões",
           "axisTime": "Hora do dia",
-          "axisCount": "Contagem de detecções"
+          "axisCount": "Deteções médias / dia"
         },
         "dailyTrend": {
           "title": "Tendências de detecção de espécies",

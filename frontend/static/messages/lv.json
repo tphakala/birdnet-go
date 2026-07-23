@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Atpazīšanas modeļi pēc diennakts laika",
-          "description": "Parāda vidējos atpazīšanas skaitļus dienas laikā atlasītajām sugām",
+          "description": "Vidējais atpazīšanu skaits dienā katrā stundā, atlasītajā datumu diapazonā un sugām",
           "noData": "Diennakts laika dati nav pieejami",
           "noDataHint": "Atlasiet sugas un datumu diapazonu, lai skatītu modeļus",
           "axisTime": "Diennakts laiks",
-          "axisCount": "Atpazīšanu skaits"
+          "axisCount": "Vid. atpazīšanas / dienā"
         },
         "dailyTrend": {
           "title": "Sugu atpazīšanas tendences",

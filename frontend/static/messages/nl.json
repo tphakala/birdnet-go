@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Detectiepatronen per dagdeel",
-          "description": "Toont gemiddelde detectieaantallen gedurende de dag voor geselecteerde soorten",
+          "description": "Gemiddeld aantal detecties per dag op elk uur, over het geselecteerde datumbereik en de geselecteerde soorten",
           "noData": "Geen dagdeelgegevens beschikbaar",
           "noDataHint": "Selecteer soorten en een datumbereik om patronen weer te geven",
           "axisTime": "Tijd van de dag",
-          "axisCount": "Aantal detecties"
+          "axisCount": "Gem. detecties / dag"
         },
         "dailyTrend": {
           "title": "Soortdetectietrends",

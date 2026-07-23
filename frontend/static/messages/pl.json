@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Wzorce Wykryć według Pory Dnia",
-          "description": "Pokazuje średnią liczbę wykryć w ciągu dnia dla wybranych gatunków",
+          "description": "Średnia liczba wykryć na dzień w każdej godzinie, w wybranym zakresie dat i dla wybranych gatunków",
           "noData": "Brak danych o porze dnia",
           "noDataHint": "Wybierz gatunki i zakres dat, aby wyświetlić wzorce",
           "axisTime": "Pora dnia",
-          "axisCount": "Liczba wykryć"
+          "axisCount": "Śr. wykrycia / dzień"
         },
         "dailyTrend": {
           "title": "Trendy Wykryć Gatunków",

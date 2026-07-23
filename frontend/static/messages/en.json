@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Detection Patterns by Time of Day",
-          "description": "Shows average detection counts throughout the day for selected species",
+          "description": "Average detections per day at each hour, across your selected date range and species",
           "noData": "No time-of-day data available",
           "noDataHint": "Select species and a date range to view patterns",
           "axisTime": "Time of Day",
-          "axisCount": "Detection Count"
+          "axisCount": "Avg Detections / Day"
         },
         "dailyTrend": {
           "title": "Species Detection Trends",

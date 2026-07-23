@@ -440,7 +440,8 @@ func (c *Handler) aggregateDailySpeciesData(ctx context.Context, notes []datasto
 	// Batch fetch hourly counts for all species in single query
 	speciesList := slices.Collect(maps.Keys(uniqueSpecies))
 
-	hourlyCounts, err := c.DS.GetBatchHourlyOccurrences(ctx, selectedDate, speciesList, minConfidence)
+	// This summary covers a single day, so the range collapses to that one date.
+	hourlyCounts, err := c.DS.GetBatchHourlyOccurrences(ctx, selectedDate, selectedDate, speciesList, minConfidence)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get batch hourly occurrences: %w", err)
 	}
@@ -2461,14 +2462,15 @@ func (c *Handler) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 
 	// Validate parameters
-	speciesParams, date, err := c.validateBatchHourlyParams(ctx, operation)
+	speciesParams, startDate, endDate, err := c.validateBatchHourlyParams(ctx, operation)
 	if err != nil {
 		return err
 	}
 
 	minConfidence := c.parseOptionalFloat(ctx, "min_confidence", 0.0, apicore.PercentageMultiplier)
 	c.LogInfoIfEnabled("Retrieving batch hourly species data",
-		logger.String("date", date),
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
 		logger.Int("species_count", len(speciesParams)),
 		logger.Float64("min_confidence", minConfidence),
 		logger.String("ip", ip),
@@ -2476,55 +2478,80 @@ func (c *Handler) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	)
 
 	// Process all species
-	results, processingErrors := c.processHourlyBatchSpecies(ctx, speciesParams, date, ip, path)
+	results, processingErrors := c.processHourlyBatchSpecies(ctx, speciesParams, startDate, endDate, ip, path, minConfidence)
 
 	// Handle results
 	return c.handleBatchHourlyResults(ctx, results, processingErrors, len(speciesParams), ip, path)
 }
 
-// validateBatchHourlyParams validates and returns batch hourly parameters
-func (c *Handler) validateBatchHourlyParams(ctx echo.Context, operation string) (speciesParams []string, date string, err error) {
+// validateBatchHourlyParams validates and returns batch hourly parameters.
+//
+// The hour-of-day pattern is requested for a date RANGE (start_date/end_date, both inclusive) so
+// the chart reflects the user's whole selected period. The original single `date` param is still
+// accepted for backwards compatibility and collapses to a one-day range.
+func (c *Handler) validateBatchHourlyParams(ctx echo.Context, operation string) (speciesParams []string, startDate, endDate string, err error) {
 	speciesParams = ctx.QueryParams()["species"]
-	date = ctx.QueryParam("date")
+	startDate = ctx.QueryParam("start_date")
+	endDate = ctx.QueryParam("end_date")
+	singleDate := ctx.QueryParam("date")
 
 	if err := c.requireQueryArrayParam(ctx, "species", operation); err != nil {
-		return nil, "", err
-	}
-	if err := c.requireQueryParam(ctx, "date", operation); err != nil {
-		return nil, "", err
-	}
-	if err := c.validateDateFormatWithResponse(ctx, date, "date", operation); err != nil {
-		return nil, "", err
-	}
-	if err := c.validateBatchSize(ctx, len(speciesParams), maxSpeciesBatch, operation); err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 
-	return speciesParams, date, nil
+	// Legacy single-date form: `date` alone covers exactly that day.
+	if startDate == "" && endDate == "" {
+		if err := c.requireQueryParam(ctx, "date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.validateDateFormatWithResponse(ctx, singleDate, "date", operation); err != nil {
+			return nil, "", "", err
+		}
+		startDate, endDate = singleDate, singleDate
+	} else {
+		// Range form: both bounds are required so the window is never open-ended.
+		if err := c.requireQueryParam(ctx, "start_date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.requireQueryParam(ctx, "end_date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.validateDateFormatWithResponse(ctx, startDate, "start_date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.validateDateFormatWithResponse(ctx, endDate, "end_date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.validateDateOrderWithResponse(ctx, startDate, endDate, operation); err != nil {
+			return nil, "", "", err
+		}
+	}
+
+	if err := c.validateBatchSize(ctx, len(speciesParams), maxSpeciesBatch, operation); err != nil {
+		return nil, "", "", err
+	}
+
+	return speciesParams, startDate, endDate, nil
 }
 
-// processHourlyBatchSpecies processes each species for batch hourly data
-func (c *Handler) processHourlyBatchSpecies(ctx echo.Context, speciesParams []string, date, ip, path string) (results map[string][]HourlyDistribution, processingErrors []string) {
+// processHourlyBatchSpecies returns the hour-of-day counts for every requested species, summed
+// over the inclusive [startDate, endDate] range.
+//
+// The whole batch is one datastore query: the datastore resolves each scientific name to all of
+// its model label IDs and aggregates them, so a species carrying several labels is summed rather
+// than split (and a large selection no longer costs one query per species).
+func (c *Handler) processHourlyBatchSpecies(ctx echo.Context, speciesParams []string, startDate, endDate, ip, path string, minConfidence float64) (results map[string][]HourlyDistribution, processingErrors []string) {
 	results = make(map[string][]HourlyDistribution)
 	processingErrors = make([]string, 0)
+
+	// Deduplicate the request while remembering the caller's exact key: results stay keyed by the
+	// user-facing species string, but the query needs scientific names. Two different inputs can
+	// resolve to the same scientific name, so one query name may feed several result keys.
+	queryNames := make([]string, 0, len(speciesParams))
+	inputsByQueryName := make(map[string][]string, len(speciesParams))
 	seen := make(map[string]bool)
 
-	// Stop the batch when the client disconnects or the server shuts down. Each
-	// per-species query is bounded individually by analyticsQueryTimeout (below) so
-	// one slow query cannot hang the batch, without capping the total time a
-	// legitimately large batch may take on slower hardware.
-	reqCtx := ctx.Request().Context()
-
 	for _, speciesItem := range speciesParams {
-		if err := reqCtx.Err(); err != nil {
-			c.LogDebugIfEnabled("Batch hourly species data: client canceled request",
-				logger.String("species", speciesItem),
-				logger.Error(err),
-				logger.String("ip", ip),
-				logger.String("path", path),
-			)
-			break
-		}
 		speciesItem = strings.TrimSpace(speciesItem)
 		if speciesItem == "" || seen[speciesItem] {
 			continue
@@ -2538,25 +2565,53 @@ func (c *Handler) processHourlyBatchSpecies(ctx echo.Context, speciesParams []st
 			queryItem = resolved
 		}
 
-		queryCtx, cancel := withAnalyticsTimeout(ctx)
-		hourlyData, err := c.DS.GetHourlyAnalyticsData(queryCtx, date, queryItem)
-		cancel()
-		if err != nil {
-			if c.logBatchQueryError("Error getting hourly data for species in batch request", err,
-				logger.String("species", speciesItem),
-				logger.String("date", date),
-				logger.String("ip", ip),
-				logger.String("path", path),
-			) {
-				break // client disconnected; stop the batch
-			}
-			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err))
+		if _, dup := inputsByQueryName[queryItem]; !dup {
+			queryNames = append(queryNames, queryItem)
+		}
+		inputsByQueryName[queryItem] = append(inputsByQueryName[queryItem], speciesItem)
+
+		// Every requested species gets an entry, so a species with no detections in the range
+		// renders as a flat zero line rather than disappearing from the response.
+		results[speciesItem] = initEmptyHourlyDistribution()
+	}
+
+	if len(queryNames) == 0 {
+		return results, processingErrors
+	}
+
+	queryCtx, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+	hourlyByName, err := c.DS.GetBatchHourlyOccurrences(queryCtx, startDate, endDate, queryNames, minConfidence)
+	if err != nil {
+		c.logBatchQueryError("Error getting batch hourly data", err,
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.Int("species_count", len(queryNames)),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
+		processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data: %v", err))
+		// Discard the pre-seeded zero entries. handleBatchResponse decides success from the
+		// result count, so returning them would report a failed query as HTTP 200 with "no
+		// detections at any hour" - a database error or query timeout would be indistinguishable
+		// from a genuinely quiet period. With no results it correctly answers 500.
+		return make(map[string][]HourlyDistribution), processingErrors
+	}
+
+	// Drive from the requested species rather than the response: a species with no rows keeps the
+	// zero-filled entry created above instead of vanishing from the payload.
+	for queryName, inputKeys := range inputsByQueryName {
+		hourly, ok := hourlyByName[queryName]
+		if !ok {
 			continue
 		}
-
-		hourlyDistribution := initEmptyHourlyDistribution()
-		fillHourlyDistributionFromAnalytics(hourlyDistribution, hourlyData)
-		results[speciesItem] = hourlyDistribution
+		for _, inputKey := range inputKeys {
+			distribution := initEmptyHourlyDistribution()
+			for hour := range apicore.HoursPerDay {
+				distribution[hour].Count = hourly[hour]
+			}
+			results[inputKey] = distribution
+		}
 	}
 
 	return results, processingErrors

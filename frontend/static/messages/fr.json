@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Modèles de détection par moment de la journée",
-          "description": "Affiche le nombre moyen de détections tout au long de la journée pour les espèces sélectionnées",
+          "description": "Nombre moyen de détections par jour à chaque heure, sur la plage de dates et les espèces sélectionnées",
           "noData": "Aucune donnée par moment de la journée disponible",
           "noDataHint": "Sélectionnez les espèces et une plage de dates pour afficher les modèles",
           "axisTime": "Heure de la journée",
-          "axisCount": "Nombre de détections"
+          "axisCount": "Détections moy. / jour"
         },
         "dailyTrend": {
           "title": "Tendances de détection des espèces",

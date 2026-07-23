@@ -2001,11 +2001,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Detektálási minták napszak szerint",
-          "description": "A kiválasztott fajok detektálási átlagát mutatja a nap folyamán",
+          "description": "Átlagos napi detektálásszám óránként, a kiválasztott dátumtartományban és fajokra",
           "noData": "Nincs elérhető napszak adat",
           "noDataHint": "Válasszon fajokat és dátumtartományt a minták megtekintéséhez",
           "axisTime": "Napszak",
-          "axisCount": "Detektálás szám"
+          "axisCount": "Átl. detektálás / nap"
         },
         "dailyTrend": {
           "title": "Faj detektálási trendek",
