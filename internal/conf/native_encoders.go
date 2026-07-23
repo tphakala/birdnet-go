@@ -46,11 +46,9 @@ const (
 	// segment and write the playlist for a live stream.
 	EnvNativeHLSEncoder = "BIRDNET_HLS_ENCODER"
 
-	// NativeEncoderValue is the only value that enables a native encoder.
-	// Anything else, including an unset variable, keeps the FFmpeg path. It is
-	// exported so a caller logging which encoder it selected can name the value
-	// rather than restating the literal.
-	NativeEncoderValue = "native"
+	// nativeEncoderValue is the only value that enables a native encoder.
+	// Anything else, including an unset variable, keeps the FFmpeg path.
+	nativeEncoderValue = "native"
 )
 
 // NativeAACEncoderEnabled reports whether AAC clip export should use the native
@@ -75,5 +73,5 @@ func NativeHLSEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeHLSE
 // live keeps the gate consistent with the rest of BirdNET-Go's settings, which
 // take effect without a restart.
 func nativeEncoderSelected(env string) bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv(env)), NativeEncoderValue)
+	return strings.EqualFold(strings.TrimSpace(os.Getenv(env)), nativeEncoderValue)
 }

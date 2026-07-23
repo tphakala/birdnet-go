@@ -1476,7 +1476,10 @@ func (c *Handler) buildFFmpegArgs(inputSource, outputDir, playlistPath string) [
 	args := []string{
 		"-f", "s16le",
 		"-ar", fmt.Sprintf("%d", sampleRate),
-		"-ac", "1",
+		// Must match what the consumer declared to the router, for the same
+		// reason as the assertion in setupAudioCallback: FFmpeg is told what the
+		// raw PCM is, so a mismatch is reinterpreted rather than rejected.
+		"-ac", strconv.Itoa(hlsConsumerChannels),
 		"-i", inputSource,
 		"-y",
 		"-c:a", "aac",
@@ -1719,11 +1722,17 @@ func (c *Handler) ffmpegConsumerSampleRate() int {
 func (c *Handler) setupAudioCallback(sourceID string, sampleRate int) (audioChan chan audioChunk, cleanup func(), err error) {
 	audioChan = make(chan audioChunk, defaultReadBufferSize)
 
-	// hlsConsumerChannels is what this consumer declares to the router. The
-	// native path derives its muxer sample-frame size from nativeHLSChannels, so
-	// the two must agree or every frame would be rejected on alignment; the
-	// compile-time assertion below is what keeps them from drifting apart.
-	const _ = uint(hlsConsumerChannels - nativeHLSChannels) // both must be equal
+	// hlsConsumerChannels is what this consumer declares to the router, and the
+	// native path derives its muxer sample-frame size from nativeHLSChannels.
+	// They must be equal, and the failure when they are not is silent rather
+	// than loud: with more consumer channels than muxer channels the interleaved
+	// frames still divide evenly into the smaller sample frame, so every write is
+	// ACCEPTED and the muxer reads L,R,L,R as consecutive mono samples. That
+	// plays at double speed an octave up with no error anywhere.
+	//
+	// Both subtractions are needed. One alone only rejects the direction that
+	// goes negative, which is the direction that would have failed loudly anyway.
+	const _ = uint(hlsConsumerChannels-nativeHLSChannels) + uint(nativeHLSChannels-hlsConsumerChannels)
 
 	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
 

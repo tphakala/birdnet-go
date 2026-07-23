@@ -12,7 +12,9 @@ package audio
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -21,7 +23,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/hlsmux"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -40,10 +41,10 @@ const (
 	// createNativeHLSStream warns when the configured rate disagrees.
 	nativeHLSSampleRate = 48000
 
-	// nativeHLSChannels is the output channel count. It must match what
-	// setupAudioCallback declares to the router (see the guard in
-	// createNativeHLSStream): the muxer derives its sample-frame size from it,
-	// and a disagreement would reject every frame.
+	// nativeHLSChannels is the output channel count. It must equal
+	// hlsConsumerChannels, which is what setupAudioCallback declares to the
+	// router; see the compile-time assertion there, and the note on why a
+	// mismatch is silently wrong rather than loudly rejected.
 	nativeHLSChannels = 1
 
 	// nativeHLSBytesPerSample is the width of one sample of one channel. The
@@ -59,7 +60,13 @@ const (
 	// goroutine to stop before closing the muxer anyway. The wait exists to make
 	// a write-after-close impossible; the bound exists so a wedged goroutine
 	// cannot block shutdown.
-	nativeFeedDrainTimeout = 2 * time.Second
+	//
+	// It must exceed the router's own drainerStopTimeout (5s). The feed
+	// goroutine's first deferred action is res.cleanup(), which calls
+	// RemoveRoute and blocks there for up to that long, so a shorter bound here
+	// would expire during an ordinary stop and report a wedged feed that is
+	// merely inside a teardown with a larger budget.
+	nativeFeedDrainTimeout = 8 * time.Second
 )
 
 // isNative reports whether this stream is served by the in-process muxer rather
@@ -96,6 +103,28 @@ func closeNativeMux(sourceID string, stream *HLSStreamInfo) {
 		}
 	}
 
+	closeNativeMuxGuarded(sourceID, stream)
+}
+
+// closeNativeMuxGuarded closes the muxer, containing a panic from the encoder.
+//
+// Close flushes the encoder tail, which runs the same codec code that may have
+// just panicked. Without this the recover() on the feed goroutine would only
+// move the crash: it cancels the stream, teardown reaches Close on a DIFFERENT
+// goroutine (the context watcher, or the inactivity sweep), the flush re-enters
+// the corrupt state, and that second panic is unrecovered. The process dies
+// anyway, one hop later, which is exactly what the feed's recover exists to
+// prevent.
+func closeNativeMuxGuarded(sourceID string, stream *HLSStreamInfo) {
+	defer func() {
+		if r := recover(); r != nil {
+			apicore.GetLogger().Error("Native HLS muxer panicked while closing; abandoning it",
+				logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+				logger.Any("panic", r),
+				logger.String("stack", string(debug.Stack())))
+		}
+	}()
+
 	if err := stream.mux.Close(); err != nil {
 		apicore.GetLogger().Warn("Native HLS muxer close reported an error",
 			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
@@ -124,8 +153,7 @@ func (c *Handler) effectiveBitrateKbps() int {
 func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
 	apicore.GetLogger().Info("Creating new HLS stream (native encoder)",
-		logger.String("source_id", sanitizedID),
-		logger.String("encoder", conf.NativeEncoderValue))
+		logger.String("source_id", sanitizedID))
 
 	// The configured sample rate cannot be honoured here (see nativeHLSSampleRate).
 	// Say so rather than letting a setting the UI accepts, and which triggers a
@@ -149,11 +177,11 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 		WindowSize:      hlsListSize,
 	})
 	if err != nil {
-		return nil, errors.New(err).
-			Component("api").
-			Category(errors.CategoryAudio).
-			Context("operation", "create_native_hls_muxer").
-			Build()
+		// Plain wrap, not another errors.Build(): hlsmux already terminated this
+		// error with Build(), which reported it to telemetry. Rebuilding would
+		// fire the reporter a second time for one failure, under a different
+		// component and category.
+		return nil, fmt.Errorf("create native HLS muxer: %w", err)
 	}
 
 	// Derive from the controller lifecycle, not the HTTP request: the stream
@@ -459,16 +487,28 @@ func (c *Handler) serveNativeContent(ctx echo.Context, stream *HLSStreamInfo, re
 		return c.HandleError(ctx, nil, "Segment no longer available", http.StatusNotFound)
 	}
 
-	return c.serveNativeBytes(ctx, requestPath, segment.Data, segment.PDT)
+	// Validate on the stream epoch, not segment.PDT. PDT is the SOURCE's capture
+	// clock, and sequence numbers restart at zero on every stream restart, so a
+	// client holding segment0 from a previous stream could send If-Modified-Since
+	// with a newer PDT and get a 304 for different audio. The epoch is this
+	// process's own monotonic-enough per-stream value and cannot collide.
+	return c.serveNativeBytes(ctx, requestPath, segment.Data, stream.streamEpoch)
 }
 
-// serveNativeBytes writes one in-memory artifact with the same HTTP semantics the
-// disk path gets from securefs.
+// serveNativeBytes writes one in-memory artifact with the same HTTP semantics
+// the disk path gets from securefs.
 //
-// http.ServeContent rather than a plain blob write, because it answers range
-// requests and conditional requests. AVFoundation asks for fMP4 segments by byte
-// range, and the frontend falls back to native HLS on iOS, so a 200-only handler
-// would be the one that breaks Safari.
+// http.ServeContent rather than a plain blob write, so range and conditional
+// requests are answered. That is parity with how the FFmpeg path serves its
+// media segments (securefs.ServeFile wraps the same function), not a fix for a
+// known break: the FFmpeg path serves its INIT segment with a plain 200 and
+// plays on iOS today, so a 200-only handler is evidently tolerated. Range
+// support is worth having because AVFoundation does issue byte-range requests
+// for fMP4 and the frontend falls back to native HLS there, but treat it as
+// matching the stricter of the two existing behaviours rather than as a fix.
+//
+// modTime is the caller's choice of validator; see the call sites for why it is
+// the stream epoch rather than per-segment capture time.
 func (c *Handler) serveNativeBytes(ctx echo.Context, name string, data []byte, modTime time.Time) error {
 	c.setHLSHeaders(ctx)
 	c.setHLSContentType(ctx, name)

@@ -68,11 +68,13 @@ type aacEncoder struct {
 func newAACEncoder(cfg EncoderConfig) (FrameEncoder, error) {
 	// Cutoff is deliberately left at zero, selecting go-aac's tuned
 	// rate-dependent default. Whether that default is right for bird song is a
-	// real tuning question but a separate one, and it only bites at the lower
-	// bitrates: the default is roughly 18.7 kHz at 128 kbps, above essentially
-	// all bird vocalisation, but drops to 14 kHz at 32 kbps. Changing it
-	// changes what listeners hear, so it wants measurement rather than a value
-	// picked while wiring the codec up.
+	// real tuning question but a separate one, and how much it bites depends on
+	// the configured bitrate: the default is roughly 18.7 kHz at 128 kbps, above
+	// essentially all bird vocalisation, but it falls to 14 kHz at 32 kbps and to
+	// about 8 kHz at the 16 kbps floor the live-stream setting allows, which is
+	// inside the range of most passerine song. Changing it changes what listeners
+	// hear, so it wants measurement rather than a value picked while wiring the
+	// codec up.
 	enc, err := aacpcm.NewFrameEncoder(aacpcm.Config{
 		SampleRate: cfg.SampleRate,
 		BitDepth:   bitDepth16,

@@ -14,8 +14,11 @@ import (
 // gets bumped routinely. A 10x encode regression from such a bump would
 // otherwise ship silently.
 //
-// The steady-state allocation count is the assertion worth watching: the design
-// claims zero, and -benchmem is what keeps that honest.
+// B/op is the signal worth watching, not allocs/op. The design deliberately
+// allocates a fresh destination per segment (cutSegment: published bytes are
+// handed to HTTP handlers that may still be reading them), so allocs/op reads 0
+// only because one allocation per ~94 writes rounds down. A regression in the
+// per-write path shows up in B/op first.
 
 // benchFrame sizes one router delivery. Both shapes occur in production: the
 // sound-card path delivers ~10 ms periods, the RTSP path a 32 KiB pipe read.

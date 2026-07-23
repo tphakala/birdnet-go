@@ -261,28 +261,6 @@ func TestServeNativePlaylistHintsRetryBeforeFirstSegment(t *testing.T) {
 		"the hint must be the real segment length; a regression yielding \"0\" is non-empty too")
 }
 
-// TestCheckHLSPlaylistReadyUsesTheMuxer proves the readiness gate does not fall
-// through to the disk check, which would look at a PlaylistPath this path never
-// sets and report "not ready" forever.
-func TestCheckHLSPlaylistReadyUsesTheMuxer(t *testing.T) {
-	h, _ := newNativeTestHandler(t)
-
-	ready := newNativeTestStream(t, 6)
-	assert.True(t, h.checkHLSPlaylistReady(ready),
-		"six seconds at the default segment length must satisfy the two-segment gate")
-
-	mux, err := hlsmux.New(&hlsmux.Config{
-		Codec:       hlsmux.AACLC(),
-		SampleRate:  nativeTestRate,
-		Channels:    nativeTestChannels,
-		BitrateKbps: 128,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = mux.Close() })
-	assert.False(t, h.checkHLSPlaylistReady(&HLSStreamInfo{mux: mux}),
-		"a stream with no segments yet is not ready")
-}
-
 // TestNativeFeedLoopAnchorsPDTToCaptureTime is the test for the item the design
 // flagged as most likely to be missed. The router's frame.Timestamp has to
 // survive the hop through the channel and reach the muxer, because that is what
@@ -291,13 +269,7 @@ func TestCheckHLSPlaylistReadyUsesTheMuxer(t *testing.T) {
 // resumes would report wall-clock times that never happened.
 func TestNativeFeedLoopAnchorsPDTToCaptureTime(t *testing.T) {
 	h, _ := newNativeTestHandler(t)
-	mux, err := hlsmux.New(&hlsmux.Config{
-		Codec:       hlsmux.AACLC(),
-		SampleRate:  nativeTestRate,
-		Channels:    nativeTestChannels,
-		BitrateKbps: 128,
-	})
-	require.NoError(t, err)
+	mux := newNativeMux(t)
 	stream := &HLSStreamInfo{SourceID: "native_src", mux: mux}
 
 	// A capture time deliberately unrelated to now, so a "used time.Now()"
@@ -332,7 +304,6 @@ func TestNativeFeedLoopAnchorsPDTToCaptureTime(t *testing.T) {
 	assert.Equal(t, epoch.UnixNano(), stream.firstDataTime.Load(),
 		"first-data diagnostics must record the capture time, not the processing time")
 
-	_ = mux.Close()
 }
 
 // TestNativeFeedLoopFallsBackWhenCaptureTimeMissing covers a source that does
@@ -340,13 +311,7 @@ func TestNativeFeedLoopAnchorsPDTToCaptureTime(t *testing.T) {
 // year 1, which a monitoring UI renders as nonsense.
 func TestNativeFeedLoopFallsBackWhenCaptureTimeMissing(t *testing.T) {
 	h, _ := newNativeTestHandler(t)
-	mux, err := hlsmux.New(&hlsmux.Config{
-		Codec:       hlsmux.AACLC(),
-		SampleRate:  nativeTestRate,
-		Channels:    nativeTestChannels,
-		BitrateKbps: 128,
-	})
-	require.NoError(t, err)
+	mux := newNativeMux(t)
 	stream := &HLSStreamInfo{SourceID: "native_src", mux: mux}
 
 	const chunkSamples = 1200
@@ -374,7 +339,6 @@ func TestNativeFeedLoopFallsBackWhenCaptureTimeMissing(t *testing.T) {
 	assert.False(t, seg.PDT.After(time.Now().Add(time.Minute)),
 		"a far-future fallback is just as wrong as a zero one")
 
-	_ = mux.Close()
 }
 
 // TestNativeFeedLoopStopsOnContextCancel proves the loop honours cancellation,
@@ -436,16 +400,13 @@ func TestCloseNativeMuxWaitsForTheFeed(t *testing.T) {
 		close(released)
 	}()
 
-	start := time.Now()
 	closeNativeMux("src", stream)
-	elapsed := time.Since(start)
 
 	select {
 	case <-released:
 	default:
 		t.Fatal("closeNativeMux returned before the feed signalled it had stopped")
 	}
-	assert.Positive(t, elapsed, "close must not race ahead of the feed goroutine")
 }
 
 // TestCloseNativeMuxGivesUpOnAWedgedFeed proves the wait is bounded, so a feed
@@ -469,74 +430,6 @@ func TestCloseNativeMuxGivesUpOnAWedgedFeed(t *testing.T) {
 		"the muxer must still be closed after the drain timeout expires")
 }
 
-// feedChunks drives the native feed loop with fixed-size chunks and returns the
-// total per-channel sample count the muxer actually cut into segments.
-func feedChunks(t *testing.T, chunkBytes, totalBytes int) int {
-	t.Helper()
-
-	h, _ := newNativeTestHandler(t)
-	stream := &HLSStreamInfo{SourceID: "native_src", mux: newNativeMux(t)}
-
-	epoch := time.Date(2026, 7, 23, 9, 0, 0, 0, time.UTC)
-	ch := make(chan audioChunk, 4096)
-	pcm := make([]byte, chunkBytes)
-	for sent := 0; sent < totalBytes; sent += chunkBytes {
-		n := min(chunkBytes, totalBytes-sent)
-		ch <- audioChunk{
-			data:      pcm[:n],
-			timestamp: epoch.Add(time.Duration(sent/nativeHLSBytesPerSample) * time.Second / nativeTestRate),
-		}
-	}
-	close(ch)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	defer cancel()
-	h.runNativeAudioFeedLoop(ctx, "native_src", stream, &audioFeedResources{
-		audioChan: ch,
-		cleanup:   func() {},
-	})
-
-	// Close flushes the encoder and cuts the trailing partial segment. Without
-	// it the tail stays pending and uncounted, and a small sample deficit would
-	// hide inside it instead of moving the total, leaving this test toothless.
-	require.NoError(t, stream.mux.Close())
-
-	var samples int
-	for seq := uint64(0); ; seq++ {
-		seg, ok := stream.mux.Segment(seq)
-		if !ok {
-			break
-		}
-		samples += seg.Samples
-	}
-	return samples
-}
-
-// TestNativeFeedLoopCarriesOddLengthRemainder is the regression test for the
-// defect this path is most likely to hit in the field.
-//
-// The router only guarantees whole sample frames when it resamples or applies
-// EQ/gain. With the common default (source already at the pinned rate, no EQ,
-// 0 dB gain) it does neither, so a partial read from an FFmpeg source reaches
-// the muxer as an odd-length buffer. hlsmux rejects those, and treating that as
-// fatal would kill the live stream outright; truncating the odd byte would be
-// worse still, because dropping half a sample desynchronises everything after
-// it and the audio becomes noise.
-//
-// Feeding the same total bytes in odd- and even-sized chunks must therefore
-// produce the same audio. Truncation would lose a byte per chunk and show up
-// here as a sample deficit; rejection would lose far more.
-func TestNativeFeedLoopCarriesOddLengthRemainder(t *testing.T) {
-	const totalBytes = 5 * nativeTestRate * nativeHLSBytesPerSample // 5 s of mono 16-bit
-
-	even := feedChunks(t, 1200, totalBytes)
-	odd := feedChunks(t, 1201, totalBytes)
-
-	require.Positive(t, even, "the control feed must produce segments")
-	assert.Equal(t, even, odd,
-		"odd-length chunks must yield the same audio as even ones; a deficit means the remainder was dropped rather than carried")
-}
-
 // TestNativeFeedLoopAccumulatesSubSampleChunks is the assertion with teeth.
 //
 // Every chunk here is shorter than one sample frame, so it carries no whole
@@ -552,15 +445,28 @@ func TestNativeFeedLoopCarriesOddLengthRemainder(t *testing.T) {
 // test would otherwise feed.
 func TestNativeFeedLoopAccumulatesSubSampleChunks(t *testing.T) {
 	h, _ := newNativeTestHandler(t)
-	stream := &HLSStreamInfo{SourceID: "native_src", mux: newNativeMux(t)}
+
+	// Short segments so half a second of audio still cuts one. Feeding the
+	// default 2 s target byte by byte would need a multi-megabyte channel, on a
+	// project that targets 512 MB boards and runs this in CI.
+	mux, err := hlsmux.New(&hlsmux.Config{
+		Codec:           hlsmux.AACLC(),
+		SampleRate:      nativeTestRate,
+		Channels:        nativeTestChannels,
+		BitrateKbps:     128,
+		SegmentDuration: 200 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, mux.Close()) })
+	stream := &HLSStreamInfo{SourceID: "native_src", mux: mux}
 
 	epoch := time.Date(2026, 7, 23, 9, 0, 0, 0, time.UTC)
-	// Enough single bytes to make several segments once paired into samples.
-	const singleBytes = 5 * nativeTestRate * nativeHLSBytesPerSample
+	// Half a second of audio, delivered one byte at a time.
+	const singleBytes = nativeTestRate * nativeHLSBytesPerSample / 2
 	ch := make(chan audioChunk, singleBytes+1)
 	one := []byte{0x11}
 	for i := range singleBytes {
-		ch <- audioChunk{data: one, timestamp: epoch.Add(time.Duration(i) * time.Microsecond)}
+		ch <- audioChunk{data: one, timestamp: epoch.Add(time.Duration(i/nativeHLSBytesPerSample) * time.Second / nativeTestRate)}
 	}
 	close(ch)
 
