@@ -25,6 +25,13 @@ const (
 	// Buffer size for reading FFmpeg stdout.
 	ffmpegBufferSize = 32768
 
+	// bitsPerByte converts a configured bit depth to a PCM sample size in bytes.
+	bitsPerByte = 8
+
+	// defaultPCMSampleBytes is the sample size for the s16le output format that
+	// buildOutputArgs falls back to for any bit depth other than 16, 24 or 32.
+	defaultPCMSampleBytes = 2
+
 	// Health check intervals and timeouts.
 	healthCheckInterval  = 5 * time.Second
 	silenceTimeout       = 90 * time.Second
@@ -531,6 +538,12 @@ type Stream struct {
 	audioOnlyFallback atomic.Bool
 	receivedAudio     atomic.Bool
 	audioOnlyFailures atomic.Int32
+
+	// partialFrameCarries counts reads that ended part-way through a PCM frame,
+	// forcing readStdout to hold the remainder for the next read. Diagnostic
+	// only: a partial read is normal pipe behaviour and self correcting, but the
+	// rate shows whether realignment is engaging and how often.
+	partialFrameCarries atomic.Int64
 
 	// Dropped data tracking.
 	lastDropLogTime time.Time
@@ -1101,6 +1114,37 @@ func (s *Stream) processAudio() error {
 	}
 }
 
+// pcmFrameBytes returns the size in bytes of one interleaved PCM frame (one
+// sample for each channel) in the raw stream FFmpeg writes to stdout.
+//
+// The sample size follows pcmSampleBytes, the byte-size twin of the format
+// switch GetFFmpegFormat owns. The channel count follows
+// effectiveOutputChannels, which accounts for the left and right channel modes
+// where appendChannelArgs tells FFmpeg to fold a multi-channel source down to
+// mono. Aligning on the whole interleaved frame keeps each sample intact across
+// a read boundary, and for true multi-channel output keeps the channel order
+// stable as well, so a read landing between the left and right sample of a
+// stereo pair does not swap the two channels for the rest of the stream.
+//
+// The result is always at least 1 and never larger than ffmpegBufferSize, so
+// callers can use it as a modulus and size their carry from it.
+func pcmFrameBytes(cfg *StreamConfig) int {
+	sampleBytes := pcmSampleBytes(cfg.BitDepth)
+	channels := max(effectiveOutputChannels(cfg), 1)
+	// Bound the multiplicand, not the product, so the multiplication cannot
+	// overflow on a 32-bit build. A wrapped product would turn the modulus
+	// callers apply into a divide by zero, or a negative make size, and
+	// readStdout runs in a goroutine with no recover. The bound itself matters
+	// too: a frame larger than the read buffer could never be completed, the
+	// carry would fill the buffer, and every subsequent read would be handed a
+	// zero-length slice, spinning hot without ever emitting a byte. No real
+	// configuration reaches either case; byte alignment fails open.
+	if channels > ffmpegBufferSize/sampleBytes {
+		return 1
+	}
+	return sampleBytes * channels
+}
+
 // readStdout is the body of the dedicated reader goroutine launched by
 // processAudio. When a buffer manager is wired it borrows a full-sized slice
 // from the size-specific BytePool and attaches a FrameRef whose release
@@ -1109,10 +1153,23 @@ func (s *Stream) processAudio() error {
 // cleanupProcess), on a read error, or when readerDone is closed (main loop
 // exited, preventing a goroutine leak).
 //
-// The release closure captures the FULL-capacity slice, not the n-byte
-// sub-slice sent downstream, so the pool always sees a correctly sized buffer
-// on Put.
+// The release closure captures the FULL-capacity slice, not the out[:total]
+// sub-slice of whole frames sent downstream, so the pool always sees a
+// correctly sized buffer on Put.
 func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, readerDone <-chan struct{}) {
+	// A pipe read boundary is not a PCM frame boundary: stdout.Read returns
+	// whatever bytes happen to be available, so a read routinely ends part-way
+	// through a sample. Every downstream consumer reinterprets these bytes as
+	// samples, and a partial one cannot be handled locally by any of them:
+	// dropping the odd byte shifts every following byte by one, so each
+	// subsequent sample decodes with its halves swapped and the audio becomes
+	// broadband noise, while the resampler rejects the frame outright. So the
+	// remainder is held here and prepended to the next read, and only whole
+	// frames go downstream. carry and carryLen are local to this goroutine.
+	frameBytes := pcmFrameBytes(&s.config)
+	carry := make([]byte, frameBytes)
+	carryLen := 0
+
 	for {
 		var (
 			out []byte
@@ -1132,13 +1189,31 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 			out = make([]byte, ffmpegBufferSize)
 		}
 
-		n, err := stdout.Read(out)
-		if n > 0 {
-			// Shrink the slice to the actual read size; the underlying
-			// capacity is preserved and returned to the pool via the ref
-			// closure (which captures the full-length slice).
+		// Read behind the carry so the joined bytes are already contiguous:
+		// no second buffer and no copy of the payload itself.
+		copy(out, carry[:carryLen])
+		n, err := stdout.Read(out[carryLen:])
+		total := carryLen + n
+		carryLen = 0
+		if rem := total % frameBytes; rem != 0 {
+			if n > 0 {
+				// Count only reads that actually delivered bytes. A read
+				// returning nothing re-observes the remainder that the previous
+				// read already carried, so counting it again would double-count
+				// a single orphan at end of stream.
+				s.partialFrameCarries.Add(1)
+			}
+			// Copy before re-slicing: out is recycled on the next iteration.
+			carryLen = copy(carry, out[total-rem:total])
+			total -= rem
+		}
+
+		if total > 0 {
+			// Shrink the slice to the whole frames actually available; the
+			// underlying capacity is preserved and returned to the pool via
+			// the ref closure (which captures the full-length slice).
 			select {
-			case readCh <- readResult{data: out[:n], ref: ref}:
+			case readCh <- readResult{data: out[:total], ref: ref}:
 			case <-readerDone:
 				// Main loop exited before we could hand off: release the
 				// producer's own reference so the pool slice is not leaked.
@@ -1146,7 +1221,9 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 				return
 			}
 		} else {
-			// No bytes read: return the buffer to the pool immediately.
+			// Nothing whole to hand downstream, either because the read was
+			// empty or because it only advanced part of a frame. Return the
+			// buffer to the pool immediately; the bytes live on in carry.
 			ref.Release()
 		}
 		if err != nil {
@@ -1236,7 +1313,11 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 
 	s.conditionalFailureReset(totalReceived)
 
-	// Invoke onFrame callback with a fully populated AudioFrame.
+	// Invoke onFrame callback with a fully populated AudioFrame. The channel
+	// count is the one FFmpeg was actually told to emit, not the configured one:
+	// the left and right channel modes fold a multi-channel source to mono, so
+	// reporting cfg.Channels would describe the payload wrongly. This is the
+	// same derivation readStdout frames on.
 	if s.onFrame != nil {
 		s.onFrame(audiocore.AudioFrame{
 			SourceID:   s.config.SourceID,
@@ -1244,7 +1325,7 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 			Data:       data,
 			SampleRate: s.config.SampleRate,
 			BitDepth:   s.config.BitDepth,
-			Channels:   s.config.Channels,
+			Channels:   effectiveOutputChannels(&s.config),
 			Timestamp:  time.Now(),
 			Ref:        ref,
 		})
@@ -1817,6 +1898,7 @@ func (s *Stream) logStreamHealth() {
 			logger.Bool("is_healthy", health.IsHealthy),
 			logger.Bool("is_receiving_data", health.IsReceivingData),
 			logger.Int64("total_bytes_received", totalBytes),
+			logger.Int64("partial_frame_carries", s.partialFrameCarries.Load()),
 			logger.Float64("bytes_per_second", dataRate),
 			logger.Float64("last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived)),
 			logger.String("component", "ffmpeg-stream"),
@@ -1827,6 +1909,7 @@ func (s *Stream) logStreamHealth() {
 			logger.Bool("is_healthy", health.IsHealthy),
 			logger.Bool("is_receiving_data", health.IsReceivingData),
 			logger.Int64("total_bytes_received", totalBytes),
+			logger.Int64("partial_frame_carries", s.partialFrameCarries.Load()),
 			logger.Float64("last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived)),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "health_check"))
