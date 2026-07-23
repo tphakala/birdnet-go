@@ -93,6 +93,11 @@ const (
 	// checks to avoid adding I/O load on every playlist poll.
 	hlsFreshnessCheckInterval = 10 * time.Second
 
+	// hlsPlaylistPollInterval is how often stream creation checks whether enough
+	// segments exist to start playback. Set to catch the second segment promptly
+	// after the first; both encoders poll on it.
+	hlsPlaylistPollInterval = 500 * time.Millisecond
+
 	// Session ID validation
 
 	// FFmpeg HLS muxer settings
@@ -100,6 +105,13 @@ const (
 	hlsAllowCache      = 1          // Allow client-side caching of HLS segments
 	hlsStartNumber     = 0          // Starting sequence number for HLS segments
 	hlsInitSegmentName = "init.mp4" // fMP4 initialization segment filename
+
+	// hlsConsumerChannels is the channel count the HLS consumer declares to the
+	// audio router. The capture pipeline is mono end to end and neither encoder
+	// downmixes, so this is an assumption both paths already made; naming it
+	// gives the native path's muxer configuration something to be checked
+	// against rather than a second bare literal.
+	hlsConsumerChannels = 1
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -120,6 +132,11 @@ type HLSStreamInfo struct {
 	// no output directory, and playlist and segments are served from memory.
 	// Written once before the stream is published and never reassigned.
 	mux *hlsmux.Stream
+
+	// feedDone is closed when the native feed goroutine has stopped, so teardown
+	// can close the muxer only once nothing can still write to it. Non-nil only
+	// on the native path, alongside mux.
+	feedDone chan struct{}
 
 	// pdtOffset corrects FFmpeg's PROGRAM_DATE_TIME timestamps to align with
 	// wall-clock time. FFmpeg sets the PDT epoch at process init (av_gettime),
@@ -1440,35 +1457,16 @@ func (c *Handler) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource, o
 func (c *Handler) buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
 	settings := c.CurrentSettings().WebServer.LiveStream
 
-	// Apply defaults and limits
-	bitrate := 128
-	if settings.BitRate > 0 {
-		switch {
-		case settings.BitRate < hlsMinBitrate:
-			bitrate = hlsMinBitrate
-		case settings.BitRate > hlsMaxBitrate:
-			bitrate = hlsMaxBitrate
-		default:
-			bitrate = settings.BitRate
-		}
-	}
+	// Resolve through the same helpers the native path uses, so the two encoders
+	// cannot drift apart on defaults or clamping.
+	bitrate := c.effectiveBitrateKbps()
+	segmentLength := c.getEffectiveSegmentLength()
 
-	sampleRate := hlsDefaultSampleRate
-	if settings.SampleRate > 0 {
-		sampleRate = settings.SampleRate
-	}
-
-	segmentLength := hlsDefaultSegmentLen
-	if settings.SegmentLength > 0 {
-		switch {
-		case settings.SegmentLength < hlsMinSegmentLen:
-			segmentLength = hlsMinSegmentLen
-		case settings.SegmentLength > hlsMaxSegmentLen:
-			segmentLength = hlsMaxSegmentLen
-		default:
-			segmentLength = settings.SegmentLength
-		}
-	}
+	// This must be the rate the consumer declared to the router, which is what
+	// the router resampled the PCM to. FFmpeg is told the raw PCM is at this
+	// rate, so a divergence between the two would not error anywhere; it would
+	// silently reinterpret the stream and shift its pitch and speed.
+	sampleRate := c.ffmpegConsumerSampleRate()
 
 	logLevel := logLevelWarning
 	if settings.FfmpegLogLevel != "" {
@@ -1721,6 +1719,12 @@ func (c *Handler) ffmpegConsumerSampleRate() int {
 func (c *Handler) setupAudioCallback(sourceID string, sampleRate int) (audioChan chan audioChunk, cleanup func(), err error) {
 	audioChan = make(chan audioChunk, defaultReadBufferSize)
 
+	// hlsConsumerChannels is what this consumer declares to the router. The
+	// native path derives its muxer sample-frame size from nativeHLSChannels, so
+	// the two must agree or every frame would be rejected on alignment; the
+	// compile-time assertion below is what keeps them from drifting apart.
+	const _ = uint(hlsConsumerChannels - nativeHLSChannels) // both must be equal
+
 	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
 
 	consumer := &hlsConsumer{
@@ -1729,7 +1733,7 @@ func (c *Handler) setupAudioCallback(sourceID string, sampleRate int) (audioChan
 		ch:       audioChan,
 		rate:     sampleRate,
 		depth:    conf.BitDepth,
-		channels: 1,
+		channels: hlsConsumerChannels,
 	}
 
 	// Load the engine once for all registry/router operations in this section.
@@ -2254,7 +2258,7 @@ func (c *Handler) waitForHLSPlaylist(ctx echo.Context, sourceID string, stream *
 
 	// Use ticker for polling, let context timeout control the overall duration.
 	// Poll at 500ms to catch the second segment quickly after the first.
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(hlsPlaylistPollInterval)
 	defer ticker.Stop()
 
 	// Poll until playlist has enough segments for immediate playback.
@@ -2303,7 +2307,12 @@ func (c *Handler) logHLSClientConnection(sourceID, clientIP, requestPath string)
 
 	if shouldLog {
 		streamStartMsg := ""
-		if strings.HasPrefix(requestPath, "segment00") {
+		// Match both segment namings: FFmpeg zero-pads to segment%03d.m4s, while
+		// the native muxer emits unpadded names because a live stream outlives
+		// any fixed width. Testing for the first sequence number covers both.
+		if seq, ok := hlsmux.ParseSegmentName(requestPath); ok && seq == 0 {
+			streamStartMsg = " (streaming started)"
+		} else if strings.HasPrefix(requestPath, "segment00") {
 			streamStartMsg = " (streaming started)"
 		}
 		apicore.GetLogger().Info("HLS stream request",

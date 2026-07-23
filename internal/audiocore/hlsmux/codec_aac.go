@@ -3,6 +3,7 @@ package hlsmux
 import (
 	"fmt"
 
+	aac "github.com/tphakala/go-aac"
 	aacpcm "github.com/tphakala/go-aac/pcm"
 	m4a "github.com/tphakala/go-m4a"
 )
@@ -11,11 +12,13 @@ const (
 	// aacCodecName identifies AAC-LC in configuration and in logs.
 	aacCodecName = "aac-lc"
 
-	// aacFrameSamples is the per-channel sample count of one AAC-LC access
-	// unit. It is what New checks a segment target against, so a segment too
-	// short to hold a single access unit is rejected at construction rather
-	// than by every frame the encoder emits.
-	aacFrameSamples = 1024
+	// aacFrameSamples is the per-channel sample count of one access unit, read
+	// from go-aac rather than restated, because it is what this encoder emits
+	// rather than what the format permits (AAC-LC also admits 960-sample
+	// framing). New checks a segment target against it, so a segment too short
+	// to hold a single access unit is rejected at construction rather than by
+	// every frame the encoder produces.
+	aacFrameSamples = aac.FrameSize
 
 	// bitsPerKilobit converts the codec-independent BitrateKbps carried by
 	// EncoderConfig to the bits per second go-aac's Config takes.
@@ -27,11 +30,12 @@ const (
 //
 // It is the only codec this package exports today. AAC-LC is chosen for HLS
 // compatibility rather than on technical merit: Opus is cheaper to encode and
-// sounds better at these bitrates, but it does not play through the audio
-// element on Apple devices and is not a codec in the HLS Authoring
-// Specification, so shipping it would silently break live audio on every
-// iPhone. The codec remains a parameter throughout this package precisely so
-// that judgement can be revisited without a rewrite.
+// sounds better at these bitrates, but it is not a codec in Apple's HLS
+// Authoring Specification and Apple's HLS stack will not play it, so shipping
+// it would break live audio on every iPhone. (Safari does play Opus in other
+// containers; it is HLS specifically that rules it out.) The codec remains a
+// parameter throughout this package precisely so that judgement can be
+// revisited without a rewrite, at the cost of iOS clients.
 func AACLC() Codec {
 	return Codec{
 		Name:            aacCodecName,
@@ -43,11 +47,19 @@ func AACLC() Codec {
 
 // aacEncoder adapts go-aac's pcm.FrameEncoder to the FrameEncoder interface.
 //
-// The adaptation is thin but not omittable. go-aac's EncodeInterleaved and
-// Flush take an unnamed func literal type, while this package declares EmitFunc
-// as a named type, and Go treats those as different method signatures for
-// interface satisfaction, so *pcm.FrameEncoder does not satisfy FrameEncoder
-// directly however identical the underlying signatures look.
+// The adaptation is thin but not omittable, for three independent reasons, of
+// which the first two are the load-bearing ones: go-aac's encoder has no Close
+// at all, and it names the decoder configuration AudioSpecificConfig rather
+// than DecoderConfig (this package renames it because the same interface has to
+// carry a FLAC STREAMINFO and an Opus dOps). Additionally, interface
+// satisfaction demands identical method signatures, and go-aac spells the emit
+// parameter as an unnamed func type where this package declares EmitFunc.
+//
+// Note that last point constrains the method set only, not the call: EmitFunc
+// is assignable to go-aac's unnamed parameter type, so the methods below pass
+// emit straight through. Wrapping it in a closure would be worse than
+// redundant, because it would mask go-aac's own nil-emit check and turn a
+// clean error into a nil-func-call panic inside the dependency.
 type aacEncoder struct {
 	enc *aacpcm.FrameEncoder
 }
@@ -55,10 +67,12 @@ type aacEncoder struct {
 // newAACEncoder builds the per-stream AAC-LC encoder.
 func newAACEncoder(cfg EncoderConfig) (FrameEncoder, error) {
 	// Cutoff is deliberately left at zero, selecting go-aac's tuned
-	// rate-dependent default. Raising the coded bandwidth for bird song, which
-	// carries energy well above the default cutoff, is a real tuning question
-	// but a separate one: it changes what listeners hear and wants measurement,
-	// not a value picked while wiring the codec up.
+	// rate-dependent default. Whether that default is right for bird song is a
+	// real tuning question but a separate one, and it only bites at the lower
+	// bitrates: the default is roughly 18.7 kHz at 128 kbps, above essentially
+	// all bird vocalisation, but drops to 14 kHz at 32 kbps. Changing it
+	// changes what listeners hear, so it wants measurement rather than a value
+	// picked while wiring the codec up.
 	enc, err := aacpcm.NewFrameEncoder(aacpcm.Config{
 		SampleRate: cfg.SampleRate,
 		BitDepth:   bitDepth16,
@@ -103,16 +117,12 @@ func aacWriterConfig(cfg EncoderConfig, enc FrameEncoder) (m4a.WriterConfig, err
 
 // EncodeInterleaved consumes pcm and reports each complete access unit.
 func (a *aacEncoder) EncodeInterleaved(pcm []byte, emit EmitFunc) error {
-	return a.enc.EncodeInterleaved(pcm, func(au []byte, samples int) error {
-		return emit(au, samples)
-	})
+	return a.enc.EncodeInterleaved(pcm, emit)
 }
 
 // Flush drains the encoder lookahead so the final frame is not lost.
 func (a *aacEncoder) Flush(emit EmitFunc) error {
-	return a.enc.Flush(func(au []byte, samples int) error {
-		return emit(au, samples)
-	})
+	return a.enc.Flush(emit)
 }
 
 // DecoderConfig returns the MPEG-4 AudioSpecificConfig for the esds box.

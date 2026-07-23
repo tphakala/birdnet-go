@@ -98,7 +98,10 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
 - **TensorFlow Lite C library**: Required for the core audio analysis functionality
-- **FFmpeg**: Required for RTSP stream capture, the HLS live stream feature in the web interface, on-demand clip transcoding in the web interface, and audio export to MP3. WAV and FLAC are encoded natively and do not need FFmpeg. AAC and Opus export uses FFmpeg by default, but native encoders for both are available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` and `BIRDNET_OPUS_ENCODER=native` environment variables. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
+- **FFmpeg**: Required for RTSP stream capture, the HLS live stream feature in the web interface, on-demand clip transcoding in the web interface, and audio export to MP3. WAV and FLAC are encoded natively and do not need FFmpeg. AAC and Opus export uses FFmpeg by default, but native encoders for both are available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` and `BIRDNET_OPUS_ENCODER=native` environment variables. The HLS live stream also runs through FFmpeg by default; setting `BIRDNET_HLS_ENCODER=native` switches it to a pure-Go encoder and muxer, as an opt-in preview. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
+
+  With `BIRDNET_HLS_ENCODER=native` the live stream is encoded in-process and served from memory, so nothing is written to the HLS directory. Note two differences from the FFmpeg path while the preview is in place: the output sample rate is fixed at 48 kHz, so `webserver.livestream.samplerate` has no effect (a warning is logged if it is set to anything else), and `webserver.livestream.ffmpegloglevel` no longer applies since there is no FFmpeg process to configure.
+
 - **SoX**: Required for rendering spectrograms in the web interface
 
 > **Note**: When using the Docker installation method, all these dependencies are already included in the Docker image, so you don't need to install them separately. This is one of the major advantages of using the Docker-based installation.
@@ -2135,6 +2138,7 @@ Shoutrrr format:  discord://{webhook_token}@{webhook_id}
 ```
 
 For example:
+
 ```
 https://discord.com/api/webhooks/1234567890/abcDEFghiJKLmnoPQRstu
 → discord://abcDEFghiJKLmnoPQRstu@1234567890
@@ -2143,6 +2147,7 @@ https://discord.com/api/webhooks/1234567890/abcDEFghiJKLmnoPQRstu
 **Step 3: Configure in BirdNET-Go**
 
 Via the web UI:
+
 1. Go to **Settings** → **Notifications** → **Channels**
 2. Click **Add Provider**
 3. Set type to **Shoutrrr**, enter the `discord://...` URL
@@ -2199,6 +2204,7 @@ notification:
 ```
 
 This produces Discord messages with:
+
 - Bird species thumbnail image
 - Green color bar (color code `3066993` = green; use `15158332` for red, `3447003` for blue)
 - Species name, confidence, and location as inline fields
@@ -2307,20 +2313,20 @@ Available template fields:
 
 **Detection metadata fields** (available for bird detection notifications):
 
-| Template Syntax | Description |
-|-----------------|-------------|
-| `{{index .Metadata "species"}}` | Bird common name |
-| `{{index .Metadata "scientific_name"}}` | Scientific name |
-| `{{index .Metadata "confidence"}}` | Confidence (0.0-1.0) |
-| `{{index .Metadata "bg_image_url"}}` | Bird species thumbnail URL |
+| Template Syntax                               | Description                           |
+| --------------------------------------------- | ------------------------------------- |
+| `{{index .Metadata "species"}}`               | Bird common name                      |
+| `{{index .Metadata "scientific_name"}}`       | Scientific name                       |
+| `{{index .Metadata "confidence"}}`            | Confidence (0.0-1.0)                  |
+| `{{index .Metadata "bg_image_url"}}`          | Bird species thumbnail URL            |
 | `{{index .Metadata "bg_confidence_percent"}}` | Confidence as percentage (e.g., "99") |
-| `{{index .Metadata "bg_detection_time"}}` | Detection time (e.g., "14:30:45") |
-| `{{index .Metadata "bg_detection_date"}}` | Detection date (e.g., "2026-03-21") |
-| `{{index .Metadata "bg_detection_id"}}` | Database detection ID |
-| `{{index .Metadata "bg_detection_url"}}` | Full URL to detection in web UI |
-| `{{index .Metadata "bg_location"}}` | Formatted coordinates |
-| `{{index .Metadata "bg_latitude"}}` | GPS latitude |
-| `{{index .Metadata "bg_longitude"}}` | GPS longitude |
+| `{{index .Metadata "bg_detection_time"}}`     | Detection time (e.g., "14:30:45")     |
+| `{{index .Metadata "bg_detection_date"}}`     | Detection date (e.g., "2026-03-21")   |
+| `{{index .Metadata "bg_detection_id"}}`       | Database detection ID                 |
+| `{{index .Metadata "bg_detection_url"}}`      | Full URL to detection in web UI       |
+| `{{index .Metadata "bg_location"}}`           | Formatted coordinates                 |
+| `{{index .Metadata "bg_latitude"}}`           | GPS latitude                          |
+| `{{index .Metadata "bg_longitude"}}`          | GPS longitude                         |
 
 ##### 3. Script (Custom Scripts)
 

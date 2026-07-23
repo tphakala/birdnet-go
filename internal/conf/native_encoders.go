@@ -29,8 +29,10 @@ import (
 //
 //	AAC:  exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
 //	Opus: exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
-//	HLS:  no reader yet; the backend selection in internal/api/v2/audio lands
-//	      with the handler wiring, and this list must name it then
+//	HLS:  createHLSStream in internal/api/v2/audio/audio_hls.go, which routes to
+//	      createNativeHLSStream in audio_hls_native.go. Removing the gate means
+//	      deleting audio_hls.go's FFmpeg branch and the whole FFmpeg half of
+//	      that package, not just the conditional.
 //
 // Nothing else depends on this file, and it deliberately holds no other logic
 // so that each removal stays a mechanical edit.
@@ -44,9 +46,11 @@ const (
 	// segment and write the playlist for a live stream.
 	EnvNativeHLSEncoder = "BIRDNET_HLS_ENCODER"
 
-	// nativeEncoderValue is the only value that enables a native encoder.
-	// Anything else, including an unset variable, keeps the FFmpeg path.
-	nativeEncoderValue = "native"
+	// NativeEncoderValue is the only value that enables a native encoder.
+	// Anything else, including an unset variable, keeps the FFmpeg path. It is
+	// exported so a caller logging which encoder it selected can name the value
+	// rather than restating the literal.
+	NativeEncoderValue = "native"
 )
 
 // NativeAACEncoderEnabled reports whether AAC clip export should use the native
@@ -71,5 +75,5 @@ func NativeHLSEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeHLSE
 // live keeps the gate consistent with the rest of BirdNET-Go's settings, which
 // take effect without a restart.
 func nativeEncoderSelected(env string) bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv(env)), nativeEncoderValue)
+	return strings.EqualFold(strings.TrimSpace(os.Getenv(env)), NativeEncoderValue)
 }

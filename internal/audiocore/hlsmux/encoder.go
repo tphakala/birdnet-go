@@ -14,10 +14,10 @@
 // cheaper to encode, which is the escape hatch if AAC proves too expensive on
 // the smallest ARM boards.
 //
-// Nothing constructs a Stream yet: the concrete codec and the wiring into the
-// v2 HLS handler land together, behind the BIRDNET_HLS_ENCODER gate in
-// internal/conf/native_encoders.go. Until then HLS live streaming runs entirely
-// through FFmpeg and this package is unreachable from production code.
+// The concrete codec is AACLC, and the v2 HLS handler constructs a Stream when
+// BIRDNET_HLS_ENCODER=native selects it (see internal/conf/native_encoders.go).
+// With the gate unset, which is the default, HLS live streaming still runs
+// entirely through FFmpeg and nothing here is reached.
 package hlsmux
 
 // EmitFunc receives one coded access unit and the per-channel sample count it
