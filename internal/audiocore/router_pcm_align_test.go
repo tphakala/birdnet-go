@@ -2,11 +2,15 @@ package audiocore
 
 import (
 	"bytes"
+	"runtime/debug"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // collectingConsumer accumulates every byte handed to Write so a test can
@@ -103,7 +107,7 @@ func runChunksThroughRoute(t *testing.T, chunks [][]byte, opts alignRunOpts) ali
 	t.Cleanup(r.Close)
 
 	consumer := newCollectingConsumer(opts.dstRate)
-	route := newAlignTestRoute(t, r, consumer, opts)
+	route := newAlignTestRoute(t, consumer, opts)
 
 	for _, chunk := range chunks {
 		r.handleRouteFrame(AudioFrame{
@@ -126,9 +130,8 @@ func runChunksThroughRoute(t *testing.T, chunks [][]byte, opts alignRunOpts) ali
 
 // newAlignTestRoute builds a Route wired to consumer, adding a resampler only
 // when the rates differ (mirroring what AddRoute does).
-func newAlignTestRoute(t *testing.T, r *AudioRouter, consumer AudioConsumer, opts alignRunOpts) *Route {
+func newAlignTestRoute(t *testing.T, consumer AudioConsumer, opts alignRunOpts) *Route {
 	t.Helper()
-	_ = r
 	route := &Route{
 		SourceID:         "align-src",
 		Consumer:         consumer,
@@ -237,34 +240,63 @@ func TestRouter_PassThroughPCM16RealignsOddFrames(t *testing.T) {
 		"a pass-through route must reassemble the same sample stream from odd-length frames")
 }
 
-// TestRouter_NonPCM16PassThroughIsUntouched pins the other half of the gate. A
-// 2-byte carry applied to a stream that is not 16-bit PCM would regroup its frame
+// TestRouter_NonPCM16IsNeverRealigned pins the narrow half of the gate. A 2-byte
+// carry applied to a stream that is not 16-bit PCM would regroup its frame
 // boundaries and permanently withhold a trailing byte at stream end, so frames
-// declaring another bit depth must pass through byte for byte.
-func TestRouter_NonPCM16PassThroughIsUntouched(t *testing.T) {
+// declaring another bit depth must never enter the carry.
+//
+// The resampling case is the one that discriminates: the previous gate aligned
+// any route that had a resampler, regardless of bit depth, so 8-bit data was
+// silently realigned on a unit that does not describe it and then resampled as
+// if it were 16-bit. Now the resampler rejects the odd frame instead, which is a
+// visible failure rather than mislabelled noise.
+func TestRouter_NonPCM16IsNeverRealigned(t *testing.T) {
 	t.Parallel()
 
 	const rate = 48000
-	sizes := []int{999, 1001, 997, 1003}
 	signal := alignTestSignal(2000)
-	chunks := splitAt(t, signal, sizes)
+	chunks := splitAt(t, signal, []int{999, 1001, 997, 1003})
 
-	r := NewAudioRouter(GetLogger(), nil)
-	t.Cleanup(r.Close)
-	consumer := newCollectingConsumer(rate)
-	route := newAlignTestRoute(t, r, consumer, alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate})
+	t.Run("pass_through", func(t *testing.T) {
+		t.Parallel()
+		r := NewAudioRouter(GetLogger(), nil)
+		t.Cleanup(r.Close)
+		consumer := newCollectingConsumer(rate)
+		route := newAlignTestRoute(t, consumer, alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate})
 
-	for _, chunk := range chunks {
-		r.handleRouteFrame(AudioFrame{
-			SourceID: "align-src", SourceName: "align",
-			Data: chunk, SampleRate: rate,
-			BitDepth: 8, Channels: 1,
-		}, route)
-	}
+		for _, chunk := range chunks {
+			r.handleRouteFrame(AudioFrame{
+				SourceID: "align-src", SourceName: "align",
+				Data: chunk, SampleRate: rate,
+				BitDepth: 8, Channels: 1,
+			}, route)
+		}
 
-	assert.Equal(t, len(chunks), consumer.writes, "every non-PCM16 frame must reach the consumer")
-	assert.Zero(t, route.realignments.Load(), "a non-PCM16 route must not realign")
-	assert.Equal(t, signal, consumer.out, "a non-PCM16 route must pass every byte through unchanged")
+		assert.Equal(t, len(chunks), consumer.writes, "every non-PCM16 frame must reach the consumer")
+		assert.Zero(t, route.realignments.Load(), "a non-PCM16 route must not realign")
+		assert.Equal(t, signal, consumer.out, "a non-PCM16 route must pass every byte through unchanged")
+	})
+
+	t.Run("resampling_route_rejects_rather_than_realigns", func(t *testing.T) {
+		t.Parallel()
+		r := NewAudioRouter(GetLogger(), nil)
+		t.Cleanup(r.Close)
+		consumer := newCollectingConsumer(32000)
+		route := newAlignTestRoute(t, consumer, alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: 32000})
+
+		for _, chunk := range chunks {
+			r.handleRouteFrame(AudioFrame{
+				SourceID: "align-src", SourceName: "align",
+				Data: chunk, SampleRate: rate,
+				BitDepth: 8, Channels: 1,
+			}, route)
+		}
+
+		assert.Zero(t, route.realignments.Load(),
+			"8-bit data must never be realigned on a 16-bit sample unit, even when the route resamples")
+		assert.Positive(t, route.errors.Load(),
+			"the resampler must reject odd-length non-PCM16 frames rather than silently consume realigned ones")
+	})
 }
 
 // TestRouter_AllCarryFrameSkipsWrite covers the frame that disappears entirely
@@ -305,55 +337,6 @@ func TestRouter_StrandedFinalByteIsWithheld(t *testing.T) {
 
 	assert.Positive(t, got.realignments, "the odd chunking must exercise the carry")
 	assert.Equal(t, signal, got.out, "the unpaired trailing byte must stay in the carry")
-}
-
-// TestRouter_ResetAlignmentDropsStalePartialSample covers a stream discontinuity.
-// A Route outlives an FFmpeg process restart, so a half-sample held when the old
-// stream died would be prepended to the first frame of the new one, shifting
-// every sample that follows it for the life of the route.
-func TestRouter_ResetAlignmentDropsStalePartialSample(t *testing.T) {
-	t.Parallel()
-
-	const rate = 48000
-	first := alignTestSignal(500)   // 1000 bytes
-	second := alignTestSignal(1000) // 2000 bytes, a fresh whole stream
-
-	r := NewAudioRouter(GetLogger(), nil)
-	t.Cleanup(r.Close)
-	consumer := newCollectingConsumer(rate)
-	route := newAlignTestRoute(t, r, consumer, alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate})
-
-	writeFrame := func(data []byte) {
-		r.handleRouteFrame(AudioFrame{
-			SourceID: "align-src", SourceName: "align",
-			Data: data, SampleRate: rate,
-			BitDepth: 16, Channels: 1,
-		}, route)
-	}
-
-	// End the first stream mid-sample: 999 of 1000 bytes go out, one is held.
-	writeFrame(first[:999])
-	require.Equal(t, 1, route.carryLen, "the truncated first stream must leave a byte in the carry")
-
-	// Register the route so ResetAlignment can find it by source ID, then
-	// deregister it so the router's own teardown does not wait on a drainer
-	// goroutine this test never started.
-	r.mu.Lock()
-	r.routes["align-src"] = []*Route{route}
-	r.mu.Unlock()
-	r.ResetAlignment("align-src")
-	r.mu.Lock()
-	delete(r.routes, "align-src")
-	r.mu.Unlock()
-
-	require.True(t, route.carryResetPending.Load(), "ResetAlignment must arm the pending flag")
-
-	// The new stream must arrive unshifted.
-	writeFrame(second)
-
-	assert.Zero(t, route.carryLen, "the reset must clear the carry before the next frame")
-	assert.Equal(t, append(bytes.Clone(first[:998]), second...), consumer.out,
-		"the stale half-sample must be dropped, not prepended to the new stream")
 }
 
 // FuzzRouterAlignPCM16 asserts the framer's total invariants over arbitrary
@@ -403,4 +386,103 @@ func FuzzRouterAlignPCM16(f *testing.F) {
 			"the reassembled stream must equal the input truncated to whole samples (want %d bytes, got %d)",
 			len(want), len(consumer.out))
 	})
+}
+
+// TestRouter_ResampleAndProcessReturnsEachPooledBufferOnce guards the pool
+// discipline in handleRouteFrame, which is the riskiest thing about routing a
+// frame: the resample buffer is returned early by the processing branch and the
+// deferred release must then skip it. Getting that wrong hands the same backing
+// array to two callers at once, and every existing test still passes, because
+// nothing else asserts buffer identity.
+//
+// The route resamples and applies gain, so both release sites run for every
+// frame. Afterwards the pool must hold that buffer exactly once: two successive
+// Gets then return distinct arrays, whereas a double Put returns the same array
+// twice.
+func TestRouter_ResampleAndProcessReturnsEachPooledBufferOnce(t *testing.T) {
+	// Not parallel: it pins the GC so sync.Pool cannot be drained mid-test.
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+
+	const (
+		srcRate = 48000
+		dstRate = 32000
+	)
+	mgr := buffer.NewManager(GetLogger())
+	r := NewAudioRouter(GetLogger(), mgr)
+	t.Cleanup(r.Close)
+
+	consumer := newCollectingConsumer(dstRate)
+	route := newAlignTestRoute(t, consumer, alignRunOpts{
+		gainLinear: 0.5, srcRate: srcRate, dstRate: dstRate,
+	})
+
+	signal := alignTestSignal(1200)
+	r.handleRouteFrame(AudioFrame{
+		SourceID: "align-src", SourceName: "align",
+		Data: signal, SampleRate: srcRate,
+		BitDepth: 16, Channels: 1,
+	}, route)
+	require.NotEmpty(t, consumer.out, "the frame must reach the consumer")
+
+	// The resample buffer is sized from the resampler's own estimate, which is
+	// what handleRouteFrame asked the manager for.
+	outSize := route.resampler.EstimateOutputBytes(len(signal))
+	pool := mgr.BytePoolFor(outSize)
+	require.NotNil(t, pool)
+
+	first := pool.Get()
+	second := pool.Get()
+	require.NotEmpty(t, first)
+	require.NotEmpty(t, second)
+	assert.NotSame(t, &first[0], &second[0],
+		"the resample buffer was returned to its pool twice: two Gets handed back the same array, "+
+			"so two routes would write over each other")
+}
+
+// TestRouter_RealignmentLogsOncePerRunNotPerFrame guards the logging gate.
+// Realignment latches: joining the carry makes an even-length frame odd again,
+// so once a route starts carrying it realigns on every frame for as long as the
+// producer keeps splitting samples. Gating the log on a frame count would then
+// emit forever, one line per interval, for a condition that is normal and self
+// correcting. The log therefore reports the transition into a carrying run.
+func TestRouter_RealignmentLogsOncePerRunNotPerFrame(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rate      = 48000
+		numFrames = 200
+	)
+	var logs bytes.Buffer
+	log := logger.NewSlogLogger(&logs, logger.LogLevelDebug, time.UTC)
+
+	r := NewAudioRouter(log, nil)
+	t.Cleanup(r.Close)
+	consumer := newCollectingConsumer(rate)
+	route := newAlignTestRoute(t, consumer, alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate})
+
+	// One odd frame followed by even ones is what latches the carry: the odd
+	// frame leaves a byte, and every even frame after it joins that byte, goes
+	// odd, and leaves a new one. The run never ends, so realignments grows once
+	// per frame while the route stays in a single carrying run. (An all-odd
+	// stream does the opposite: the carry drains on every second frame, which is
+	// many short runs rather than one long one.)
+	send := func(data []byte) {
+		r.handleRouteFrame(AudioFrame{
+			SourceID: "align-src", SourceName: "align",
+			Data: data, SampleRate: rate,
+			BitDepth: 16, Channels: 1,
+		}, route)
+	}
+	signal := alignTestSignal(64)
+	send(signal[:127])
+	for range numFrames - 1 {
+		send(signal[:128])
+	}
+
+	require.Equal(t, int64(numFrames), route.realignments.Load(),
+		"a latched run realigns on every frame, which is what makes per-frame logging unbounded")
+	assert.Equal(t, int64(1), route.realignmentRuns.Load(),
+		"the whole sequence is one carrying run, entered once")
+	assert.Equal(t, 1, bytes.Count(logs.Bytes(), []byte("partial PCM16 sample carried to next frame")),
+		"a latched route must report the transition once, not once per interval forever")
 }

@@ -250,14 +250,9 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			logger.String("operation", "startup_audio_check"))
 	}
 
-	// Register watchdog reset callback so analysis monitors are recreated, and
-	// stale PCM alignment state is dropped, when the watchdog force-resets a
-	// stuck stream.
+	// Register watchdog reset callback so analysis monitors are recreated
+	// when the watchdog force-resets a stuck stream.
 	p.engine.FFmpegManager().SetOnStreamReset(func(newSourceID string) {
-		// A restarted stream begins a new byte stream on a sample boundary, so
-		// any partial sample the router still holds from the old one would
-		// shift every sample that follows it for the life of the route.
-		p.engine.Router().ResetAlignment(newSourceID)
 		if err := p.bufferMgr.AddMonitor(newSourceID); err != nil {
 			audiocore.GetLogger().Warn("failed to add monitor after watchdog stream reset",
 				logger.String("source_id", newSourceID),

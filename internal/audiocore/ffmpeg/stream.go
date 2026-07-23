@@ -1196,7 +1196,13 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 		total := carryLen + n
 		carryLen = 0
 		if rem := total % frameBytes; rem != 0 {
-			s.partialFrameCarries.Add(1)
+			if n > 0 {
+				// Count only reads that actually delivered bytes. A read
+				// returning nothing re-observes the remainder that the previous
+				// read already carried, so counting it again would double-count
+				// a single orphan at end of stream.
+				s.partialFrameCarries.Add(1)
+			}
 			// Copy before re-slicing: out is recycled on the next iteration.
 			carryLen = copy(carry, out[total-rem:total])
 			total -= rem
@@ -1307,7 +1313,11 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 
 	s.conditionalFailureReset(totalReceived)
 
-	// Invoke onFrame callback with a fully populated AudioFrame.
+	// Invoke onFrame callback with a fully populated AudioFrame. The channel
+	// count is the one FFmpeg was actually told to emit, not the configured one:
+	// the left and right channel modes fold a multi-channel source to mono, so
+	// reporting cfg.Channels would describe the payload wrongly. This is the
+	// same derivation readStdout frames on.
 	if s.onFrame != nil {
 		s.onFrame(audiocore.AudioFrame{
 			SourceID:   s.config.SourceID,
@@ -1315,7 +1325,7 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 			Data:       data,
 			SampleRate: s.config.SampleRate,
 			BitDepth:   s.config.BitDepth,
-			Channels:   s.config.Channels,
+			Channels:   effectiveOutputChannels(&s.config),
 			Timestamp:  time.Now(),
 			Ref:        ref,
 		})

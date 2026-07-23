@@ -47,8 +47,10 @@ const (
 	// paths interpret; frames with other depths skip those stages untouched.
 	// The resampler is the exception: it assumes PCM16 by contract regardless
 	// of the frame's declared bit depth, so a resampling route fed non-PCM16
-	// data rejects odd-length frames loudly and garbles the rest. Do not
-	// configure a resampler on a non-PCM16 route.
+	// data rejects odd-length frames loudly and garbles the rest. AddRoute
+	// builds the resampler purely from a rate mismatch, so nothing currently
+	// prevents that pairing; it is unreachable only because both source
+	// construction sites hardcode 16-bit.
 	bitDepthPCM16 = 16
 
 	// bytesPerPCM16Sample is the size of one 16-bit PCM sample. Frames handed
@@ -111,15 +113,20 @@ type Route struct {
 	// alignBuf is the scratch buffer the carry is joined with the next frame
 	// in. All three are touched only by this route's drainer goroutine, via
 	// alignPCM16, so they need no synchronisation.
+	//
+	// Known limitation: the carry is not cleared at a stream discontinuity. A
+	// Route outlives an FFmpeg process restart, so a producer that ends one
+	// stream generation mid-sample would have that byte prepended to the first
+	// frame of the next. Clearing it correctly needs a marker travelling in
+	// band with the frames, because an out-of-band signal is consumed by
+	// whichever frame the drainer happens to dequeue next, which is still an
+	// old-stream frame while the inbox is draining. No in-tree producer can
+	// reach this: readStdout reassembles whole frames and its own carry is
+	// goroutine-local, so it resets per process, and the malgo path emits whole
+	// samples by construction.
 	carry    [bytesPerPCM16Sample - 1]byte
 	carryLen int
 	alignBuf []byte
-
-	// carryResetPending asks the drainer goroutine to drop any partial sample
-	// held in carry before it processes its next frame. Set from outside the
-	// drainer by ResetAlignment; carry and carryLen themselves stay
-	// single-goroutine, this flag is the only cross-goroutine signal.
-	carryResetPending atomic.Bool
 
 	// realignmentRuns counts how many times this route entered a carrying run,
 	// i.e. held a partial sample when it previously held none. Realignment
@@ -163,14 +170,9 @@ type RouteInfo struct {
 	// Drops is the total number of frames dropped for this route.
 	Drops int64
 
-	// Errors is the total number of Write errors for this route.
+	// Errors is the total number of processing failures for this route,
+	// counting resampler, conversion and Consumer.Write failures alike.
 	Errors int64
-
-	// Realignments is the total number of partial PCM16 samples carried between
-	// frames on this route. Not an error count: realignment is normal and self
-	// correcting, but a nonzero value shows a producer is splitting samples
-	// across frames.
-	Realignments int64
 
 	// QueueDepth is the current occupancy of the route inbox (len of the bounded channel).
 	QueueDepth int
@@ -469,12 +471,11 @@ func (r *AudioRouter) Routes(sourceID string) []RouteInfo {
 	infos := make([]RouteInfo, 0, len(routes))
 	for _, rt := range routes {
 		infos = append(infos, RouteInfo{
-			SourceID:     rt.SourceID,
-			ConsumerID:   rt.Consumer.ID(),
-			Drops:        rt.drops.Load(),
-			Errors:       rt.errors.Load(),
-			Realignments: rt.realignments.Load(),
-			QueueDepth:   len(rt.inbox),
+			SourceID:   rt.SourceID,
+			ConsumerID: rt.Consumer.ID(),
+			Drops:      rt.drops.Load(),
+			Errors:     rt.errors.Load(),
+			QueueDepth: len(rt.inbox),
 		})
 	}
 	return infos
@@ -497,24 +498,6 @@ func (r *AudioRouter) LastDispatchTime(sourceID string) time.Time {
 func (r *AudioRouter) ResetDispatchTime(sourceID string) {
 	ts := r.getOrCreateDispatchTimestamp(sourceID)
 	ts.Store(time.Now().UnixNano())
-}
-
-// ResetAlignment requests that every route on the given source drop any partial
-// PCM16 sample held in its alignment carry. Call it when the source's byte
-// stream restarts (an FFmpeg process restart or a watchdog force reset): the new
-// stream starts on a sample boundary, so a byte held over from the old stream
-// would shift every sample that follows it, for the life of the route.
-//
-// The reset is applied by each route's drainer goroutine before its next frame,
-// so any frames already queued when this is called consume the reset first. That
-// is acceptable because the carry is second-line defence: the in-tree PCM16
-// producers deliver whole samples, so the carry is normally empty anyway.
-func (r *AudioRouter) ResetAlignment(sourceID string) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, rt := range r.routes[sourceID] {
-		rt.carryResetPending.Store(true)
-	}
 }
 
 // ClearDispatchTime removes the dispatch timestamp for sourceID.
@@ -772,16 +755,6 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	frameStart := time.Now()
 	var resampleDur, processingDur time.Duration
 
-	// A stream discontinuity makes a held partial sample meaningless: the next
-	// frame starts a new byte stream on a sample boundary, and prepending a
-	// stale byte to it would shift every subsequent sample for the life of the
-	// route. The flag is consumed here, on the drainer goroutine, so carryLen
-	// keeps its single-goroutine discipline.
-	if route.carryResetPending.Load() {
-		route.carryResetPending.Store(false)
-		route.carryLen = 0
-	}
-
 	// Resampling, EQ and gain all reinterpret Data as a stream of 16-bit
 	// samples, and so does every consumer of a PCM16 route, so every PCM16
 	// frame is aligned to whole samples here regardless of what this route
@@ -811,13 +784,14 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 
 	var resampleBuf []byte // full-length pooled buffer for Put; nil when no resampling
 
-	// Release the router's own pooled buffers on every exit from this function,
-	// including a panicking Consumer.Write. drainRoute recovers that panic above
-	// this frame, so a release at the tail would be skipped and the buffers
-	// would never return to their pools. Releasing during the unwind is safe for
-	// the same reason it is safe on the normal path: AudioConsumer.Write forbids
-	// retaining frame.Data past return, so a consumer that aborted mid-Write
-	// holds no reference either.
+	// Release the router's own pooled buffers on every exit from this function.
+	// A single deferred release keeps the accounting in one place, and it also
+	// covers a panicking Consumer.Write, where a release at the tail would be
+	// skipped. That leak was bounded rather than unbounded, since drainRoute's
+	// recover retires the route, but the buffers are cheap to return correctly.
+	// Releasing during the unwind is safe for the same reason it is safe on the
+	// normal path: AudioConsumer.Write forbids retaining frame.Data past return,
+	// and Go runs the consumer's own defers before this one.
 	//
 	// No path can Put twice: the processing branch returns resampleBuf early and
 	// nils resamplePool when it takes ownership, and procResult.release is a
@@ -933,9 +907,13 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 // holds for every producer, present or future, and keeps a producer-side
 // regression from turning into corrupted audio downstream.
 //
-// The returned slice aliases either data or route.alignBuf. Both stay valid for
-// the rest of the frame's journey through handleRouteFrame, which reads them into
-// a separate output buffer before handing anything to the consumer.
+// The returned slice aliases either data or route.alignBuf, and route.alignBuf is
+// overwritten by the next frame on this route. That is safe for the same reason
+// the producer's pooled slice is: AudioConsumer.Write forbids retaining
+// frame.Data past return, and the next overwrite happens on this same goroutine,
+// after Write has returned. A pass-through route hands alignBuf to the consumer
+// directly, so the no-retain contract, not an intervening copy, is what makes
+// this sound.
 //
 // Called only from the route's drainer goroutine, so route.carry, route.carryLen
 // and route.alignBuf are unsynchronised by design.

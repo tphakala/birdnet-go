@@ -192,19 +192,23 @@ func TestReadStdout_EmitsWholeFrames(t *testing.T) {
 }
 
 // TestReadStdout_PooledCarrySurvivesBufferRecycling drives the carry against a
-// live buffer pool, with every frame released as soon as it is collected so the
-// pool hands the same slice back on the next read. That is the interaction the
-// producer's carry copy exists for: the remainder must be copied out of the read
-// buffer before that buffer is recycled. Without a pool the read buffer is a
-// fresh allocation each time and a carry-copied-after-handoff regression would go
-// unnoticed.
+// live buffer pool, releasing each frame as soon as it is collected so the pool
+// can hand the same slice back on the next read. Without a pool the read buffer
+// is a fresh allocation every iteration, so the pooled path is otherwise only
+// covered by a test that reads four aligned bytes and never carries anything.
+//
+// The channel is unbuffered so the reader cannot borrow the next buffer until
+// this collector has taken the previous frame, and the pool's hit count is
+// asserted afterwards: recycling is the premise of the test, so a run where it
+// never happened must fail rather than pass vacuously.
 func TestReadStdout_PooledCarrySurvivesBufferRecycling(t *testing.T) {
 	t.Parallel()
 
 	signal := pcmRamp(4096)
-	s := alignTestStream(t, 16, 1, 0, "", buffer.NewManager(audiocore.GetLogger()))
+	mgr := buffer.NewManager(audiocore.GetLogger())
+	s := alignTestStream(t, 16, 1, 0, "", mgr)
 
-	readCh := make(chan readResult, 1)
+	readCh := make(chan readResult)
 	readerDone := make(chan struct{})
 	t.Cleanup(func() { close(readerDone) })
 
@@ -216,6 +220,8 @@ func TestReadStdout_PooledCarrySurvivesBufferRecycling(t *testing.T) {
 	assert.Equal(t, signal, got,
 		"the reassembled stream must survive the read buffer being recycled between reads")
 	assert.Positive(t, s.partialFrameCarries.Load(), "this script must exercise the carry")
+	assert.Positive(t, mgr.BytePoolFor(ffmpegBufferSize).GetStats().Hits,
+		"the pool must actually have recycled a buffer, otherwise this test proves nothing about recycling")
 }
 
 // TestReadStdout_DropsOnlyTheFinalPartialFrame verifies the one case where bytes
@@ -262,6 +268,11 @@ func TestReadStdout_PendingCarryDroppedOnReadError(t *testing.T) {
 	require.ErrorIs(t, err, errScriptedFailure, "the read error must be forwarded")
 	assert.Equal(t, signal[:len(signal)-1], got,
 		"the pending partial frame must not be emitted when the stream fails")
+	// Exactly one: the single read that delivered the orphan byte. The failing
+	// read that follows delivers nothing new, so counting it again would report
+	// two carries for one orphan and overstate the rate in the health log.
+	assert.Equal(t, int64(1), s.partialFrameCarries.Load(),
+		"one orphaned byte must be counted once, not once per read that observes it")
 }
 
 // TestPCMFrameBytes_Bounds pins the frame-size derivation at its edges. The
