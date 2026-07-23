@@ -70,10 +70,48 @@ vars:
   OPENVINO_HEADERS_DIR: '{{.ROOT_DIR}}/.cache/openvino'
   CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I{{.TENSORFLOW_HEADERS_DIR}} -I{{.OPENVINO_HEADERS_DIR}}/include"
   EXTRA_BUILD_TAGS: '{{.EXTRA_BUILD_TAGS | default ""}}'
+  # Tags applied to every artifact we ship, independent of the caller-supplied
+  # EXTRA_BUILD_TAGS. Every build path that produces a shipped binary must fold
+  # these in, or a target silently ships a different binary than the rest.
+  # (tools/dbexport is deliberately exempt: it never reaches go-aac.)
+  #
+  # goaac_simd selects go-aac's SIMD kernels, which are opt-in upstream so that
+  # the default build carries no assembly. It swaps exactly two hot kernels: the
+  # NMR Viterbi trellis (f32.MinIdxOfSumRows) and the AbsPow34 magnitude
+  # transform. Dispatch is by CPU feature at RUNTIME, via github.com/tphakala/simd
+  # (which wraps golang.org/x/sys/cpu and adds its own darwin/arm64 detection):
+  # the trellis takes AVX2 on amd64 and NEON on arm64, AbsPow34 takes AVX, else
+  # SSE2, on amd64 and NEON on arm64. Every kernel falls back to pure Go when the
+  # feature bit is absent, and f32_other.go covers architectures that are neither
+  # amd64 nor arm64, so a tagged binary runs unchanged on any CPU rather than
+  # trapping on an unsupported instruction.
+  #
+  # Output is bit-identical to the scalar path; go-aac gates both kernels with
+  # bitwise differential tests plus fuzz targets. Note those tests live upstream
+  # and do not run in our CI, so a go-aac bump that regressed only the SIMD path
+  # would not be caught here.
+  #
+  # Measured on a Raspberry Pi 5 (Cortex-A76), medians of -benchtime=2s -count=5
+  # over internal/audiocore/hlsmux BenchmarkStreamWrite: 11.2% faster for 10 ms
+  # frames, 12.8% for 32 KiB. That path is encode plus fMP4 fragmentation, so the
+  # encoder-only gain is higher; go-aac's README reports 14% for the trellis alone
+  # on the same hardware. Both consumers (native AAC clip export and native HLS)
+  # are still opt-in behind BIRDNET_AAC_ENCODER / BIRDNET_HLS_ENCODER=native, so
+  # today this speeds up those gated paths rather than a default deployment.
+  BASE_BUILD_TAGS: 'goaac_simd'
+  # Emits nothing when the joined list is empty, mirroring the ${BUILD_TAGS:+...}
+  # guard on the linux_amd64 / linux_arm64 build lines. (noembed_build needs no
+  # such guard: its list always contains noembed.) Without this, overriding
+  # BASE_BUILD_TAGS to empty would emit a bare `-tags`, which then swallows the
+  # following -ldflags and fails with a confusing "flag provided but not defined".
   BUILD_TAGS_FLAG:
     sh: |
-      if [ -n "{{.EXTRA_BUILD_TAGS}}" ]; then
-        echo "-tags {{.EXTRA_BUILD_TAGS}}"
+      TAGS="{{.BASE_BUILD_TAGS}}"
+      EXTRA="{{.EXTRA_BUILD_TAGS}}"
+      TAGS="${TAGS:+${TAGS},}${EXTRA}"
+      TAGS="${TAGS%,}"
+      if [ -n "${TAGS}" ]; then
+        echo "-tags ${TAGS}"
       fi
   LDFLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}' -X 'github.com/tphakala/birdnet-go/internal/telemetry.sentryDSN={{.SENTRY_DSN}}' -X 'github.com/tphakala/birdnet-go/internal/branding.projectName={{.PROJECT_NAME}}' -X 'github.com/tphakala/birdnet-go/internal/branding.projectRepoURL={{.PROJECT_REPO_URL}}' -X 'github.com/tphakala/birdnet-go/internal/branding.projectCommunityURL={{.PROJECT_COMMUNITY_URL}}'"
   BUILD_FLAGS: '{{.BUILD_TAGS_FLAG}} {{.LDFLAGS}}'
@@ -90,10 +128,12 @@ tasks:
   test:
     desc: Run tests for the application
     cmds:
-      # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
+      # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests.
+      # BASE_BUILD_TAGS keeps the local run on the same kernels CI and the shipped
+      # binaries use, so a tag-specific failure cannot pass here and fail in CI.
       # CGO_FLAGS supplies CGO_ENABLED=1 and the TensorFlow header include path;
       # -race needs CGO so it must stay enabled here.
-      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend -race ./... {{.TEST_FLAGS}}'
+      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend,{{.BASE_BUILD_TAGS}} -race ./... {{.TEST_FLAGS}}'
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
 
@@ -111,7 +151,7 @@ tasks:
       - mkdir -p coverage
       # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
       # Keep -race in sync with the test task so coverage runs catch data races too.
-      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend -race ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}'
+      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend,{{.BASE_BUILD_TAGS}} -race ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}'
       - go tool cover -html=coverage/coverage.out -o coverage/coverage.html
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
@@ -130,7 +170,7 @@ tasks:
         esac
         # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting
         {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
-        golangci-lint run --build-tags=noembed,skipfrontend {{.CLI_ARGS}}
+        golangci-lint run --build-tags=noembed,skipfrontend,{{.BASE_BUILD_TAGS}} {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "-v" .CLI_ARGS}}'
 
@@ -1183,9 +1223,9 @@ tasks:
         mkdir -p {{.TFLITE_LIB_DIR}}
         # openvino adds the OpenVINO inference backend (dlopen'd at runtime, ORT
         # fallback); headers are provided by the check-openvino task above.
-        BUILD_TAGS=""
+        BUILD_TAGS="{{.BASE_BUILD_TAGS}}"
         if [ "{{.OPENVINO}}" = "true" ]; then
-          BUILD_TAGS="openvino"
+          BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}openvino"
         fi
         # go-task exposes EXTRA_BUILD_TAGS as a template var, not a shell env var,
         # so read it via templating (works for both `task ... EXTRA_BUILD_TAGS=x`
@@ -1225,9 +1265,9 @@ tasks:
         fi
         # openvino adds the OpenVINO inference backend (dlopen'd at runtime, ORT
         # fallback); headers are provided by the check-openvino task above.
-        BUILD_TAGS=""
+        BUILD_TAGS="{{.BASE_BUILD_TAGS}}"
         if [ "{{.OPENVINO}}" = "true" ]; then
-          BUILD_TAGS="openvino"
+          BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}openvino"
         fi
         # go-task exposes EXTRA_BUILD_TAGS as a template var, not a shell env var,
         # so read it via templating (works for both `task ... EXTRA_BUILD_TAGS=x`
@@ -1356,7 +1396,8 @@ tasks:
         {{else if .CC}}
         export CC={{.CC}}
         {{end}}
-        BUILD_TAGS="noembed"
+        BUILD_TAGS="{{.BASE_BUILD_TAGS}}"
+        BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}noembed"
         # notflite produces an ONNX-only binary that does not link libtensorflowlite_c.
         if [ "{{.NOTFLITE}}" = "true" ]; then
           BUILD_TAGS="${BUILD_TAGS},notflite"

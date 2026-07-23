@@ -168,7 +168,9 @@ jobs:
           # ~2000 tests) intermittently exceeded the old 600s per-package ceiling
           # under runner load (cumulative race-instrumented work, not a deadlock).
           # 900s adds headroom and stays under the 25m step cap below.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
+          # goaac_simd matches BASE_BUILD_TAGS in Taskfile.yml, so the AAC tests run
+          # the same kernels the shipped windows/amd64 binary uses.
+          go test -tags noembed,skipfrontend,goaac_simd -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 

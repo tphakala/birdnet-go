@@ -148,7 +148,12 @@ jobs:
           # -ltensorflowlite_c, so the rpath/library are harmlessly duplicated)
           # into JSON output events whose content crashes gotestfmt's tokenizer.
           # Failed tests are printed below and in the job summary instead.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
+          # goaac_simd matches BASE_BUILD_TAGS in Taskfile.yml. darwin/arm64 is a
+          # shipped release target that cannot be cross-compiled from Linux, so this
+          # is the ONLY job that compiles and runs its SIMD kernels (which include
+          # hand-written NEON assembly and a darwin-specific CPU-detection path)
+          # before a release build would.
+          go test -tags noembed,skipfrontend,goaac_simd -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 
