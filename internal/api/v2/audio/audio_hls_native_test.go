@@ -291,8 +291,8 @@ func TestNativeFeedLoopAnchorsPDTToCaptureTime(t *testing.T) {
 	defer cancel()
 	// The loop returns when the channel closes.
 	h.runNativeAudioFeedLoop(ctx, "native_src", stream, &audioFeedResources{
-		audioChan: ch,
-		cleanup:   func() {},
+		feed:    &audioFeed{ch: ch},
+		cleanup: func() {},
 	})
 
 	require.True(t, mux.Ready(1), "the feed loop must have produced segments")
@@ -326,8 +326,8 @@ func TestNativeFeedLoopFallsBackWhenCaptureTimeMissing(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	h.runNativeAudioFeedLoop(ctx, "native_src", stream, &audioFeedResources{
-		audioChan: ch,
-		cleanup:   func() {},
+		feed:    &audioFeed{ch: ch},
+		cleanup: func() {},
 	})
 
 	require.True(t, mux.Ready(1))
@@ -352,8 +352,8 @@ func TestNativeFeedLoopStopsOnContextCancel(t *testing.T) {
 	cancel()
 
 	h.runNativeAudioFeedLoop(ctx, "native_src", stream, &audioFeedResources{
-		audioChan: make(chan audioChunk),
-		cleanup:   func() { cleanupCalled = true },
+		feed:    &audioFeed{ch: make(chan audioChunk)},
+		cleanup: func() { cleanupCalled = true },
 	})
 
 	assert.True(t, cleanupCalled, "the route must be unregistered when the loop exits")
@@ -473,7 +473,7 @@ func TestNativeFeedLoopAccumulatesSubSampleChunks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 	defer cancel()
 	h.runNativeAudioFeedLoop(ctx, "native_src", stream, &audioFeedResources{
-		audioChan: ch, cleanup: func() {},
+		feed: &audioFeed{ch: ch}, cleanup: func() {},
 	})
 
 	assert.False(t, stream.mux.Stats().Failed, "sub-sample chunks are not an encoder failure")
@@ -504,7 +504,7 @@ func TestNativeFeedLoopSurvivesAlternatingOddChunks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 	h.runNativeAudioFeedLoop(ctx, "native_src", stream, &audioFeedResources{
-		audioChan: ch, cleanup: func() {},
+		feed: &audioFeed{ch: ch}, cleanup: func() {},
 	})
 
 	assert.False(t, stream.mux.Stats().Failed,
