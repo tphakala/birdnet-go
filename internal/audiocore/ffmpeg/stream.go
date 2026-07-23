@@ -25,6 +25,13 @@ const (
 	// Buffer size for reading FFmpeg stdout.
 	ffmpegBufferSize = 32768
 
+	// bitsPerByte converts a configured bit depth to a PCM sample size in bytes.
+	bitsPerByte = 8
+
+	// defaultPCMSampleBytes is the sample size for the s16le output format that
+	// buildOutputArgs falls back to for any bit depth other than 16, 24 or 32.
+	defaultPCMSampleBytes = 2
+
 	// Health check intervals and timeouts.
 	healthCheckInterval  = 5 * time.Second
 	silenceTimeout       = 90 * time.Second
@@ -1101,6 +1108,35 @@ func (s *Stream) processAudio() error {
 	}
 }
 
+// pcmFrameBytes returns the size in bytes of one interleaved PCM frame (one
+// sample for each channel) in the raw stream FFmpeg writes to stdout.
+//
+// It must track buildOutputArgs, which derives the output format from
+// cfg.BitDepth via GetFFmpegFormat: 16 -> s16le, 24 -> s24le, 32 -> s32le, and
+// s16le for anything else. Aligning on the whole interleaved frame rather than
+// on a single sample also keeps channel order stable, so a read that lands
+// between the left and right sample of a stereo pair does not swap the two
+// channels for the rest of the stream.
+//
+// The result is always at least 1, so callers can use it as a modulus.
+func pcmFrameBytes(cfg *StreamConfig) int {
+	sampleBytes := defaultPCMSampleBytes
+	switch cfg.BitDepth {
+	case 16, 24, 32:
+		sampleBytes = cfg.BitDepth / bitsPerByte
+	}
+
+	frameBytes := sampleBytes * max(cfg.Channels, 1)
+	if frameBytes > ffmpegBufferSize {
+		// A frame that cannot fit in a read buffer would stall the reader:
+		// every read would be a partial frame and nothing would ever be
+		// emitted. No real configuration reaches this, but falling back to
+		// byte alignment fails open rather than silently going mute.
+		return 1
+	}
+	return frameBytes
+}
+
 // readStdout is the body of the dedicated reader goroutine launched by
 // processAudio. When a buffer manager is wired it borrows a full-sized slice
 // from the size-specific BytePool and attaches a FrameRef whose release
@@ -1113,6 +1149,19 @@ func (s *Stream) processAudio() error {
 // sub-slice sent downstream, so the pool always sees a correctly sized buffer
 // on Put.
 func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, readerDone <-chan struct{}) {
+	// A pipe read boundary is not a PCM frame boundary: stdout.Read returns
+	// whatever bytes happen to be available, so a read routinely ends part-way
+	// through a sample. Every downstream consumer reinterprets these bytes as
+	// samples, and a partial one cannot be handled locally by any of them:
+	// dropping the odd byte shifts every following byte by one, so each
+	// subsequent sample decodes with its halves swapped and the audio becomes
+	// broadband noise, while the resampler rejects the frame outright. So the
+	// remainder is held here and prepended to the next read, and only whole
+	// frames go downstream. carry and carryLen are local to this goroutine.
+	frameBytes := pcmFrameBytes(&s.config)
+	carry := make([]byte, frameBytes)
+	carryLen := 0
+
 	for {
 		var (
 			out []byte
@@ -1132,13 +1181,24 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 			out = make([]byte, ffmpegBufferSize)
 		}
 
-		n, err := stdout.Read(out)
-		if n > 0 {
-			// Shrink the slice to the actual read size; the underlying
-			// capacity is preserved and returned to the pool via the ref
-			// closure (which captures the full-length slice).
+		// Read behind the carry so the joined bytes are already contiguous:
+		// no second buffer and no copy of the payload itself.
+		copy(out, carry[:carryLen])
+		n, err := stdout.Read(out[carryLen:])
+		total := carryLen + n
+		carryLen = 0
+		if rem := total % frameBytes; rem != 0 {
+			// Copy before re-slicing: out is recycled on the next iteration.
+			carryLen = copy(carry, out[total-rem:total])
+			total -= rem
+		}
+
+		if total > 0 {
+			// Shrink the slice to the whole frames actually available; the
+			// underlying capacity is preserved and returned to the pool via
+			// the ref closure (which captures the full-length slice).
 			select {
-			case readCh <- readResult{data: out[:n], ref: ref}:
+			case readCh <- readResult{data: out[:total], ref: ref}:
 			case <-readerDone:
 				// Main loop exited before we could hand off: release the
 				// producer's own reference so the pool slice is not leaked.
@@ -1146,7 +1206,9 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 				return
 			}
 		} else {
-			// No bytes read: return the buffer to the pool immediately.
+			// Nothing whole to hand downstream, either because the read was
+			// empty or because it only advanced part of a frame. Return the
+			// buffer to the pool immediately; the bytes live on in carry.
 			ref.Release()
 		}
 		if err != nil {
