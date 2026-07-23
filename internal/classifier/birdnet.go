@@ -855,6 +855,19 @@ func lookupOccurrence(scores map[string]float64, label string) (float64, bool) {
 	return score, ok
 }
 
+// clampOccurrence constrains an occurrence probability to [0.0, 1.0]. A NaN score is
+// returned unchanged, matching the comparison chain this replaced.
+func clampOccurrence(score float64) float64 {
+	switch {
+	case score < 0.0:
+		return 0.0
+	case score > 1.0:
+		return 1.0
+	default:
+		return score
+	}
+}
+
 // buildOccurrenceIndex indexes species scores for lookupOccurrence: every species under
 // its exact scientific name, plus a canonical-name entry wherever that does not shadow
 // an exact one. The cached and uncached paths both build the index through this helper
@@ -1508,14 +1521,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
 	if err == nil && len(cachedScores) > 0 {
 		if occurrence, found := lookupOccurrence(cachedScores, species); found {
-			// Clamp the score to [0.0, 1.0] range
-			if occurrence < 0.0 {
-				return 0.0
-			}
-			if occurrence > 1.0 {
-				return 1.0
-			}
-			return occurrence
+			return clampOccurrence(occurrence)
 		}
 	}
 
@@ -1533,14 +1539,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Resolve through the same index the cache uses, so a cache miss cannot answer
 	// differently from a cache hit for the same species.
 	if occurrence, found := lookupOccurrence(buildOccurrenceIndex(speciesScores), species); found {
-		// Clamp the score to [0.0, 1.0] range
-		if occurrence < 0.0 {
-			return 0.0
-		}
-		if occurrence > 1.0 {
-			return 1.0
-		}
-		return occurrence
+		return clampOccurrence(occurrence)
 	}
 
 	// Species not found in range filter results
