@@ -19,19 +19,38 @@ const (
 	testChannels = 1
 	testBitrate  = 128
 	aacFrame     = 1024
+
+	// testWideWindow is a playlist window nothing scrolls out of, for tests that
+	// assert over every segment a run produced.
+	testWideWindow = 1000
 )
 
 // testEpoch is a fixed wall-clock origin so PDT assertions are exact.
 var testEpoch = time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
 
-// newTestStream builds a stream over a fixed-frame fake codec.
+// newTestStream builds a stream over a fixed-frame fake codec, with the default
+// playlist window.
 func newTestStream(t *testing.T, opts *fakeCodecOptions) *Stream {
+	t.Helper()
+	return newTestStreamWithWindow(t, opts, 0)
+}
+
+// newTestStreamWithWindow builds a stream whose playlist window holds
+// windowSize segments; zero selects DefaultWindowSize.
+//
+// It exists so that a test needing a window nothing scrolls out of configures
+// one, rather than replacing s.segments after New. Replacing it works today but
+// swaps the window a snapshot was already published from without republishing,
+// which is exactly the unpublished-mutation shape
+// TestPlaylistSnapshotNeverGoesStale exists to forbid.
+func newTestStreamWithWindow(t *testing.T, opts *fakeCodecOptions, windowSize int) *Stream {
 	t.Helper()
 	s, err := New(&Config{
 		Codec:       newFakeCodec(opts),
 		SampleRate:  testRate,
 		Channels:    testChannels,
 		BitrateKbps: testBitrate,
+		WindowSize:  windowSize,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
@@ -141,10 +160,9 @@ func TestDurationsAccumulateWithoutDrift(t *testing.T) {
 
 	// A window large enough to retain every segment produced below, so the
 	// sum can be checked against the total sample count.
-	s := newTestStream(t, &fakeCodecOptions{
+	s := newTestStreamWithWindow(t, &fakeCodecOptions{
 		frameSizes: []int{aacFrame},
-	})
-	s.segments = newSegmentWindow(1000)
+	}, testWideWindow)
 
 	const total = testRate * 600 // ten minutes
 	writeSamples(t, s, total, testEpoch)
@@ -166,8 +184,7 @@ func TestDurationsAccumulateWithoutDrift(t *testing.T) {
 func TestProgramDateTimeTracksTheSampleTimeline(t *testing.T) {
 	t.Parallel()
 
-	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
-	s.segments = newSegmentWindow(1000)
+	s := newTestStreamWithWindow(t, &fakeCodecOptions{frameSizes: []int{aacFrame}}, testWideWindow)
 
 	writeSamples(t, s, testRate*10, testEpoch)
 
@@ -187,8 +204,7 @@ func TestProgramDateTimeTracksTheSampleTimeline(t *testing.T) {
 func TestSourceStallDeclaresDiscontinuityAndReanchorsPDT(t *testing.T) {
 	t.Parallel()
 
-	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
-	s.segments = newSegmentWindow(1000)
+	s := newTestStreamWithWindow(t, &fakeCodecOptions{frameSizes: []int{aacFrame}}, testWideWindow)
 
 	// Four seconds of well-behaved audio.
 	const before = testRate * 4
@@ -232,8 +248,7 @@ func TestSourceStallDeclaresDiscontinuityAndReanchorsPDT(t *testing.T) {
 func TestJitterBelowThresholdIsAbsorbed(t *testing.T) {
 	t.Parallel()
 
-	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
-	s.segments = newSegmentWindow(1000)
+	s := newTestStreamWithWindow(t, &fakeCodecOptions{frameSizes: []int{aacFrame}}, testWideWindow)
 
 	// Feed in chunks whose timestamps wobble by a few milliseconds, well
 	// inside the default one-second threshold. None of it should break the
@@ -252,7 +267,7 @@ func TestJitterBelowThresholdIsAbsorbed(t *testing.T) {
 	assert.NotContains(t, s.Playlist(), "#EXT-X-DISCONTINUITY")
 }
 
-func TestRingEvictsOldestAndAdvancesMediaSequence(t *testing.T) {
+func TestSegmentWindowEvictsOldestAndAdvancesMediaSequence(t *testing.T) {
 	t.Parallel()
 
 	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
@@ -360,14 +375,13 @@ func TestEncoderFailurePropagates(t *testing.T) {
 func TestCodecNeutrality(t *testing.T) {
 	t.Parallel()
 
-	s := newTestStream(t, &fakeCodecOptions{
+	s := newTestStreamWithWindow(t, &fakeCodecOptions{
 		name:       "variable",
 		frameSizes: []int{4096, 2048, 512, 4096},
 		delay:      0,
 		// Declared as variable: the muxer must record each unit's own
 		// duration rather than a fragment-wide default.
-	})
-	s.segments = newSegmentWindow(1000)
+	}, testWideWindow)
 
 	writeSamples(t, s, testRate*10, testEpoch)
 
@@ -449,16 +463,30 @@ func TestAccessUnitsAreCopiedNotAliased(t *testing.T) {
 	}
 }
 
+// TestConcurrentWriteAndServe runs the readers against a writer under -race,
+// which is the only mechanism that can catch a FUTURE write into a published
+// window; the unit tests can only pin the implementation as it stands.
+//
+// Two details make it able to detect that, and both were established by
+// reverting push to its old in-place shift and confirming this test then fails.
+// The readers run until the writer is done rather than a fixed count, so they
+// cannot retire early and leave the interesting cuts unobserved; and the window
+// is small enough that every cut evicts, since the in-place shift only wrote
+// into the published array on eviction. With a fixed reader count and the
+// default window, the same revert survived twenty runs.
 func TestConcurrentWriteAndServe(t *testing.T) {
 	t.Parallel()
 
-	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
+	// A window that evicts on every cut after the second.
+	s := newTestStreamWithWindow(t, &fakeCodecOptions{frameSizes: []int{aacFrame}}, 2)
 
 	var wg sync.WaitGroup
 	const chunks = 200
 	const chunk = testRate / 10
+	done := make(chan struct{})
 
 	wg.Go(func() {
+		defer close(done)
 		for i := range chunks {
 			if err := s.Write(silence(chunk, testChannels), sampleTime(i*chunk)); err != nil {
 				t.Errorf("write: %v", err)
@@ -469,10 +497,23 @@ func TestConcurrentWriteAndServe(t *testing.T) {
 
 	for range 4 {
 		wg.Go(func() {
-			for range chunks {
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				// Read the segment payloads, not just the counts: Playlist and
+				// Ready never touch a window element, so Segment is the only
+				// call here that a mutated header could be observed through.
+				stats := s.Stats()
+				for seq := range stats.Segments {
+					if seg, ok := s.Segment(seq); ok {
+						_ = len(seg.Data)
+					}
+				}
 				_ = s.Playlist()
 				_ = s.InitSegment()
-				_, _ = s.Segment(0)
 				_ = s.Ready(1)
 			}
 		})
@@ -497,28 +538,114 @@ func TestPlaylistSnapshotNeverGoesStale(t *testing.T) {
 	})
 
 	// Quarter-second chunks, so cuts land inside the run rather than only at
-	// its edges, and enough of them to scroll the window past its capacity.
+	// its edges, and enough of them to scroll the window well past its
+	// capacity. Scrolling matters: until the window fills, push never takes its
+	// eviction branch and Retained is just nextSeq, so the assertions below
+	// would agree for the wrong reason.
 	const chunk = testRate / 4
-	const chunks = 40
+	const chunks = 80
 	for i := range chunks {
 		writeSamples(t, s, chunk, sampleTime(i*chunk))
-
-		require.Equal(t, renderPlaylist(s.segments, s.targetDuration, s.closed), s.Playlist(),
-			"the snapshot must equal a fresh render of the window after write %d", i)
-		require.Equal(t, len(s.segments.retained()), s.Stats().Retained,
-			"Stats must be read from the same snapshot after write %d", i)
+		requireSnapshotMatchesWindow(t, s, i)
 	}
+	require.Greater(t, s.nextSeq, uint64(s.segments.capacity),
+		"the window must have scrolled, or eviction went untested")
 
 	// A stall re-anchors the timeline and cuts through a second path into
 	// cutSegment, which has its own publish to get wrong.
 	stall := sampleTime(chunks * chunk).Add(10 * time.Second)
 	require.NoError(t, s.Write(silence(chunk, testChannels), stall))
-	require.Equal(t, renderPlaylist(s.segments, s.targetDuration, s.closed), s.Playlist(),
-		"a discontinuity cut must republish")
+	requireSnapshotMatchesWindow(t, s, chunks)
 
 	require.NoError(t, s.Close())
-	assert.Equal(t, renderPlaylist(s.segments, s.targetDuration, s.closed), s.Playlist(),
-		"Close must republish, or a client polls a playlist that never gains EXT-X-ENDLIST")
+	requireSnapshotMatchesWindow(t, s, chunks+1)
+	assert.Contains(t, s.Playlist(), "#EXT-X-ENDLIST", "a closed stream must stop clients polling")
+}
+
+// requireSnapshotMatchesWindow asserts that every field a reader can see equals
+// what the stream's own state says it should be.
+//
+// It checks all five, not just the playlist, because the three counters are
+// exactly the fields cutSegment settles AFTER pushing the segment. Asserting
+// only the playlist and Retained would pass against a publish hoisted above
+// those updates, which is a way to get the snapshot wrong that no amount of
+// playlist comparison detects.
+func requireSnapshotMatchesWindow(t *testing.T, s *Stream, step int) {
+	t.Helper()
+
+	stats := s.Stats()
+	require.Equal(t, renderPlaylist(s.segments, s.targetDuration, s.closed), s.Playlist(),
+		"the snapshot must equal a fresh render of the window at step %d", step)
+	require.Equal(t, len(s.segments.retained()), stats.Retained, "Retained at step %d", step)
+	require.Equal(t, s.nextSeq, stats.Segments, "Segments at step %d", step)
+	require.Equal(t, s.discontinuities, stats.Discontinuities, "Discontinuities at step %d", step)
+	require.Equal(t, s.lastSegmentPDT, stats.LastSegmentPDT, "LastSegmentPDT at step %d", step)
+}
+
+// TestCloseWithNoPendingAudioEndsPlaylist covers the one path on which Close's
+// own publish is the only one: a stream with nothing buffered to cut.
+//
+// Without it the ENDLIST assertions elsewhere are satisfied by cutSegment's
+// publish instead, since Close sets s.closed before flushing. Deleting Close's
+// publish then leaves the whole suite green while a stream closed on a segment
+// boundary, or with no audio at all, serves a playlist that never ends and a
+// client that polls it forever.
+func TestCloseWithNoPendingAudioEndsPlaylist(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
+	require.NoError(t, s.Close())
+
+	assert.Contains(t, s.Playlist(), "#EXT-X-ENDLIST",
+		"a stream closed with nothing buffered must still stop advertising itself as live")
+}
+
+// TestCloseDoesNotEndThePlaylistBeforeTheFinalSegment pins the reason
+// publishView takes an explicit ended flag rather than reading s.closed.
+//
+// Close sets s.closed first, so that a racing Write is refused and a second
+// Close cannot re-enter a codec that just panicked. A cut triggered by the
+// flush therefore runs with s.closed already true, and rendering the tag from
+// that would publish a terminated playlist that omits the segment the flush is
+// producing. A client honouring EXT-X-ENDLIST stops there and never fetches it.
+//
+// The bad state is transient, so asserting on the final playlist proves
+// nothing: by the time Close returns, both the mid-flush cut and Close's own
+// publish have happened and the result is correct either way. The flush hook is
+// what makes the intermediate instant observable, and it can call Playlist from
+// inside the muxer's own critical section precisely because the read side no
+// longer takes the lock.
+func TestCloseDoesNotEndThePlaylistBeforeTheFinalSegment(t *testing.T) {
+	t.Parallel()
+
+	var s *Stream
+	var duringFlush string
+	opts := &fakeCodecOptions{
+		frameSizes:  []int{aacFrame},
+		tailSamples: aacFrame,
+	}
+	// Runs after the tail unit has forced its cut, and therefore after that
+	// cut has published a snapshot.
+	opts.flushHook = func() { duringFlush = s.Playlist() }
+	s = newTestStream(t, opts)
+
+	// Fill the segment in progress to within one access unit of the target, so
+	// that the flushed tail overflows it and forces a cut from inside Close.
+	writeSamples(t, s, s.targetSamples, testEpoch)
+	require.Positive(t, s.pendingSamples, "the flush must have a partial segment to overflow")
+
+	require.NoError(t, s.Close())
+
+	require.NotEmpty(t, duringFlush, "the flush hook must have run")
+	require.Contains(t, duringFlush, "#EXTINF", "the tail must have forced a cut during the flush")
+	assert.NotContains(t, duringFlush, "#EXT-X-ENDLIST",
+		"the playlist must not declare the stream over while the flush is still producing segments")
+
+	// And the finished playlist is complete and terminated.
+	playlist := s.Playlist()
+	require.Contains(t, playlist, "#EXT-X-ENDLIST")
+	assert.Equal(t, len(s.segments.retained()), strings.Count(playlist, "#EXTINF"),
+		"the ended playlist must advertise every retained segment")
 }
 
 func TestPlaylistBeforeAnySegment(t *testing.T) {
@@ -642,8 +769,7 @@ func TestStallThresholdBoundary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
-			s.segments = newSegmentWindow(1000)
+			s := newTestStreamWithWindow(t, &fakeCodecOptions{frameSizes: []int{aacFrame}}, testWideWindow)
 
 			const first = testRate
 			writeSamples(t, s, first, testEpoch)
@@ -665,8 +791,7 @@ func TestStallThresholdBoundary(t *testing.T) {
 func TestBackwardClockJumpIsDetected(t *testing.T) {
 	t.Parallel()
 
-	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
-	s.segments = newSegmentWindow(1000)
+	s := newTestStreamWithWindow(t, &fakeCodecOptions{frameSizes: []int{aacFrame}}, testWideWindow)
 
 	writeSamples(t, s, testRate, testEpoch)
 	// Far enough back that time.Time.Sub saturates.

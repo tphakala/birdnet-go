@@ -56,6 +56,15 @@ type fakeEncoder struct {
 	// lookahead frame back until the stream ends.
 	tailSamples int
 
+	// flushHook runs inside Flush, immediately after the tail access unit has
+	// been handed to the muxer. That is the one instant at which a test can
+	// observe what a reader would see PART WAY through Close: the tail may have
+	// forced a segment cut, and that cut publishes a snapshot, while Close has
+	// not yet published its own final one. Since the read side takes no lock,
+	// the hook can call straight into Playlist or Stats from here even though
+	// the stream mutex is held.
+	flushHook func()
+
 	// failAfter, when positive, makes the encoder fail once it has emitted
 	// that many access units.
 	failAfter int
@@ -123,7 +132,13 @@ func (f *fakeEncoder) Flush(emit EmitFunc) error {
 	}
 	samples := f.tailSamples
 	f.tailSamples = 0
-	return f.emitOne(samples, emit)
+	if err := f.emitOne(samples, emit); err != nil {
+		return err
+	}
+	if f.flushHook != nil {
+		f.flushHook()
+	}
+	return nil
 }
 
 func (f *fakeEncoder) DecoderConfig() []byte { return make([]byte, flacStreamInfoLen) }
@@ -141,6 +156,7 @@ type fakeCodecOptions struct {
 	delay       int
 	tailSamples int
 	failAfter   int
+	flushHook   func()
 
 	// flushErr and closeErr make the encoder's teardown fail.
 	flushErr error
@@ -190,6 +206,7 @@ func newFakeCodec(opts *fakeCodecOptions) Codec {
 				delay:       opts.delay,
 				tailSamples: opts.tailSamples,
 				failAfter:   opts.failAfter,
+				flushHook:   opts.flushHook,
 				flushErr:    opts.flushErr,
 				closeErr:    opts.closeErr,
 			}

@@ -117,7 +117,7 @@ func TestCeilSeconds(t *testing.T) {
 	}
 }
 
-func TestSegmentWindowLen(t *testing.T) {
+func TestSegmentWindowNeverGrowsPastCapacity(t *testing.T) {
 	t.Parallel()
 
 	w := newSegmentWindow(3)
@@ -136,11 +136,16 @@ func TestNewSegmentWindowRaisesDegenerateCapacity(t *testing.T) {
 	t.Parallel()
 
 	for _, capacity := range []int{-1, 0} {
-		w := newSegmentWindow(capacity)
+		// The constructor is inside the closure too: without the raise, a
+		// capacity of -1 panics in make() rather than in push, and a panic out
+		// here takes the whole test binary down instead of failing this case.
+		var w *segmentWindow
 		assert.NotPanics(t, func() {
+			w = newSegmentWindow(capacity)
 			w.push(&Segment{Seq: 1})
 			w.push(&Segment{Seq: 2})
 		})
+		require.NotNil(t, w)
 		assert.Len(t, w.retained(), 1)
 	}
 }

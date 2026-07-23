@@ -29,7 +29,7 @@ type Segment struct {
 	Seq uint64
 
 	// Data is the complete segment: styp, moof and mdat. It is owned by the
-	// stream and must be treated as read only; the ring never writes into a
+	// stream and must be treated as read only; nothing ever writes into a
 	// published segment's backing array.
 	Data []byte
 
@@ -55,8 +55,8 @@ type Segment struct {
 	// DiscontinuitySeq is this segment's own discontinuity sequence number,
 	// counting every break up to and including its own. It is not what
 	// EXT-X-DISCONTINUITY-SEQUENCE reports directly; see
-	// ring.discontinuitySequence, which subtracts this segment's own break
-	// because the renderer emits the tag for it separately.
+	// segmentWindow.discontinuitySequence, which subtracts this segment's own
+	// break because the renderer emits the tag for it separately.
 	DiscontinuitySeq uint64
 }
 
@@ -133,10 +133,13 @@ func newSegmentWindow(capacity int) *segmentWindow {
 // The retained headers are copied into a fresh slice rather than shifted down
 // in place. Shifting is one allocation cheaper, but it writes into an array a
 // reader may be walking at that moment, since the window is published to
-// playlist and segment lookups without a lock. Dropping the evicted header from
-// the new slice releases its Data as soon as the last reader holding the
-// previous slice lets go, which is the same collectability the in-place
-// overwrite gave.
+// playlist and segment lookups without a lock.
+//
+// The cost is that an evicted segment's Data is released strictly later than
+// the in-place overwrite released it: the overwrite dropped the reference at
+// push time, whereas the evicted header now survives in the previous slice
+// until the last reader holding it lets go. That is bounded by one window's
+// worth of payload, roughly 35 KB per stream at the default settings.
 func (w *segmentWindow) push(s *Segment) {
 	retained := w.segments
 	if len(retained) == w.capacity {
@@ -151,8 +154,14 @@ func (w *segmentWindow) push(s *Segment) {
 // retained returns the window's segments, oldest first. The returned slice is
 // final: push replaces it rather than writing into it, so a caller may keep it
 // for as long as it likes.
+//
+// Capacity is clipped to the length so that "final" is true of the spare slots
+// too. Until the window first fills, w.segments has room to spare, and an
+// unclipped slice would let a caller's append write into the array a concurrent
+// reader is walking, which is the one thing the copy-on-write push exists to
+// prevent.
 func (w *segmentWindow) retained() []Segment {
-	return w.segments
+	return w.segments[:len(w.segments):len(w.segments)]
 }
 
 // findSegment returns the segment with the given sequence number from a window

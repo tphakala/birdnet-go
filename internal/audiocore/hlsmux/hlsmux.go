@@ -169,8 +169,9 @@ type view struct {
 // the goroutine encoding for it. See the view type.
 type Stream struct {
 	// view is the read side's snapshot; see the type. It is the only thing
-	// Playlist, Segment, Ready and Stats touch, which is what keeps every
-	// reader off mu. Stored only from publishView, under mu.
+	// Playlist, Segment and Ready touch, and it supplies every Stats field
+	// except the two below, which is what keeps every reader off mu. Stored
+	// only from publishView, under mu.
 	view atomic.Pointer[view]
 
 	// driftCorrection and failed are the two Stats fields the segment window
@@ -382,8 +383,11 @@ func New(cfg *Config) (*Stream, error) {
 	s.appendSegment = frag.AppendSegment
 	// Publish the first snapshot before the Stream is handed to anyone, so a
 	// reader never loads a nil view and a poll arriving before the first
-	// segment is cut still learns the init segment from EXT-X-MAP.
-	s.publishView()
+	// segment is cut still learns the init segment from EXT-X-MAP. Nothing may
+	// return between the literal above and this call; the readers dereference
+	// the view unguarded, so a Stream that escaped without one would panic on
+	// the first poll.
+	s.publishView(false)
 	return s, nil
 }
 
@@ -626,27 +630,38 @@ func (s *Stream) cutSegment() error {
 	s.pendingSamples = 0
 
 	// Last, once every field the snapshot reads is settled. A cut is the only
-	// thing that changes what a reader can see, apart from the stream ending,
-	// so this is also the only place the render happens.
-	s.publishView()
+	// thing that changes the window while the stream runs, so it is the only
+	// render the running stream needs; New seeds the first snapshot and Close
+	// republishes the last one.
+	s.publishView(false)
 	return nil
 }
 
 // publishView rebuilds the read-side snapshot and swaps it in.
 //
 // It must be called with s.mu held, or before the Stream has been handed to any
-// other goroutine, and it must be called after every change a reader can
-// observe: a segment cut, and the transition to closed that adds
-// EXT-X-ENDLIST.
+// other goroutine, and after any change to the segment window or to the
+// counters Stats reports. Missing one leaves every reader on a stale snapshot
+// indefinitely, with no error anywhere.
 //
-// The render it costs runs on the capture goroutine rather than on an HTTP
-// handler, which is the one thing this trades away. It is worth it at any
-// audience above one: the render happens once per segment instead of once per
-// poll, and a segment is two seconds of a goroutine that spends single-digit
-// milliseconds per second encoding.
-func (s *Stream) publishView() {
+// ended is passed rather than read from s.closed because the two are not the
+// same event. Close sets s.closed before flushing the encoder, so that a Write
+// racing the teardown is refused and a second Close cannot re-enter a codec
+// that has just panicked. But the flush can still cut a segment, and rendering
+// EXT-X-ENDLIST from s.closed at that moment would publish a terminated
+// playlist that is missing the very segment the flush is producing. A client
+// honouring the tag stops polling and never sees it. Only Close's own final
+// publish ends the playlist.
+//
+// The render costs the capture goroutine roughly 2.4 microseconds and 1 KB once
+// per segment, which is the one thing this design trades away: it moves work
+// off HTTP handlers onto the real-time thread. Measured against a two-second
+// segment on a goroutine that spends single-digit milliseconds per second
+// encoding, that is under a thousandth of the budget, and it replaces a render
+// per poll per viewer with one render per segment.
+func (s *Stream) publishView(ended bool) {
 	s.view.Store(&view{
-		playlist:        renderPlaylist(s.segments, s.targetDuration, s.closed),
+		playlist:        renderPlaylist(s.segments, s.targetDuration, ended),
 		segments:        s.segments.retained(),
 		nextSeq:         s.nextSeq,
 		discontinuities: s.discontinuities,
@@ -668,6 +683,20 @@ func (s *Stream) Close() error {
 	}
 	s.closed = true
 
+	// Deferred, and registered after the unlock so that it runs before it,
+	// still holding the mutex.
+	//
+	// Deferred rather than called inline because the flush below runs codec
+	// code that this project already assumes can panic: the HLS handler wraps
+	// this very call in a recover (see closeNativeMuxGuarded) for exactly that
+	// reason. An inline publish would be skipped by the unwind, and since
+	// s.closed is already set, the second Close returns early and nothing ever
+	// publishes again, leaving a dead stream advertising itself as live for as
+	// long as the process runs. It also covers the ordinary failure paths, so a
+	// stream that could not publish its last segment still stops clients
+	// polling.
+	defer s.publishView(true)
+
 	var flushErr error
 	if !s.failed.Load() {
 		flushErr = s.enc.Flush(s.emit)
@@ -675,11 +704,6 @@ func (s *Stream) Close() error {
 			flushErr = s.cutSegment()
 		}
 	}
-
-	// Unconditionally, including when the flush failed: EXT-X-ENDLIST is what
-	// stops a client polling forever, and a stream that could not publish its
-	// last segment still has to stop advertising itself as live.
-	s.publishView()
 
 	closeErr := s.enc.Close()
 	switch {
@@ -731,14 +755,36 @@ func (s *Stream) Ready(n int) bool {
 
 // Stats returns a point-in-time view of the stream's health.
 //
-// Each call is internally consistent, but Stats and Playlist read the snapshot
-// separately, so a caller making both calls can catch a segment cut between
-// them and see a Retained one ahead of the playlist it just read. No field here
-// is an invariant of the playlist, so there is nothing that can be observed
-// broken; a caller that needs the two to agree exactly should treat Retained as
-// a lower bound on what the playlist it holds advertises.
+// Segments, Retained, Discontinuities and LastSegmentPDT all come from one
+// snapshot and so agree with each other. DriftCorrection and Failed are sampled
+// separately, because neither is determined by a segment cut: one moves on
+// every write and the other latches at an arbitrary one. They can therefore be
+// a generation ahead of the other four, which is what a caller wants from them
+// anyway, since both report the liveness of the write side rather than the
+// contents of the playlist.
+//
+// Retained is the number of segments the playlist advertises, but only for the
+// playlist rendered from the SAME snapshot. A separate Playlist call may land
+// either side of a cut; use PlaylistAndStats when the two have to agree.
 func (s *Stream) Stats() Stats {
+	return s.statsFrom(s.view.Load())
+}
+
+// PlaylistAndStats returns the media playlist together with the stats
+// describing that exact playlist, from a single snapshot load.
+//
+// This is what a caller reporting on the playlist it is about to serve wants:
+// Retained is then exactly the number of segments in the returned playlist,
+// rather than a count from a neighbouring instant that has to be reasoned about
+// as a bound.
+func (s *Stream) PlaylistAndStats() (playlist string, stats Stats) {
 	v := s.view.Load()
+	return v.playlist, s.statsFrom(v)
+}
+
+// statsFrom builds the Stats a given snapshot describes, plus the two fields
+// the snapshot does not determine.
+func (s *Stream) statsFrom(v *view) Stats {
 	return Stats{
 		Segments:        v.nextSeq,
 		Retained:        len(v.segments),
