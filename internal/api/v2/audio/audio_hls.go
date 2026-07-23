@@ -30,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/hlsmux"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -92,6 +93,11 @@ const (
 	// checks to avoid adding I/O load on every playlist poll.
 	hlsFreshnessCheckInterval = 10 * time.Second
 
+	// hlsPlaylistPollInterval is how often stream creation checks whether enough
+	// segments exist to start playback. Set to catch the second segment promptly
+	// after the first; both encoders poll on it.
+	hlsPlaylistPollInterval = 500 * time.Millisecond
+
 	// Session ID validation
 
 	// FFmpeg HLS muxer settings
@@ -99,6 +105,13 @@ const (
 	hlsAllowCache      = 1          // Allow client-side caching of HLS segments
 	hlsStartNumber     = 0          // Starting sequence number for HLS segments
 	hlsInitSegmentName = "init.mp4" // fMP4 initialization segment filename
+
+	// hlsConsumerChannels is the channel count the HLS consumer declares to the
+	// audio router. The capture pipeline is mono end to end and neither encoder
+	// downmixes, so this is an assumption both paths already made; naming it
+	// gives the native path's muxer configuration something to be checked
+	// against rather than a second bare literal.
+	hlsConsumerChannels = 1
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -112,6 +125,18 @@ type HLSStreamInfo struct {
 	ctx          context.Context    // Stream lifecycle context
 	cancel       context.CancelFunc // Cancel function for cleanup
 	streamEpoch  time.Time          // Wall-clock time corresponding to HLS stream position 0
+
+	// mux is the in-process muxer serving this stream, non-nil only when
+	// BIRDNET_HLS_ENCODER selects the native encoder. It is the discriminator
+	// between the two paths: when set, there is no FFmpeg process, no FIFO and
+	// no output directory, and playlist and segments are served from memory.
+	// Written once before the stream is published and never reassigned.
+	mux *hlsmux.Stream
+
+	// feedDone is closed when the native feed goroutine has stopped, so teardown
+	// can close the muxer only once nothing can still write to it. Non-nil only
+	// on the native path, alongside mux.
+	feedDone chan struct{}
 
 	// pdtOffset corrects FFmpeg's PROGRAM_DATE_TIME timestamps to align with
 	// wall-clock time. FFmpeg sets the PDT epoch at process init (av_gettime),
@@ -498,7 +523,13 @@ func (c *Handler) buildHLSStreamResponse(ctx echo.Context, sourceID string, stre
 
 // checkHLSPlaylistReady checks if the playlist file exists and is valid
 func (c *Handler) checkHLSPlaylistReady(stream *HLSStreamInfo) bool {
-	if stream == nil || stream.PlaylistPath == "" {
+	if stream == nil {
+		return false
+	}
+	if stream.isNative() {
+		return stream.mux.Ready(hlsMinSegments)
+	}
+	if stream.PlaylistPath == "" {
 		return false
 	}
 
@@ -657,6 +688,10 @@ func (c *Handler) ServeHLSPlaylist(ctx echo.Context) error {
 
 	// Update stream-level activity (no client registration - lifecycle managed by start/stop/heartbeat)
 	c.updateStreamActivity(sourceID)
+
+	if stream.isNative() {
+		return c.serveNativePlaylist(ctx, sourceID, stream)
+	}
 
 	// Get HLS base directory
 	hlsBaseDir, err := conf.GetHLSDirectory()
@@ -892,6 +927,10 @@ func (c *Handler) ServeHLSContent(ctx echo.Context) error {
 
 	// Log client connection (rate-limited)
 	c.logHLSClientConnection(sourceID, ctx.RealIP(), decodedPath)
+
+	if stream.isNative() {
+		return c.serveNativeContent(ctx, stream, decodedPath)
+	}
 
 	// Get HLS base directory
 	hlsBaseDir, err := conf.GetHLSDirectory()
@@ -1167,6 +1206,12 @@ func (c *Handler) forceCreateHLSStream(sourceID string) (*HLSStreamInfo, error) 
 
 // createHLSStream creates a new HLS stream (called under singleflight serialization).
 func (c *Handler) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
+	// The gate is read per request rather than captured at startup, so toggling
+	// it takes effect on the next stream without a restart.
+	if conf.NativeHLSEncoderEnabled() {
+		return c.createNativeHLSStream(sourceID)
+	}
+
 	apicore.GetLogger().Info("Creating new HLS stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 
 	// Generate filesystem-safe name
@@ -1281,13 +1326,7 @@ func (c *Handler) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 		streamEpoch:  time.Now(),
 	}
 
-	// Register the stream (singleflight guarantees no concurrent creation for this sourceID)
-	hlsMgr.streamsMu.Lock()
-	hlsMgr.streams[sourceID] = stream
-	hlsMgr.streamsMu.Unlock()
-
-	// Initialize activity
-	c.updateHLSActivity(sourceID, "", "stream_creation")
+	c.publishHLSStream(sourceID, stream)
 
 	// Start audio feed loop (non-Windows platforms).
 	// The audio callback and FIFO were already prepared above, so the feed
@@ -1305,9 +1344,25 @@ func (c *Handler) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 		}()
 	}
 
-	// Start context cleanup goroutine - pass stream pointer to verify identity
-	// before cleanup, preventing a force-restarted stream from being killed
-	// by the old stream's context cancellation goroutine.
+	c.watchHLSStreamContext(sourceID, stream)
+
+	return stream, nil
+}
+
+// publishHLSStream registers the stream and seeds its activity tracking.
+// Singleflight guarantees no concurrent creation for this sourceID.
+func (c *Handler) publishHLSStream(sourceID string, stream *HLSStreamInfo) {
+	hlsMgr.streamsMu.Lock()
+	hlsMgr.streams[sourceID] = stream
+	hlsMgr.streamsMu.Unlock()
+
+	c.updateHLSActivity(sourceID, "", "stream_creation")
+}
+
+// watchHLSStreamContext starts the goroutine that cleans up once the stream's
+// context is cancelled. It verifies stream identity before cleaning up, so a
+// force-restarted stream is not killed by the old stream's cancellation.
+func (c *Handler) watchHLSStreamContext(sourceID string, stream *HLSStreamInfo) {
 	go func(s *HLSStreamInfo) {
 		<-s.ctx.Done()
 		hlsMgr.streamsMu.Lock()
@@ -1321,8 +1376,6 @@ func (c *Handler) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 			hlsMgr.streamsMu.Unlock()
 		}
 	}(stream)
-
-	return stream, nil
 }
 
 // prepareHLSDirectory creates and validates the output directory
@@ -1404,35 +1457,16 @@ func (c *Handler) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource, o
 func (c *Handler) buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
 	settings := c.CurrentSettings().WebServer.LiveStream
 
-	// Apply defaults and limits
-	bitrate := 128
-	if settings.BitRate > 0 {
-		switch {
-		case settings.BitRate < hlsMinBitrate:
-			bitrate = hlsMinBitrate
-		case settings.BitRate > hlsMaxBitrate:
-			bitrate = hlsMaxBitrate
-		default:
-			bitrate = settings.BitRate
-		}
-	}
+	// Resolve through the same helpers the native path uses, so the two encoders
+	// cannot drift apart on defaults or clamping.
+	bitrate := c.effectiveBitrateKbps()
+	segmentLength := c.getEffectiveSegmentLength()
 
-	sampleRate := hlsDefaultSampleRate
-	if settings.SampleRate > 0 {
-		sampleRate = settings.SampleRate
-	}
-
-	segmentLength := hlsDefaultSegmentLen
-	if settings.SegmentLength > 0 {
-		switch {
-		case settings.SegmentLength < hlsMinSegmentLen:
-			segmentLength = hlsMinSegmentLen
-		case settings.SegmentLength > hlsMaxSegmentLen:
-			segmentLength = hlsMaxSegmentLen
-		default:
-			segmentLength = settings.SegmentLength
-		}
-	}
+	// This must be the rate the consumer declared to the router, which is what
+	// the router resampled the PCM to. FFmpeg is told the raw PCM is at this
+	// rate, so a divergence between the two would not error anywhere; it would
+	// silently reinterpret the stream and shift its pitch and speed.
+	sampleRate := c.ffmpegConsumerSampleRate()
 
 	logLevel := logLevelWarning
 	if settings.FfmpegLogLevel != "" {
@@ -1442,7 +1476,10 @@ func (c *Handler) buildFFmpegArgs(inputSource, outputDir, playlistPath string) [
 	args := []string{
 		"-f", "s16le",
 		"-ar", fmt.Sprintf("%d", sampleRate),
-		"-ac", "1",
+		// Must match what the consumer declared to the router, for the same
+		// reason as the assertion in setupAudioCallback: FFmpeg is told what the
+		// raw PCM is, so a mismatch is reinterpreted rather than rejected.
+		"-ac", strconv.Itoa(hlsConsumerChannels),
 		"-i", inputSource,
 		"-y",
 		"-c:a", "aac",
@@ -1507,7 +1544,7 @@ func (c *Handler) setupWindowsAudioFeed(ctx context.Context, sourceID string, cm
 		}()
 		apicore.GetLogger().Debug("Starting audio feed via stdin", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 
-		audioChan, cleanup, err := c.setupAudioCallback(sourceID)
+		audioChan, cleanup, err := c.setupAudioCallback(sourceID, c.ffmpegConsumerSampleRate())
 		if err != nil {
 			apicore.GetLogger().Error("Error setting up audio callback", logger.Error(err))
 			return
@@ -1519,12 +1556,13 @@ func (c *Handler) setupWindowsAudioFeed(ctx context.Context, sourceID string, cm
 			case <-ctx.Done():
 				apicore.GetLogger().Debug("Audio feed terminated due to context cancellation", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 				return
-			case data, ok := <-audioChan:
+			case chunk, ok := <-audioChan:
 				if !ok {
 					apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 					return
 				}
 
+				data := chunk.data
 				written := 0
 				for written < len(data) {
 					n, err := stdin.Write(data[written:])
@@ -1571,12 +1609,25 @@ func (c *Handler) setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd, hl
 	return logFile, nil
 }
 
+// audioChunk is one delivery of PCM from the router, carrying the capture time
+// alongside the samples.
+//
+// The timestamp exists for the native muxer, which anchors EXT-X-PROGRAM-DATE-TIME
+// to when audio was actually captured. Deriving that from the sample count instead
+// would report wall-clock times that never happened whenever a source stalls and
+// resumes, silently and permanently, because a stalled source produces no samples
+// for the gap. The FFmpeg path ignores the field and is unaffected.
+type audioChunk struct {
+	data      []byte
+	timestamp time.Time
+}
+
 // hlsConsumer implements audiocore.AudioConsumer for HLS streaming.
-// It forwards audio frames to a channel for FFmpeg encoding.
+// It forwards audio frames to a channel for encoding.
 type hlsConsumer struct {
 	id       string
 	sourceID string
-	ch       chan []byte
+	ch       chan audioChunk
 	rate     int
 	depth    int
 	channels int
@@ -1612,10 +1663,10 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 	}
 
 	// Copy once up front. Both select arms below need an owned slice.
-	buf := slices.Clone(frame.Data)
+	chunk := audioChunk{data: slices.Clone(frame.Data), timestamp: frame.Timestamp}
 
 	select {
-	case h.ch <- buf:
+	case h.ch <- chunk:
 	default:
 		// Channel full, drop oldest to make room
 		dropped := false
@@ -1626,7 +1677,7 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 		}
 		// Non-blocking send - drop if still full
 		select {
-		case h.ch <- buf:
+		case h.ch <- chunk:
 		default:
 		}
 
@@ -1655,17 +1706,35 @@ func (h *hlsConsumer) Close() error {
 	return nil
 }
 
+// ffmpegConsumerSampleRate is the rate the FFmpeg path declares to the router:
+// the configured live-stream rate, falling back to the HLS default. The native
+// path pins its own rate instead (see nativeHLSSampleRate).
+func (c *Handler) ffmpegConsumerSampleRate() int {
+	if rate := c.CurrentSettings().WebServer.LiveStream.SampleRate; rate > 0 {
+		return rate
+	}
+	return hlsDefaultSampleRate
+}
+
 // setupAudioCallback sets up the audio callback channel using the AudioRouter.
-func (c *Handler) setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(), err error) {
-	audioChan = make(chan []byte, defaultReadBufferSize)
+// sampleRate is the rate the consumer declares; the router inserts a resampler
+// whenever the source differs from it.
+func (c *Handler) setupAudioCallback(sourceID string, sampleRate int) (audioChan chan audioChunk, cleanup func(), err error) {
+	audioChan = make(chan audioChunk, defaultReadBufferSize)
+
+	// hlsConsumerChannels is what this consumer declares to the router, and the
+	// native path derives its muxer sample-frame size from nativeHLSChannels.
+	// They must be equal, and the failure when they are not is silent rather
+	// than loud: with more consumer channels than muxer channels the interleaved
+	// frames still divide evenly into the smaller sample frame, so every write is
+	// ACCEPTED and the muxer reads L,R,L,R as consecutive mono samples. That
+	// plays at double speed an octave up with no error anywhere.
+	//
+	// Both subtractions are needed. One alone only rejects the direction that
+	// goes negative, which is the direction that would have failed loudly anyway.
+	const _ = uint(hlsConsumerChannels-nativeHLSChannels) + uint(nativeHLSChannels-hlsConsumerChannels)
 
 	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
-	// Use the configured live stream sample rate, falling back to the default HLS sample rate.
-	sampleRate := hlsDefaultSampleRate
-	liveStream := c.CurrentSettings().WebServer.LiveStream
-	if liveStream.SampleRate > 0 {
-		sampleRate = liveStream.SampleRate
-	}
 
 	consumer := &hlsConsumer{
 		id:       consumerID,
@@ -1673,7 +1742,7 @@ func (c *Handler) setupAudioCallback(sourceID string) (audioChan chan []byte, cl
 		ch:       audioChan,
 		rate:     sampleRate,
 		depth:    conf.BitDepth,
-		channels: 1,
+		channels: hlsConsumerChannels,
 	}
 
 	// Load the engine once for all registry/router operations in this section.
@@ -1748,9 +1817,9 @@ func writeToFIFO(ctx context.Context, fifo *os.File, data []byte) error {
 // callback is already registered and the FIFO is open when FFmpeg captures its
 // PROGRAM_DATE_TIME epoch.
 type audioFeedResources struct {
-	audioChan chan []byte        // Buffered channel receiving audio chunks from the broadcast callback
-	fifo      *os.File           // FIFO pipe opened for writing to FFmpeg
-	secFS     *securefs.SecureFS // Secure filesystem (must be closed when done)
+	audioChan chan audioChunk    // Buffered channel receiving audio chunks from the broadcast callback
+	fifo      *os.File           // FIFO pipe opened for writing to FFmpeg (nil on the native path)
+	secFS     *securefs.SecureFS // Secure filesystem (nil on the native path; must be closed when done)
 	cleanup   func()             // Releases all resources (unregisters callback, closes FIFO and secFS)
 }
 
@@ -1774,7 +1843,7 @@ func (c *Handler) prepareAudioFeed(sourceID, pipePath string) (*audioFeedResourc
 
 	// Register the audio callback first so audio chunks start buffering
 	// in the channel while we open the FIFO and before FFmpeg starts.
-	audioChan, callbackCleanup, err := c.setupAudioCallback(sourceID)
+	audioChan, callbackCleanup, err := c.setupAudioCallback(sourceID, c.ffmpegConsumerSampleRate())
 	if err != nil {
 		if closeErr := secFS.Close(); closeErr != nil {
 			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
@@ -1846,12 +1915,13 @@ func (c *Handler) runAudioFeedLoop(ctx context.Context, sourceID string, stream 
 			apicore.GetLogger().Debug("Audio feed stopped due to context cancellation",
 				logger.String("source_id", sanitizedID))
 			return
-		case data, ok := <-res.audioChan:
+		case chunk, ok := <-res.audioChan:
 			if !ok {
 				apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
 				return
 			}
 
+			data := chunk.data
 			writeStart := time.Now()
 			if err := writeToFIFO(ctx, res.fifo, data); err != nil {
 				if ctx.Err() != nil {
@@ -2016,6 +2086,11 @@ func (c *Handler) cleanupExistingHLSStream(sourceID string) {
 	removeStreamToken(sourceID)
 	hlsMgr.streamsMu.Unlock()
 
+	// Deleting the stream above means the context watcher will find a different
+	// (or missing) entry and skip performHLSCleanup, so the muxer has to be
+	// closed here or it is never closed at all.
+	closeNativeMux(sourceID, stream)
+
 	// Wait for process termination using cmd.Wait() (not cmd.Process.Wait())
 	// so that cmd.Cancel/cmd.WaitDelay escalation to SIGKILL works correctly.
 	if cmd != nil {
@@ -2088,11 +2163,18 @@ func (c *Handler) performHLSCleanup(sourceID string, stream *HLSStreamInfo, reas
 		stream.cancel()
 	}
 
-	// Clean up FFmpeg process and log file
-	c.cleanupFFmpegProcess(sourceID, stream)
+	if stream.isNative() {
+		// No process, no FIFO and no output directory exist on this path, so
+		// closing the muxer (which flushes the encoder tail) and dropping the
+		// tracking data is the whole of cleanup.
+		closeNativeMux(sourceID, stream)
+	} else {
+		// Clean up FFmpeg process and log file
+		c.cleanupFFmpegProcess(sourceID, stream)
 
-	// Clean up output directory
-	cleanupStreamDirectory(stream.OutputDir)
+		// Clean up output directory
+		cleanupStreamDirectory(stream.OutputDir)
+	}
 
 	// Clean up tracking data
 	c.cleanupStreamTracking(sourceID)
@@ -2161,6 +2243,10 @@ func cleanupStreamTrackingData(sourceID string) {
 
 // waitForHLSPlaylist waits for the playlist file to be ready
 func (c *Handler) waitForHLSPlaylist(ctx echo.Context, sourceID string, stream *HLSStreamInfo) bool {
+	if stream.isNative() {
+		return c.waitForNativePlaylist(ctx, sourceID, stream)
+	}
+
 	hlsBaseDir, err := conf.GetHLSDirectory()
 	if err != nil {
 		return false
@@ -2181,7 +2267,7 @@ func (c *Handler) waitForHLSPlaylist(ctx echo.Context, sourceID string, stream *
 
 	// Use ticker for polling, let context timeout control the overall duration.
 	// Poll at 500ms to catch the second segment quickly after the first.
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(hlsPlaylistPollInterval)
 	defer ticker.Stop()
 
 	// Poll until playlist has enough segments for immediate playback.
@@ -2230,7 +2316,12 @@ func (c *Handler) logHLSClientConnection(sourceID, clientIP, requestPath string)
 
 	if shouldLog {
 		streamStartMsg := ""
-		if strings.HasPrefix(requestPath, "segment00") {
+		// Match both segment namings: FFmpeg zero-pads to segment%03d.m4s, while
+		// the native muxer emits unpadded names because a live stream outlives
+		// any fixed width. Testing for the first sequence number covers both.
+		if seq, ok := hlsmux.ParseSegmentName(requestPath); ok && seq == 0 {
+			streamStartMsg = " (streaming started)"
+		} else if strings.HasPrefix(requestPath, "segment00") {
 			streamStartMsg = " (streaming started)"
 		}
 		apicore.GetLogger().Info("HLS stream request",
@@ -2440,6 +2531,11 @@ func cleanupStream(s *HLSStreamInfo, sourceID string) {
 	if s.cancel != nil {
 		s.cancel()
 	}
+
+	// The inactivity sweep removes the stream from the registry itself, so the
+	// context watcher skips performHLSCleanup and this is the only chance to
+	// release the muxer.
+	closeNativeMux(sourceID, s)
 
 	// Use cmd.Wait() (not cmd.Process.Wait()) so that cmd.Cancel/cmd.WaitDelay
 	// escalation to SIGKILL works correctly.

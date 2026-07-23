@@ -29,8 +29,10 @@ import (
 //
 //	AAC:  exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
 //	Opus: exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
-//	HLS:  no reader yet; the backend selection in internal/api/v2/audio lands
-//	      with the handler wiring, and this list must name it then
+//	HLS:  createHLSStream in internal/api/v2/audio/audio_hls.go, which routes to
+//	      createNativeHLSStream in audio_hls_native.go. Removing the gate means
+//	      deleting audio_hls.go's FFmpeg branch and the whole FFmpeg half of
+//	      that package, not just the conditional.
 //
 // Nothing else depends on this file, and it deliberately holds no other logic
 // so that each removal stays a mechanical edit.
