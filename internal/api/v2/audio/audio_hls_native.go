@@ -283,13 +283,15 @@ func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, s
 		// carry holds the bytes of a partial sample frame left over from the
 		// previous chunk, and joined is the scratch buffer the join happens in.
 		//
-		// This is not defensive: the router only guarantees whole sample frames
-		// when it resamples or applies EQ/gain, and with the common default
-		// (source already at the pinned rate, no EQ, 0 dB gain) it does neither,
-		// so a partial read from an FFmpeg source arrives here as-is. Truncating
-		// the odd byte would be worse than useless, because the dropped half of a
-		// sample desynchronises every following byte and the audio becomes noise.
-		// Carrying it into the next chunk keeps the sample stream aligned.
+		// Since the PCM alignment fix in audiocore, the FFmpeg reader and the
+		// router both deliver whole samples on PCM16 routes, so for the in-tree
+		// producers this carry is a second line of defence rather than the
+		// primary fix. It stays because this loop must not depend on every
+		// current and future producer honouring that contract: truncating the
+		// odd byte would be worse than useless, because the dropped half of a
+		// sample desynchronises every following byte and the audio becomes
+		// noise. Carrying it into the next chunk keeps the sample stream
+		// aligned.
 		carry  []byte
 		joined []byte
 	)

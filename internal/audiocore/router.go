@@ -32,13 +32,23 @@ const (
 	// errorLogInterval controls how often consumer write errors are logged.
 	errorLogInterval = 100
 
+	// realignmentLogInterval controls how often the router reports that it
+	// started carrying a partial PCM16 sample between frames. It counts
+	// carrying runs, not frames: realignment is normal and self correcting, so
+	// errorLogInterval is reserved for genuine failures.
+	realignmentLogInterval = 100
+
 	// dropSentryThreshold is the total number of drops per route before
 	// a single Sentry report is fired. This fires once; the log.Warn at
 	// dropLogInterval provides ongoing visibility.
 	dropSentryThreshold int64 = 1000
 
-	// bitDepthPCM16 is the only bit depth the router's resampling and
-	// EQ/gain paths can interpret; other depths are passed through untouched.
+	// bitDepthPCM16 is the only bit depth the router's alignment, EQ and gain
+	// paths interpret; frames with other depths skip those stages untouched.
+	// The resampler is the exception: it assumes PCM16 by contract regardless
+	// of the frame's declared bit depth, so a resampling route fed non-PCM16
+	// data rejects odd-length frames loudly and garbles the rest. Do not
+	// configure a resampler on a non-PCM16 route.
 	bitDepthPCM16 = 16
 
 	// bytesPerPCM16Sample is the size of one 16-bit PCM sample. Frames handed
@@ -87,10 +97,13 @@ type Route struct {
 	// sustained-write-errors Sentry threshold separately from resampler errors.
 	writeErrors atomic.Int64
 
-	// realignments counts odd-length PCM16 frames observed on this route.
-	// Kept separate from errors so RouteInfo.Errors retains its "real error"
-	// semantics for operators; an upstream that splits samples across reads
-	// is not an error, it does not inflate that metric.
+	// realignments counts the times a partial trailing PCM16 sample was carried
+	// out of a frame on this route. It is not a per-odd-frame count: a frame
+	// that consumes a pending carry and ends on a sample boundary realigns the
+	// stream without incrementing it. Kept separate from errors so
+	// RouteInfo.Errors retains its "real error" semantics for operators; an
+	// upstream that splits samples across reads is not an error, it does not
+	// inflate that metric.
 	realignments atomic.Int64
 
 	// carry holds the bytes of a PCM16 sample that the previous frame ended
@@ -101,6 +114,20 @@ type Route struct {
 	carry    [bytesPerPCM16Sample - 1]byte
 	carryLen int
 	alignBuf []byte
+
+	// carryResetPending asks the drainer goroutine to drop any partial sample
+	// held in carry before it processes its next frame. Set from outside the
+	// drainer by ResetAlignment; carry and carryLen themselves stay
+	// single-goroutine, this flag is the only cross-goroutine signal.
+	carryResetPending atomic.Bool
+
+	// realignmentRuns counts how many times this route entered a carrying run,
+	// i.e. held a partial sample when it previously held none. Realignment
+	// latches: once a run starts, an even-length producer keeps re-arming the
+	// carry on every frame, so realignments grows per frame while this grows
+	// once per episode. Logging is gated on this so a latched route reports the
+	// transition instead of repeating itself forever.
+	realignmentRuns atomic.Int64
 
 	// done is closed to signal the drainer goroutine to exit.
 	done chan struct{}
@@ -138,6 +165,12 @@ type RouteInfo struct {
 
 	// Errors is the total number of Write errors for this route.
 	Errors int64
+
+	// Realignments is the total number of partial PCM16 samples carried between
+	// frames on this route. Not an error count: realignment is normal and self
+	// correcting, but a nonzero value shows a producer is splitting samples
+	// across frames.
+	Realignments int64
 
 	// QueueDepth is the current occupancy of the route inbox (len of the bounded channel).
 	QueueDepth int
@@ -436,11 +469,12 @@ func (r *AudioRouter) Routes(sourceID string) []RouteInfo {
 	infos := make([]RouteInfo, 0, len(routes))
 	for _, rt := range routes {
 		infos = append(infos, RouteInfo{
-			SourceID:   rt.SourceID,
-			ConsumerID: rt.Consumer.ID(),
-			Drops:      rt.drops.Load(),
-			Errors:     rt.errors.Load(),
-			QueueDepth: len(rt.inbox),
+			SourceID:     rt.SourceID,
+			ConsumerID:   rt.Consumer.ID(),
+			Drops:        rt.drops.Load(),
+			Errors:       rt.errors.Load(),
+			Realignments: rt.realignments.Load(),
+			QueueDepth:   len(rt.inbox),
 		})
 	}
 	return infos
@@ -463,6 +497,24 @@ func (r *AudioRouter) LastDispatchTime(sourceID string) time.Time {
 func (r *AudioRouter) ResetDispatchTime(sourceID string) {
 	ts := r.getOrCreateDispatchTimestamp(sourceID)
 	ts.Store(time.Now().UnixNano())
+}
+
+// ResetAlignment requests that every route on the given source drop any partial
+// PCM16 sample held in its alignment carry. Call it when the source's byte
+// stream restarts (an FFmpeg process restart or a watchdog force reset): the new
+// stream starts on a sample boundary, so a byte held over from the old stream
+// would shift every sample that follows it, for the life of the route.
+//
+// The reset is applied by each route's drainer goroutine before its next frame,
+// so any frames already queued when this is called consume the reset first. That
+// is acceptable because the carry is second-line defence: the in-tree PCM16
+// producers deliver whole samples, so the carry is normally empty anyway.
+func (r *AudioRouter) ResetAlignment(sourceID string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, rt := range r.routes[sourceID] {
+		rt.carryResetPending.Store(true)
+	}
 }
 
 // ClearDispatchTime removes the dispatch timestamp for sourceID.
@@ -699,18 +751,19 @@ func drainInboxRefs(inbox <-chan AudioFrame) {
 // writes it to the route's consumer. It is called from drainRoute's select loop
 // and is extracted to keep drainRoute under the cognitive-complexity limit.
 //
-// Pool discipline (three release sites, seven scenarios):
-//   - Resample buffer: allocated before resampling, returned after Write (or on
-//     error). When processing follows, the resample buffer is returned before
-//     frame.Data is reassigned so the wrong (processed) slice is never put back
-//     to the resample pool; resamplePool is nilled so the trailing guard is a
-//     no-op.
-//   - Processing float64 scratch and output byte buffers: allocated inside
-//     applyProcessing, bundled in procResult. procResult.release() is called
-//     unconditionally in the trailing guards; it is a no-op on a zero-value
-//     result (processing never ran or errored with internal cleanup).
-//   - procResult.OutPool and resamplePool cannot both be non-nil at the trailing
-//     guards by construction, so their Put calls are mutually exclusive.
+// Pool discipline (two release sites, one common exit):
+//   - The function-level defer is the single common release point. It runs
+//     procResult.release(), a no-op on a zero-value result, and returns the
+//     resample buffer while resamplePool is still non-nil. Being deferred, it
+//     also runs when Consumer.Write panics; drainRoute's recover would otherwise
+//     strand both buffers in the panicking frame.
+//   - The processing branch is the one early release: it returns the resample
+//     buffer before frame.Data is reassigned to the processing output, so the
+//     wrong (processed) slice is never put back to the resample pool, and nils
+//     resamplePool so the deferred release cannot return it a second time.
+//   - applyProcessing releases its own float64 scratch and output buffers
+//     internally on error and returns a zero-value result, so the deferred
+//     procResult.release() stays a no-op on that path.
 func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	// Balance the Retain performed by Dispatch for this route. Runs even if
 	// consumer.Write panics (drainRoute's recover catches the panic).
@@ -719,15 +772,29 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	frameStart := time.Now()
 	var resampleDur, processingDur time.Duration
 
-	// Resampling and EQ/gain both reinterpret Data as a stream of 16-bit
-	// samples, so both need whole samples. Align once here, ahead of the first
-	// of them, and carry any partial sample into the next frame. A pass-through
-	// route is left untouched: it hands the producer's bytes to the consumer
-	// without interpreting them. The resampler assumes PCM16 by contract
-	// regardless of the frame's declared bit depth, so its presence alone
-	// requires the alignment.
+	// A stream discontinuity makes a held partial sample meaningless: the next
+	// frame starts a new byte stream on a sample boundary, and prepending a
+	// stale byte to it would shift every subsequent sample for the life of the
+	// route. The flag is consumed here, on the drainer goroutine, so carryLen
+	// keeps its single-goroutine discipline.
+	if route.carryResetPending.Load() {
+		route.carryResetPending.Store(false)
+		route.carryLen = 0
+	}
+
+	// Resampling, EQ and gain all reinterpret Data as a stream of 16-bit
+	// samples, and so does every consumer of a PCM16 route, so every PCM16
+	// frame is aligned to whole samples here regardless of what this route
+	// does with it afterwards; any partial sample is carried into the next
+	// frame. Aligning only the routes that resample or process would leave the
+	// analysis consumers, which read a pass-through route, enforcing the
+	// invariant nowhere. Non-PCM16 frames are left untouched: a 2-byte carry
+	// would regroup their frame boundaries and permanently withhold a trailing
+	// byte at stream end. The resampler assumes PCM16 by contract, so a
+	// resampling route fed another depth now fails loudly in ResampleTo
+	// instead of being silently realigned on the wrong unit.
 	chain := route.filterChain.Load()
-	if route.resampler != nil || (frame.BitDepth == bitDepthPCM16 && (chain != nil || route.gainLinear != 1.0)) {
+	if frame.BitDepth == bitDepthPCM16 {
 		frame.Data = r.alignPCM16(frame.Data, route)
 		if len(frame.Data) == 0 {
 			// Every byte of this frame is now held in the carry (or the frame
@@ -744,6 +811,24 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 
 	var resampleBuf []byte // full-length pooled buffer for Put; nil when no resampling
 
+	// Release the router's own pooled buffers on every exit from this function,
+	// including a panicking Consumer.Write. drainRoute recovers that panic above
+	// this frame, so a release at the tail would be skipped and the buffers
+	// would never return to their pools. Releasing during the unwind is safe for
+	// the same reason it is safe on the normal path: AudioConsumer.Write forbids
+	// retaining frame.Data past return, so a consumer that aborted mid-Write
+	// holds no reference either.
+	//
+	// No path can Put twice: the processing branch returns resampleBuf early and
+	// nils resamplePool when it takes ownership, and procResult.release is a
+	// no-op on a zero value.
+	defer func() {
+		procResult.release()
+		if resamplePool != nil {
+			resamplePool.Put(resampleBuf)
+		}
+	}()
+
 	// Apply per-route resampling when rates differ.
 	if route.resampler != nil {
 		resampleStart := time.Now()
@@ -756,9 +841,7 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 		}
 		n, err := route.resampler.ResampleTo(frame.Data, resampleBuf)
 		if err != nil {
-			if resamplePool != nil {
-				resamplePool.Put(resampleBuf)
-			}
+			// The deferred release returns resampleBuf to its pool.
 			errCount := route.errors.Add(1)
 			if errCount%errorLogInterval == 1 {
 				r.log.Warn("resampler error",
@@ -786,15 +869,13 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 		procStart := time.Now()
 		result, err := r.applyProcessing(frame, route, chain)
 		if err != nil {
-			// applyProcessing already released its own pool buffers on error.
-			// Release the resample buffer.
-			if resamplePool != nil {
-				resamplePool.Put(resampleBuf)
-			}
+			// applyProcessing already released its own pool buffers on error;
+			// the deferred release returns the resample buffer.
 			return
 		}
 		// Release the resample buffer BEFORE frame.Data is reassigned to the
-		// processing output. Nil out the pointer so the trailing guard is a no-op.
+		// processing output. Nil out the pointer so the deferred release cannot
+		// return it a second time.
 		if resamplePool != nil {
 			resamplePool.Put(resampleBuf)
 			resamplePool = nil
@@ -831,17 +912,6 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	}
 	writeDur := time.Since(writeStart)
 
-	// Release processing buffers (output byte slice and float64 scratch).
-	// Safe to call unconditionally: no-op when procResult is zero value.
-	// All in-tree consumers copy synchronously, so recycling is safe here.
-	procResult.release()
-	// Release resample buffer when processing did NOT run (processing branch
-	// nilled resamplePool before reassigning frame.Data). When processing ran,
-	// resamplePool is nil here and this is a no-op.
-	if resamplePool != nil {
-		resamplePool.Put(resampleBuf)
-	}
-
 	route.stats.record(resampleDur, processingDur, writeDur, time.Since(frameStart))
 	route.stats.checkAndLog(r.log, route.SourceID, route.Consumer.ID())
 }
@@ -856,8 +926,12 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 // broadband noise until the framing happens to realign. Carrying the byte forward
 // keeps the sample stream intact.
 //
-// Odd lengths are not an upstream bug. internal/audiocore/ffmpeg reads its source
-// from a pipe, and a pipe read returns whatever bytes happen to be available.
+// The in-tree producers no longer deliver odd lengths themselves: the FFmpeg
+// reader reassembles whole frames before dispatch, and the malgo capture path
+// emits whole 16-bit samples by construction. The carry here is the router's own
+// enforcement of the whole-sample invariant, one hop before the consumers, so it
+// holds for every producer, present or future, and keeps a producer-side
+// regression from turning into corrupted audio downstream.
 //
 // The returned slice aliases either data or route.alignBuf. Both stay valid for
 // the rest of the frame's journey through handleRouteFrame, which reads them into
@@ -871,6 +945,11 @@ func (r *AudioRouter) alignPCM16(data []byte, route *Route) []byte {
 	}
 
 	frameBytes := len(data)
+	// Whether this frame starts a new carrying run. Realignment latches: once a
+	// run starts, joining the carry makes an even-length frame odd again, so
+	// every following frame re-arms the carry. Logging per frame would then
+	// repeat forever, so only the transition into a run is reported.
+	startsRun := route.carryLen == 0
 
 	if route.carryLen > 0 {
 		route.alignBuf = append(route.alignBuf[:0], route.carry[:route.carryLen]...)
@@ -890,12 +969,17 @@ func (r *AudioRouter) alignPCM16(data []byte, route *Route) []byte {
 	data = data[:len(data)-rem]
 
 	count := route.realignments.Add(1)
-	if count%errorLogInterval == 1 {
-		r.log.Info("odd-length PCM16 frame realigned",
+	if !startsRun {
+		return data
+	}
+	runs := route.realignmentRuns.Add(1)
+	if runs%realignmentLogInterval == 1 {
+		r.log.Info("partial PCM16 sample carried to next frame",
 			logger.String("source_id", route.SourceID),
 			logger.String("consumer_id", route.Consumer.ID()),
 			logger.Int("frame_bytes", frameBytes),
-			logger.Int64("total_realignments", count))
+			logger.Int64("total_realignments", count),
+			logger.Int64("realignment_runs", runs))
 	}
 	return data
 }
@@ -936,11 +1020,14 @@ func (p *processingResult) release() {
 // make() with no corresponding Put, preserving legacy behaviour for unit tests
 // that construct routers with a nil Manager.
 func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
-	// frame.Data holds a whole number of samples: handleRouteFrame runs it
-	// through alignPCM16 first, which carries any partial sample into the next
-	// frame. The floor below is a bounds guard for callers that build a frame by
-	// hand (the benchmarks in this package), not a truncation policy. Dropping a
-	// byte mid-stream desynchronises every sample that follows it.
+	// frame.Data holds a whole number of samples: handleRouteFrame aligns every
+	// PCM16 frame before either processing stage runs, and only PCM16 frames
+	// reach this function, so the align gate covers a strict superset of the
+	// frames seen here. The floor below is a bounds guard for callers that build
+	// a frame by hand (the tests and benchmarks in this package), not a
+	// truncation policy. Dropping a byte mid-stream desynchronises every sample
+	// that follows it, so narrowing the align gate in handleRouteFrame below
+	// this function's own gate would silently reintroduce that truncation.
 	evenLen := len(frame.Data) &^ (bytesPerPCM16Sample - 1)
 	sampleCount := evenLen / bytesPerPCM16Sample
 

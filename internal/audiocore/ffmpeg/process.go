@@ -552,6 +552,15 @@ func buildOutputArgs(args []string, cfg *StreamConfig) []string {
 	return args
 }
 
+// channelModeLeft and channelModeRight are the ChannelMode values that make
+// appendChannelArgs insert a pan filter and force mono output. They are shared
+// with effectiveOutputChannels so the frame-size derivation and the argument
+// builder cannot drift apart.
+const (
+	channelModeLeft  = "left"
+	channelModeRight = "right"
+)
+
 // appendChannelArgs appends the appropriate FFmpeg channel selection flags.
 // When channelMode is "left" or "right" and the source has >1 channel,
 // it uses a pan filter to extract the selected channel. Falls back to
@@ -559,13 +568,28 @@ func buildOutputArgs(args []string, cfg *StreamConfig) []string {
 func appendChannelArgs(args []string, channelMode string, sourceChannels int, numChannels string) []string {
 	if sourceChannels > 1 {
 		switch strings.ToLower(channelMode) {
-		case "left":
+		case channelModeLeft:
 			return append(args, "-af", "pan=mono|c0=c0", "-ac", "1")
-		case "right":
+		case channelModeRight:
 			return append(args, "-af", "pan=mono|c0=c1", "-ac", "1")
 		}
 	}
 	return append(args, "-ac", numChannels)
+}
+
+// effectiveOutputChannels returns the channel count of the PCM stream FFmpeg
+// actually emits for cfg. The left and right channel modes make
+// appendChannelArgs pan a multi-channel source down to mono regardless of
+// cfg.Channels, so readers of the output stream must use this, not the
+// configured count. Every other configuration emits cfg.Channels unchanged.
+func effectiveOutputChannels(cfg *StreamConfig) int {
+	if cfg.SourceChannels > 1 {
+		switch strings.ToLower(cfg.ChannelMode) {
+		case channelModeLeft, channelModeRight:
+			return 1
+		}
+	}
+	return cfg.Channels
 }
 
 // buildInputArgs constructs the pre-input FFmpeg flags (transport, timeout, extra parameters).
