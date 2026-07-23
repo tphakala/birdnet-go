@@ -204,8 +204,36 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Build()
 	}
 
+	// Normalize and validate the locale before anything reads it. An unsupported
+	// locale is reported as an error but NormalizeLocale still returns
+	// conf.DefaultFallbackLocale, so the fallback is informational and the returned
+	// value is always usable. Treating it as fatal would stop every command from
+	// starting on a config whose locale merely needs normalizing, which is neither
+	// what config validation (conf.ValidateBirdNETSettings) nor label loading does
+	// with the same condition.
+	// Pass the configured value as written: NormalizeLocale lowercases internally
+	// and keeps the original for its error, so lowercasing first would report a
+	// locale the user never typed.
+	requestedLocale := settings.BirdNET.Locale
+	normalizedLocale, err := conf.NormalizeLocale(requestedLocale)
+	if err != nil {
+		GetLogger().Warn("Locale not supported, using fallback",
+			logger.Error(err),
+			logger.String("requested_locale", requestedLocale),
+			logger.String("fallback_locale", normalizedLocale))
+	}
+	settings.BirdNET.Locale = normalizedLocale
+
+	// Check if the locale is supported by the model
+	if !IsLocaleSupported(&bn.ModelInfo, normalizedLocale) {
+		bn.Debug("Warning: Locale '%s' is not officially supported by model '%s'. Using default locale '%s'.",
+			normalizedLocale, bn.ModelInfo.ID, bn.ModelInfo.DefaultLocale)
+		settings.BirdNET.Locale = bn.ModelInfo.DefaultLocale
+	}
+
 	// Load labels before model initialization; ONNX models require labels
-	// at construction time for output dimension validation.
+	// at construction time for output dimension validation. The locale is
+	// normalized above so the label file matches the locale reported in settings.
 	if err := bn.loadLabels(); err != nil {
 		return nil, errors.New(err).
 			Component("birdnet").
@@ -242,21 +270,6 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			logger.Error(err),
 			logger.String("range_filter_model", settings.BirdNET.RangeFilter.Model),
 			logger.String("model_path", settings.BirdNET.RangeFilter.ModelPath))
-	}
-
-	// Normalize and validate locale setting.
-	inputLocale := strings.ToLower(settings.BirdNET.Locale)
-	normalizedLocale, err := conf.NormalizeLocale(inputLocale)
-	if err != nil {
-		return nil, err
-	}
-	settings.BirdNET.Locale = normalizedLocale
-
-	// Check if the locale is supported by the model
-	if !IsLocaleSupported(&bn.ModelInfo, normalizedLocale) {
-		bn.Debug("Warning: Locale '%s' is not officially supported by model '%s'. Using default locale '%s'.",
-			normalizedLocale, bn.ModelInfo.ID, bn.ModelInfo.DefaultLocale)
-		settings.BirdNET.Locale = bn.ModelInfo.DefaultLocale
 	}
 
 	// Validate model and labels, which will also allocate the results buffer

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -495,4 +496,76 @@ func TestRangeFilterStatus_NoGeomodel(t *testing.T) {
 	assert.Zero(t, resp.Classifiers[0].WithRangeData)
 	assert.Zero(t, resp.Classifiers[0].WithoutRangeData)
 	assert.InDelta(t, 0.05, resp.Threshold, 0.001)
+}
+
+// testV24TFLiteModelPath is the committed FP32 v2.4 model, relative to this
+// package directory. Setting it as birdnet.modelpath keeps construction on the
+// TFLite backend (a non-empty CustomPath suppresses the arm64 ONNX remap) and
+// works under the CI `noembed` tag, where the embedded model is compiled out.
+const testV24TFLiteModelPath = "data/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
+
+// TestNewBirdNET_LocaleNormalization covers locales that NormalizeLocale has to
+// rewrite. An unsupported locale falls back rather than aborting construction:
+// treating the fallback as fatal stopped `serve` and `benchmark` from starting at
+// all on a config carrying e.g. `birdnet.locale: en`. A locale given by full name
+// is rewritten to its code, and labels must be loaded for the rewritten locale,
+// not the raw input.
+func TestNewBirdNET_LocaleNormalization(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		input      string
+		wantLocale string
+	}{
+		{
+			name:       "unsupported locale falls back",
+			input:      "en",
+			wantLocale: conf.DefaultFallbackLocale,
+		},
+		{
+			name:       "full name normalizes to code",
+			input:      "German",
+			wantLocale: "de",
+		},
+		{
+			name:       "supported code passes through",
+			input:      "fi",
+			wantLocale: "fi",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			settings := &conf.Settings{}
+			settings.BirdNET.Locale = tt.input
+			settings.BirdNET.Version = "2.4"
+			settings.BirdNET.ModelPath = testV24TFLiteModelPath
+
+			bn, err := NewBirdNET(settings, nil)
+			if bn != nil {
+				t.Cleanup(bn.Delete)
+			}
+			require.NoError(t, err, "locale %q must not fail construction", tt.input)
+			require.NotNil(t, bn)
+
+			assert.Equal(t, tt.wantLocale, settings.BirdNET.Locale,
+				"locale %q should normalize to %q", tt.input, tt.wantLocale)
+
+			// Labels must come from the normalized locale's label file. Comparing
+			// against that file directly catches normalization running after the
+			// labels are loaded, which would silently pair e.g. English labels with
+			// a settings locale of "de".
+			require.NotEmpty(t, settings.BirdNET.Labels, "labels should be loaded")
+			want := GetLabelFileDataWithResult(bn.ModelInfo.ID, tt.wantLocale, nil)
+			require.NoError(t, want.Error)
+			require.False(t, want.FallbackOccurred,
+				"test locale %q must have its own label file", tt.wantLocale)
+			wantFirstLabel, _, _ := strings.Cut(string(want.Data), "\n")
+			assert.Equal(t, strings.TrimSpace(wantFirstLabel), settings.BirdNET.Labels[0],
+				"labels should be loaded from the %q label file", tt.wantLocale)
+		})
+	}
 }
