@@ -145,7 +145,7 @@ tasks:
       # binaries use, so a tag-specific failure cannot pass here and fail in CI.
       # CGO_FLAGS supplies CGO_ENABLED=1 and the TensorFlow header include path;
       # -race needs CGO so it must stay enabled here.
-      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend,{{.BASE_BUILD_TAGS}} -race ./... {{.TEST_FLAGS}}'
+      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend{{if .BASE_BUILD_TAGS}},{{.BASE_BUILD_TAGS}}{{end}} -race ./... {{.TEST_FLAGS}}'
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
 
@@ -163,7 +163,7 @@ tasks:
       - mkdir -p coverage
       # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
       # Keep -race in sync with the test task so coverage runs catch data races too.
-      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend,{{.BASE_BUILD_TAGS}} -race ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}'
+      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend{{if .BASE_BUILD_TAGS}},{{.BASE_BUILD_TAGS}}{{end}} -race ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}'
       - go tool cover -html=coverage/coverage.out -o coverage/coverage.html
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
@@ -182,7 +182,7 @@ tasks:
         esac
         # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting
         {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
-        golangci-lint run --build-tags=noembed,skipfrontend,{{.BASE_BUILD_TAGS}} {{.CLI_ARGS}}
+        golangci-lint run --build-tags=noembed,skipfrontend{{if .BASE_BUILD_TAGS}},{{.BASE_BUILD_TAGS}}{{end}} {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "-v" .CLI_ARGS}}'
 
