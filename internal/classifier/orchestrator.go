@@ -16,7 +16,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -713,11 +712,11 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// name the geomodel can predict at all.
 	seenSci := make(map[string]bool, len(scores))
 	for _, s := range scores {
-		seenSci[strings.ToLower(detection.ExtractScientificName(s.Label))] = true
+		seenSci[canonicalSpeciesKey(s.Label)] = true
 	}
 	geoCovered := make(map[string]bool, len(geoLabels))
 	for _, label := range geoLabels {
-		geoCovered[strings.ToLower(detection.ExtractScientificName(label))] = true
+		geoCovered[canonicalSpeciesKey(label)] = true
 	}
 
 	o.mu.RLock()
@@ -762,7 +761,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		}
 
 		for _, label := range labels {
-			sci := strings.ToLower(detection.ExtractScientificName(label))
+			sci := canonicalSpeciesKey(label)
 			switch {
 			case seenSci[sci]:
 				// Already represented via the primary (or an earlier model).
@@ -810,7 +809,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 			scores = slices.Grow(scores, len(batLabels))
 		}
 		for _, label := range batLabels {
-			sci := strings.ToLower(detection.ExtractScientificName(label))
+			sci := canonicalSpeciesKey(label)
 			if seenSci[sci] || excluder.matches(label) {
 				continue
 			}
@@ -2049,4 +2048,49 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	}
 
 	return nil
+}
+
+// GetRarityContext returns the primary model's probable-species scores together with
+// the two label vocabularies needed to interpret them, so a caller computing rarity
+// does not have to reassemble them from calls that can each observe a different model.
+//
+// Rarity is the geomodel occurrence probability, so the scores come from the primary
+// (geomodel-backed) range filter, not the multi-model union: the union assigns
+// synthetic always-active scores to secondary-model species that have no real
+// occurrence probability.
+//
+// Consistency, stated precisely because the guarantee is partial: scores and
+// geomodelLabels always describe the same range-filter instance, because
+// getProbableSpecies captures the geomodel vocabulary under the same bn.mu hold that
+// produces the scores. classifierLabels comes from the settings snapshot read here,
+// which is the same snapshot getProbableSpecies indexes for zeroScoresForAllLabels and
+// the unmapped-species mapping, so it agrees with the scores; but the range-filter
+// instance is resolved later, under its own lock, so a reload landing in that window can
+// still leave classifierLabels one generation behind the backend. That is narrower than
+// the skew separate GetProbableSpecies + Labels calls admit, not an absence of skew.
+//
+// Note also that currentSettings resolves through conf.CurrentOrFallback, which prefers
+// the globally published snapshot; an in-place model reload republishes only to the
+// instance, so classifierLabels can lag a label-set change until the next restart.
+//
+// geomodelLabels is nil unless the universal geomodel path ran. It is nil for the
+// TFLite meta model and the plain ONNX range filter, and when no range filter or
+// location is configured; in every one of those cases the scores are labeled with the
+// classifier's own vocabulary, so callers must fall back to classifierLabels.
+func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, geomodelLabels, classifierLabels []string, err error) {
+	// Snapshot the primary once and drive every read below from it. Delegating to
+	// o.GetProbableSpecies would re-resolve o.primary under a fresh lock and could
+	// score against a different model than the labels describe.
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return nil, nil, nil, nil
+	}
+
+	settings := primary.currentSettings()
+	scores, geomodelLabels, err = primary.getProbableSpecies(date, 0.0, settings)
+	classifierLabels = slices.Clone(settings.BirdNET.Labels)
+
+	return scores, geomodelLabels, classifierLabels, err
 }
