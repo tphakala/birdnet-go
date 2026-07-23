@@ -31,16 +31,20 @@ func TestDedupeSpeciesForDisplay(t *testing.T) {
 			want: []dto.RangeFilterSpecies{{ScientificName: "Corvus cornix", CommonName: "varis", Score: new(0.71)}},
 		},
 		{
-			// R1: a geomodel-scored species and its force-include override copy
-			// carry different label strings but the same resolved common name.
-			// They collapse to one row at the always-active 1.0 score.
-			name: "override copy collapses, 1.0 wins",
+			// Regression: BirdNET calls this taxon "Red-crowned Parrot" while the
+			// geomodel/OpenFauna display name is "Red-crowned Amazon". Both rows
+			// localize to the latter, so display deduplication must carry the native
+			// range score and Included provenance without changing the established
+			// score-1.0 override sentinel.
+			name: "common-name synonym override carries native range score and included flag",
 			in: []dto.RangeFilterSpecies{
-				{Label: "Corvus cornix_varis", ScientificName: "Corvus cornix", CommonName: "varis", Score: new(1.0)},
-				{Label: "Corvus cornix_Hooded Crow", ScientificName: "Corvus cornix", CommonName: "varis", Score: new(0.71)},
+				{Label: "Amazona viridigenalis_Red-crowned Parrot", ScientificName: "Amazona viridigenalis", CommonName: "Red-crowned Amazon", Score: new(1.0), IsManuallyIncluded: true, IsSyntheticOverride: true},
+				{Label: "Corvus brachyrhynchos_American Crow", ScientificName: "Corvus brachyrhynchos", CommonName: "American Crow", Score: new(0.99)},
+				{Label: "Amazona viridigenalis_Red-crowned Amazon", ScientificName: "Amazona viridigenalis", CommonName: "Red-crowned Amazon", Score: new(0.95)},
 			},
 			want: []dto.RangeFilterSpecies{
-				{Label: "Corvus cornix_varis", ScientificName: "Corvus cornix", CommonName: "varis", Score: new(1.0)},
+				{Label: "Amazona viridigenalis_Red-crowned Parrot", ScientificName: "Amazona viridigenalis", CommonName: "Red-crowned Amazon", Score: new(1.0), RangeScore: new(0.95), IsManuallyIncluded: true, IsSyntheticOverride: true},
+				{Label: "Corvus brachyrhynchos_American Crow", ScientificName: "Corvus brachyrhynchos", CommonName: "American Crow", Score: new(0.99)},
 			},
 		},
 		{
@@ -53,6 +57,30 @@ func TestDedupeSpeciesForDisplay(t *testing.T) {
 			},
 			want: []dto.RangeFilterSpecies{
 				{Label: "Eptesicus nilssonii", ScientificName: "Eptesicus nilssonii", CommonName: "pohjanlepakko", Score: new(1.0)},
+			},
+		},
+		{
+			// Custom config also force-adds species, but has its own UI badge. It
+			// carries the native geomodel score separately without setting Always
+			// Include provenance or replacing the override sentinel.
+			name: "config-only synthetic override carries range score without included flag",
+			in: []dto.RangeFilterSpecies{
+				{Label: "Parus major_Talitiainen", ScientificName: "Parus major", CommonName: "Great Tit", Score: new(1.0), IsSyntheticOverride: true},
+				{Label: "Parus major_Great Tit", ScientificName: "Parus major", CommonName: "Great Tit", Score: new(0.73)},
+			},
+			want: []dto.RangeFilterSpecies{
+				{Label: "Parus major_Talitiainen", ScientificName: "Parus major", CommonName: "Great Tit", Score: new(1.0), RangeScore: new(0.73), IsSyntheticOverride: true},
+			},
+		},
+		{
+			name: "native rows before override retain highest range score",
+			in: []dto.RangeFilterSpecies{
+				{Label: "Amazona viridigenalis_Red-crowned Amazon", ScientificName: "Amazona viridigenalis", CommonName: "Red-crowned Amazon", Score: new(0.91)},
+				{Label: "Amazona viridigenalis_Red-crowned Parrot", ScientificName: "Amazona viridigenalis", CommonName: "Red-crowned Amazon", Score: new(1.0), IsManuallyIncluded: true, IsSyntheticOverride: true},
+				{Label: "Amazona viridigenalis_Cotorra Serrana Oriental", ScientificName: "Amazona viridigenalis", CommonName: "Red-crowned Amazon", Score: new(0.95)},
+			},
+			want: []dto.RangeFilterSpecies{
+				{Label: "Amazona viridigenalis_Red-crowned Parrot", ScientificName: "Amazona viridigenalis", CommonName: "Red-crowned Amazon", Score: new(1.0), RangeScore: new(0.95), IsManuallyIncluded: true, IsSyntheticOverride: true},
 			},
 		},
 		{
@@ -150,6 +178,17 @@ func TestDedupeSpeciesForDisplay(t *testing.T) {
 				assert.Equal(t, tt.want[i].ScientificName, got[i].ScientificName, "row %d scientific name", i)
 				assert.Equal(t, tt.want[i].CommonName, got[i].CommonName, "row %d common name", i)
 				assert.Equal(t, tt.want[i].Label, got[i].Label, "row %d label", i)
+				assert.Equal(t, tt.want[i].IsManuallyIncluded, got[i].IsManuallyIncluded,
+					"row %d manual inclusion", i)
+				assert.Equal(t, tt.want[i].IsSyntheticOverride, got[i].IsSyntheticOverride,
+					"row %d synthetic override", i)
+				if tt.want[i].RangeScore == nil {
+					assert.Nil(t, got[i].RangeScore, "row %d range score", i)
+				} else {
+					require.NotNil(t, got[i].RangeScore, "row %d range score", i)
+					assert.InDelta(t, *tt.want[i].RangeScore, *got[i].RangeScore, 1e-9,
+						"row %d range score value", i)
+				}
 				if tt.want[i].Score == nil {
 					assert.Nil(t, got[i].Score, "row %d score", i)
 				} else {

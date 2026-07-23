@@ -127,11 +127,119 @@ func TestGetProbableSpecies_BareLocalizedCommonNameOverride_CanonicalizesLabel(t
 	labels := make([]string, 0, len(scores))
 	for _, ss := range scores {
 		labels = append(labels, ss.Label)
+		if ss.Label == "Parus major_Talitiainen" {
+			assert.True(t, ss.IsManuallyIncluded,
+				"canonicalized override score must retain its user-override provenance")
+			assert.True(t, ss.IsSyntheticOverride,
+				"out-of-range override must remain identifiable as a synthetic score")
+		}
 	}
 	assert.Contains(t, labels, "Parus major_Talitiainen",
 		"override must be canonicalized to the classifier's Scientific_Common label")
 	assert.NotContains(t, labels, "Talitiainen",
 		"the bare common name must not survive as a species score label")
+}
+
+// TestAddUserOverrideSpeciesScores_MarksExistingNativeScore verifies that an
+// override entered by scientific name does not need a synthetic duplicate: the
+// existing geomodel row keeps its native score and gains override provenance.
+// The API uses that provenance for the Included badge, so scientific-name and
+// common-name inputs render consistently.
+func TestAddUserOverrideSpeciesScores_MarksExistingNativeScore(t *testing.T) {
+	t.Parallel()
+
+	settings, rf := overrideTestSettings(t, "fi")
+	settings.Realtime.Species.Include = []string{"Parus major"}
+	scores := []SpeciesScore{{
+		Score: 0.95,
+		Label: "Parus major_Great Tit",
+	}}
+	bn := &BirdNET{Settings: settings}
+
+	addUserOverrideSpeciesScores(bn, &scores, settings, rf.geoLabels)
+
+	require.Len(t, scores, 1, "matching geomodel label must not be duplicated")
+	assert.InDelta(t, 0.95, scores[0].Score, 1e-9, "native geomodel score must be preserved")
+	assert.True(t, scores[0].IsManuallyIncluded, "existing row must retain override provenance")
+	assert.False(t, scores[0].IsSyntheticOverride, "existing native score is not synthetic")
+}
+
+// TestAddUserOverrideSpeciesScores_ConfigOnlyIsNotManuallyIncluded keeps the
+// Active table's two badges distinct: a custom config force-adds its species to
+// the working set, but it must not masquerade as an Always Include entry.
+func TestAddUserOverrideSpeciesScores_ConfigOnlyIsNotManuallyIncluded(t *testing.T) {
+	t.Parallel()
+
+	settings, rf := overrideTestSettings(t, "fi")
+	settings.Realtime.Species.Include = nil
+	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+		"Parus major": {},
+	}
+	scores := []SpeciesScore{{
+		Score: 0.95,
+		Label: "Parus major_Great Tit",
+	}}
+	bn := &BirdNET{Settings: settings}
+
+	addUserOverrideSpeciesScores(bn, &scores, settings, rf.geoLabels)
+
+	require.Len(t, scores, 1, "matching geomodel label must not be duplicated")
+	assert.False(t, scores[0].IsManuallyIncluded,
+		"custom config has its own badge and must not set Always Include provenance")
+	assert.False(t, scores[0].IsSyntheticOverride, "existing native score is not synthetic")
+}
+
+// TestGetProbableSpecies_RangeFilterInactivePreservesOverrideProvenance covers
+// both fallback guards that return zero scores for classifier labels. Explicit
+// includes must still carry provenance there, and non-primary aliases must still
+// be appended as synthetic rows, or the Active table and inclusion gate regress
+// whenever the range backend is unavailable or location has not been configured.
+func TestGetProbableSpecies_RangeFilterInactivePreservesOverrideProvenance(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		hasRangeFilter     bool
+		locationConfigured bool
+	}{
+		{name: "range filter unavailable", locationConfigured: true},
+		{name: "location not configured", hasRangeFilter: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			settings, rf := overrideTestSettings(t, "fi")
+			settings.BirdNET.LocationConfigured = tt.locationConfigured
+			settings.Realtime.Species.Include = []string{"Talitiainen", "Kettu"}
+
+			bn := &BirdNET{Settings: settings}
+			if tt.hasRangeFilter {
+				bn.rangeFilter = rf
+			}
+
+			scores, _, err := bn.getProbableSpecies(time.Now(), 1, settings)
+			require.NoError(t, err)
+
+			byLabel := make(map[string]SpeciesScore, len(scores))
+			for _, score := range scores {
+				byLabel[score.Label] = score
+			}
+
+			primary, ok := byLabel["Parus major_Talitiainen"]
+			require.True(t, ok, "localized classifier alias must resolve to its model label")
+			assert.InDelta(t, 0.0, primary.Score, 1e-9, "existing fallback row keeps its zero score")
+			assert.True(t, primary.IsManuallyIncluded)
+			assert.False(t, primary.IsSyntheticOverride)
+
+			nonPrimary, ok := byLabel["Vulpes vulpes"]
+			require.True(t, ok, "non-primary localized alias must still be force-included")
+			assert.InDelta(t, 1.0, nonPrimary.Score, 1e-9)
+			assert.True(t, nonPrimary.IsManuallyIncluded)
+			assert.True(t, nonPrimary.IsSyntheticOverride)
+		})
+	}
 }
 
 // TestBuildRangeFilter_NonPrimaryLocalizedCommonOverride_ReverseResolvesToScientific
