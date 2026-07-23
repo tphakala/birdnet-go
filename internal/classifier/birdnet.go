@@ -26,7 +26,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/inference/tflite"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -829,13 +828,50 @@ func (bn *BirdNET) clearSpeciesCache() {
 	bn.speciesCacheMu.Unlock()
 }
 
-// canonicalScoreKey reduces a species label to the key used by the occurrence score
-// cache: the taxonomic canonical form of its scientific name, lowercased. Cache
-// writes, cache reads and the uncached fallback scan must all go through this, or a
-// caller naming a species by one synonym misses entries stored under the other and
-// silently falls back to recomputing the whole probable-species list on every call.
-func canonicalScoreKey(label string) string {
-	return strings.ToLower(openfauna.CanonicalName(detection.ExtractScientificName(label)))
+// rawSpeciesKey reduces a species label to its scientific name, lowercased but NOT
+// resolved through the alias map. It is the exact-match counterpart to
+// canonicalSpeciesKey; see lookupOccurrence for why both are needed.
+func rawSpeciesKey(label string) string {
+	return strings.ToLower(detection.ExtractScientificName(label))
+}
+
+// lookupOccurrence resolves a species label against an occurrence score map built by
+// getCachedSpeciesScores, preferring an exact scientific-name match over a taxonomic
+// alias.
+//
+// The two-step order is load-bearing. OpenFauna's alias map merges some pairs that the
+// classifier ships as separate species: BirdNET v2.4 carries both Dicrurus adsimilis
+// and Dicrurus divaricatus, and both Mirafra javanica and Mirafra cantillans, while
+// OpenFauna maps the second of each pair onto the first. Keying the cache on the
+// canonical name alone would collapse those two distinct species onto one entry and
+// report one bird's occurrence probability for the other. Trying the exact name first
+// keeps each species' own score, and falling back to the canonical name still lets a
+// caller naming a species by a legacy synonym find the geomodel's entry for it.
+func lookupOccurrence(scores map[string]float64, label string) (float64, bool) {
+	if score, ok := scores[rawSpeciesKey(label)]; ok {
+		return score, true
+	}
+	score, ok := scores[canonicalSpeciesKey(label)]
+	return score, ok
+}
+
+// buildOccurrenceIndex indexes species scores for lookupOccurrence: every species under
+// its exact scientific name, plus a canonical-name entry wherever that does not shadow
+// an exact one. The cached and uncached paths both build the index through this helper
+// so they cannot disagree about which species a name refers to.
+func buildOccurrenceIndex(speciesScores []SpeciesScore) map[string]float64 {
+	scores := make(map[string]float64, len(speciesScores))
+	for _, s := range speciesScores {
+		scores[rawSpeciesKey(s.Label)] = s.Score
+	}
+	for _, s := range speciesScores {
+		if key := canonicalSpeciesKey(s.Label); key != "" {
+			if _, exact := scores[key]; !exact {
+				scores[key] = s.Score
+			}
+		}
+	}
+	return scores
 }
 
 // getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
@@ -865,10 +901,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	if err != nil {
 		return nil, err
 	}
-	scores := make(map[string]float64, len(speciesScores))
-	for _, s := range speciesScores {
-		scores[canonicalScoreKey(s.Label)] = s.Score
-	}
+	scores := buildOccurrenceIndex(speciesScores)
 
 	// WRITE PATH: double-check, evict old entries, and publish new results
 	bn.speciesCacheMu.Lock()
@@ -1472,7 +1505,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Try to get cached scores first
 	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
 	if err == nil && len(cachedScores) > 0 {
-		if occurrence, found := cachedScores[canonicalScoreKey(species)]; found {
+		if occurrence, found := lookupOccurrence(cachedScores, species); found {
 			// Clamp the score to [0.0, 1.0] range
 			if occurrence < 0.0 {
 				return 0.0
@@ -1495,20 +1528,17 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 		return 0.0
 	}
 
-	// Look for the species in the scores, keyed identically to the cache above so
-	// both paths resolve a taxonomic synonym to the same entry.
-	targetKey := canonicalScoreKey(species)
-	for _, score := range speciesScores {
-		if canonicalScoreKey(score.Label) == targetKey {
-			// Clamp the score to [0.0, 1.0] range
-			if score.Score < 0.0 {
-				return 0.0
-			}
-			if score.Score > 1.0 {
-				return 1.0
-			}
-			return score.Score
+	// Resolve through the same index the cache uses, so a cache miss cannot answer
+	// differently from a cache hit for the same species.
+	if occurrence, found := lookupOccurrence(buildOccurrenceIndex(speciesScores), species); found {
+		// Clamp the score to [0.0, 1.0] range
+		if occurrence < 0.0 {
+			return 0.0
 		}
+		if occurrence > 1.0 {
+			return 1.0
+		}
+		return occurrence
 	}
 
 	// Species not found in range filter results

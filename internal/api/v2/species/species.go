@@ -260,17 +260,28 @@ func (c *Handler) allModelLabels() []string {
 	return nil
 }
 
-// resolveSpeciesLabel finds the "Scientific_Common" label denoting targetSci in a
-// label set, returning the label and its common name. Both sides are resolved through
-// openfauna.CanonicalName so a request naming a species by a legacy synonym still
-// matches the label carrying its current name. Returns empty strings when no label
-// denotes the species.
+// resolveSpeciesLabel finds the "Scientific_Common" label denoting targetSci in a label
+// set, returning the label and its common name, or empty strings when no label denotes
+// the species.
+//
+// An exact scientific-name match is tried across the whole set before any alias match,
+// so a species that exists under its own name is never shadowed by a synonym. That
+// ordering is load-bearing: OpenFauna's alias map merges pairs the classifier ships as
+// separate species (BirdNET v2.4 carries both Dicrurus adsimilis and D. divaricatus,
+// and both Mirafra javanica and M. cantillans), so an alias-first match would answer a
+// request for one of them with the other's label and common name.
 func resolveSpeciesLabel(targetSci string, allLabels []string) (matchedLabel, commonName string) {
+	for _, label := range allLabels {
+		if strings.EqualFold(detection.ExtractScientificName(label), targetSci) {
+			return label, detection.ParseSpeciesString(label).CommonName
+		}
+	}
+	// No label carries this exact name, so fall back to the taxonomic alias and let a
+	// request naming a species by a legacy synonym resolve to its current name.
 	canonicalTarget := openfauna.CanonicalName(targetSci)
 	for _, label := range allLabels {
-		sp := detection.ParseSpeciesString(label)
-		if strings.EqualFold(openfauna.CanonicalName(sp.ScientificName), canonicalTarget) {
-			return label, sp.CommonName
+		if labelMatchesSpecies(label, canonicalTarget) {
+			return label, detection.ParseSpeciesString(label).CommonName
 		}
 	}
 	return "", ""
@@ -324,16 +335,6 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	// instead of 404ing.
 	matchedLabel, commonName := resolveSpeciesLabel(scientificName, bn.AllLabels())
 
-	// Secondary-model labels (bats, Perch) are scientific-only, so ParseSpeciesString
-	// reports CommonName == ScientificName for them. Treat that (and an empty common
-	// name) as "needs localizing" and resolve through the orchestrator's
-	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
-	if matchedLabel != "" && (commonName == "" || strings.EqualFold(commonName, scientificName)) {
-		if resolved := bn.ResolveName(scientificName, c.CurrentLocale()); resolved != "" {
-			commonName = resolved
-		}
-	}
-
 	// If species not found in any loaded model's labels, return error
 	if matchedLabel == "" {
 		return nil, errors.Newf("species '%s' not found in loaded model labels", scientificName).
@@ -343,9 +344,27 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 			Build()
 	}
 
-	// Create basic species info
+	// Everything downstream keys on the matched label's scientific name rather than the
+	// request's. resolveSpeciesLabel accepts a legacy synonym, so the two differ exactly
+	// when the caller used one, and the name resolver and both taxonomy backends key on
+	// current names. Threading the request string through instead would answer such a
+	// request with a missing common name and a missing taxonomy block.
+	matchedSci := detection.ExtractScientificName(matchedLabel)
+
+	// Secondary-model labels (bats, Perch) are scientific-only, so ParseSpeciesString
+	// reports CommonName == ScientificName for them. Treat that (and an empty common
+	// name) as "needs localizing" and resolve through the orchestrator's
+	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
+	if commonName == "" || strings.EqualFold(commonName, matchedSci) {
+		if resolved := bn.ResolveName(matchedSci, c.CurrentLocale()); resolved != "" {
+			commonName = resolved
+		}
+	}
+
+	// Create basic species info. The scientific name reported is the matched label's, so
+	// a response never pairs a legacy name with the current name's common name.
 	info := &SpeciesInfo{
-		ScientificName: scientificName,
+		ScientificName: matchedSci,
 		CommonName:     commonName,
 		Metadata:       make(map[string]any),
 	}
@@ -360,12 +379,18 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 		info.Rarity = rarityInfo
 	}
 
-	// Get taxonomy/family tree information using fallback pattern. Both lookup
-	// backends return a non-nil tree whenever they report no error, but the tree
-	// is now dereferenced into a value field, so guard it: a backend that ever
-	// returns (nil, nil) would panic the handler rather than yield an empty tree.
-	if result := c.lookupTaxonomyTree(ctx, scientificName); result != nil && result.tree != nil {
-		info.Taxonomy = *result.tree
+	// Get taxonomy/family tree information using fallback pattern. Both backends return
+	// a non-nil tree whenever they report no error, so the tree guard is defensive: the
+	// field is a value, so a backend that ever returned (nil, nil) would panic the
+	// handler rather than yield an empty tree.
+	//
+	// The lookup takes the label's scientific name, not the request's. Both backends key
+	// on current names, so a request naming the species by a legacy synonym would
+	// otherwise return 200 with the taxonomy block silently missing.
+	if result := c.lookupTaxonomyTree(ctx, matchedSci); result != nil {
+		if result.tree != nil {
+			info.Taxonomy = *result.tree
+		}
 		info.Metadata["source"] = result.source
 	}
 
@@ -381,16 +406,22 @@ func labelMatchesSpecies(label, canonicalTarget string) bool {
 	return strings.EqualFold(openfauna.CanonicalName(detection.ExtractScientificName(label)), canonicalTarget)
 }
 
-// speciesHasGeomodelCoverage reports whether the geomodel can produce an occurrence
-// probability for the scientific name. It answers that against the geomodel's own
+// speciesHasGeomodelCoverage reports whether the active range filter can produce an
+// occurrence probability for the scientific name. It answers against the geomodel's own
 // vocabulary, which for the universal geomodel is much larger than the primary
-// classifier's, so a species the classifier cannot name still gets a real rarity.
+// classifier's (it spans birds, bats, other mammals and insects), so a species the
+// classifier cannot name still gets a real rarity.
 //
-// geomodelLabels is empty when no mapped geomodel is active. The TFLite meta model
-// and the plain ONNX range filter are both keyed to the classifier's own labels, so
-// falling back to classifierLabels is the correct vocabulary for those backends, not
-// a degraded approximation. Secondary-model-only species (e.g. bats) are in neither
-// set and therefore have no occurrence probability to base a rarity on.
+// geomodelLabels is empty for every backend other than the universal geomodel: the
+// TFLite meta model and the plain ONNX range filter are keyed to the classifier's own
+// labels, so falling back to classifierLabels is the correct vocabulary for those, not a
+// degraded approximation. It is also empty when no range filter is loaded or no location
+// is configured; there the fallback grants nominal coverage to the classifier's species
+// even though nothing is actually scoring them, which is why callers must not read a
+// rarity as meaningful when SpeciesRarityInfo.LocationBased is false.
+//
+// A species in neither vocabulary (a secondary-model-only species the geomodel does not
+// cover) has no occurrence probability to base a rarity on.
 func speciesHasGeomodelCoverage(targetSci string, geomodelLabels, classifierLabels []string) bool {
 	labels := geomodelLabels
 	if len(labels) == 0 {
@@ -405,32 +436,49 @@ func speciesHasGeomodelCoverage(targetSci string, geomodelLabels, classifierLabe
 	return false
 }
 
-// computeRarity resolves a species to its occurrence score and rarity status.
-//
-// A species in today's probable list is scored directly. One that is absent but that
-// the geomodel can classify is below today's threshold and therefore genuinely very
-// rare; one with no geomodel coverage at all has no occurrence probability, so it is
-// reported as unknown rather than given a misleading rarity.
-func computeRarity(targetSci string, speciesScores []classifier.SpeciesScore, geomodelLabels, classifierLabels []string) (float64, RarityStatus) {
-	canonicalTarget := openfauna.CanonicalName(targetSci)
-	var score float64
-	found := false
+// findSpeciesScore returns the occurrence score for targetSci from a probable-species
+// list. It matches on the exact scientific name across the whole list before trying any
+// alias, for the reason resolveSpeciesLabel documents: the alias map merges pairs the
+// classifier ships as separate species, and an alias-first match would report one bird's
+// occurrence probability for the other.
+func findSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore) (float64, bool) {
 	for _, ss := range speciesScores {
-		if labelMatchesSpecies(ss.Label, canonicalTarget) {
-			score = ss.Score
-			found = true
-			break
+		if strings.EqualFold(detection.ExtractScientificName(ss.Label), targetSci) {
+			return ss.Score, true
 		}
 	}
-
-	if !found {
-		if speciesHasGeomodelCoverage(targetSci, geomodelLabels, classifierLabels) {
-			return 0.0, RarityVeryRare
+	canonicalTarget := openfauna.CanonicalName(targetSci)
+	for _, ss := range speciesScores {
+		if labelMatchesSpecies(ss.Label, canonicalTarget) {
+			return ss.Score, true
 		}
+	}
+	return 0, false
+}
+
+// computeRarity resolves a species to its occurrence score and rarity status.
+//
+// Coverage decides first. A species the range filter cannot score has no occurrence
+// probability at all, so it is reported as unknown even when it does appear in the
+// probable-species list: two mechanisms inject synthetic scores that are not occurrence
+// probabilities. PassUnmappedSpecies adds species with no geomodel match at 0.0 purely so
+// they survive the filter, and addUserOverrideSpeciesScores adds force-included species
+// at 1.0 so they read as always-active. Reading either as a rarity would report "very
+// rare" or "very common" for a species the geomodel simply has no data on, and would make
+// the badge depend on the unrelated PassUnmappedSpecies toggle.
+//
+// A covered species present in the list is scored directly; one that is covered but
+// absent is below today's threshold and therefore genuinely very rare.
+func computeRarity(targetSci string, speciesScores []classifier.SpeciesScore, geomodelLabels, classifierLabels []string) (float64, RarityStatus) {
+	if !speciesHasGeomodelCoverage(targetSci, geomodelLabels, classifierLabels) {
 		return 0.0, RarityUnknown
 	}
 
-	return score, calculateRarityStatus(score)
+	if score, found := findSpeciesScore(targetSci, speciesScores); found {
+		return score, calculateRarityStatus(score)
+	}
+
+	return 0.0, RarityVeryRare
 }
 
 func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (SpeciesRarityInfo, error) {

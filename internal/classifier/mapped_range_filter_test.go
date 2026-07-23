@@ -92,9 +92,11 @@ type fakeRangeFilter struct {
 	scores []float32
 	err    error
 	closed bool
+	calls  int // predictions served; lets a test prove an answer came from cache
 }
 
 func (f *fakeRangeFilter) Predict(_, _, _ float32) ([]float32, error) {
+	f.calls++
 	if f.err != nil {
 		return nil, f.err
 	}
