@@ -2591,7 +2591,11 @@ func (c *Handler) processHourlyBatchSpecies(ctx echo.Context, speciesParams []st
 			logger.String("path", path),
 		)
 		processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data: %v", err))
-		return results, processingErrors
+		// Discard the pre-seeded zero entries. handleBatchResponse decides success from the
+		// result count, so returning them would report a failed query as HTTP 200 with "no
+		// detections at any hour" - a database error or query timeout would be indistinguishable
+		// from a genuinely quiet period. With no results it correctly answers 500.
+		return make(map[string][]HourlyDistribution), processingErrors
 	}
 
 	// Drive from the requested species rather than the response: a species with no rows keeps the
