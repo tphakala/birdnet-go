@@ -1686,6 +1686,21 @@ func (f *audioFeed) release(n int) {
 	f.queued.Add(-int64(n))
 }
 
+// evictOldest drops the single oldest queued chunk if there is one, releasing
+// its bytes, and reports whether it evicted anything. It is the one place a
+// chunk leaves the queue on the producer side, so the receive and its matching
+// release stay welded together here rather than being repeated at each caller:
+// makeRoom's byte-budget loop and Write's slot-exhaustion arm both go through it.
+func (f *audioFeed) evictOldest() bool {
+	select {
+	case old := <-f.ch:
+		f.release(len(old.data))
+		return true
+	default:
+		return false
+	}
+}
+
 // makeRoom evicts the oldest chunks until n more bytes fit within the byte
 // budget, returning the number of chunks it dropped.
 //
@@ -1703,13 +1718,10 @@ func (f *audioFeed) makeRoom(n int) int {
 	}
 	dropped := 0
 	for f.queued.Load()+int64(n) > f.maxBytes {
-		select {
-		case old := <-f.ch:
-			f.release(len(old.data))
-			dropped++
-		default:
+		if !f.evictOldest() {
 			return dropped
 		}
+		dropped++
 	}
 	return dropped
 }
@@ -1772,11 +1784,8 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 		// Slots exhausted while still inside the byte budget, which is what a
 		// stream of chunks far smaller than the budget looks like. Drop the
 		// oldest to make room, on the same reasoning as makeRoom.
-		select {
-		case old := <-h.feed.ch:
-			h.feed.release(len(old.data))
+		if h.feed.evictOldest() {
 			dropped++
-		default:
 		}
 		select {
 		case h.feed.ch <- chunk:
