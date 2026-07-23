@@ -38,15 +38,15 @@ const (
 	playlistBytesPerSegment = 96
 )
 
-// renderPlaylist builds the HLS media playlist describing the ring's current
-// window.
+// renderPlaylist builds the HLS media playlist describing a window's current
+// segments.
 //
 // It is a media playlist, not a master playlist, which is why no CODECS
 // attribute appears: RFC 8216 places CODECS on EXT-X-STREAM-INF, a master
 // playlist tag. Players determine the codec by probing the init segment named
 // by EXT-X-MAP.
-func renderPlaylist(r *ring, targetDuration int, ended bool) string {
-	segs := r.window()
+func renderPlaylist(w *segmentWindow, targetDuration int, ended bool) string {
+	segs := w.retained()
 
 	var b strings.Builder
 	b.Grow(playlistFixedLines*playlistBytesPerHeaderLine + len(segs)*playlistBytesPerSegment)
@@ -62,9 +62,9 @@ func renderPlaylist(r *ring, targetDuration int, ended bool) string {
 	b.WriteString("\n#EXT-X-TARGETDURATION:")
 	b.WriteString(strconv.Itoa(targetDuration))
 	b.WriteString("\n#EXT-X-MEDIA-SEQUENCE:")
-	b.WriteString(strconv.FormatUint(r.mediaSequence(), 10))
+	b.WriteString(strconv.FormatUint(w.mediaSequence(), 10))
 	b.WriteString("\n")
-	if ds := r.discontinuitySequence(); ds != 0 {
+	if ds := w.discontinuitySequence(); ds != 0 {
 		b.WriteString("#EXT-X-DISCONTINUITY-SEQUENCE:")
 		b.WriteString(strconv.FormatUint(ds, 10))
 		b.WriteString("\n")

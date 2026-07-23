@@ -412,15 +412,20 @@ func (c *Handler) serveNativePlaylist(ctx echo.Context, sourceID string, stream 
 	ctx.Response().Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	ctx.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-	playlist := stream.mux.Playlist()
+	// Stats first, then the playlist. Both read the muxer's snapshot without a
+	// lock, so a segment cut can land between them; taking Stats first makes
+	// Retained a lower bound on what the playlist below advertises rather than
+	// an upper one. That is the safe direction: an extra Retry-After on a
+	// playlist that has just gained its first segment is ignored by a client
+	// that can already start, while a missing one on a genuinely empty playlist
+	// is the case the hint exists for.
 	stats := stream.mux.Stats()
+	playlist := stream.mux.Playlist()
 
 	c.checkNativeStreamFreshness(sourceID, &stats)
 
 	// Tell a client polling before the first segment how long to wait, matching
-	// what the FFmpeg path does with its placeholder playlist. Retained comes
-	// from the same Stats already sampled, so the answer is consistent with the
-	// playlist just rendered rather than read at a third instant.
+	// what the FFmpeg path does with its placeholder playlist.
 	if stats.Retained == 0 {
 		ctx.Response().Header().Set("Retry-After", strconv.Itoa(c.getEffectiveSegmentLength()))
 	}

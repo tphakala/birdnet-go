@@ -14,7 +14,7 @@ func TestRenderPlaylistGolden(t *testing.T) {
 	t.Parallel()
 
 	base := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
-	r := newRing(3)
+	r := newSegmentWindow(3)
 	r.push(&Segment{Seq: 7, Samples: 96256, Duration: 2005333333 * time.Nanosecond, PDT: base})
 	r.push(&Segment{Seq: 8, Samples: 96256, Duration: 2005333334 * time.Nanosecond, PDT: base.Add(2005333333 * time.Nanosecond)})
 
@@ -40,7 +40,7 @@ func TestRenderPlaylistWithDiscontinuityGolden(t *testing.T) {
 	t.Parallel()
 
 	base := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
-	r := newRing(2)
+	r := newSegmentWindow(2)
 	r.push(&Segment{Seq: 40, Duration: 2 * time.Second, PDT: base, DiscontinuitySeq: 2})
 	// A segment preceded by EXT-X-DISCONTINUITY carries its predecessor's
 	// discontinuity sequence number plus one, so that the number a client
@@ -78,7 +78,7 @@ func TestRenderPlaylistEndedGolden(t *testing.T) {
 	t.Parallel()
 
 	base := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
-	r := newRing(2)
+	r := newSegmentWindow(2)
 	r.push(&Segment{Seq: 0, Duration: 1500 * time.Millisecond, PDT: base})
 
 	want := `#EXTM3U
@@ -107,7 +107,7 @@ func TestRenderPlaylistEmptyGolden(t *testing.T) {
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-MAP:URI="init.mp4"
 `
-	assert.Equal(t, want, renderPlaylist(newRing(6), 2, false))
+	assert.Equal(t, want, renderPlaylist(newSegmentWindow(6), 2, false))
 }
 
 func TestFormatEXTINF(t *testing.T) {
