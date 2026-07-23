@@ -844,24 +844,33 @@ func TestComputeRarity_CollidingSpecies(t *testing.T) {
 }
 
 // TestComputeRarity_SyntheticScoresReportUnknown pins that a score injected for a species
-// the geomodel cannot rank is not read as a rarity. PassUnmappedSpecies injects unmapped
-// species at 0.0 and addUserOverrideSpeciesScores injects force-included species at 1.0;
-// neither is an occurrence probability, so both must report unknown rather than letting
-// an unrelated toggle decide the badge.
+// OUTSIDE the coverage vocabulary is not read as a rarity, whatever its value.
+// PassUnmappedSpecies injects unmapped species at 0.0, which is the case this fully
+// covers: previously they read as very_rare, so the badge depended on an unrelated
+// toggle.
+//
+// Note what this does NOT cover. addUserOverrideSpeciesScores also injects at 1.0, but
+// resolveOverrideLabels resolves an override against the geomodel labels first, so a
+// force-included species the geomodel knows sits INSIDE the coverage vocabulary and
+// still reads as very_common. Only an override outside it, as constructed here, reaches
+// the unknown path. Separating a real score from an injected one needs the range filter
+// to tag synthetic entries.
 func TestComputeRarity_SyntheticScoresReportUnknown(t *testing.T) {
 	t.Parallel()
 
 	const unmappedSci = "Myotis brandtii"
 	geomodelLabels := []string{testCanonName + "_" + testCanonCommon}
-	classifierLabels := []string{unmappedSci + "_Brandt's Bat"}
+	// A species present in neither vocabulary, standing in for one the range filter
+	// cannot rank. classifierLabels is the primary model's own set in production.
+	classifierLabels := []string{testSciName + "_" + testCommonName}
 
 	tests := []struct {
 		name  string
 		score float64
 		why   string
 	}{
-		{name: "PassUnmappedSpecies injects 0.0", score: 0.0, why: "must not read as very_rare"},
-		{name: "force-include injects 1.0", score: 1.0, why: "must not read as very_common"},
+		{name: "unmapped species injected at 0.0", score: 0.0, why: "must not read as very_rare"},
+		{name: "uncovered override injected at 1.0", score: 1.0, why: "must not read as very_common"},
 	}
 
 	for _, tt := range tests {

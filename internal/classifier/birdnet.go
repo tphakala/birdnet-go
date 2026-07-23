@@ -862,7 +862,9 @@ func lookupOccurrence(scores map[string]float64, label string) (float64, bool) {
 func buildOccurrenceIndex(speciesScores []SpeciesScore) map[string]float64 {
 	scores := make(map[string]float64, len(speciesScores))
 	for _, s := range speciesScores {
-		scores[rawSpeciesKey(s.Label)] = s.Score
+		if key := rawSpeciesKey(s.Label); key != "" {
+			scores[key] = s.Score
+		}
 	}
 	for _, s := range speciesScores {
 		if key := canonicalSpeciesKey(s.Label); key != "" {

@@ -30,8 +30,9 @@ const (
 // These tests read settings through BirdNET.currentSettings, which resolves via
 // conf.CurrentOrFallback and therefore prefers the process-global snapshot over the
 // instance's own pointer. They must publish their fixture globally and must not run in
-// parallel, matching the rest of this package; a sibling test leaving a snapshot
-// published would otherwise silently supply their settings.
+// parallel, or a sibling test leaving a snapshot published silently supplies their
+// settings instead. Go runs every serial top-level test to completion before releasing
+// the paused parallel ones, so staying serial is what makes the isolation hold.
 func publishTestSettings(t *testing.T, settings *conf.Settings) {
 	t.Helper()
 	conftest.SetTestSettings(settings)
@@ -162,11 +163,13 @@ func TestGetSpeciesOccurrenceAtTime_CanonicalNameAlsoResolves(t *testing.T) {
 // TestGetSpeciesOccurrenceAtTime_UnknownSpecies exercises the uncached fallback scan,
 // which the cache-hit tests above never reach.
 func TestGetSpeciesOccurrenceAtTime_UnknownSpecies(t *testing.T) {
-	bn, _ := newAliasedGeomodelBirdNET(t, 0.42)
+	bn, inner := newAliasedGeomodelBirdNET(t, 0.42)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
 	got := bn.GetSpeciesOccurrenceAtTime("Myotis brandtii_Brandt's Bat", at)
 	assert.InDelta(t, 0.0, got, 0.001, "a species the range filter cannot score has no occurrence")
+	assert.Equal(t, 2, inner.calls,
+		"a cache miss must reach the uncached fallback, which recomputes the probable list")
 }
 
 func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
