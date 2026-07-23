@@ -70,14 +70,14 @@ func TestGetBatchHourlySpeciesData_RangeParams(t *testing.T) {
 	t.Attr("feature", "batch-hourly")
 
 	mockDS := mocks.NewMockInterface(t)
-	var hourly [24]int
+	var hourly [apicore.HoursPerDay]int
 	hourly[6] = 12
 
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2026-03-01", "2026-03-31",
 		mock.MatchedBy(func(species []string) bool {
 			return len(species) == 1 && species[0] == sciBlackbird
 		}), 0.0).
-		Return(map[string][24]int{sciBlackbird: hourly}, nil)
+		Return(map[string][apicore.HoursPerDay]int{sciBlackbird: hourly}, nil)
 
 	rec := callBatchHourly(t, mockDS, batchQuery([]string{sciBlackbird},
 		"start_date", "2026-03-01", "end_date", "2026-03-31", "min_confidence", "0"))
@@ -87,7 +87,7 @@ func TestGetBatchHourlySpeciesData_RangeParams(t *testing.T) {
 	var response map[string][]HourlyDistribution
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	require.Contains(t, response, sciBlackbird)
-	require.Len(t, response[sciBlackbird], 24)
+	require.Len(t, response[sciBlackbird], apicore.HoursPerDay)
 	assert.Equal(t, 12, response[sciBlackbird][6].Count)
 	mockDS.AssertExpectations(t)
 }
@@ -103,7 +103,7 @@ func TestGetBatchHourlySpeciesData_LegacyDateParam(t *testing.T) {
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2026-03-07", "2026-03-07",
 		mock.Anything, 0.0).
-		Return(map[string][24]int{sciBlackbird: {}}, nil)
+		Return(map[string][apicore.HoursPerDay]int{sciBlackbird: {}}, nil)
 
 	rec := callBatchHourly(t, mockDS, batchQuery([]string{sciBlackbird}, "date", "2026-03-07"))
 
@@ -158,7 +158,7 @@ func TestGetBatchHourlySpeciesData_QueryFailureIsNotZeroes(t *testing.T) {
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2026-03-01", "2026-03-31",
 		mock.Anything, 0.0).
-		Return(map[string][24]int{}, errors.New("query timeout"))
+		Return(map[string][apicore.HoursPerDay]int{}, errors.New("query timeout"))
 
 	rec := callBatchHourly(t, mockDS, batchQuery([]string{sciBlackbird},
 		"start_date", "2026-03-01", "end_date", "2026-03-31"))
@@ -178,13 +178,13 @@ func TestGetBatchHourlySpeciesData_SpeciesWithNoRowsIsZeroFilled(t *testing.T) {
 	t.Attr("feature", "batch-hourly")
 
 	mockDS := mocks.NewMockInterface(t)
-	var hourly [24]int
+	var hourly [apicore.HoursPerDay]int
 	hourly[5] = 3
 
 	// Only the blackbird comes back; the robin has no detections in the range.
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2026-03-01", "2026-03-31",
 		mock.Anything, 0.0).
-		Return(map[string][24]int{sciBlackbird: hourly}, nil)
+		Return(map[string][apicore.HoursPerDay]int{sciBlackbird: hourly}, nil)
 
 	rec := callBatchHourly(t, mockDS, batchQuery([]string{sciBlackbird, sciRobin},
 		"start_date", "2026-03-01", "end_date", "2026-03-31"))
@@ -195,12 +195,12 @@ func TestGetBatchHourlySpeciesData_SpeciesWithNoRowsIsZeroFilled(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
 	require.Contains(t, response, sciRobin, "a species with no detections must still be returned")
-	require.Len(t, response[sciRobin], 24)
+	require.Len(t, response[sciRobin], apicore.HoursPerDay)
 	total := 0
 	for _, h := range response[sciRobin] {
 		total += h.Count
 	}
-	assert.Equal(t, 0, total, "the absent species is zero-filled across all 24 hours")
+	assert.Equal(t, 0, total, "the absent species is zero-filled across every hour bucket")
 	assert.Equal(t, 3, response[sciBlackbird][5].Count)
 	mockDS.AssertExpectations(t)
 }
