@@ -75,6 +75,16 @@ vars:
   # these in, or a target silently ships a different binary than the rest.
   # (tools/dbexport is deliberately exempt: it never reaches go-aac.)
   #
+  # CI carries the same tag so the checks compile what ships, and nothing
+  # enforces that automatically. Change these together:
+  #   .github/workflows/cross-platform-build.yml  (env: BASE_BUILD_TAGS)
+  #   .github/workflows/golangci-test.yml         (env: BASE_BUILD_TAGS)
+  #   .github/workflows/golangci-lint.yml         (literal; it is a
+  #                                                workflow_call target and does
+  #                                                not inherit the caller's env)
+  #   .github/workflows/macos-test.yml            (literal)
+  #   .github/workflows/windows-test.yml          (literal)
+  #
   # goaac_simd selects go-aac's SIMD kernels, which are opt-in upstream so that
   # the default build carries no assembly. It swaps exactly two hot kernels: the
   # NMR Viterbi trellis (f32.MinIdxOfSumRows) and the AbsPow34 magnitude
@@ -92,10 +102,12 @@ vars:
   # would not be caught here.
   #
   # Measured on a Raspberry Pi 5 (Cortex-A76), medians of -benchtime=2s -count=5
-  # over internal/audiocore/hlsmux BenchmarkStreamWrite: 11.2% faster for 10 ms
-  # frames, 12.8% for 32 KiB. That path is encode plus fMP4 fragmentation, so the
-  # encoder-only gain is higher; go-aac's README reports 14% for the trellis alone
-  # on the same hardware. Both consumers (native AAC clip export and native HLS)
+  # over internal/audiocore/hlsmux BenchmarkStreamWrite10ms and
+  # BenchmarkStreamWrite32k: 11.2% and 12.8% faster respectively. Those cover
+  # encode plus fMP4 fragmentation, so the encoder-only gain is larger by an
+  # unmeasured margin. (go-aac's README reports 14% on the same hardware, but for
+  # the trellis kernel alone; it lists the both-kernels figure as pending, so it
+  # is not directly comparable.) Both consumers (native AAC clip export, native HLS)
   # are still opt-in behind BIRDNET_AAC_ENCODER / BIRDNET_HLS_ENCODER=native, so
   # today this speeds up those gated paths rather than a default deployment.
   BASE_BUILD_TAGS: 'goaac_simd'

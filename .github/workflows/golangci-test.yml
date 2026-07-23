@@ -37,6 +37,9 @@ env:
   # Number of parallel shards the portable unit suite is split across. Keep in
   # sync with the matrix below and the `NR % <N>` modulo in the shard step.
   UNIT_SHARDS: 4
+  # Must match BASE_BUILD_TAGS in Taskfile.yml (see the comment there for the
+  # full list of files that carry this tag and must change together).
+  BASE_BUILD_TAGS: goaac_simd
 
 jobs:
   golangci:
@@ -118,7 +121,7 @@ jobs:
           # Tags are kept identical to the `go test` step below so the enumerated
           # package set cannot drift from the tested one if a package ever becomes
           # build-tag conditional.
-          go list -tags noembed,skipfrontend,goaac_simd ./... \
+          go list -tags noembed,skipfrontend,"$BASE_BUILD_TAGS" ./... \
             | awk -v n="${UNIT_SHARDS}" -v s="${{ matrix.shard }}" 'NR % n == s' \
             > shard_pkgs.txt
           echo "Shard ${{ matrix.shard }} owns $(wc -l < shard_pkgs.txt) packages:"
@@ -145,7 +148,7 @@ jobs:
             --rerun-fails-max-failures=15 \
             --rerun-fails-report="rerun-unit-${{ matrix.shard }}.txt" \
             --packages "${PKGS[*]}" \
-            -- -tags noembed,skipfrontend,goaac_simd -race -short -timeout 300s
+            -- -tags noembed,skipfrontend,$BASE_BUILD_TAGS -race -short -timeout 300s
         timeout-minutes: 12
 
       - name: Cleanup any remaining processes
