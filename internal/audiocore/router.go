@@ -46,11 +46,17 @@ const (
 	// bitDepthPCM16 is the only bit depth the router's alignment, EQ and gain
 	// paths interpret; frames with other depths skip those stages untouched.
 	// The resampler is the exception: it assumes PCM16 by contract regardless
-	// of the frame's declared bit depth, so a resampling route fed non-PCM16
-	// data rejects odd-length frames loudly and garbles the rest. AddRoute
-	// builds the resampler purely from a rate mismatch, so nothing currently
-	// prevents that pairing; it is unreachable only because both source
-	// construction sites hardcode 16-bit.
+	// of the frame's declared bit depth, so a resampling route fed another
+	// depth rejects odd-length frames loudly and garbles the rest. Nothing
+	// gates that pairing, because AddRoute derives the resampler from a rate
+	// mismatch alone.
+	//
+	// It does not bite today because bit depth is not a user setting: there is
+	// no conf field for it, and the paths that build a source pass
+	// conf.BitDepth, which is 16. The engine forwards whatever it is given,
+	// substituting the default only for a non-positive value, so it does not
+	// normalise a wrong value either. A non-16 source would therefore reach
+	// FFmpeg's output format selection, this gate, and the resampler at once.
 	bitDepthPCM16 = 16
 
 	// bytesPerPCM16Sample is the size of one 16-bit PCM sample. Frames handed
