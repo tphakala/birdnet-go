@@ -112,6 +112,25 @@ const (
 	// gives the native path's muxer configuration something to be checked
 	// against rather than a second bare literal.
 	hlsConsumerChannels = 1
+
+	// hlsFeedQueueUnbounded disables an audio feed queue's byte budget, leaving
+	// the channel's slot count (defaultReadBufferSize) as the only bound.
+	//
+	// This is what the FFmpeg path uses, deliberately. Its consumer writes PCM
+	// into a FIFO that the FFmpeg process reads, and FFmpeg cannot see a gap in
+	// what it is handed: it encodes whatever arrives as one continuous stream.
+	// Since pdtOffset is computed once from the first playlist and then applied
+	// to every later one, every dropped chunk shifts EXT-X-PROGRAM-DATE-TIME
+	// permanently behind wall-clock time, by the duration dropped. A budget
+	// tight enough to bite before fifoWriteTimeout (30s) gives up on the stall
+	// while FFmpeg is still willing to wait it out, and pays for it with a
+	// timeline that never recovers.
+	//
+	// The native path has no such coupling: it hands the muxer each chunk's own
+	// capture timestamp, so a drop shows up as a timestamp jump the muxer
+	// accounts for, and the timeline stays true. That is why it can afford
+	// nativeHLSFeedQueueBytes and this path cannot.
+	hlsFeedQueueUnbounded = 0
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -1544,7 +1563,7 @@ func (c *Handler) setupWindowsAudioFeed(ctx context.Context, sourceID string, cm
 		}()
 		apicore.GetLogger().Debug("Starting audio feed via stdin", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 
-		audioChan, cleanup, err := c.setupAudioCallback(sourceID, c.ffmpegConsumerSampleRate())
+		feed, cleanup, err := c.setupAudioCallback(sourceID, c.ffmpegConsumerSampleRate(), hlsFeedQueueUnbounded)
 		if err != nil {
 			apicore.GetLogger().Error("Error setting up audio callback", logger.Error(err))
 			return
@@ -1556,11 +1575,14 @@ func (c *Handler) setupWindowsAudioFeed(ctx context.Context, sourceID string, cm
 			case <-ctx.Done():
 				apicore.GetLogger().Debug("Audio feed terminated due to context cancellation", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 				return
-			case chunk, ok := <-audioChan:
+			case chunk, ok := <-feed.ch:
 				if !ok {
 					apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 					return
 				}
+				// Report the dequeue before anything can return early, so the
+				// producer's byte accounting cannot leak on a mid-loop exit.
+				feed.release(len(chunk.data))
 
 				data := chunk.data
 				written := 0
@@ -1622,12 +1644,82 @@ type audioChunk struct {
 	timestamp time.Time
 }
 
+// audioFeed is the per-stream PCM queue between the router, which produces
+// chunks on its dispatch goroutine, and an HLS feed loop, which drains them.
+//
+// The queue is bounded by bytes of queued PCM rather than by chunk count,
+// because chunk size is a property of the producer, not of HLS: the FFmpeg
+// ingest path emits ffmpegBufferSize (32 KiB) per frame, a directly captured
+// sound card emits miniaudio's default 10 ms period (under 1 KiB at 48 kHz
+// mono), and a route whose source rate differs from the consumer rate has a
+// resampler in between that changes the size again. A chunk-count bound
+// therefore means a different memory ceiling and a different amount of buffered
+// audio for every source; one small enough to bound RTSP frames leaves a sound
+// card with a fraction of a second of slack. A byte budget gives every producer
+// the same ceiling and the same wall-clock depth.
+//
+// Chunks leave the queue two ways, and each one has to be accounted for. The
+// producer evicts the oldest to make room: in makeRoom when the byte budget is
+// exceeded, and in Write's overflow arm when the channel's slots fill before the
+// byte budget does (which is the only eviction path when there is no budget).
+// The consumer receives. The invariant is simply that every
+// path removing a chunk from ch calls release(len(chunk.data)) for it; skipping
+// it leaves the producer believing the queue holds bytes that are already gone,
+// and the queue eventually evicts on every write.
+type audioFeed struct {
+	ch chan audioChunk
+
+	// maxBytes is the byte budget. hlsFeedQueueUnbounded disables it and leaves
+	// the channel's slot count as the only bound.
+	maxBytes int64
+
+	// queued is the PCM currently sitting in ch. It is only ever advisory:
+	// nothing serializes a producer's enqueue against a consumer's release, so
+	// it can lag reality by a chunk in either direction. That is bounded and
+	// harmless, since one chunk of slack on a multi-second budget changes
+	// neither the memory ceiling nor the buffered depth in any way that matters.
+	queued atomic.Int64
+}
+
+// release reports that a chunk of n bytes has been taken off the queue.
+func (f *audioFeed) release(n int) {
+	f.queued.Add(-int64(n))
+}
+
+// makeRoom evicts the oldest chunks until n more bytes fit within the byte
+// budget, returning the number of chunks it dropped.
+//
+// Dropping the oldest is the right policy for a live stream: the queue only
+// grows when the encoder falls behind, and audio that far behind the live edge
+// is past the point where any player would still ask for it.
+//
+// It stops early when the queue runs empty, which happens when a single chunk
+// is larger than the whole budget. Refusing that chunk would silence the stream
+// permanently rather than briefly, so it is admitted and the budget is exceeded
+// by that one chunk.
+func (f *audioFeed) makeRoom(n int) int {
+	if f.maxBytes <= 0 {
+		return 0
+	}
+	dropped := 0
+	for f.queued.Load()+int64(n) > f.maxBytes {
+		select {
+		case old := <-f.ch:
+			f.release(len(old.data))
+			dropped++
+		default:
+			return dropped
+		}
+	}
+	return dropped
+}
+
 // hlsConsumer implements audiocore.AudioConsumer for HLS streaming.
-// It forwards audio frames to a channel for encoding.
+// It forwards audio frames to a bounded feed queue (see audioFeed) for encoding.
 type hlsConsumer struct {
 	id       string
 	sourceID string
-	ch       chan audioChunk
+	feed     *audioFeed
 	rate     int
 	depth    int
 	channels int
@@ -1651,51 +1743,69 @@ func (h *hlsConsumer) BitDepth() int { return h.depth }
 // Channels returns the expected channel count.
 func (h *hlsConsumer) Channels() int { return h.channels }
 
-// Write delivers audio frame data to the HLS channel.
+// Write delivers audio frame data to the HLS feed queue.
 //
 // The frame data is copied before being sent so the caller (the audio router)
-// may safely reuse or recycle the underlying slice after Write returns. FFmpeg
-// reads asynchronously from the channel, so any retained slice header would
-// race with the caller's buffer reuse.
+// may safely reuse or recycle the underlying slice after Write returns. The
+// feed loop reads asynchronously from the queue, so any retained slice header
+// would race with the caller's buffer reuse.
+//
+// The send never blocks. A feed loop that has fallen behind costs the stream
+// its oldest queued audio, not the router its dispatch goroutine.
 func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
 	if h.closed.Load() {
 		return audiocore.ErrConsumerClosed
 	}
 
-	// Copy once up front. Both select arms below need an owned slice.
+	// Copy once up front. Every send arm below needs an owned slice.
 	chunk := audioChunk{data: slices.Clone(frame.Data), timestamp: frame.Timestamp}
+	chunkBytes := int64(len(chunk.data))
+
+	// Evict down to the byte budget first, so the queue is bounded by the PCM
+	// it holds rather than by the slot count of the channel behind it.
+	dropped := h.feed.makeRoom(len(chunk.data))
 
 	select {
-	case h.ch <- chunk:
+	case h.feed.ch <- chunk:
+		h.feed.queued.Add(chunkBytes)
 	default:
-		// Channel full, drop oldest to make room
-		dropped := false
+		// Slots exhausted while still inside the byte budget, which is what a
+		// stream of chunks far smaller than the budget looks like. Drop the
+		// oldest to make room, on the same reasoning as makeRoom.
 		select {
-		case <-h.ch:
-			dropped = true
+		case old := <-h.feed.ch:
+			h.feed.release(len(old.data))
+			dropped++
 		default:
 		}
-		// Non-blocking send - drop if still full
 		select {
-		case h.ch <- chunk:
+		case h.feed.ch <- chunk:
+			h.feed.queued.Add(chunkBytes)
 		default:
+			// Unreachable under the single-producer model (the eviction above,
+			// or the consumer draining, leaves a free slot before this retry),
+			// but count the loss rather than trust that invariant: if a second
+			// writer is ever added, the drop stays honest instead of silently
+			// under-reporting.
+			dropped++
 		}
+	}
 
-		if dropped {
-			h.dropMu.Lock()
-			h.dropCount++
-			now := time.Now()
-			if now.Sub(h.lastDropLog) >= hlsDropLogInterval {
-				sanitizedID := privacy.SanitizeRTSPUrl(h.sourceID)
-				apicore.GetLogger().Warn("HLS audio data dropped: channel full",
-					logger.String("source_id", sanitizedID),
-					logger.Int64("drops_since_last_log", h.dropCount),
-					logger.Int("channel_cap", defaultReadBufferSize))
-				h.dropCount = 0
-				h.lastDropLog = now
-			}
-			h.dropMu.Unlock()
+	if dropped > 0 {
+		h.dropMu.Lock()
+		h.dropCount += int64(dropped)
+		now := time.Now()
+		if now.Sub(h.lastDropLog) >= hlsDropLogInterval {
+			sanitizedID := privacy.SanitizeRTSPUrl(h.sourceID)
+			apicore.GetLogger().Warn("HLS audio data dropped: feed queue full",
+				logger.String("source_id", sanitizedID),
+				logger.Int64("drops_since_last_log", h.dropCount),
+				logger.Int64("queued_bytes", h.feed.queued.Load()),
+				logger.Int64("max_queued_bytes", h.feed.maxBytes))
+			h.dropCount = 0
+			h.lastDropLog = now
 		}
+		h.dropMu.Unlock()
 	}
 	return nil
 }
@@ -1716,11 +1826,16 @@ func (c *Handler) ffmpegConsumerSampleRate() int {
 	return hlsDefaultSampleRate
 }
 
-// setupAudioCallback sets up the audio callback channel using the AudioRouter.
+// setupAudioCallback sets up the audio feed queue using the AudioRouter.
 // sampleRate is the rate the consumer declares; the router inserts a resampler
-// whenever the source differs from it.
-func (c *Handler) setupAudioCallback(sourceID string, sampleRate int) (audioChan chan audioChunk, cleanup func(), err error) {
-	audioChan = make(chan audioChunk, defaultReadBufferSize)
+// whenever the source differs from it. maxQueuedBytes is the queue's byte
+// budget, or hlsFeedQueueUnbounded to leave the channel's slot count as the only
+// bound; see audioFeed for why the bound is in bytes rather than chunks.
+func (c *Handler) setupAudioCallback(sourceID string, sampleRate int, maxQueuedBytes int64) (feed *audioFeed, cleanup func(), err error) {
+	feed = &audioFeed{
+		ch:       make(chan audioChunk, defaultReadBufferSize),
+		maxBytes: maxQueuedBytes,
+	}
 
 	// hlsConsumerChannels is what this consumer declares to the router, and the
 	// native path derives its muxer sample-frame size from nativeHLSChannels.
@@ -1739,7 +1854,7 @@ func (c *Handler) setupAudioCallback(sourceID string, sampleRate int) (audioChan
 	consumer := &hlsConsumer{
 		id:       consumerID,
 		sourceID: sourceID,
-		ch:       audioChan,
+		feed:     feed,
 		rate:     sampleRate,
 		depth:    conf.BitDepth,
 		channels: hlsConsumerChannels,
@@ -1785,7 +1900,7 @@ func (c *Handler) setupAudioCallback(sourceID string, sampleRate int) (audioChan
 		apicore.GetLogger().Debug("Removed HLS audio route", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("consumer_id", consumerID))
 	}
 
-	return audioChan, cleanup, nil
+	return feed, cleanup, nil
 }
 
 // writeToFIFO performs a context-aware write to the FIFO pipe.
@@ -1817,10 +1932,10 @@ func writeToFIFO(ctx context.Context, fifo *os.File, data []byte) error {
 // callback is already registered and the FIFO is open when FFmpeg captures its
 // PROGRAM_DATE_TIME epoch.
 type audioFeedResources struct {
-	audioChan chan audioChunk    // Buffered channel receiving audio chunks from the broadcast callback
-	fifo      *os.File           // FIFO pipe opened for writing to FFmpeg (nil on the native path)
-	secFS     *securefs.SecureFS // Secure filesystem (nil on the native path; must be closed when done)
-	cleanup   func()             // Releases all resources (unregisters callback, closes FIFO and secFS)
+	feed    *audioFeed         // Feed queue from the router (byte-budgeted on the native path, slot-bounded otherwise)
+	fifo    *os.File           // FIFO pipe opened for writing to FFmpeg (nil on the native path)
+	secFS   *securefs.SecureFS // Secure filesystem (nil on the native path; must be closed when done)
+	cleanup func()             // Releases all resources (unregisters callback, closes FIFO and secFS)
 }
 
 // prepareAudioFeed initialises the audio callback and opens the FIFO pipe.
@@ -1843,7 +1958,7 @@ func (c *Handler) prepareAudioFeed(sourceID, pipePath string) (*audioFeedResourc
 
 	// Register the audio callback first so audio chunks start buffering
 	// in the channel while we open the FIFO and before FFmpeg starts.
-	audioChan, callbackCleanup, err := c.setupAudioCallback(sourceID, c.ffmpegConsumerSampleRate())
+	feed, callbackCleanup, err := c.setupAudioCallback(sourceID, c.ffmpegConsumerSampleRate(), hlsFeedQueueUnbounded)
 	if err != nil {
 		if closeErr := secFS.Close(); closeErr != nil {
 			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
@@ -1866,9 +1981,9 @@ func (c *Handler) prepareAudioFeed(sourceID, pipePath string) (*audioFeedResourc
 	}
 
 	res := &audioFeedResources{
-		audioChan: audioChan,
-		fifo:      fifo,
-		secFS:     secFS,
+		feed:  feed,
+		fifo:  fifo,
+		secFS: secFS,
 		cleanup: func() {
 			callbackCleanup()
 			if closeErr := fifo.Close(); closeErr != nil {
@@ -1915,11 +2030,14 @@ func (c *Handler) runAudioFeedLoop(ctx context.Context, sourceID string, stream 
 			apicore.GetLogger().Debug("Audio feed stopped due to context cancellation",
 				logger.String("source_id", sanitizedID))
 			return
-		case chunk, ok := <-res.audioChan:
+		case chunk, ok := <-res.feed.ch:
 			if !ok {
 				apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
 				return
 			}
+			// Report the dequeue before anything can return early, so the
+			// producer's byte accounting cannot leak on a mid-loop exit.
+			res.feed.release(len(chunk.data))
 
 			data := chunk.data
 			writeStart := time.Now()

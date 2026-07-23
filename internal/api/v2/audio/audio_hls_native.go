@@ -51,6 +51,25 @@ const (
 	// capture pipeline is 16-bit end to end, which hlsmux also assumes.
 	nativeHLSBytesPerSample = 2
 
+	// nativeHLSFeedQueueBytes is the byte budget for the PCM queued between the
+	// router and the feed loop. At nativeHLSSampleRate, nativeHLSChannels and
+	// nativeHLSBytesPerSample it is 5.4 seconds of audio.
+	//
+	// The depth only has to cover the encoder falling behind, and it does not
+	// fall behind: encoding costs about 2.5 ms of CPU per second of audio, so
+	// this is roughly a 2000x margin over the steady state and still absorbs a
+	// multi-second scheduling stall on a loaded ARM board. Depth past that is
+	// unusable rather than merely unnecessary. A live listener sits about 4
+	// seconds behind the edge (hls.js keeps liveSyncDurationCount segments of
+	// buffer), so audio queued deeper than this would be encoded into segments
+	// nobody will request.
+	//
+	// The bound is in bytes because chunk size belongs to the producer: RTSP
+	// ingest delivers 32 KiB frames, a directly captured sound card delivers
+	// miniaudio's 10 ms period, and a resampled route delivers something else
+	// again. See audioFeed.
+	nativeHLSFeedQueueBytes = 512 * 1024
+
 	// nativeHLSDefaultBitrate is the target in kbps when the setting is unset.
 	// The FFmpeg path resolves its own default through the same helper, so the
 	// two encoders cannot drift apart.
@@ -250,15 +269,15 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 
 // prepareNativeAudioFeed registers the audio route. Unlike the FFmpeg path there
 // is no FIFO to open and no secure filesystem to hold, so the resources are just
-// the channel and the route cleanup.
+// the feed queue and the route cleanup.
 func (c *Handler) prepareNativeAudioFeed(sourceID string) (*audioFeedResources, error) {
-	audioChan, callbackCleanup, err := c.setupAudioCallback(sourceID, nativeHLSSampleRate)
+	feed, callbackCleanup, err := c.setupAudioCallback(sourceID, nativeHLSSampleRate, nativeHLSFeedQueueBytes)
 	if err != nil {
 		return nil, err
 	}
 	return &audioFeedResources{
-		audioChan: audioChan,
-		cleanup:   callbackCleanup,
+		feed:    feed,
+		cleanup: callbackCleanup,
 	}, nil
 }
 
@@ -311,11 +330,14 @@ func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, s
 			apicore.GetLogger().Debug("Native audio feed stopped due to context cancellation",
 				logger.String("source_id", sanitizedID))
 			return
-		case chunk, ok := <-res.audioChan:
+		case chunk, ok := <-res.feed.ch:
 			if !ok {
 				apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
 				return
 			}
+			// Report the dequeue before anything can return early, so the
+			// producer's byte accounting cannot leak on a mid-loop exit.
+			res.feed.release(len(chunk.data))
 
 			// A frame with no capture time would anchor program-date-time to the
 			// zero instant, putting every segment in year 1. Falling back to now

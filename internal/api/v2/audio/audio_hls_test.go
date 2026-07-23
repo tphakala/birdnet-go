@@ -603,7 +603,7 @@ func TestHLSConsumer_WriteDoesNotRetainFrameData(t *testing.T) {
 	h := &hlsConsumer{
 		id:       "test",
 		sourceID: "src",
-		ch:       ch,
+		feed:     &audioFeed{ch: ch},
 		rate:     48000,
 		depth:    16,
 		channels: 1,
