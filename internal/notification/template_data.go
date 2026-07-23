@@ -26,6 +26,7 @@ type TemplateData struct {
 	DetectionURL       string
 	ImageURL           string
 	DaysSinceFirstSeen int
+	DaysSinceLastSeen  int
 }
 
 func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool) *TemplateData {
@@ -78,6 +79,13 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 
 	scientificName := event.GetScientificName()
 
+	// Days since the previous detection before this one; the metadata may be omitted
+	// (e.g., first-ever detections or non-novelty same-day repeats), so it defaults to 0.
+	var daysSinceLastSeen int
+	if days, ok := metadata[events.DetectionMetadataDaysSinceLastSeen].(int); ok {
+		daysSinceLastSeen = days
+	}
+
 	// Get image URL from metadata if available (direct URL from image provider)
 	// Fall back to proxy URL if not available
 	var imageURL string
@@ -104,6 +112,7 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 		DetectionURL:       detectionURL,
 		ImageURL:           imageURL,
 		DaysSinceFirstSeen: event.GetDaysSinceFirstSeen(),
+		DaysSinceLastSeen:  daysSinceLastSeen,
 	}
 }
 

@@ -623,6 +623,7 @@
       "categoryYear": "Uusi tänä vuonna",
       "categorySeason": "Uusi tällä kaudella",
       "categorySeasonNamed": "Uusi tällä {season}",
+      "categoryInfrequent": "Harvoin havaittu",
       "maxConfidenceShort": "Maks {confidence} %",
       "detections": "{count, plural, one {# havainto} other {# havaintoa}}",
       "lastSeen": "Viimeksi: {days, plural, =0 {tänään} one {# päivä sitten} other {# päivää sitten}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Näytä kaikki havainnot välillä {startHour}.00-{endHour}.00",
         "hourlyDetections": "{count} havaintoa klo {hour}.00 - Klikkaa nähdäksesi",
         "biHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi",
-        "sixHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi"
+        "sixHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi",
+        "infrequent": "Harvoin havaittu - palasi {days, plural, one {# päivän} other {# päivän}} poissaolon jälkeen"
       },
       "loading": {
         "preparing": "Valmistellaan tietoja...",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Suhteellinen polku havaintoon (esim. \"/ui/detections/1234\")",
           "detectionUrl": "Täydellinen URL havaintoon",
           "imageUrl": "Linkki lajikuvaan",
-          "daysSinceFirstSeen": "Päivien lukumäärä ensimmäisestä havainnosta"
+          "daysSinceFirstSeen": "Päivien lukumäärä ensimmäisestä havainnosta",
+          "daysSinceLastSeen": "Päivien määrä viimeisestä havainnosta"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "Kausien päivämäärät määritetään automaattisesti leveysasteesi perusteella. Pohjoisella pallonpuoliskolla käytetään tavallisia vuodenaikoja, eteläisellä pallonpuoliskolla siirrettyjä päivämääriä ja päiväntasaajan alueilla sade-/kuivakausia."
           }
         },
+        "infrequent": {
+          "title": "Harvoin havaittujen lajien seuranta",
+          "description": "Merkitsee lajit, jotka palaavat pitkän poissaolon jälkeen (harvinaiset palaajat)",
+          "enabled": {
+            "label": "Ota harvoin havaittujen lajien seuranta käyttöön",
+            "helpText": "Seuraa ja ilmoita, kun laji havaitaan uudelleen pitkän poissaolon jälkeen"
+          },
+          "absenceDays": {
+            "label": "Poissaolokynnys (päivää)",
+            "helpText": "Vähimmäismäärä päiviä viimeisestä havainnosta ennen kuin palaava laji merkitään harvoin havaituksi (1-365)"
+          }
+        },
         "months": {
           "january": "Tammikuu",
           "february": "Helmikuu",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Striimi katkaistu",
           "stream_error": "Striimivirhe",
           "detection_new_species": "Uusi laji havaittu",
+          "detection_infrequent_species": "Harvinainen palaava laji havaittu",
           "detection_occurred": "Havainto tehty",
           "application_started": "Sovellus käynnistetty",
           "application_stopped": "Sovellus pysäytetty",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Uusi laji havaittu",
           "description": "Ilmoittaa kun laji havaitaan ensimmäistä kertaa"
+        },
+        "infrequentSpecies": {
+          "name": "Harvinainen palaava laji havaittu",
+          "description": "Ilmoittaa, kun laji palaa pitkän poissaolon jälkeen"
         },
         "streamDisconnected": {
           "name": "Äänistriimi katkennut",

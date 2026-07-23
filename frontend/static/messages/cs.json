@@ -623,6 +623,7 @@
       "categoryYear": "Nový letos",
       "categorySeason": "Nový tuto sezónu",
       "categorySeasonNamed": "Nový toto {season}",
+      "categoryInfrequent": "Zřídka vídané",
       "maxConfidenceShort": "Max {confidence} %",
       "detections": "{count, plural, one {# detekce} few {# detekce} other {# detekcí}}",
       "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {před # dnem} few {před # dny} other {před # dny}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Zobrazit všechny detekce pro {startHour}:00–{endHour}:00",
         "hourlyDetections": "{count} detekcí v {hour}:00 – kliknutím zobrazíte",
         "biHourlyDetections": "{count} detekcí od {startHour}:00 do {endHour}:00 – kliknutím zobrazíte",
-        "sixHourlyDetections": "{count} detekcí od {startHour}:00 do {endHour}:00 – kliknutím zobrazíte"
+        "sixHourlyDetections": "{count} detekcí od {startHour}:00 do {endHour}:00 – kliknutím zobrazíte",
+        "infrequent": "Zřídka vídané - návrat po {days, plural, one {# dni} other {# dnech}} nepřítomnosti"
       },
       "loading": {
         "preparing": "Připravuji data…",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Relativní cesta k detekci (např. \"/ui/detections/1234\")",
           "detectionUrl": "Úplná URL adresa detekce v UI",
           "imageUrl": "Odkaz na obrázek druhu",
-          "daysSinceFirstSeen": "Počet dní od první detekce"
+          "daysSinceFirstSeen": "Počet dní od první detekce",
+          "daysSinceLastSeen": "Počet dní od poslední detekce"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "Data sezón jsou automaticky konfigurována podle vaší zeměpisné šířky. Severní polokoule používá standardní sezóny, jižní polokoule má posunutá data a rovníkové oblasti používají období dešťů/sucha."
           }
         },
+        "infrequent": {
+          "title": "Sledování zřídka vídaných druhů",
+          "description": "Označí druhy, které se vracejí po dlouhé nepřítomnosti (vzácní navrátilci)",
+          "enabled": {
+            "label": "Povolit sledování zřídka vídaných druhů",
+            "helpText": "Sledovat a upozornit, když je druh znovu detekován po dlouhé nepřítomnosti"
+          },
+          "absenceDays": {
+            "label": "Práh nepřítomnosti (dny)",
+            "helpText": "Minimální počet dní od poslední detekce, než je vracející se druh označen jako 'zřídka vídaný' (1-365)"
+          }
+        },
         "months": {
           "january": "Leden",
           "february": "Únor",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Stream odpojen",
           "stream_error": "Chyba streamu",
           "detection_new_species": "Detekován nový druh",
+          "detection_infrequent_species": "Detekován zřídka vídaný druh",
           "detection_occurred": "Proběhla detekce",
           "application_started": "Aplikace spuštěna",
           "application_stopped": "Aplikace zastavena",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Detekován nový druh",
           "description": "Upozorní, když je druh detekován poprvé"
+        },
+        "infrequentSpecies": {
+          "name": "Detekován zřídka vídaný druh",
+          "description": "Upozorní, když se druh vrátí po dlouhé nepřítomnosti"
         },
         "streamDisconnected": {
           "name": "Audio stream odpojen",

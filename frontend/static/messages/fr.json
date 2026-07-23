@@ -623,6 +623,7 @@
       "categoryYear": "Nouvelle cette année",
       "categorySeason": "Nouvelle cette saison",
       "categorySeasonNamed": "Nouvelle ce {season}",
+      "categoryInfrequent": "Peu fréquente",
       "maxConfidenceShort": "Max {confidence} %",
       "detections": "{count, plural, one {# détection} other {# détections}}",
       "lastSeen": "Dernier : {days, plural, =0 {aujourd'hui} one {il y a # jour} other {il y a # jours}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Voir toutes les détections de {startHour}h00 à {endHour}h00",
         "hourlyDetections": "{count} détections à {hour}h00 - Cliquer pour voir",
         "biHourlyDetections": "{count} détections de {startHour}h00 à {endHour}h00 - Cliquer pour voir",
-        "sixHourlyDetections": "{count} détections de {startHour}h00 à {endHour}h00 - Cliquer pour voir"
+        "sixHourlyDetections": "{count} détections de {startHour}h00 à {endHour}h00 - Cliquer pour voir",
+        "infrequent": "Peu fréquente - revenue après {days, plural, one {# jour} other {# jours}} d'absence"
       },
       "loading": {
         "preparing": "Préparation des données...",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Chemin relatif vers la détection (ex., \"/ui/detections/1234\")",
           "detectionUrl": "URL complète vers la détection",
           "imageUrl": "Lien vers l'image de l'espèce",
-          "daysSinceFirstSeen": "Nombre de jours depuis la première détection"
+          "daysSinceFirstSeen": "Nombre de jours depuis la première détection",
+          "daysSinceLastSeen": "Nombre de jours depuis la dernière détection"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "Les dates des saisons sont automatiquement configurées en fonction de votre latitude. L'hémisphère nord utilise les saisons standard, l'hémisphère sud a des dates décalées, et les régions équatoriales utilisent les saisons humides/sèches."
           }
         },
+        "infrequent": {
+          "title": "Suivi des espèces peu fréquentes",
+          "description": "Signaler les espèces qui reviennent après une longue absence (visiteurs rares de retour)",
+          "enabled": {
+            "label": "Activer le suivi des espèces peu fréquentes",
+            "helpText": "Suivre et notifier lorsqu'une espèce est détectée à nouveau après une longue absence"
+          },
+          "absenceDays": {
+            "label": "Seuil d'absence (jours)",
+            "helpText": "Nombre minimal de jours depuis la dernière détection avant qu'une espèce de retour soit signalée comme 'peu fréquente' (1-365)"
+          }
+        },
         "months": {
           "january": "Janvier",
           "february": "Février",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Flux déconnecté",
           "stream_error": "Erreur de flux",
           "detection_new_species": "Nouvelle espèce détectée",
+          "detection_infrequent_species": "Espèce peu fréquente détectée",
           "detection_occurred": "Détection effectuée",
           "application_started": "Application démarrée",
           "application_stopped": "Application arrêtée",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Nouvelle espèce détectée",
           "description": "Notifie lorsqu'une espèce est détectée pour la première fois"
+        },
+        "infrequentSpecies": {
+          "name": "Espèce peu fréquente détectée",
+          "description": "Notifie lorsqu'une espèce revient après une longue absence"
         },
         "streamDisconnected": {
           "name": "Flux audio déconnecté",

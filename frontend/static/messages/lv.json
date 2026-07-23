@@ -623,6 +623,7 @@
       "categoryYear": "Jauna šogad",
       "categorySeason": "Jauna šosezon",
       "categorySeasonNamed": "Jauna šajā {season}",
+      "categoryInfrequent": "Reti novērota",
       "maxConfidenceShort": "Maks {confidence} %",
       "detections": "{count, plural, zero {# noteikšanu} one {# noteikšana} other {# noteikšanas}}",
       "lastSeen": "Pēdējoreiz: {days, plural, =0 {šodien} one {pirms # dienas} other {pirms # dienām}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Skatīt visas atklāšanas no {startHour}:00 līdz {endHour}:00",
         "hourlyDetections": "{count} atklāšanas plkst. {hour}:00 — noklikšķiniet, lai skatītu",
         "biHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 — noklikšķiniet, lai skatītu",
-        "sixHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 — noklikšķiniet, lai skatītu"
+        "sixHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 — noklikšķiniet, lai skatītu",
+        "infrequent": "Reti novērota - atgriezās pēc {days, plural, zero {# dienu} one {# dienas} other {# dienām}} prombūtnes"
       },
       "loading": {
         "preparing": "Sagatavo datus...",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Relatīvais ceļš uz noteikšanu (piem., \"/ui/detections/1234\")",
           "detectionUrl": "Pilns URL uz noteikšanu saskarnē",
           "imageUrl": "Saite uz sugas attēlu",
-          "daysSinceFirstSeen": "Dienu skaits kopš pirmās noteikšanas"
+          "daysSinceFirstSeen": "Dienu skaits kopš pirmās noteikšanas",
+          "daysSinceLastSeen": "Dienu skaits kopš pēdējās noteikšanas"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "Sezonu datumi tiek automātiski konfigurēti, pamatojoties uz jūsu ģeogrāfisko platumu. Ziemeļu puslode izmanto standarta sezonas, dienvidu puslodei ir nobīdīti datumi, un ekvatoriālajos reģionos tiek izmantotas lietainās/sausās sezonas."
           }
         },
+        "infrequent": {
+          "title": "Reti novērotu sugu izsekošana",
+          "description": "Atzīmē sugas, kas atgriežas pēc ilgas prombūtnes (reti atgriezušies viesi)",
+          "enabled": {
+            "label": "Iespējot reti novērotu sugu izsekošanu",
+            "helpText": "Izsekot un paziņot, kad suga pēc ilgas prombūtnes tiek noteikta atkārtoti"
+          },
+          "absenceDays": {
+            "label": "Prombūtnes slieksnis (dienas)",
+            "helpText": "Minimālais dienu skaits kopš pēdējās noteikšanas, pirms atgriezusies suga tiek atzīmēta kā 'reti novērota' (1-365)"
+          }
+        },
         "months": {
           "january": "Janvāris",
           "february": "Februāris",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Straume atvienota",
           "stream_error": "Straumes kļūda",
           "detection_new_species": "Jauna suga noteikta",
+          "detection_infrequent_species": "Noteikta reti novērota suga",
           "detection_occurred": "Noteikšana notikusi",
           "application_started": "Lietojumprogramma palaista",
           "application_stopped": "Lietojumprogramma apturēta",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Jauna suga noteikta",
           "description": "Paziņo, kad suga tiek noteikta pirmo reizi"
+        },
+        "infrequentSpecies": {
+          "name": "Noteikta reti novērota suga",
+          "description": "Paziņo, kad suga atgriežas pēc ilgas prombūtnes"
         },
         "streamDisconnected": {
           "name": "Audio straume atvienota",

@@ -69,6 +69,7 @@ func GetSchema() Schema {
 				Label: "Detection",
 				Events: []EventSchema{
 					{Name: EventDetectionNewSpecies, Label: "New Species Detected", Description: "Fires when a species is seen for the first time within the tracking window", Properties: detectionProperties()},
+					{Name: EventDetectionInfrequentSpecies, Label: "Infrequent Species Detected", Description: "Fires when a species returns after an absence longer than the configured threshold", Properties: detectionProperties()},
 					{Name: EventDetectionOccurred, Label: "Detection Occurred", Description: "Fires for every detection, including new species", Properties: detectionProperties()},
 				},
 			},

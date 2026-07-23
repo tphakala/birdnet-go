@@ -623,6 +623,7 @@
       "categoryYear": "Nova este ano",
       "categorySeason": "Nova nesta temporada",
       "categorySeasonNamed": "Nova nesta {season}",
+      "categoryInfrequent": "Infrequente",
       "maxConfidenceShort": "Máx {confidence}%",
       "detections": "{count, plural, one {# deteção} other {# deteções}}",
       "lastSeen": "Último: {days, plural, =0 {hoje} one {há # dia} other {há # dias}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Ver todas as detecções de {startHour}:00 a {endHour}:00",
         "hourlyDetections": "{count} detecções às {hour}:00 - Clique para ver",
         "biHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver",
-        "sixHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver"
+        "sixHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver",
+        "infrequent": "Infrequente - retornou após {days, plural, one {# dia} other {# dias}} de ausência"
       },
       "loading": {
         "preparing": "Preparando dados...",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Caminho relativo para a detecção (ex., \"/ui/detections/1234\")",
           "detectionUrl": "URL completa para a detecção",
           "imageUrl": "Link para imagem da espécie",
-          "daysSinceFirstSeen": "Número de dias desde a primeira detecção"
+          "daysSinceFirstSeen": "Número de dias desde a primeira detecção",
+          "daysSinceLastSeen": "Número de dias desde a última detecção"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "As datas das estações são configuradas automaticamente com base na sua latitude. O hemisfério norte usa estações padrão, o hemisfério sul tem datas deslocadas, e regiões equatoriais usam estações chuvosas/secas."
           }
         },
+        "infrequent": {
+          "title": "Rastreamento infrequente",
+          "description": "Marca espécies que retornam após uma longa ausência (visitantes raros de retorno)",
+          "enabled": {
+            "label": "Ativar rastreamento infrequente",
+            "helpText": "Rastreia e notifica quando uma espécie é detectada novamente após uma longa ausência"
+          },
+          "absenceDays": {
+            "label": "Limite de ausência (dias)",
+            "helpText": "Número mínimo de dias desde a última detecção antes que uma espécie que retorna seja marcada como 'infrequente' (1-365)"
+          }
+        },
         "months": {
           "january": "Janeiro",
           "february": "Fevereiro",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Fluxo desconectado",
           "stream_error": "Erro de fluxo",
           "detection_new_species": "Nova espécie detetada",
+          "detection_infrequent_species": "Espécie infrequente detectada",
           "detection_occurred": "Deteção realizada",
           "application_started": "Aplicação iniciada",
           "application_stopped": "Aplicação parada",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Nova espécie detetada",
           "description": "Notifica quando uma espécie é detetada pela primeira vez"
+        },
+        "infrequentSpecies": {
+          "name": "Espécie infrequente detectada",
+          "description": "Notifica quando uma espécie retorna após uma longa ausência"
         },
         "streamDisconnected": {
           "name": "Fluxo de áudio desligado",

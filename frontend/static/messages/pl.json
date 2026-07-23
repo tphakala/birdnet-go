@@ -623,6 +623,7 @@
       "categoryYear": "Nowy w tym roku",
       "categorySeason": "Nowy w tym sezonie",
       "categorySeasonNamed": "Nowy w tym {season}",
+      "categoryInfrequent": "Rzadko obserwowany",
       "maxConfidenceShort": "Maks {confidence}%",
       "detections": "{count, plural, one {# wykrycie} few {# wykrycia} many {# wykryć} other {# wykrycia}}",
       "lastSeen": "Ostatnio: {days, plural, =0 {dzisiaj} one {# dzień temu} few {# dni temu} many {# dni temu} other {# dnia temu}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Wyświetl wszystkie detekcje dla {startHour}:00-{endHour}:00",
         "hourlyDetections": "{count} detekcji o {hour}:00 - Kliknij aby wyświetlić",
         "biHourlyDetections": "{count} detekcji od {startHour}:00-{endHour}:00 - Kliknij aby wyświetlić",
-        "sixHourlyDetections": "{count} detekcji od {startHour}:00-{endHour}:00 - Kliknij aby wyświetlić"
+        "sixHourlyDetections": "{count} detekcji od {startHour}:00-{endHour}:00 - Kliknij aby wyświetlić",
+        "infrequent": "Rzadko obserwowany - powrócił po {days, plural, one {# dniu} other {# dniach}} nieobecności"
       },
       "loading": {
         "preparing": "Przygotowywanie danych...",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Ścieżka względna do detekcji (np. \"/ui/detections/1234\")",
           "detectionUrl": "Pełny URL do detekcji",
           "imageUrl": "Link do obrazu gatunku",
-          "daysSinceFirstSeen": "Liczba dni od pierwszej detekcji"
+          "daysSinceFirstSeen": "Liczba dni od pierwszej detekcji",
+          "daysSinceLastSeen": "Liczba dni od ostatniego wykrycia"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "Daty sezonów są automatycznie konfigurowane na podstawie szerokości geograficznej. Półkula północna używa standardowych pór roku, półkula południowa ma przesunięte daty, a regiony równikowe używają pór deszczowych/suchych."
           }
         },
+        "infrequent": {
+          "title": "Śledzenie rzadko obserwowanych gatunków",
+          "description": "Oznacza gatunki powracające po długiej nieobecności (rzadcy powracający goście)",
+          "enabled": {
+            "label": "Włącz śledzenie rzadko obserwowanych gatunków",
+            "helpText": "Śledź i powiadamiaj, gdy gatunek zostanie ponownie wykryty po długiej nieobecności"
+          },
+          "absenceDays": {
+            "label": "Próg nieobecności (dni)",
+            "helpText": "Minimalna liczba dni od ostatniego wykrycia, zanim powracający gatunek zostanie oznaczony jako 'rzadko obserwowany' (1-365)"
+          }
+        },
         "months": {
           "january": "Styczeń",
           "february": "Luty",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Strumień rozłączony",
           "stream_error": "Błąd strumienia",
           "detection_new_species": "Wykryto nowy gatunek",
+          "detection_infrequent_species": "Wykryto rzadko obserwowany gatunek",
           "detection_occurred": "Wykryto detekcję",
           "application_started": "Aplikacja uruchomiona",
           "application_stopped": "Aplikacja zatrzymana",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Wykryto nowy gatunek",
           "description": "Powiadamia, gdy gatunek zostanie wykryty po raz pierwszy"
+        },
+        "infrequentSpecies": {
+          "name": "Wykryto rzadko obserwowany gatunek",
+          "description": "Powiadamia, gdy gatunek wraca po długiej nieobecności"
         },
         "streamDisconnected": {
           "name": "Strumień audio rozłączony",

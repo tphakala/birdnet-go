@@ -623,6 +623,7 @@
       "categoryYear": "Idén új",
       "categorySeason": "Ebben az évszakban új",
       "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
+      "categoryInfrequent": "Ritkán észlelt",
       "maxConfidenceShort": "Max {confidence}%",
       "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
       "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Összes detektálás megtekintése {startHour}:00-{endHour}:00-kor",
         "hourlyDetections": "{count} detektálás {hour}:00-kor - Kattintson a megtekintéshez",
         "biHourlyDetections": "{count} detektálás {startHour}:00-{endHour}:00-kor - Kattintson a megtekintéshez",
-        "sixHourlyDetections": "{count} detektálás {startHour}:00-{endHour}:00-kor - Kattintson a megtekintéshez"
+        "sixHourlyDetections": "{count} detektálás {startHour}:00-{endHour}:00-kor - Kattintson a megtekintéshez",
+        "infrequent": "Ritkán észlelt - {days, plural, one {# nap} other {# nap}} távollét után visszatért"
       },
       "loading": {
         "preparing": "Adatok előkészítése...",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Relatív útvonal a detektáláshoz (pl., \"/ui/detections/1234\")",
           "detectionUrl": "Teljes URL a detektáláshoz a felületen",
           "imageUrl": "Link a faj képéhez",
-          "daysSinceFirstSeen": "Napok száma az első detektálás óta"
+          "daysSinceFirstSeen": "Napok száma az első detektálás óta",
+          "daysSinceLastSeen": "Az utolsó észlelés óta eltelt napok száma"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "Az évszak dátumok automatikusan az Ön szélessége alapján kerülnek konfigurálásra. Az északi félgömb a szabványos évszakokat, a déli félgömb eltolódott dátumokat, az egyenlítői régiók pedig esős/száraz évszakokat használnak."
           }
         },
+        "infrequent": {
+          "title": "Ritkán észlelt fajok követése",
+          "description": "Hosszú távollét után visszatérő fajok megjelölése (ritka visszatérő látogatók)",
+          "enabled": {
+            "label": "Ritkán észlelt fajok követésének engedélyezése",
+            "helpText": "Követés és értesítés, amikor egy fajt hosszú távollét után újra észlelnek"
+          },
+          "absenceDays": {
+            "label": "Távolléti küszöb (nap)",
+            "helpText": "Az utolsó észlelés óta eltelt minimális napok száma, mielőtt egy visszatérő faj 'ritkán észlelt' jelölést kap (1-365)"
+          }
+        },
         "months": {
           "january": "Január",
           "february": "Február",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Stream leválasztva",
           "stream_error": "Stream hiba",
           "detection_new_species": "Új faj detektálva",
+          "detection_infrequent_species": "Ritkán észlelt faj észlelve",
           "detection_occurred": "Detektálás történt",
           "application_started": "Alkalmazás indítva",
           "application_stopped": "Alkalmazás leállítva",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Új faj detektálva",
           "description": "Értesít, amikor egy faj először kerül detektálásra"
+        },
+        "infrequentSpecies": {
+          "name": "Ritkán észlelt faj észlelve",
+          "description": "Értesít, amikor egy faj hosszú távollét után visszatér"
         },
         "streamDisconnected": {
           "name": "Hang stream leválasztva",

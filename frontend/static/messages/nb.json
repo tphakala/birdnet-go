@@ -623,6 +623,7 @@
       "categoryYear": "Nye i år",
       "categorySeason": "Nye denne sesongen",
       "categorySeasonNamed": "Nye i {season}",
+      "categoryInfrequent": "Sjelden",
       "maxConfidenceShort": "Maks {confidence}%",
       "detections": "{count, plural, one {# deteksjon} other {# deteksjoner}}",
       "lastSeen": "Sist: {days, plural, =0 {i dag} one {# dag siden} other {# dager siden}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Vis alle registreringer for {startHour}:00–{endHour}:00",
         "hourlyDetections": "{count} registreringer kl. {hour}:00 – Klikk for å se",
         "biHourlyDetections": "{count} registreringer fra {startHour}:00–{endHour}:00 – Klikk for å se",
-        "sixHourlyDetections": "{count} registreringer fra {startHour}:00–{endHour}:00 – Klikk for å se"
+        "sixHourlyDetections": "{count} registreringer fra {startHour}:00–{endHour}:00 – Klikk for å se",
+        "infrequent": "Sjelden - tilbake etter {days, plural, one {# dags} other {# dagers}} fravær"
       },
       "loading": {
         "preparing": "Forbereder data...",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Relativ sti til registrering (f.eks. «/ui/detections/1234»)",
           "detectionUrl": "Full URL til registrering i grensesnittet",
           "imageUrl": "Lenke til artsbilde",
-          "daysSinceFirstSeen": "Antall dager siden første registrering"
+          "daysSinceFirstSeen": "Antall dager siden første registrering",
+          "daysSinceLastSeen": "Antall dager siden siste observasjon"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "Sesongdatoer konfigureres automatisk basert på breddegrad. Den nordlige halvkule bruker standardsesonger, den sørlige halvkule har forskjøvede datoer, og ekvatoriale regioner bruker regn-/tørketider."
           }
         },
+        "infrequent": {
+          "title": "Sporing av sjeldne arter",
+          "description": "Marker arter som kommer tilbake etter langt fravær (sjeldne tilbakevendende besøkende)",
+          "enabled": {
+            "label": "Aktiver sporing av sjeldne arter",
+            "helpText": "Spor og varsle når en art registreres igjen etter langt fravær"
+          },
+          "absenceDays": {
+            "label": "Fraværsterskel (dager)",
+            "helpText": "Minste antall dager siden siste registrering før en art som kommer tilbake markeres som 'sjelden' (1-365)"
+          }
+        },
         "months": {
           "january": "Januar",
           "february": "Februar",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Strøm frakoblet",
           "stream_error": "Strømfeil",
           "detection_new_species": "Ny art registrert",
+          "detection_infrequent_species": "Sjelden art registrert",
           "detection_occurred": "Registrering utført",
           "application_started": "Applikasjon startet",
           "application_stopped": "Applikasjon stoppet",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Ny art registrert",
           "description": "Varsler når en art registreres for første gang"
+        },
+        "infrequentSpecies": {
+          "name": "Sjelden art registrert",
+          "description": "Varsler når en art kommer tilbake etter langt fravær"
         },
         "streamDisconnected": {
           "name": "Lydstrøm frakoblet",

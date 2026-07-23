@@ -623,6 +623,7 @@
       "categoryYear": "Neu dieses Jahr",
       "categorySeason": "Neu diese Saison",
       "categorySeasonNamed": "Neu diesen {season}",
+      "categoryInfrequent": "Selten",
       "maxConfidenceShort": "Max. {confidence} %",
       "detections": "{count, plural, one {# Erkennung} other {# Erkennungen}}",
       "lastSeen": "Zuletzt: {days, plural, =0 {heute} one {vor # Tag} other {vor # Tagen}}"
@@ -657,7 +658,8 @@
         "viewSixHourly": "Alle Erkennungen von {startHour}:00 bis {endHour}:00 Uhr anzeigen",
         "hourlyDetections": "{count} Erkennungen um {hour}:00 Uhr - Klicken zum Anzeigen",
         "biHourlyDetections": "{count} Erkennungen von {startHour}:00 bis {endHour}:00 Uhr - Klicken zum Anzeigen",
-        "sixHourlyDetections": "{count} Erkennungen von {startHour}:00 bis {endHour}:00 Uhr - Klicken zum Anzeigen"
+        "sixHourlyDetections": "{count} Erkennungen von {startHour}:00 bis {endHour}:00 Uhr - Klicken zum Anzeigen",
+        "infrequent": "Selten - nach {days, plural, one {# Tag} other {# Tagen}} Abwesenheit zurückgekehrt"
       },
       "loading": {
         "preparing": "Daten werden vorbereitet...",
@@ -2734,7 +2736,8 @@
           "detectionPath": "Relativer Pfad zur Erkennung (z.B. \"/ui/detections/1234\")",
           "detectionUrl": "Vollständige URL zur Erkennung",
           "imageUrl": "Link zum Artbild",
-          "daysSinceFirstSeen": "Anzahl Tage seit der ersten Erkennung"
+          "daysSinceFirstSeen": "Anzahl Tage seit der ersten Erkennung",
+          "daysSinceLastSeen": "Anzahl der Tage seit der letzten Erkennung"
         }
       },
       "testNotification": {
@@ -4257,6 +4260,18 @@
             "hemisphereNote": "Die Saisondaten werden automatisch basierend auf Ihrem Breitengrad konfiguriert. Die nördliche Hemisphäre verwendet Standardsaisons, die südliche Hemisphäre hat verschobene Daten und Äquatorialregionen verwenden Regen-/Trockenzeiten."
           }
         },
+        "infrequent": {
+          "title": "Verfolgung seltener Arten",
+          "description": "Markiert Arten, die nach langer Abwesenheit zurückkehren (seltene Rückkehrer)",
+          "enabled": {
+            "label": "Verfolgung seltener Arten aktivieren",
+            "helpText": "Verfolgen und benachrichtigen Sie, wenn eine Art nach langer Abwesenheit erneut erkannt wird"
+          },
+          "absenceDays": {
+            "label": "Abwesenheitsschwelle (Tage)",
+            "helpText": "Mindestanzahl der Tage seit der letzten Erkennung, bevor eine zurückkehrende Art als 'selten' markiert wird (1-365)"
+          }
+        },
         "months": {
           "january": "Januar",
           "february": "Februar",
@@ -4454,6 +4469,7 @@
           "stream_disconnected": "Stream getrennt",
           "stream_error": "Stream-Fehler",
           "detection_new_species": "Neue Art erkannt",
+          "detection_infrequent_species": "Seltene Art erkannt",
           "detection_occurred": "Erkennung erfolgt",
           "application_started": "Anwendung gestartet",
           "application_stopped": "Anwendung gestoppt",
@@ -4503,6 +4519,10 @@
         "newSpecies": {
           "name": "Neue Art erkannt",
           "description": "Benachrichtigt, wenn eine Art zum ersten Mal erkannt wird"
+        },
+        "infrequentSpecies": {
+          "name": "Seltene Art erkannt",
+          "description": "Benachrichtigt, wenn eine Art nach langer Abwesenheit zurückkehrt"
         },
         "streamDisconnected": {
           "name": "Audiostream getrennt",

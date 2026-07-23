@@ -220,6 +220,7 @@ func buildTemplateDataFromProps(props map[string]any) *notification.TemplateData
 
 	commonName, _ := props[PropertySpeciesName].(string)
 	daysSinceFirstSeen, _ := props[PropertyDaysSinceFirstSeen].(int)
+	daysSinceLastSeen, _ := props[PropertyDaysSinceLastSeen].(int)
 
 	return &notification.TemplateData{
 		CommonName:         commonName,
@@ -236,6 +237,7 @@ func buildTemplateDataFromProps(props map[string]any) *notification.TemplateData
 		DetectionURL:       detectionURL,
 		ImageURL:           imageURL,
 		DaysSinceFirstSeen: daysSinceFirstSeen,
+		DaysSinceLastSeen:  daysSinceLastSeen,
 	}
 }
 
