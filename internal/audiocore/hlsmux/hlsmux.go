@@ -162,16 +162,17 @@ type view struct {
 // Stream encodes and muxes one live audio source into HLS media segments and
 // the playlist indexing them, holding everything in memory.
 //
-// Write is called from the audio feed goroutine; Playlist, Segment, Stats and
-// InitSegment are called from HTTP handlers. All of them are safe to call
-// concurrently, and the read side takes no lock at all: it reads a snapshot
+// Write is called from the audio feed goroutine; the read side (Playlist,
+// PlaylistAndStats, Segment, Ready, Stats and InitSegment) is called from HTTP
+// handlers. All of them are safe to call concurrently, and the read side takes
+// no lock at all: it reads a snapshot
 // republished on each segment cut, so an audience of any size can never delay
 // the goroutine encoding for it. See the view type.
 type Stream struct {
-	// view is the read side's snapshot; see the type. It is the only thing
-	// Playlist, Segment and Ready touch, and it supplies every Stats field
-	// except the two below, which is what keeps every reader off mu. Stored
-	// only from publishView, under mu.
+	// view is the read side's snapshot; see the type. Every reader goes through
+	// it and nothing else, which is what keeps them all off mu: it is the whole
+	// of Playlist, Segment and Ready, and every Stats field except the two
+	// below. Stored only from publishView, under mu.
 	view atomic.Pointer[view]
 
 	// driftCorrection and failed are the two Stats fields the segment window
@@ -611,8 +612,12 @@ func (s *Stream) cutSegment() error {
 		s.discontinuities++
 	}
 	s.segments.push(&Segment{
-		Seq:              s.nextSeq,
-		Data:             data,
+		Seq: s.nextSeq,
+		// Capacity clipped to length for the same reason segmentWindow.retained
+		// clips: segBufHint deliberately over-sizes the arena, so an unclipped
+		// slice would let a handler's append write into bytes another handler
+		// is still streaming.
+		Data:             data[:len(data):len(data)],
 		Samples:          s.pendingSamples,
 		Duration:         duration,
 		PDT:              s.segPDT,
@@ -641,8 +646,9 @@ func (s *Stream) cutSegment() error {
 //
 // It must be called with s.mu held, or before the Stream has been handed to any
 // other goroutine, and after any change to the segment window or to the
-// counters Stats reports. Missing one leaves every reader on a stale snapshot
-// indefinitely, with no error anywhere.
+// counters the view carries. Missing one leaves every reader on a stale
+// snapshot indefinitely, with no error anywhere. DriftCorrection and Failed are
+// deliberately outside the view and so are not among them; see their fields.
 //
 // ended is passed rather than read from s.closed because the two are not the
 // same event. Close sets s.closed before flushing the encoder, so that a Write

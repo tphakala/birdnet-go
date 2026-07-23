@@ -62,7 +62,14 @@ type fakeEncoder struct {
 	// forced a segment cut, and that cut publishes a snapshot, while Close has
 	// not yet published its own final one. Since the read side takes no lock,
 	// the hook can call straight into Playlist or Stats from here even though
-	// the stream mutex is held.
+	// the stream mutex is held. That is a hard dependency, not a convenience:
+	// sync.Mutex is not reentrant, so if any read path ever takes it again this
+	// self-deadlocks, and the symptom is a test-binary timeout rather than a
+	// failed assertion.
+	//
+	// It runs only after a tail unit was emitted, so a stream configured with
+	// no tail, or one whose flush fails, never calls it. A test relying on the
+	// hook must assert that it ran.
 	flushHook func()
 
 	// failAfter, when positive, makes the encoder fail once it has emitted

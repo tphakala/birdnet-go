@@ -166,3 +166,29 @@ func TestSampleClockIsExactAcrossManyConversions(t *testing.T) {
 	want := time.Duration(frames) * aacFrame * time.Second / testRate
 	assert.Equal(t, want, total)
 }
+
+// TestRetainedExposesNoSpareCapacity pins the clip in retained.
+//
+// The guarantee is about capacity, so that is what this asserts. Until the
+// window fills, its backing array has spare slots; an unclipped slice would let
+// a caller's append write into slots the array still owns, which is the array a
+// concurrent reader is walking. Nothing in the tree appends to a retained slice
+// today, and that is the point: the first caller that does must get its own
+// storage rather than silently reach into a published window.
+func TestRetainedExposesNoSpareCapacity(t *testing.T) {
+	t.Parallel()
+
+	w := newSegmentWindow(4)
+	w.push(&Segment{Seq: 0})
+	w.push(&Segment{Seq: 1})
+
+	published := w.retained()
+	require.Len(t, published, 2, "the window is deliberately left short of capacity")
+	assert.Equal(t, len(published), cap(published),
+		"a published window must not hand out capacity into its own array")
+
+	// An append therefore reallocates, and the window is unaffected by it.
+	grown := append(published, Segment{Seq: 99}) //nolint:gocritic // the reallocation is the assertion
+	assert.Len(t, w.retained(), 2, "the window must not have grown")
+	assert.Equal(t, uint64(99), grown[2].Seq)
+}

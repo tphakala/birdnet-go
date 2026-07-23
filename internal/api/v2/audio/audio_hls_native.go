@@ -475,8 +475,8 @@ func (c *Handler) checkNativeStreamFreshness(sourceID string, stats *hlsmux.Stat
 func (c *Handler) serveNativeContent(ctx echo.Context, stream *HLSStreamInfo, requestPath string) error {
 	// Traversal is unreachable here because nothing below this line touches a
 	// filesystem: the name is either matched against a literal or parsed to a
-	// sequence number and looked up in an in-memory segment window. That, not the check
-	// immediately below, is what makes securefs unnecessary. The separator
+	// sequence number and looked up in an in-memory segment window. That, not
+	// the check immediately below, is what makes securefs unnecessary. The separator
 	// rejection is defence in depth, and a reminder that any future branch which
 	// did resolve a name against disk would need securefs rather than this.
 	if requestPath == "" || strings.ContainsAny(requestPath, `/\`) {

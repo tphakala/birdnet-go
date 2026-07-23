@@ -20,17 +20,17 @@ const (
 	benchToneHz = 3000
 
 	// benchPollInterval paces each viewer in BenchmarkStreamWriteUnderPoll. It
-	// is chosen so that the largest audience in benchViewerCounts generates
-	// enough polls to keep a serialising lock busy most of the time, while
-	// leaving the machine far from CPU saturation: 64 viewers at 200 us is
-	// 320k polls a second, which is most of a core's worth of work when a poll
-	// costs microseconds under a shared mutex and negligible when it does not.
+	// is chosen to generate enough polls to keep a serialising lock busy while
+	// leaving the machine far from CPU saturation, which is the separation the
+	// benchmark needs: a poll costing microseconds under a shared mutex is
+	// most of a core's worth of work at this rate, and negligible without one.
 	//
-	// The rate a ticker at this period actually achieves is well under the
-	// nominal one, because 200 us is at the scheduler's practical floor and
-	// dropped ticks are silent. BenchmarkStreamWriteUnderPoll therefore reports
-	// the achieved polls/s as a metric, so a starved run is visible rather than
-	// indistinguishable from a healthy one.
+	// Do not read the nominal rate as the applied one. 200 us is at the
+	// scheduler's practical floor, dropped ticks are silent, and the achieved
+	// rate measures around a fifth of nominal (roughly 1k polls/s per viewer,
+	// not 5k). That is why BenchmarkStreamWriteUnderPoll reports the achieved
+	// polls/s: the load is a property of the machine, so a starved run has to
+	// be visible rather than indistinguishable from a healthy one.
 	benchPollInterval = 200 * time.Microsecond
 
 	// benchClaimBatch is how many iterations a viewer claims from the shared
@@ -100,17 +100,23 @@ func fillWindow(b *testing.B, s *Stream) time.Time {
 //
 // Read the per-write numbers knowing that a segment cut is amortised into them,
 // and that the cut is not cheap in allocation terms even though it is cheap in
-// time. Each cut allocates the published segment (one, deliberately: those
-// bytes go to HTTP handlers that may still be reading them, so the arena can
-// never be reused), the copy-on-write window slice, the snapshot, and the
-// playlist render, for roughly 16 allocations and 1 KB beyond the segment
-// itself, once per segment per stream.
+// time. Beyond the published segment itself (one allocation, deliberately:
+// those bytes go to HTTP handlers that may still be reading them, so the arena
+// can never be reused), each cut allocates the copy-on-write window slice, the
+// snapshot, and the playlist render: measured at 15 allocations and about
+// 1.6 KB, once per segment per stream.
 //
 // So allocs/op is NOT uniformly zero here and a non-zero value is not by itself
 // a regression: BenchmarkStreamWrite32k reports 2 because a 32 KiB write is
 // 8192 samples against a ~95000-sample segment, so a cut lands every dozen
 // writes. What to watch is a change in the amortised value at a fixed shape,
 // and B/op on the shapes that cut rarely.
+//
+// One drift to know about when pairing runs: strconv's no-allocation fast path
+// for small integers stops at 100, so SegmentName starts allocating once a
+// stream passes roughly 200 segments. The per-cut figure therefore rises with
+// stream age, and two runs at different -benchtime are not directly
+// comparable.
 
 // benchFrame sizes one router delivery. Both shapes occur in production: the
 // sound-card path delivers ~10 ms periods, the RTSP path a 32 KiB pipe read.
@@ -305,20 +311,27 @@ func BenchmarkPlaylistPollUnderWrite(b *testing.B) {
 	}
 }
 
-// startBenchPollers runs viewers polling the playlist on benchPollInterval
-// until the benchmark ends, and returns the total poll count so the caller can
-// report the rate actually achieved.
+// startBenchPollers runs viewers polling the playlist on benchPollInterval and
+// returns a function that stops them and reports the rate they actually
+// achieved, in polls per second.
 //
-// The count is not bookkeeping. A ticker at benchPollInterval drops ticks
+// The rate is not bookkeeping. A ticker at benchPollInterval drops ticks
 // silently under load, so the nominal rate is an upper bound the run may fall
 // far short of, and a starved run would otherwise look exactly like a healthy
 // one in the output.
-func startBenchPollers(b *testing.B, s *Stream, viewers int) *atomic.Int64 {
+//
+// The caller must invoke the returned function before reporting the metric.
+// Reading a counter the poller goroutines publish on exit does not work: they
+// exit when the stop channel closes, which a b.Cleanup does, and cleanups run
+// after the benchmark body has already returned. A metric read in the body
+// would be zero every time, which is the same blindness this exists to remove.
+func startBenchPollers(b *testing.B, s *Stream, viewers int) func() float64 {
 	b.Helper()
 
 	var polls atomic.Int64
 	stop := make(chan struct{})
 	var pollers sync.WaitGroup
+	started := time.Now()
 	for range viewers {
 		pollers.Go(func() {
 			tick := time.NewTicker(benchPollInterval)
@@ -336,11 +349,22 @@ func startBenchPollers(b *testing.B, s *Stream, viewers int) *atomic.Int64 {
 			}
 		})
 	}
-	b.Cleanup(func() {
-		close(stop)
+
+	var once sync.Once
+	halt := func() float64 {
+		once.Do(func() { close(stop) })
 		pollers.Wait()
-	})
-	return &polls
+		// The pollers' own lifetime, not b.Elapsed: they start before the timer
+		// is reset, so dividing by the measured interval would overstate the
+		// rate they sustained.
+		if elapsed := time.Since(started).Seconds(); elapsed > 0 {
+			return float64(polls.Load()) / elapsed
+		}
+		return 0
+	}
+	// Idempotent, so the cleanup is a no-op once the caller has stopped them.
+	b.Cleanup(func() { _ = halt() })
+	return halt
 }
 
 // BenchmarkStreamWriteUnderPoll measures the capture goroutine's cost while
@@ -365,7 +389,7 @@ func BenchmarkStreamWriteUnderPoll(b *testing.B) {
 		b.Run("viewers="+strconv.Itoa(viewers), func(b *testing.B) {
 			s := newBenchStream(b)
 			at := fillWindow(b, s)
-			polls := startBenchPollers(b, s, viewers)
+			stopPollers := startBenchPollers(b, s, viewers)
 
 			pcm := tone(testRate/benchFramesPerSecond, testChannels, testRate, benchToneHz)
 			step := time.Second / benchFramesPerSecond
@@ -382,7 +406,7 @@ func BenchmarkStreamWriteUnderPoll(b *testing.B) {
 			b.StopTimer()
 
 			// The load this run actually applied, not the load it asked for.
-			b.ReportMetric(float64(polls.Load())/b.Elapsed().Seconds(), "polls/s")
+			b.ReportMetric(stopPollers(), "polls/s")
 		})
 	}
 }

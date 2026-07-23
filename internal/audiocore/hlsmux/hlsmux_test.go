@@ -3,6 +3,7 @@ package hlsmux
 import (
 	"bytes"
 	"errors"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -467,13 +468,14 @@ func TestAccessUnitsAreCopiedNotAliased(t *testing.T) {
 // which is the only mechanism that can catch a FUTURE write into a published
 // window; the unit tests can only pin the implementation as it stands.
 //
-// Two details make it able to detect that, and both were established by
-// reverting push to its old in-place shift and confirming this test then fails.
-// The readers run until the writer is done rather than a fixed count, so they
-// cannot retire early and leave the interesting cuts unobserved; and the window
-// is small enough that every cut evicts, since the in-place shift only wrote
-// into the published array on eviction. With a fixed reader count and the
-// default window, the same revert survived twenty runs.
+// What makes it able to detect that is the readers running until the writer is
+// done rather than for a fixed count. Established by reverting push to its old
+// in-place shift: with a fixed count the readers retired long before the writer,
+// left the interesting cuts unobserved, and the revert survived twenty runs;
+// with the unbounded loop it is caught. The small window is not required for
+// detection, and is kept only because it makes every cut after the second evict,
+// which is the sole branch in which the in-place shift wrote into a published
+// array at all.
 func TestConcurrentWriteAndServe(t *testing.T) {
 	t.Parallel()
 
@@ -503,6 +505,9 @@ func TestConcurrentWriteAndServe(t *testing.T) {
 					return
 				default:
 				}
+				// These readers spin for the writer's whole run, so yield
+				// rather than monopolise a core on a small CI runner.
+				runtime.Gosched()
 				// Read the segment payloads, not just the counts: Playlist and
 				// Ready never touch a window element, so Segment is the only
 				// call here that a mutated header could be observed through.
@@ -570,6 +575,10 @@ func TestPlaylistSnapshotNeverGoesStale(t *testing.T) {
 // only the playlist and Retained would pass against a publish hoisted above
 // those updates, which is a way to get the snapshot wrong that no amount of
 // playlist comparison detects.
+//
+// It reads the stream's fields without the mutex, so callers must have no
+// concurrent writer. That holds for its only caller and would be a hard data
+// race in a test shaped like TestConcurrentWriteAndServe.
 func requireSnapshotMatchesWindow(t *testing.T, s *Stream, step int) {
 	t.Helper()
 
@@ -585,11 +594,12 @@ func requireSnapshotMatchesWindow(t *testing.T, s *Stream, step int) {
 // TestCloseWithNoPendingAudioEndsPlaylist covers the one path on which Close's
 // own publish is the only one: a stream with nothing buffered to cut.
 //
-// Without it the ENDLIST assertions elsewhere are satisfied by cutSegment's
-// publish instead, since Close sets s.closed before flushing. Deleting Close's
-// publish then leaves the whole suite green while a stream closed on a segment
-// boundary, or with no audio at all, serves a playlist that never ends and a
-// client that polls it forever.
+// Every other ENDLIST assertion in this file closes a stream that still has
+// audio to cut, so each of them would also pass if the tag came from somewhere
+// in the cut path. This one cannot: there is nothing to cut, so Close's own
+// publish is the only thing that can end the playlist. Without a test here, a
+// stream closed on a segment boundary, or one that never received audio, would
+// serve a playlist that never ends and a client that polls it forever.
 func TestCloseWithNoPendingAudioEndsPlaylist(t *testing.T) {
 	t.Parallel()
 
@@ -1157,4 +1167,24 @@ func TestNewAcceptsASegmentThatFitsExactlyOneAccessUnit(t *testing.T) {
 	// And it must actually stream rather than merely construct.
 	writeSamples(t, s, testRate, testEpoch)
 	assert.True(t, s.Ready(1))
+}
+
+// TestPlaylistAndStatsComeFromOneSnapshot pins the reason the accessor exists:
+// Retained must be the segment count of the playlist returned beside it, not of
+// a neighbouring instant.
+func TestPlaylistAndStatsComeFromOneSnapshot(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStream(t, &fakeCodecOptions{frameSizes: []int{aacFrame}})
+
+	// Before any cut, and then across several, including once the window has
+	// scrolled so Retained stops tracking the total.
+	for i := range 40 {
+		playlist, stats := s.PlaylistAndStats()
+		assert.Equal(t, strings.Count(playlist, "#EXTINF"), stats.Retained,
+			"Retained must count the segments in the playlist returned with it, at write %d", i)
+		assert.Equal(t, s.Playlist(), playlist, "the playlist must match a plain Playlist call")
+		writeSamples(t, s, testRate/2, sampleTime(i*testRate/2))
+	}
+	require.Greater(t, s.nextSeq, uint64(s.segments.capacity), "the window must have scrolled")
 }

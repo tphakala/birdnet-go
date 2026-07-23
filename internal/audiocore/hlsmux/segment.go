@@ -138,8 +138,10 @@ func newSegmentWindow(capacity int) *segmentWindow {
 // The cost is that an evicted segment's Data is released strictly later than
 // the in-place overwrite released it: the overwrite dropped the reference at
 // push time, whereas the evicted header now survives in the previous slice
-// until the last reader holding it lets go. That is bounded by one window's
-// worth of payload, roughly 35 KB per stream at the default settings.
+// until the last reader holding it lets go. In practice that is one extra
+// segment, about 34 KB at the default 128 kbps and two-second segments, since
+// a reader holds the slice for microseconds; the hard bound is one window,
+// roughly 200 KB.
 func (w *segmentWindow) push(s *Segment) {
 	retained := w.segments
 	if len(retained) == w.capacity {
