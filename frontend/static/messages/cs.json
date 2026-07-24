@@ -4777,7 +4777,16 @@
       "streamTitleDefault": "Audio stream ptáků",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Živý přenos",
-      "playbackError": "Chyba přehrávání: {details}"
+      "playbackError": "Chyba přehrávání: {details}",
+      "audibleBats": {
+        "title": "Slyšitelné přehrávání netopýrů",
+        "subtitle": "Zpomalí ultrazvuková volání do rozsahu slyšitelného člověkem.",
+        "timeExpansion": "Časové roztažení",
+        "enable": "Zapnout",
+        "disable": "Vypnout",
+        "generating": "Generuje se odvozený zvuk…",
+        "error": "Nepodařilo se vygenerovat zvuk slyšitelných netopýrů"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogram zatím nebyl vygenerován",

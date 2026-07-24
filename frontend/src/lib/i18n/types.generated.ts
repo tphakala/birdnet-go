@@ -3497,6 +3497,13 @@ export type TranslationKey =
   | 'media.audio.streamArtist'
   | 'media.audio.streamAlbum'
   | 'media.audio.playbackError' // params: details
+  | 'media.audio.audibleBats.title'
+  | 'media.audio.audibleBats.subtitle'
+  | 'media.audio.audibleBats.timeExpansion'
+  | 'media.audio.audibleBats.enable'
+  | 'media.audio.audibleBats.disable'
+  | 'media.audio.audibleBats.generating'
+  | 'media.audio.audibleBats.error'
   | 'media.spectrogram.notGenerated'
   | 'media.spectrogram.generate'
   | 'media.spectrogram.generateButton'

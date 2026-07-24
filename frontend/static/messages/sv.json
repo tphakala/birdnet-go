@@ -4777,7 +4777,16 @@
       "streamTitleDefault": "Fågelljudström",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Livestream",
-      "playbackError": "Uppspelningsfel: {details}"
+      "playbackError": "Uppspelningsfel: {details}",
+      "audibleBats": {
+        "title": "Hörbar fladdermusuppspelning",
+        "subtitle": "Sakta ned ultraljudsläten till människans hörselområde.",
+        "timeExpansion": "Tidsutvidgning",
+        "enable": "Aktivera",
+        "disable": "Inaktivera",
+        "generating": "Genererar härlett ljud…",
+        "error": "Det gick inte att generera hörbart fladdermusljud"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammet har inte genererats ännu",

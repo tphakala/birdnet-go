@@ -4777,7 +4777,16 @@
       "streamTitleDefault": "Lintujen äänistriimi",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Suora lähetys",
-      "playbackError": "Toistovirhe: {details}"
+      "playbackError": "Toistovirhe: {details}",
+      "audibleBats": {
+        "title": "Kuultava lepakoiden toisto",
+        "subtitle": "Hidasta ultraäänikutsut ihmisen kuuloalueelle.",
+        "timeExpansion": "Aikavenytys",
+        "enable": "Aktivoi",
+        "disable": "Deaktivoi",
+        "generating": "Luodaan johdettua ääntä…",
+        "error": "Kuultavaa lepakkoääntä ei voitu luoda"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",

@@ -32,6 +32,8 @@
   import { cn } from '$lib/utils/cn.js';
   import { Play, Pause, Download, XCircle } from '@lucide/svelte';
   import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
+  import AudibleBatsButton from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
+  import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import AudioToolbar from './AudioToolbar.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -148,6 +150,10 @@
   let currentTime = $state(0);
   let duration = $state(0);
   let audioContextAvailable = $state(true);
+  // Mutual-exclusion signals: bumping one forces the sibling popup (Audible
+  // Bats vs Audio Settings) closed, so only one is ever open at a time.
+  let closeAudibleBatsSignal = $state(0);
+  let closeAudioSettingsSignal = $state(0);
   let progress = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -260,6 +266,26 @@
   let processingActive = $derived(processingDenoise !== '' || processingNormalize);
   let processAbortController: AbortController | null = null;
   let processDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Audible bats derived playback. When active, the player swaps its audio source
+  // to a server-generated time-expanded (slowed) copy so ultrasonic bat calls fall
+  // into the human hearing range. The spectrogram still spans the full original
+  // clip; because the derived audio's duration scales by the expansion factor, the
+  // playhead and seeking stay proportionally in sync automatically. The request
+  // lifecycle lives in the shared composable; this component owns the actual
+  // source swap (so position is preserved across the duration change).
+  const audibleBats = useAudibleBats({
+    getDetectionId: () => detectionId,
+    onActivate: url => swapAudioSource(url),
+    onDeactivate: () => swapAudioSource(processedAudioUrl ?? audioUrl),
+  });
+  // Proportional position (0-1) to restore after an audio source swap, applied
+  // once the new source's metadata (and therefore its duration) is available.
+  let audibleBatsPendingFraction: number | null = null;
+  // Whether playback should resume once the swapped-in source's metadata (and
+  // restored position) are ready — avoids a race where play() starts from 0
+  // before handleLoadedMetadata applies audibleBatsPendingFraction.
+  let audibleBatsPendingAutoplay = false;
 
   // Constants
   const GAIN_MAX_DB = 24;
@@ -1041,6 +1067,21 @@
     duration = audioElement.duration;
     isLoading = false;
     error = null;
+    // Restore the proportional playback position after an audible-bats source
+    // swap (the derived clip has a different duration than the original).
+    if (audibleBatsPendingFraction !== null && isFinite(duration) && duration > 0) {
+      audioElement.currentTime = audibleBatsPendingFraction * duration;
+      currentTime = audioElement.currentTime;
+      progress = (currentTime / duration) * 100;
+    }
+    audibleBatsPendingFraction = null;
+
+    if (audibleBatsPendingAutoplay) {
+      audibleBatsPendingAutoplay = false;
+      audioElement.play().catch((err: unknown) => {
+        logger.warn('Resume after audio source swap failed', err as Error);
+      });
+    }
   };
 
   const handleProgressClick = (event: MouseEvent) => {
@@ -1083,6 +1124,30 @@
       applyPlaybackRate(audioElement, newSpeed);
     }
   };
+
+  // --- Audible bats derived playback ---
+
+  // Swap the player's audio source, preserving the proportional playback
+  // position and play/pause state across the change. The actual seek (and any
+  // resumed playback) happens in handleLoadedMetadata once the new source
+  // reports its duration, avoiding a race where play() would otherwise start
+  // from position 0 before the proportional position is restored.
+  function swapAudioSource(newSrc: string) {
+    if (!audioElement) return;
+    // Read the live element position rather than the reactive `currentTime`
+    // state, which only updates on the progress interval/timeupdate and can
+    // lag a recent direct seek.
+    const liveCurrentTime = audioElement.currentTime;
+    const frac = isFinite(duration) && duration > 0 ? liveCurrentTime / duration : 0;
+    audibleBatsPendingFraction = frac;
+    audibleBatsPendingAutoplay = isPlaying;
+    audioElement.src = newSrc;
+    audioElement.load();
+  }
+
+  // The generate/disable lifecycle lives in the useAudibleBats composable; the
+  // onActivate/onDeactivate callbacks above route back into swapAudioSource so the
+  // playback position is preserved across the source change.
 
   // Part of user-requested spectrogram generation feature (see TODO above)
   // Check spectrogram mode on mount/URL change to avoid double-request pattern
@@ -1494,6 +1559,10 @@
         processingDenoise = '';
         processingNormalize = false;
         isProcessing = false;
+        // Reset audible-bats derived playback for the new detection (the source
+        // is reset to audioUrl above; this just clears the derived-copy state).
+        audibleBats.reset();
+        audibleBatsPendingFraction = null;
         // Reset playback state for new audio
         isPlaying = false;
         currentTime = 0;
@@ -1647,7 +1716,14 @@
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
           audioRetryTimer = setTimeout(() => {
             if (audioElement) {
-              audioElement.src = audioUrl;
+              // Retry against whichever source is currently active — reverting
+              // to the original audioUrl here would silently drop out of an
+              // active audible-bats or processed-audio derived clip while
+              // leaving its state flagged as still active.
+              audioElement.src =
+                audibleBats.active && audibleBats.url
+                  ? audibleBats.url
+                  : (processedAudioUrl ?? audioUrl);
               audioElement.load();
             }
           }, AUDIO_RETRY_DELAY_MS);
@@ -1784,6 +1860,7 @@
       if (processAbortController) {
         processAbortController.abort();
       }
+      audibleBats.cleanup();
     };
   });
 
@@ -1949,13 +2026,26 @@
 
   <!-- Audio element is created dynamically in onMount for iOS Safari compatibility -->
 
-  <!-- Audio settings button (top-right) -->
+  <!-- Audio settings button (top-right), with the audible-bats button alongside
+       it for bat detections. -->
   {#if showControls}
     <div
-      class="absolute top-2 right-2 transition-opacity duration-200"
+      class="absolute top-2 right-2 flex items-center gap-1 transition-opacity duration-200"
       class:opacity-0={!isMobile}
       class:group-hover:opacity-100={!isMobile}
     >
+      {#if isBatSpectrogram}
+        <AudibleBatsButton
+          active={audibleBats.active}
+          generating={audibleBats.generating}
+          error={audibleBats.error}
+          disabled={!audioContextAvailable}
+          closeSignal={closeAudibleBatsSignal}
+          onEnable={settings => audibleBats.enable(settings)}
+          onDisable={() => audibleBats.disable()}
+          onMenuOpen={() => closeAudioSettingsSignal++}
+        />
+      {/if}
       <AudioSettingsButton
         {gainValue}
         {filterFreq}
@@ -1965,6 +2055,8 @@
         onFilterChange={updateFilter}
         onSpeedChange={handleSpeedChange}
         disabled={!audioContextAvailable}
+        closeSignal={closeAudioSettingsSignal}
+        onMenuOpen={() => closeAudibleBatsSignal++}
       />
     </div>
   {/if}

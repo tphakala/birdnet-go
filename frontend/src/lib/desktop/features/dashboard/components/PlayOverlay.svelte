@@ -51,6 +51,11 @@
     filterFreq?: number;
     playbackSpeed?: number;
     onAudioContextAvailable?: (_isAvailable: boolean) => void;
+    // When set, playback uses this server-generated time-expanded (slowed) "audible
+    // bats" clip instead of the original. The spectrogram still spans the full
+    // original clip; the playhead stays in sync because progress is computed as a
+    // fraction of whichever source's duration is loaded.
+    audibleBatsSrc?: string | null;
   }
 
   let {
@@ -61,6 +66,7 @@
     filterFreq = 20,
     playbackSpeed = 1.0,
     onAudioContextAvailable,
+    audibleBatsSrc = null,
   }: Props = $props();
 
   let audioElement: HTMLAudioElement;
@@ -91,6 +97,23 @@
   // PLAY_END_DELAY_MS imported from $lib/utils/audio
 
   const audioUrl = $derived(buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}`));
+  // The source actually loaded into the element: the derived audible-bats clip
+  // when one is active, otherwise the original.
+  const effectiveSrc = $derived(audibleBatsSrc ?? audioUrl);
+
+  // Source-swap bookkeeping. previousAudioUrl distinguishes a detection change
+  // (full reset) from an audible-bats toggle on the same detection (preserve the
+  // proportional position). pendingFraction (0-1) is restored once the swapped-in
+  // source reports its duration in handleLoadedMetadata.
+  // svelte-ignore state_referenced_locally
+  let previousAudioUrl = audioUrl;
+  // svelte-ignore state_referenced_locally
+  let previousEffectiveSrc = audibleBatsSrc ?? audioUrl;
+  let pendingFraction: number | null = null;
+  // Whether playback should resume once the swapped-in source's metadata (and
+  // restored position) are ready — avoids a race where play() starts from 0
+  // before handleLoadedMetadata applies pendingFraction.
+  let pendingAutoplayAfterSwap = false;
 
   // Update audio nodes when gain/filter props change
   // Read values unconditionally to ensure they're tracked as dependencies
@@ -118,27 +141,52 @@
     }
   });
 
-  // Sync audio source when URL changes (replaces template binding for iOS Safari compatibility)
+  // Sync the audio source when it changes (replaces template binding for iOS
+  // Safari compatibility). Two distinct cases:
+  //   - Detection change (audioUrl differs): full reset of playback state.
+  //   - Audible-bats toggle on the same detection: swap the source but preserve
+  //     the proportional position and play/pause state across the swap.
   $effect(() => {
-    if (audioElement && audioUrl) {
-      // Compare resolved URLs to avoid unnecessary reloads
-      const absoluteUrl = new URL(audioUrl, window.location.origin).href;
-      if (audioElement.src !== absoluteUrl) {
-        audioElement.src = audioUrl;
-        // Reset playback state for new audio
-        isPlaying = false;
-        currentTime = 0;
-        progress = 0;
-        duration = 0;
-        error = null;
-        hasEverPlayed = false;
-        audioRetryCount = 0;
-        if (audioRetryTimer) {
-          clearTimeout(audioRetryTimer);
-          audioRetryTimer = undefined;
-        }
+    const src = effectiveSrc;
+    const baseUrl = audioUrl;
+    if (!audioElement || !src) return;
+
+    const detectionChanged = baseUrl !== previousAudioUrl;
+    const srcChanged = src !== previousEffectiveSrc;
+    if (!detectionChanged && !srcChanged) return;
+
+    if (detectionChanged) {
+      previousAudioUrl = baseUrl;
+      previousEffectiveSrc = src;
+      pendingFraction = null;
+      audioElement.src = src;
+      // Reset playback state for the new detection.
+      isPlaying = false;
+      currentTime = 0;
+      progress = 0;
+      duration = 0;
+      error = null;
+      hasEverPlayed = false;
+      audioRetryCount = 0;
+      if (audioRetryTimer) {
+        clearTimeout(audioRetryTimer);
+        audioRetryTimer = undefined;
       }
+      return;
     }
+
+    // Audible-bats overlay toggled: swap source, preserving proportional position.
+    // Read the live element position (not the reactive `currentTime` state,
+    // which only updates on the progress interval/timeupdate and can lag a
+    // recent seek) so the restored position matches what the user last saw.
+    previousEffectiveSrc = src;
+    const liveCurrentTime = audioElement.currentTime;
+    pendingFraction = isFinite(duration) && duration > 0 ? liveCurrentTime / duration : 0;
+    // Defer resuming playback until handleLoadedMetadata has restored the
+    // position from pendingFraction, so playback doesn't briefly start from 0.
+    pendingAutoplayAfterSwap = isPlaying;
+    audioElement.src = src;
+    audioElement.load();
   });
 
   async function handlePlayPause(event: MouseEvent) {
@@ -271,6 +319,21 @@
   function handleLoadedMetadata() {
     if (audioElement) {
       duration = audioElement.duration;
+      // Restore the proportional position after an audible-bats source swap (the
+      // derived clip has a different duration than the original).
+      if (pendingFraction !== null && isFinite(duration) && duration > 0) {
+        audioElement.currentTime = pendingFraction * duration;
+        currentTime = audioElement.currentTime;
+        progress = (currentTime / duration) * 100;
+      }
+      pendingFraction = null;
+
+      if (pendingAutoplayAfterSwap) {
+        pendingAutoplayAfterSwap = false;
+        void audioElement.play().catch((err: unknown) => {
+          logger.warn('Resume after audio source swap failed', err);
+        });
+      }
     }
   }
 
@@ -393,8 +456,10 @@
         if (!audioElement) return;
         // Ensure isLoading is true so subsequent retries can trigger
         isLoading = true;
-        // Cache-bust to avoid the browser serving the cached 404
-        audioElement.src = `${audioUrl}?t=${String(Date.now())}`;
+        // Cache-bust to avoid the browser serving the cached 404. The derived
+        // audible-bats blob URL is local and can't take a query param, so retry
+        // it as-is; only the original clip needs cache-busting.
+        audioElement.src = audibleBatsSrc ?? `${audioUrl}?t=${String(Date.now())}`;
         audioElement.load();
         void audioElement.play().catch(() => {
           // play() rejection handled by the next error event

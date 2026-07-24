@@ -4777,7 +4777,16 @@
       "streamTitleDefault": "Vogelaudio-Stream",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Livestream",
-      "playbackError": "Wiedergabefehler: {details}"
+      "playbackError": "Wiedergabefehler: {details}",
+      "audibleBats": {
+        "title": "Hörbare Fledermaus-Wiedergabe",
+        "subtitle": "Verlangsamt Ultraschallrufe in den menschlichen Hörbereich.",
+        "timeExpansion": "Zeitdehnung",
+        "enable": "Aktivieren",
+        "disable": "Deaktivieren",
+        "generating": "Abgeleitetes Audio wird erzeugt…",
+        "error": "Audio für hörbare Fledermäuse konnte nicht erzeugt werden"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogramm noch nicht generiert",

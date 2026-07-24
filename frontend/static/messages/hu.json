@@ -4777,7 +4777,16 @@
       "streamTitleDefault": "Madárhang stream",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Élő közvetítés",
-      "playbackError": "Lejátszási hiba: {details}"
+      "playbackError": "Lejátszási hiba: {details}",
+      "audibleBats": {
+        "title": "Hallható denevérlejátszás",
+        "subtitle": "Az ultrahangos hívásokat az emberi hallástartományba lassítja.",
+        "timeExpansion": "Időnyújtás",
+        "enable": "Aktiválás",
+        "disable": "Deaktiválás",
+        "generating": "Származtatott hang generálása…",
+        "error": "Nem sikerült létrehozni a hallható denevérhangot"
+      }
     },
     "spectrogram": {
       "notGenerated": "A spektrogram még nincs generálva",

@@ -4777,7 +4777,16 @@
       "streamTitleDefault": "Audio stream vtákov",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Živé vysielanie",
-      "playbackError": "Chyba prehrávania: {details}"
+      "playbackError": "Chyba prehrávania: {details}",
+      "audibleBats": {
+        "title": "Počuteľné prehrávanie netopierov",
+        "subtitle": "Spomalí ultrazvukové volania do rozsahu počuteľného pre človeka.",
+        "timeExpansion": "Časové roztiahnutie",
+        "enable": "Zapnúť",
+        "disable": "Vypnúť",
+        "generating": "Generuje sa odvodený zvuk…",
+        "error": "Nepodarilo sa vygenerovať počuteľný zvuk netopierov"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogram ešte nebol vygenerovaný",

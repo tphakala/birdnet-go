@@ -177,6 +177,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy` | ❌   | Alias for image proxy endpoint     |
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
+| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`        | ✅   | Time-expand bat clip into audible range |
 
 **Pending clip handling (`503 + Retry-After`).** A detection's DB record and SSE
 broadcast are emitted before its audio clip is written, and with Extended Capture the

@@ -8,6 +8,9 @@
   import PlayOverlay from '$lib/desktop/features/dashboard/components/PlayOverlay.svelte';
   import SpeciesInfoBar from '$lib/desktop/features/dashboard/components/SpeciesInfoBar.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
+  import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
+  import AudibleBatsButton from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
+  import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import { cn } from '$lib/utils/cn';
   import { downloadDetectionAudio } from '$lib/utils/audioDownload';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
@@ -53,9 +56,33 @@
   let isVisible = $state(false);
   let isMenuOpen = $state(false);
 
+  // Mutual-exclusion signals: bumping one forces the sibling popup (Audible
+  // Bats vs Audio Settings) closed, so only one is ever open at a time.
+  let closeAudibleBatsSignal = $state(0);
+  let closeAudioSettingsSignal = $state(0);
+
   let audioGainValue = $state(getDefaultAudioGain());
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
+  let audioContextAvailable = $state(true);
+
+  // Audible bats: only offered for bat detections (matches DetectionCard). The
+  // request lifecycle lives in the shared composable; PlayOverlay swaps to the
+  // generated `url` while the spectrogram keeps spanning the full original clip.
+  const MODEL_TYPE_BAT = 'bat';
+  const isBatDetection = $derived(detection.modelType === MODEL_TYPE_BAT);
+  const audibleBats = useAudibleBats({ getDetectionId: () => detection.id });
+
+  // Reset derived playback if this card instance is recycled to a different
+  // detection (keyed {#each} normally avoids this, but guard defensively).
+  // svelte-ignore state_referenced_locally
+  let previousDetectionId = detection.id;
+  $effect(() => {
+    if (detection.id !== previousDetectionId) {
+      previousDetectionId = detection.id;
+      audibleBats.reset();
+    }
+  });
 
   $effect(() => {
     if (detection.clipName && isVisible) {
@@ -65,12 +92,38 @@
     }
   });
 
+  function handleGainChange(value: number) {
+    audioGainValue = value;
+  }
+
+  function handleFilterChange(value: number) {
+    audioFilterFreq = value;
+  }
+
+  function handleSpeedChange(value: number) {
+    audioPlaybackSpeed = value;
+  }
+
+  function handleAudioContextAvailable(available: boolean) {
+    audioContextAvailable = available;
+  }
+
   function handleMenuOpen() {
     isMenuOpen = true;
   }
 
   function handleMenuClose() {
     isMenuOpen = false;
+  }
+
+  function handleAudibleBatsOpen() {
+    isMenuOpen = true;
+    closeAudioSettingsSignal++;
+  }
+
+  function handleAudioSettingsOpen() {
+    isMenuOpen = true;
+    closeAudibleBatsSignal++;
   }
 
   function handleViewDetails() {
@@ -102,6 +155,7 @@
   onDestroy(() => {
     observer?.disconnect();
     loader.destroy();
+    audibleBats.cleanup();
   });
 </script>
 
@@ -179,6 +233,8 @@
         gainValue={audioGainValue}
         filterFreq={audioFilterFreq}
         playbackSpeed={audioPlaybackSpeed}
+        onAudioContextAvailable={handleAudioContextAvailable}
+        audibleBatsSrc={audibleBats.url}
       />
     {/if}
 
@@ -193,8 +249,36 @@
     </button>
   </div>
 
-  <!-- Top-Right Action Menu - OUTSIDE overflow-hidden container -->
-  <div class="absolute top-2 right-2 z-50">
+  <!-- Top-Right Controls - OUTSIDE overflow-hidden container -->
+  <div class="absolute top-2 right-2 z-50 flex items-center gap-1.5">
+    {#if detection.clipName}
+      {#if isBatDetection}
+        <AudibleBatsButton
+          active={audibleBats.active}
+          generating={audibleBats.generating}
+          error={audibleBats.error}
+          disabled={!audioContextAvailable}
+          closeSignal={closeAudibleBatsSignal}
+          onEnable={settings => audibleBats.enable(settings)}
+          onDisable={() => audibleBats.disable()}
+          onMenuOpen={handleAudibleBatsOpen}
+          onMenuClose={handleMenuClose}
+        />
+      {/if}
+      <AudioSettingsButton
+        gainValue={audioGainValue}
+        filterFreq={audioFilterFreq}
+        playbackSpeed={audioPlaybackSpeed}
+        defaultGainValue={getDefaultAudioGain()}
+        onGainChange={handleGainChange}
+        onFilterChange={handleFilterChange}
+        onSpeedChange={handleSpeedChange}
+        disabled={!audioContextAvailable}
+        closeSignal={closeAudioSettingsSignal}
+        onMenuOpen={handleAudioSettingsOpen}
+        onMenuClose={handleMenuClose}
+      />
+    {/if}
     <ActionMenu
       {detection}
       variant="overlay"

@@ -4777,7 +4777,16 @@
       "streamTitleDefault": "Bird Audio Stream",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Live Stream",
-      "playbackError": "Playback error: {details}"
+      "playbackError": "Playback error: {details}",
+      "audibleBats": {
+        "title": "Audible bat playback",
+        "subtitle": "Slow ultrasonic calls into human hearing range.",
+        "timeExpansion": "Time expansion",
+        "enable": "Activate",
+        "disable": "Deactivate",
+        "generating": "Generating derived audio…",
+        "error": "Failed to generate audible bats audio"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spectrogram not yet generated",

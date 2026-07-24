@@ -4777,7 +4777,16 @@
       "streamTitleDefault": "Stream audio uccelli",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Diretta",
-      "playbackError": "Errore di riproduzione: {details}"
+      "playbackError": "Errore di riproduzione: {details}",
+      "audibleBats": {
+        "title": "Riproduzione udibile dei pipistrelli",
+        "subtitle": "Rallenta i richiami ultrasonici fino alla gamma udibile dall’uomo.",
+        "timeExpansion": "Espansione temporale",
+        "enable": "Attiva",
+        "disable": "Disattiva",
+        "generating": "Generazione audio derivato…",
+        "error": "Impossibile generare l’audio udibile dei pipistrelli"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spettrogramma non ancora generato",

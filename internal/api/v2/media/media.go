@@ -209,6 +209,20 @@ type ProcessAudioRequest struct {
 	GainDB    float64 `json:"gain_db"`
 }
 
+// AudibleBatsRequest defines the request body for POST /api/v2/audio/:id/audible-bats.
+type AudibleBatsRequest struct {
+	// Expansion is the time-expansion factor (5, 10, 16, or 20).
+	Expansion int `json:"expansion"`
+	// Normalize enables loudness normalization applied after time expansion.
+	Normalize bool `json:"normalize"`
+	// GainDB is the volume adjustment in dB applied to the derived clip.
+	GainDB float64 `json:"gain_db"`
+}
+
+// modelTypeBat is the ai_models.model_type value identifying bat-detection
+// models. Audible-bats playback is only offered for these detections.
+const modelTypeBat = "bat"
+
 // RegisterRoutes registers the media domain routes. It is called by the facade
 // in the deterministic initRoutes order, at the same slot the former
 // initMediaRoutes occupied, so the registered route set stays byte-identical.
@@ -258,6 +272,9 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 	// Audio processing / preview (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/process", c.ProcessAudioByID, c.AuthMiddleware)
+
+	// Audible bats derived playback (requires authentication)
+	c.Echo.POST("/api/v2/audio/:id/audible-bats", c.AudibleBatsByID, c.AuthMiddleware)
 
 	// Processed spectrogram preview (requires authentication)
 	c.Echo.POST("/api/v2/spectrogram/:id/process", c.ProcessedSpectrogramByID, c.AuthMiddleware)
@@ -1163,6 +1180,181 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 		}
 	}
 
+	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
+}
+
+// AudibleBatsByID generates a derived "audible bats" review clip from a bat
+// detection's full audio. The ultrasonic clip is time-expanded (slowed and
+// pitched down) into the human hearing range and resampled to 48 kHz, then
+// optionally loudness-normalized (after conversion) and gain-adjusted. The
+// result is returned as WAV for browser playback and cached ephemerally; the
+// original recording and AI pipeline are never touched. Requires authentication.
+//
+// POST /api/v2/audio/:id/audible-bats
+// Body: {"expansion": 10, "normalize": true, "gain_db": 6.0}
+func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
+	// Defense in depth: RegisterRoutes skips registering this handler when the
+	// datastore is disabled, but guard the c.DS dereferences below anyway.
+	if err := c.RequireDatastore(ctx); err != nil {
+		return err
+	}
+
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+	if _, err := strconv.ParseUint(noteID, 10, 64); err != nil {
+		return c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
+	}
+
+	var req AudibleBatsRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
+	if !ffmpeg.IsValidBatExpansionFactor(req.Expansion) {
+		return c.HandleError(ctx, fmt.Errorf("invalid expansion factor: %d", req.Expansion),
+			"Time expansion must be 5, 10, 16, or 20", http.StatusBadRequest)
+	}
+	if !ffmpeg.IsValidGainDB(req.GainDB) {
+		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
+			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+	}
+
+	// Audible-bats playback only applies to bat detections.
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	if err != nil {
+		if isClipNotFoundErr(err) {
+			return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to resolve detection model type", http.StatusInternalServerError)
+	}
+	if modelType != modelTypeBat {
+		return c.HandleError(ctx, fmt.Errorf("model type %q is not a bat model", modelType),
+			"Audible bats mode is only available for bat detections", http.StatusBadRequest)
+	}
+
+	// Resolve and validate clip path (same pattern as ProcessAudioByID).
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		if isClipNotFoundErr(err) {
+			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
+	}
+	if clipPath == "" {
+		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
+	}
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
+	if err != nil {
+		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+	}
+	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
+	if _, statErr := c.SFS.StatRel(normalizedPath); statErr != nil {
+		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	}
+
+	// Serve from the ephemeral cache when available.
+	cacheKey := audibleBatsCacheKey(noteID, req.Expansion, req.Normalize, req.GainDB)
+	if c.processingCache != nil {
+		if cached := c.processingCache.get(cacheKey); cached != nil {
+			ctx.Response().Header().Set("Cache-Control", "no-store")
+			return ctx.Blob(http.StatusOK, MimeTypeWAV, cached)
+		}
+	}
+
+	// Limit concurrent processing (non-blocking, returns 503 if full).
+	select {
+	case c.processingSemaphore <- struct{}{}:
+		defer func() { <-c.processingSemaphore }()
+	default:
+		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
+			"Server busy, try again later", http.StatusServiceUnavailable)
+	}
+
+	ffmpegPath := c.CurrentSettings().Realtime.Audio.FfmpegPath
+
+	// Probe the native capture rate so time expansion maps ultrasonic content
+	// into the audible band correctly regardless of the original sample rate.
+	sampleRate, err := ffmpeg.ProbeFileSampleRate(ctx.Request().Context(), absolutePath)
+	if err != nil {
+		if ctx.Request().Context().Err() != nil {
+			return nil // Client disconnected
+		}
+		return c.HandleError(ctx, err, "Failed to probe audio sample rate", http.StatusInternalServerError)
+	}
+	// Sources below the minimum bat capture rate cannot carry ultrasonic content,
+	// so a derived "audible bats" clip would have nothing meaningful to reveal.
+	// Reject before spending CPU on time expansion.
+	if sampleRate < ffmpeg.MinBatSampleRate {
+		return c.HandleError(ctx,
+			fmt.Errorf("sample rate %d below minimum %d", sampleRate, ffmpeg.MinBatSampleRate),
+			fmt.Sprintf("Source audio must be at least %d Hz for audible bats mode", ffmpeg.MinBatSampleRate),
+			http.StatusUnprocessableEntity,
+		)
+	}
+
+	// Temp working directory under the SecureFS root (container-friendly with a
+	// read-only rootfs), reusing the existing processing temp dir.
+	tmpDir := filepath.Join(c.SFS.BaseDir(), ".tmp-processing")
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
+	}
+
+	// Pass 1: full-clip time expansion + 48 kHz resample (all-or-nothing; no
+	// detection-window clipping).
+	expandedFile, err := os.CreateTemp(tmpDir, "bat-expanded-*.wav")
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
+	}
+	expandedPath := expandedFile.Name()
+	_ = expandedFile.Close()
+	defer func() { _ = os.Remove(expandedPath) }()
+
+	if err := ffmpeg.TimeExpandBatAudio(ctx.Request().Context(), absolutePath, ffmpegPath,
+		req.Expansion, sampleRate, expandedPath); err != nil {
+		if ctx.Request().Context().Err() != nil {
+			return nil // Client disconnected
+		}
+		return c.HandleError(ctx, err, "Failed to generate audible bats audio", http.StatusInternalServerError)
+	}
+
+	// Pass 2: apply normalization (after conversion) and gain to the derived clip.
+	finalPath := expandedPath
+	filters := ffmpeg.AudioFilters{Normalize: req.Normalize, GainDB: req.GainDB}
+	if filters.HasFilters() {
+		finalFile, err := os.CreateTemp(tmpDir, "bat-audible-*.wav")
+		if err != nil {
+			return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
+		}
+		processedPath := finalFile.Name()
+		_ = finalFile.Close()
+		defer func() { _ = os.Remove(processedPath) }()
+
+		if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), expandedPath, ffmpegPath, filters, processedPath); err != nil {
+			if ctx.Request().Context().Err() != nil {
+				return nil // Client disconnected
+			}
+			return c.HandleError(ctx, err, "Failed to process audible bats audio", http.StatusInternalServerError)
+		}
+		finalPath = processedPath
+	}
+
+	wavData, err := os.ReadFile(finalPath)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to read audible bats audio", http.StatusInternalServerError)
+	}
+
+	// Cache the result (non-fatal on failure).
+	if c.processingCache != nil {
+		if err := c.processingCache.put(cacheKey, wavData); err != nil {
+			c.LogAPIRequest(ctx, logger.LogLevelWarn, "Failed to cache audible bats audio",
+				logger.String("cache_key", cacheKey),
+				logger.Error(err),
+			)
+		}
+	}
+
+	ctx.Response().Header().Set("Cache-Control", "no-store")
 	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
 }
 
