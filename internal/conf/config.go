@@ -928,7 +928,7 @@ type LogDeduplicationSettings struct {
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
 	Enabled                      bool                     `yaml:"enabled" json:"enabled"`                                           // true to enable new species tracking
-	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 7, DefaultNewSpeciesWindowDays)
+	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 7)
 	SyncIntervalMinutes          int                      `yaml:"syncintervalminutes" json:"syncIntervalMinutes"`                   // Interval to sync with database (default: 60)
 	NotificationSuppressionHours int                      `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
 	YearlyTracking               YearlyTrackingSettings   `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
@@ -940,13 +940,13 @@ type YearlyTrackingSettings struct {
 	Enabled    bool `yaml:"enabled" json:"enabled"`       // true to enable yearly tracking
 	ResetMonth int  `yaml:"resetmonth" json:"resetMonth"` // Month to reset yearly tracking (1=January, default: 1)
 	ResetDay   int  `yaml:"resetday" json:"resetDay"`     // Day to reset yearly tracking (default: 1)
-	WindowDays int  `yaml:"windowdays" json:"windowDays"` // Days to show "new this year" indicator (default: 7, DefaultYearlyTrackingWindowDays)
+	WindowDays int  `yaml:"windowdays" json:"windowDays"` // Days to show "new this year" indicator (default: 7)
 }
 
 // SeasonalTrackingSettings contains settings for tracking first arrivals each season
 type SeasonalTrackingSettings struct {
 	Enabled    bool              `yaml:"enabled" json:"enabled"`                       // true to enable seasonal tracking
-	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 7, DefaultSeasonalTrackingWindowDays)
+	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 7)
 	Seasons    map[string]Season `yaml:"seasons" json:"seasons" jsonschema:"nullable"` // Season definitions
 }
 

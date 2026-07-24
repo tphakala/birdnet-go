@@ -307,15 +307,15 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.weather.wunderground.endpoint` | string | WeatherUnderground API endpoint |
 | `realtime.weather.wunderground.units` | string | units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid) |
 | `realtime.speciestracking.enabled` | boolean | true to enable new species tracking |
-| `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 7, DefaultNewSpeciesWindowDays) |
+| `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 7) |
 | `realtime.speciestracking.syncintervalminutes` | integer | Interval to sync with database (default: 60) |
 | `realtime.speciestracking.notificationsuppressionhours` | integer | Hours to suppress duplicate notifications (default: 168) |
 | `realtime.speciestracking.yearlytracking.enabled` | boolean | true to enable yearly tracking |
 | `realtime.speciestracking.yearlytracking.resetmonth` | integer | Month to reset yearly tracking (1=January, default: 1) |
 | `realtime.speciestracking.yearlytracking.resetday` | integer | Day to reset yearly tracking (default: 1) |
-| `realtime.speciestracking.yearlytracking.windowdays` | integer | Days to show "new this year" indicator (default: 7, DefaultYearlyTrackingWindowDays) |
+| `realtime.speciestracking.yearlytracking.windowdays` | integer | Days to show "new this year" indicator (default: 7) |
 | `realtime.speciestracking.seasonaltracking.enabled` | boolean | true to enable seasonal tracking |
-| `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 7, DefaultSeasonalTrackingWindowDays) |
+| `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 7) |
 | `realtime.speciestracking.seasonaltracking.seasons` | any |  |
 | `realtime.extendedcapture.enabled` | boolean |  |
 | `realtime.extendedcapture.maxduration` | integer |  |

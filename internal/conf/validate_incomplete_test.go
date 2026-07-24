@@ -166,6 +166,28 @@ func TestValidateOAuthRedirects_ScopedToLockOutShape(t *testing.T) {
 			}},
 			wantErr: true,
 		},
+		{
+			name: "bare host gains the https scheme computeBaseURL assumes",
+			security: Security{Host: "example.com", OAuthProviders: []OAuthProviderConfig{
+				{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"},
+			}},
+		},
+		{
+			// computeBaseURL returns baseUrl verbatim and prefers it over host, so a
+			// malformed one yields a callback the identity provider rejects and a
+			// valid host cannot rescue it.
+			name: "malformed baseUrl is not a usable origin",
+			security: Security{BaseURL: "example.com", Host: "https://real.example.com", OAuthProviders: []OAuthProviderConfig{
+				{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret"},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "malformed baseUrl is tolerated when the provider carries its own redirectUri",
+			security: Security{BaseURL: "example.com", OAuthProviders: []OAuthProviderConfig{
+				{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "https://example.com/callback"},
+			}},
+		},
 	}
 
 	for _, tt := range tests {

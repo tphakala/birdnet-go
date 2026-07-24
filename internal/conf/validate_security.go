@@ -3,6 +3,7 @@
 package conf
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"strings"
@@ -112,16 +113,59 @@ func validateSecuritySettings(settings *Security) error {
 // (see defaults.go), and MigrateOAuthConfig copies that into the array as-is, so a
 // migrated provider usually carries a non-empty but relative value that no OAuth
 // provider can redirect back to.
-func oauthRedirectProblem(p *OAuthProviderConfig, hasOrigin bool) string {
+//
+// originProblem describes the shared fallback, and is what a provider without its
+// own redirectUri inherits; see oauthOriginProblem.
+func oauthRedirectProblem(p *OAuthProviderConfig, originProblem string) string {
 	if p.RedirectURI == "" {
-		if hasOrigin {
-			return ""
-		}
-		return "no redirect URL can be built; set security.host or security.baseUrl, or security.oauthProviders[].redirectUri"
+		return originProblem
 	}
 	parsed, err := url.Parse(p.RedirectURI)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
 		return "its redirectUri is not an absolute http(s) URL, so the provider has nowhere to send the user back to"
+	}
+	return ""
+}
+
+// oauthOriginProblem describes why security.host and security.baseUrl cannot
+// produce a redirect origin, or returns "" when they can.
+//
+// Presence is not enough: computeBaseURL returns baseUrl verbatim, so a value that
+// is not an absolute http(s) URL yields a callback the identity provider will
+// reject, which is the same lock-out as having no origin at all. baseUrl also wins
+// outright when set, so a valid host cannot rescue a malformed one.
+//
+// This mirrors computeBaseURL in internal/security/oauth.go, including its rule
+// that a host without a scheme is assumed to be https. The logic is duplicated
+// rather than shared for the same reason as the provider name constants above:
+// security imports conf, so the dependency cannot run the other way.
+//
+// A malformed baseUrl is only reported through this path, when a credentialed
+// provider actually depends on it. Rejecting one that nothing consumes would be the
+// kind of inert-config failure this pass exists to remove.
+func oauthOriginProblem(settings *Security) string {
+	var origin string
+	switch {
+	case settings.BaseURL != "":
+		origin = strings.TrimSuffix(settings.BaseURL, "/")
+	case settings.Host != "":
+		host := strings.TrimSuffix(settings.Host, "/")
+		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
+			origin = host
+		} else {
+			origin = "https://" + host
+		}
+	default:
+		return "no redirect URL can be built; set security.host or security.baseUrl, or security.oauthProviders[].redirectUri"
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
+		field := "security.host"
+		if settings.BaseURL != "" {
+			field = "security.baseUrl"
+		}
+		return fmt.Sprintf("%s does not form an absolute http(s) URL (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, origin)
 	}
 	return ""
 }
@@ -147,13 +191,13 @@ func oauthRedirectProblem(p *OAuthProviderConfig, hasOrigin bool) string {
 // perfectly good absolute redirectUri. Only the absence of any usable redirect is
 // fatal here.
 func validateOAuthRedirects(settings *Security) error {
-	hasOrigin := settings.Host != "" || settings.BaseURL != ""
+	originProblem := oauthOriginProblem(settings)
 	for i := range settings.OAuthProviders {
 		provider := &settings.OAuthProviders[i]
 		if !provider.Enabled || provider.ClientID == "" || provider.ClientSecret == "" {
 			continue
 		}
-		if reason := oauthRedirectProblem(provider, hasOrigin); reason != "" {
+		if reason := oauthRedirectProblem(provider, originProblem); reason != "" {
 			return errors.Newf("security.oauthProviders: provider %q is enabled but %s", provider.Provider, reason).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oauth-redirect-missing").
