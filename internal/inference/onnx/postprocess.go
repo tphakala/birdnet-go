@@ -19,7 +19,10 @@ func sigmoidSlice(logits []float32) []float32 {
 
 func softmax(logits []float32) []float32 {
 	if len(logits) == 0 {
-		return logits
+		// Return a fresh empty slice (never the input) so callers relying on the
+		// "newly allocated, never aliases logits" contract (activationFor) hold even
+		// for an unexpected empty output, whose backing tensor the caller destroys.
+		return []float32{}
 	}
 	result := make([]float32, len(logits))
 	maxVal := logits[0]

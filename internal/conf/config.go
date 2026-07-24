@@ -1740,7 +1740,7 @@ type Settings struct {
 
 	BirdNET   BirdNETConfig   `yaml:"birdnet" json:"birdnet"`     // BirdNET configuration
 	Perch     PerchConfig     `yaml:"perch" json:"perch"`         // Perch v2 model configuration
-	BirdNETV3 BirdNETV3Config `yaml:"birdnetv3" json:"birdNetV3"` // BirdNET v3.0 acoustic classifier configuration
+	BirdNETV3 BirdNETV3Config `yaml:"birdnetv3" json:"birdnetv3"` // BirdNET v3.0 acoustic classifier configuration
 	Bat       BatConfig       `yaml:"bat" json:"bat"`             // Bat detection configuration
 	BSG       BSGConfig       `yaml:"bsg" json:"bsg"`             // BSG regional bird model configuration
 	Models    ModelsConfig    `yaml:"models" json:"models"`       // Global model enablement and management
