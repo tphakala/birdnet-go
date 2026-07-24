@@ -123,6 +123,15 @@ func DetectEmbeddingOutput(modelPath string) (index, size int, err error) {
 	return ort.DetectEmbeddingOutput(modelPath)
 }
 
+// DetectPredictionsOutput returns the output-port index of a model's
+// species-predictions output: the output whose last dimension equals numClasses.
+// BirdNET v3.0 also exposes a 1280-dim embeddings output whose position varies by
+// export, so the OpenVINO path uses this to bind the classifier to the correct
+// port before inference. Returns an error when no output matches numClasses.
+func DetectPredictionsOutput(modelPath string, numClasses int) (index int, err error) {
+	return ort.DetectPredictionsOutput(modelPath, numClasses)
+}
+
 // ONNXCustomClassifierOptions configures the ONNX custom classifier.
 type ONNXCustomClassifierOptions struct {
 	Labels     []string // Provide labels directly (takes priority over LabelsPath)

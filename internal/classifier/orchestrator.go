@@ -1517,8 +1517,9 @@ func (o *Orchestrator) IsModelLoaded(registryID string) bool {
 // this map are recognized but not yet implemented; callers log a warning
 // and skip. Adding a new loader only requires one entry here.
 var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
-	RegistryIDPerchV2: (*Orchestrator).loadPerch,
-	RegistryIDBat:     (*Orchestrator).loadBat,
+	RegistryIDBirdNETV3: (*Orchestrator).loadBirdNETV3,
+	RegistryIDPerchV2:   (*Orchestrator).loadPerch,
+	RegistryIDBat:       (*Orchestrator).loadBat,
 }
 
 // secondaryModelBuilder constructs (but does not register) a secondary model
@@ -1534,6 +1535,15 @@ type secondaryModelBuilder func(o *Orchestrator, settings *conf.Settings, thread
 // secondary OpenVINO support is a one-line entry here, paired with the OV fields on
 // its loader config.
 var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
+	RegistryIDBirdNETV3: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		// Explicit nil-on-error return avoids the typed-nil interface trap (a
+		// nil *BirdNETV3 wrapped in a non-nil ModelInstance).
+		m, err := o.buildBirdNETV3(settings, threads)
+		if err != nil {
+			return nil, err
+		}
+		return m, nil
+	},
 	RegistryIDPerchV2: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Perch wrapped in a non-nil ModelInstance).

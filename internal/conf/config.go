@@ -1311,6 +1311,14 @@ type PerchConfig struct {
 	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
+// BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
+type BirdNETV3Config struct {
+	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET v3.0 ONNX model file
+	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET v3.0 label file
+	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
+	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+}
+
 // BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 type BatConfig struct {
 	EmbeddingModel      string                      `yaml:"embeddingmodel,omitempty" json:"embeddingModel,omitempty"`   // path to BirdNET v2.4 embeddings ONNX model
@@ -1730,11 +1738,12 @@ type Settings struct {
 		TimeAs24h bool   `yaml:"timeas24h" json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
 	} `yaml:"main" json:"main"`
 
-	BirdNET BirdNETConfig `yaml:"birdnet" json:"birdnet"` // BirdNET configuration
-	Perch   PerchConfig   `yaml:"perch" json:"perch"`     // Perch v2 model configuration
-	Bat     BatConfig     `yaml:"bat" json:"bat"`         // Bat detection configuration
-	BSG     BSGConfig     `yaml:"bsg" json:"bsg"`         // BSG regional bird model configuration
-	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement and management
+	BirdNET   BirdNETConfig   `yaml:"birdnet" json:"birdnet"`     // BirdNET configuration
+	Perch     PerchConfig     `yaml:"perch" json:"perch"`         // Perch v2 model configuration
+	BirdNETV3 BirdNETV3Config `yaml:"birdnetv3" json:"birdNetV3"` // BirdNET v3.0 acoustic classifier configuration
+	Bat       BatConfig       `yaml:"bat" json:"bat"`             // Bat detection configuration
+	BSG       BSGConfig       `yaml:"bsg" json:"bsg"`             // BSG regional bird model configuration
+	Models    ModelsConfig    `yaml:"models" json:"models"`       // Global model enablement and management
 
 	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 
