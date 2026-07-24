@@ -8,6 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestValidateSecuritySettings_OIDC covers the OIDC rules that block startup. An
+// unusable issuer URL and a missing redirect source both stay fatal, because
+// enabling OIDC is the setting that can lock an operator out: the provider counts
+// towards IsAuthenticationEnabled as soon as it has credentials, so accepting either
+// shape would make authentication required while no sign-in can complete. The
+// settings API validates without normalizing, so this is what answers such a save
+// with an error rather than a 200 and a locked door.
 func TestValidateSecuritySettings_OIDC(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +91,16 @@ func TestValidateSecuritySettings_OIDC(t *testing.T) {
 			errMsg:  "duplicate",
 		},
 		{
+			name: "one enabled and one disabled OIDC provider - should pass",
+			modify: func(s *Security) {
+				s.OAuthProviders = []OAuthProviderConfig{
+					{Provider: "oidc", Enabled: true, ClientID: "id1", ClientSecret: "secret1", IssuerURL: "https://idp1.example.com"},
+					{Provider: "oidc", Enabled: false, ClientID: "id2", ClientSecret: "secret2", IssuerURL: "https://idp2.example.com"},
+				}
+			},
+			wantErr: false,
+		},
+		{
 			name: "OIDC with HTTP issuerUrl - should pass with warning",
 			modify: func(s *Security) {
 				s.OAuthProviders = []OAuthProviderConfig{
@@ -112,7 +129,7 @@ func TestValidateSecuritySettings_OIDC(t *testing.T) {
 				}
 			},
 			wantErr: true,
-			errMsg:  "redirectUri",
+			errMsg:  "redirect URL",
 		},
 		{
 			name: "OIDC enabled with explicit redirectUri but no host - should pass",

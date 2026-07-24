@@ -21,9 +21,27 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
+
+// fallbackWarningComponent labels a validation warning that was recorded without
+// the "component: message" prefix conf.recordValidationWarning produces.
+const fallbackWarningComponent = "config"
+
+// splitValidationWarning separates a validation warning into its component and its
+// message. Every producer goes through conf.recordValidationWarning, which always
+// prefixes, so the fallback is defence rather than a live path: an unprefixed entry
+// used to be discarded here, which meant it reached neither telemetry nor the user,
+// and a future producer that forgets the prefix should be reported whole rather than
+// silently dropped again.
+func splitValidationWarning(warning string) (component, message string) {
+	if component, message, found := strings.Cut(warning, ": "); found {
+		return component, message
+	}
+	return fallbackWarningComponent, warning
+}
 
 // buildTime is the time when the binary was built.
 var buildDate string
@@ -195,15 +213,19 @@ func mainWithExitCode() int {
 		mainLog.Debug("Runtime profiling enabled (mutex and block profiling active)")
 	}
 
-	// Process configuration validation warnings that occurred before Sentry initialization
+	// Process configuration validation warnings that occurred before Sentry initialization.
+	//
+	// These are settings that were switched on but never finished, which the config
+	// loader disabled or defaulted instead of refusing to start. Sentry only sees
+	// them when telemetry is enabled, and the field is cleared below, so without a
+	// notification the user's only clue that a feature stopped working would be a
+	// line in the log they will never read. Both core systems are initialized by
+	// this point; NotifyWarning is a no-op if they are not.
 	if len(settings.ValidationWarnings) > 0 {
 		for _, warning := range settings.ValidationWarnings {
-			parts := strings.SplitN(warning, ": ", 2)
-			if len(parts) == 2 {
-				component := parts[0]
-				message := parts[1]
-				telemetry.CaptureMessage(message, sentry.LevelWarning, component)
-			}
+			component, message := splitValidationWarning(warning)
+			telemetry.CaptureMessage(message, sentry.LevelWarning, component)
+			notification.NotifyWarning(component, "Configuration Problem", message)
 		}
 		// Clear the warnings as they've been processed
 		settings.ValidationWarnings = nil

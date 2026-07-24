@@ -15,6 +15,22 @@ import (
 	"github.com/tphakala/birdnet-go/internal/templatefuncs"
 )
 
+// Push notification provider types.
+const (
+	pushProviderScript   = "script"
+	pushProviderShoutrrr = "shoutrrr"
+	pushProviderWebhook  = "webhook"
+)
+
+// Webhook endpoint authentication types. An empty type is equivalent to
+// webhookAuthNone.
+const (
+	webhookAuthNone   = "none"
+	webhookAuthBearer = "bearer"
+	webhookAuthBasic  = "basic"
+	webhookAuthCustom = "custom"
+)
+
 // ValidateBirdNETSettings performs BirdNET validation without side effects.
 // Returns normalized settings and any errors/warnings.
 // This pure function enables testing without log output or settings mutation.
@@ -82,23 +98,29 @@ func ValidateBirdweatherSettings(settings *BirdweatherSettings) ValidationResult
 	if settings == nil {
 		return ValidationResult{Valid: false, Errors: []string{"Birdweather settings is nil"}}
 	}
-	result := ValidationResult{Valid: true, Warnings: []string{}}
+	result := ValidationResult{Valid: true}
 	normalized := *settings
 
 	if settings.Enabled {
-		// Check if ID is provided when enabled
-		if settings.ID == "" {
+		// An unusable station ID is an error here and only an error. It used to be
+		// reported as an error AND as a "will be disabled" warning that cleared
+		// Enabled on the normalized copy, which meant one condition carried two
+		// contradictory severities: the config was rejected, and the rejection
+		// claimed the integration had been switched off instead.
+		//
+		// The graceful half now lives in normalizeIncompleteFeatures, which runs
+		// before this validator on the load path and clears Enabled, so an aged
+		// config file no longer blocks startup. Keeping the error is what stops the
+		// settings API from accepting a bad ID, silently switching BirdWeather off
+		// and saving that back over the user's own toggle.
+		switch {
+		case settings.ID == "":
 			result.Valid = false
 			result.Errors = append(result.Errors, "Birdweather ID is required when enabled")
-			// Suggest disabling
-			normalized.Enabled = false
-			result.Warnings = append(result.Warnings, "Birdweather will be disabled due to missing ID")
-		} else if !birdweatherIDPattern.MatchString(settings.ID) {
+		case !birdweatherIDPattern.MatchString(settings.ID):
 			// Validate Birdweather ID format using precompiled regex
 			result.Valid = false
 			result.Errors = append(result.Errors, "Invalid Birdweather ID format: must be 24 alphanumeric characters")
-			normalized.Enabled = false
-			result.Warnings = append(result.Warnings, "Birdweather will be disabled due to invalid ID format")
 		}
 
 		checkRange(&result, settings.Threshold, 0, 1, "birdweather threshold must be between 0 and 1")
@@ -462,11 +484,6 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 	}
 	*settings = *normalized
 
-	// Handle warnings (side effect: logging)
-	for _, warning := range result.Warnings {
-		GetLogger().Warn("Birdweather validation warning", logger.String("message", warning))
-	}
-
 	// Return errors if validation failed
 	if !result.Valid {
 		// Join errors for backward compatibility
@@ -501,15 +518,15 @@ func validateNotificationSettings(n *NotificationConfig) error {
 		p := &n.Push.Providers[i]
 		ptype := strings.ToLower(p.Type)
 		switch ptype {
-		case "script":
-			if p.Enabled && strings.TrimSpace(p.Command) == "" {
+		case pushProviderScript:
+			if p.Enabled && pushProviderProblem(p) != "" {
 				return errors.Newf("script provider requires command when enabled").
 					Category(errors.CategoryValidation).
 					Context("validation_type", "notification-push-script-command").
 					Build()
 			}
-		case "shoutrrr":
-			if p.Enabled && len(p.URLs) == 0 {
+		case pushProviderShoutrrr:
+			if p.Enabled && pushProviderProblem(p) != "" {
 				return errors.Newf("shoutrrr provider requires at least one URL when enabled").
 					Category(errors.CategoryValidation).
 					Context("validation_type", "notification-push-shoutrrr-urls").
@@ -517,11 +534,17 @@ func validateNotificationSettings(n *NotificationConfig) error {
 			}
 			// Normalize ntfy URLs: ntfy://topic -> ntfy://ntfy.sh/topic
 			normalizeNtfyURLs(p)
-		case "webhook":
+		case pushProviderWebhook:
 			if err := validateWebhookProvider(p); err != nil {
 				return err
 			}
 		default:
+			// Only reject an unrecognised type on a provider that is switched on.
+			// A disabled leftover entry (an older type name, or a half-created
+			// provider) sends nothing, so it is not a reason to refuse to start.
+			if !p.Enabled {
+				continue
+			}
 			return errors.Newf("unknown push provider type: %s", p.Type).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-provider-type").
@@ -572,55 +595,19 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 	authType := strings.ToLower(auth.Type)
 
 	// Empty auth type defaults to "none" - this is valid
-	if authType == "" || authType == "none" { //nolint:goconst // auth-type value, not the RetentionPolicyNone constant
+	if authType == "" || authType == webhookAuthNone {
 		return nil
 	}
 
 	switch authType {
-	case "bearer":
-		// At least one of token or token_file must be provided
-		if strings.TrimSpace(auth.Token) == "" && strings.TrimSpace(auth.TokenFile) == "" {
-			return errors.Newf("webhook provider '%s' endpoint %d: bearer auth requires token or token_file", providerName, endpointIndex).
+	case webhookAuthBearer, webhookAuthBasic, webhookAuthCustom:
+		// Which credential each auth type needs is defined once, in
+		// missingWebhookAuthSecret, so this rule and the normalization pass that
+		// disables an unusable provider cannot drift apart.
+		if reason := missingWebhookAuthSecret(auth); reason != "" {
+			return errors.Newf("webhook provider '%s' endpoint %d: %s auth requires a credential, %s", providerName, endpointIndex, authType, reason).
 				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-auth-bearer").
-				Context("provider_name", providerName).
-				Context("endpoint_index", endpointIndex).
-				Build()
-		}
-	case "basic":
-		// Check user/user_file
-		if strings.TrimSpace(auth.User) == "" && strings.TrimSpace(auth.UserFile) == "" {
-			return errors.Newf("webhook provider '%s' endpoint %d: basic auth requires user or user_file", providerName, endpointIndex).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-auth-basic").
-				Context("provider_name", providerName).
-				Context("endpoint_index", endpointIndex).
-				Build()
-		}
-		// Check pass/pass_file
-		if strings.TrimSpace(auth.Pass) == "" && strings.TrimSpace(auth.PassFile) == "" {
-			return errors.Newf("webhook provider '%s' endpoint %d: basic auth requires pass or pass_file", providerName, endpointIndex).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-auth-basic").
-				Context("provider_name", providerName).
-				Context("endpoint_index", endpointIndex).
-				Build()
-		}
-	case "custom":
-		// Header name is always required (no file variant)
-		if strings.TrimSpace(auth.Header) == "" {
-			return errors.Newf("webhook provider '%s' endpoint %d: custom auth requires header", providerName, endpointIndex).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-auth-custom").
-				Context("provider_name", providerName).
-				Context("endpoint_index", endpointIndex).
-				Build()
-		}
-		// Check value/value_file
-		if strings.TrimSpace(auth.Value) == "" && strings.TrimSpace(auth.ValueFile) == "" {
-			return errors.Newf("webhook provider '%s' endpoint %d: custom auth requires value or value_file", providerName, endpointIndex).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-auth-custom").
+				Context("validation_type", "notification-push-webhook-auth-"+authType).
 				Context("provider_name", providerName).
 				Context("endpoint_index", endpointIndex).
 				Build()

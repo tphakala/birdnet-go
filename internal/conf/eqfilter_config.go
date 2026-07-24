@@ -5,7 +5,7 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 	"LowPass": {
 		Parameters: []EqFilterParameter{
 			{Name: "Frequency", Label: "Cutoff Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 15000, Tooltip: "Cutoff frequency above which the signal is attenuated"},
-			{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: 0.707, Tooltip: "Quality factor that determines the sharpness of the filter's response"},
+			{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: DefaultEQQFactor, Tooltip: "Quality factor that determines the sharpness of the filter's response"},
 			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 1, Max: 4, Default: 1, Tooltip: "Number of passes to apply the filter — 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
 		},
 		Tooltip: "Low-pass filter attenuates frequencies above the cutoff frequency.",
@@ -13,7 +13,7 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 	"HighPass": {
 		Parameters: []EqFilterParameter{
 			{Name: "Frequency", Label: "Cutoff Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 100, Tooltip: "Cutoff frequency below which the signal is attenuated"},
-			{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: 0.707, Tooltip: "Quality factor that determines the sharpness of the filter's response"},
+			{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: DefaultEQQFactor, Tooltip: "Quality factor that determines the sharpness of the filter's response"},
 			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 1, Max: 4, Default: 1, Tooltip: "Number of passes to apply the filter — 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
 		},
 		Tooltip: "High-pass filter attenuates frequencies below the cutoff frequency.",
@@ -37,7 +37,7 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 		"LowShelf": {
 			Parameters: []EqFilterParameter{
 				{Name: "Frequency", Label: "Transition Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 0, Tooltip: "Transition frequency of the shelf filter"},
-				{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: 0.707, Tooltip: "Quality factor that determines the transition slope"},
+				{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: DefaultEQQFactor, Tooltip: "Quality factor that determines the transition slope"},
 				{Name: "Gain", Label: "Gain", Type: "number", Unit: "dB", Min: -30, Max: 30, Default: 0, Tooltip: "Amount of boost or cut applied to frequencies below the transition frequency"},
 			},
 			Tooltip: "Low-shelf filter boosts or cuts frequencies below the transition frequency.",
@@ -45,7 +45,7 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 		"HighShelf": {
 			Parameters: []EqFilterParameter{
 				{Name: "Frequency", Label: "Transition Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 0, Tooltip: "Transition frequency of the shelf filter"},
-				{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: 0.707, Tooltip: "Quality factor that determines the transition slope"},
+				{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: DefaultEQQFactor, Tooltip: "Quality factor that determines the transition slope"},
 				{Name: "Gain", Label: "Gain", Type: "number", Unit: "dB", Min: -30, Max: 30, Default: 0, Tooltip: "Amount of boost or cut applied to frequencies above the transition frequency"},
 			},
 			Tooltip: "High-shelf filter boosts or cuts frequencies above the transition frequency.",
