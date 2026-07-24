@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -74,13 +75,14 @@ func TestParseBirdNETV3Labels_LargeFile(t *testing.T) {
 
 	const n = 11560
 	var sb strings.Builder
-	for range n {
-		sb.WriteString("Genus")
-		sb.WriteByte('_')
-		sb.WriteString("Common")
-		sb.WriteByte('\n')
+	for i := range n {
+		fmt.Fprintf(&sb, "Genus%d_Common %d\n", i, i)
 	}
 	got, err := ParseBirdNETV3Labels([]byte(sb.String()))
 	require.NoError(t, err)
-	assert.Len(t, got, n)
+	require.Len(t, got, n)
+	// Order is preserved: spot-check first, middle, and last labels.
+	assert.Equal(t, "Genus0_Common 0", got[0])
+	assert.Equal(t, "Genus5780_Common 5780", got[5780])
+	assert.Equal(t, "Genus11559_Common 11559", got[n-1])
 }

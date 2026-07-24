@@ -14,6 +14,13 @@ import (
 // start of a Go source file.
 const utf8BOM = "\uFEFF"
 
+// Label scanner buffer sizes. Labels are short ("SciName_CommonName"), but the
+// buffer is grown beyond bufio's default 64 KiB line cap defensively.
+const (
+	labelScannerInitialBufBytes = 64 * 1024   // initial scan buffer (64 KiB)
+	labelScannerMaxLineBytes    = 1024 * 1024 // max label line length (1 MiB)
+)
+
 // ParseBirdNETV3Labels parses a BirdNET v3.0 label file.
 //
 // Format: one label per line in "Scientific name_Common name" form (the same
@@ -24,9 +31,7 @@ const utf8BOM = "\uFEFF"
 // model load rather than silently shifting labels off by one.
 func ParseBirdNETV3Labels(data []byte) ([]string, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
-	// Labels can be long (scientific + common name); grow the buffer beyond the
-	// default 64 KiB line cap defensively even though v3.0 labels are short.
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, labelScannerInitialBufBytes), labelScannerMaxLineBytes)
 
 	var labels []string
 	first := true

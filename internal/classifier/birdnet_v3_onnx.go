@@ -78,6 +78,20 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 			Build()
 	}
 
+	// Initialize the ONNX Runtime up front, before attempting OpenVINO. The
+	// OpenVINO path's predictions-port detection (DetectPredictionsOutput) reads the
+	// model metadata through ONNX Runtime, and the ORT fallback classifier needs it
+	// too; InitONNXRuntime is idempotent. Doing this here (mirroring NewBat) ensures
+	// OpenVINO is not silently skipped when v3.0 is the first ONNX model loaded: an
+	// uninitialized runtime would make DetectPredictionsOutput fail and force the ORT
+	// fallback even when the user selected the OpenVINO backend.
+	if err := inference.InitONNXRuntime(cfg.ONNXRuntimePath); err != nil {
+		return nil, errors.New(err).
+			Category(errors.CategoryModelInit).
+			Context("onnx_runtime_path", cfg.ONNXRuntimePath).
+			Build()
+	}
+
 	// Prefer the OpenVINO backend when the gate allows it, falling back to ORT on
 	// any failure. OpenVINO must never make BirdNET v3.0 fail to load, so
 	// tryBirdNETV3OpenVINO logs and swallows OV errors and returns ok=false. device
@@ -90,15 +104,7 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	backend := BackendOpenVINO
 	precision := string(QuantizationFP16)
 	if !ok {
-		// Initialize ONNX Runtime
-		if err := inference.InitONNXRuntime(cfg.ONNXRuntimePath); err != nil {
-			return nil, errors.New(err).
-				Category(errors.CategoryModelInit).
-				Context("onnx_runtime_path", cfg.ONNXRuntimePath).
-				Build()
-		}
-
-		// Create ONNX classifier
+		// Create the ONNX Runtime classifier (the runtime was initialized above).
 		var cerr error
 		classifier, cerr = inference.NewONNXClassifier(cfg.ModelPath, inference.ONNXClassifierOptions{
 			Labels:  labels,

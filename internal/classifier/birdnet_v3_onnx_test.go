@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // newTestBirdNETV3 builds a BirdNETV3 instance around a fake classifier, with the
@@ -137,4 +138,54 @@ func TestBirdNETV3_CatalogEntry(t *testing.T) {
 	assert.Equal(t, 1, roles[RoleLabels], "one labels file")
 	assert.True(t, HasGeomodelFiles(&entry), "v3.0 pairs with the v3 geomodel range filter")
 	assert.True(t, HasTaxonomyFiles(&entry), "v3.0 ships the shared taxonomy companion")
+}
+
+// TestBirdNETV3Predict_InferenceError verifies an inference failure surfaces as an
+// error and is recorded exactly once (and not as a success).
+func TestBirdNETV3Predict_InferenceError(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	boom := errors.Newf("backend inference failed").Category(errors.CategoryAudio).Build()
+	b := newTestBirdNETV3(&predTelemetryClassifier{err: boom}, []string{"Aaa aaa_Alpha", "Bbb bbb_Beta"})
+
+	_, err := b.Predict(t.Context(), [][]float32{{0.1, 0.2}})
+	require.Error(t, err)
+	assert.InDelta(t, 1.0, predictionCount(t, m, RegistryIDBirdNETV3, "error"), 0,
+		"a failed inference must be recorded exactly once as an error")
+	assert.InDelta(t, 0.0, predictionCount(t, m, RegistryIDBirdNETV3, "success"), 0,
+		"a failed inference must not record a spurious success")
+}
+
+// TestBirdNETV3Predict_LabelMismatch verifies a label/score count mismatch (a
+// failure after inference begins) records exactly one error.
+func TestBirdNETV3Predict_LabelMismatch(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	// Two labels but only one score: pairLabelsAndConfidence returns an error.
+	b := newTestBirdNETV3(&predTelemetryClassifier{logits: []float32{0.5}}, []string{"Aaa aaa_Alpha", "Bbb bbb_Beta"})
+
+	_, err := b.Predict(t.Context(), [][]float32{{0.1, 0.2}})
+	require.Error(t, err)
+	assert.InDelta(t, 1.0, predictionCount(t, m, RegistryIDBirdNETV3, "error"), 0,
+		"a label/score mismatch must be recorded exactly once as an error")
+}
+
+// TestBirdNETV3_Close verifies Close releases the classifier without error and that
+// a subsequent Predict fails via the nil-classifier guard.
+func TestBirdNETV3_Close(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	SetMetrics(newTestMetrics(t))
+
+	b := newTestBirdNETV3(&predTelemetryClassifier{logits: []float32{0.5}}, []string{"Aaa aaa_Alpha"})
+	require.NoError(t, b.Close())
+
+	_, err := b.Predict(t.Context(), [][]float32{{0.1}})
+	require.Error(t, err, "Predict after Close must fail via the nil-classifier guard")
 }

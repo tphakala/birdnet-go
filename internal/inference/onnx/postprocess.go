@@ -55,7 +55,8 @@ func activationFor(mt ModelType, logits []float32) []float32 {
 	case PerchV2:
 		return softmax(logits)
 	}
-	// Unknown types fall back to sigmoid, matching the historical default.
+	// Defensive fallback for an unhandled model type. ModelType is a closed
+	// three-value enum, all handled above, so this is unreachable in practice.
 	return sigmoidSlice(logits)
 }
 

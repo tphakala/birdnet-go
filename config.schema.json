@@ -499,6 +499,29 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "BirdNETV3Config": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to BirdNET v3.0 ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to BirdNET v3.0 label file"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for detections"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for species label translation"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier."
+    },
     "BirdweatherSettings": {
       "properties": {
         "enabled": {
@@ -2131,6 +2154,10 @@
         "perch": {
           "$ref": "#/$defs/PerchConfig",
           "description": "Perch v2 model configuration"
+        },
+        "birdnetv3": {
+          "$ref": "#/$defs/BirdNETV3Config",
+          "description": "BirdNET v3.0 acoustic classifier configuration"
         },
         "bat": {
           "$ref": "#/$defs/BatConfig",

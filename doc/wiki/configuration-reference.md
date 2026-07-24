@@ -85,6 +85,17 @@ PerchConfig holds configuration for the Google Perch v2 model.
 | `perch.threshold` | number | confidence threshold for detections |
 | `perch.locale` | string | locale for species label translation |
 
+## birdnetv3
+
+BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `birdnetv3.modelpath` | string | path to BirdNET v3.0 ONNX model file |
+| `birdnetv3.labelpath` | string | path to BirdNET v3.0 label file |
+| `birdnetv3.threshold` | number | confidence threshold for detections |
+| `birdnetv3.locale` | string | locale for species label translation |
+
 ## bat
 
 BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.

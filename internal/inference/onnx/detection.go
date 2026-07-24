@@ -95,6 +95,8 @@ func buildModelConfig(mt ModelType, inputShape []int64, outputShapes [][]int64) 
 		// GPU-native export, the reverse for the stock export). Pick the embeddings
 		// port by its embeddingSizeV30 dimension and treat the other of the two
 		// outputs as predictions, so either ordering loads correctly.
+		// detectModelTypeFromShapes only classifies a model as BirdNETv30 when it has
+		// exactly two outputs, so indexing outputShapes[0] and [1] here is safe.
 		cfg.EmbeddingSize = embeddingSizeV30
 		if lastDim(outputShapes[0]) == embeddingSizeV30 {
 			cfg.EmbeddingIndex, cfg.LogitsIndex = 0, 1

@@ -66,7 +66,7 @@ func TestBirdNETV3_Functional(t *testing.T) {
 
 	m, err := NewBirdNETV3(&cfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
+	t.Cleanup(func() { assert.NoError(t, m.Close()) })
 
 	require.Equal(t, len(labels), m.NumSpecies(), "NumSpecies must equal the label count")
 	require.Equal(t, 32000, m.Spec().SampleRate)

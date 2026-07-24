@@ -37,6 +37,17 @@ func TestActivationFor_BirdNETv24Sigmoid(t *testing.T) {
 	assert.InDelta(t, 0.5, got[0], 1e-6, "sigmoid(0) must be 0.5")
 }
 
+// TestActivationFor_UnknownTypeFallsBackToSigmoid pins the defensive default: an
+// out-of-range ModelType returns a sigmoid (never nil), so a future unhandled type
+// degrades to a bounded score rather than a nil-scores panic downstream.
+func TestActivationFor_UnknownTypeFallsBackToSigmoid(t *testing.T) {
+	t.Parallel()
+
+	got := activationFor(ModelType(99), []float32{0})
+	require.Len(t, got, 1)
+	assert.InDelta(t, 0.5, got[0], 1e-6, "unknown type must fall back to sigmoid(0)=0.5")
+}
+
 // TestActivationFor_PerchV2Softmax verifies Perch still gets a softmax (scores
 // sum to 1).
 func TestActivationFor_PerchV2Softmax(t *testing.T) {
