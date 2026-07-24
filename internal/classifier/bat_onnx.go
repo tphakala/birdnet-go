@@ -56,13 +56,6 @@ type BatModelConfig struct {
 	OpenVINODevice string // BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu")
 }
 
-// batEmbeddingOutputIndex is the output port of the bat embedding model
-// (birdnet-v24-embeddings.onnx) that carries the embedding vector; port 0 is the
-// species logits, which the bat pipeline discards. The selected port's element count
-// is validated against the bat classifier's input dimension in tryBatOpenVINO, so a
-// wrong index degrades to ORT rather than feeding a malformed embedding downstream.
-const batEmbeddingOutputIndex = 1
-
 // NewBat creates a new bat detection model instance.
 func NewBat(cfg *BatModelConfig) (*Bat, error) {
 	log := GetLogger()
@@ -117,7 +110,7 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		if !isExtractor {
 			embClassifier.Close()
 			batCC.Close()
-			return nil, errors.Newf("embedding model does not support embedding extraction; ensure it has 2 outputs").
+			return nil, errors.Newf("embedding model does not support embedding extraction").
 				Category(errors.CategoryModelInit).
 				Context("embedding_model", cfg.EmbeddingModelPath).
 				Build()
@@ -164,13 +157,34 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 // f16. expectedDim is the bat classifier's input dimension, used to reject a wrong
 // output port before any inference.
 func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (inference.EmbeddingExtractor, string, bool) {
-	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDBat, cfg.OpenVINOPath, batEmbeddingOutputIndex)
+	log := GetLogger()
+
+	// openVINOPlanFor gates on the build tag, backend preference, and device
+	// availability without needing the output port, so run it first; only read the
+	// model metadata to resolve the embedding port once OpenVINO is actually in play.
+	// This avoids a wasted metadata read (and a misleading warning) on the common
+	// non-OpenVINO build. The output index passed here is a placeholder, overwritten
+	// below once detected.
+	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDBat, cfg.OpenVINOPath, 0)
 	if !ok {
 		logOpenVINODeclined(RegistryIDBat, cfg.Backend, reason)
 		return nil, "", false
 	}
 
-	log := GetLogger()
+	// Resolve which output port carries the [1024] embedding: index 1 for the 2-output
+	// backbone (logits@0 + embedding@1), index 0 for the head-pruned, embedding-only
+	// model. The OpenVINO extractor binds to a fixed port at compile time. On any
+	// detection failure, decline OpenVINO and fall back to ORT, which derives the
+	// embedding port internally. ORT is initialized by NewBat before this runs.
+	embIndex, _, err := inference.DetectEmbeddingOutput(cfg.EmbeddingModelPath)
+	if err != nil {
+		log.Warn("Bat OpenVINO embedding-output detection failed; using ONNX Runtime",
+			logger.String("embedding_model", cfg.EmbeddingModelPath),
+			logger.Error(err))
+		return nil, "", false
+	}
+	plan.outputIndex = embIndex
+
 	// InitOpenVINO is idempotent: the auto/GPU plan above may already have loaded the
 	// core to enumerate devices, but the explicit-CPU plan path does not, so init here
 	// to cover it. A load failure means no usable OpenVINO; fall back to ORT.

@@ -113,6 +113,16 @@ func (c *onnxClassifier) Close() {
 	}
 }
 
+// DetectEmbeddingOutput returns the output-port index and size of a model's BirdNET
+// v2.4 embedding output ([.,1024]): index 1 for the 2-output backbone (logits@0 +
+// embedding@1), index 0 for the head-pruned, embedding-only model. The bat OpenVINO
+// path uses it to bind the embedding extractor to the correct port before inference.
+// Returns an error when the model has no 1024-dim output. The ONNX Runtime must be
+// initialized via InitONNXRuntime before calling.
+func DetectEmbeddingOutput(modelPath string) (index, size int, err error) {
+	return ort.DetectEmbeddingOutput(modelPath)
+}
+
 // ONNXCustomClassifierOptions configures the ONNX custom classifier.
 type ONNXCustomClassifierOptions struct {
 	Labels     []string // Provide labels directly (takes priority over LabelsPath)

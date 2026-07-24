@@ -86,6 +86,9 @@ func TestOpenVINOPlan_ExplicitCPU(t *testing.T) {
 // "f32 everywhere" deviation at the plan level, where compilation actually reads it.
 func TestOpenVINOPlan_Bat_ForcesF32(t *testing.T) {
 	t.Parallel()
+	// Output index 1 is the 2-output backbone's embedding port (the head-pruned model's
+	// port is resolved at runtime from model metadata, not from a constant).
+	const batEmbeddingOutputIndex = 1
 	plan, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceCPU, RegistryIDBat, "", batEmbeddingOutputIndex)
 	expected := cpuspec.HasNativeF16() || runtime.GOARCH == archAMD64
 	assert.Equal(t, expected, ok, "explicit CPU is allowed on ARM A76 or amd64, not on ARM A72")

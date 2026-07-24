@@ -183,7 +183,15 @@ func resolveModelType(cfg *classifierConfig, inputShapes [][]int64, numOutputs i
 
 // validateLabelCount checks that the label count matches the model's logits output dimension.
 func validateLabelCount(modelCfg *ModelConfig, outputInfos []ort.InputOutputInfo, labelCount int) error {
-	if modelCfg.LogitsIndex < 0 || modelCfg.LogitsIndex >= len(outputInfos) {
+	// An embedding-only model (LogitsIndex < 0) produces no logits, so it cannot serve
+	// the provided species labels. Reject it here so a model misconfigured as a
+	// label-validated classifier fails at construction with a clear message rather than
+	// only later at prediction time. Embedding-only consumers (the bat pipeline) load
+	// the model with WithSkipLabelValidation, which bypasses this check entirely.
+	if modelCfg.LogitsIndex < 0 {
+		return fmt.Errorf("birdnet: model produces no logits (embedding-only); it cannot be used as a label-validated classifier; load it with WithSkipLabelValidation for embedding extraction")
+	}
+	if modelCfg.LogitsIndex >= len(outputInfos) {
 		return fmt.Errorf("birdnet: LogitsIndex %d is out of range for model with %d outputs", modelCfg.LogitsIndex, len(outputInfos))
 	}
 	logitsDims := outputInfos[modelCfg.LogitsIndex].Dimensions
@@ -283,20 +291,24 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 		return nil, nil, fmt.Errorf("birdnet: inference failed: %w", err)
 	}
 
-	logitsTensor, ok := outputs[c.config.LogitsIndex].(*ort.Tensor[float32])
-	if !ok {
-		return nil, nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
+	// Embedding-only models (LogitsIndex < 0, e.g. the head-pruned bat backbone)
+	// produce no logits; skip logits extraction and return nil logits.
+	if c.config.LogitsIndex >= 0 {
+		logitsTensor, ok := outputs[c.config.LogitsIndex].(*ort.Tensor[float32])
+		if !ok {
+			return nil, nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
+		}
+		allLogits := logitsTensor.GetData()
+		logitsSize := c.config.LogitsSize
+		if logitsSize <= 0 {
+			return nil, nil, fmt.Errorf("birdnet: invalid logits size %d", logitsSize)
+		}
+		if logitsSize > len(allLogits) {
+			return nil, nil, fmt.Errorf("birdnet: logits tensor too small: need %d, have %d", logitsSize, len(allLogits))
+		}
+		logits = make([]float32, logitsSize)
+		copy(logits, allLogits[:logitsSize])
 	}
-	allLogits := logitsTensor.GetData()
-	logitsSize := c.config.LogitsSize
-	if logitsSize <= 0 {
-		return nil, nil, fmt.Errorf("birdnet: invalid logits size %d", logitsSize)
-	}
-	if logitsSize > len(allLogits) {
-		return nil, nil, fmt.Errorf("birdnet: logits tensor too small: need %d, have %d", logitsSize, len(allLogits))
-	}
-	logits = make([]float32, logitsSize)
-	copy(logits, allLogits[:logitsSize])
 
 	if c.config.EmbeddingIndex >= 0 {
 		embTensor, ok := outputs[c.config.EmbeddingIndex].(*ort.Tensor[float32])
@@ -459,13 +471,17 @@ func (c *Classifier) outputShape(outputIdx, batchSize int) ([]int64, error) {
 	batch := int64(batchSize)
 	switch c.config.Type {
 	case BirdNETv24:
+		// Index-aware so it covers the 2-output model (logits@0 + embedding@1), the
+		// head-pruned embedding-only model (embedding@0, no logits), and the plain
+		// 1-output classifier (logits@0, no embedding). EmbeddingIndex/LogitsIndex are
+		// -1 when absent, which never equals a real outputIdx (>= 0).
 		switch outputIdx {
-		case 0:
-			return []int64{batch, int64(c.config.LogitsSize)}, nil
-		case 1:
+		case c.config.EmbeddingIndex:
 			if c.config.EmbeddingSize > 0 {
 				return []int64{batch, int64(c.config.EmbeddingSize)}, nil
 			}
+		case c.config.LogitsIndex:
+			return []int64{batch, int64(c.config.LogitsSize)}, nil
 		}
 	case BirdNETv30:
 		switch outputIdx {
@@ -491,6 +507,11 @@ func (c *Classifier) outputShape(outputIdx, batchSize int) ([]int64, error) {
 
 // processOutput extracts predictions and embeddings from output tensors for a given batch index.
 func (c *Classifier) processOutput(outputs []ort.Value, batchIdx int) (*Result, error) {
+	// An embedding-only model produces no logits and therefore no species
+	// predictions; callers that need embeddings must use PredictRawWithEmbeddings.
+	if c.config.LogitsIndex < 0 {
+		return nil, fmt.Errorf("birdnet: model has no logits output; use PredictRawWithEmbeddings for embedding extraction")
+	}
 	logitsTensor, ok := outputs[c.config.LogitsIndex].(*ort.Tensor[float32])
 	if !ok {
 		return nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
