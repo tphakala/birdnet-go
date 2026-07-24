@@ -826,6 +826,8 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// low-probability birds in consumers that do not re-sort (the CSV export and
 	// the range-filter test preview). A stable sort keeps the deterministic append
 	// order of the equal-scored 1.0 species (secondary models are walked in
+	addUserOverrideSpeciesScores(primary, &scores, settings, geoLabels)
+
 	// sorted-by-ID order above), so the output does not shuffle run to run.
 	sort.Stable(ByScore(scores))
 
