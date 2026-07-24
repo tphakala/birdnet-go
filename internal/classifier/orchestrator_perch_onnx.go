@@ -1,3 +1,4 @@
+//nolint:dupl // Parallel to orchestrator_birdnet_v3_onnx.go by design: each single-file secondary ONNX classifier (Perch v2, BirdNET v3.0) has its own loader file that shares this build/load/warm-up skeleton but differs in its settings fields, registry ID, config type, and constructor.
 package classifier
 
 import (

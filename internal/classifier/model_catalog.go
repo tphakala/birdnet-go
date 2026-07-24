@@ -71,26 +71,35 @@ type CatalogFile struct {
 // information to drive the download process.
 var EmbeddedCatalog = []CatalogEntry{
 	// Wildlife models (multi-taxa classifiers)
+	// BirdNET v3.0 acoustic classifier (developer preview). Global GPU-native model
+	// (EfficientNetV2-S backbone, 11,560 species, 32kHz/5s), paired with the v3.0
+	// geomodel range filter. Kept Hidden until GA: the HuggingFace repo is private
+	// during preview and the file checksums/sizes are finalized in a follow-up (as
+	// was done for Perch v2), so the gallery Install path is not wired yet. The
+	// backend loader is fully functional, so v3.0 can be enabled via config
+	// (models.enabled + birdnetv3 model/label paths) for evaluation. The empty
+	// SHA256 on this hidden entry is intentional: it avoids a false checksum
+	// mismatch and, being Hidden, the entry is never installed from the gallery.
 	{
 		ID:              "birdnet-v3.0",
 		Name:            "BirdNET v3.0",
-		Description:     "Global wildlife classifier using BirdNET v3.0 architecture",
+		Description:     "Global wildlife classifier using the BirdNET v3.0 architecture (11,560 species, birds and other fauna; scientific and common names)",
 		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
-		License:         "TBD",
+		License:         "CC-BY-SA-4.0",
 		CommercialUse:   false,
 		Category:        CategoryWildlife,
 		Region:          "",
-		SpeciesCount:    0, // determined at runtime from label file
+		SpeciesCount:    11560,
 		Version:         "3.0",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
 		Hidden:          true,
 		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
-		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
+		HuggingFaceRepo: "tphakala/BirdNET-v3.0-Models",
 		Files: slices.Concat([]CatalogFile{
-			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
+			{RemotePath: "full/birdnet_v3.0_fp32.onnx", LocalName: "birdnet_v3.0_fp32.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
+			{RemotePath: "full/birdnet_v3.0_labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
 		}, geomodelFiles(), taxonomyFiles()),
 	},
 	{

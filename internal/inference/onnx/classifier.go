@@ -484,10 +484,12 @@ func (c *Classifier) outputShape(outputIdx, batchSize int) ([]int64, error) {
 			return []int64{batch, int64(c.config.LogitsSize)}, nil
 		}
 	case BirdNETv30:
+		// Index-aware (like the BirdNETv24 case) so it covers both export orderings:
+		// EmbeddingIndex/LogitsIndex are resolved by size in buildModelConfig.
 		switch outputIdx {
-		case 0:
+		case c.config.EmbeddingIndex:
 			return []int64{batch, int64(c.config.EmbeddingSize)}, nil
-		case 1:
+		case c.config.LogitsIndex:
 			return []int64{batch, int64(c.config.LogitsSize)}, nil
 		}
 	case PerchV2:
@@ -528,13 +530,7 @@ func (c *Classifier) processOutput(outputs []ort.Value, batchIdx int) (*Result, 
 	}
 	logits := allLogits[start:end]
 
-	var scores []float32
-	switch c.config.Type {
-	case BirdNETv24, BirdNETv30:
-		scores = sigmoidSlice(logits)
-	case PerchV2:
-		scores = softmax(logits)
-	}
+	scores := activationFor(c.config.Type, logits)
 
 	var embeddings []float32
 	if c.config.EmbeddingIndex >= 0 {

@@ -405,7 +405,7 @@ func (s *Settings) applyModelValidation() error {
 	// Default known IDs - matches classifier.KnownConfigIDs() at compile time.
 	// This fallback is used during config loading before the classifier package
 	// is available. The orchestrator re-validates with the authoritative list.
-	knownIDs := map[string]bool{ModelIDBirdNET: true, ModelIDPerchV2: true, ModelIDBat: true, ModelIDBSG: true}
+	knownIDs := map[string]bool{ModelIDBirdNET: true, ModelIDBirdNETV3: true, ModelIDPerchV2: true, ModelIDBat: true, ModelIDBSG: true}
 	modelIssues := s.ValidateModelConfig(knownIDs, false)
 	var fatalErrors []string
 	for _, issue := range modelIssues {

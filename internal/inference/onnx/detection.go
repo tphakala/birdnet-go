@@ -89,10 +89,21 @@ func buildModelConfig(mt ModelType, inputShape []int64, outputShapes [][]int64) 
 			}
 		}
 	case BirdNETv30:
-		cfg.LogitsIndex = 1
-		cfg.LogitsSize = lastDim(outputShapes[1])
-		cfg.EmbeddingIndex = 0
+		// Detect the ports by size rather than position. The v3.0 graph has a
+		// 1280-dim embeddings output and a species-predictions output, and export
+		// tooling has emitted them in both orders (embeddings@0/predictions@1 for the
+		// GPU-native export, the reverse for the stock export). Pick the embeddings
+		// port by its embeddingSizeV30 dimension and treat the other of the two
+		// outputs as predictions, so either ordering loads correctly.
+		// detectModelTypeFromShapes only classifies a model as BirdNETv30 when it has
+		// exactly two outputs, so indexing outputShapes[0] and [1] here is safe.
 		cfg.EmbeddingSize = embeddingSizeV30
+		if lastDim(outputShapes[0]) == embeddingSizeV30 {
+			cfg.EmbeddingIndex, cfg.LogitsIndex = 0, 1
+		} else {
+			cfg.EmbeddingIndex, cfg.LogitsIndex = 1, 0
+		}
+		cfg.LogitsSize = lastDim(outputShapes[cfg.LogitsIndex])
 	case PerchV2:
 		cfg.LogitsIndex = 3
 		cfg.LogitsSize = lastDim(outputShapes[3])
@@ -121,6 +132,35 @@ func DetectEmbeddingOutput(modelPath string) (index, size int, err error) {
 		return -1, 0, fmt.Errorf("birdnet: failed to load model metadata: %w", err)
 	}
 	return selectEmbeddingOutput(outputInfos)
+}
+
+// DetectPredictionsOutput inspects an ONNX model's output tensors and returns the
+// index of its species-predictions output: the output whose last dimension equals
+// numClasses (the label count). BirdNET v3.0 also exposes a 1280-dim embeddings
+// output whose position varies by export, so the OpenVINO path uses this to bind
+// the classifier to the correct port before inference. Returns a
+// ModelDetectionError when no output matches numClasses.
+func DetectPredictionsOutput(modelPath string, numClasses int) (index int, err error) {
+	_, outputInfos, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return -1, fmt.Errorf("birdnet: failed to load model metadata: %w", err)
+	}
+	return selectPredictionsOutput(outputInfos, numClasses)
+}
+
+// selectPredictionsOutput returns the index of the species-predictions output
+// among a model's output tensors: the first output whose last dimension equals
+// numClasses. Split out so the port-selection logic is unit-testable without a
+// real ONNX model. Returns a ModelDetectionError when no output matches.
+func selectPredictionsOutput(outputInfos []ort.InputOutputInfo, numClasses int) (index int, err error) {
+	for i := range outputInfos {
+		if lastDim(outputInfos[i].Dimensions) == numClasses {
+			return i, nil
+		}
+	}
+	return -1, &ModelDetectionError{
+		Reason: fmt.Sprintf("model has no output matching %d classes", numClasses),
+	}
 }
 
 // selectEmbeddingOutput returns the index and size of the BirdNET v2.4 embedding

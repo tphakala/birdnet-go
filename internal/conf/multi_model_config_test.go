@@ -8,7 +8,7 @@ import (
 )
 
 // testKnownIDs mirrors classifier.KnownConfigIDs() for testing without circular imports.
-var testKnownIDs = map[string]bool{"birdnet": true, "perch_v2": true, "bat": true, "bsg": true}
+var testKnownIDs = map[string]bool{"birdnet": true, "birdnet_v3.0": true, "perch_v2": true, "bat": true, "bsg": true}
 
 func TestPerchConfig_Defaults(t *testing.T) {
 	t.Parallel()
