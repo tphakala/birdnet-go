@@ -62,6 +62,10 @@ type Handler struct {
 	// uses audioWaitTimeout. Tests set a short timeout to exercise the
 	// 503-after-timeout path without waiting the full default.
 	audioWaitTimeoutOverride time.Duration
+
+	// audioWaitStartedHook synchronizes tests with the point after an initial
+	// audio serve miss enters a wait path. Production leaves it nil.
+	audioWaitStartedHook func()
 }
 
 // New constructs the media domain handler around the shared core. It builds the

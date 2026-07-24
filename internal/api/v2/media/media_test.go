@@ -105,6 +105,32 @@ func assertAudioHeaders(t *testing.T, rec *httptest.ResponseRecorder, expectedCo
 	}
 }
 
+const testAudioAsyncTimeout = 5 * time.Second
+
+func requireAudioWaitStarted(t *testing.T, waitStarted <-chan struct{}, handlerErr <-chan error) {
+	t.Helper()
+
+	select {
+	case <-waitStarted:
+		return
+	case err := <-handlerErr:
+		require.Failf(t, "handler returned before entering audio wait", "handler error: %v", err)
+	case <-time.After(testAudioAsyncTimeout):
+		require.Fail(t, "handler did not enter audio wait before timeout")
+	}
+}
+
+func requireAudioHandlerSuccess(t *testing.T, handlerErr <-chan error) {
+	t.Helper()
+
+	select {
+	case err := <-handlerErr:
+		require.NoError(t, err)
+	case <-time.After(testAudioAsyncTimeout):
+		require.Fail(t, "audio handler did not complete before timeout")
+	}
+}
+
 // assertMediaResponseBody validates response body content based on type.
 func assertMediaResponseBody(t *testing.T, body []byte, expectedBody string, isAudioFile bool) {
 	t.Helper()
@@ -253,38 +279,70 @@ func TestServeAudioClip(t *testing.T) {
 	largeFilePath := filepath.Join(tempDir, largeFilename)
 	createLargeWAVFile(t, largeFilePath, 1100*1024)
 
+	standardClipFilename := "corvus_corax_74p_20260724T132919Z.wav"
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, standardClipFilename)))
+	extendedClipFilename := "strix_uralensis_85p_20260724T231500Z_86s.wav"
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, extendedClipFilename)))
+	spacedFilename := "my clip.wav"
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, spacedFilename)))
+
 	// Test cases
 	testCases := []struct {
-		name           string
-		filename       string // Filename relative to SecureFS root
-		rangeHeader    string
-		expectedStatus int
-		expectedLength int64 // Use int64 for http.ServeContent
-		partialContent bool
+		name                string
+		filename            string // Filename relative to SecureFS root
+		rangeHeader         string
+		expectedStatus      int
+		expectedLength      int64 // Use int64 for http.ServeContent
+		partialContent      bool
+		expectedDisposition string
 	}{
 		{
-			name:           "Small file - full content",
-			filename:       smallFilename,
-			rangeHeader:    "",
-			expectedStatus: http.StatusOK,
-			expectedLength: 8864, // WAV header (44) + audio data (8820)
-			partialContent: false,
+			name:                "Small file - full content",
+			filename:            smallFilename,
+			rangeHeader:         "",
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864, // WAV header (44) + audio data (8820)
+			partialContent:      false,
+			expectedDisposition: "inline; filename*=UTF-8''small.wav",
 		},
 		{
-			name:           "Large file - full content",
-			filename:       largeFilename,
-			rangeHeader:    "",
-			expectedStatus: http.StatusOK,
-			expectedLength: 1100*1024 + 44, // Data size + WAV header
-			partialContent: false,
+			name:                "Large file - full content",
+			filename:            largeFilename,
+			rangeHeader:         "",
+			expectedStatus:      http.StatusOK,
+			expectedLength:      1100*1024 + 44, // Data size + WAV header
+			partialContent:      false,
+			expectedDisposition: "inline; filename*=UTF-8''large.wav",
 		},
 		{
-			name:           "Large file - partial content",
-			filename:       largeFilename,
-			rangeHeader:    "bytes=100-199",
-			expectedStatus: http.StatusPartialContent,
-			expectedLength: 100,
-			partialContent: true,
+			name:                "Large file - partial content",
+			filename:            largeFilename,
+			rangeHeader:         "bytes=100-199",
+			expectedStatus:      http.StatusPartialContent,
+			expectedLength:      100,
+			partialContent:      true,
+			expectedDisposition: "inline; filename*=UTF-8''large.wav",
+		},
+		{
+			name:                "Standard clip filename omits misleading UTC marker",
+			filename:            standardClipFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''corvus_corax_74p_20260724T132919.wav",
+		},
+		{
+			name:                "Extended clip filename omits misleading UTC marker",
+			filename:            extendedClipFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''strix_uralensis_85p_20260724T231500_86s.wav",
+		},
+		{
+			name:                "Filename spaces use RFC 5987 encoding",
+			filename:            spacedFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''my%20clip.wav",
 		},
 		{
 			name:           "Non-existent file",
@@ -306,7 +364,7 @@ func TestServeAudioClip(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			targetURL := "/api/v2/media/audio/" + tc.filename
+			targetURL := "/api/v2/media/audio/" + strings.ReplaceAll(tc.filename, " ", "%20")
 			req := httptest.NewRequest(http.MethodGet, targetURL, http.NoBody)
 			if tc.rangeHeader != "" {
 				req.Header.Set("Range", tc.rangeHeader)
@@ -316,6 +374,7 @@ func TestServeAudioClip(t *testing.T) {
 
 			isSmallFile := tc.filename == smallFilename
 			assertAudioClipResponse(t, rec, tc.expectedStatus, tc.expectedLength, tc.partialContent, isSmallFile)
+			assert.Equal(t, tc.expectedDisposition, rec.Header().Get("Content-Disposition"))
 		})
 	}
 }
@@ -893,7 +952,8 @@ func TestServeAudioByID(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
 	// Create a test audio file
-	testFilename := "2024-01-15_14-30-45_Turdus_migratorius.wav"
+	testFilename := "turdus_migratorius_88p_20240115T143045Z.wav"
+	downloadFilename := "turdus_migratorius_88p_20240115T143045.wav"
 	filePath := filepath.Join(tempDir, testFilename)
 	testContent := "test audio content"
 	err := os.WriteFile(filePath, []byte(testContent), 0o600)
@@ -920,7 +980,7 @@ func TestServeAudioByID(t *testing.T) {
 			audioID:                "123",
 			expectedStatus:         http.StatusOK,
 			expectedContentType:    MimeTypeWAV,
-			expectedDisposition:    fmt.Sprintf("inline; filename*=UTF-8''%s", testFilename),
+			expectedDisposition:    fmt.Sprintf("inline; filename*=UTF-8''%s", downloadFilename),
 			shouldHaveAcceptRanges: true,
 		},
 		{
@@ -955,6 +1015,71 @@ func TestServeAudioByID(t *testing.T) {
 
 	// Note: Error cases are omitted as they are tested elsewhere and the main
 	// goal of this test is to verify Content-Disposition header functionality
+}
+
+func TestContentDispositionFilename(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		filename string
+		expected string
+	}{
+		{
+			name:     "standard local timestamp",
+			filename: "corvus_corax_74p_20260724T132919Z.m4a",
+			expected: "corvus_corax_74p_20260724T132919.m4a",
+		},
+		{
+			name:     "extended capture duration",
+			filename: "strix_uralensis_85p_20260724T231500Z_86s.wav",
+			expected: "strix_uralensis_85p_20260724T231500_86s.wav",
+		},
+		{
+			name:     "timestamp already has no zone marker",
+			filename: "corvus_corax_74p_20260724T132919.m4a",
+			expected: "corvus_corax_74p_20260724T132919.m4a",
+		},
+		{
+			name:     "unrecognized filename preserves legitimate Z",
+			filename: "recordingZ.m4a",
+			expected: "recordingZ.m4a",
+		},
+		{
+			name:     "custom UTC timestamp is unchanged",
+			filename: "recording_20240115T143045Z.wav",
+			expected: "recording_20240115T143045Z.wav",
+		},
+		{
+			name:     "invalid timestamp is unchanged",
+			filename: "corvus_corax_74p_20261399T999999Z.m4a",
+			expected: "corvus_corax_74p_20261399T999999Z.m4a",
+		},
+	}
+
+	for i := range tests {
+		t.Run(tests[i].name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tests[i].expected, contentDispositionFilename(tests[i].filename))
+		})
+	}
+}
+
+func TestTranslateAudioServeErrorClearsHeadersBeforeCommittedJSON(t *testing.T) {
+	e, controller, _ := setupMediaTestEnvironment(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/test.wav", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeWAV)
+	ctx.Response().Header().Set(echo.HeaderContentDisposition, "inline; filename*=UTF-8''test.wav")
+	ctx.Response().Header().Set(headerAcceptRanges, acceptRangesBytes)
+
+	require.NoError(t, controller.translateAudioServeError(ctx, errors.New("forced serve failure"), "Failed to serve audio"))
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), echo.MIMEApplicationJSON)
+	assert.Empty(t, rec.Header().Get(echo.HeaderContentDisposition))
+	assert.Empty(t, rec.Header().Get(headerAcceptRanges))
 }
 
 // TestServeAudioByID_AudioFormats tests different audio format MIME type handling
@@ -1318,9 +1443,6 @@ func TestGetSpectrogramLogger(t *testing.T) {
 	}, "Logger methods should not panic")
 }
 
-// TestServeAudioClipWaitsForEncoding verifies that when an audio file is being
-// encoded (temp file exists), the server waits for the final file to appear
-// instead of immediately returning 503.
 // TestIsExportTempFor verifies the in-progress-encoding temp matcher accepts the
 // export temp formats and rejects unrelated sidecar temps that merely share the
 // clip's prefix and the ".temp" suffix (GitHub #3323).
@@ -1352,8 +1474,12 @@ func TestIsExportTempFor(t *testing.T) {
 	}
 }
 
+// TestServeAudioClipWaitsForEncoding verifies that when an audio file is being
+// encoded (temp file exists), the server waits for the final file to appear
+// instead of immediately returning 503.
 func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
+	controller.audioWaitTimeoutOverride = testAudioAsyncTimeout
 
 	audioFilename := "encoding-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
@@ -1361,33 +1487,13 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	// exporters write, so this exercises the directory-scan detection in
 	// isAudioBeingEncoded rather than a fixed name that production never produces.
 	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
+	require.NoError(t, os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600))
 
-	// Create the temp file to simulate in-progress encoding
-	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
-	require.NoError(t, err)
+	waitStarted := make(chan struct{})
+	controller.audioWaitStartedHook = func() {
+		close(waitStarted)
+	}
 
-	// Simulate the file appearing after a short delay (encoding completes).
-	// Use an error channel to propagate failures from the background goroutine.
-	errChan := make(chan error, 1)
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		// Create the final audio file
-		createErr := createTestAudioFile(t, audioFilePath)
-		if createErr != nil {
-			errChan <- createErr
-			return
-		}
-		// Remove the temp file to simulate FFmpeg completing
-		os.Remove(tempFilePath) //nolint:errcheck // best-effort cleanup in test
-		errChan <- nil
-	}()
-	t.Cleanup(func() {
-		if bgErr := <-errChan; bgErr != nil {
-			t.Errorf("Background goroutine failed: %v", bgErr)
-		}
-	})
-
-	// Make the request - should wait for the file and serve it
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
@@ -1395,19 +1501,59 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	ctx.SetParamNames("filename")
 	ctx.SetParamValues(audioFilename)
 
-	handlerErr := controller.ServeAudioClip(ctx)
+	handlerErr := make(chan error, 1)
+	go func() {
+		handlerErr <- controller.ServeAudioClip(ctx)
+	}()
 
-	// Should succeed (200) instead of 503
-	if handlerErr != nil {
-		// If there's an error, it should NOT be 503
-		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
-			assert.NotEqual(t, http.StatusServiceUnavailable, httpErr.Code,
-				"Should not return 503 when file appears within timeout")
-		}
-	} else {
-		assert.Equal(t, http.StatusOK, rec.Code,
-			"Should serve the file successfully after waiting for encoding")
+	requireAudioWaitStarted(t, waitStarted, handlerErr)
+	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	require.NoError(t, os.Remove(tempFilePath))
+	requireAudioHandlerSuccess(t, handlerErr)
+	assert.Equal(t, http.StatusOK, rec.Code,
+		"Should serve the file successfully after waiting for encoding")
+}
+
+// TestServeAudioByIDWaitsForEncodingPreservesHeaders verifies that the ID route
+// keeps its audio metadata when the initial 404 is recovered by a successful
+// encoding wait and retry.
+func TestServeAudioByIDWaitsForEncodingPreservesHeaders(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+	controller.audioWaitTimeoutOverride = testAudioAsyncTimeout
+
+	audioFilename := "turdus_migratorius_88p_20260724T143045Z.wav"
+	audioFilePath := filepath.Join(tempDir, audioFilename)
+	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
+	require.NoError(t, os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600))
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "42").Return(audioFilename, nil)
+	mockDS.On("Get", "42").Return(datastore.Note{ID: 42, EndTime: time.Now()}, nil).Maybe()
+	controller.DS = mockDS
+
+	waitStarted := make(chan struct{})
+	controller.audioWaitStartedHook = func() {
+		close(waitStarted)
 	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/42", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("id")
+	ctx.SetParamValues("42")
+
+	handlerErr := make(chan error, 1)
+	go func() {
+		handlerErr <- controller.ServeAudioByID(ctx)
+	}()
+
+	requireAudioWaitStarted(t, waitStarted, handlerErr)
+	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	require.NoError(t, os.Remove(tempFilePath))
+	requireAudioHandlerSuccess(t, handlerErr)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assertAudioHeaders(t, rec, MimeTypeWAV,
+		"inline; filename*=UTF-8''turdus_migratorius_88p_20260724T143045.wav", true)
 }
 
 // TestServeAudioClipReturns503AfterTimeout verifies that the server returns 503
@@ -1454,6 +1600,8 @@ func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 	}
 	assert.Equal(t, audioRetryAfterSeconds, rec.Header().Get("Retry-After"),
 		"Should include Retry-After header")
+	assert.Empty(t, rec.Header().Get("Content-Disposition"),
+		"JSON error response should not advertise an audio filename")
 }
 
 // TestServeAudioClipNoTempFileReturns404 verifies that a missing file without
@@ -1582,17 +1730,10 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	audioFilename := "grace-wait-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
 
-	// No temp file - only the final file appears after a short delay.
-	// This simulates the race window where FFmpeg hasn't started yet.
-	// Delay is derived from audioGracePeriod to stay aligned with production timing.
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		time.Sleep(audioGracePeriod / 2)
-		if err := createTestAudioFile(t, audioFilePath); err != nil {
-			t.Errorf("Background goroutine failed: %v", err)
-		}
-	})
-	t.Cleanup(wg.Wait)
+	waitStarted := make(chan struct{})
+	controller.audioWaitStartedHook = func() {
+		close(waitStarted)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
 	rec := httptest.NewRecorder()
@@ -1601,18 +1742,17 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	ctx.SetParamNames("filename")
 	ctx.SetParamValues(audioFilename)
 
-	handlerErr := controller.ServeAudioClip(ctx)
+	handlerErr := make(chan error, 1)
+	go func() {
+		handlerErr <- controller.ServeAudioClip(ctx)
+	}()
 
-	// Should succeed - grace wait should pick up the file
-	if handlerErr != nil {
-		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
-			assert.NotEqual(t, http.StatusNotFound, httpErr.Code,
-				"Should not return 404 when file appears within grace period")
-		}
-	} else {
-		assert.Equal(t, http.StatusOK, rec.Code,
-			"Should serve the file successfully after grace wait")
-	}
+	requireAudioWaitStarted(t, waitStarted, handlerErr)
+	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	requireAudioHandlerSuccess(t, handlerErr)
+	assert.Equal(t, http.StatusOK, rec.Code,
+		"Should serve the file successfully after grace wait")
+	assert.Equal(t, "inline; filename*=UTF-8''grace-wait-test.wav", rec.Header().Get(echo.HeaderContentDisposition))
 }
 
 // TestBuildStyleSuffix tests that spectrogram style and dynamic range are correctly
