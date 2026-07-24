@@ -189,9 +189,10 @@ var EmbeddedCatalog = []CatalogEntry{
 // bit-exact with the original 2-output backbone (embedding max|delta| = 0.0, identical
 // output order, so no inference-code change) but about 2x faster on CPU and roughly 8 MB
 // smaller. The local filename is deliberately kept as birdnet-v24-embeddings.onnx so
-// existing installs keep their on-disk shared/birdnet-v24-embeddings.onnx (the startup
-// scan is presence-only and never re-verifies it) and upgrade transparently the next
-// time a bat model is reinstalled or another bat region is installed.
+// existing installs keep their on-disk shared/birdnet-v24-embeddings.onnx: the startup
+// scan only stats each bat model's own regional file and never inspects or re-verifies
+// the shared embeddings file, so nothing is flagged, and installs upgrade transparently
+// the next time a bat model is reinstalled or another bat region is installed.
 const (
 	embeddingsSHA256          = "b91139d3c63d55d742779a56531078bc88366a09bcc9bd6a9b703d425914c380"
 	embeddingsSizeBytes int64 = 58763257
