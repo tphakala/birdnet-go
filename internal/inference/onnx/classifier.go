@@ -183,10 +183,13 @@ func resolveModelType(cfg *classifierConfig, inputShapes [][]int64, numOutputs i
 
 // validateLabelCount checks that the label count matches the model's logits output dimension.
 func validateLabelCount(modelCfg *ModelConfig, outputInfos []ort.InputOutputInfo, labelCount int) error {
-	// An embedding-only model (LogitsIndex < 0) produces no logits, so there is no
-	// logits dimension to validate the label count against.
+	// An embedding-only model (LogitsIndex < 0) produces no logits, so it cannot serve
+	// the provided species labels. Reject it here so a model misconfigured as a
+	// label-validated classifier fails at construction with a clear message rather than
+	// only later at prediction time. Embedding-only consumers (the bat pipeline) load
+	// the model with WithSkipLabelValidation, which bypasses this check entirely.
 	if modelCfg.LogitsIndex < 0 {
-		return nil
+		return fmt.Errorf("birdnet: model produces no logits (embedding-only); it cannot be used as a label-validated classifier; load it with WithSkipLabelValidation for embedding extraction")
 	}
 	if modelCfg.LogitsIndex >= len(outputInfos) {
 		return fmt.Errorf("birdnet: LogitsIndex %d is out of range for model with %d outputs", modelCfg.LogitsIndex, len(outputInfos))

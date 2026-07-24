@@ -74,11 +74,14 @@ func TestBuildModelConfig_BirdNETv24(t *testing.T) {
 func TestValidateLabelCount(t *testing.T) {
 	t.Parallel()
 
-	t.Run("embedding-only model skips validation", func(t *testing.T) {
+	t.Run("embedding-only model without skip is rejected", func(t *testing.T) {
 		t.Parallel()
 		cfg := &ModelConfig{LogitsIndex: -1}
-		// A nonsense label count and nil outputs must still pass: there are no logits.
-		require.NoError(t, validateLabelCount(cfg, nil, 999))
+		// An embedding-only model has no logits to match labels against, so with
+		// validation enabled it must fail fast rather than error only at prediction
+		// time. The bat pipeline loads such models with SkipLabelValidation, which
+		// bypasses this function entirely.
+		require.Error(t, validateLabelCount(cfg, nil, 999))
 	})
 
 	t.Run("matching label count passes", func(t *testing.T) {
