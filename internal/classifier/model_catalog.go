@@ -139,6 +139,67 @@ var EmbeddedCatalog = []CatalogEntry{
 		},
 	},
 
+	// BirdNET v2.4 DFT-truncated variants: opt-in, faster drop-in files for the
+	// primary classifier. DFT-bin truncation drops the mel-DFT bins the filterbank
+	// discards, so the output is bit-exact (single classification head, unchanged
+	// labels) while CPU/OpenVINO inference is about 1.4-2x faster. The files are
+	// published under NEW HuggingFace filenames, so existing installs are untouched.
+	//
+	// These entries are Hidden on purpose. The primary BirdNET v2.4 classifier is
+	// resolved at startup from config and the standard model paths (see NewBirdNET),
+	// NOT from the gallery, and nothing in the install path wires an installed file
+	// into BirdNET.ModelPath or hot-swaps the primary model. A visible "Install"
+	// button would therefore download a file that nothing activates. So these entries
+	// only record the authoritative checksums, sizes, and repo paths as a catalog
+	// foundation; a future primary-variant selector (tracked separately) will make
+	// them selectable. RegistryID is the permanent BirdNET v2.4 ID because these ARE
+	// that model in an alternate file: being Hidden they are never hot-loaded (there
+	// is no secondary loader for the primary), and Uninstall refuses them via the
+	// permanent-model guard. Labels are the embedded v2.4 set (data/labels/V2.4), so
+	// no labels file is downloaded. If a power user points birdnet.modelpath at a
+	// manually fetched file, the primary loader uses it as-is (remapV24ToONNXOnARM64
+	// honors an explicit CustomPath).
+	{
+		ID:              "birdnet-v2.4-fp32-dfttrunc",
+		Name:            "BirdNET v2.4 (DFT-truncated, FP32)",
+		Description:     "Drop-in BirdNET v2.4 classifier with DFT-bin truncation: bit-exact output, about 1.4-2x faster CPU and OpenVINO inference. FP32 ONNX for OpenVINO (A76/Pi5, amd64 CPU and Intel iGPU).",
+		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:         "CC-BY-NC-SA-4.0",
+		CommercialUse:   false,
+		Category:        CategoryBird,
+		Region:          "",
+		SpeciesCount:    0, // determined at runtime from the embedded v2.4 labels (no labels file is downloaded)
+		Version:         "2.4",
+		RegistryID:      permanentRegistryID,
+		Hidden:          true,
+		RequiresONNX:    true,
+		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
+		HuggingFaceRepo: "tphakala/BirdNET-v2.4",
+		Files: []CatalogFile{
+			{RemotePath: "BirdNET_v2.4_fp32_dfttrunc.onnx", LocalName: "BirdNET_v2.4_fp32_dfttrunc.onnx", Role: RoleModel, SHA256: "3b72e88b3ad0c310a41adabccf8cf75b1a05daeeb40884ebd38038c91d0e423d", SizeBytes: 54068648},
+		},
+	},
+	{
+		ID:              "birdnet-v2.4-int8-arm-dfttrunc",
+		Name:            "BirdNET v2.4 (DFT-truncated, INT8 ARM)",
+		Description:     "Drop-in BirdNET v2.4 classifier with DFT-bin truncation: bit-exact output, about 1.4-2x faster inference. INT8 ONNX for low-RAM ARM via ONNX Runtime (Pi4/Pi3, no native f16).",
+		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:         "CC-BY-NC-SA-4.0",
+		CommercialUse:   false,
+		Category:        CategoryBird,
+		Region:          "",
+		SpeciesCount:    0, // determined at runtime from the embedded v2.4 labels (no labels file is downloaded)
+		Version:         "2.4",
+		RegistryID:      permanentRegistryID,
+		Hidden:          true,
+		RequiresONNX:    true,
+		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
+		HuggingFaceRepo: "tphakala/BirdNET-v2.4",
+		Files: []CatalogFile{
+			{RemotePath: "BirdNET_v2.4_int8_arm_dfttrunc.onnx", LocalName: "BirdNET_v2.4_int8_arm_dfttrunc.onnx", Role: RoleModel, SHA256: "7550498ba996064feca12005ff4133eb1d35741c4061376e7a987d8227518893", SizeBytes: 38727042},
+		},
+	},
+
 	// Geomodels (spatiotemporal species occurrence prediction)
 	{
 		ID:              "birdnet-geomodel-v3",

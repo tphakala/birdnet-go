@@ -148,8 +148,9 @@ func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 func TestEmbeddedCatalog_EntryCount(t *testing.T) {
 	t.Parallel()
 
-	// 2 wildlife + 1 bird + 1 geomodel + 11 bat = 15 total
-	assert.Len(t, EmbeddedCatalog, 15, "expected 15 total catalog entries")
+	// 2 wildlife + 3 bird + 1 geomodel + 11 bat = 17 total
+	// (bird: bsg-finland + the two hidden BirdNET v2.4 DFT-truncated variants)
+	assert.Len(t, EmbeddedCatalog, 17, "expected 17 total catalog entries")
 }
 
 func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
@@ -170,8 +171,26 @@ func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, bsg.Hidden)
 
-	// Visible count should be total minus hidden
-	assert.Len(t, visible, len(EmbeddedCatalog)-2)
+	// The DFT-truncated BirdNET v2.4 variants are hidden foundation entries.
+	dftVariants := []string{"birdnet-v2.4-fp32-dfttrunc", "birdnet-v2.4-int8-arm-dfttrunc"}
+	for _, id := range dftVariants {
+		entry, ok := GetCatalogEntry(id)
+		require.True(t, ok, "expected to find hidden catalog entry %q", id)
+		assert.True(t, entry.Hidden, "entry %q must be hidden", id)
+	}
+
+	// The hidden variants must be directly absent from the visible set, not just
+	// inferred from the count assertion below.
+	for i := range visible {
+		assert.NotContains(t, dftVariants, visible[i].ID,
+			"hidden entry %q must be excluded from the visible catalog", visible[i].ID)
+	}
+
+	// Visible count should be total minus the 4 hidden entries
+	// (birdnet-v3.0, bsg-finland, and the two BirdNET v2.4 DFT-truncated variants).
+	// The hardcoded count is an intentional tripwire: a new hidden entry must
+	// update it, forcing a conscious check that the exclusion is intended.
+	assert.Len(t, visible, len(EmbeddedCatalog)-4)
 }
 
 func TestGetCatalogEntry_BSGFinland(t *testing.T) {
@@ -207,4 +226,56 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.Equal(t, "BirdNET v3.0", entry.Name)
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
 	assert.Equal(t, CategoryWildlife, entry.Category)
+}
+
+// TestEmbeddedCatalog_DFTTruncatedVariants pins the identity of the two hidden
+// BirdNET v2.4 DFT-truncated variant entries: their RemotePath, LocalName, size,
+// and checksum are the authoritative values published on HuggingFace, and the
+// entries are intentionally hidden ONNX drop-ins for the primary classifier. The
+// literals mean an accidental edit, revert, or checksum drift is caught here.
+func TestEmbeddedCatalog_DFTTruncatedVariants(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		id         string
+		remotePath string
+		sha256     string
+		sizeBytes  int64
+	}{
+		{
+			id:         "birdnet-v2.4-fp32-dfttrunc",
+			remotePath: "BirdNET_v2.4_fp32_dfttrunc.onnx",
+			sha256:     "3b72e88b3ad0c310a41adabccf8cf75b1a05daeeb40884ebd38038c91d0e423d",
+			sizeBytes:  54068648,
+		},
+		{
+			id:         "birdnet-v2.4-int8-arm-dfttrunc",
+			remotePath: "BirdNET_v2.4_int8_arm_dfttrunc.onnx",
+			sha256:     "7550498ba996064feca12005ff4133eb1d35741c4061376e7a987d8227518893",
+			sizeBytes:  38727042,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.id, func(t *testing.T) {
+			t.Parallel()
+
+			entry, ok := GetCatalogEntry(tc.id)
+			require.True(t, ok, "expected to find catalog entry %q", tc.id)
+			assert.Equal(t, CategoryBird, entry.Category, "%q must be a bird model", tc.id)
+			assert.True(t, entry.Hidden, "%q must be hidden (no primary-variant selector yet)", tc.id)
+			assert.True(t, entry.RequiresONNX, "%q must require ONNX", tc.id)
+			assert.Equal(t, permanentRegistryID, entry.RegistryID,
+				"%q must map to the permanent BirdNET v2.4 registry ID", tc.id)
+			assert.Equal(t, "tphakala/BirdNET-v2.4", entry.HuggingFaceRepo, "%q repo", tc.id)
+
+			require.Len(t, entry.Files, 1, "%q must have exactly one (model) file", tc.id)
+			f := entry.Files[0]
+			assert.Equal(t, RoleModel, f.Role, "%q file must have the model role", tc.id)
+			assert.Equal(t, tc.remotePath, f.RemotePath, "%q RemotePath", tc.id)
+			assert.Equal(t, tc.remotePath, f.LocalName, "%q LocalName", tc.id)
+			assert.Equal(t, tc.sha256, f.SHA256, "%q checksum", tc.id)
+			assert.Equal(t, tc.sizeBytes, f.SizeBytes, "%q size", tc.id)
+		})
+	}
 }
