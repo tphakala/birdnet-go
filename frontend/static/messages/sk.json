@@ -1962,6 +1962,7 @@
       "speciesList": "Zoznam druhov",
       "switchToGrid": "Prepnúť na mriežku",
       "switchToList": "Prepnúť na zoznam",
+      "switchToManage": "Prepnúť na správu druhov",
       "noSpeciesFound": "Nenašli sa žiadne druhy zodpovedajúce vašim filtrom.",
       "headers": {
         "species": "Druh",
@@ -1975,6 +1976,26 @@
         "detections": "Detekcie:",
         "confidence": "Istota:",
         "first": "Prvýkrát:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Vylúčené",
+          "included": "Zahrnuté",
+          "reviewRatio": "Správne",
+          "rangeProbability": "Rozsah",
+          "confirmed": "Potvrdené",
+          "actions": "Akcie"
+        },
+        "delete": "Odstrániť všetky detekcie tohto druhu",
+        "deleteTitle": "Odstrániť detekcie druhu",
+        "deleteConfirm": "Odstrániť",
+        "deleteMessage": "Odstrániť všetkých {count} detekcií druhu {species}? Uzamknuté detekcie zostanú zachované.",
+        "deleteWarning": "Týmto sa natrvalo odstránia detekcie aj ich zvukové klipy a túto akciu nie je možné vrátiť späť.",
+        "deleteFailed": "Detekcie sa nepodarilo odstrániť. Skúste to znova.",
+        "deleteProgress": "Zatiaľ odstránené: {deleted}, zostáva: {remaining}…",
+        "membershipFailed": "Nepodarilo sa aktualizovať zoznamy druhov. Skúste to znova.",
+        "loadFailed": "Nepodarilo sa obnoviť údaje o druhoch. Zobrazujú sa predtým načítané výsledky.",
+        "allTimeNote": "Správa zobrazuje všetky detekcie za celé obdobie; vyššie uvedený filter dátumu sa tu nepoužije."
       }
     },
     "advanced": {

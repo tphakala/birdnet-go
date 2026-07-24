@@ -1962,6 +1962,7 @@
       "speciesList": "Soorten lijst",
       "switchToGrid": "Wissel naar tegel overzicht",
       "switchToList": "Wissel naar lijst overzicht",
+      "switchToManage": "Naar beheerweergave schakelen",
       "noSpeciesFound": "Geen soorten gevonden voor jouw filters.",
       "headers": {
         "species": "Soort",
@@ -1975,6 +1976,26 @@
         "detections": "Aantal herkend:",
         "confidence": "Betrouwbaarheid:",
         "first": "Eerst:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Uitgesloten",
+          "included": "Opgenomen",
+          "reviewRatio": "Correct",
+          "rangeProbability": "Bereik",
+          "confirmed": "Bevestigd",
+          "actions": "Acties"
+        },
+        "delete": "Alle detecties van deze soort verwijderen",
+        "deleteTitle": "Soortdetecties verwijderen",
+        "deleteConfirm": "Verwijderen",
+        "deleteMessage": "Alle {count} detecties van {species} verwijderen? Vergrendelde detecties blijven behouden.",
+        "deleteWarning": "Hiermee worden de detecties en hun audiofragmenten permanent verwijderd en dit kan niet ongedaan worden gemaakt.",
+        "deleteFailed": "Kan detecties niet verwijderen. Probeer het opnieuw.",
+        "deleteProgress": "Tot nu toe {deleted} verwijderd, nog {remaining} te gaan…",
+        "membershipFailed": "Kan de soortenlijsten niet bijwerken. Probeer het opnieuw.",
+        "loadFailed": "Kan soortgegevens niet vernieuwen. Eerder geladen resultaten worden weergegeven.",
+        "allTimeNote": "Beheren toont alle detecties over alle tijd; het datumfilter hierboven is hier niet van toepassing."
       }
     },
     "advanced": {

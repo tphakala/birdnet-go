@@ -237,6 +237,15 @@ type DetectionRepository interface {
 	// modelID is optional; pass nil to include all models.
 	GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error)
 
+	// GetSpeciesReviewStats returns per-species detection and review counts
+	// across all time, including false positives.
+	GetSpeciesReviewStats(ctx context.Context) ([]SpeciesReviewStat, error)
+
+	// GetDetectionIDsByScientificName returns the IDs of all detections whose
+	// label resolves to the given scientific name. Legacy labels stored as
+	// "ScientificName_CommonName" are matched on the scientific-name portion.
+	GetDetectionIDsByScientificName(ctx context.Context, scientificName string) ([]uint, error)
+
 	// GetHourlyDistribution returns detection counts by hour. tzOffsetSeconds is the
 	// configured timezone's UTC offset, applied so detections bucket by wall-clock hour in
 	// that zone rather than the database/OS-local zone. labelID and modelID are optional filters.

@@ -1962,6 +1962,7 @@
       "speciesList": "Artlista",
       "switchToGrid": "Byt till rutnätsvy",
       "switchToList": "Byt till listvy",
+      "switchToManage": "Växla till hanteringsvy",
       "noSpeciesFound": "Inga arter hittades som matchar dina filter.",
       "headers": {
         "species": "Art",
@@ -1975,6 +1976,26 @@
         "detections": "Detektioner:",
         "confidence": "Konfidens:",
         "first": "Först:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Exkluderad",
+          "included": "Inkluderad",
+          "reviewRatio": "Korrekt",
+          "rangeProbability": "Område",
+          "confirmed": "Bekräftad",
+          "actions": "Åtgärder"
+        },
+        "delete": "Radera alla detektioner för denna art",
+        "deleteTitle": "Radera artdetektioner",
+        "deleteConfirm": "Radera",
+        "deleteMessage": "Radera alla {count} detektioner för {species}? Låsta detektioner behålls.",
+        "deleteWarning": "Detta tar bort detektionerna och deras ljudklipp permanent och kan inte ångras.",
+        "deleteFailed": "Det gick inte att radera detektionerna. Försök igen.",
+        "deleteProgress": "Har raderat {deleted} hittills, {remaining} kvar…",
+        "membershipFailed": "Det gick inte att uppdatera artlistorna. Försök igen.",
+        "loadFailed": "Det gick inte att uppdatera artdata. Visar tidigare inläst resultat.",
+        "allTimeNote": "Hantera visar alla detektioner genom tiderna; datumfiltret ovan gäller inte här."
       }
     },
     "advanced": {
