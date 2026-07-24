@@ -11,20 +11,27 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// validateSecuritySettings validates the security-specific settings
-func validateSecuritySettings(settings *Security) error {
-	// Check if any OAuth provider is enabled (OAuth providers require host or baseUrl for redirect URLs)
-	// Note: BasicAuth doesn't require host as it doesn't use OAuth redirects
-	if (settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled || settings.MicrosoftAuth.Enabled) && settings.Host == "" && settings.BaseURL == "" {
-		return errors.Newf("security.host or security.baseUrl must be set when using OAuth authentication providers (Google, GitHub, or Microsoft)").
-			Category(errors.CategoryValidation).
-			Context("validation_type", "security-oauth-host").
-			Context("google_enabled", settings.GoogleAuth.Enabled).
-			Context("github_enabled", settings.GithubAuth.Enabled).
-			Context("microsoft_enabled", settings.MicrosoftAuth.Enabled).
-			Build()
-	}
+// Provider IDs used in security.oauthProviders, and by the deprecated
+// googleAuth/githubAuth/microsoftAuth blocks that MigrateOAuthConfig converts into
+// it. These must stay equal to the values internal/security dispatches on
+// (ConfigGoogle, ConfigGitHub, ConfigMicrosoft, ConfigOIDC in
+// internal/security/constants.go). They are duplicated rather than shared because
+// security imports conf, so the dependency cannot run the other way.
+const (
+	providerGoogle    = "google"
+	providerGitHub    = "github"
+	providerMicrosoft = "microsoft"
+	providerOIDC      = "oidc"
+)
 
+// validateSecuritySettings validates the security-specific settings.
+//
+// A social provider that is enabled but cannot complete a sign-in no longer blocks
+// startup: normalizeIncompleteFeatures disables the ones the runtime already
+// ignores and warns about the rest, because the alternative is a server that will
+// not boot and therefore serves no UI in which to fix the provider. OIDC is the
+// exception, and validateOIDCProviders explains why.
+func validateSecuritySettings(settings *Security) error {
 	// TLS mode validation
 	if err := validateTLSMode(settings); err != nil {
 		return err
@@ -133,42 +140,64 @@ func validateTLSMode(settings *Security) error {
 	return nil
 }
 
-// validateOIDCProviders validates OIDC-specific provider configuration:
-// at most one OIDC entry, valid issuer URL when enabled, callback URL source required, HTTPS warning.
+// validateOIDCProviders validates OIDC-specific provider configuration.
+//
+// Only a duplicate among ENABLED entries is fatal on that count: two of those make
+// it ambiguous which one a sign-in would use, because goth registers providers by
+// name and the second silently replaces the first. A disabled second entry never
+// reaches goth (GetEnabledOAuthProviders and initializeProviders both skip it), so
+// refusing to start over a leftover is the failure this whole change exists to
+// remove.
+//
+// An unusable issuer URL, and a provider with no way back from the identity
+// provider, both stay fatal. That is worth spelling out because the rest of this
+// change moves in the other direction. Enabling OIDC is the setting that can lock
+// an operator out of their own instance: the provider counts towards
+// IsAuthenticationEnabled as soon as it has credentials, so accepting either shape
+// means authentication becomes required while no sign-in can complete. The settings
+// API validates without normalizing, so keeping these rules here is what answers
+// that save with an error instead of a 200 and a locked door.
+//
+// The load path pays for that: an OIDC provider with credentials and a broken
+// issuer still refuses to boot. The trade is deliberate. A provider merely toggled
+// on has no credentials, so normalizeIncompleteFeatures disables it before this
+// runs and the common case never reaches here; what remains is a provider someone
+// deliberately configured, where booting into a locked door is worse than saying
+// which field is wrong.
 func validateOIDCProviders(settings *Security) error {
 	oidcCount := 0
 	for i := range settings.OAuthProviders {
 		provider := &settings.OAuthProviders[i]
-		if provider.Provider != "oidc" {
+		if provider.Provider != providerOIDC || !provider.Enabled {
 			continue
 		}
 		oidcCount++
 		if oidcCount > 1 {
-			return errors.Newf("only one OIDC provider (provider: \"oidc\") is allowed in security.oauthProviders, found duplicate entry").
+			return errors.Newf("only one enabled OIDC provider (provider: %q) is allowed in security.oauthProviders, found duplicate entry", providerOIDC).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-duplicate").
 				Build()
 		}
-		if !provider.Enabled {
-			continue
-		}
-		// Require a callback URL source — without host/baseUrl/redirectUri, the OAuth flow will fail
-		if provider.RedirectURI == "" && settings.Host == "" && settings.BaseURL == "" {
-			return errors.Newf("security.host or security.baseUrl must be set, or redirectUri must be configured, when OIDC provider is enabled").
+		// A provider with no way back from the identity provider is the same
+		// lock-out as a broken issuer, so it is fatal for the same reason. Scoped to
+		// OIDC because that is where the rule already existed; the array-based
+		// social providers never had one, and adding it here would newly reject
+		// configurations that load today.
+		if reason := oauthRedirectProblem(provider, settings.Host != "" || settings.BaseURL != ""); reason != "" {
+			return errors.Newf("security.oauthProviders: OIDC provider is enabled but %s", reason).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-redirect-missing").
-				Context("issuer_url", provider.IssuerURL).
 				Build()
 		}
 		if provider.IssuerURL == "" {
-			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is \"oidc\" and enabled").
+			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is %q and enabled", providerOIDC).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-issuer-missing").
 				Build()
 		}
 		parsed, err := url.Parse(provider.IssuerURL)
 		if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
-			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid URL", provider.IssuerURL).
+			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid http(s) URL", provider.IssuerURL).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-issuer-invalid").
 				Context("issuer_url", provider.IssuerURL).

@@ -49,6 +49,35 @@ const (
 
 	// DefaultWeatherPollInterval is the default weather poll interval in minutes.
 	DefaultWeatherPollInterval = 60
+
+	// The viper defaults, named so defaults.go and the incomplete-feature
+	// normalization cannot drift apart. Most are applied by normalizeIncompleteFeatures
+	// when a feature is switched on and the field was left at its zero value;
+	// DefaultNotificationSuppressionHours is the exception, because zero is a legal
+	// value there rather than an unwritten one, so only viper uses it.
+	DefaultWebServerPort                = "8080"
+	DefaultTelemetryListen              = "0.0.0.0:8090"
+	DefaultSoundLevelInterval           = 10
+	DefaultDynamicThresholdValidHours   = 24
+	DefaultNewSpeciesWindowDays         = 7
+	DefaultSpeciesSyncIntervalMinutes   = 60
+	DefaultYearlyTrackingResetMonth     = 1
+	DefaultYearlyTrackingResetDay       = 1
+	DefaultYearlyTrackingWindowDays     = 7
+	DefaultSeasonalTrackingWindowDays   = 7
+	DefaultNotificationSuppressionHours = 168
+	DefaultAudioExportLength            = 15
+	DefaultAudioExportBitrate           = "96k"
+	DefaultNormalizationTargetLUFS      = -23.0
+	DefaultRetentionMaxAge              = "30d"
+	DefaultRetentionMaxUsage            = "80%"
+	DefaultRetryBackoffMultiplier       = 2.0
+
+	// DefaultEQQFactor is the Q factor applied to an equalizer filter whose q was
+	// never set. eqfilter_config.go offers it as the settings UI's default too, so a
+	// filter created in the UI and one repaired here get the same value. 0.707 is the
+	// conventional rounding of the Butterworth 1/sqrt(2).
+	DefaultEQQFactor = 0.707
 )
 
 // DefaultSessionDuration is the default session duration (7 days).

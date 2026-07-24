@@ -79,8 +79,11 @@ var ValidAudioModels = map[string]bool{
 // ValidateSettings. Every entry in Errors blocks startup: severity is decided
 // structurally by whether a validator returned an error, never by inspecting
 // the message text. Non-fatal configuration findings use a separate channel,
-// Settings.ValidationWarnings, recorded during config migration (see
-// applyModelValidation), not derived from the text of a fatal error.
+// Settings.ValidationWarnings, written through recordValidationWarning during
+// config migration, during the incomplete-feature normalization Load runs before
+// validating (see validate_incomplete.go), and by the few validators that
+// normalize a value instead of rejecting it. None of them is derived from the text
+// of a fatal error.
 type ValidationError struct {
 	Errors []string
 }
@@ -196,8 +199,8 @@ func ValidateSettings(settings *Settings) error {
 	case "", LowMemoryModeAuto, LowMemoryModeOn, LowMemoryModeOff:
 		settings.LowMemory.Mode = normalized
 	default:
-		settings.ValidationWarnings = append(settings.ValidationWarnings,
-			fmt.Sprintf("invalid lowmemory.mode %q; using %q", settings.LowMemory.Mode, LowMemoryModeAuto))
+		settings.recordValidationWarning(warnComponentLowMemory,
+			"invalid lowmemory.mode %q; using %q", settings.LowMemory.Mode, LowMemoryModeAuto)
 		settings.LowMemory.Mode = LowMemoryModeAuto
 	}
 

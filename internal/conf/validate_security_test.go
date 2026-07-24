@@ -12,6 +12,12 @@ import (
 func TestValidateSecuritySettings_OAuth(t *testing.T) {
 	t.Parallel()
 
+	// validateSecuritySettings no longer carries an OAuth-specific rule. A provider
+	// that cannot complete a sign-in is reported by normalizeIncompleteFeatures on
+	// the load path, which this entry point does not run; see
+	// TestNormalizeOAuthProviders_LegacyCredentialedBlockWarnsAfterMigration for the
+	// behaviour that replaced the deleted host rule, and validateOIDCProviders for
+	// the one provider kind where an unusable configuration is still rejected here.
 	tests := []struct {
 		name     string
 		security Security
@@ -19,7 +25,7 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 		errType  string
 	}{
 		{
-			name: "Google OAuth enabled without host - should fail",
+			name: "Google OAuth enabled without host - not rejected here",
 			security: Security{
 				Host: "",
 				GoogleAuth: SocialProvider{
@@ -29,11 +35,10 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 					RedirectURI:  "https://example.com/callback",
 				},
 			},
-			wantErr: true,
-			errType: "security-oauth-host",
+			wantErr: false,
 		},
 		{
-			name: "GitHub OAuth enabled without host - should fail",
+			name: "GitHub OAuth enabled without host - not rejected here",
 			security: Security{
 				Host: "",
 				GithubAuth: SocialProvider{
@@ -43,11 +48,10 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 					RedirectURI:  "https://example.com/callback",
 				},
 			},
-			wantErr: true,
-			errType: "security-oauth-host",
+			wantErr: false,
 		},
 		{
-			name: "Both OAuth providers enabled without host - should fail",
+			name: "Both OAuth providers enabled without host - not rejected here",
 			security: Security{
 				Host: "",
 				GoogleAuth: SocialProvider{
@@ -63,8 +67,7 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 					RedirectURI:  "https://example.com/github/callback",
 				},
 			},
-			wantErr: true,
-			errType: "security-oauth-host",
+			wantErr: false,
 		},
 		{
 			name: "Google OAuth enabled with valid host - should pass",
