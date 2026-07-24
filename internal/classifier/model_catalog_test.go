@@ -119,12 +119,27 @@ func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 
 		hasEmbeddings := false
 		for _, f := range entry.Files {
-			if f.Role == RoleEmbeddings {
-				hasEmbeddings = true
-				assert.Equal(t, "birdnet-v24-embeddings.onnx", f.LocalName,
-					"bat entry %q should use shared embeddings file", entry.ID)
-				break
+			if f.Role != RoleEmbeddings {
+				continue
 			}
+			hasEmbeddings = true
+			// LocalName is kept stable for drop-in compatibility with existing
+			// installs; RemotePath points at the DFT-truncated backbone (bit-exact,
+			// ~2x faster). The two intentionally differ, so assert both. Size and
+			// SHA256 are pinned to literals (not the embeddingsSizeBytes/embeddingsSHA256
+			// constants) so this locks the exact expected file content: comparing the
+			// field to the constant it is assigned from would be a tautology, whereas a
+			// literal catches an accidental constant change and forces a deliberate model
+			// swap to update the test too.
+			assert.Equal(t, "birdnet-v24-embeddings.onnx", f.LocalName,
+				"bat entry %q should use shared embeddings file", entry.ID)
+			assert.Equal(t, "birdnet-v2.4-embeddings-fp32-dfttrunc.onnx", f.RemotePath,
+				"bat entry %q should fetch the DFT-truncated backbone", entry.ID)
+			assert.Equal(t, int64(58763257), f.SizeBytes,
+				"bat entry %q embeddings size should match the DFT-truncated backbone", entry.ID)
+			assert.Equal(t, "b91139d3c63d55d742779a56531078bc88366a09bcc9bd6a9b703d425914c380", f.SHA256,
+				"bat entry %q embeddings checksum should match the DFT-truncated backbone", entry.ID)
+			break
 		}
 		assert.True(t, hasEmbeddings, "bat entry %q must have an embeddings file", entry.ID)
 	}
