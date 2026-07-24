@@ -47,7 +47,6 @@ package conf
 
 import (
 	"fmt"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -109,8 +108,11 @@ func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeWebServer()
 }
 
-// normalizeOAuthProviders disables OAuth providers that cannot authenticate anyone
-// and warns about the ones that can but have no redirect URL to come back to.
+// normalizeOAuthProviders disables OAuth providers that cannot authenticate anyone.
+//
+// A provider that keeps its credentials but has no redirect URL to come back to is
+// not handled here: validateOAuthRedirects rejects it outright, because it forces
+// authentication on while making sign-in impossible.
 //
 // Disabling is limited to providers the runtime already refuses to use:
 // GetEnabledOAuthProviders and initializeProviders both require a non-empty
@@ -121,7 +123,6 @@ func normalizeIncompleteFeatures(s *Settings) {
 // it off would drop authentication from a server the operator meant to protect.
 func (s *Settings) normalizeOAuthProviders() {
 	sec := &s.Security
-	hasRedirectSource := sec.Host != "" || sec.BaseURL != ""
 
 	for i := range sec.OAuthProviders {
 		p := &sec.OAuthProviders[i]
@@ -137,12 +138,11 @@ func (s *Settings) normalizeOAuthProviders() {
 			continue
 		}
 
-		// Credentials are present, so the provider stays enabled and
-		// authentication stays required. Warn about what will not work.
-		if reason := oauthRedirectProblem(p, hasRedirectSource); reason != "" {
-			s.recordValidationWarning(warnComponentSecurity,
-				"OAuth provider %q is enabled but %s, so sign-in will fail", p.Provider, reason)
-		}
+		// Credentials are present, so the provider stays enabled and authentication
+		// stays required. A provider in that state with no usable redirect URL is
+		// left to validateOAuthRedirects, which is fatal: warning here instead would
+		// boot an instance that requires a sign-in nobody can complete, and put the
+		// warning behind the login that cannot complete.
 	}
 
 	// The deprecated googleAuth/githubAuth/microsoftAuth blocks are migrated into
@@ -174,31 +174,6 @@ func (s *Settings) normalizeOAuthProviders() {
 				l.key)
 		}
 	}
-}
-
-// oauthRedirectProblem describes why a provider has no usable redirect URL, or
-// returns "" when it has one. It mirrors what initializeProviders actually
-// computes: an explicit redirectUri is used verbatim, and only an absent one is
-// built from security.host or security.baseUrl.
-//
-// Testing merely for an empty redirectUri would miss the common case. The
-// deprecated googleAuth and githubAuth blocks default redirecturi to "/settings"
-// (see defaults.go), and MigrateOAuthConfig copies that into the array as-is, so a
-// migrated provider usually carries a non-empty but relative value that no OAuth
-// provider can redirect back to. That shape used to be caught by the fatal
-// host-required rule; without this check it would degrade to silence.
-func oauthRedirectProblem(p *OAuthProviderConfig, hasOrigin bool) string {
-	if p.RedirectURI == "" {
-		if hasOrigin {
-			return ""
-		}
-		return "no redirect URL can be built; set security.host or security.baseUrl, or security.oauthProviders[].redirectUri"
-	}
-	parsed, err := url.Parse(p.RedirectURI)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
-		return "its redirectUri is not an absolute http(s) URL, so the provider has nowhere to send the user back to"
-	}
-	return ""
 }
 
 // normalizeQuietHours disables quiet hours blocks that cannot produce a window.
@@ -487,12 +462,14 @@ func (s *Settings) normalizeNotificationProviders() {
 func (s *Settings) normalizeWebhookProvider(p *PushProviderConfig, disable func(string, ...any)) {
 	for i := range p.Endpoints {
 		endpoint := &p.Endpoints[i]
+		// 1-based to match the stream and filter warnings, and to match how an
+		// operator counts the entries in their YAML list.
 		if strings.TrimSpace(endpoint.URL) == "" {
-			disable("endpoint %d has no URL; disabling the provider", i)
+			disable("endpoint %d has no URL; disabling the provider", i+1)
 			return
 		}
 		if reason := missingWebhookAuthSecret(&endpoint.Auth); reason != "" {
-			disable("endpoint %d cannot authenticate: %s; disabling the provider", i, reason)
+			disable("endpoint %d cannot authenticate: %s; disabling the provider", i+1, reason)
 			return
 		}
 	}

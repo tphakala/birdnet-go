@@ -70,27 +70,32 @@ func TestNormalizeOAuthProviders_DisablesProviderWithoutCredentials(t *testing.T
 
 // TestNormalizeOAuthProviders_KeepsCredentialedProviderEnabled verifies the other
 // half of the security rule: a provider that does have credentials is never
-// disabled, however broken the rest of its configuration. It counts towards
-// IsAuthenticationEnabled, so switching it off here would drop authentication from
-// a server the operator meant to protect. Sign-in fails, the operator is warned,
-// and the server stays closed.
+// disabled by normalization, however broken the rest of its configuration. It
+// counts towards IsAuthenticationEnabled, so switching it off here would drop
+// authentication from a server the operator meant to protect.
+//
+// Such a provider with no usable redirect URL is the one shape this change does
+// NOT downgrade to a warning: it forces authentication on while making sign-in
+// impossible, so validateOAuthRedirects rejects it and startup stops with the field
+// named. Booting instead would leave an instance nobody can sign in to, with the
+// warning that explains why sitting behind the login that cannot complete.
 func TestNormalizeOAuthProviders_KeepsCredentialedProviderEnabled(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		provider      OAuthProviderConfig
-		expectWarning string
+		name        string
+		provider    OAuthProviderConfig
+		expectFatal string
 	}{
 		{
-			name:          "no redirect source",
-			provider:      OAuthProviderConfig{Provider: "google", Enabled: true, ClientID: "id", ClientSecret: "secret"},
-			expectWarning: "no redirect URL can be built",
+			name:        "no redirect source",
+			provider:    OAuthProviderConfig{Provider: "google", Enabled: true, ClientID: "id", ClientSecret: "secret"},
+			expectFatal: "no redirect URL can be built",
 		},
 		{
-			name:          "relative redirect URI, the shape a migrated legacy block carries",
-			provider:      OAuthProviderConfig{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
-			expectWarning: "not an absolute http(s) URL",
+			name:        "relative redirect URI, the shape a migrated legacy block carries",
+			provider:    OAuthProviderConfig{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
+			expectFatal: "not an absolute http(s) URL",
 		},
 	}
 
@@ -106,8 +111,72 @@ func TestNormalizeOAuthProviders_KeepsCredentialedProviderEnabled(t *testing.T) 
 				"a credentialed provider must stay enabled so authentication is still required")
 			assert.Equal(t, []string{tt.provider.Provider}, s.GetEnabledOAuthProviders(),
 				"authentication must not be silently removed")
-			assert.Contains(t, warningsText(s), tt.expectWarning)
-			require.NoError(t, ValidateSettings(s))
+
+			err := ValidateSettings(s)
+			require.Error(t, err,
+				"a provider that forces auth on but cannot complete a sign-in must stay fatal")
+			assert.Contains(t, err.Error(), tt.expectFatal)
+		})
+	}
+}
+
+// TestValidateOAuthRedirects_ScopedToLockOutShape pins the boundaries of the fatal
+// rule, so it cannot drift back into the blunt host requirement it replaced.
+//
+// The deleted security-oauth-host rule rejected any enabled social provider without
+// security.host or security.baseUrl, even one carrying a perfectly good absolute
+// redirectUri. Only the absence of a usable redirect is fatal now, and only when the
+// provider has the credentials that make authentication mandatory.
+func TestValidateOAuthRedirects_ScopedToLockOutShape(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		security Security
+		wantErr  bool
+	}{
+		{
+			name: "absolute redirectUri without host or baseUrl is accepted",
+			security: Security{OAuthProviders: []OAuthProviderConfig{
+				{Provider: providerGoogle, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "https://example.com/callback"},
+			}},
+		},
+		{
+			name: "host supplies the redirect source",
+			security: Security{Host: "example.com", OAuthProviders: []OAuthProviderConfig{
+				{Provider: providerGitHub, Enabled: true, ClientID: "id", ClientSecret: "secret"},
+			}},
+		},
+		{
+			name: "no credentials is inert, not fatal",
+			security: Security{OAuthProviders: []OAuthProviderConfig{
+				{Provider: providerGoogle, Enabled: true, RedirectURI: "/settings"},
+			}},
+		},
+		{
+			name: "disabled provider is never consulted",
+			security: Security{OAuthProviders: []OAuthProviderConfig{
+				{Provider: providerGoogle, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
+			}},
+		},
+		{
+			name: "credentialed provider with no usable redirect is fatal",
+			security: Security{OAuthProviders: []OAuthProviderConfig{
+				{Provider: providerMicrosoft, Enabled: true, ClientID: "id", ClientSecret: "secret", RedirectURI: "/settings"},
+			}},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateOAuthRedirects(&tt.security)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -246,11 +315,12 @@ func TestNormalizeOAuthProviders_WarnsForEveryLegacyBlock(t *testing.T) {
 	}
 }
 
-// TestNormalizeOAuthProviders_LegacyCredentialedBlockWarnsAfterMigration covers the
-// one shape the deleted host rule was doing real work for: a legacy block with
-// credentials and no redirect source. After migration it becomes an array entry, so
-// the redirect warning is what has to fire.
-func TestNormalizeOAuthProviders_LegacyCredentialedBlockWarnsAfterMigration(t *testing.T) {
+// TestNormalizeOAuthProviders_LegacyCredentialedBlockStaysFatalAfterMigration covers
+// the one shape the deleted host rule was doing real work for: a legacy block with
+// credentials and no redirect source. After migration it becomes an array entry that
+// forces authentication on while being unable to complete a sign-in, so it must stay
+// fatal rather than degrade to a warning nobody can reach.
+func TestNormalizeOAuthProviders_LegacyCredentialedBlockStaysFatalAfterMigration(t *testing.T) {
 	t.Parallel()
 
 	s := &Settings{}
@@ -261,8 +331,10 @@ func TestNormalizeOAuthProviders_LegacyCredentialedBlockWarnsAfterMigration(t *t
 
 	assert.Equal(t, []string{providerGoogle}, s.GetEnabledOAuthProviders(),
 		"a credentialed provider keeps requiring authentication")
-	assert.Contains(t, warningsText(s), "no redirect URL can be built")
-	require.NoError(t, ValidateSettings(s))
+
+	err := ValidateSettings(s)
+	require.Error(t, err, "a migrated legacy block with no redirect source must not boot")
+	assert.Contains(t, err.Error(), "no redirect URL can be built")
 }
 
 // TestNormalizeQuietHours_DisablesUnusableBlocks verifies that a quiet hours block
@@ -1083,7 +1155,10 @@ realtime:
 	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0o600))
 
 	oldPath := ConfigPath
-	oldSettings := GetSettings()
+	// Clone rather than keep the live pointer: GetSettings returns the published
+	// settings, so a snapshot taken by reference would follow any mutation the test
+	// makes and restore the mutated state instead of the original.
+	oldSettings := CloneSettings(GetSettings())
 	t.Cleanup(func() {
 		ConfigPath = oldPath
 		viper.Reset()

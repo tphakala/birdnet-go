@@ -12,12 +12,13 @@ import (
 func TestValidateSecuritySettings_OAuth(t *testing.T) {
 	t.Parallel()
 
-	// validateSecuritySettings no longer carries an OAuth-specific rule. A provider
-	// that cannot complete a sign-in is reported by normalizeIncompleteFeatures on
-	// the load path, which this entry point does not run; see
-	// TestNormalizeOAuthProviders_LegacyCredentialedBlockWarnsAfterMigration for the
-	// behaviour that replaced the deleted host rule, and validateOIDCProviders for
-	// the one provider kind where an unusable configuration is still rejected here.
+	// The blunt security-oauth-host rule is gone: it rejected a provider carrying a
+	// perfectly good absolute redirectUri just because security.host was unset, and
+	// it only ever looked at the deprecated blocks. What replaced it is
+	// validateOAuthRedirects, which is narrower (only a missing usable redirect is
+	// fatal) and wider (every provider kind, via the migrated array). The cases below
+	// all supply an absolute redirectUri, so none of them is rejected here; see
+	// TestValidateOAuthRedirects_ScopedToLockOutShape for the boundary.
 	tests := []struct {
 		name     string
 		security Security

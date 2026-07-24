@@ -94,22 +94,27 @@ The "realtime" command is an alias for backward compatibility.`,
 // setupFlags configures flags specific to the serve command.
 // These are the same flags previously on the realtime command.
 func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
-	// Flags whose target the config load rewrites take their default from the loaded
-	// settings rather than from viper, for the same reason as --locale in
-	// cmd/root.go: cobra assigns the default into the bound variable at registration
-	// time, so passing the raw viper value writes it straight back over whatever
-	// load produced. For --source, --rtsp and --rtsptransport that would resurrect
-	// the legacy keys MigrateAudioSourceConfig and MigrateRTSPConfig deliberately
-	// cleared, and the next save would write them back into config.yaml. For
-	// --listen it would undo the normalized telemetry address, leaving the endpoint
-	// with nothing to bind.
-	cmd.Flags().StringVar(&settings.Realtime.Audio.Export.Path, "clippath", viper.GetString("realtime.audio.export.path"), "Path to save audio clips")
+	// Every flag default comes from the loaded settings rather than from viper, for
+	// the same reason as --locale in cmd/root.go: cobra assigns the default into the
+	// bound variable at registration time, so passing the raw viper value writes it
+	// straight back over whatever load produced. For --source, --rtsp and
+	// --rtsptransport that would resurrect the legacy keys MigrateAudioSourceConfig
+	// and MigrateRTSPConfig deliberately cleared, and the next save would write them
+	// back into config.yaml. For --listen it would undo the normalized telemetry
+	// address, leaving the endpoint with nothing to bind.
+	//
+	// The remaining flags are read from settings too, even though nothing rewrites
+	// their keys today. Since the bound field already holds the loaded value, each
+	// default is a self-assignment, so the uniform spelling costs nothing and removes
+	// the trap: the next default or migration added to export.path, log.path or
+	// telemetry.enabled would otherwise silently reintroduce exactly this bug.
+	cmd.Flags().StringVar(&settings.Realtime.Audio.Export.Path, "clippath", settings.Realtime.Audio.Export.Path, "Path to save audio clips")
 	cmd.Flags().StringVar(&settings.Realtime.Audio.Source, "source", settings.Realtime.Audio.Source, "Audio capture source (\"sysdefault\", \"USB Audio\", \":0,0\", etc.)")
-	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
-	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
+	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", settings.Realtime.Log.Path, "Path to save log files")
+	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", settings.Realtime.ProcessingTime, "Report processing time for each detection")
 	cmd.Flags().StringSliceVar(&settings.Realtime.RTSP.URLs, "rtsp", settings.Realtime.RTSP.URLs, "URL of RTSP audio stream to capture")
 	cmd.Flags().StringVar(&settings.Realtime.RTSP.Transport, "rtsptransport", settings.Realtime.RTSP.Transport, "RTSP transport (tcp/udp)")
-	cmd.Flags().BoolVar(&settings.Realtime.Telemetry.Enabled, "telemetry", viper.GetBool("realtime.telemetry.enabled"), "Enable Prometheus telemetry endpoint")
+	cmd.Flags().BoolVar(&settings.Realtime.Telemetry.Enabled, "telemetry", settings.Realtime.Telemetry.Enabled, "Enable Prometheus telemetry endpoint")
 	cmd.Flags().StringVar(&settings.Realtime.Telemetry.Listen, "listen", settings.Realtime.Telemetry.Listen, "Listen address and port of telemetry endpoint")
 
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {

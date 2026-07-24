@@ -26,11 +26,12 @@ const (
 
 // validateSecuritySettings validates the security-specific settings.
 //
-// A social provider that is enabled but cannot complete a sign-in no longer blocks
-// startup: normalizeIncompleteFeatures disables the ones the runtime already
-// ignores and warns about the rest, because the alternative is a server that will
-// not boot and therefore serves no UI in which to fix the provider. OIDC is the
-// exception, and validateOIDCProviders explains why.
+// A provider that is enabled but merely unfinished no longer blocks startup:
+// normalizeIncompleteFeatures disables the ones the runtime already ignores,
+// because the alternative is a server that will not boot and therefore serves no
+// UI in which to fix the provider. The exception is a provider that can still
+// force authentication on while being unable to complete a sign-in; see
+// validateOAuthRedirects and validateOIDCProviders.
 func validateSecuritySettings(settings *Security) error {
 	// TLS mode validation
 	if err := validateTLSMode(settings); err != nil {
@@ -86,11 +87,80 @@ func validateSecuritySettings(settings *Security) error {
 		settings.SessionDuration = DefaultSessionDuration // 7 days, matches viper default
 	}
 
+	// Reject providers that would force authentication on without being able to
+	// complete a sign-in. Runs before validateOIDCProviders so that the reason an
+	// operator cannot get in is reported ahead of the OIDC-only issuer rules.
+	if err := validateOAuthRedirects(settings); err != nil {
+		return err
+	}
+
 	// Validate OIDC provider configuration
 	if err := validateOIDCProviders(settings); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+// oauthRedirectProblem describes why a provider has no usable redirect URL, or
+// returns "" when it has one. It mirrors what initializeProviders actually
+// computes: an explicit redirectUri is used verbatim, and only an absent one is
+// built from security.host or security.baseUrl.
+//
+// Testing merely for an empty redirectUri would miss the common case. The
+// deprecated googleAuth and githubAuth blocks default redirecturi to "/settings"
+// (see defaults.go), and MigrateOAuthConfig copies that into the array as-is, so a
+// migrated provider usually carries a non-empty but relative value that no OAuth
+// provider can redirect back to.
+func oauthRedirectProblem(p *OAuthProviderConfig, hasOrigin bool) string {
+	if p.RedirectURI == "" {
+		if hasOrigin {
+			return ""
+		}
+		return "no redirect URL can be built; set security.host or security.baseUrl, or security.oauthProviders[].redirectUri"
+	}
+	parsed, err := url.Parse(p.RedirectURI)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
+		return "its redirectUri is not an absolute http(s) URL, so the provider has nowhere to send the user back to"
+	}
+	return ""
+}
+
+// validateOAuthRedirects rejects an enabled OAuth provider that has credentials but
+// no usable redirect URL, for every provider kind.
+//
+// This is the one shape that the rest of this change cannot afford to downgrade to
+// a warning. Credentials are what make a provider count towards
+// IsAuthenticationEnabled (see GetEnabledOAuthProviders), so such an entry makes
+// authentication mandatory, while initializeProviders still registers it with a
+// redirect the identity provider will reject. The result is an instance nobody can
+// sign in to, and the notification that reports the problem lives behind the very
+// login that cannot complete. Refusing to boot at least names the field.
+//
+// The credentials guard is what keeps this consistent with the rest of the pass: a
+// provider merely toggled on cannot sign anyone in either, but it also does not
+// make authentication required, so it is inert and normalizeOAuthProviders just
+// disables it.
+//
+// This deliberately does not restore the deleted security-oauth-host rule, which
+// demanded security.host or security.baseUrl even from a provider carrying a
+// perfectly good absolute redirectUri. Only the absence of any usable redirect is
+// fatal here.
+func validateOAuthRedirects(settings *Security) error {
+	hasOrigin := settings.Host != "" || settings.BaseURL != ""
+	for i := range settings.OAuthProviders {
+		provider := &settings.OAuthProviders[i]
+		if !provider.Enabled || provider.ClientID == "" || provider.ClientSecret == "" {
+			continue
+		}
+		if reason := oauthRedirectProblem(provider, hasOrigin); reason != "" {
+			return errors.Newf("security.oauthProviders: provider %q is enabled but %s", provider.Provider, reason).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-oauth-redirect-missing").
+				Context("provider", provider.Provider).
+				Build()
+		}
+	}
 	return nil
 }
 
@@ -149,14 +219,17 @@ func validateTLSMode(settings *Security) error {
 // refusing to start over a leftover is the failure this whole change exists to
 // remove.
 //
-// An unusable issuer URL, and a provider with no way back from the identity
-// provider, both stay fatal. That is worth spelling out because the rest of this
-// change moves in the other direction. Enabling OIDC is the setting that can lock
-// an operator out of their own instance: the provider counts towards
-// IsAuthenticationEnabled as soon as it has credentials, so accepting either shape
-// means authentication becomes required while no sign-in can complete. The settings
-// API validates without normalizing, so keeping these rules here is what answers
-// that save with an error instead of a 200 and a locked door.
+// An unusable issuer URL stays fatal. That is worth spelling out because the rest
+// of this change moves in the other direction. Enabling OIDC is the setting that
+// can lock an operator out of their own instance: the provider counts towards
+// IsAuthenticationEnabled as soon as it has credentials, so accepting a broken
+// issuer means authentication becomes required while no sign-in can complete. The
+// settings API validates without normalizing, so keeping this rule here is what
+// answers that save with an error instead of a 200 and a locked door.
+//
+// The matching "no way back from the identity provider" rule used to live here too.
+// It now applies to every provider kind in validateOAuthRedirects, because the
+// lock-out it prevents was never specific to OIDC.
 //
 // The load path pays for that: an OIDC provider with credentials and a broken
 // issuer still refuses to boot. The trade is deliberate. A provider merely toggled
@@ -176,17 +249,6 @@ func validateOIDCProviders(settings *Security) error {
 			return errors.Newf("only one enabled OIDC provider (provider: %q) is allowed in security.oauthProviders, found duplicate entry", providerOIDC).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-duplicate").
-				Build()
-		}
-		// A provider with no way back from the identity provider is the same
-		// lock-out as a broken issuer, so it is fatal for the same reason. Scoped to
-		// OIDC because that is where the rule already existed; the array-based
-		// social providers never had one, and adding it here would newly reject
-		// configurations that load today.
-		if reason := oauthRedirectProblem(provider, settings.Host != "" || settings.BaseURL != ""); reason != "" {
-			return errors.Newf("security.oauthProviders: OIDC provider is enabled but %s", reason).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "security-oidc-redirect-missing").
 				Build()
 		}
 		if provider.IssuerURL == "" {

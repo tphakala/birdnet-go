@@ -1997,7 +1997,7 @@
         },
         "windowdays": {
           "type": "integer",
-          "description": "Days to show \"new this season\" indicator (default: 21)"
+          "description": "Days to show \"new this season\" indicator (default: 7, DefaultSeasonalTrackingWindowDays)"
         },
         "seasons": {
           "oneOf": [
@@ -2415,7 +2415,7 @@
         },
         "newspecieswindowdays": {
           "type": "integer",
-          "description": "Days to consider a species \"new\" (default: 14)"
+          "description": "Days to consider a species \"new\" (default: 7, DefaultNewSpeciesWindowDays)"
         },
         "syncintervalminutes": {
           "type": "integer",
@@ -2820,7 +2820,7 @@
         },
         "windowdays": {
           "type": "integer",
-          "description": "Days to show \"new this year\" indicator (default: 30)"
+          "description": "Days to show \"new this year\" indicator (default: 7, DefaultYearlyTrackingWindowDays)"
         }
       },
       "additionalProperties": false,
