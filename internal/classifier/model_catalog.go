@@ -80,7 +80,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		CommercialUse:   false,
 		Category:        CategoryWildlife,
 		Region:          "",
-		SpeciesCount:    0, // determined at runtime from the embedded v2.4 labels (no labels file is downloaded)
+		SpeciesCount:    0, // determined at runtime from label file
 		Version:         "3.0",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
