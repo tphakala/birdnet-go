@@ -1009,6 +1009,7 @@
       "title": "Artens sjældenhed",
       "score": "Score",
       "basedOnLocation": "Baseret på lokation: {latitude}, {longitude}",
+      "highlightTooltip": "Sjælden ({percent}% forekomst)",
       "statuses": {
         "very_common": "Meget almindelig",
         "common": "Almindelig",
@@ -4581,6 +4582,19 @@
         "defaultGain": "Standard lydstyrkeforstærkning",
         "defaultGainHelpText": "Indledende forstærkning ved afspilning af optagelser. Fuglelyde er ofte stille, så en forstærkning på 6-12 dB anbefales.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Fremhævning af sjældne arter",
+        "description": "Fremhæv registreringer af arter, der er sjældne for din placering og årstid.",
+        "enabled": {
+          "label": "Fremhæv sjældne arter",
+          "helpText": "Viser en rød stjerne på registreringer, hvis forekomstsandsynlighed er lig med eller under tærsklen."
+        },
+        "threshold": {
+          "label": "Tærskel for sjældenhed",
+          "helpText": "Arter med en forekomstsandsynlighed lig med eller under denne værdi markeres som sjældne.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Nogle ændringer kræver genstart af serveren for at træde i kraft. Genstart venligst BirdNET-Go."

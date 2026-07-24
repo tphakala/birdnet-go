@@ -1009,6 +1009,7 @@
       "title": "Vzácnosť druhu",
       "score": "Skóre",
       "basedOnLocation": "Na základe polohy: {latitude}, {longitude}",
+      "highlightTooltip": "Vzácny ({percent}% výskyt)",
       "statuses": {
         "very_common": "Veľmi bežný",
         "common": "Bežný",
@@ -4581,6 +4582,19 @@
         "defaultGain": "Predvolené zosilnenie hlasitosti",
         "defaultGainHelpText": "Počiatočné zosilnenie pri prehrávaní nahrávok. Zvuky vtákov sú často tiché, preto sa odporúča zosilnenie 6-12 dB.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Zvýraznenie vzácnych druhov",
+        "description": "Zvýrazniť detekcie druhov, ktoré sú pre vašu polohu a ročné obdobie vzácne.",
+        "enabled": {
+          "label": "Zvýrazniť vzácne druhy",
+          "helpText": "Zobrazí červenú hviezdu pri detekciách, ktorých pravdepodobnosť výskytu je nižšia alebo rovná prahovej hodnote."
+        },
+        "threshold": {
+          "label": "Prah vzácnosti",
+          "helpText": "Druhy s pravdepodobnosťou výskytu nižšou alebo rovnou tejto hodnote sú označené ako vzácne.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Niektoré zmeny vyžadujú reštart servera. Reštartujte BirdNET-Go."

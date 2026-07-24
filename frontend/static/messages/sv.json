@@ -1009,6 +1009,7 @@
       "title": "Arternas sällsynthet",
       "score": "Poäng",
       "basedOnLocation": "Baserat på plats: {latitude}, {longitude}",
+      "highlightTooltip": "Sällsynt ({percent}% förekomst)",
       "statuses": {
         "very_common": "Mycket vanlig",
         "common": "Vanlig",
@@ -4581,6 +4582,19 @@
         "defaultGain": "Standard volymförstärkning",
         "defaultGainHelpText": "Initial förstärkning vid uppspelning av inspelningar. Fågelljud är ofta svaga, så en förstärkning på 6–12 dB rekommenderas.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Markering av sällsynta arter",
+        "description": "Markera detektioner av arter som är sällsynta för din plats och tid på året.",
+        "enabled": {
+          "label": "Markera sällsynta arter",
+          "helpText": "Visar en röd stjärna på detektioner vars förekomstsannolikhet är lika med eller under tröskelvärdet."
+        },
+        "threshold": {
+          "label": "Tröskel för sällsynthet",
+          "helpText": "Arter med en förekomstsannolikhet som är lika med eller under detta värde markeras som sällsynta.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Vissa ändringar kräver en omstart av servern för att träda i kraft. Starta om BirdNET-Go."

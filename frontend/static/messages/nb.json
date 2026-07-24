@@ -1009,6 +1009,7 @@
       "title": "Sjeldenhetsgrad",
       "score": "Score",
       "basedOnLocation": "Basert på posisjon: {latitude}, {longitude}",
+      "highlightTooltip": "Sjelden ({percent}% forekomst)",
       "statuses": {
         "very_common": "Svært vanlig",
         "common": "Vanlig",
@@ -4581,6 +4582,19 @@
         "defaultGain": "Standard volumforsterkning",
         "defaultGainHelpText": "Startforsterkning ved avspilling av opptak. Fuglelyder er ofte stille, så en forsterkning på 6–12 dB anbefales.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Utheving av sjeldne arter",
+        "description": "Uthev deteksjoner av arter som er sjeldne for stedet ditt og tiden på året.",
+        "enabled": {
+          "label": "Uthev sjeldne arter",
+          "helpText": "Viser en rød stjerne på deteksjoner der forekomstsannsynligheten er lik eller under terskelen."
+        },
+        "threshold": {
+          "label": "Terskel for sjeldenhet",
+          "helpText": "Arter med en forekomstsannsynlighet lik eller under denne verdien merkes som sjeldne.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Noen endringer krever en serveromstart for å ta effekt. Start BirdNET-Go på nytt."

@@ -79,6 +79,7 @@ Responsive Breakpoints:
     noveltyCategoryColorVar,
   } from '$lib/desktop/features/dashboard/utils/noveltyCategory';
   import { ChevronLeft, ChevronRight, Star, XCircle } from '@lucide/svelte';
+  import RareSpeciesIndicator from '$lib/desktop/components/data/RareSpeciesIndicator.svelte';
   import { untrack } from 'svelte';
   import AnimatedCounter from './AnimatedCounter.svelte';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
@@ -1084,6 +1085,7 @@ Responsive Breakpoints:
                     title={displayName}
                   >
                     <span class="truncate flex-1">{displayName}</span>
+                    <RareSpeciesIndicator scientificName={item.scientific_name} />
                     {#if resolveNoveltyCategory(item) === 'lifetime'}
                       <span
                         class="inline-block shrink-0"

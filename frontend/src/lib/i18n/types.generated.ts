@@ -802,6 +802,7 @@ export type TranslationKey =
   | 'species.rarity.title'
   | 'species.rarity.score'
   | 'species.rarity.basedOnLocation' // params: latitude, longitude
+  | 'species.rarity.highlightTooltip' // params: percent
   | 'species.rarity.statuses.very_common'
   | 'species.rarity.statuses.common'
   | 'species.rarity.statuses.uncommon'
@@ -3347,6 +3348,13 @@ export type TranslationKey =
   | 'settings.userInterface.audioPlayback.defaultGain'
   | 'settings.userInterface.audioPlayback.defaultGainHelpText'
   | 'settings.userInterface.audioPlayback.defaultGainUnit'
+  | 'settings.userInterface.rarity.title'
+  | 'settings.userInterface.rarity.description'
+  | 'settings.userInterface.rarity.enabled.label'
+  | 'settings.userInterface.rarity.enabled.helpText'
+  | 'settings.userInterface.rarity.threshold.label'
+  | 'settings.userInterface.rarity.threshold.helpText'
+  | 'settings.userInterface.rarity.threshold.unit'
   | 'settings.restartRequired'
   | 'auth.login'
   | 'auth.logout'
@@ -4130,6 +4138,7 @@ export type TranslationParams = {
   'detections.aria.thumbnailLoaded': { species: string | number };
   'detections.errors.loadFailed': { status: string | number };
   'species.rarity.basedOnLocation': { latitude: string | number; longitude: string | number };
+  'species.rarity.highlightTooltip': { percent: string | number };
   'spectrogram.gain.level': { value: string | number };
   'system.systemInfo.temperatureValue': { temp: string | number };
   'system.errors.systemInfo': { error: string | number };

@@ -1009,6 +1009,7 @@
       "title": "Rareza de la especie",
       "score": "Puntuación",
       "basedOnLocation": "Basado en la ubicación: {latitude}, {longitude}",
+      "highlightTooltip": "Rara ({percent}% de aparición)",
       "statuses": {
         "very_common": "Muy común",
         "common": "Común",
@@ -4581,6 +4582,19 @@
         "defaultGain": "Amplificación de volumen predeterminada",
         "defaultGainHelpText": "Ganancia inicial aplicada al reproducir grabaciones. Los sonidos de aves suelen ser suaves, por lo que se recomienda una amplificación de 6-12 dB.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Resaltado de especies raras",
+        "description": "Resalta las detecciones de especies que son raras para tu ubicación y época del año.",
+        "enabled": {
+          "label": "Resaltar especies raras",
+          "helpText": "Muestra una estrella roja en las detecciones cuya probabilidad de aparición es igual o inferior al umbral."
+        },
+        "threshold": {
+          "label": "Umbral de rareza",
+          "helpText": "Las especies con una probabilidad de aparición igual o inferior a este valor se marcan como raras.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Algunos cambios requieren reiniciar el servidor para aplicarse. Reinicia BirdNET-Go."

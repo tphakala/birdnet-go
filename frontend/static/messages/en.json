@@ -1009,6 +1009,7 @@
       "title": "Species Rarity",
       "score": "Score",
       "basedOnLocation": "Based on location: {latitude}, {longitude}",
+      "highlightTooltip": "Rare ({percent}% occurrence)",
       "statuses": {
         "very_common": "Very Common",
         "common": "Common",
@@ -4581,6 +4582,19 @@
         "defaultGain": "Default Volume Boost",
         "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Rare Species Highlighting",
+        "description": "Highlight detections of species that are rare for your location and time of year.",
+        "enabled": {
+          "label": "Highlight rare species",
+          "helpText": "Show a red star on detections whose occurrence probability is at or below the threshold."
+        },
+        "threshold": {
+          "label": "Rarity threshold",
+          "helpText": "Species with an occurrence probability at or below this value are marked rare.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."

@@ -1009,6 +1009,7 @@
       "title": "Seltenheit der Art",
       "score": "Bewertung",
       "basedOnLocation": "Basierend auf Standort: {latitude}, {longitude}",
+      "highlightTooltip": "Selten ({percent}% Vorkommen)",
       "statuses": {
         "very_common": "Sehr häufig",
         "common": "Häufig",
@@ -4581,6 +4582,19 @@
         "defaultGain": "Standard-Lautstärkeverstärkung",
         "defaultGainHelpText": "Anfangsverstärkung bei der Wiedergabe von Aufnahmen. Vogelstimmen sind oft leise, daher wird eine Verstärkung von 6-12 dB empfohlen.",
         "defaultGainUnit": "dB"
+      },
+      "rarity": {
+        "title": "Hervorhebung seltener Arten",
+        "description": "Erkennungen von Arten hervorheben, die für Ihren Standort und die Jahreszeit selten sind.",
+        "enabled": {
+          "label": "Seltene Arten hervorheben",
+          "helpText": "Zeigt einen roten Stern bei Erkennungen an, deren Vorkommenswahrscheinlichkeit auf oder unter dem Schwellenwert liegt."
+        },
+        "threshold": {
+          "label": "Seltenheitsschwelle",
+          "helpText": "Arten mit einer Vorkommenswahrscheinlichkeit auf oder unter diesem Wert werden als selten markiert.",
+          "unit": "%"
+        }
       }
     },
     "restartRequired": "Einige Änderungen erfordern einen Neustart des Servers. Bitte starten Sie BirdNET-Go neu."

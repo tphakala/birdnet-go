@@ -33,6 +33,7 @@
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
+  import RareSpeciesIndicator from '$lib/desktop/components/data/RareSpeciesIndicator.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
@@ -263,12 +264,15 @@
     <!-- Species Names -->
     <div class="sp-species-info-wrapper">
       <div class="sp-species-names">
-        <button
-          onclick={handleDetailsClick}
-          class="sp-species-common-name hover:text-primary transition-colors cursor-pointer text-left"
-        >
-          {displayName}
-        </button>
+        <div class="flex items-center gap-1">
+          <button
+            onclick={handleDetailsClick}
+            class="sp-species-common-name hover:text-primary transition-colors cursor-pointer text-left"
+          >
+            {displayName}
+          </button>
+          <RareSpeciesIndicator scientificName={detection.scientificName} />
+        </div>
         <div class="sp-species-scientific-name">{detection.scientificName}</div>
       </div>
     </div>

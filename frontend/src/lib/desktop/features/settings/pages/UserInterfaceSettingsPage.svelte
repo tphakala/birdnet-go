@@ -18,6 +18,7 @@
     settingsActions,
     dashboardSettings,
     DEFAULT_SPECTROGRAM_SETTINGS,
+    DEFAULT_RARITY,
     type SpectrogramPreRender,
     type SpectrogramStyle,
     type SpectrogramDynamicRange,
@@ -200,10 +201,12 @@
       {
         thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
         spectrogram: store.originalData.realtime?.dashboard?.spectrogram,
+        rarity: store.originalData.realtime?.dashboard?.rarity,
       },
       {
         thumbnails: store.formData.realtime?.dashboard?.thumbnails,
         spectrogram: store.formData.realtime?.dashboard?.spectrogram,
+        rarity: store.formData.realtime?.dashboard?.rarity,
       }
     )
   );
@@ -231,6 +234,16 @@
       dashboard: {
         ...settings.dashboard,
         thumbnails: { ...settings.dashboard.thumbnails, [key]: value },
+      },
+    });
+  }
+
+  function updateRaritySetting(key: 'enabled' | 'threshold', value: boolean | number) {
+    const current = settings.dashboard.rarity ?? DEFAULT_RARITY;
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        ...settings.dashboard,
+        rarity: { ...current, [key]: value },
       },
     });
   }
@@ -636,6 +649,40 @@
               </span>
             </SettingsNote>
           </div>
+        </div>
+      </div>
+    </SettingsSection>
+
+    <SettingsSection
+      title={t('settings.userInterface.rarity.title')}
+      description={t('settings.userInterface.rarity.description')}
+      originalData={{ rarity: store.originalData.realtime?.dashboard?.rarity }}
+      currentData={{ rarity: store.formData.realtime?.dashboard?.rarity }}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={settings.dashboard.rarity?.enabled ?? DEFAULT_RARITY.enabled}
+          label={t('settings.userInterface.rarity.enabled.label')}
+          helpText={t('settings.userInterface.rarity.enabled.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateRaritySetting('enabled', value)}
+        />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+          <InlineSlider
+            label={t('settings.userInterface.rarity.threshold.label')}
+            helpText={t('settings.userInterface.rarity.threshold.helpText')}
+            value={Math.round(
+              (settings.dashboard.rarity?.threshold ?? DEFAULT_RARITY.threshold) * 100
+            )}
+            onUpdate={value => updateRaritySetting('threshold', value / 100)}
+            min={0}
+            max={100}
+            step={5}
+            unit={t('settings.userInterface.rarity.threshold.unit')}
+            disabled={store.isLoading ||
+              store.isSaving ||
+              !(settings.dashboard.rarity?.enabled ?? DEFAULT_RARITY.enabled)}
+          />
         </div>
       </div>
     </SettingsSection>

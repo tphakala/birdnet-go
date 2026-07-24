@@ -188,7 +188,21 @@ type Dashboard struct {
 	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
 	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
 	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
+	Rarity           RarityHighlight      `yaml:"rarity" json:"rarity"`                                 // rare-species highlight settings
 }
+
+// RarityHighlight controls highlighting of detections whose geomodel occurrence
+// probability is at or below Threshold (a "rare" sighting for the configured
+// location and time of year). The occurrence probability is the same value shown
+// as species rarity on the detection detail page (0-1, higher = more common).
+type RarityHighlight struct {
+	Enabled   bool    `yaml:"enabled" json:"enabled"`                                      // show the rare-species highlight icon on detections
+	Threshold float64 `yaml:"threshold" json:"threshold" jsonschema:"minimum=0,maximum=1"` // occurrence probability (0-1) at or below which a detection is flagged rare
+}
+
+// DefaultRarityHighlightThreshold is the default occurrence probability at or
+// below which a detection is highlighted as rare (see RarityHighlight).
+const DefaultRarityHighlightThreshold = 0.25
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.
 // Element order is determined by array index position.
