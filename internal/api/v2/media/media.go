@@ -106,6 +106,67 @@ func isValidFilename(filename string) bool {
 	return true
 }
 
+// contentDispositionFilename returns the user-facing clip filename advertised
+// by media responses. BirdNET-Go's legacy on-disk naming convention formats
+// clip timestamps in local time but appends a literal Z, which normally means
+// UTC. Keep the stored path unchanged for compatibility while removing that
+// misleading marker from recognized clip timestamps in download filenames.
+func contentDispositionFilename(filename string) string {
+	const timestampLayout = "20060102T150405Z"
+
+	ext := filepath.Ext(filename)
+	stem := strings.TrimSuffix(filename, ext)
+	timestampStem := diskmanager.StripDurationSuffix(stem)
+	timestampEnd := len(timestampStem)
+
+	if timestampEnd < len(timestampLayout) {
+		return filename
+	}
+	timestampStart := timestampEnd - len(timestampLayout)
+	if timestampStart == 0 || stem[timestampStart-1] != '_' {
+		return filename
+	}
+	prefix := timestampStem[:timestampStart-1]
+	confidenceSeparator := strings.LastIndexByte(prefix, '_')
+	if confidenceSeparator < 1 {
+		return filename
+	}
+	confidence := prefix[confidenceSeparator+1:]
+	if len(confidence) < 2 || confidence[len(confidence)-1] != 'p' {
+		return filename
+	}
+	if _, err := strconv.ParseUint(confidence[:len(confidence)-1], 10, 64); err != nil {
+		return filename
+	}
+
+	timestamp := stem[timestampStart:timestampEnd]
+	if _, err := time.ParseInLocation(timestampLayout, timestamp, time.Local); err != nil {
+		return filename
+	}
+
+	return stem[:timestampEnd-1] + stem[timestampEnd:] + ext
+}
+
+// setAudioContentDisposition advertises a safe, user-facing filename while
+// keeping the response inline for browser playback.
+func setAudioContentDisposition(ctx echo.Context, filename string) {
+	if !isValidFilename(filename) {
+		return
+	}
+
+	dispositionFilename := contentDispositionFilename(filename)
+	// QueryEscape provides the conservative percent-encoding needed for an
+	// RFC 5987 filename* value, except that its form-style spaces use '+'.
+	encodedFilename := strings.ReplaceAll(url.QueryEscape(dispositionFilename), "+", "%20")
+	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename*=UTF-8''%s", encodedFilename))
+}
+
+func clearAudioResponseHeaders(ctx echo.Context) {
+	ctx.Response().Header().Del("Content-Type")
+	ctx.Response().Header().Del("Content-Disposition")
+	ctx.Response().Header().Del("Accept-Ranges")
+}
+
 // AudioNotReadyError carries retry information for audio files that are not yet ready
 type AudioNotReadyError struct {
 	RetryAfter time.Duration
@@ -472,6 +533,9 @@ func (c *Handler) isAudioBeingEncoded(relClipPath string) bool {
 // error log, Sentry, and the bell. The JSON body is identical to HandleError's because
 // both build it via NewErrorResponse. Callers log the condition at Debug themselves.
 func (c *Handler) writeAudioNotReady(ctx echo.Context, err error, message string, retryAfterSeconds int) error {
+	// These handlers write a JSON response, so discard any audio headers set by
+	// the initial serve attempt before committing it.
+	clearAudioResponseHeaders(ctx)
 	ctx.Response().Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
 	return ctx.JSON(http.StatusServiceUnavailable,
 		c.NewErrorResponse(err, message, http.StatusServiceUnavailable))
@@ -710,6 +774,8 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid file path", http.StatusBadRequest)
 	}
 
+	setAudioContentDisposition(ctx, filepath.Base(normalizedFilename))
+
 	// Serve the file using SecureFS. It handles path validation and serves the file.
 	// ServeRelativeFile is expected to return appropriate echo.HTTPErrors (400, 404, 500).
 	err = c.SFS.ServeRelativeFile(ctx, normalizedFilename)
@@ -722,14 +788,20 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
 			// Filename-based serving has no note ID to resolve capture times, so pass
 			// zero times (unknown -> no pending window, keep the grace wait, fail-safe).
-			return c.handleAudio404WithWait(ctx, normalizedFilename, err, time.Time{}, time.Time{},
+			err = c.handleAudio404WithWait(ctx, normalizedFilename, err, time.Time{}, time.Time{},
 				logger.String("filename", filename),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()),
 			)
+		} else {
+			// Error logging is handled within translateSecureFSError
+			err = c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 		}
-		// Error logging is handled within translateSecureFSError
-		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
+
+		if err != nil && !ctx.Response().Committed {
+			clearAudioResponseHeaders(ctx)
+		}
+		return err
 	}
 
 	c.LogInfoIfEnabled("Successfully served audio clip by filename",
@@ -803,9 +875,7 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 
 	// Set Content-Disposition as inline to enable playback in browser.
 	// Use filename* for proper UTF-8 filename encoding.
-	if isValidFilename(originalFilename) {
-		ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename*=UTF-8''%s", url.QueryEscape(originalFilename)))
-	}
+	setAudioContentDisposition(ctx, originalFilename)
 
 	// Ensure Accept-Ranges header is set for iOS Safari.
 	ctx.Response().Header().Set("Accept-Ranges", "bytes")
@@ -813,26 +883,27 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 	// Serve the file using SecureFS.
 	err = c.SFS.ServeRelativeFile(ctx, normalizedClipPath)
 	if err != nil {
-		// Clear audio-specific headers before error handling so 404 responses
-		// don't carry Content-Type: audio/wav on JSON error bodies.
-		if !ctx.Response().Committed {
-			ctx.Response().Header().Del("Content-Type")
-			ctx.Response().Header().Del("Content-Disposition")
-			ctx.Response().Header().Del("Accept-Ranges")
-		}
-
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
 			// Capture times drive the pending-export and ghost decisions. They are
 			// looked up here on the 404 slow path only.
 			begin, end := c.noteCaptureTimes(noteID)
-			return c.handleAudio404WithWait(ctx, normalizedClipPath, err, begin, end,
+			err = c.handleAudio404WithWait(ctx, normalizedClipPath, err, begin, end,
 				logger.String("note_id", noteID),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()),
 			)
+		} else {
+			err = c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 		}
-		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
+
+		// Preserve the audio headers if a wait/retry served the file. Terminal
+		// JSON responses clear them in writeAudioNotReady; uncommitted errors are
+		// cleared here before Echo renders the error body.
+		if err != nil && !ctx.Response().Committed {
+			clearAudioResponseHeaders(ctx)
+		}
+		return err
 	}
 
 	return nil
