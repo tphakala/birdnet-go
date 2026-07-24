@@ -90,6 +90,9 @@ func CloneSettings(src *Settings) *Settings {
 	dst.Realtime.Species.Exclude = slices.Clone(src.Realtime.Species.Exclude)
 	dst.Realtime.Species.Config = cloneSpeciesConfigMap(src.Realtime.Species.Config)
 
+	// Realtime.LifeList.
+	dst.Realtime.LifeList.Species = slices.Clone(src.Realtime.LifeList.Species)
+
 	// Realtime.SpeciesTracking.SeasonalTracking.Seasons: values are plain value
 	// structs (no nested slices/maps), so maps.Clone is sufficient.
 	dst.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(src.Realtime.SpeciesTracking.SeasonalTracking.Seasons)

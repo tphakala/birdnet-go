@@ -183,28 +183,37 @@ func (t *SpeciesTracker) PruneOldEntries() int {
 	// Prune seasonal tracking maps if enabled
 	pruned += t.pruneSeasonalEntriesLocked(now)
 
-	// Also cleanup old notification records (only if suppression is enabled)
+	// Also cleanup old notification records (only if suppression is enabled).
+	// Lifer cleanup shares this gate with new-species even though its window is
+	// fixed rather than user-configurable: RecordLiferNotificationSent only
+	// persists lifer rows to the database under this same condition (see its
+	// doc comment), so there's nothing here to clean up when it's disabled.
 	if t.notificationSuppressionWindow > 0 {
-		pruned += t.cleanupOldNotificationRecordsLocked(now)
+		pruned += t.cleanupOldNotificationRecordsLocked(t.notificationLastSent, now, t.notificationSuppressionWindow)
+		pruned += t.cleanupOldNotificationRecordsLocked(t.liferNotificationLastSent, now, liferNotificationSuppressionWindow)
 	}
 
 	return pruned
 }
 
-// cleanupOldNotificationRecordsLocked is an internal version that assumes lock is already held
-func (t *SpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time.Time) int {
-	if t.notificationLastSent == nil || t.notificationSuppressionWindow <= 0 {
+// cleanupOldNotificationRecordsLocked is an internal version that assumes lock
+// is already held. Shared by notificationLastSent and
+// liferNotificationLastSent, which are independent maps that use different
+// suppression windows (see liferNotificationLastSent's doc comment); window is
+// the one that applies to m.
+func (t *SpeciesTracker) cleanupOldNotificationRecordsLocked(m map[string]time.Time, currentTime time.Time, window time.Duration) int {
+	if m == nil || window <= 0 {
 		return 0
 	}
 
 	cleaned := 0
-	// Compute cutoff = currentTime - suppressionWindow to remove records no longer needed
+	// Compute cutoff = currentTime - window to remove records no longer needed
 	// Once the suppression window has passed, we can notify again, so no need to keep the record
-	cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
+	cutoffTime := currentTime.Add(-window)
 
-	for species, sentTime := range t.notificationLastSent {
+	for species, sentTime := range m {
 		if sentTime.Before(cutoffTime) {
-			delete(t.notificationLastSent, species)
+			delete(m, species)
 			cleaned++
 		}
 	}
@@ -244,27 +253,35 @@ func (t *SpeciesTracker) ShouldSuppressNotification(scientificName string, curre
 // RecordNotificationSent records that a notification was sent for a species.
 // This is used to prevent duplicate notifications within the suppression window.
 func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime time.Time) {
-	// Early return when suppression is disabled to avoid unnecessary operations
 	if t.notificationSuppressionWindow <= 0 {
 		return
 	}
-
 	// Record and persist under the canonical name so suppression survives a restart
 	// and matches a later detection under either the legacy or canonical name.
 	scientificName = canonicalSpeciesName(scientificName)
 
 	t.mu.Lock()
-	// Initialize map if needed
 	if t.notificationLastSent == nil {
 		t.notificationLastSent = make(map[string]time.Time, initialSpeciesCapacity)
 	}
-
-	// Record the notification time
 	t.notificationLastSent[scientificName] = sentTime
 	t.mu.Unlock()
 
+	t.persistNotificationSent(scientificName, sentTime, t.notificationSuppressionWindow, notificationTypeNewSpecies, "notification")
+}
+
+// persistNotificationSent logs and asynchronously persists a suppression record
+// shared by RecordNotificationSent and RecordLiferNotificationSent. window is
+// the suppression window that applies to this kind (the user-configurable
+// notificationSuppressionWindow for new-species, or the fixed
+// liferNotificationSuppressionWindow for lifer), notifType selects the
+// persisted NotificationHistory type, and kind is a short label for log
+// messages. The two kinds keep independent in-memory maps, windows, and DB
+// types on purpose — see liferNotificationLastSent's doc comment; only this
+// persistence tail is common to both.
+func (t *SpeciesTracker) persistNotificationSent(scientificName string, sentTime time.Time, window time.Duration, notifType, kind string) {
 	// Log outside the critical section to reduce lock contention
-	getLog().Debug("Recorded notification sent",
+	getLog().Debug("Recorded "+kind+" sent",
 		logger.String("species", scientificName),
 		logger.String("sent_time", sentTime.Format(time.DateTime)))
 
@@ -272,39 +289,103 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	// This ensures notification suppression state survives application restarts.
 	// The write runs under a bounded context so a stuck SQLite write cannot leak
 	// this goroutine; in-memory suppression still works if the persist fails.
-	if t.ds != nil {
-		t.asyncOpsWg.Go(func() {
-			ctx, cancel := context.WithTimeout(context.Background(), notificationPersistTimeout)
-			defer cancel()
-
-			// ExpiresAt = when the suppression ends (sentTime + suppressionWindow)
-			expiresAt := sentTime.Add(t.notificationSuppressionWindow)
-			history := &datastore.NotificationHistory{
-				ScientificName:   scientificName,
-				NotificationType: notificationTypeNewSpecies,
-				LastSent:         sentTime,
-				ExpiresAt:        expiresAt,
-				CreatedAt:        sentTime,
-				UpdatedAt:        sentTime,
-			}
-
-			if err := t.ds.SaveNotificationHistory(ctx, history); err != nil {
-				getLog().Error("Failed to save notification history to database",
-					logger.String("species", scientificName),
-					logger.Error(err),
-					logger.String("operation", "save_notification_history"))
-				// Don't crash - in-memory suppression still works
-			} else {
-				getLog().Debug("Persisted notification history to database",
-					logger.String("species", scientificName),
-					logger.String("expires_at", expiresAt.Format(time.DateTime)))
-			}
-		})
+	if t.ds == nil {
+		return
 	}
+	t.asyncOpsWg.Go(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), notificationPersistTimeout)
+		defer cancel()
+
+		// ExpiresAt = when the suppression ends (sentTime + window)
+		expiresAt := sentTime.Add(window)
+		history := &datastore.NotificationHistory{
+			ScientificName:   scientificName,
+			NotificationType: notifType,
+			LastSent:         sentTime,
+			ExpiresAt:        expiresAt,
+			CreatedAt:        sentTime,
+			UpdatedAt:        sentTime,
+		}
+
+		if err := t.ds.SaveNotificationHistory(ctx, history); err != nil {
+			getLog().Error("Failed to save "+kind+" history to database",
+				logger.String("species", scientificName),
+				logger.Error(err),
+				logger.String("operation", "save_notification_history"))
+			// Don't crash - in-memory suppression still works
+		} else {
+			getLog().Debug("Persisted "+kind+" history to database",
+				logger.String("species", scientificName),
+				logger.String("expires_at", expiresAt.Format(time.DateTime)))
+		}
+	})
 }
 
-// CleanupOldNotificationRecords removes notification records older than the suppression window
-// to prevent unbounded memory growth.
+// ShouldSuppressLiferNotification checks if a lifer notification for this
+// species should be suppressed based on when the last lifer notification was
+// sent for it. Structural sibling of ShouldSuppressNotification, operating on
+// liferNotificationLastSent instead of notificationLastSent, and using the
+// fixed liferNotificationSuppressionWindow instead of the user-configurable
+// notificationSuppressionWindow — see that constant's doc comment for why.
+func (t *SpeciesTracker) ShouldSuppressLiferNotification(scientificName string, currentTime time.Time) bool {
+	scientificName = canonicalSpeciesName(scientificName)
+	t.mu.RLock()
+	lastSent, exists := t.liferNotificationLastSent[scientificName]
+	t.mu.RUnlock()
+
+	if !exists {
+		return false // Never sent, don't suppress
+	}
+
+	suppressUntil := lastSent.Add(liferNotificationSuppressionWindow)
+	shouldSuppress := currentTime.Before(suppressUntil)
+
+	if shouldSuppress {
+		getLog().Debug("Suppressing duplicate lifer notification",
+			logger.String("species", scientificName),
+			logger.Time("suppress_until", suppressUntil),
+			logger.Duration("suppression_window", liferNotificationSuppressionWindow))
+	}
+	return shouldSuppress
+}
+
+// RecordLiferNotificationSent records that a lifer notification was sent for
+// a species. Structural sibling of RecordNotificationSent — see
+// liferNotificationLastSent's doc comment for why this is a separate map and
+// database notification type rather than reusing the new-species one.
+//
+// The in-memory record (this function's map write) is never skipped: lifer
+// suppression uses the fixed liferNotificationSuppressionWindow and works
+// regardless of NotificationSuppressionHours. Database persistence for
+// restart-survival, however, piggybacks on that same setting being enabled
+// (matching loadLiferNotificationsFromDatabase's gate) — writing rows that
+// would never be reloaded or cleaned up when it's disabled would just leak
+// storage, so it's skipped in that case; suppression still works correctly
+// in-memory for the life of the process either way.
+func (t *SpeciesTracker) RecordLiferNotificationSent(scientificName string, sentTime time.Time) {
+	// Record and persist under the canonical name so suppression survives a restart
+	// and matches a later detection under either the legacy or canonical name.
+	scientificName = canonicalSpeciesName(scientificName)
+
+	t.mu.Lock()
+	if t.liferNotificationLastSent == nil {
+		t.liferNotificationLastSent = make(map[string]time.Time, initialSpeciesCapacity)
+	}
+	t.liferNotificationLastSent[scientificName] = sentTime
+	t.mu.Unlock()
+
+	if t.notificationSuppressionWindow <= 0 {
+		return
+	}
+	t.persistNotificationSent(scientificName, sentTime, liferNotificationSuppressionWindow, notificationTypeLifer, "lifer notification")
+}
+
+// CleanupOldNotificationRecords removes notification records older than the
+// suppression window to prevent unbounded memory growth. Lifer cleanup shares
+// this gate with new-species even though its window is fixed rather than
+// user-configurable: RecordLiferNotificationSent only persists lifer rows to
+// the database under this same condition, so there's nothing to clean up when
+// it's disabled (see that function's doc comment).
 // BG-17 fix: Also cleans up expired records from database
 func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
 	// Early return if suppression is disabled (0 window)
@@ -314,15 +395,13 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 
 	// Clean up in-memory records (removes entries older than currentTime - suppressionWindow)
 	t.mu.Lock()
-	cleaned := t.cleanupOldNotificationRecordsLocked(currentTime)
+	cleaned := t.cleanupOldNotificationRecordsLocked(t.notificationLastSent, currentTime, t.notificationSuppressionWindow)
+	cleaned += t.cleanupOldNotificationRecordsLocked(t.liferNotificationLastSent, currentTime, liferNotificationSuppressionWindow)
 	t.mu.Unlock()
 
 	if cleaned > 0 {
-		// Log the actual cutoff used by cleanupOldNotificationRecordsLocked
-		cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
 		getLog().Debug("Cleaned up old notification records from memory",
-			logger.Int("removed_count", cleaned),
-			logger.String("cutoff_time", cutoffTime.Format(time.DateTime)))
+			logger.Int("removed_count", cleaned))
 	}
 
 	// Clean up database records asynchronously (BG-17 fix)

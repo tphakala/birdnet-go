@@ -4277,6 +4277,29 @@
           "hours": "t"
         }
       },
+      "lifeList": {
+        "tabLabel": "Life List",
+        "title": "Life List",
+        "description": "Upload your eBird life list export to get notified when BirdNET-Go detects a species you've never seen before (a \"lifer\") — as opposed to a species merely new to this install.",
+        "enableLabel": "Enable lifer notifications",
+        "enableHelp": "Requires Species Tracking (enabled above) — lifers are matched only while species tracking is running.",
+        "uploadCsv": "Upload CSV",
+        "clearList": "Clear Life List",
+        "clearConfirmTitle": "Clear life list?",
+        "clearConfirmMessage": "This removes all species from your life list.",
+        "uploadHelp": "Upload your eBird life list export (CSV). Only the Scientific Name and Common Name columns are used; matching against detections happens continuously by scientific name.",
+        "getFromEbird": "Get your life list from eBird",
+        "emptyMessage": "No species on your life list yet. Upload a CSV export from eBird, or add species manually below.",
+        "emptyMessageHint": "Upload a CSV export from eBird.",
+        "speciesCount": "{count} species",
+        "emptyFile": "The uploaded file did not contain any recognizable rows.",
+        "fileReadError": "Failed to read the uploaded file.",
+        "importSummary": "Imported {accepted} of {total} rows.",
+        "showRejectedRows": "Show {count} rows that could not be imported",
+        "hideRejectedRows": "Hide rejected rows",
+        "rejectedRow": "Row {row}",
+        "learnAboutTaxonomy": "Learn about eBird's taxonomy categories (spuh, slash, hybrid)"
+      },
       "dynamicThreshold": {
         "tabLabel": "Opitut",
         "title": "Opitut kynnysarvot",
@@ -4503,6 +4526,10 @@
         "newSpecies": {
           "name": "Uusi laji havaittu",
           "description": "Ilmoittaa kun laji havaitaan ensimmäistä kertaa"
+        },
+        "lifer": {
+          "name": "Lifer detected",
+          "description": "Notifies when a species not on your imported life list is detected"
         },
         "streamDisconnected": {
           "name": "Äänistriimi katkennut",

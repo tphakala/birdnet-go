@@ -110,6 +110,21 @@ func (r *notificationHistoryRepository) GetActiveNotificationHistory(ctx context
 	return histories, err
 }
 
+// GetActiveNotificationHistoryByType retrieves non-expired notification
+// history entries restricted to a single notification type. Unlike
+// GetActiveNotificationHistory (which returns entries of every type, since v2
+// does not table-partition by type), this lets a consumer that tracks
+// multiple independent notification types (e.g. "new_species" vs "lifer")
+// load only its own type's suppression state on restart.
+func (r *notificationHistoryRepository) GetActiveNotificationHistoryByType(ctx context.Context, notificationType string, after time.Time) ([]entities.NotificationHistory, error) {
+	var histories []entities.NotificationHistory
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Preload("Label").
+		Where("notification_type = ? AND expires_at > ?", notificationType, after).
+		Find(&histories).Error
+	return histories, err
+}
+
 // DeleteExpiredNotificationHistory deletes expired entries.
 func (r *notificationHistoryRepository) DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) {
 	var rowsAffected int64
