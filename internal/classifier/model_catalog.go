@@ -185,9 +185,17 @@ var EmbeddedCatalog = []CatalogEntry{
 }
 
 // Shared BirdNET v2.4 embeddings model, used by all BattyBirdNET classifiers.
+// This is the DFT-truncated variant (remote birdnet-v2.4-embeddings-fp32-dfttrunc.onnx):
+// bit-exact with the original 2-output backbone (embedding max|delta| = 0.0, identical
+// output order, so no inference-code change) but about 2x faster on CPU and roughly 8 MB
+// smaller. The local filename is deliberately kept as birdnet-v24-embeddings.onnx so
+// existing installs keep their on-disk shared/birdnet-v24-embeddings.onnx: the startup
+// scan only stats each bat model's own regional file and never inspects or re-verifies
+// the shared embeddings file, so nothing is flagged, and installs upgrade transparently
+// the next time a bat model is reinstalled or another bat region is installed.
 const (
-	embeddingsSHA256          = "b6b8f24dc9c3d43f2deb14a6f2c7b5b233e7477b6baf1b52341291e714903fb0"
-	embeddingsSizeBytes int64 = 66932350
+	embeddingsSHA256          = "b91139d3c63d55d742779a56531078bc88366a09bcc9bd6a9b703d425914c380"
+	embeddingsSizeBytes int64 = 58763257
 )
 
 // Shared v3.0 geomodel, used as range filter companion by Perch v2 and BirdNET v3.0.
@@ -366,7 +374,9 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileRegion strin
 				SizeBytes:  checksums.labelsSize,
 			},
 			{
-				RemotePath: "birdnet-v24-embeddings.onnx",
+				// RemotePath is the DFT-truncated backbone; LocalName stays the
+				// original filename for drop-in compatibility (see embeddingsSHA256).
+				RemotePath: "birdnet-v2.4-embeddings-fp32-dfttrunc.onnx",
 				LocalName:  "birdnet-v24-embeddings.onnx",
 				Role:       RoleEmbeddings,
 				SHA256:     embeddingsSHA256,
