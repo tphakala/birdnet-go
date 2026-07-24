@@ -1,6 +1,10 @@
 package onnx
 
-import "fmt"
+import (
+	"fmt"
+
+	ort "github.com/yalue/onnxruntime_go"
+)
 
 // Known model sample counts and output counts for auto-detection.
 const (
@@ -11,6 +15,7 @@ const (
 	numOutputsV30    = 2      // BirdNET v3.0: embeddings + logits
 	numOutputsPerch  = 4      // Perch v2: embeddings + features + attention + logits
 
+	embeddingSizeV24   = 1024 // BirdNET v2.4 embedding dimension (head-pruned embedding-only model)
 	embeddingSizeV30   = 1280 // BirdNET v3.0 embedding dimension
 	embeddingSizePerch = 1536 // Perch v2 embedding dimension
 )
@@ -59,12 +64,28 @@ func buildModelConfig(mt ModelType, inputShape []int64, outputShapes [][]int64) 
 
 	switch mt {
 	case BirdNETv24:
-		cfg.LogitsIndex = 0
-		cfg.LogitsSize = lastDim(outputShapes[0])
-		if numOutputs >= 2 {
-			if embSize := lastDim(outputShapes[1]); embSize > 0 {
-				cfg.EmbeddingIndex = 1
-				cfg.EmbeddingSize = embSize
+		if numOutputs == 1 && lastDim(outputShapes[0]) == embeddingSizeV24 {
+			// Head-pruned embedding-only backbone: a single [.,1024] embedding output
+			// (the [6522] logits head is pruned). Distinguished from the plain
+			// 1-output classifier ([.,6522] logits) by output size. LogitsSize stays 0
+			// and LogitsIndex is -1 to mark that this model produces no logits.
+			//
+			// Disambiguation is by output size: a hypothetical custom BirdNET v2.4
+			// classifier with exactly 1024 output classes would be misread as
+			// embedding-only. The shipped models make this safe (the classifier head is
+			// 6522 classes, the backbone embedding is 1024), and a 1024-class v2.4
+			// classifier is not a configuration this project produces.
+			cfg.LogitsIndex = -1
+			cfg.EmbeddingIndex = 0
+			cfg.EmbeddingSize = embeddingSizeV24
+		} else {
+			cfg.LogitsIndex = 0
+			cfg.LogitsSize = lastDim(outputShapes[0])
+			if numOutputs >= 2 {
+				if embSize := lastDim(outputShapes[1]); embSize > 0 {
+					cfg.EmbeddingIndex = 1
+					cfg.EmbeddingSize = embSize
+				}
 			}
 		}
 	case BirdNETv30:
@@ -87,4 +108,33 @@ func lastDim(shape []int64) int {
 		return 0
 	}
 	return int(shape[len(shape)-1])
+}
+
+// DetectEmbeddingOutput inspects an ONNX model's output tensors and returns the
+// index and size of its BirdNET v2.4 embedding output (the [.,1024] tensor). The
+// bat OpenVINO path uses this to bind the extractor to the correct output port up
+// front, before inference. Returns a ModelDetectionError when the model has no
+// 1024-dim output.
+func DetectEmbeddingOutput(modelPath string) (index, size int, err error) {
+	_, outputInfos, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return -1, 0, fmt.Errorf("birdnet: failed to load model metadata: %w", err)
+	}
+	return selectEmbeddingOutput(outputInfos)
+}
+
+// selectEmbeddingOutput returns the index and size of the BirdNET v2.4 embedding
+// output ([.,1024]) among a model's output tensors: index 1 for the 2-output backbone
+// (logits@0 + embedding@1), index 0 for the head-pruned, embedding-only model. Returns
+// a ModelDetectionError when no 1024-dim output exists. Split out so the port-selection
+// logic is unit-testable without a real ONNX model.
+func selectEmbeddingOutput(outputInfos []ort.InputOutputInfo) (index, size int, err error) {
+	for i := range outputInfos {
+		if lastDim(outputInfos[i].Dimensions) == embeddingSizeV24 {
+			return i, embeddingSizeV24, nil
+		}
+	}
+	return -1, 0, &ModelDetectionError{
+		Reason: fmt.Sprintf("model has no %d-dim embedding output", embeddingSizeV24),
+	}
 }
